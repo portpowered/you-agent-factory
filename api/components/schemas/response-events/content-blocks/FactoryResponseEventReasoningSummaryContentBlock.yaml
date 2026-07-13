@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+description: Reasoning summary text content block.
+required:
+  - kind
+  - text
+properties:
+  kind:
+    allOf:
+      - $ref: ../FactoryResponseEventContentBlockKind.yaml
+    enum:
+      - REASONING_SUMMARY
+  text:
+    type: string
+    description: Reasoning summary text.

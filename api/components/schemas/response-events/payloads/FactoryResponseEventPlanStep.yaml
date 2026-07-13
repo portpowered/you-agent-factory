@@ -1,0 +1,16 @@
+type: object
+additionalProperties: false
+description: One step in a published plan snapshot.
+required:
+  - id
+  - description
+properties:
+  id:
+    type: string
+    description: Stable plan step identifier.
+  description:
+    type: string
+    description: Human-readable step description.
+  status:
+    type: string
+    description: Plan step status when applicable.

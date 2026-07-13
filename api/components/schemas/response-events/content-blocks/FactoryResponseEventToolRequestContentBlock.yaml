@@ -1,0 +1,24 @@
+type: object
+additionalProperties: false
+description: Tool invocation request content block with bounded argument summary.
+required:
+  - kind
+  - toolCallId
+  - toolName
+properties:
+  kind:
+    allOf:
+      - $ref: ../FactoryResponseEventContentBlockKind.yaml
+    enum:
+      - TOOL_REQUEST
+  toolCallId:
+    type: string
+    description: Stable tool call identifier within the message.
+  toolName:
+    type: string
+    description: Declared tool name for the invocation request.
+  argumentsSummary:
+    type: object
+    description: >-
+      Bounded summary of tool arguments. Not a raw provider protocol payload.
+    additionalProperties: true

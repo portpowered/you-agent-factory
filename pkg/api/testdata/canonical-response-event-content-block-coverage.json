@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "agent-factory.response-event.v1",
+  "eventId": "evt-content-block-coverage-001",
+  "sequence": 50,
+  "recordedAt": "2026-07-13T12:01:00Z",
+  "factorySessionId": "session-coverage-001",
+  "runId": "run-coverage-001",
+  "kind": "MESSAGE",
+  "phase": "COMPLETED",
+  "provenance": {
+    "provider": "example-provider",
+    "nativeEventType": "message.completed",
+    "delivery": "NATIVE_STREAM",
+    "representation": "SNAPSHOT",
+    "fidelity": "LOSSLESS"
+  },
+  "payload": {
+    "role": "assistant",
+    "contentBlocks": [
+      {
+        "kind": "TEXT",
+        "text": "Inline text block."
+      },
+      {
+        "kind": "REASONING_SUMMARY",
+        "text": "Reasoning summary block."
+      },
+      {
+        "kind": "TOOL_REQUEST",
+        "toolCallId": "call-block-001",
+        "toolName": "lookup",
+        "argumentsSummary": {
+          "key": "value"
+        }
+      },
+      {
+        "kind": "IMAGE_REF",
+        "imageRef": "artifact://image-coverage-001"
+      },
+      {
+        "kind": "RESOURCE_REF",
+        "resourceRef": "resource://doc-coverage-001"
+      },
+      {
+        "kind": "STRUCTURED_OUTPUT",
+        "structuredOutput": {
+          "ok": true
+        }
+      }
+    ]
+  }
+}

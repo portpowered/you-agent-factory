@@ -1,0 +1,20 @@
+type: string
+description: How closely the public payload preserves provider detail.
+x-enum-varnames:
+  - FactoryResponseEventProvenanceFidelityLossless
+  - FactoryResponseEventProvenanceFidelityNormalized
+  - FactoryResponseEventProvenanceFidelityLossy
+  - FactoryResponseEventProvenanceFidelityFinalOnly
+  - FactoryResponseEventProvenanceFidelityLifecycleOnly
+enum:
+  - LOSSLESS
+  - NORMALIZED
+  - LOSSY
+  - FINAL_ONLY
+  - LIFECYCLE_ONLY
+x-enum-descriptions:
+  - Public payload preserves provider-visible detail without loss.
+  - Public payload is normalized to the Factory vocabulary.
+  - Public payload intentionally omits some provider detail.
+  - Only final provider outcomes are represented publicly.
+  - Only lifecycle transitions are represented publicly.

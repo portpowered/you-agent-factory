@@ -1,0 +1,20 @@
+description: >-
+  Public typed payload union for FactoryResponseEvent. Variants align with
+  envelope kind and phase semantics from the Story 01 vocabulary. MESSAGE and
+  TOOL kinds use distinct snapshot and delta payload shapes; consumers select
+  the variant using envelope kind and phase together with structural decoding.
+oneOf:
+  - $ref: ./payloads/FactoryResponseEventSessionPayload.yaml
+  - $ref: ./payloads/FactoryResponseEventRunPayload.yaml
+  - $ref: ./payloads/FactoryResponseEventTurnPayload.yaml
+  - $ref: ./payloads/FactoryResponseEventMessagePayload.yaml
+  - $ref: ./payloads/FactoryResponseEventMessageDeltaPayload.yaml
+  - $ref: ./payloads/FactoryResponseEventReasoningPayload.yaml
+  - $ref: ./payloads/FactoryResponseEventToolPayload.yaml
+  - $ref: ./payloads/FactoryResponseEventToolDeltaPayload.yaml
+  - $ref: ./payloads/FactoryResponseEventFileChangePayload.yaml
+  - $ref: ./payloads/FactoryResponseEventPlanPayload.yaml
+  - $ref: ./payloads/FactoryResponseEventProgressPayload.yaml
+  - $ref: ./payloads/FactoryResponseEventUsagePayload.yaml
+  - $ref: ./payloads/FactoryResponseEventErrorPayload.yaml
+  - $ref: ./payloads/FactoryResponseEventStreamGapPayload.yaml
