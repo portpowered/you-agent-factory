@@ -2,6 +2,7 @@ import type { DashboardStreamState } from "../../../api/dashboard/types";
 
 export interface DashboardWorldViewShellInput {
   eventCount: number;
+  hasRestoredCheckpoint: boolean;
   rawSessionID: string | null;
   selectedTick: number;
   streamState: DashboardStreamState;
@@ -15,12 +16,14 @@ export interface DashboardWorldViewShellState {
 
 export function deriveDashboardWorldViewShellState({
   eventCount,
+  hasRestoredCheckpoint,
   rawSessionID,
   selectedTick,
   streamState,
 }: DashboardWorldViewShellInput): DashboardWorldViewShellState {
   const hasEvents = eventCount > 0;
-  const hasNoStreamedSnapshot = selectedTick === 0 && !hasEvents;
+  const hasNoStreamedSnapshot =
+    selectedTick === 0 && !hasEvents && !hasRestoredCheckpoint;
   const isInitialLoading =
     rawSessionID != null &&
     hasNoStreamedSnapshot &&
