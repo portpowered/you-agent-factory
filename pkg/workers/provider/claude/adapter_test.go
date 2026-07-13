@@ -13,7 +13,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/testkit"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/claude"
+)
+
+const (
+	privateConformancePrompt = "private Claude prompt must not escape"
+	privateConformanceToken  = "sk-claude-fixture-secret"
 )
 
 func TestAdapterBuildCommandRequestsStructuredPartialMessages(t *testing.T) {
@@ -58,6 +64,54 @@ func TestAdapterReportsClaudeStreamingCapabilitiesAndFailureFacts(t *testing.T) 
 	}
 }
 
+func TestAdapterFullStreamConformance(t *testing.T) {
+	t.Parallel()
+
+	testkit.RunFullStream(t, testkit.FullStreamFixture{
+		NewAdapter: func() adapter.Adapter { return claude.NewAdapter() },
+		Request: interfaces.ProviderInferenceRequest{
+			Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-conformance"},
+			Model:    "claude-sonnet-4", UserMessage: privateConformancePrompt,
+		},
+		ContentAndTools: claudeObservations(
+			`{"type":"system","subtype":"init","session_id":"claude-session-conformance"}`,
+			`{"type":"stream_event","session_id":"claude-session-conformance","event":{"type":"message_start","message":{"id":"msg_conformance","role":"assistant","content":[]}}}`,
+			`{"type":"stream_event","session_id":"claude-session-conformance","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}`,
+			`{"type":"stream_event","session_id":"claude-session-conformance","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hello "}}}`,
+			`{"type":"stream_event","session_id":"claude-session-conformance","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"world"}}}`,
+			`{"type":"stream_event","session_id":"claude-session-conformance","event":{"type":"message_stop"}}`,
+			`{"type":"assistant","session_id":"claude-session-conformance","message":{"id":"msg_conformance","role":"assistant","content":[{"type":"text","text":"Hello world"}]}}`,
+			`{"type":"stream_event","session_id":"claude-session-conformance","event":{"type":"message_start","message":{"id":"msg_tool","role":"assistant","content":[]}}}`,
+			`{"type":"stream_event","session_id":"claude-session-conformance","event":{"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_conformance","name":"weather","input":{}}}}`,
+			`{"type":"stream_event","session_id":"claude-session-conformance","event":{"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"city\":\"Oslo\"}"}}}`,
+			`{"type":"stream_event","session_id":"claude-session-conformance","event":{"type":"content_block_stop","index":0}}`,
+		),
+		RetryableFailure: claudeObservations(
+			`{"type":"system","subtype":"api_retry","session_id":"claude-session-conformance","attempt":2,"retry_delay_ms":2000,"error_status":429}`,
+		),
+		UnsafeAndRecovering: claudeObservations(
+			`{"type":"system","subtype":"init","session_id":"claude-session-conformance"}`,
+			`{"type":`+privateConformancePrompt+`,"token":"`+privateConformanceToken+`"}`,
+			`{"type":"future_shape","prompt":"`+privateConformancePrompt+`","token":"`+privateConformanceToken+`"}`,
+			`{"type":"assistant","session_id":"claude-session-conformance","message":{"id":"msg_conformance","role":"assistant","content":[{"type":"text","text":"Hello world"}]}}`,
+		),
+		UnterminatedFinal: []adapter.Observation{{Stream: adapter.OutputStreamStdout, Chunk: []byte(
+			`{"type":"assistant","session_id":"claude-session-conformance","message":{"id":"msg_conformance","role":"assistant","content":[{"type":"text","text":"Hello world"}]}}`,
+		)}},
+		FinalResult: workerprocess.CommandResult{Stdout: []byte(
+			`{"type":"result","subtype":"success","is_error":false,"result":"Hello world","session_id":"claude-session-conformance"}`,
+		)},
+		Expected: testkit.FullStreamExpected{
+			ProviderSession: interfaces.ProviderSessionMetadata{Provider: "claude", Kind: "session_id", ID: "claude-session-conformance"},
+			ProviderRef:     "claude-session-conformance", MessageItemID: "msg_conformance",
+			ToolItemID: "msg_tool/content-block/0", ToolCallID: "toolu_conformance",
+			MessageDeltas: []string{"Hello ", "world"}, FinalContent: "Hello world",
+			ToolOutputDelta: `{"city":"Oslo"}`, RetryAfter: 2,
+		},
+		ForbiddenDiagnostic: []string{privateConformancePrompt, privateConformanceToken},
+	})
+}
+
 func TestDecoderMapsChunkedTextAndToolInputWithStableIdentity(t *testing.T) {
 	t.Parallel()
 
@@ -99,6 +153,103 @@ func TestDecoderInvalidToolInputDoesNotLeakOrStopLaterMessage(t *testing.T) {
 	completed := findDraft(drafts, responseevents.KindMessage, responseevents.PhaseCompleted)
 	if completed == nil || completed.ItemID != "msg_recovery" {
 		t.Fatalf("later completed message missing: %#v", drafts)
+	}
+}
+
+func TestDecoderNormalizesControlRecordsAndExplicitSubagentAttribution(t *testing.T) {
+	t.Parallel()
+
+	drafts, diagnostics := decodeFixture(t, "testdata/control_records.jsonl", true)
+	assertControlDiagnostics(t, diagnostics)
+	assertCanonicalDrafts(t, drafts)
+	assertControlObservations(t, drafts)
+	assertControlAttribution(t, drafts)
+	assertControlOutputSafe(t, drafts, diagnostics)
+}
+
+func assertControlDiagnostics(t *testing.T, diagnostics []adapter.Diagnostic) {
+	t.Helper()
+	if len(diagnostics) != 2 || diagnostics[0].Code != "claude_unknown_record" || diagnostics[1].Code != "claude_malformed_record" {
+		t.Fatalf("diagnostics = %#v", diagnostics)
+	}
+}
+
+func assertCanonicalDrafts(t *testing.T, drafts []responseevents.Draft) {
+	t.Helper()
+	for index, draft := range drafts {
+		if err := responseevents.ValidateDraft(draft); err != nil {
+			t.Fatalf("draft[%d] invalid: %v", index, err)
+		}
+	}
+}
+
+func assertControlObservations(t *testing.T, drafts []responseevents.Draft) {
+	t.Helper()
+	retry := findDraft(drafts, responseevents.KindError, responseevents.PhaseUpdated)
+	if retry == nil {
+		t.Fatalf("retry observation missing: %#v", drafts)
+	}
+	var retryPayload responseevents.ErrorPayload
+	decodePayload(t, *retry, &retryPayload)
+	if !retryPayload.Retryable || retryPayload.RetryAttempt == nil || *retryPayload.RetryAttempt != 2 || retryPayload.RetryAfterSeconds == nil || *retryPayload.RetryAfterSeconds != 2 {
+		t.Fatalf("retry payload = %#v", retryPayload)
+	}
+	compaction := findDraft(drafts, responseevents.KindProgress, responseevents.PhaseUpdated)
+	if compaction == nil {
+		t.Fatalf("compaction observation missing: %#v", drafts)
+	}
+}
+
+func assertControlAttribution(t *testing.T, drafts []responseevents.Draft) {
+	t.Helper()
+	completed := draftsByKindAndPhase(drafts, responseevents.KindMessage, responseevents.PhaseCompleted)
+	if len(completed) != 3 || completed[0].ParentItemID != "toolu_parent" || completed[1].ParentItemID != "" || completed[2].ParentItemID != "" {
+		t.Fatalf("completed message attribution = %#v", completed)
+	}
+	delta := findDraft(drafts, responseevents.KindMessage, responseevents.PhaseDelta)
+	if delta == nil || delta.ParentItemID != "toolu_parent" || delta.ItemID != completed[0].ItemID {
+		t.Fatalf("partial attribution or identity = %#v", delta)
+	}
+}
+
+func assertControlOutputSafe(t *testing.T, drafts []responseevents.Draft, diagnostics []adapter.Diagnostic) {
+	t.Helper()
+	encoded, err := json.Marshal(struct {
+		Drafts      []responseevents.Draft
+		Diagnostics []adapter.Diagnostic
+	}{drafts, diagnostics})
+	if err != nil {
+		t.Fatalf("marshal decoded controls: %v", err)
+	}
+	for _, forbidden := range []string{"private compacted transcript", "private future prompt", privateConformanceToken} {
+		if bytes.Contains(encoded, []byte(forbidden)) {
+			t.Fatalf("normalized controls leaked %q: %s", forbidden, encoded)
+		}
+	}
+}
+
+func TestDecoderOmitsOutOfRangeRetryMetadata(t *testing.T) {
+	t.Parallel()
+
+	decoder, err := claude.NewAdapter().NewDecoder(context.Background(), adapter.DecoderContext{RunID: "run-bounds"})
+	if err != nil {
+		t.Fatalf("NewDecoder() error = %v", err)
+	}
+	result, err := decoder.Observe(context.Background(), adapter.Observation{
+		Stream: adapter.OutputStreamStdout,
+		Chunk:  []byte(`{"type":"system","subtype":"api_retry","attempt":1000001,"retry_delay_ms":86400001}` + "\n"),
+	})
+	if err != nil {
+		t.Fatalf("Observe() error = %v", err)
+	}
+	retry := findDraft(result.Drafts, responseevents.KindError, responseevents.PhaseUpdated)
+	if retry == nil {
+		t.Fatalf("retry observation missing: %#v", result)
+	}
+	var payload responseevents.ErrorPayload
+	decodePayload(t, *retry, &payload)
+	if payload.RetryAttempt != nil || payload.RetryAfterSeconds != nil {
+		t.Fatalf("out-of-range retry metadata was retained: %#v", payload)
 	}
 }
 
@@ -219,16 +370,28 @@ func decodeFixture(t *testing.T, path string, keepFinalRecordUnterminated bool) 
 	return append(drafts, flushed.Drafts...), append(diagnostics, flushed.Diagnostics...)
 }
 
+func claudeObservations(records ...string) []adapter.Observation {
+	observations := make([]adapter.Observation, 0, len(records)+1)
+	for index, record := range records {
+		chunk := []byte(strings.TrimSpace(record) + "\n")
+		if index == 1 && len(chunk) > 7 {
+			observations = append(observations,
+				adapter.Observation{Stream: adapter.OutputStreamStdout, Chunk: chunk[:7]},
+				adapter.Observation{Stream: adapter.OutputStreamStdout, Chunk: chunk[7:]},
+			)
+			continue
+		}
+		observations = append(observations, adapter.Observation{Stream: adapter.OutputStreamStdout, Chunk: chunk})
+	}
+	return observations
+}
+
 func assertValidDrafts(t *testing.T, drafts []responseevents.Draft, diagnostics []adapter.Diagnostic) {
 	t.Helper()
 	if len(diagnostics) != 0 {
 		t.Fatalf("diagnostics = %#v, want none", diagnostics)
 	}
-	for index, draft := range drafts {
-		if err := responseevents.ValidateDraft(draft); err != nil {
-			t.Fatalf("draft[%d] invalid: %v", index, err)
-		}
-	}
+	assertCanonicalDrafts(t, drafts)
 }
 
 func draftsByKindAndPhase(drafts []responseevents.Draft, kind responseevents.Kind, phase responseevents.Phase) []responseevents.Draft {

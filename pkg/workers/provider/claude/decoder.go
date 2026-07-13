@@ -25,6 +25,7 @@ type decoder struct {
 
 	runStarted        bool
 	messageID         string
+	parentItemID      string
 	sessionRef        string
 	blocks            map[int]*contentBlock
 	pendingCompletion *messageCompletion
@@ -34,6 +35,7 @@ type decoder struct {
 
 type messageCompletion struct {
 	messageID     string
+	parentItemID  string
 	nativeType    string
 	contentBlocks []responseevents.ContentBlock
 	toolSnapshots []indexedToolSnapshot
@@ -54,10 +56,15 @@ type contentBlock struct {
 }
 
 type nativeEnvelope struct {
-	Type      string          `json:"type"`
-	SessionID string          `json:"session_id"`
-	Event     json.RawMessage `json:"event"`
-	Message   *nativeMessage  `json:"message"`
+	Type            string          `json:"type"`
+	Subtype         string          `json:"subtype"`
+	SessionID       string          `json:"session_id"`
+	ParentToolUseID json.RawMessage `json:"parent_tool_use_id"`
+	Event           json.RawMessage `json:"event"`
+	Message         *nativeMessage  `json:"message"`
+	Attempt         *int            `json:"attempt"`
+	RetryDelayMS    *int64          `json:"retry_delay_ms"`
+	ErrorStatus     json.RawMessage `json:"error_status"`
 }
 
 type nativeEvent struct {
@@ -154,15 +161,37 @@ func (d *decoder) decodeRecord(raw []byte) (adapter.DecodeResult, error) {
 		d.sessionRef = session.ID
 	}
 	if envelope.Type == "assistant" && envelope.Message != nil {
-		return d.completeNativeMessage(*envelope.Message)
+		return d.completeNativeMessage(*envelope.Message, optionalString(envelope.ParentToolUseID))
+	}
+	if envelope.Type == "system" {
+		return d.decodeSystemRecord(envelope)
 	}
 	if envelope.Type != "stream_event" {
-		return adapter.DecodeResult{}, nil
+		if envelope.Type == "result" || envelope.Type == "user" {
+			return adapter.DecodeResult{}, nil
+		}
+		return safeDiagnostic("claude_unknown_record", "Claude emitted an unsupported additive record"), nil
 	}
-	return d.decodeStreamEvent(envelope.Event)
+	if len(envelope.Event) == 0 {
+		return safeDiagnostic("claude_malformed_event", "Claude emitted a malformed stream event"), nil
+	}
+	return d.decodeStreamEvent(envelope.Event, optionalString(envelope.ParentToolUseID))
 }
 
-func (d *decoder) decodeStreamEvent(raw json.RawMessage) (adapter.DecodeResult, error) {
+func (d *decoder) decodeSystemRecord(envelope nativeEnvelope) (adapter.DecodeResult, error) {
+	switch envelope.Subtype {
+	case "init", "status":
+		return adapter.DecodeResult{}, nil
+	case "api_retry":
+		return d.retryObservation(envelope)
+	case "compact_boundary":
+		return d.compactionObservation()
+	default:
+		return safeDiagnostic("claude_unknown_system_record", "Claude emitted an unsupported additive system record"), nil
+	}
+}
+
+func (d *decoder) decodeStreamEvent(raw json.RawMessage, parentItemID string) (adapter.DecodeResult, error) {
 	var event nativeEvent
 	if err := json.Unmarshal(raw, &event); err != nil {
 		return safeDiagnostic("claude_malformed_event", "Claude emitted a malformed stream event"), nil
@@ -179,18 +208,23 @@ func (d *decoder) decodeStreamEvent(raw json.RawMessage) (adapter.DecodeResult, 
 		if d.messageID == "" {
 			d.messageID = fallbackMessageID(d.context)
 		}
+		d.parentItemID = parentItemID
 		d.blocks = make(map[int]*contentBlock)
 		return appendResult(result, d.withRunStart(adapter.DecodeResult{})), nil
 	case "content_block_start":
+		d.retainExplicitParent(parentItemID)
 		return d.startBlock(event)
 	case "content_block_delta":
+		d.retainExplicitParent(parentItemID)
 		return d.updateBlock(event)
 	case "content_block_stop":
+		d.retainExplicitParent(parentItemID)
 		return d.stopBlock(event)
 	case "message_stop":
+		d.retainExplicitParent(parentItemID)
 		return d.deferAccumulatedMessage()
 	default:
-		return adapter.DecodeResult{}, nil
+		return safeDiagnostic("claude_unknown_stream_event", "Claude emitted an unsupported additive stream event"), nil
 	}
 }
 
@@ -216,7 +250,7 @@ func (d *decoder) startBlock(event nativeEvent) (adapter.DecodeResult, error) {
 		}
 		return d.toolSnapshot(event.Index, responseevents.PhaseStarted)
 	default:
-		return adapter.DecodeResult{}, nil
+		return safeDiagnostic("claude_unknown_block", "Claude emitted an unsupported additive content block"), nil
 	}
 }
 
@@ -248,7 +282,7 @@ func (d *decoder) updateBlock(event nativeEvent) (adapter.DecodeResult, error) {
 		block.lastSummary = summary
 		return d.toolDelta(event.Index, summary)
 	default:
-		return adapter.DecodeResult{}, nil
+		return safeDiagnostic("claude_unknown_block_delta", "Claude emitted an unsupported additive content-block update"), nil
 	}
 }
 
@@ -292,12 +326,12 @@ func (d *decoder) deferAccumulatedMessage() (adapter.DecodeResult, error) {
 		}
 	}
 	if len(blocks) > 0 {
-		d.pendingCompletion = &messageCompletion{messageID: d.stableMessageID(), nativeType: "message_stop", contentBlocks: blocks}
+		d.pendingCompletion = &messageCompletion{messageID: d.stableMessageID(), parentItemID: d.parentItemID, nativeType: "message_stop", contentBlocks: blocks}
 	}
 	return adapter.DecodeResult{}, nil
 }
 
-func (d *decoder) completeNativeMessage(message nativeMessage) (adapter.DecodeResult, error) {
+func (d *decoder) completeNativeMessage(message nativeMessage, parentItemID string) (adapter.DecodeResult, error) {
 	if strings.TrimSpace(message.Role) != "assistant" {
 		return adapter.DecodeResult{}, nil
 	}
@@ -322,8 +356,9 @@ func (d *decoder) completeNativeMessage(message nativeMessage) (adapter.DecodeRe
 		d.pendingCompletion = nil
 	}
 	d.messageID = messageID
+	d.parentItemID = parentItemID
 	completed, err := d.publishCompletion(messageCompletion{
-		messageID: messageID, nativeType: "assistant", contentBlocks: blocks, toolSnapshots: tools,
+		messageID: messageID, parentItemID: parentItemID, nativeType: "assistant", contentBlocks: blocks, toolSnapshots: tools,
 	})
 	completed.Diagnostics = append(completed.Diagnostics, diagnostics...)
 	return appendResult(result, completed), err
@@ -385,16 +420,17 @@ func (d *decoder) publishCompletion(completion messageCompletion) (adapter.Decod
 	if err != nil {
 		return adapter.DecodeResult{}, err
 	}
-	if d.completedMessages[completion.messageID] == string(payload) {
+	fingerprint := completion.parentItemID + "\x00" + string(payload)
+	if d.completedMessages[completion.messageID] == fingerprint {
 		return adapter.DecodeResult{}, nil
 	}
 	result, err := d.publishToolSnapshots(completion)
 	if err != nil {
 		return result, err
 	}
-	d.completedMessages[completion.messageID] = string(payload)
+	d.completedMessages[completion.messageID] = fingerprint
 	result.Drafts = append(result.Drafts, responseevents.Draft{
-		Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted, ItemID: completion.messageID, ProviderSessionRef: d.sessionRef,
+		Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted, ItemID: completion.messageID, ParentItemID: completion.parentItemID, ProviderSessionRef: d.sessionRef,
 		Provenance: provenance(completion.nativeType, responseevents.RepresentationSnapshot), Payload: payload,
 	})
 	return d.withRunStart(result), nil
@@ -427,7 +463,7 @@ func (d *decoder) messageDelta(index int, text string) (adapter.DecodeResult, er
 		return adapter.DecodeResult{}, err
 	}
 	return d.withRunStart(adapter.DecodeResult{Drafts: []responseevents.Draft{{
-		Kind: responseevents.KindMessage, Phase: responseevents.PhaseDelta, ItemID: d.stableMessageID(), ProviderSessionRef: d.sessionRef,
+		Kind: responseevents.KindMessage, Phase: responseevents.PhaseDelta, ItemID: d.stableMessageID(), ParentItemID: d.parentItemID, ProviderSessionRef: d.sessionRef,
 		Provenance: provenance("content_block_delta", responseevents.RepresentationDelta), Payload: payload,
 	}}}), nil
 }
@@ -488,6 +524,12 @@ func (d *decoder) stableMessageID() string {
 	}
 	d.messageID = fallbackMessageID(d.context)
 	return d.messageID
+}
+
+func (d *decoder) retainExplicitParent(parentItemID string) {
+	if parentItemID != "" {
+		d.parentItemID = parentItemID
+	}
 }
 
 func (d *decoder) toolItemID(index int) string {

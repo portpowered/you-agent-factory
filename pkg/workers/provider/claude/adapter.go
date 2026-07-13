@@ -73,6 +73,9 @@ func (*Adapter) NewDecoder(_ context.Context, input adapter.DecoderContext) (ada
 
 func (*Adapter) ParseFinal(_ context.Context, input adapter.FinalParseContext) (adapter.FinalParseResult, error) {
 	if input.CommandError != nil || input.CommandResult.ExitCode != 0 {
+		if failure := claudeRetryFailure(input.CommandResult.Stdout); failure != nil {
+			return adapter.FinalParseResult{}, &claudeRetryError{failure: *failure}
+		}
 		return adapter.FinalParseResult{}, errors.New("Claude command did not complete successfully")
 	}
 	lines := bytes.Split(bytes.ReplaceAll(input.CommandResult.Stdout, []byte("\r\n"), []byte("\n")), []byte("\n"))
@@ -108,6 +111,14 @@ func (*Adapter) Capabilities(context.Context, adapter.CapabilityContext) (adapte
 func (*Adapter) ClassifyFailure(_ context.Context, input adapter.FailureContext) adapter.FailureResult {
 	if input.CommandError == nil && input.CommandResult.ExitCode == 0 && input.DecodeError == nil && input.FlushError == nil && input.ParseError == nil {
 		return adapter.FailureResult{}
+	}
+	if failure := claudeRetryFailure(input.CommandResult.Stdout); failure != nil {
+		return adapter.FailureResult{Failure: failure}
+	}
+	var retryErr *claudeRetryError
+	if errors.As(input.ParseError, &retryErr) {
+		failure := retryErr.failure
+		return adapter.FailureResult{Failure: &failure}
 	}
 	return adapter.FailureResult{Failure: &adapter.FailureFacts{
 		Family:  interfaces.WorkFailureFamilyTerminal,

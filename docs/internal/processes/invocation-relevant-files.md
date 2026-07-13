@@ -210,6 +210,12 @@ primary-result behavior.
   explicitly opts into response streaming. Native JSONL fixture tests should
   fragment reads and flush an unterminated final record so command selection,
   decoder buffering, and final-result parsing are proven independently.
+  Provider retry and compaction records should publish only bounded typed facts
+  with static safe messages; adapters may classify those facts but must not
+  sleep, rerun commands, choose backoff, or expose raw provider payloads.
+  Preserve optional provider attribution only from an explicit native field on
+  the supported record, and omit malformed or absent attribution instead of
+  inferring it from neighboring stream activity.
 
   Legacy fragment
   compatibility mapping lives in `pkg/factorysessions/responsestream/compat`
