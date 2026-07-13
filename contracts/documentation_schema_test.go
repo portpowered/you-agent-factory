@@ -13,6 +13,11 @@ import (
 
 const documentationSchemaID = "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
 
+type schemaResource struct {
+	path string
+	id   string
+}
+
 func TestDocumentationSchemaFixtures(t *testing.T) {
 	schema := compileSchema(t, filepath.Join("common", "documentation.schema.json"), documentationSchemaID)
 
@@ -54,11 +59,16 @@ func TestDocumentationSchemaFixtures(t *testing.T) {
 	}
 }
 
-func compileSchema(t *testing.T, path, id string) *jsonschema.Schema {
+func compileSchema(t *testing.T, path, id string, resources ...schemaResource) *jsonschema.Schema {
 	t.Helper()
-	document := readJSON(t, path)
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
+	for _, resource := range resources {
+		if err := compiler.AddResource(resource.id, readJSON(t, resource.path)); err != nil {
+			t.Fatalf("add schema resource %s: %v", resource.id, err)
+		}
+	}
+	document := readJSON(t, path)
 	if err := compiler.AddResource(id, document); err != nil {
 		t.Fatalf("add schema resource: %v", err)
 	}
