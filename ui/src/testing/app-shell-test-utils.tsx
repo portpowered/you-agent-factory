@@ -111,6 +111,7 @@ export {
 interface RenderAppOptions {
   browserLanguage?: string | null;
   browserLanguages?: readonly string[] | null;
+  eventSourceOpening?: "automatic" | "manual";
   factorySessions?: FactorySessionSummary[];
   fetchOverride?: RenderAppFetchOverride;
   initialLocale?: string | null;
@@ -231,6 +232,7 @@ export async function waitForDashboardShell(): Promise<void> {
 export function renderApp({
   browserLanguage,
   browserLanguages,
+  eventSourceOpening = "automatic",
   factorySessions,
   fetchOverride,
   initialLocale,
@@ -317,6 +319,7 @@ export function renderApp({
   }
 
   vi.stubGlobal("fetch", fetchMock);
+  MockEventSource.openAutomatically = eventSourceOpening === "automatic";
   vi.stubGlobal("EventSource", MockEventSource);
   reloadDashboardLayoutFromStorage();
   if (timelineEvents) {
@@ -398,6 +401,7 @@ export function resetCurrentFactoryDocumentMock(): void {
 export function registerAppDashboardTestLifecycle(): void {
   beforeEach(() => {
     window.localStorage.clear();
+    MockEventSource.openAutomatically = false;
     MockEventSource.instances = [];
     restoreBrowserTestShims = installDashboardBrowserTestShims();
     resetSelectionHistoryStore();

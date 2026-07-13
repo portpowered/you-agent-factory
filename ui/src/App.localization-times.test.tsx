@@ -106,7 +106,9 @@ function expandedAttempt(attemptNumber: number): HTMLElement {
 
   fireEvent.click(
     within(attempt).getByRole("button", {
-      name: new RegExp(`^(Expand|展开) (attempt|尝试) ${attemptNumber}$`),
+      name: new RegExp(
+        `^(?:Expand attempt ${attemptNumber}|展开尝试 ${attemptNumber})$`,
+      ),
     }),
   );
   return attempt;
@@ -202,9 +204,7 @@ it("rerenders current-selection request history and request-detail times when th
     });
 
     const localizedSelection = getCurrentSelection();
-    const localizedAttempt = within(
-      within(localizedSelection).getByRole("region", { name: "推理尝试" }),
-    ).getByRole("article", { name: "推理尝试 2" });
+    const localizedAttempt = expandedAttempt(2);
     const chineseRequestTime = formatLocalDateTime(
       "2026-04-08T12:00:01Z",
       "不可用",
@@ -229,6 +229,7 @@ it("rerenders current-selection request history and request-detail times when th
     expect(
       within(localizedAttempt).queryByText(englishResponseTime),
     ).toBeNull();
+    openAttemptBodies(localizedAttempt, "展开请求正文", "展开响应正文");
     assertAttemptPayload(
       localizedAttempt,
       "Retry the review with the latest context.",
@@ -289,9 +290,7 @@ it("shows localized fallback copy for invalid request-detail timestamps without 
       expect(screen.getByRole("article", { name: "当前选择" })).toBeTruthy();
     });
 
-    const localizedAttempt = within(
-      within(getCurrentSelection()).getByRole("region", { name: "推理尝试" }),
-    ).getByRole("article", { name: "推理尝试 1" });
+    const localizedAttempt = expandedAttempt(1);
     expect(within(localizedAttempt).getAllByText("不可用")).toHaveLength(2);
     expect(
       within(localizedAttempt).queryByText(" definitely-not-a-date "),

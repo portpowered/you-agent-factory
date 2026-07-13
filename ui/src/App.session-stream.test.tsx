@@ -58,6 +58,7 @@ describe("App dashboard session stream loading", () => {
 
     resetTimelineForInitialStreamLoad();
     renderApp({
+      eventSourceOpening: "manual",
       seedTimelineFromSnapshot: false,
       snapshot: semanticWorkflowDashboardSnapshot,
     });
@@ -94,6 +95,7 @@ describe("App dashboard session stream loading", () => {
     await fixture.installCheckpoint();
 
     renderApp({
+      eventSourceOpening: "manual",
       fetchOverride: fixture.fetchOverride,
       seedTimelineFromSnapshot: false,
       snapshot: semanticWorkflowDashboardSnapshot,
@@ -157,6 +159,7 @@ describe("App dashboard session stream tab switch", () => {
     const betaSnapshot = buildBetaSessionSnapshot();
 
     renderApp({
+      eventSourceOpening: "manual",
       factorySessions: [rootFactorySession, betaFactorySession],
       snapshot: semanticWorkflowDashboardSnapshot,
     });
@@ -223,6 +226,7 @@ describe("App dashboard session stream pause", () => {
     const betaSnapshot = buildBetaSessionSnapshot();
 
     renderApp({
+      eventSourceOpening: "manual",
       factorySessions: [rootFactorySession, betaFactorySession],
       snapshot: semanticWorkflowDashboardSnapshot,
     });
@@ -295,6 +299,7 @@ describe("App dashboard session stream refresh", () => {
 
     resetTimelineForInitialStreamLoad();
     renderApp({
+      eventSourceOpening: "manual",
       seedTimelineFromSnapshot: false,
       snapshot: semanticWorkflowDashboardSnapshot,
     });

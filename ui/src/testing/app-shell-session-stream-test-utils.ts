@@ -5,6 +5,7 @@ import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./app-shell-session-pre
 import { seedTimelineSnapshot } from "./app-shell-timeline-seed-utils";
 
 export class MockEventSource {
+  public static openAutomatically = false;
   public static instances: MockEventSource[] = [];
 
   public closed = false;
@@ -17,6 +18,13 @@ export class MockEventSource {
 
   public constructor(public readonly url: string) {
     MockEventSource.instances.push(this);
+    if (MockEventSource.openAutomatically) {
+      queueMicrotask(() => {
+        if (!this.closed) {
+          this.open();
+        }
+      });
+    }
   }
 
   public addEventListener(type: string, listener: EventListener): void {
