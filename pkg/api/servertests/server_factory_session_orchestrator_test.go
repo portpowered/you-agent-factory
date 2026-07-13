@@ -102,6 +102,43 @@ func TestFactorySessionsAPI_ResponseEventsRouteSignalsStaleReconnectFirst(t *tes
 	}
 }
 
+type integrationResponseEventClock struct {
+	now time.Time
+}
+
+func (c *integrationResponseEventClock) Now() time.Time {
+	return c.now
+}
+
+func TestFactorySessionsAPI_ResponseEventsRouteReturnsTypedExpiredOutcome(t *testing.T) {
+	start := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	clock := &integrationResponseEventClock{now: start}
+	store := responseeventstore.NewSessionResponseEventStoreWithClock("session-beta", clock)
+	publishIntegrationResponseProgress(t, store, "completed")
+	store.Complete()
+	clock.now = start.Add(responseeventstore.CompletedStreamRetentionWindow)
+	srv := newMockFactorySessionTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
+		"session-beta": {ResponseEventStore: store},
+	}})
+
+	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events", nil)
+	rec := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusGone {
+		t.Fatalf("GET expired response-events status = %d, want 410: %s", rec.Code, rec.Body.String())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode expired response: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED || response.Family != factoryapi.ErrorFamilyGone {
+		t.Fatalf("expired response = %#v, want typed RESPONSE_EVENT_STREAM_EXPIRED/GONE", response)
+	}
+	if got := rec.Header().Get("Content-Type"); strings.Contains(got, "text/event-stream") {
+		t.Fatalf("expired response Content-Type = %q, want JSON before SSE headers", got)
+	}
+}
+
 func publishIntegrationResponseProgress(
 	t *testing.T,
 	store *responseeventstore.SessionResponseEventStore,

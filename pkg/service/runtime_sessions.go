@@ -375,6 +375,9 @@ func (fs *FactoryService) SubscribeFactoryResponseEventsForSession(ctx context.C
 	}
 	subscription, err := session.ResponseEvents.Subscribe(afterSequence, options...)
 	if err != nil {
+		if errors.Is(err, responseeventstore.ErrStoreExpired) {
+			return nil, fmt.Errorf("%w: %s", apisurface.ErrFactoryResponseEventStreamExpired, sessionID)
+		}
 		return nil, err
 	}
 	return &factoryResponseEventSubscription{subscription: subscription}, nil

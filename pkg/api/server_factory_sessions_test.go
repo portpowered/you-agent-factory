@@ -87,6 +87,58 @@ func TestFactoryResponseEventsBySessionID_RetainedThenLiveUsesExactSessionAndFlu
 	}
 }
 
+func TestFactoryResponseEventsBySessionID_DisconnectDoesNotStopPublicationOrCatchUp(t *testing.T) {
+	store := responseeventstore.NewSessionResponseEventStore("session-beta")
+	retained := publishResponseProgress(t, store, "before-disconnect")
+	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
+		"session-beta": {ResponseEventStore: store},
+	}})
+	httpServer := httptest.NewServer(srv.Handler())
+	defer httpServer.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, httpServer.URL+"/factory-sessions/session-beta/response-events", nil)
+	if err != nil {
+		t.Fatalf("new response-event request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("open response-event stream: %v", err)
+	}
+	defer response.Body.Close()
+	got := readSSEFactoryResponseEvent(t, bufio.NewReader(response.Body))
+	if got.EventID != retained.EventID {
+		t.Fatalf("retained event = %q, want %q", got.EventID, retained.EventID)
+	}
+
+	cancel()
+	waitForNoResponseEventSubscribers(t, store)
+	afterDisconnect := publishResponseProgress(t, store, "after-disconnect")
+	catchUp, err := store.Subscribe(retained.Sequence)
+	if err != nil {
+		t.Fatalf("subscribe after observer disconnect: %v", err)
+	}
+	defer catchUp.Detach()
+	events, err := catchUp.Next(context.Background())
+	if err != nil {
+		t.Fatalf("read event published after observer disconnect: %v", err)
+	}
+	if len(events) != 1 || events[0].EventID != afterDisconnect.EventID {
+		t.Fatalf("events after observer disconnect = %#v, want continued event %q", events, afterDisconnect.EventID)
+	}
+}
+
+func waitForNoResponseEventSubscribers(t *testing.T, store *responseeventstore.SessionResponseEventStore) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for store.SubscriberCount() != 0 && time.Now().Before(deadline) {
+		runtime.Gosched()
+	}
+	if store.SubscriberCount() != 0 {
+		t.Fatalf("response-event subscribers after disconnect = %d, want 0", store.SubscriberCount())
+	}
+}
+
 func TestFactoryResponseEventsBySessionID_StaleCursorGetsGapBeforeRetainedAndLiveEvents(t *testing.T) {
 	store, err := responseeventstore.NewSessionResponseEventStoreWithLimits(
 		"session-beta",
@@ -216,6 +268,76 @@ func TestFactoryResponseEventsBySessionID_UnknownSessionNeverFallsBackToDefault(
 	if defaultStore.SubscriberCount() != 0 {
 		t.Fatalf("default response-event subscribers = %d, want 0 after unknown-session request", defaultStore.SubscriberCount())
 	}
+}
+
+type responseEventTestClock struct {
+	now time.Time
+}
+
+func (c *responseEventTestClock) Now() time.Time {
+	return c.now
+}
+
+func TestFactoryResponseEventsBySessionID_CompletedWithinRetentionDrainsAndCloses(t *testing.T) {
+	start := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	clock := &responseEventTestClock{now: start}
+	store := responseeventstore.NewSessionResponseEventStoreWithClock("session-beta", clock)
+	wantFirst := publishResponseProgress(t, store, "completed-first")
+	wantSecond := publishResponseProgress(t, store, "completed-second")
+	store.Complete()
+	clock.now = start.Add(responseeventstore.CompletedStreamRetentionWindow - time.Second)
+
+	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
+		"session-beta": {ResponseEventStore: store},
+	}})
+	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events", nil)
+	recorder := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("completed response-event status = %d, want 200: %s", recorder.Code, recorder.Body.String())
+	}
+	reader := bufio.NewReader(recorder.Body)
+	first := readSSEFactoryResponseEvent(t, reader)
+	second := readSSEFactoryResponseEvent(t, reader)
+	if first.EventID != wantFirst.EventID || second.EventID != wantSecond.EventID {
+		t.Fatalf("completed drain events = [%q %q], want [%q %q]", first.EventID, second.EventID, wantFirst.EventID, wantSecond.EventID)
+	}
+	if remaining, err := io.ReadAll(reader); err != nil || len(remaining) != 0 {
+		t.Fatalf("completed stream remainder = %q, err = %v; want clean end", remaining, err)
+	}
+}
+
+func TestFactoryResponseEventsBySessionID_ExpiredCompletedStreamReturnsTypedGone(t *testing.T) {
+	start := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	clock := &responseEventTestClock{now: start}
+	store := responseeventstore.NewSessionResponseEventStoreWithClock("session-beta", clock)
+	publishResponseProgress(t, store, "completed")
+	store.Complete()
+	clock.now = start.Add(responseeventstore.CompletedStreamRetentionWindow)
+
+	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
+		"session-beta": {ResponseEventStore: store},
+	}})
+	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events", nil)
+	recorder := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(recorder, request)
+
+	assertJSONError(t, recorder, http.StatusGone, "RESPONSE_EVENT_STREAM_EXPIRED", "factory response-event stream expired")
+	if got := recorder.Header().Get("Content-Type"); strings.Contains(got, "text/event-stream") {
+		t.Fatalf("expired stream Content-Type = %q, want typed JSON before SSE headers", got)
+	}
+}
+
+func TestFactoryResponseEventsBySessionID_SubscriptionFailureReturnsTypedInternalError(t *testing.T) {
+	srv := newTestServer(&testutil.MockFactory{SessionFactories: map[string]*testutil.MockFactory{
+		"session-beta": {ResponseEventSubscribeErr: errors.New("subscription storage failed")},
+	}})
+	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-beta/response-events", nil)
+	recorder := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(recorder, request)
+
+	assertJSONError(t, recorder, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to subscribe to factory response events")
 }
 
 func publishResponseProgress(t *testing.T, store *responseeventstore.SessionResponseEventStore, label string) responseevents.FactoryResponseEvent {

@@ -107,6 +107,9 @@ func (s *SessionResponseEventStore) Subscribe(afterSequence int64, opts ...Subsc
 	if s.closed {
 		return nil, ErrStoreClosed
 	}
+	if s.completed && !s.storeNowLocked().Before(s.completedAt.Add(CompletedStreamRetentionWindow)) {
+		return nil, ErrStoreExpired
+	}
 	if s.completed {
 		return &Subscription{
 			store:         s,

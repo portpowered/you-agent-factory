@@ -2,12 +2,17 @@ package apisurface
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 )
+
+// ErrFactoryResponseEventStreamExpired reports that the completed session's
+// ephemeral response-event retention window elapsed before subscription.
+var ErrFactoryResponseEventStreamExpired = errors.New("factory response event stream expired")
 
 // FactoryResponseEventRecord is one transport-neutral serialized observation
 // returned by a session-owned ephemeral response-event subscription.

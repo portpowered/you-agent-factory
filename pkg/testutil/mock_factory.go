@@ -904,6 +904,9 @@ func (m *MockFactory) SubscribeFactoryResponseEventsForSession(ctx context.Conte
 	}
 	subscription, err := session.ResponseEventStore.Subscribe(afterSequence, options...)
 	if err != nil {
+		if errors.Is(err, responseeventstore.ErrStoreExpired) {
+			return nil, fmt.Errorf("%w: %s", apisurface.ErrFactoryResponseEventStreamExpired, sessionID)
+		}
 		return nil, err
 	}
 	return &mockFactoryResponseEventSubscription{subscription: subscription}, nil

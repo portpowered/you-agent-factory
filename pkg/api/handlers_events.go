@@ -144,6 +144,10 @@ func (s *Server) GetFactoryResponseEventsBySessionId(
 			s.writeError(w, http.StatusNotFound, "factory response-event session not found", "RESPONSE_EVENT_SESSION_NOT_FOUND")
 			return
 		}
+		if errors.Is(err, apisurface.ErrFactoryResponseEventStreamExpired) {
+			s.writeError(w, http.StatusGone, "factory response-event stream expired", "RESPONSE_EVENT_STREAM_EXPIRED")
+			return
+		}
 		s.logger.Error("subscribe factory response events failed", zap.String("session_id", string(sessionID)), zap.Error(err))
 		s.writeError(w, http.StatusInternalServerError, "failed to subscribe to factory response events", "INTERNAL_ERROR")
 		return
