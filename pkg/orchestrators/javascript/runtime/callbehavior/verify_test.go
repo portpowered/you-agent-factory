@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/callbehavior"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/symbolidentity"
+	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 )
 
 func TestVerifyInventory_FailsWhenExpectedPathMissing(t *testing.T) {
@@ -55,6 +57,40 @@ func TestVerifyInventory_FailsWhenPathDuplicated(t *testing.T) {
 	}
 	if got := err.Error(); !strings.Contains(got, `duplicate record path "agent"`) {
 		t.Fatalf("VerifyInventory() error = %q, want duplicate path diagnostic naming agent", got)
+	}
+}
+
+func TestForbiddenGlobalsAbsentFromInventoryAndInstalledBindingSurface(t *testing.T) {
+	inventory := callbehavior.ProjectInstalledCallBehavior()
+	for _, forbidden := range callbehavior.ForbiddenRootGlobals {
+		for _, record := range inventory.Records {
+			path := record.Path
+			if path == forbidden || strings.HasPrefix(path, forbidden+".") {
+				t.Fatalf("call-behavior inventory exposes forbidden global %q via path %q", forbidden, path)
+			}
+		}
+	}
+
+	installedRoots := symbolidentity.InstalledRootGlobals()
+	for _, forbidden := range callbehavior.ForbiddenRootGlobals {
+		for _, root := range installedRoots {
+			if root == forbidden {
+				t.Fatalf("installed binding surface exposes forbidden root global %q", forbidden)
+			}
+		}
+	}
+
+	for _, forbidden := range callbehavior.ForbiddenRootGlobals {
+		result := workflowvalidation.Validate(workflowvalidation.Request{
+			Source:    fmt.Sprintf("%s({}); workflow.final({ ok: true });", forbidden),
+			SourceRef: "inline",
+		})
+		if !result.HasIssues() {
+			t.Fatalf("validation accepted forbidden global %q", forbidden)
+		}
+		if result.Issues[0].Code != workflowvalidation.CodeUnsupportedGlobal {
+			t.Fatalf("validation issue for %q = %#v, want unsupported global", forbidden, result.Issues[0])
+		}
 	}
 }
 
