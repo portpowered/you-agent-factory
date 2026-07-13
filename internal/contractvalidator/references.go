@@ -114,7 +114,7 @@ func resolveReferencesWithin(
 		rejectUnsupportedReferenceKeywords: allowed != nil,
 		resolvedResourceIDs:                make(map[string]struct{}),
 	}
-	resolved, diagnostics := resolver.resolveNode(value, document, nil)
+	resolved, diagnostics := resolver.resolveNode(value, document, nil, documentBaseURI(document))
 	if len(diagnostics) != 0 {
 		return nil, nil, diagnostics
 	}
@@ -130,7 +130,7 @@ func resolveReferencesWithin(
 	return resolved, loaded, nil
 }
 
-func (r *referenceResolver) resolveNode(value any, document string, segments []string) (any, []Diagnostic) {
+func (r *referenceResolver) resolveNode(value any, document string, segments []string, baseURI *url.URL) (any, []Diagnostic) {
 	switch typed := value.(type) {
 	case map[string]any:
 		if r.rejectUnsupportedReferenceKeywords {
@@ -138,22 +138,23 @@ func (r *referenceResolver) resolveNode(value any, document string, segments []s
 				return nil, diagnostics
 			}
 		}
-		resourceID, hasResourceID := stableResourceID(typed)
+		resourceID, resourceURI, hasResourceID := stableResourceID(typed, baseURI)
 		if r.deduplicateResources && hasResourceID {
-			if _, resolved := r.resolvedResourceIDs[resourceID]; resolved {
-				return map[string]any{"$ref": resourceID}, nil
+			if _, resolved := r.resolvedResourceIDs[resourceURI.String()]; resolved {
+				return map[string]any{"$ref": reusableResourceReference(resourceID, resourceURI)}, nil
 			}
+			baseURI = resourceURI
 		}
 
 		var resolved any
 		var diagnostics []Diagnostic
 		if reference, ok := typed["$ref"]; ok {
-			resolved, diagnostics = r.resolveReferenceObject(typed, reference, document, segments)
+			resolved, diagnostics = r.resolveReferenceObject(typed, reference, document, segments, baseURI)
 		} else {
-			resolved, diagnostics = r.resolveObject(typed, document, segments)
+			resolved, diagnostics = r.resolveObject(typed, document, segments, baseURI)
 		}
 		if len(diagnostics) == 0 && r.deduplicateResources && hasResourceID {
-			r.resolvedResourceIDs[resourceID] = struct{}{}
+			r.resolvedResourceIDs[resourceURI.String()] = struct{}{}
 		}
 		return resolved, diagnostics
 	case []any:
@@ -161,7 +162,7 @@ func (r *referenceResolver) resolveNode(value any, document string, segments []s
 		var diagnostics []Diagnostic
 		for index, child := range typed {
 			var issues []Diagnostic
-			resolved[index], issues = r.resolveNode(child, document, appendPath(segments, strconv.Itoa(index)))
+			resolved[index], issues = r.resolveNode(child, document, appendPath(segments, strconv.Itoa(index)), baseURI)
 			diagnostics = append(diagnostics, issues...)
 		}
 		return resolved, diagnostics
@@ -186,12 +187,30 @@ func (r *referenceResolver) unsupportedReferenceKeywordDiagnostics(value map[str
 	return diagnostics
 }
 
-func stableResourceID(value map[string]any) (string, bool) {
+func stableResourceID(value map[string]any, baseURI *url.URL) (string, *url.URL, bool) {
 	identifier, ok := value["$id"].(string)
-	return identifier, ok && identifier != ""
+	if !ok || identifier == "" {
+		return "", baseURI, false
+	}
+	parsed, err := url.Parse(identifier)
+	if err != nil {
+		return identifier, baseURI, false
+	}
+	return identifier, baseURI.ResolveReference(parsed), true
 }
 
-func (r *referenceResolver) resolveObject(value map[string]any, document string, segments []string) (map[string]any, []Diagnostic) {
+func reusableResourceReference(identifier string, resourceURI *url.URL) string {
+	if resourceURI.IsAbs() {
+		return resourceURI.String()
+	}
+	return identifier
+}
+
+func documentBaseURI(document string) *url.URL {
+	return &url.URL{Path: "/" + normalizeRepositoryPath(document)}
+}
+
+func (r *referenceResolver) resolveObject(value map[string]any, document string, segments []string, baseURI *url.URL) (map[string]any, []Diagnostic) {
 	keys := make([]string, 0, len(value))
 	for key := range value {
 		keys = append(keys, key)
@@ -200,15 +219,15 @@ func (r *referenceResolver) resolveObject(value map[string]any, document string,
 	resolved := make(map[string]any, len(value))
 	var diagnostics []Diagnostic
 	for _, key := range keys {
-		child, issues := r.resolveNode(value[key], document, appendPath(segments, key))
+		child, issues := r.resolveNode(value[key], document, appendPath(segments, key), baseURI)
 		resolved[key] = child
 		diagnostics = append(diagnostics, issues...)
 	}
 	return resolved, diagnostics
 }
 
-func (r *referenceResolver) resolveReferenceObject(value map[string]any, reference any, document string, segments []string) (any, []Diagnostic) {
-	resolvedReference, diagnostics := r.resolveReference(reference, document, appendPath(segments, "$ref"))
+func (r *referenceResolver) resolveReferenceObject(value map[string]any, reference any, document string, segments []string, baseURI *url.URL) (any, []Diagnostic) {
+	resolvedReference, diagnostics := r.resolveReference(reference, document, appendPath(segments, "$ref"), baseURI)
 	if len(diagnostics) != 0 {
 		return nil, diagnostics
 	}
@@ -222,7 +241,7 @@ func (r *referenceResolver) resolveReferenceObject(value map[string]any, referen
 			siblings[key] = child
 		}
 	}
-	resolvedSiblings, diagnostics := r.resolveObject(siblings, document, segments)
+	resolvedSiblings, diagnostics := r.resolveObject(siblings, document, segments, baseURI)
 	if len(diagnostics) != 0 {
 		return nil, diagnostics
 	}
@@ -234,7 +253,7 @@ func (r *referenceResolver) resolveReferenceObject(value map[string]any, referen
 	return resolvedSiblings, nil
 }
 
-func (r *referenceResolver) resolveReference(value any, referringDocument string, segments []string) (any, []Diagnostic) {
+func (r *referenceResolver) resolveReference(value any, referringDocument string, segments []string, baseURI *url.URL) (any, []Diagnostic) {
 	reference, ok := value.(string)
 	if !ok || reference == "" {
 		return nil, r.issue("reference.invalid", "reference must be a non-empty string", referringDocument, segments)
@@ -258,7 +277,10 @@ func (r *referenceResolver) resolveReference(value any, referringDocument string
 	if err != nil {
 		return nil, r.issue("reference.fragment", fmt.Sprintf("reference %q has an unresolved fragment", reference), referringDocument, segments)
 	}
-	return r.resolveNode(selected, targetDocument, nil)
+	parsedReference, _ := url.Parse(reference)
+	resolvedBaseURI := baseURI.ResolveReference(parsedReference)
+	resolvedBaseURI.Fragment = ""
+	return r.resolveNode(selected, targetDocument, nil, resolvedBaseURI)
 }
 
 func (r *referenceResolver) classifyReference(referringDocument, reference string, segments []string) (string, string, *Diagnostic) {

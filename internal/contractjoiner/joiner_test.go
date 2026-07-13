@@ -180,6 +180,118 @@ func TestJoinDeduplicatesSharedStableIDResourceAndPreservesValidation(t *testing
 	}
 }
 
+func TestJoinDistinguishesRelativeResourceIDsUnderDifferentBases(t *testing.T) {
+	root := t.TempDir()
+	paths := []string{
+		"contracts/root.json",
+		"contracts/a/base.json",
+		"contracts/a/item.json",
+		"contracts/b/base.json",
+		"contracts/b/item.json",
+	}
+	writeFile(t, root, paths[0], `{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://schemas.example.test/root.json",
+  "type":"object",
+  "required":["a","b"],
+  "properties":{
+    "a":{"$ref":"a/base.json"},
+    "b":{"$ref":"b/base.json"}
+  }
+}`)
+	writeFile(t, root, paths[1], `{
+  "$id":"https://schemas.example.test/a/",
+  "type":"object",
+  "required":["first","second"],
+  "properties":{"first":{"$ref":"item.json"},"second":{"$ref":"item.json"}}
+}`)
+	writeFile(t, root, paths[2], `{"$id":"item.json","type":"string","minLength":2}`)
+	writeFile(t, root, paths[3], `{
+  "$id":"https://schemas.example.test/b/",
+  "type":"object",
+  "required":["first","second"],
+  "properties":{"first":{"$ref":"item.json"},"second":{"$ref":"item.json"}}
+}`)
+	writeFile(t, root, paths[4], `{"$id":"item.json","type":"integer","minimum":10}`)
+
+	input := contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          paths[:1],
+		Components:     paths[1:],
+	}
+	before := joinDocuments(t, input)[0].Value
+	if got := countResourceID(before, "item.json"); got != 2 {
+		t.Fatalf("distinct relative item resource count = %d, want 2", got)
+	}
+	joinedProperties := object(t, object(t, before)["properties"])
+	for property, want := range map[string]string{
+		"a": "https://schemas.example.test/a/item.json",
+		"b": "https://schemas.example.test/b/item.json",
+	} {
+		baseProperties := object(t, object(t, joinedProperties[property])["properties"])
+		if got := object(t, baseProperties["second"])["$ref"]; got != want {
+			t.Fatalf("joined %s repeated resource reference = %v, want %s", property, got, want)
+		}
+	}
+	assertDistinctRelativeResourcesValidate(t, before)
+
+	beforeProperties := joinedProperties
+	beforeA := canonicalValue(t, beforeProperties["a"])
+	beforeB := canonicalValue(t, beforeProperties["b"])
+
+	writeFile(t, root, paths[2], `{"$id":"item.json","type":"string","minLength":3}`)
+	aEdited := joinDocuments(t, input)[0].Value
+	aProperties := object(t, object(t, aEdited)["properties"])
+	if bytes.Equal(beforeA, canonicalValue(t, aProperties["a"])) {
+		t.Fatal("editing a/item.json did not change its consumer")
+	}
+	if !bytes.Equal(beforeB, canonicalValue(t, aProperties["b"])) {
+		t.Fatal("editing a/item.json changed the distinct b resource")
+	}
+
+	writeFile(t, root, paths[4], `{"$id":"item.json","type":"integer","minimum":20}`)
+	bEdited := joinDocuments(t, input)[0].Value
+	bProperties := object(t, object(t, bEdited)["properties"])
+	if !bytes.Equal(canonicalValue(t, aProperties["a"]), canonicalValue(t, bProperties["a"])) {
+		t.Fatal("editing b/item.json changed the distinct a resource")
+	}
+	if bytes.Equal(canonicalValue(t, aProperties["b"]), canonicalValue(t, bProperties["b"])) {
+		t.Fatal("editing b/item.json did not change its consumer")
+	}
+}
+
+func assertDistinctRelativeResourcesValidate(t *testing.T, value any) {
+	t.Helper()
+	schema := compileJoinedSchema(t, value)
+	for _, test := range []struct {
+		name  string
+		value any
+		valid bool
+	}{
+		{name: "both resources pass", value: map[string]any{"a": map[string]any{"first": "aa", "second": "bb"}, "b": map[string]any{"first": 10, "second": 11}}, valid: true},
+		{name: "a first fails", value: map[string]any{"a": map[string]any{"first": "a", "second": "bb"}, "b": map[string]any{"first": 10, "second": 11}}, valid: false},
+		{name: "a repeated use fails", value: map[string]any{"a": map[string]any{"first": "aa", "second": 2}, "b": map[string]any{"first": 10, "second": 11}}, valid: false},
+		{name: "b first fails", value: map[string]any{"a": map[string]any{"first": "aa", "second": "bb"}, "b": map[string]any{"first": 9, "second": 11}}, valid: false},
+		{name: "b repeated use fails", value: map[string]any{"a": map[string]any{"first": "aa", "second": "bb"}, "b": map[string]any{"first": 10, "second": "wrong"}}, valid: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := schema.Validate(test.value)
+			if (err == nil) != test.valid {
+				t.Fatalf("Validate(%v) error = %v, want valid %t", test.value, err, test.valid)
+			}
+		})
+	}
+}
+
+func canonicalValue(t *testing.T, value any) []byte {
+	t.Helper()
+	contents, err := contractjoiner.MarshalCanonicalJSON(value)
+	if err != nil {
+		t.Fatalf("MarshalCanonicalJSON() error = %v", err)
+	}
+	return contents
+}
+
 func TestJoinPreservesAdjacentReferenceKeywordsAndTheirSemantics(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, root, "contracts/root.json", `{
