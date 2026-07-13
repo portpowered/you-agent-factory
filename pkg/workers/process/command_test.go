@@ -271,7 +271,7 @@ func TestExecCommandRunner_ContextCancelTerminatesSpawnedChildProcess(t *testing
 	go func() {
 		deadline := time.Now().Add(3 * time.Second)
 		for time.Now().Before(deadline) {
-			if _, err := os.Stat(pidFile); err == nil {
+			if _, err := readCommandHelperPIDFile(pidFile); err == nil {
 				cancel()
 				return
 			}
@@ -893,16 +893,11 @@ func waitForCommandHelperPID(t *testing.T, pidFile string, timeout time.Duration
 	deadline := time.Now().Add(timeout)
 	var lastErr error
 	for timeout <= 0 || time.Now().Before(deadline) {
-		raw, err := os.ReadFile(pidFile)
+		pid, err := readCommandHelperPIDFile(pidFile)
 		if err == nil {
-			pid, parseErr := strconv.Atoi(strings.TrimSpace(string(raw)))
-			if parseErr == nil && pid > 0 {
-				return pid
-			}
-			lastErr = parseErr
-		} else {
-			lastErr = err
+			return pid
 		}
+		lastErr = err
 		if timeout <= 0 {
 			break
 		}
@@ -913,6 +908,21 @@ func waitForCommandHelperPID(t *testing.T, pidFile string, timeout time.Duration
 	}
 	t.Fatalf("parse child pid from %s: %v", pidFile, lastErr)
 	return 0
+}
+
+func readCommandHelperPIDFile(pidFile string) (int, error) {
+	raw, err := os.ReadFile(pidFile)
+	if err != nil {
+		return 0, err
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil {
+		return 0, err
+	}
+	if pid <= 0 {
+		return 0, fmt.Errorf("child pid must be positive, got %d", pid)
+	}
+	return pid, nil
 }
 
 func waitForCommandHelperProcessExit(pid int, timeout time.Duration) bool {

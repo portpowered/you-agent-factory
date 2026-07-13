@@ -99,16 +99,16 @@ the standards.
   types used across subsystems.
 - `pkg/work/` contains canonical Work content, materialization, query, graph,
   time-work, and pure invocation input/return-policy behavior.
-- `pkg/localmodels/` contains managed model runtime catalog, readiness,
+- `pkg/models/local/` contains managed model runtime catalog, readiness,
   lifecycle, source resolution, cache, pull, and invocation support.
 - `pkg/petri/` contains internal Petri-net primitives.
 - `pkg/service/` coordinates backend service behavior across sessions,
   runtime construction, model catalog, replay, ingestion, and factory save or
   validation flows.
-- `pkg/workers/`, `pkg/hostedworkers/`, and `pkg/packagedfactories/` contain
+- `pkg/workers/` contains
   worker execution, inference binding/output shaping, provider integration,
   invocation-time worker capability policy, mock workers, worktrees, hosted
-  workers, and packaged factory support.
+  workers; `pkg/packagedfactories/` contains packaged factory support.
 - `pkg/orchestrators/javascript/preview`, `pkg/orchestrators/javascript/policy`,
   `pkg/orchestrators/javascript/result`, `pkg/orchestrators/javascript/source`,
   and `pkg/orchestrators/javascript/validation` contain JavaScript workflow

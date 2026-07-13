@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work/materialize"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
@@ -17,13 +18,15 @@ type Identity string
 // CommandContext contains invocation facts used to construct one subprocess
 // request. Command execution remains owned by orchestration.
 type CommandContext struct {
-	Request         interfaces.ProviderInferenceRequest
-	SkipPermissions bool
+	Request            interfaces.ProviderInferenceRequest
+	SkipPermissions    bool
+	MaterializeOptions *materialize.Options
 }
 
 // CommandBuildResult is the complete subprocess request produced by an adapter.
 type CommandBuildResult struct {
 	Request workerprocess.CommandRequest
+	Cleanup func()
 }
 
 // DecoderContext scopes a stateful decoder to one provider invocation.

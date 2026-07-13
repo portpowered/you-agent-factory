@@ -13,8 +13,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/builtingoal"
 	"github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 )
 
 func TestBlockingFactoryLoadError_PreservesCanonicalTargetsOnCanonicalJSONLoad(t *testing.T) {
@@ -146,7 +147,7 @@ func TestMaybeFormatBlockingFactoryLoadOperatorError_IncludesRecoveryForOnDiskFa
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
-	mutateGoalFactoryWorkstationOutputStateForTest(t, factoryDir, "missing-plan-state")
+	mutateGoalFactoryWorkstationOutputStateForTest(t, factoryDir, "missing-output-state")
 
 	_, loadErr := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
 	if loadErr == nil {
@@ -172,7 +173,7 @@ func TestFailureBaseline_InvalidTopology_MaterializedGoalUpgradePathReportsFindi
 	if err != nil {
 		t.Fatalf("ResolveNamedFactoryAcrossRoots(materialize goal): %v", err)
 	}
-	corruptGoalFactoryPlanOutputStateForTest(t, resolution.FactoryDir, "missing-plan-state")
+	corruptGoalFactoryExecuteOutputStateForTest(t, resolution.FactoryDir, "missing-output-state")
 
 	_, err = factoryconfig.ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
 	if err == nil {
@@ -279,7 +280,7 @@ func assertInvalidTopologyMaterializationOperatorDiagnostics(t *testing.T, err e
 	}
 }
 
-func corruptGoalFactoryPlanOutputStateForTest(t *testing.T, factoryDir, stateName string) {
+func corruptGoalFactoryExecuteOutputStateForTest(t *testing.T, factoryDir, stateName string) {
 	t.Helper()
 
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
@@ -301,13 +302,13 @@ func corruptGoalFactoryPlanOutputStateForTest(t *testing.T, factoryDir, stateNam
 		if !ok {
 			continue
 		}
-		if candidate["name"] == "plan-goal" {
+		if candidate["name"] == goal.PackagedExecuteWorkstationName {
 			workstation = candidate
 			break
 		}
 	}
 	if workstation == nil {
-		t.Fatal("factory.json plan-goal workstation not found")
+		t.Fatal("factory.json execute-goal workstation not found")
 	}
 	outputs, ok := workstation["outputs"].([]any)
 	if !ok || len(outputs) == 0 {
@@ -329,5 +330,5 @@ func corruptGoalFactoryPlanOutputStateForTest(t *testing.T, factoryDir, stateNam
 
 func mutateGoalFactoryWorkstationOutputStateForTest(t *testing.T, factoryDir, stateName string) {
 	t.Helper()
-	corruptGoalFactoryPlanOutputStateForTest(t, factoryDir, stateName)
+	corruptGoalFactoryExecuteOutputStateForTest(t, factoryDir, stateName)
 }

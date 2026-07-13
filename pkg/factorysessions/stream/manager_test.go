@@ -2,10 +2,12 @@ package stream_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/stream"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -153,6 +155,102 @@ func TestManager_PublishesCanonicalResponseEventsToSessionStore(t *testing.T) {
 	}
 	if events[0].DispatchID != "dispatch-1" {
 		t.Fatalf("dispatchId = %q, want dispatch-1", events[0].DispatchID)
+	}
+}
+
+func TestManager_PublishesProviderCanonicalDraftWithoutLegacyRemapping(t *testing.T) {
+	t.Parallel()
+
+	session := factorysessions.NewLiveSession(
+		"sess-native-draft", "/factory", "/workspace", "/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory",
+	)
+	host := &streamTestHost{session: session}
+	publisher := stream.NewManager(host).InferenceProgressPublisherFactory(nil)(session.ID)
+	payload, err := json.Marshal(responseevents.MessageDeltaPayload{
+		ContentBlockIndex: 2, ContentBlockKind: responseevents.ContentBlockText, TextDelta: "native delta",
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	publisher(workerprovider.CanonicalDraftFragment("dispatch-native", responseevents.Draft{
+		RunID: "dispatch-native", DispatchID: "dispatch-native", ItemID: "claude-message-7",
+		Kind: responseevents.KindMessage, Phase: responseevents.PhaseDelta,
+		Provenance: responseevents.Provenance{
+			Provider: "claude", NativeEventType: "content_block_delta",
+			Delivery: responseevents.DeliveryNativeStream, Representation: responseevents.RepresentationDelta,
+			Fidelity: responseevents.FidelityLossless,
+		},
+		Payload: payload,
+	}))
+
+	events := session.ResponseEvents.Events()
+	if len(events) != 1 || events[0].ItemID != "claude-message-7" || events[0].Provenance.Delivery != responseevents.DeliveryNativeStream {
+		t.Fatalf("canonical events = %#v, want unchanged provider-native identity and provenance", events)
+	}
+	if events[0].Sequence != 1 || events[0].EventID == "" || events[0].RecordedAt.IsZero() {
+		t.Fatalf("publication metadata = %#v, want session-owned identity, sequence, and time", events[0])
+	}
+	if host.published != 0 {
+		t.Fatalf("legacy response-stream publications = %d, want no lossy remapping", host.published)
+	}
+}
+
+func TestManager_NativeFailureSuppressesLegacyMarkersSecondCanonicalProjection(t *testing.T) {
+	t.Parallel()
+	session := factorysessions.NewLiveSession(
+		"sess-native-failure", "/factory", "/workspace", "/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory",
+	)
+	host := &streamTestHost{session: session}
+	publisher := stream.NewManager(host).InferenceProgressPublisherFactory(nil)(session.ID)
+	payload, err := json.Marshal(responseevents.ErrorPayload{Code: "codex_turn_failed", Message: "Codex is temporarily unavailable.", Retryable: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	publisher(workerprovider.CanonicalDraftFragment("dispatch-native-failure", responseevents.Draft{
+		RunID: "dispatch-native-failure", DispatchID: "dispatch-native-failure",
+		Kind: responseevents.KindError, Phase: responseevents.PhaseFailed,
+		Provenance: responseevents.Provenance{
+			Provider: "codex", NativeEventType: "turn.failed", Delivery: responseevents.DeliveryNativeStream,
+			Representation: responseevents.RepresentationNotification, Fidelity: responseevents.FidelityNormalized,
+		},
+		Payload: payload,
+	}))
+	marker := workerprovider.FailedFragment("dispatch-native-failure", nil, "Codex is temporarily unavailable.")
+	marker.CanonicalEventAlreadyPublished = true
+	publisher(marker)
+
+	events := session.ResponseEvents.Events()
+	if len(events) != 1 || events[0].Kind != responseevents.KindError || events[0].Provenance.NativeEventType != "turn.failed" {
+		t.Fatalf("canonical events = %#v, want one native terminal failure", events)
+	}
+	if host.published != 1 {
+		t.Fatalf("legacy response-stream publications = %d, want terminal marker retained", host.published)
+	}
+}
+
+func TestManager_RejectsInvalidProviderCanonicalDraftsWithoutLegacyFallback(t *testing.T) {
+	t.Parallel()
+	session := factorysessions.NewLiveSession(
+		"sess-invalid-native", "/factory", "/workspace", "/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory",
+	)
+	host := &streamTestHost{session: session}
+	publisher := stream.NewManager(host).InferenceProgressPublisherFactory(nil)(session.ID)
+	publisher(workerprovider.CanonicalDraftFragment("dispatch-invalid-type", "not-a-draft"))
+	publisher(workerprovider.CanonicalDraftFragment("dispatch-invalid-shape", responseevents.Draft{
+		DispatchID: "dispatch-invalid-shape", Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted,
+	}))
+
+	if host.degraded != 2 {
+		t.Fatalf("degraded publications = %d, want both invalid drafts rejected", host.degraded)
+	}
+	if events := session.ResponseEvents.Events(); len(events) != 0 {
+		t.Fatalf("canonical events = %#v, want no lossy fallback", events)
+	}
+	if host.published != 0 {
+		t.Fatalf("legacy publications = %d, want no invalid draft remapping", host.published)
 	}
 }
 

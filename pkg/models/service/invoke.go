@@ -9,8 +9,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
@@ -201,10 +201,10 @@ func (s *Service) modelInvocationExecutor(
 }
 
 func (s *Service) factoryRunnerID() string {
-	if s == nil || s.deps.FactoryRunnerID == nil {
+	if s == nil {
 		return ""
 	}
-	return s.deps.FactoryRunnerID()
+	return s.deps.FactoryRunnerID
 }
 
 func (s *Service) recordManagedRuntimeInvocationReadiness(

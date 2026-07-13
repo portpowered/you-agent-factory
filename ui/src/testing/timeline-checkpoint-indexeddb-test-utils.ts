@@ -2,11 +2,15 @@ interface StoredCheckpointEnvelope {
   storageKey?: string;
 }
 
-export function createTimelineCheckpointIndexedDBTestDouble(): {
+export function createTimelineCheckpointIndexedDBTestDouble(
+  options: { writeError?: Error } = {},
+): {
   indexedDB: IDBFactory;
   records: Map<string, StoredCheckpointEnvelope>;
+  writeAttempts: () => number;
 } {
   const records = new Map<string, StoredCheckpointEnvelope>();
+  let attemptedWrites = 0;
   const database = {
     close: () => {},
     createObjectStore: () => undefined,
@@ -14,28 +18,57 @@ export function createTimelineCheckpointIndexedDBTestDouble(): {
     objectStoreNames: {
       contains: () => true,
     },
-    transaction: () => ({
-      objectStore: () => ({
-        delete: (key: string) =>
-          indexedDBRequest(undefined, () => {
-            records.delete(key);
-          }),
-        get: (key: string) => indexedDBRequest(records.get(key)),
-        getAll: () => indexedDBRequest([...records.values()]),
-        put: (value: StoredCheckpointEnvelope) =>
-          indexedDBRequest(value.storageKey ?? "", () => {
-            if (value.storageKey) {
-              records.set(value.storageKey, value);
+    transaction: () => {
+      const transaction = {
+        onabort: null,
+        oncomplete: null,
+        onerror: null,
+        objectStore: () => ({
+          delete: (key: string) =>
+            indexedDBTestRequest(
+              undefined,
+              () => {
+                records.delete(key);
+              },
+              () =>
+                (transaction.oncomplete as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                ),
+            ),
+          get: (key: string) => indexedDBTestRequest(records.get(key)),
+          getAll: () => indexedDBTestRequest([...records.values()]),
+          put: (value: StoredCheckpointEnvelope) => {
+            attemptedWrites += 1;
+            if (options.writeError) {
+              return indexedDBErrorTestRequest(options.writeError, () => {
+                (transaction.onerror as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                );
+              });
             }
-          }),
-      }),
-    }),
+            return indexedDBTestRequest(
+              value.storageKey ?? "",
+              () => {
+                if (value.storageKey) {
+                  records.set(value.storageKey, value);
+                }
+              },
+              () =>
+                (transaction.oncomplete as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                ),
+            );
+          },
+        }),
+      };
+      return transaction;
+    },
   };
 
   return {
     indexedDB: {
       open: () => {
-        const request = indexedDBRequest(database);
+        const request = indexedDBTestRequest(database);
         queueMicrotask(() =>
           request.onupgradeneeded?.({} as IDBVersionChangeEvent),
         );
@@ -43,10 +76,15 @@ export function createTimelineCheckpointIndexedDBTestDouble(): {
       },
     } as unknown as IDBFactory,
     records,
+    writeAttempts: () => attemptedWrites,
   };
 }
 
-function indexedDBRequest<T>(result: T, beforeSuccess?: () => void) {
+export function indexedDBTestRequest<T>(
+  result: T,
+  beforeSuccess?: () => void,
+  afterSuccess?: () => void,
+) {
   const request = {
     error: null,
     onblocked: null,
@@ -62,7 +100,25 @@ function indexedDBRequest<T>(result: T, beforeSuccess?: () => void) {
   queueMicrotask(() => {
     beforeSuccess?.();
     request.onsuccess?.({} as Event);
+    afterSuccess?.();
   });
 
+  return request;
+}
+
+export function indexedDBErrorTestRequest<T>(
+  error: Error,
+  afterError?: () => void,
+): IDBRequest<T> {
+  const request = {
+    error,
+    onerror: null,
+    onsuccess: null,
+    result: undefined,
+  } as unknown as IDBRequest<T>;
+  queueMicrotask(() => {
+    request.onerror?.({} as Event);
+    afterError?.();
+  });
   return request;
 }
