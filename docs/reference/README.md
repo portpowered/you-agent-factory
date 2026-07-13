@@ -36,7 +36,7 @@ concept owners below when you need the complete customer-facing contract.
 | `workstations` | Workstation kinds, routes, runtime fields, and scoped execution settings | [Workstations](workstations.md) |
 | `workers` | Worker quick reference | [Workers](workers.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
-| `models` | Model discovery, invocation, and contract quick reference | [Models and model operations](models.md) |
+| `models` | Model discovery, readiness, pull, invocation, and Factory execution boundaries | [Models](models.md) |
 | `batch-inputs` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |
 | `templates` | Template authoring guide | [Templates](templates.md) |
 
@@ -109,9 +109,8 @@ Use these canonical concept owners when you need the current contract.
   `factory.json`, `workers/`, `workstations/`, and `inputs/`.
 - [Resources](resources.md) explains top-level resource pools and the
   `{name, capacity}` requirements consumed by workers or workstations.
-- [Models and model operations](models.md) explains `INFERENCE_RUN`,
-  `INFERENCE_WORKER` capabilities, typed model resources, `/models`, and local or
-  cloud TTS authoring patterns.
+- [Models](models.md) explains model discovery, readiness, pull, direct
+  invocation, and the `INFERENCE_WORKER`/`INFERENCE_RUN` Factory boundary.
 - [Batch inputs](batch-inputs.md) explains the `FACTORY_REQUEST_BATCH` request
   shape, watched-file placement, and supported relation types.
 - [Templates](templates.md) explains the supported Go-template surfaces, the
@@ -136,7 +135,7 @@ Use these canonical concept owners when you need the current contract.
 - [Workstations](workstations.md)
 - [Workers](workers.md)
 - [Resources](resources.md)
-- [Models and model operations](models.md)
+- [Models](models.md)
 - [Author AGENTS.md](authoring-agents-md.md)
 - [Batch inputs](batch-inputs.md)
 - [Templates](templates.md)

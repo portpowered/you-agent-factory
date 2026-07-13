@@ -11,8 +11,103 @@ import (
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 )
+
+func TestModelsDocumentation_ExamplesReachCurrentCLIBoundary(t *testing.T) {
+	doc, err := docscli.Markdown("models")
+	if err != nil {
+		t.Fatalf("Markdown(models) error = %v", err)
+	}
+	requireDocumentedModelCommands(t, doc)
+
+	originalList := listModels
+	originalInspect := inspectModel
+	originalPull := pullModel
+	originalInvoke := invokeModel
+	defer func() {
+		listModels = originalList
+		inspectModel = originalInspect
+		pullModel = originalPull
+		invokeModel = originalInvoke
+	}()
+
+	var listed bool
+	var inspected, pulled string
+	var invocations []modelscli.InvokeConfig
+	listModels = func(modelscli.ListConfig) error { listed = true; return nil }
+	inspectModel = func(cfg modelscli.InspectConfig) error { inspected = cfg.ModelName; return nil }
+	pullModel = func(cfg modelscli.PullConfig) error { pulled = cfg.ModelName; return nil }
+	invokeModel = func(cfg modelscli.InvokeConfig) error {
+		invocations = append(invocations, cfg)
+		return nil
+	}
+
+	executeDocumentedModelExample(t, []string{"models", "list"})
+	executeDocumentedModelExample(t, []string{"models", "inspect", "OMNIVOICE_Q4_K_M"})
+	executeDocumentedModelExample(t, []string{"models", "pull", "OMNIVOICE_Q4_K_M"})
+	executeDocumentedModelExample(t, []string{"models", "invoke", "OMNIVOICE_Q4_K_M", "--operation", "TTS", "--text", "Read the release summary.", "--output", "./speech.wav"})
+	executeDocumentedModelExample(t, []string{"--json", "models", "invoke", "OMNIVOICE_Q4_K_M", "--operation", "TTS", "--text", "Read the release summary."})
+
+	assertDocumentedModelConfigs(t, listed, inspected, pulled, invocations)
+	assertModelCommandsRequireName(t)
+}
+
+func requireDocumentedModelCommands(t *testing.T, doc string) {
+	t.Helper()
+	for _, command := range []string{
+		"you models list",
+		"you models inspect OMNIVOICE_Q4_K_M",
+		"you models pull OMNIVOICE_Q4_K_M",
+		`you models invoke OMNIVOICE_Q4_K_M --operation TTS --text "Read the release summary." --output ./speech.wav`,
+		`you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text "Read the release summary."`,
+	} {
+		if !strings.Contains(doc, command) {
+			t.Fatalf("packaged models guide missing executable example %q", command)
+		}
+	}
+}
+
+func assertDocumentedModelConfigs(t *testing.T, listed bool, inspected, pulled string, invocations []modelscli.InvokeConfig) {
+	t.Helper()
+	if !listed || inspected != "OMNIVOICE_Q4_K_M" || pulled != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("documented model task boundary = listed %t, inspected %q, pulled %q", listed, inspected, pulled)
+	}
+	if len(invocations) != 2 {
+		t.Fatalf("documented invocations reaching model boundary = %d, want 2", len(invocations))
+	}
+	if got := invocations[0]; got.ModelName != "OMNIVOICE_Q4_K_M" || got.Operation != "TTS" || got.Text != "Read the release summary." || got.OutputPath != "./speech.wav" || got.JSON {
+		t.Fatalf("documented audio invocation = %#v, want complete model, operation, text, and output", got)
+	}
+	if got := invocations[1]; got.ModelName != "OMNIVOICE_Q4_K_M" || got.Operation != "TTS" || got.Text != "Read the release summary." || got.OutputPath != "" || !got.JSON {
+		t.Fatalf("documented JSON invocation = %#v, want complete model, operation, text, and JSON mode", got)
+	}
+}
+
+func assertModelCommandsRequireName(t *testing.T) {
+	t.Helper()
+	for _, subcommand := range []string{"inspect", "pull", "invoke"} {
+		root := NewRootCommand()
+		root.SetOut(io.Discard)
+		root.SetErr(io.Discard)
+		root.SetArgs([]string{"models", subcommand})
+		if err := root.Execute(); err == nil || !strings.Contains(err.Error(), "accepts 1 arg(s), received 0") {
+			t.Fatalf("models %s without model error = %v, want required-model failure", subcommand, err)
+		}
+	}
+}
+
+func executeDocumentedModelExample(t *testing.T, args []string) {
+	t.Helper()
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute %q: %v", strings.Join(args, " "), err)
+	}
+}
 
 func TestConfigDocumentation_ExamplesReachCurrentCLIPathBoundary(t *testing.T) {
 	doc, err := docscli.Markdown("config")
@@ -304,7 +399,7 @@ func TestDocsCommand_CanonicalOperatorTopicsResolve(t *testing.T) {
 	}{
 		{topic: "run", heading: "# Run"},
 		{topic: "config", heading: "# Config"},
-		{topic: "models", heading: "# Models And Model Operations"},
+		{topic: "models", heading: "# Models"},
 		{topic: "mcp", heading: "# MCP Install Path For Factory Preview Tools"},
 		{topic: "javascript-workflows", heading: "# JavaScript Workflow Authoring"},
 	}
