@@ -237,12 +237,16 @@ func newAPIJavaScriptExecutionService(t *testing.T, projectRoot, childExecutorMo
 		ProjectRoot:       projectRoot,
 		Clock:             factory.RealClock{},
 		Provider:          provider,
-		Persistence:       runtimepersist.DirectoryStore{Dir: filepath.Join(t.TempDir(), "durable-sessions")},
+		Persistence:       runtimepersist.DirectoryStore{Dir: runtimepersist.DirForProjectRoot(projectRoot)},
 		ChildExecutorMode: childExecutorMode,
 	})
 	if err != nil {
 		t.Fatalf("compose API JavaScript execution service: %v", err)
 	}
+	t.Cleanup(func() {
+		drainAPILifecycleRuntimeSessions(t, service)
+		removeAPILifecycleProjectState(t, projectRoot)
+	})
 	return service
 }
 
