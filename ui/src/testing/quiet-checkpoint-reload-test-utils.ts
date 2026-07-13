@@ -96,7 +96,14 @@ function createIndexedDBTestDouble(): IDBFactory {
   } as unknown as IDBFactory;
 }
 
-function preflightResponse(checkpoint: FactoryTimelineCheckpoint): Response {
+function preflightResponse(path: string): Response {
+  const requestedSessionId = decodeURIComponent(
+    path.match(/^\/factory-sessions\/([^/]+)\/sync-preflight/)?.[1] ?? "",
+  );
+  const searchParams = new URLSearchParams(path.split("?")[1] ?? "");
+  const afterEventId = searchParams.get("after_event_id") ?? undefined;
+  const afterSequence = searchParams.get("after_sequence");
+  const cursorProvided = afterEventId != null || afterSequence != null;
   return new Response(
     JSON.stringify({
       backendScopeId: BACKEND_SCOPE_ID,
@@ -105,12 +112,15 @@ function preflightResponse(checkpoint: FactoryTimelineCheckpoint): Response {
       logicalSessionKeyId: LOGICAL_SESSION_KEY_ID,
       reasonCode: "ok",
       reconnectCursor: {
-        afterEventId: checkpoint.afterEventId,
-        afterSequence: checkpoint.afterSequence,
-        provided: true,
+        afterEventId,
+        afterSequence:
+          afterSequence == null
+            ? undefined
+            : Number.parseInt(afterSequence, 10),
+        provided: cursorProvided,
         validForStreamGeneration: true,
       },
-      requestedSessionId: "~default",
+      requestedSessionId,
       streamGenerationId: STREAM_GENERATION_ID,
     }),
     { headers: { "Content-Type": "application/json" } },
@@ -160,7 +170,7 @@ export function createQuietCheckpointReloadFixture(
     if (method === "GET" && path.includes("/sync-preflight")) {
       await preflightGate;
       observed.preflightCompleted = true;
-      return preflightResponse(checkpoint);
+      return preflightResponse(path);
     }
     if (
       method === "GET" &&
