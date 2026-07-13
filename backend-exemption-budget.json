@@ -477,12 +477,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factory/subsystems/history_transitioner_pipeline_test.go#TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPreservesRetryableProviderMetadata",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this failure-pipeline regression keeps the retryable Windows exit corpus and metadata assertions inline."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/factorysessionexecution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this runtime control helper keeps dispatch-targeted lifecycle validation and replay together on one seam."

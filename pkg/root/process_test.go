@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	processinitializer "github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 )
@@ -70,19 +71,29 @@ func TestProductionRunGraphCompletesConstructionBeforeInitializerFailure(t *test
 
 	initializerErr := errors.New("initializer failed after construction")
 	initializer := &recordingInitializer{err: initializerErr}
-	code := Run(Input{
+	err := ExecuteWithDependencies(Input{
 		Args: []string{"you", "run", "--dir", dir, "--quiet", "--no-record"},
-		Env:  rootTestEnvironment(),
+		Env:  homeEnvironment(t.TempDir()),
 	}, Dependencies{GraphBuilder: productionGraphBuilder{}, Initializer: initializer})
 
-	if code != ExitFailure {
-		t.Fatalf("exit code = %d, want %d", code, ExitFailure)
+	if !errors.Is(err, initializerErr) {
+		t.Fatalf("ExecuteWithDependencies() error = %v, want initializer failure", err)
 	}
 	if initializer.calls != 1 {
 		t.Fatalf("initializer calls = %d, want 1 after completed production construction", initializer.calls)
 	}
 	if initializer.input.Graph == nil {
 		t.Fatal("initializer did not receive the constructed production graph")
+	}
+	closeUnstartedProductionGraph(t, initializer.input.Graph)
+}
+
+func closeUnstartedProductionGraph(t *testing.T, graph *ApplicationGraph) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := processinitializer.RunProcess(ctx, graph); err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("close unstarted production graph: %v", err)
 	}
 }
 
