@@ -1,0 +1,10 @@
+name: dispatch_id
+in: query
+required: false
+description: >-
+  Return only FactoryResponseEvent records associated with this exact dispatch
+  identifier. Invalid or empty identifiers return the typed bad-request
+  response.
+schema:
+  type: string
+  minLength: 1
