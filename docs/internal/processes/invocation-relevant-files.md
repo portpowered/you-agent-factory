@@ -550,6 +550,14 @@ primary-result behavior.
   instead of submitted input text or raw audio payload bytes.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
+- Production provider mode selection lives at the `pkg/workers/provider`
+  execution boundary: a configured Factory Session response-stream publisher
+  selects a registered structured adapter, while final-only invocations retain
+  the established provider behavior. Provider-native `responseevents.Draft`
+  values must be published directly by `pkg/factorysessions/stream` so the
+  session store assigns event ID, sequence, recorded time, and Factory Session
+  identity without flattening stable message or tool identity through the
+  legacy fragment compatibility mapper.
 - `docs/reference/run.md` is the customer-facing owner for packaged `@you/goal`
   invocation behavior. Operator-visible blocked, needs-human, paused,
   interrupted, failed, timed-out, and unresolved-primary-result outcomes plus
