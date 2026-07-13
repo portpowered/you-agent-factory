@@ -1,0 +1,12 @@
+{
+  "name": "retired-fan-in-factory",
+  "workTypes": [{"name": "story", "states": [{"name": "init", "type": "INITIAL"}, {"name": "complete", "type": "TERMINAL"}]}],
+  "workers": [{"name": "executor"}],
+  "workstations": [{
+    "name": "execute-story",
+    "worker": "executor",
+    "inputs": [{"workType": "story", "state": "init"}],
+    "outputs": [{"workType": "story", "state": "complete"}],
+    "join": {"waitFor": "story", "waitState": "complete", "require": "all"}
+  }]
+}
