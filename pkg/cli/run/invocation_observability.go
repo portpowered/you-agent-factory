@@ -287,8 +287,19 @@ type sessionResponseStreamAttachable interface {
 	SessionResponseStreamDispatchIDs(sessionID string) ([]string, error)
 }
 
+type sessionResponseEventAttachable interface {
+	SubscribeSessionResponseEvents(
+		sessionID string,
+		afterSequence int64,
+	) (*factorysessions.SessionResponseEventSubscription, error)
+}
+
 type responseStreamEventSink interface {
 	onStreamSegment(factorysessions.SessionResponseStreamReadResult)
+}
+
+type canonicalResponseEventSink interface {
+	onResponseEvents([]responseevents.FactoryResponseEvent)
 }
 
 // onResponseEvents consumes validated, session-ordered FactoryResponseEvent
@@ -470,6 +481,63 @@ type responseStreamAttachment struct {
 	cancel    context.CancelFunc
 	done      chan struct{}
 	consumers sync.WaitGroup
+}
+
+func startCanonicalResponseEventAttachment(
+	ctx context.Context,
+	attachable sessionResponseEventAttachable,
+	sessionID string,
+	sink canonicalResponseEventSink,
+) *responseStreamAttachment {
+	if attachable == nil || sink == nil {
+		return nil
+	}
+	subscription, err := attachable.SubscribeSessionResponseEvents(sessionID, 0)
+	if err != nil {
+		return nil
+	}
+	attachCtx, cancel := context.WithCancel(ctx)
+	attachment := &responseStreamAttachment{cancel: cancel, done: make(chan struct{})}
+	attachment.consumers.Add(1)
+	go func() {
+		defer close(attachment.done)
+		defer attachment.consumers.Done()
+		consumeCanonicalResponseEventSubscription(attachCtx, subscription, sink)
+	}()
+	return attachment
+}
+
+func consumeCanonicalResponseEventSubscription(
+	ctx context.Context,
+	subscription *factorysessions.SessionResponseEventSubscription,
+	sink canonicalResponseEventSink,
+) {
+	defer subscription.Detach()
+	for {
+		events, err := subscription.Next(ctx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				drainCanonicalResponseEventSubscription(subscription, sink)
+			}
+			return
+		}
+		sink.onResponseEvents(events)
+	}
+}
+
+func drainCanonicalResponseEventSubscription(
+	subscription *factorysessions.SessionResponseEventSubscription,
+	sink canonicalResponseEventSink,
+) {
+	drainCtx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer cancel()
+	for {
+		events, err := subscription.Next(drainCtx)
+		if err != nil {
+			return
+		}
+		sink.onResponseEvents(events)
+	}
 }
 
 func startResponseStreamAttachment(

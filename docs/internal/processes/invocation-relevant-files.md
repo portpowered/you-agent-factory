@@ -165,8 +165,12 @@ primary-result behavior.
   must stay aligned with the shared `InvocationResponse` envelope for both
   successful and non-success invocation results rather than becoming a
   success-only CLI fork. `RunConfig.InvocationOutputMode` and `you run --output`
-  select primary-result-only versus internal `SessionResponseStream` attachment
-  for supported one-shot factory invocations; keep mode validation, unsupported
+  select primary-result-only versus streamed observation for supported one-shot
+  factory invocations. Human mode attaches only to the session-ordered canonical
+  `FactoryResponseEvent` subscription; JSON mode retains the internal legacy
+  `SessionResponseStream` records. Do not fall back from human mode to legacy
+  provider-progress payloads when the canonical subscription is unavailable.
+  Keep mode validation, unsupported
   run-shape rejection, and fallback behavior in `pkg/cli/run/invocation_error.go`,
   stream attachment and bounded async progress stdout draining in
   `pkg/cli/run/invocation_observability.go`, human and JSON progress rendering in
@@ -180,12 +184,10 @@ primary-result behavior.
   15-file limit; extend existing files instead of adding new ones. Human response-stream
   terminal outcomes use `--- invocation outcome ---` with structured status/error
   fields; JSON response-stream terminal outcomes stay on the final
-  `primary_result` NDJSON record. Human-only suppression helpers:
-  `humanProgressRenderableEvent`, `humanInternalProgressPayload`, and
-  `humanTokenUsageProgressEvent` in `pkg/cli/run/run_clean_invocation.go` drop
-  compaction/backlog/stream-gap text and token-usage chatter while JSON mode
-  keeps `compaction` / `stream_gap` records. Internal stream listing for
-  `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
+  `primary_result` NDJSON record. The in-process invocation bootstrap adapter in
+  `pkg/cli/run/factory_invocation_input.go` exposes the live session's canonical
+  subscription through `FactoryService.SubscribeSessionResponseEvents`; legacy
+  stream listing and JSON subscription remain in `pkg/service/runtime_sessions.go`.
   Provider-neutral `FactoryResponseEvent` vocabulary lives in
   `pkg/factorysessions/responseevents` (distinct from internal
   `pkg/factorysessions/responsestream` fragment kinds). Legacy fragment

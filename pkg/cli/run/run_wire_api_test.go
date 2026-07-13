@@ -280,7 +280,7 @@ func TestRun_FactoryInvocationResponseStreamFallsBackWhenStreamAttachmentUnavail
 	}
 }
 
-func TestRun_FactoryInvocationResponseStreamAttachesWhenRunnerSupportsInternalStream(t *testing.T) {
+func TestRun_FactoryInvocationHumanResponseStreamRejectsLegacyStreamFallback(t *testing.T) {
 	preserveRunGlobals(t)
 
 	text := "goal completed"
@@ -295,13 +295,6 @@ func TestRun_FactoryInvocationResponseStreamAttachesWhenRunnerSupportsInternalSt
 					return nil
 				},
 				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-					deadline := time.Now().Add(2 * time.Second)
-					for time.Now().Before(deadline) {
-						if len(attachable.subscribeCalls) > 0 {
-							break
-						}
-						time.Sleep(10 * time.Millisecond)
-					}
 					stream := attachable.stream("dispatch-goal-1")
 					if stream != nil {
 						stream.Append(responsestream.Event{
@@ -342,28 +335,11 @@ func TestRun_FactoryInvocationResponseStreamAttachesWhenRunnerSupportsInternalSt
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	got := output.String()
-	if !strings.Contains(got, "planning") {
-		t.Fatalf("output missing progress rendering:\n%s", got)
+	if got := output.String(); got != text {
+		t.Fatalf("output = %q, want only authoritative result %q", got, text)
 	}
-	if strings.Contains(got, "[you:progress]") {
-		t.Fatalf("output must not include [you:progress] prefix:\n%s", got)
-	}
-	beforePrimary := got
-	if idx := strings.Index(got, responseStreamPrimaryResultHeader); idx >= 0 {
-		beforePrimary = got[:idx]
-	}
-	if strings.Contains(beforePrimary, "goal completed") {
-		t.Fatalf("response fragment leaked into progress output:\n%s", got)
-	}
-	if !strings.Contains(got, responseStreamPrimaryResultHeader) {
-		t.Fatalf("output missing primary-result header:\n%s", got)
-	}
-	if !strings.HasSuffix(got, text) {
-		t.Fatalf("output = %q, want suffix primary result %q", got, text)
-	}
-	if len(attachable.subscribeCalls) == 0 {
-		t.Fatal("expected internal response-stream subscription during invocation")
+	if len(attachable.subscribeCalls) != 0 {
+		t.Fatal("human mode must not subscribe to the legacy response stream")
 	}
 }
 
@@ -371,9 +347,9 @@ func TestRun_FactoryInvocationResponseStreamRendersShortLivedDispatch(t *testing
 	preserveRunGlobals(t)
 
 	cases := []struct {
-		name              string
-		dispatchID        string
-		hideUntilReveal   bool
+		name                           string
+		dispatchID                     string
+		hideUntilReveal                bool
 		requireNoSubscribeDuringInvoke bool
 	}{
 		{
@@ -463,24 +439,11 @@ func runFactoryInvocationShortLivedDispatchCase(
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	got := output.String()
-	if !strings.Contains(got, "planning") {
-		t.Fatalf("output missing retained short-lived dispatch progress:\n%s", got)
+	if got := output.String(); got != text {
+		t.Fatalf("output = %q, want only authoritative result %q", got, text)
 	}
-	if strings.Contains(got, "[you:progress]") {
-		t.Fatalf("output must not include [you:progress] prefix:\n%s", got)
-	}
-	if !strings.Contains(got, responseStreamPrimaryResultHeader) {
-		t.Fatalf("output missing primary-result header:\n%s", got)
-	}
-	if !strings.HasSuffix(got, text) {
-		t.Fatalf("output = %q, want suffix primary result %q", got, text)
-	}
-	if len(recorder.subscribeCalls) == 0 {
-		t.Fatal("expected internal response-stream subscription for retained short-lived dispatch")
-	}
-	if recorder.subscribeCalls[0].dispatchID != dispatchID {
-		t.Fatalf("dispatchID = %q, want %s", recorder.subscribeCalls[0].dispatchID, dispatchID)
+	if len(recorder.subscribeCalls) != 0 {
+		t.Fatal("human mode must not discover retained legacy dispatches")
 	}
 }
 
@@ -608,7 +571,6 @@ var responseStreamTerminalOutcomeCases = []responseStreamTerminalOutcomeCase{
 		},
 		wantErrCode: "INVOCATION_BLOCKED",
 		wantContains: []string{
-			"planning",
 			responseStreamInvocationOutcomeHeader,
 			"status: FAILED",
 			"error: INVOCATION_BLOCKED",
@@ -713,12 +675,14 @@ func runResponseStreamTerminalOutcomeSubtest(t *testing.T, tc responseStreamTerm
 					return nil
 				},
 				invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-					deadline := time.Now().Add(2 * time.Second)
-					for time.Now().Before(deadline) {
-						if len(attachable.subscribeCalls) > 0 {
-							break
+					if tc.jsonMode {
+						deadline := time.Now().Add(2 * time.Second)
+						for time.Now().Before(deadline) {
+							if len(attachable.subscribeCalls) > 0 {
+								break
+							}
+							time.Sleep(10 * time.Millisecond)
 						}
-						time.Sleep(10 * time.Millisecond)
 					}
 					stream := attachable.stream("dispatch-goal-1")
 					if stream != nil {
@@ -945,10 +909,10 @@ func TestResponseStreamRenderer_FinalResultDoesNotInterleavePastDrainTimeout(t *
 	t.Parallel()
 
 	cases := []struct {
-		name            string
-		newRenderer     func(io.Writer) responseStreamRenderer
-		finalMarker     string
-		progressMarker  string
+		name           string
+		newRenderer    func(io.Writer) responseStreamRenderer
+		finalMarker    string
+		progressMarker string
 	}{
 		{
 			name:           "human",

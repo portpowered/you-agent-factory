@@ -9,10 +9,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -20,6 +22,107 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
+
+type canonicalResponseEventRunStub struct {
+	stubResponseStreamInvocationService
+	store      *factorysessions.SessionResponseEventStore
+	subscribed chan struct{}
+	once       sync.Once
+}
+
+func (s *canonicalResponseEventRunStub) SubscribeSessionResponseEvents(
+	_ string,
+	afterSequence int64,
+) (*factorysessions.SessionResponseEventSubscription, error) {
+	subscription, err := s.store.Subscribe(afterSequence)
+	if err == nil {
+		s.once.Do(func() { close(s.subscribed) })
+	}
+	return subscription, err
+}
+
+func TestRun_HumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
+	preserveRunGlobals(t)
+
+	const canary = "SECRET_PROVIDER_PAYLOAD_7f8a"
+	const answer = "authoritative answer"
+	var output strings.Builder
+	legacy := newRecordingResponseStreamAttachable()
+	legacy.ensureDispatch("dispatch-1")
+	store := factorysessions.NewSessionResponseEventStore(factorysessions.DefaultSessionID)
+	stub := &canonicalResponseEventRunStub{
+		stubResponseStreamInvocationService: stubResponseStreamInvocationService{
+			stubInvocationService: stubInvocationService{run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			}},
+			attachable: legacy,
+		},
+		store: store, subscribed: make(chan struct{}),
+	}
+	stub.invoke = func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+		select {
+		case <-stub.subscribed:
+		case <-time.After(2 * time.Second):
+			t.Fatal("canonical response-event subscription was not established")
+		}
+		legacy.stream("dispatch-1").Append(responsestream.Event{
+			Kind: responsestream.EventKindProgressFragment, Type: responsestream.EventTypeProgress,
+			Payload: canary,
+		})
+		attempt := 2
+		events := []responseevents.FactoryResponseEvent{
+			humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseCompleted, responseevents.ReasoningPayload{Summary: "selected safe path"}),
+			humanResponseEvent(responseevents.KindTool, responseevents.PhaseStarted, responseevents.ToolPayload{
+				ToolCallID: "call-1", ToolName: "search", ArgumentsSummary: json.RawMessage(`{"secret":"` + canary + `"}`),
+			}),
+			humanResponseEvent(responseevents.KindTool, responseevents.PhaseDelta, responseevents.ToolDeltaPayload{ToolCallID: "call-1", OutputDelta: canary}),
+			humanResponseEvent(responseevents.KindError, responseevents.PhaseUpdated, responseevents.ErrorPayload{
+				Code: "rate_limited", Message: canary, Retryable: true, RetryAttempt: &attempt,
+			}),
+			humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "planning", Message: "next step"}),
+			humanResponseEvent(responseevents.KindMessage, responseevents.PhaseDelta, responseevents.MessageDeltaPayload{
+				ContentBlockIndex: 0, ContentBlockKind: responseevents.ContentBlockText, TextDelta: answer,
+			}),
+			humanResponseEvent(responseevents.KindUsage, responseevents.PhaseUpdated, responseevents.UsagePayload{InputTokens: 99, Model: canary}),
+			humanResponseEvent(responseevents.KindStreamGap, responseevents.PhaseUpdated, responseevents.StreamGapPayload{FromSequence: 40, ToSequence: 44, Reason: "retention window"}),
+		}
+		for _, event := range events {
+			if _, err := store.Publish(event); err != nil {
+				t.Fatalf("publish canonical response event: %v", err)
+			}
+		}
+		store.Complete()
+		return apisurface.FactoryInvocationResult{
+			Status:        factoryapi.InvocationTerminalStatusCompleted,
+			PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: answer}},
+		}, nil
+	}
+	buildInvocationBootstrap = func(context.Context, *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+		return stub, nil
+	}
+
+	text := "prompt"
+	err := Run(context.Background(), RunConfig{
+		FactoryConfigPath: "/tmp/factory.json", InvocationPositionalText: &text,
+		InvocationOutputMode: InvocationOutputResponseStream, StdinIsTTY: func() bool { return true }, Output: &output,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	want := "reasoning: selected safe path\n" +
+		"tool: name=search call=call-1 status=started\n" +
+		"retry: code=rate_limited attempt=2\n" +
+		"progress: planning — next step\n" +
+		"stream gap: sequences 40-44 unavailable (reason=retention window)\n\n" +
+		responseStreamPrimaryResultHeader + "\n" + answer
+	if got := output.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+	if strings.Contains(output.String(), canary) || len(legacy.subscribeCalls) != 0 {
+		t.Fatalf("human output used unsafe legacy/provider data: %q", output.String())
+	}
+}
 
 func TestHumanResponseStreamRenderer_CanonicalMessagesDoNotDuplicatePrimaryResult(t *testing.T) {
 	t.Parallel()
