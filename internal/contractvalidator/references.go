@@ -315,7 +315,39 @@ func (r *referenceResolver) resolveReference(value any, referringDocument string
 	parsedReference, _ := url.Parse(reference)
 	resolvedBaseURI := baseURI.ResolveReference(parsedReference)
 	resolvedBaseURI.Fragment = ""
-	return r.resolveNode(selected, targetDocument, nil, fragmentSegments(fragment), resolvedBaseURI)
+	resolved, diagnostics := r.resolveNode(selected, targetDocument, nil, fragmentSegments(fragment), resolvedBaseURI)
+	if len(diagnostics) != 0 {
+		return nil, diagnostics
+	}
+	return preserveReferencedResourceBase(resolved, selected, resolvedBaseURI, targetDocument, fragment), nil
+}
+
+func preserveReferencedResourceBase(resolved, authored any, baseURI *url.URL, document, fragment string) any {
+	authoredObject, ok := authored.(map[string]any)
+	if !ok {
+		return resolved
+	}
+	identifier, ok := authoredObject["$id"].(string)
+	if !ok || identifier == "" {
+		return resolved
+	}
+	parsedIdentifier, err := url.Parse(identifier)
+	if err != nil || parsedIdentifier.IsAbs() {
+		return resolved
+	}
+	resolvedObject, ok := resolved.(map[string]any)
+	if !ok || resolvedObject["$id"] != identifier {
+		return resolved
+	}
+
+	relocationBase := *baseURI
+	query := relocationBase.Query()
+	query.Set("you-join-source", normalizeRepositoryPath(document)+"#"+fragment)
+	relocationBase.RawQuery = query.Encode()
+	return map[string]any{
+		"$id":   relocationBase.String(),
+		"allOf": []any{resolved},
+	}
 }
 
 func fragmentSegments(fragment string) []string {

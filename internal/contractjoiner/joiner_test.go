@@ -180,6 +180,60 @@ func TestJoinDeduplicatesSharedStableIDResourceAndPreservesValidation(t *testing
 	}
 }
 
+func TestJoinPreservesRelativeResourceIDWhenInliningAcrossBases(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "contracts/roots/root.json", `{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://schemas.example.test/roots/root.json",
+  "type":"object",
+  "required":["first","second"],
+  "properties":{
+    "first":{"$ref":"../components/component.json"},
+    "second":{"$ref":"../components/component.json"}
+  }
+}`)
+	writeFile(t, root, "contracts/components/component.json", `{
+  "$id":"component.json",
+  "type":"string",
+  "minLength":2
+}`)
+
+	documents, diagnostics := contractjoiner.Join(contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          []string{"contracts/roots/root.json"},
+		Components:     []string{"contracts/components/component.json"},
+	})
+	if len(diagnostics) != 0 {
+		t.Fatalf("Join() diagnostics = %+v, want none", diagnostics)
+	}
+	joined := documents[0].Value
+	if got := countResourceID(joined, "component.json"); got != 1 {
+		t.Fatalf("joined authored relative resource count = %d, want 1", got)
+	}
+	properties := object(t, object(t, joined)["properties"])
+	if got := object(t, properties["second"])["$ref"]; got != "https://schemas.example.test/components/component.json" {
+		t.Fatalf("repeated relative resource reference = %v, want canonical embedded resource URI", got)
+	}
+
+	schema := compileJoinedSchema(t, joined)
+	for _, test := range []struct {
+		name  string
+		value any
+		valid bool
+	}{
+		{name: "both uses pass", value: map[string]any{"first": "aa", "second": "bb"}, valid: true},
+		{name: "first use fails", value: map[string]any{"first": "a", "second": "bb"}, valid: false},
+		{name: "repeated use fails", value: map[string]any{"first": "aa", "second": 2}, valid: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := schema.Validate(test.value)
+			if (err == nil) != test.valid {
+				t.Fatalf("Validate(%v) error = %v, want valid %t", test.value, err, test.valid)
+			}
+		})
+	}
+}
+
 func TestJoinDistinguishesRelativeResourceIDsUnderDifferentBases(t *testing.T) {
 	root := t.TempDir()
 	paths := []string{
