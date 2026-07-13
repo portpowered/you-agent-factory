@@ -2,6 +2,7 @@ package opencode_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -200,6 +201,53 @@ func TestStructuredFinalRejectsMissingAuthoritativeResponse(t *testing.T) {
 	classified := newStructuredAdapter(t).ClassifyFailure(context.Background(), adapter.FailureContext{ParseError: err})
 	if classified.Failure == nil || classified.Failure.Type != interfaces.WorkFailureTypeUnknown {
 		t.Fatalf("ClassifyFailure() = %#v", classified)
+	}
+}
+
+func TestOpenCodeTerminalClassificationCoversSupportedStatusAndNameSignals(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name        string
+		nativeName  string
+		status      int
+		failureType interfaces.WorkFailureType
+	}{
+		{name: "bad request status", nativeName: "APIError", status: 400, failureType: interfaces.WorkFailureTypePermanentBadRequest},
+		{name: "throttle status", nativeName: "APIError", status: 429, failureType: interfaces.WorkFailureTypeThrottled},
+		{name: "timeout status", nativeName: "APIError", status: 504, failureType: interfaces.WorkFailureTypeTimeout},
+		{name: "server status", nativeName: "APIError", status: 503, failureType: interfaces.WorkFailureTypeInternalServerError},
+		{name: "auth name", nativeName: "UnauthorizedError", failureType: interfaces.WorkFailureTypeAuthFailure},
+		{name: "invalid name", nativeName: "InvalidRequest", failureType: interfaces.WorkFailureTypePermanentBadRequest},
+		{name: "capacity name", nativeName: "CapacityError", failureType: interfaces.WorkFailureTypeThrottled},
+		{name: "deadline name", nativeName: "DeadlineExceeded", failureType: interfaces.WorkFailureTypeTimeout},
+		{name: "server name", nativeName: "ServerError", failureType: interfaces.WorkFailureTypeInternalServerError},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			stdout := []byte(fmt.Sprintf(`{"type":"error","error":{"name":%q,"data":{"statusCode":%d}}}`, tc.nativeName, tc.status))
+			providerAdapter := newStructuredAdapter(t)
+			_, parseErr := providerAdapter.ParseFinal(context.Background(), adapter.FinalParseContext{CommandResult: workerprocess.CommandResult{Stdout: stdout}})
+			if parseErr == nil {
+				t.Fatal("ParseFinal() error = nil")
+			}
+			classified := providerAdapter.ClassifyFailure(context.Background(), adapter.FailureContext{CommandResult: workerprocess.CommandResult{Stdout: stdout}, ParseError: parseErr})
+			if classified.Failure == nil || classified.Failure.Type != tc.failureType {
+				t.Fatalf("ClassifyFailure() = %#v, want %s", classified, tc.failureType)
+			}
+		})
+	}
+}
+
+func TestNegotiatedAdapterRejectsInvalidConstruction(t *testing.T) {
+	t.Parallel()
+	tests := []opencode.Decision{
+		{Installation: installation(), Version: "1.0.0", Mode: opencode.Mode("invalid")},
+		{Version: "1.0.0", Mode: opencode.ModeFinalOnly},
+	}
+	for _, decision := range tests {
+		if _, err := opencode.NewNegotiatedAdapter(decision, nil); err == nil {
+			t.Fatalf("NewNegotiatedAdapter(%#v) error = nil", decision)
+		}
 	}
 }
 
