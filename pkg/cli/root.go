@@ -79,7 +79,21 @@ type cliOperatorDefaultsOptions struct {
 	defaultWorkerModel         string
 }
 
+// RootCommandOptions supplies process-owned values used while executing a
+// command. Zero values preserve the legacy process environment behavior.
+type RootCommandOptions struct {
+	HomeDir   func() (string, error)
+	LookupEnv func(string) (string, bool)
+}
+
 func NewRootCommand() *cobra.Command {
+	return NewRootCommandWithOptions(RootCommandOptions{})
+}
+
+// NewRootCommandWithOptions constructs the command tree with explicit process
+// inputs so callers can execute independent command instances deterministically.
+func NewRootCommandWithOptions(options RootCommandOptions) *cobra.Command {
+	options = normalizeRootCommandOptions(options)
 	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
 	diagnostics := &cliDiagnosticsOptions{}
 	operatorDefaults := &cliOperatorDefaultsOptions{}
@@ -102,7 +116,7 @@ func NewRootCommand() *cobra.Command {
 			"  " + cliBinaryName + " docs agents",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			policy := diagnostics.resolvePolicy(false)
-			return runFactory(cmd, defaultcmd.OOTBRunConfig(), nil, globals, operatorDefaults, policy)
+			return runFactoryWithOptions(cmd, defaultcmd.OOTBRunConfig(), nil, globals, operatorDefaults, policy, options)
 		},
 	}
 	root.PersistentFlags().BoolVarP(&diagnostics.verbose, "verbose", "v", false, "emit concise command diagnostics to stderr")
@@ -136,8 +150,8 @@ func NewRootCommand() *cobra.Command {
 		newFactoryCommand(globals, diagnostics),
 		newInitCommand(globals, diagnostics),
 		newMCPCommand(),
-		newModelsCommand(globals, diagnostics, operatorDefaults),
-		newRunCommand(globals, diagnostics, operatorDefaults),
+		newModelsCommand(globals, diagnostics, operatorDefaults, options),
+		newRunCommand(globals, diagnostics, operatorDefaults, options),
 		newSubmitCommand(globals, diagnostics),
 		newSessionCommand(globals, diagnostics),
 		newWorkCommand(globals, diagnostics),
@@ -145,6 +159,16 @@ func NewRootCommand() *cobra.Command {
 	)
 
 	return root
+}
+
+func normalizeRootCommandOptions(options RootCommandOptions) RootCommandOptions {
+	if options.HomeDir == nil {
+		options.HomeDir = os.UserHomeDir
+	}
+	if options.LookupEnv == nil {
+		options.LookupEnv = os.LookupEnv
+	}
+	return options
 }
 
 type cliDiagnosticsOptions struct {
@@ -183,7 +207,7 @@ func (opts *cliDiagnosticsOptions) writer(cmd *cobra.Command) io.Writer {
 	return opts.resolvePolicy(false).DiagnosticsWriter(cmd.ErrOrStderr())
 }
 
-func newModelsCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions) *cobra.Command {
+func newModelsCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions) *cobra.Command {
 	modelsCmd := &cobra.Command{
 		Use:   "models",
 		Short: "Inspect discovered models from a running service",
@@ -195,7 +219,7 @@ func newModelsCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpti
 	modelsCmd.AddCommand(
 		newModelsListCommand(globals, diagnostics),
 		newModelsInspectCommand(globals, diagnostics),
-		newModelsInvokeCommand(globals, diagnostics, operatorDefaults),
+		newModelsInvokeCommand(globals, diagnostics, operatorDefaults, rootOptions),
 		newModelsPullCommand(globals, diagnostics),
 	)
 	return modelsCmd
@@ -243,7 +267,7 @@ func newModelsInspectCommand(globals *cliGlobalOptions, diagnostics *cliDiagnost
 	return cmd
 }
 
-func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions) *cobra.Command {
+func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions) *cobra.Command {
 	cfg := modelscli.InvokeConfig{Server: globals.server, Operation: "TTS"}
 	cmd := &cobra.Command{
 		Use:     "invoke <model-name>",
@@ -256,7 +280,7 @@ func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 			if err != nil {
 				return err
 			}
-			resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults)
+			resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults, rootOptions)
 			if err != nil {
 				return err
 			}
@@ -395,7 +419,7 @@ func newInitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOption
 	return cmd
 }
 
-func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy) error {
+func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions RootCommandOptions) error {
 	logger, err := policy.BuildLogger()
 	if err != nil {
 		return err
@@ -411,7 +435,7 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 		return err
 	}
 
-	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults)
+	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults, rootOptions)
 	if err != nil {
 		return err
 	}
@@ -482,12 +506,15 @@ func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocati
 	return cleanInvocation, textInvocation
 }
 
-func resolveOperatorDefaults(cmd *cobra.Command, operatorDefaults *cliOperatorDefaultsOptions) (operatorconfig.ResolvedDefaults, error) {
-	homeDir, err := os.UserHomeDir()
+func resolveOperatorDefaults(cmd *cobra.Command, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions) (operatorconfig.ResolvedDefaults, error) {
+	homeDir, err := rootOptions.HomeDir()
 	if err != nil {
 		return operatorconfig.ResolvedDefaults{}, fmt.Errorf("resolve operator home directory: %w", err)
 	}
-	return operatorconfig.ResolveFromHome(homeDir, operatorconfig.FlagOverrides{
+	environment := operatorconfig.Defaults{}
+	environment.WorkerModelProvider, _ = rootOptions.LookupEnv(operatorconfig.EnvDefaultWorkerModelProvider)
+	environment.WorkerModel, _ = rootOptions.LookupEnv(operatorconfig.EnvDefaultWorkerModel)
+	return operatorconfig.ResolveFromHomeWithEnvironment(homeDir, environment, operatorconfig.FlagOverrides{
 		WorkerModelProvider: persistentFlagValueIfChanged(cmd, "default-worker-model-provider", operatorDefaults.defaultWorkerModelProvider),
 		WorkerModel:         persistentFlagValueIfChanged(cmd, "default-worker-model", operatorDefaults.defaultWorkerModel),
 	})

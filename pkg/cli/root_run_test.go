@@ -1457,6 +1457,72 @@ func TestRootCommand_DefaultWorkerModelProviderFlagMapsToRunConfig(t *testing.T)
 	}
 }
 
+func TestRootCommand_ExplicitEnvironmentIsIsolatedAndFlagsRetainPrecedence(t *testing.T) {
+	homeDir := t.TempDir()
+	configPath := operatorconfig.DefaultConfigPath(homeDir)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{"defaults":{"workerModelProvider":"claude"}}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+	var got []runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = append(got, cfg)
+		return nil
+	}
+
+	newCommand := func(environment map[string]string) *cobra.Command {
+		return NewRootCommandWithOptions(RootCommandOptions{
+			HomeDir: func() (string, error) { return homeDir, nil },
+			LookupEnv: func(name string) (string, bool) {
+				value, ok := environment[name]
+				return value, ok
+			},
+		})
+	}
+
+	first := newCommand(map[string]string{operatorconfig.EnvDefaultWorkerModelProvider: "codex"})
+	first.SetOut(io.Discard)
+	first.SetErr(io.Discard)
+	first.SetArgs([]string{"run", "--default-worker-model-provider", "gemini", "--no-record"})
+	if err := first.Execute(); err != nil {
+		t.Fatalf("first Execute() error = %v", err)
+	}
+
+	second := newCommand(map[string]string{operatorconfig.EnvDefaultWorkerModelProvider: "codex"})
+	second.SetOut(io.Discard)
+	second.SetErr(io.Discard)
+	second.SetArgs(nil)
+	if err := second.Execute(); err != nil {
+		t.Fatalf("second Execute() error = %v", err)
+	}
+
+	third := newCommand(map[string]string{operatorconfig.EnvDefaultWorkerModelProvider: ""})
+	third.SetOut(io.Discard)
+	third.SetErr(io.Discard)
+	third.SetArgs(nil)
+	if err := third.Execute(); err != nil {
+		t.Fatalf("third Execute() error = %v", err)
+	}
+
+	if len(got) != 3 {
+		t.Fatalf("run calls = %d, want 3", len(got))
+	}
+	if got[0].OperatorDefaults.WorkerModelProvider != "GEMINI" || got[0].OperatorDefaults.WorkerModelProviderSource != operatorconfig.SourceFlag {
+		t.Fatalf("first defaults = %+v, want GEMINI from flag", got[0].OperatorDefaults)
+	}
+	if got[1].OperatorDefaults.WorkerModelProvider != "CODEX" || got[1].OperatorDefaults.WorkerModelProviderSource != operatorconfig.SourceEnv {
+		t.Fatalf("second defaults = %+v, want CODEX from environment", got[1].OperatorDefaults)
+	}
+	if got[2].OperatorDefaults.WorkerModelProvider != "CLAUDE" || got[2].OperatorDefaults.WorkerModelProviderSource != operatorconfig.SourceFile {
+		t.Fatalf("third defaults = %+v, want CLAUDE from file", got[2].OperatorDefaults)
+	}
+}
+
 func TestRootCommand_DefaultWorkerModelFlagMapsToRunConfig(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
