@@ -95,8 +95,8 @@ var topicDocuments = []topicDocument{
 }
 
 var (
-	packagedReferenceDocs = refdocs.PackagedTopics
-	topicRegistry         = newTopicRegistry(topicDocuments)
+	packagedReferenceDocs fs.FS = refdocs.PackagedTopics
+	topicRegistry               = newTopicRegistry(topicDocuments)
 )
 
 type topicRegistryData struct {
