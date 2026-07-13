@@ -252,6 +252,10 @@ primary-result behavior.
   nested item discriminator, retain the provider's native item ID across start,
   update, and completion records, and represent the completed full item as the
   authoritative snapshot rather than synthesizing a second completed item.
+  When the native item union distinguishes non-fatal error items from terminal
+  stream errors, map those items to correlated `ERROR`/`UPDATED` snapshots and
+  reserve `ERROR`/`FAILED` plus invocation failure classification for terminal
+  records and process outcomes.
   Reconcile typed terminal failures before generic process-exit fallback, but
   preserve cancellation and timeout precedence. A streaming decoder must hold
   terminal `ERROR` drafts until the shared executor flushes it with the process

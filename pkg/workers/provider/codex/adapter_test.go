@@ -104,8 +104,8 @@ func TestDecoderPreservesEverySupportedItemSemanticAndIdentity(t *testing.T) {
 	if len(decoded.Diagnostics) != 0 {
 		t.Fatalf("diagnostics = %#v", decoded.Diagnostics)
 	}
-	if len(decoded.Drafts) != 19 {
-		t.Fatalf("draft count = %d, want 19", len(decoded.Drafts))
+	if len(decoded.Drafts) != 22 {
+		t.Fatalf("draft count = %d, want 22", len(decoded.Drafts))
 	}
 	for index, draft := range decoded.Drafts {
 		if err := responseevents.ValidateDraft(draft); err != nil {
@@ -117,7 +117,7 @@ func TestDecoderPreservesEverySupportedItemSemanticAndIdentity(t *testing.T) {
 	}
 
 	byID := draftsByItemID(decoded.Drafts)
-	if got, want := itemIDOrder(decoded.Drafts), []string{"reason-1", "reason-1", "command-1", "command-1", "files-1", "mcp-1", "mcp-1", "collab-1", "collab-1", "web-1", "web-1", "plan-1", "plan-1", "plan-1", "message-1"}; !reflect.DeepEqual(got, want) {
+	if got, want := itemIDOrder(decoded.Drafts), []string{"reason-1", "reason-1", "command-1", "command-1", "files-1", "mcp-1", "mcp-1", "collab-1", "collab-1", "web-1", "web-1", "error-1", "error-1", "error-1", "plan-1", "plan-1", "plan-1", "message-1"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("item order = %#v, want %#v", got, want)
 	}
 	assertItemLifecycle(t, byID["reason-1"], responseevents.KindReasoning, responseevents.PhaseStarted, responseevents.PhaseCompleted)
@@ -125,6 +125,7 @@ func TestDecoderPreservesEverySupportedItemSemanticAndIdentity(t *testing.T) {
 	assertItemLifecycle(t, byID["mcp-1"], responseevents.KindTool, responseevents.PhaseStarted, responseevents.PhaseCompleted)
 	assertItemLifecycle(t, byID["collab-1"], responseevents.KindTool, responseevents.PhaseStarted, responseevents.PhaseCompleted)
 	assertItemLifecycle(t, byID["web-1"], responseevents.KindTool, responseevents.PhaseStarted, responseevents.PhaseCompleted)
+	assertItemLifecycle(t, byID["error-1"], responseevents.KindError, responseevents.PhaseUpdated, responseevents.PhaseUpdated, responseevents.PhaseUpdated)
 	assertItemLifecycle(t, byID["plan-1"], responseevents.KindPlan, responseevents.PhaseUpdated, responseevents.PhaseUpdated, responseevents.PhaseUpdated)
 	assertItemLifecycle(t, byID["message-1"], responseevents.KindMessage, responseevents.PhaseCompleted)
 	assertItemLifecycle(t, byID["files-1"], responseevents.KindFileChange, responseevents.PhaseUpdated)
@@ -140,6 +141,29 @@ func TestDecoderClassifiesOnlyExactNestedItemTypes(t *testing.T) {
 	}
 	if len(decoded.Drafts) != 0 || len(decoded.Diagnostics) != 1 || decoded.Diagnostics[0].Code != "codex_unknown_item" {
 		t.Fatalf("decoded = %#v", decoded)
+	}
+}
+
+func TestDecoderMapsErrorItemAsBoundedNonTerminalObservation(t *testing.T) {
+	message := strings.Repeat("recoverable ", 200)
+	record := `{"type":"item.completed","item":{"id":"error-bounded","type":"error","message":` + mustMarshalString(t, message) + `}}` + "\n"
+	decoder := codex.NewDecoder(adapter.DecoderContext{DispatchID: "dispatch-error-item"})
+	decoded, err := decoder.Observe(context.Background(), adapter.Observation{Stream: adapter.OutputStreamStdout, Chunk: []byte(record)})
+	if err != nil || len(decoded.Diagnostics) != 0 || len(decoded.Drafts) != 1 {
+		t.Fatalf("Observe() = %#v, %v", decoded, err)
+	}
+	draft := decoded.Drafts[0]
+	if draft.Kind != responseevents.KindError || draft.Phase != responseevents.PhaseUpdated || draft.ItemID != "error-bounded" {
+		t.Fatalf("error item draft = %#v", draft)
+	}
+	var payload responseevents.ErrorPayload
+	decodePayload(t, draft, &payload)
+	if payload.Code != "codex_item_error" || len(payload.Message) > 1027 || !strings.HasSuffix(payload.Message, "...") {
+		t.Fatalf("bounded error item payload = %#v", payload)
+	}
+	flushed, err := decoder.Flush(context.Background(), adapter.FlushContext{Reason: adapter.FlushReasonCompleted})
+	if err != nil || len(flushed.Drafts) != 0 {
+		t.Fatalf("Flush() promoted non-terminal item = %#v, %v", flushed, err)
 	}
 }
 
@@ -703,6 +727,19 @@ func assertItemPayloads(t *testing.T, byID map[string][]responseevents.Draft) {
 	t.Helper()
 	assertReasoningCommandAndFilePayloads(t, byID)
 	assertToolAndPlanPayloads(t, byID)
+	assertErrorItemPayload(t, byID["error-1"])
+}
+
+func assertErrorItemPayload(t *testing.T, drafts []responseevents.Draft) {
+	t.Helper()
+	if got, want := []string{drafts[0].Provenance.NativeEventType, drafts[1].Provenance.NativeEventType, drafts[2].Provenance.NativeEventType}, []string{"item.started", "item.updated", "item.completed"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("error item provenance = %#v, want %#v", got, want)
+	}
+	var payload responseevents.ErrorPayload
+	decodePayload(t, drafts[2], &payload)
+	if payload.Code != "codex_item_error" || payload.Message != "The recoverable error was recorded." || payload.Retryable {
+		t.Fatalf("error item payload = %#v", payload)
+	}
 }
 
 func assertReasoningCommandAndFilePayloads(t *testing.T, byID map[string][]responseevents.Draft) {
@@ -752,4 +789,13 @@ func decodePayload(t *testing.T, draft responseevents.Draft, target any) {
 	if err := json.Unmarshal(draft.Payload, target); err != nil {
 		t.Fatalf("decode %q payload: %v", draft.ItemID, err)
 	}
+}
+
+func mustMarshalString(t *testing.T, value string) string {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(encoded)
 }

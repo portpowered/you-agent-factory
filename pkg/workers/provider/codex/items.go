@@ -15,6 +15,7 @@ type itemEnvelope struct {
 	ID               string                `json:"id"`
 	Type             string                `json:"type"`
 	Text             string                `json:"text"`
+	Message          string                `json:"message"`
 	Command          string                `json:"command"`
 	AggregatedOutput string                `json:"aggregated_output"`
 	ExitCode         *int                  `json:"exit_code"`
@@ -74,6 +75,8 @@ func (d *Decoder) decodeItem(nativeEventType string, raw json.RawMessage) adapte
 		draft, ok = d.webSearchDraft(nativeEventType, item)
 	case "todo_list":
 		draft, ok = d.planDraft(nativeEventType, item)
+	case "error":
+		draft, ok = d.itemErrorDraft(nativeEventType, item)
 	default:
 		return diagnostic("codex_unknown_item", "codex JSONL item type is not supported: unknown")
 	}
@@ -81,6 +84,15 @@ func (d *Decoder) decodeItem(nativeEventType string, raw json.RawMessage) adapte
 		return diagnostic("codex_malformed_"+safeDiscriminator(item.Type), diagnosticMessage)
 	}
 	return oneDraft(draft)
+}
+
+func (d *Decoder) itemErrorDraft(nativeType string, item itemEnvelope) (responseevents.Draft, bool) {
+	message := boundedItemText(item.Message)
+	if message == "" {
+		return responseevents.Draft{}, false
+	}
+	payload := mustJSON(responseevents.ErrorPayload{Code: "codex_item_error", Message: message})
+	return d.itemDraft(item, nativeType, responseevents.KindError, responseevents.PhaseUpdated, payload), true
 }
 
 func (d *Decoder) itemDraft(item itemEnvelope, nativeType string, kind responseevents.Kind, phase responseevents.Phase, payload []byte) responseevents.Draft {

@@ -2,6 +2,7 @@ package structured_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -129,6 +130,17 @@ func TestProductionProviderBoundarySelectsStructuredCodexOnlyForCapableRunner(t 
 	}
 	if !publishedDraft(published, responseevents.KindMessage, responseevents.PhaseCompleted, "message-codex-production") {
 		t.Fatalf("published fragments = %#v, want authoritative native message", published)
+	}
+	errorDraft := publishedDraftByIdentity(published, responseevents.KindError, responseevents.PhaseUpdated, "error-codex-production")
+	if errorDraft == nil || errorDraft.Provenance.NativeEventType != "item.completed" {
+		t.Fatalf("published fragments = %#v, want non-terminal native error item", published)
+	}
+	var errorPayload responseevents.ErrorPayload
+	if err := json.Unmarshal(errorDraft.Payload, &errorPayload); err != nil {
+		t.Fatalf("decode error item payload: %v", err)
+	}
+	if errorPayload.Code != "codex_item_error" || errorPayload.Message != "A recoverable operation was skipped." || errorPayload.Retryable {
+		t.Fatalf("error item payload = %#v", errorPayload)
 	}
 }
 
@@ -286,18 +298,23 @@ func structuredCodexOutput() string {
 	return strings.Join([]string{
 		`{"type":"thread.started","thread_id":"thread-codex-production"}`,
 		`{"type":"turn.started"}`,
+		`{"type":"item.completed","item":{"id":"error-codex-production","type":"error","message":"A recoverable operation was skipped."}}`,
 		`{"type":"item.completed","item":{"id":"message-codex-production","type":"agent_message","text":"authoritative answer"}}`,
 		`{"type":"turn.completed","usage":{"input_tokens":4,"output_tokens":2}}`,
 	}, "\n") + "\n"
 }
 
 func publishedDraft(fragments []workerprovider.InferenceProgressFragment, kind responseevents.Kind, phase responseevents.Phase, itemID string) bool {
+	return publishedDraftByIdentity(fragments, kind, phase, itemID) != nil
+}
+
+func publishedDraftByIdentity(fragments []workerprovider.InferenceProgressFragment, kind responseevents.Kind, phase responseevents.Phase, itemID string) *responseevents.Draft {
 	for _, fragment := range fragments {
 		if draft, ok := fragment.CanonicalDraft.(responseevents.Draft); ok && draft.Kind == kind && draft.Phase == phase && draft.ItemID == itemID {
-			return true
+			return &draft
 		}
 	}
-	return false
+	return nil
 }
 
 type recordingRunner struct {

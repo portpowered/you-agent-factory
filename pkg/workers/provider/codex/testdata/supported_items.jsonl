@@ -11,6 +11,9 @@
 {"type":"item.completed","item":{"id":"collab-1","type":"collab_tool_call","tool":"spawn_agent","sender_thread_id":"thread-items-123","receiver_thread_ids":["child-1"],"prompt":"not projected","agents_states":{"child-1":{"status":"completed","message":"not projected"}},"status":"completed"}}
 {"type":"item.started","item":{"id":"web-1","type":"web_search","query":"Codex exec JSONL protocol","action":{"type":"search"}}}
 {"type":"item.completed","item":{"id":"web-1","type":"web_search","query":"Codex exec JSONL protocol","action":{"type":"search"}}}
+{"type":"item.started","item":{"id":"error-1","type":"error","message":"A recoverable operation was skipped."}}
+{"type":"item.updated","item":{"id":"error-1","type":"error","message":"The run can continue after the recoverable error."}}
+{"type":"item.completed","item":{"id":"error-1","type":"error","message":"The recoverable error was recorded."}}
 {"type":"item.started","item":{"id":"plan-1","type":"todo_list","items":[{"text":"Decode exact item types","completed":false},{"text":"Validate drafts","completed":false}]}}
 {"type":"item.updated","item":{"id":"plan-1","type":"todo_list","items":[{"text":"Decode exact item types","completed":true},{"text":"Validate drafts","completed":false}]}}
 {"type":"item.completed","item":{"id":"plan-1","type":"todo_list","items":[{"text":"Decode exact item types","completed":true},{"text":"Validate drafts","completed":true}]}}
