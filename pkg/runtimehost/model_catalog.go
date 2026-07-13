@@ -12,6 +12,7 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/invocations/skippermissions"
 	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/modelhost"
@@ -139,6 +140,13 @@ func (fs *Host) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryC
 		return nil, fmt.Errorf("runtime config is required")
 	}
 	logger := logging.NewZapLogger(fs.logger, fs != nil && fs.coordinatorPolicy().verbose)
+	workerDef, ok := runtimeCfg.Worker(workerName)
+	if !ok || workerDef == nil {
+		return nil, fmt.Errorf("worker %q is not configured", workerName)
+	}
+	if err := skippermissions.ValidateInvocationSkipPermissionsForWorker(workerDef, fs.invocationSkipPermissionsOverride()); err != nil {
+		return nil, fmt.Errorf("worker %q: %w", workerName, err)
+	}
 	bundle := fs.currentRuntimeBundle()
 	var modelDomain localModelDomain
 	var workflowContext *factory_context.FactoryContext
@@ -160,6 +168,7 @@ func (fs *Host) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryC
 		fs.factoryRunnerID(),
 		workflowContext,
 		logger,
+		fs.invocationSkipPermissionsOverride(),
 		fs.providerOverride(),
 		nil,
 		fs.providerCommandRunnerOverride(),
@@ -204,4 +213,11 @@ func (fs *Host) commandRunnerOverride() workers.CommandRunner {
 		return nil
 	}
 	return fs.coordinatorPolicy().commandRunnerOverride
+}
+
+func (fs *Host) invocationSkipPermissionsOverride() *bool {
+	if fs == nil || fs.cfg == nil {
+		return nil
+	}
+	return fs.cfg.InvocationSkipPermissionsOverride
 }

@@ -376,3 +376,112 @@ func TestRun_WithMockWorkersInvalidJSONFailsBeforeServiceStart(t *testing.T) {
 	}
 }
 
+func TestRun_WithSkipPermissionsPassesInvocationOverrideToService(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	var capturedConfig *service.FactoryServiceConfig
+	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		capturedConfig = cfg
+		return stubFactoryService{
+			run: func(context.Context) error {
+				return nil
+			},
+		}, nil
+	}
+
+	override := true
+	err := Run(context.Background(), RunConfig{
+		InvocationSkipPermissionsOverride: &override,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if capturedConfig == nil || capturedConfig.InvocationSkipPermissionsOverride == nil {
+		t.Fatal("expected invocation skip-permissions override to be passed to service")
+	}
+	if !*capturedConfig.InvocationSkipPermissionsOverride {
+		t.Fatal("expected invocation skip-permissions override to be true")
+	}
+}
+
+func TestRun_WithoutSkipPermissionsOmitsInvocationOverrideFromService(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	var capturedConfig *service.FactoryServiceConfig
+	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		capturedConfig = cfg
+		return stubFactoryService{
+			run: func(context.Context) error {
+				return nil
+			},
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if capturedConfig == nil {
+		t.Fatal("expected factory service config to be captured")
+	}
+	if capturedConfig.InvocationSkipPermissionsOverride != nil {
+		t.Fatalf("invocation skip-permissions override = %#v, want nil when flag omitted", capturedConfig.InvocationSkipPermissionsOverride)
+	}
+}
+
+func TestRun_WithSkipPermissionsDoesNotMutatePersistedFactoryWorkerConfig(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	dir := t.TempDir()
+	factoryJSON := filepath.Join(dir, "factory.json")
+	writeFile(t, factoryJSON, `{
+  "factory": {
+    "workers": [
+      {
+        "name": "agent",
+        "type": "MODEL_WORKER",
+        "modelProvider": "CLAUDE",
+        "skipPermissions": false
+      }
+    ]
+  }
+}`)
+
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubFactoryService{
+			run: func(context.Context) error {
+				return nil
+			},
+		}, nil
+	}
+
+	override := true
+	err := Run(context.Background(), RunConfig{
+		Dir:                               dir,
+		InvocationSkipPermissionsOverride: &override,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	got, err := os.ReadFile(factoryJSON)
+	if err != nil {
+		t.Fatalf("read factory.json: %v", err)
+	}
+	if !strings.Contains(string(got), `"skipPermissions": false`) {
+		t.Fatalf("factory.json = %s, want persisted skipPermissions:false unchanged", string(got))
+	}
+	if strings.Contains(string(got), `"skipPermissions": true`) {
+		t.Fatalf("factory.json = %s, want skipPermissions not persisted as true", string(got))
+	}
+}
+

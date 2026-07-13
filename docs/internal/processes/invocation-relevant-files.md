@@ -146,7 +146,22 @@ primary-result behavior.
   shared `pkg/invocations` contract, then runs the local service in
   invocation-only service mode so stdout stays reserved for primary-result
   output instead of startup or dashboard noise; CLI-only source conflicts are
-  logged and counted there before the service runtime exists. `RunConfig.JSONOutput`
+  logged and counted there before the service runtime exists. `you run
+  --skip-permissions` is registered in `pkg/cli/root_work.go`, mapped to
+  `RunConfig.InvocationSkipPermissionsOverride`, and forwarded through
+  `buildRunServiceConfig` into `service.FactoryServiceConfig` as an ephemeral
+  invocation override that must not mutate persisted worker `skipPermissions`.
+  `pkg/invocations/skippermissions.EffectiveSkipPermissions` resolves persisted worker config plus
+  `FactoryServiceConfig.InvocationSkipPermissionsOverride` when building
+  provider-backed worker CLI args in `pkg/service/factory_build.go` and
+  `pkg/runtimehost/build_workers.go`. `skippermissions.ValidateInvocationSkipPermissionsWorkers`
+  and `ValidateInvocationSkipPermissionsForWorker` fail closed before worker
+  construction when `--skip-permissions` is set but an agent worker uses an
+  unsupported CLI provider or local managed model path. S14 regression evidence
+  lives in `pkg/invocations/skippermissions/skip_permissions_test.go`,
+  `pkg/workers/provider/provider_behavior_test.go`, and
+  `pkg/service/factory_test_helpers_test.go` alongside the story-level
+  propagation and fail-closed service tests. `RunConfig.JSONOutput`
   must stay aligned with the shared `InvocationResponse` envelope for both
   successful and non-success invocation results rather than becoming a
   success-only CLI fork. `RunConfig.InvocationOutputMode` and `you run --output`

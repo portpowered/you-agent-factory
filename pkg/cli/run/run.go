@@ -142,7 +142,11 @@ type RunConfig struct {
 	// InvocationMetricsRecorder receives invocation counter emissions from the
 	// CLI boundary, including pre-runtime source conflicts.
 	InvocationMetricsRecorder service.InvocationMetricsRecorder
-	Logger                    *zap.Logger
+	// InvocationSkipPermissionsOverride requests an invocation-scoped unsafe
+	// permission bypass for agent workers when non-nil. Set from you run
+	// --skip-permissions and never written back to persisted factory config.
+	InvocationSkipPermissionsOverride *bool
+	Logger                            *zap.Logger
 }
 
 type factoryServiceRunner interface {
@@ -545,8 +549,9 @@ func buildRunServiceConfig(
 		WorkflowID:                cfg.Workflow,
 		MockWorkersConfig:         mockWorkersConfig,
 		APIServerStarter:          runAPIServerStarter(reservedAPIServer, dashboardReady, dashboardReadyOnce),
-		InvocationMetricsRecorder: cfg.InvocationMetricsRecorder,
-		APIServerReady:            apiServerReady,
+		InvocationMetricsRecorder:         cfg.InvocationMetricsRecorder,
+		InvocationSkipPermissionsOverride: cfg.InvocationSkipPermissionsOverride,
+		APIServerReady:                    apiServerReady,
 	}
 	if !cfg.SuppressDashboardRendering {
 		svcCfg.SimpleDashboardRenderer = renderSimpleDashboard
