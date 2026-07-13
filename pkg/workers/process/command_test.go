@@ -863,7 +863,7 @@ func spawnCommandHelperChild() {
 		fmt.Fprintf(os.Stderr, "start child: %v\n", err)
 		os.Exit(2)
 	}
-	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(child.Process.Pid)), 0o600); err != nil {
+	if err := writeCommandHelperPIDFile(pidFile, child.Process.Pid); err != nil {
 		fmt.Fprintf(os.Stderr, "write child pid file: %v\n", err)
 		_ = child.Process.Kill()
 		os.Exit(2)
@@ -876,10 +876,18 @@ func writeCommandHelperPID() {
 		fmt.Fprintln(os.Stderr, "missing COMMAND_HELPER_PID_FILE")
 		os.Exit(2)
 	}
-	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
+	if err := writeCommandHelperPIDFile(pidFile, os.Getpid()); err != nil {
 		fmt.Fprintf(os.Stderr, "write pid file: %v\n", err)
 		os.Exit(2)
 	}
+}
+
+func writeCommandHelperPIDFile(pidFile string, pid int) error {
+	temporary := pidFile + ".tmp"
+	if err := os.WriteFile(temporary, []byte(strconv.Itoa(pid)), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(temporary, pidFile)
 }
 
 func readCommandHelperPID(t *testing.T, pidFile string) int {
