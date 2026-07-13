@@ -3,6 +3,8 @@ package wire
 import (
 	"context"
 	"fmt"
+	"io"
+	"reflect"
 	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -24,14 +26,20 @@ type Lifecycle interface {
 	Stop(context.Context) error
 }
 
-// RuntimeDependencies are the explicit process-scoped infrastructure inputs
-// retained by an application graph.
-type RuntimeDependencies struct {
+// RuntimeInputs are the process-scoped infrastructure values available before
+// fallible graph construction starts.
+type RuntimeInputs struct {
 	FactoryRootDir   string
 	ExecutionBaseDir string
 	Logger           *zap.Logger
 	Clock            factory.Clock
-	Persistence      runtimepersist.Store
+}
+
+// RuntimeDependencies are the constructed process-scoped infrastructure
+// dependencies retained by an application graph.
+type RuntimeDependencies struct {
+	RuntimeInputs
+	Persistence runtimepersist.Store
 }
 
 // TransportLifecycles names the long-lived transport adapters that initializer
@@ -49,9 +57,24 @@ type SidecarLifecycles struct {
 	Dashboard Lifecycle
 }
 
+// ModelWorkerServices contains the model and worker/provider collaborators
+// created in one dependency-ordered construction phase.
+type ModelWorkerServices struct {
+	Models   *modelservice.Service
+	Workers  *workersservice.Service
+	Provider providerexecution.Executor
+}
+
+// FactorySessionServices contains the session collaborators created after
+// persistence, model, and worker/provider construction succeeds.
+type FactorySessionServices struct {
+	FactoryDefinition *factorydefinition.Service
+	FactorySessions   *factorysessionsservice.Service
+	DurableExecution  factorysessionexecution.Service
+}
+
 // TransportDependencies is the typed set of domain collaborators injected
-// into API, CLI, and MCP adapters. Its fields are the same instances exposed
-// by Graph; it is not a service locator and performs no lazy construction.
+// into API, CLI, and MCP adapters.
 type TransportDependencies struct {
 	Models            *modelservice.Service
 	FactoryDefinition *factorydefinition.Service
@@ -59,20 +82,45 @@ type TransportDependencies struct {
 	DurableExecution  factorysessionexecution.Service
 }
 
-// Inputs explicitly names every collaborator assembled by Build. Domain-owned
-// values are injected directly so graph tests and later production wiring do
-// not depend on process globals or filesystem discovery.
+// SidecarDependencies explicitly names the graph-owned collaborators available
+// when sidecar lifecycle handles are constructed.
+type SidecarDependencies struct {
+	Config           *factoryconfig.LoadedFactoryConfig
+	Runtime          RuntimeDependencies
+	Models           *modelservice.Service
+	Workers          *workersservice.Service
+	Provider         providerexecution.Executor
+	FactorySessions  *factorysessionsservice.Service
+	DurableExecution factorysessionexecution.Service
+}
+
+// Constructed is the typed result of one graph-construction phase. Resource is
+// retained by a successful graph or closed if a later phase fails.
+type Constructed[T any] struct {
+	Value    T
+	Resource io.Closer
+}
+
+// Builders explicitly names each fallible construction phase. Builders must
+// construct collaborators without starting their runtime lifecycle.
+type Builders struct {
+	Persistence     func(context.Context, RuntimeInputs) (Constructed[runtimepersist.Store], error)
+	ModelWorkers    func(context.Context, RuntimeDependencies) (Constructed[ModelWorkerServices], error)
+	FactorySessions func(
+		context.Context,
+		RuntimeDependencies,
+		ModelWorkerServices,
+	) (Constructed[FactorySessionServices], error)
+	Transports func(context.Context, TransportDependencies) (Constructed[TransportLifecycles], error)
+	Sidecars   func(context.Context, SidecarDependencies) (Constructed[SidecarLifecycles], error)
+}
+
+// Inputs explicitly names every startup value and construction phase assembled
+// by Build. It is not a host facade or service locator.
 type Inputs struct {
-	Config            *factoryconfig.LoadedFactoryConfig
-	Runtime           RuntimeDependencies
-	Models            *modelservice.Service
-	Workers           *workersservice.Service
-	Provider          providerexecution.Executor
-	FactoryDefinition *factorydefinition.Service
-	FactorySessions   *factorysessionsservice.Service
-	DurableExecution  factorysessionexecution.Service
-	Transports        TransportLifecycles
-	Sidecars          SidecarLifecycles
+	Config  *factoryconfig.LoadedFactoryConfig
+	Runtime RuntimeInputs
+	Build   Builders
 }
 
 // Graph is the immutable-after-build process application graph. All fields are
@@ -89,39 +137,16 @@ type Graph struct {
 	Transport         TransportDependencies
 	Transports        TransportLifecycles
 	Sidecars          SidecarLifecycles
+	resources         *resourceSet
 }
 
-// Build validates and assembles one application graph without activating any
-// transport, runtime, scheduler, poller, or dashboard lifecycle.
-func Build(ctx context.Context, inputs Inputs) (*Graph, error) {
-	if ctx == nil {
-		return nil, fmt.Errorf("build application graph: context is required")
+// Close releases construction resources in reverse acquisition order. Callers
+// must stop activated lifecycles before closing the graph.
+func (g *Graph) Close() error {
+	if g == nil || g.resources == nil {
+		return nil
 	}
-	if err := ctx.Err(); err != nil {
-		return nil, fmt.Errorf("build application graph: %w", err)
-	}
-	if err := validateInputs(inputs); err != nil {
-		return nil, fmt.Errorf("build application graph: %w", err)
-	}
-
-	return &Graph{
-		Config:            inputs.Config,
-		Runtime:           inputs.Runtime,
-		Models:            inputs.Models,
-		Workers:           inputs.Workers,
-		Provider:          inputs.Provider,
-		FactoryDefinition: inputs.FactoryDefinition,
-		FactorySessions:   inputs.FactorySessions,
-		DurableExecution:  inputs.DurableExecution,
-		Transport: TransportDependencies{
-			Models:            inputs.Models,
-			FactoryDefinition: inputs.FactoryDefinition,
-			FactorySessions:   inputs.FactorySessions,
-			DurableExecution:  inputs.DurableExecution,
-		},
-		Transports: inputs.Transports,
-		Sidecars:   inputs.Sidecars,
-	}, nil
+	return g.resources.Close()
 }
 
 func validateInputs(inputs Inputs) error {
@@ -131,20 +156,14 @@ func validateInputs(inputs Inputs) error {
 	}{
 		{name: "config", missing: inputs.Config == nil},
 		{name: "runtime.factoryRootDir", missing: strings.TrimSpace(inputs.Runtime.FactoryRootDir) == ""},
+		{name: "runtime.executionBaseDir", missing: strings.TrimSpace(inputs.Runtime.ExecutionBaseDir) == ""},
 		{name: "runtime.logger", missing: inputs.Runtime.Logger == nil},
-		{name: "runtime.clock", missing: inputs.Runtime.Clock == nil},
-		{name: "runtime.persistence", missing: inputs.Runtime.Persistence == nil},
-		{name: "models", missing: inputs.Models == nil},
-		{name: "workers", missing: inputs.Workers == nil},
-		{name: "provider", missing: inputs.Provider == nil},
-		{name: "factoryDefinition", missing: inputs.FactoryDefinition == nil},
-		{name: "factorySessions", missing: inputs.FactorySessions == nil},
-		{name: "durableExecution", missing: inputs.DurableExecution == nil},
-		{name: "transports.api", missing: inputs.Transports.API == nil},
-		{name: "transports.mcp", missing: inputs.Transports.MCP == nil},
-		{name: "sidecars.runtime", missing: inputs.Sidecars.Runtime == nil},
-		{name: "sidecars.workers", missing: inputs.Sidecars.Workers == nil},
-		{name: "sidecars.dashboard", missing: inputs.Sidecars.Dashboard == nil},
+		{name: "runtime.clock", missing: isNil(inputs.Runtime.Clock)},
+		{name: "builders.persistence", missing: inputs.Build.Persistence == nil},
+		{name: "builders.modelWorkers", missing: inputs.Build.ModelWorkers == nil},
+		{name: "builders.factorySessions", missing: inputs.Build.FactorySessions == nil},
+		{name: "builders.transports", missing: inputs.Build.Transports == nil},
+		{name: "builders.sidecars", missing: inputs.Build.Sidecars == nil},
 	}
 	for _, dependency := range required {
 		if dependency.missing {
@@ -152,4 +171,17 @@ func validateInputs(inputs Inputs) error {
 		}
 	}
 	return nil
+}
+
+func isNil(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
+	}
 }

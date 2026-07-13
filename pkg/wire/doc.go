@@ -1,6 +1,7 @@
 // Package wire owns construction of the process-scoped application graph.
 //
-// Build assembles already-constructed domain services and inert lifecycle
-// collaborators. It does not select a process mode or start any component;
-// pkg/root and pkg/initializer own those responsibilities respectively.
+// Build constructs domain services and inert lifecycle collaborators in
+// dependency order. Construction resources are retained by the returned Graph
+// and unwound on failure; Build never starts a component. pkg/root and
+// pkg/initializer own mode selection and lifecycle activation respectively.
 package wire
