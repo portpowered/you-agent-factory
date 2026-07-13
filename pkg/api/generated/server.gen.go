@@ -54,6 +54,7 @@ const (
 const (
 	ErrorFamilyBadRequest          ErrorFamily = "BAD_REQUEST"
 	ErrorFamilyConflict            ErrorFamily = "CONFLICT"
+	ErrorFamilyGone                ErrorFamily = "GONE"
 	ErrorFamilyInternalServerError ErrorFamily = "INTERNAL_SERVER_ERROR"
 	ErrorFamilyNotFound            ErrorFamily = "NOT_FOUND"
 )
@@ -69,8 +70,12 @@ const (
 	ErrorResponseCodeINTERNALERROR                              ErrorResponseCode = "INTERNAL_ERROR"
 	ErrorResponseCodeINVALIDFACTORY                             ErrorResponseCode = "INVALID_FACTORY"
 	ErrorResponseCodeINVALIDFACTORYNAME                         ErrorResponseCode = "INVALID_FACTORY_NAME"
+	ErrorResponseCodeINVALIDRESPONSEEVENTCURSOR                 ErrorResponseCode = "INVALID_RESPONSE_EVENT_CURSOR"
+	ErrorResponseCodeINVALIDRESPONSEEVENTFILTER                 ErrorResponseCode = "INVALID_RESPONSE_EVENT_FILTER"
 	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
 	ErrorResponseCodeNOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
+	ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND               ErrorResponseCode = "RESPONSE_EVENT_SESSION_NOT_FOUND"
+	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                 ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
 	ErrorResponseCodeSTALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 
@@ -6208,6 +6213,15 @@ type MaxResults = int
 // NextToken defines model for NextToken.
 type NextToken = string
 
+// ResponseEventAfterSequence defines model for ResponseEventAfterSequence.
+type ResponseEventAfterSequence = int
+
+// ResponseEventDispatchID defines model for ResponseEventDispatchID.
+type ResponseEventDispatchID = string
+
+// ResponseEventKind defines model for ResponseEventKind.
+type ResponseEventKind = []FactoryResponseEventKind
+
 // SessionID defines model for SessionID.
 type SessionID = string
 
@@ -6260,6 +6274,15 @@ type MoveWorkConflict = ErrorResponse
 
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
+
+// ResponseEventBadRequest defines model for ResponseEventBadRequest.
+type ResponseEventBadRequest = ErrorResponse
+
+// ResponseEventSessionNotFound defines model for ResponseEventSessionNotFound.
+type ResponseEventSessionNotFound = ErrorResponse
+
+// ResponseEventStreamExpired defines model for ResponseEventStreamExpired.
+type ResponseEventStreamExpired = ErrorResponse
 
 // SaveCurrentFactoryBadRequest defines model for SaveCurrentFactoryBadRequest.
 type SaveCurrentFactoryBadRequest = ErrorResponse

@@ -61,6 +61,42 @@ func TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete(t *testing.T) 
 	assertBundledEventStreamRoute(t, doc)
 }
 
+func TestOpenAPIContract_ResponseEventStreamIsBundledWithTypedOutcomes(t *testing.T) {
+	doc := loadBundledOpenAPIDocument(t)
+	paths := objectField(t, doc, "paths")
+	operation := pathOperation(t, paths, responseEventStreamPath, "get")
+	assertEventStreamSchemaRef(t, operation, "#/components/schemas/FactoryResponseEvent")
+	for status, ref := range map[string]string{
+		"400": "#/components/responses/ResponseEventBadRequest",
+		"404": "#/components/responses/ResponseEventSessionNotFound",
+		"410": "#/components/responses/ResponseEventStreamExpired",
+		"500": "#/components/responses/InternalError",
+	} {
+		assertResponseRef(t, operation, status, ref)
+	}
+	for _, ref := range []string{
+		"#/components/parameters/SessionID",
+		"#/components/parameters/ResponseEventAfterSequence",
+		"#/components/parameters/ResponseEventDispatchID",
+		"#/components/parameters/ResponseEventKind",
+	} {
+		assertParameterRef(t, operation["parameters"].([]any), ref)
+	}
+
+	bundledParameters := objectField(t, objectField(t, doc, "components"), "parameters")
+	afterSequence := objectField(t, bundledParameters, "ResponseEventAfterSequence")
+	if got := objectField(t, afterSequence, "schema")["minimum"]; got != 0 {
+		t.Fatalf("bundled after_sequence minimum = %v, want 0", got)
+	}
+	kind := objectField(t, bundledParameters, "ResponseEventKind")
+	if kind["style"] != "form" || kind["explode"] != true {
+		t.Fatalf("bundled kind repetition encoding = style:%v explode:%v, want form/true", kind["style"], kind["explode"])
+	}
+	if got := objectField(t, objectField(t, kind, "schema"), "items")["$ref"]; got != "#/components/schemas/FactoryResponseEventKind" {
+		t.Fatalf("bundled kind items ref = %v", got)
+	}
+}
+
 func TestOpenAPIAuthoring_EventSchemasUseDedicatedFragments(t *testing.T) {
 	doc := loadAuthoredOpenAPIDoc(t)
 	schemas := componentSchemas(t, doc)

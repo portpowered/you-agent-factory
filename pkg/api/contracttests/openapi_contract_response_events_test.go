@@ -438,19 +438,6 @@ func TestOpenAPIContract_PublicArtifactsExposeFactoryResponseEventContract(t *te
 	}
 }
 
-func TestOpenAPIContract_NoResponseEventSSERoute(t *testing.T) {
-	doc := loadBundledOpenAPIDocument(t)
-	paths, ok := doc["paths"].(map[string]any)
-	if !ok {
-		t.Fatal("paths object is missing")
-	}
-	for path := range paths {
-		if strings.Contains(path, "response-events") {
-			t.Fatalf("paths must not expose response-event SSE route %q in this lane", path)
-		}
-	}
-}
-
 func TestOpenAPIAuthoring_ResponseEventSchemasUseDedicatedFragments(t *testing.T) {
 	doc := loadAuthoredOpenAPIDoc(t)
 	schemas := componentSchemas(t, doc)
@@ -517,6 +504,7 @@ func TestOpenAPIContract_FactoryEventLaneRemainsIsolatedFromResponseEvents(t *te
 		t.Fatal("paths object is missing")
 	}
 	assertEventStreamSchemaRef(t, pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get"), "#/components/schemas/FactoryEvent")
+	assertEventStreamSchemaRef(t, pathOperation(t, paths, responseEventStreamPath, "get"), "#/components/schemas/FactoryResponseEvent")
 	assertEventStreamSchemaRef(t, pathOperation(t, paths, "/events", "get"), "#/components/schemas/FactoryEvent")
 }
 

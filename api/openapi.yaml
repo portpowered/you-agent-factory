@@ -292,6 +292,35 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/response-events:
+    get:
+      tags:
+        - Runtime
+      operationId: getFactoryResponseEventsBySessionId
+      summary: Stream ephemeral response events for one Factory Session
+      description: Streams ephemeral FactoryResponseEvent observation records for the explicitly selected Factory Session. These records are outside canonical FactoryEvent replay and never derive canonical Factory state. The connection first sends retained matching records in ascending response sequence and then continues with live matching records. Each SSE id is the decimal FactoryResponseEvent.sequence so reconnect clients can acknowledge it with after_sequence. Omitting after_sequence starts at the beginning of retained history. When a cursor predates retained history, the first emitted record is STREAM_GAP and describes the lost range rather than silently skipping it. An unknown session_id returns a typed 404 and never falls back to the current or default session.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/ResponseEventAfterSequence'
+        - $ref: '#/components/parameters/ResponseEventDispatchID'
+        - $ref: '#/components/parameters/ResponseEventKind'
+      responses:
+        '200':
+          description: Retained catch-up followed by live Factory Response Event records for the explicitly targeted session.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-Sent Events where each data record is serialized JSON matching FactoryResponseEvent and each id is its decimal response sequence.
+              x-event-schema: '#/components/schemas/FactoryResponseEvent'
+        '400':
+          $ref: '#/components/responses/ResponseEventBadRequest'
+        '404':
+          $ref: '#/components/responses/ResponseEventSessionNotFound'
+        '410':
+          $ref: '#/components/responses/ResponseEventStreamExpired'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/sync-preflight:
     get:
       tags:
@@ -1415,6 +1444,34 @@ components:
       schema:
         type: integer
         minimum: 0
+    ResponseEventAfterSequence:
+      name: after_sequence
+      in: query
+      required: false
+      description: Last acknowledged FactoryResponseEvent.sequence. The stream sends only retained response events with a greater sequence before continuing with live events. Omit this cursor to start at the beginning of retained response-event history. If the cursor predates retained history, the first emitted event is a STREAM_GAP record describing the loss instead of silently skipping it.
+      schema:
+        type: integer
+        minimum: 0
+    ResponseEventDispatchID:
+      name: dispatch_id
+      in: query
+      required: false
+      description: Return only FactoryResponseEvent records associated with this exact dispatch identifier. Invalid or empty identifiers return the typed bad-request response.
+      schema:
+        type: string
+        minLength: 1
+    ResponseEventKind:
+      name: kind
+      in: query
+      required: false
+      description: Return FactoryResponseEvent records matching any requested public kind. The parameter may be repeated, for example kind=MESSAGE&kind=TOOL. Invalid or empty kind values return the typed bad-request response.
+      style: form
+      explode: true
+      schema:
+        type: array
+        minItems: 1
+        items:
+          $ref: '#/components/schemas/FactoryResponseEventKind'
     BackendScopeId:
       name: backend_scope_id
       in: query
@@ -1633,6 +1690,51 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    ResponseEventBadRequest:
+      description: Response-event cursor or filter parameters were invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidCursor:
+              summary: The response-event reconnect cursor is invalid.
+              value:
+                message: after_sequence must be a non-negative integer.
+                family: BAD_REQUEST
+                code: INVALID_RESPONSE_EVENT_CURSOR
+            invalidFilter:
+              summary: A response-event filter is invalid.
+              value:
+                message: kind must contain only public FactoryResponseEventKind values.
+                family: BAD_REQUEST
+                code: INVALID_RESPONSE_EVENT_FILTER
+    ResponseEventSessionNotFound:
+      description: The explicitly selected Factory Session does not exist. Response-event streaming never falls back to the current or default session.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            unknownSession:
+              summary: The explicit Factory Session identifier was not found.
+              value:
+                message: Factory Session was not found.
+                family: NOT_FOUND
+                code: RESPONSE_EVENT_SESSION_NOT_FOUND
+    ResponseEventStreamExpired:
+      description: The retained response-event stream has expired and can no longer be opened. This is distinct from an invalid cursor or filter.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            expiredStream:
+              summary: Retained response-event history is no longer available.
+              value:
+                message: The retained Factory Response Event stream has expired.
+                family: GONE
+                code: RESPONSE_EVENT_STREAM_EXPIRED
   schemas:
     SubmitWorkRequest:
       type: object
@@ -2629,16 +2731,19 @@ components:
         - BAD_REQUEST
         - CONFLICT
         - NOT_FOUND
+        - GONE
         - INTERNAL_SERVER_ERROR
       x-enum-varnames:
         - ErrorFamilyBadRequest
         - ErrorFamilyConflict
         - ErrorFamilyNotFound
+        - ErrorFamilyGone
         - ErrorFamilyInternalServerError
       x-enum-descriptions:
         - Request payload or parameter validation failed.
         - The request conflicts with current resource state.
         - The requested resource does not exist.
+        - The requested resource previously existed but is no longer retained.
         - The server failed while handling an otherwise valid request.
     ErrorResponse:
       type: object
@@ -2666,6 +2771,10 @@ components:
             - MOVE_WORK_REQUEST_ALREADY_APPLIED
             - EXECUTION_REQUEST_ID_CONFLICT
             - FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED
+            - INVALID_RESPONSE_EVENT_CURSOR
+            - INVALID_RESPONSE_EVENT_FILTER
+            - RESPONSE_EVENT_SESSION_NOT_FOUND
+            - RESPONSE_EVENT_STREAM_EXPIRED
             - NOT_FOUND
             - INTERNAL_ERROR
           x-enum-descriptions:
@@ -2679,6 +2788,10 @@ components:
             - Operator move requestId was already applied for this session.
             - Durable execution requestId was reused with materially different inputs.
             - Lifecycle control requestId was already applied with different control inputs.
+            - The Factory Response Event reconnect cursor is invalid.
+            - A Factory Response Event filter is invalid.
+            - The explicitly selected Factory Session for response events does not exist.
+            - The retained Factory Response Event stream is no longer available.
             - The requested resource does not exist.
             - The server failed while handling an otherwise valid request.
         targets:

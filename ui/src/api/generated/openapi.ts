@@ -168,6 +168,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/factory-sessions/{session_id}/response-events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stream ephemeral response events for one Factory Session
+     * @description Streams ephemeral FactoryResponseEvent observation records for the explicitly selected Factory Session. These records are outside canonical FactoryEvent replay and never derive canonical Factory state. The connection first sends retained matching records in ascending response sequence and then continues with live matching records. Each SSE id is the decimal FactoryResponseEvent.sequence so reconnect clients can acknowledge it with after_sequence. Omitting after_sequence starts at the beginning of retained history. When a cursor predates retained history, the first emitted record is STREAM_GAP and describes the lost range rather than silently skipping it. An unknown session_id returns a typed 404 and never falls back to the current or default session.
+     */
+    get: operations["getFactoryResponseEventsBySessionId"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/factory-sessions/{session_id}/sync-preflight": {
     parameters: {
       query?: never;
@@ -5379,6 +5399,33 @@ export interface components {
         "application/json": components["schemas"]["ErrorResponse"];
       };
     };
+    /** @description Response-event cursor or filter parameters were invalid. */
+    ResponseEventBadRequest: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The explicitly selected Factory Session does not exist. Response-event streaming never falls back to the current or default session. */
+    ResponseEventSessionNotFound: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
+    /** @description The retained response-event stream has expired and can no longer be opened. This is distinct from an invalid cursor or filter. */
+    ResponseEventStreamExpired: {
+      headers: {
+        [name: string]: unknown;
+      };
+      content: {
+        "application/json": components["schemas"]["ErrorResponse"];
+      };
+    };
   };
   parameters: {
     /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
@@ -5419,6 +5466,12 @@ export interface components {
     AfterEventId: string;
     /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
     AfterSequence: number;
+    /** @description Last acknowledged FactoryResponseEvent.sequence. The stream sends only retained response events with a greater sequence before continuing with live events. Omit this cursor to start at the beginning of retained response-event history. If the cursor predates retained history, the first emitted event is a STREAM_GAP record describing the loss instead of silently skipping it. */
+    ResponseEventAfterSequence: number;
+    /** @description Return only FactoryResponseEvent records associated with this exact dispatch identifier. Invalid or empty identifiers return the typed bad-request response. */
+    ResponseEventDispatchID: string;
+    /** @description Return FactoryResponseEvent records matching any requested public kind. The parameter may be repeated, for example kind=MESSAGE&kind=TOOL. Invalid or empty kind values return the typed bad-request response. */
+    ResponseEventKind: components["schemas"]["FactoryResponseEventKind"][];
     /** @description Optional backend scope identifier used with logicalSessionKeyId to resolve the current live Factory Session when the requested session selector is missing or stale. When provided, resolution succeeds only when it matches the active backend scope. */
     BackendScopeId: string;
     /** @description Optional canonical logical-session key derived from the normalized factory session target. When the requested session selector is missing or stale, resolution uses backendScopeId plus this key to locate the replacement current live Factory Session. */
@@ -5718,6 +5771,40 @@ export interface operations {
       };
       400: components["responses"]["BadRequest"];
       404: components["responses"]["NotFound"];
+      500: components["responses"]["InternalError"];
+    };
+  };
+  getFactoryResponseEventsBySessionId: {
+    parameters: {
+      query?: {
+        /** @description Last acknowledged FactoryResponseEvent.sequence. The stream sends only retained response events with a greater sequence before continuing with live events. Omit this cursor to start at the beginning of retained response-event history. If the cursor predates retained history, the first emitted event is a STREAM_GAP record describing the loss instead of silently skipping it. */
+        after_sequence?: components["parameters"]["ResponseEventAfterSequence"];
+        /** @description Return only FactoryResponseEvent records associated with this exact dispatch identifier. Invalid or empty identifiers return the typed bad-request response. */
+        dispatch_id?: components["parameters"]["ResponseEventDispatchID"];
+        /** @description Return FactoryResponseEvent records matching any requested public kind. The parameter may be repeated, for example kind=MESSAGE&kind=TOOL. Invalid or empty kind values return the typed bad-request response. */
+        kind?: components["parameters"]["ResponseEventKind"];
+      };
+      header?: never;
+      path: {
+        /** @description Stable live factory session identifier. Use `~default` to target the default compatibility session explicitly. */
+        session_id: components["parameters"]["SessionID"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Retained catch-up followed by live Factory Response Event records for the explicitly targeted session. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["ResponseEventBadRequest"];
+      404: components["responses"]["ResponseEventSessionNotFound"];
+      410: components["responses"]["ResponseEventStreamExpired"];
       500: components["responses"]["InternalError"];
     };
   };
@@ -6905,6 +6992,8 @@ export const ErrorFamily = {
   ErrorFamilyConflict: "CONFLICT",
   // The requested resource does not exist.
   ErrorFamilyNotFound: "NOT_FOUND",
+  // The requested resource previously existed but is no longer retained.
+  ErrorFamilyGone: "GONE",
   // The server failed while handling an otherwise valid request.
   ErrorFamilyInternalServerError: "INTERNAL_SERVER_ERROR",
 } as const;
@@ -6931,6 +7020,14 @@ export const ErrorResponseCode = {
   // Lifecycle control requestId was already applied with different control inputs.
   FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED:
     "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED",
+  // The Factory Response Event reconnect cursor is invalid.
+  INVALID_RESPONSE_EVENT_CURSOR: "INVALID_RESPONSE_EVENT_CURSOR",
+  // A Factory Response Event filter is invalid.
+  INVALID_RESPONSE_EVENT_FILTER: "INVALID_RESPONSE_EVENT_FILTER",
+  // The explicitly selected Factory Session for response events does not exist.
+  RESPONSE_EVENT_SESSION_NOT_FOUND: "RESPONSE_EVENT_SESSION_NOT_FOUND",
+  // The retained Factory Response Event stream is no longer available.
+  RESPONSE_EVENT_STREAM_EXPIRED: "RESPONSE_EVENT_STREAM_EXPIRED",
   // The requested resource does not exist.
   NOT_FOUND: "NOT_FOUND",
   // The server failed while handling an otherwise valid request.

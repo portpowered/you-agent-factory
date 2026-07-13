@@ -8,4 +8,5 @@ output-options:
     - getEditableCurrentFactoryDefinition
     - getCurrentFactory
     - saveEditableCurrentFactoryDefinition
+    - getFactoryResponseEventsBySessionId
   response-type-suffix: ClientResponse

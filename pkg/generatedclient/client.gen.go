@@ -5,10 +5,182 @@ package generatedclient
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/oapi-codegen/runtime"
 )
+
+// Defines values for ErrorFamily.
+const (
+	ErrorFamilyBadRequest          ErrorFamily = "BAD_REQUEST"
+	ErrorFamilyConflict            ErrorFamily = "CONFLICT"
+	ErrorFamilyGone                ErrorFamily = "GONE"
+	ErrorFamilyInternalServerError ErrorFamily = "INTERNAL_SERVER_ERROR"
+	ErrorFamilyNotFound            ErrorFamily = "NOT_FOUND"
+)
+
+// Defines values for ErrorResponseCode.
+const (
+	BADREQUEST                                 ErrorResponseCode = "BAD_REQUEST"
+	EXECUTIONREQUESTIDCONFLICT                 ErrorResponseCode = "EXECUTION_REQUEST_ID_CONFLICT"
+	FACTORYALREADYEXISTS                       ErrorResponseCode = "FACTORY_ALREADY_EXISTS"
+	FACTORYNOTIDLE                             ErrorResponseCode = "FACTORY_NOT_IDLE"
+	FACTORYSESSIONCONFIGLOADFAILED             ErrorResponseCode = "FACTORY_SESSION_CONFIG_LOAD_FAILED"
+	FACTORYSESSIONCONTROLREQUESTALREADYAPPLIED ErrorResponseCode = "FACTORY_SESSION_CONTROL_REQUEST_ALREADY_APPLIED"
+	INTERNALERROR                              ErrorResponseCode = "INTERNAL_ERROR"
+	INVALIDFACTORY                             ErrorResponseCode = "INVALID_FACTORY"
+	INVALIDFACTORYNAME                         ErrorResponseCode = "INVALID_FACTORY_NAME"
+	INVALIDRESPONSEEVENTCURSOR                 ErrorResponseCode = "INVALID_RESPONSE_EVENT_CURSOR"
+	INVALIDRESPONSEEVENTFILTER                 ErrorResponseCode = "INVALID_RESPONSE_EVENT_FILTER"
+	MOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
+	NOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
+	RESPONSEEVENTSESSIONNOTFOUND               ErrorResponseCode = "RESPONSE_EVENT_SESSION_NOT_FOUND"
+	RESPONSEEVENTSTREAMEXPIRED                 ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
+	STALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
+)
+
+// Defines values for FactoryResponseEventKind.
+const (
+	FactoryResponseEventKindError      FactoryResponseEventKind = "ERROR"
+	FactoryResponseEventKindFileChange FactoryResponseEventKind = "FILE_CHANGE"
+	FactoryResponseEventKindMessage    FactoryResponseEventKind = "MESSAGE"
+	FactoryResponseEventKindPlan       FactoryResponseEventKind = "PLAN"
+	FactoryResponseEventKindProgress   FactoryResponseEventKind = "PROGRESS"
+	FactoryResponseEventKindReasoning  FactoryResponseEventKind = "REASONING"
+	FactoryResponseEventKindRun        FactoryResponseEventKind = "RUN"
+	FactoryResponseEventKindSession    FactoryResponseEventKind = "SESSION"
+	FactoryResponseEventKindStreamGap  FactoryResponseEventKind = "STREAM_GAP"
+	FactoryResponseEventKindTool       FactoryResponseEventKind = "TOOL"
+	FactoryResponseEventKindTurn       FactoryResponseEventKind = "TURN"
+	FactoryResponseEventKindUsage      FactoryResponseEventKind = "USAGE"
+)
+
+// Defines values for FactoryValidationSeverity.
+const (
+	FactoryValidationSeverityError   FactoryValidationSeverity = "error"
+	FactoryValidationSeverityHint    FactoryValidationSeverity = "hint"
+	FactoryValidationSeverityWarning FactoryValidationSeverity = "warning"
+)
+
+// Defines values for FactoryValidationSubjectLocation.
+const (
+	FactoryValidationSubjectLocationDefinition  FactoryValidationSubjectLocation = "DEFINITION"
+	FactoryValidationSubjectLocationInputs      FactoryValidationSubjectLocation = "INPUTS"
+	FactoryValidationSubjectLocationOnFailure   FactoryValidationSubjectLocation = "ON_FAILURE"
+	FactoryValidationSubjectLocationOnRejection FactoryValidationSubjectLocation = "ON_REJECTION"
+	FactoryValidationSubjectLocationOutputs     FactoryValidationSubjectLocation = "OUTPUTS"
+	FactoryValidationSubjectLocationReference   FactoryValidationSubjectLocation = "REFERENCE"
+	FactoryValidationSubjectLocationStates      FactoryValidationSubjectLocation = "STATES"
+	FactoryValidationSubjectLocationTerminal    FactoryValidationSubjectLocation = "TERMINAL"
+)
+
+// Defines values for FactoryValidationSubjectType.
+const (
+	FactoryValidationSubjectTypeFactory     FactoryValidationSubjectType = "FACTORY"
+	FactoryValidationSubjectTypeResource    FactoryValidationSubjectType = "RESOURCE"
+	FactoryValidationSubjectTypeRoute       FactoryValidationSubjectType = "ROUTE"
+	FactoryValidationSubjectTypeWorkState   FactoryValidationSubjectType = "WORK_STATE"
+	FactoryValidationSubjectTypeWorkType    FactoryValidationSubjectType = "WORK_TYPE"
+	FactoryValidationSubjectTypeWorker      FactoryValidationSubjectType = "WORKER"
+	FactoryValidationSubjectTypeWorkstation FactoryValidationSubjectType = "WORKSTATION"
+)
+
+// ErrorFamily Stable machine-readable error family for broader client grouping.
+type ErrorFamily string
+
+// ErrorResponse defines model for ErrorResponse.
+type ErrorResponse struct {
+	// Code Stable machine-readable error code.
+	Code ErrorResponseCode `json:"code"`
+
+	// Family Stable machine-readable error family for broader client grouping.
+	Family  ErrorFamily `json:"family"`
+	Message string      `json:"message"`
+
+	// Targets Optional canonical validation targets that clients can map to factory graph nodes, handles, and form fields.
+	Targets *[]FactoryValidationTarget `json:"targets,omitempty"`
+}
+
+// ErrorResponseCode Stable machine-readable error code.
+type ErrorResponseCode string
+
+// FactoryResponseEventKind Semantic category of one FactoryResponseEvent. Response events are ephemeral observation records and must not derive canonical factory replay state.
+type FactoryResponseEventKind string
+
+// FactoryValidationSeverity Validation severity for one factory validation target.
+type FactoryValidationSeverity string
+
+// FactoryValidationSubject defines model for FactoryValidationSubject.
+type FactoryValidationSubject struct {
+	// Id Stable component identifier or name for the affected factory component.
+	Id string `json:"id"`
+
+	// Location Factory-domain location within the subject component referenced by one validation target.
+	Location FactoryValidationSubjectLocation `json:"location"`
+
+	// Type Factory-domain component type referenced by one validation target subject.
+	Type FactoryValidationSubjectType `json:"type"`
+}
+
+// FactoryValidationSubjectLocation Factory-domain location within the subject component referenced by one validation target.
+type FactoryValidationSubjectLocation string
+
+// FactoryValidationSubjectType Factory-domain component type referenced by one validation target subject.
+type FactoryValidationSubjectType string
+
+// FactoryValidationTarget defines model for FactoryValidationTarget.
+type FactoryValidationTarget struct {
+	// Code Stable machine-readable validation rule identifier.
+	Code string `json:"code"`
+
+	// Message Human-readable explanation suitable for dialogs and summaries.
+	Message string `json:"message"`
+
+	// Severity Validation severity for one factory validation target.
+	Severity FactoryValidationSeverity `json:"severity"`
+	Subject  FactoryValidationSubject  `json:"subject"`
+}
+
+// ResponseEventAfterSequence defines model for ResponseEventAfterSequence.
+type ResponseEventAfterSequence = int
+
+// ResponseEventDispatchID defines model for ResponseEventDispatchID.
+type ResponseEventDispatchID = string
+
+// ResponseEventKind defines model for ResponseEventKind.
+type ResponseEventKind = []FactoryResponseEventKind
+
+// SessionID defines model for SessionID.
+type SessionID = string
+
+// InternalError defines model for InternalError.
+type InternalError = ErrorResponse
+
+// ResponseEventBadRequest defines model for ResponseEventBadRequest.
+type ResponseEventBadRequest = ErrorResponse
+
+// ResponseEventSessionNotFound defines model for ResponseEventSessionNotFound.
+type ResponseEventSessionNotFound = ErrorResponse
+
+// ResponseEventStreamExpired defines model for ResponseEventStreamExpired.
+type ResponseEventStreamExpired = ErrorResponse
+
+// GetFactoryResponseEventsBySessionIdParams defines parameters for GetFactoryResponseEventsBySessionId.
+type GetFactoryResponseEventsBySessionIdParams struct {
+	// AfterSequence Last acknowledged FactoryResponseEvent.sequence. The stream sends only retained response events with a greater sequence before continuing with live events. Omit this cursor to start at the beginning of retained response-event history. If the cursor predates retained history, the first emitted event is a STREAM_GAP record describing the loss instead of silently skipping it.
+	AfterSequence *ResponseEventAfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
+
+	// DispatchId Return only FactoryResponseEvent records associated with this exact dispatch identifier. Invalid or empty identifiers return the typed bad-request response.
+	DispatchId *ResponseEventDispatchID `form:"dispatch_id,omitempty" json:"dispatch_id,omitempty"`
+
+	// Kind Return FactoryResponseEvent records matching any requested public kind. The parameter may be repeated, for example kind=MESSAGE&kind=TOOL. Invalid or empty kind values return the typed bad-request response.
+	Kind *ResponseEventKind `form:"kind,omitempty" json:"kind,omitempty"`
+}
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -83,6 +255,108 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// GetFactoryResponseEventsBySessionId request
+	GetFactoryResponseEventsBySessionId(ctx context.Context, sessionId SessionID, params *GetFactoryResponseEventsBySessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+func (c *Client) GetFactoryResponseEventsBySessionId(ctx context.Context, sessionId SessionID, params *GetFactoryResponseEventsBySessionIdParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetFactoryResponseEventsBySessionIdRequest(c.Server, sessionId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+// NewGetFactoryResponseEventsBySessionIdRequest generates requests for GetFactoryResponseEventsBySessionId
+func NewGetFactoryResponseEventsBySessionIdRequest(server string, sessionId SessionID, params *GetFactoryResponseEventsBySessionIdParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "session_id", runtime.ParamLocationPath, sessionId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/factory-sessions/%s/response-events", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.AfterSequence != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "after_sequence", runtime.ParamLocationQuery, *params.AfterSequence); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.DispatchId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "dispatch_id", runtime.ParamLocationQuery, *params.DispatchId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Kind != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "kind", runtime.ParamLocationQuery, *params.Kind); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
@@ -128,4 +402,87 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// GetFactoryResponseEventsBySessionIdWithResponse request
+	GetFactoryResponseEventsBySessionIdWithResponse(ctx context.Context, sessionId SessionID, params *GetFactoryResponseEventsBySessionIdParams, reqEditors ...RequestEditorFn) (*GetFactoryResponseEventsBySessionIdClientResponse, error)
+}
+
+type GetFactoryResponseEventsBySessionIdClientResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON400      *ResponseEventBadRequest
+	JSON404      *ResponseEventSessionNotFound
+	JSON410      *ResponseEventStreamExpired
+	JSON500      *InternalError
+}
+
+// Status returns HTTPResponse.Status
+func (r GetFactoryResponseEventsBySessionIdClientResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetFactoryResponseEventsBySessionIdClientResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// GetFactoryResponseEventsBySessionIdWithResponse request returning *GetFactoryResponseEventsBySessionIdClientResponse
+func (c *ClientWithResponses) GetFactoryResponseEventsBySessionIdWithResponse(ctx context.Context, sessionId SessionID, params *GetFactoryResponseEventsBySessionIdParams, reqEditors ...RequestEditorFn) (*GetFactoryResponseEventsBySessionIdClientResponse, error) {
+	rsp, err := c.GetFactoryResponseEventsBySessionId(ctx, sessionId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetFactoryResponseEventsBySessionIdClientResponse(rsp)
+}
+
+// ParseGetFactoryResponseEventsBySessionIdClientResponse parses an HTTP response from a GetFactoryResponseEventsBySessionIdWithResponse call
+func ParseGetFactoryResponseEventsBySessionIdClientResponse(rsp *http.Response) (*GetFactoryResponseEventsBySessionIdClientResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetFactoryResponseEventsBySessionIdClientResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ResponseEventBadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ResponseEventSessionNotFound
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 410:
+		var dest ResponseEventStreamExpired
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON410 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest InternalError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	}
+
+	return response, nil
 }

@@ -2,13 +2,90 @@ package apicontract_test
 
 import (
 	"encoding/json"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	generatedclient "github.com/portpowered/infinite-you/pkg/generatedclient"
 )
+
+func TestGeneratedGoClientBuildsFilteredResponseEventRequest(t *testing.T) {
+	afterSequence := generatedclient.ResponseEventAfterSequence(42)
+	dispatchID := generatedclient.ResponseEventDispatchID("dispatch/one")
+	kinds := generatedclient.ResponseEventKind{
+		generatedclient.FactoryResponseEventKindMessage,
+		generatedclient.FactoryResponseEventKindTool,
+	}
+	request, err := generatedclient.NewGetFactoryResponseEventsBySessionIdRequest(
+		"http://localhost:7437",
+		generatedclient.SessionID("session one"),
+		&generatedclient.GetFactoryResponseEventsBySessionIdParams{
+			AfterSequence: &afterSequence,
+			DispatchId:    &dispatchID,
+			Kind:          &kinds,
+		},
+	)
+	if err != nil {
+		t.Fatalf("build generated response-event request: %v", err)
+	}
+	if got, want := request.URL.EscapedPath(), "/factory-sessions/session%20one/response-events"; got != want {
+		t.Fatalf("generated response-event path = %q, want %q", got, want)
+	}
+	query := request.URL.Query()
+	if query.Get("after_sequence") != "42" || query.Get("dispatch_id") != "dispatch/one" {
+		t.Fatalf("generated response-event query = %q", request.URL.RawQuery)
+	}
+	if got := query["kind"]; len(got) != 2 || got[0] != "MESSAGE" || got[1] != "TOOL" {
+		t.Fatalf("generated repeated kind values = %#v, want [MESSAGE TOOL]", got)
+	}
+}
+
+func TestGeneratedClientsExposeResponseEventSuccessAndTypedErrors(t *testing.T) {
+	response := generatedclient.GetFactoryResponseEventsBySessionIdClientResponse{
+		Body:    []byte("data: {}\n\n"),
+		JSON400: &generatedclient.ResponseEventBadRequest{},
+		JSON404: &generatedclient.ResponseEventSessionNotFound{},
+		JSON410: &generatedclient.ResponseEventStreamExpired{},
+		JSON500: &generatedclient.InternalError{},
+	}
+	if len(response.Body) == 0 || response.JSON400 == nil || response.JSON404 == nil || response.JSON410 == nil || response.JSON500 == nil {
+		t.Fatal("generated Go client must expose SSE success and every typed response-event error")
+	}
+
+	uiArtifact, err := os.ReadFile("../../../ui/src/api/generated/openapi.ts")
+	if err != nil {
+		t.Fatalf("read generated TypeScript client: %v", err)
+	}
+	uiText := string(uiArtifact)
+	for _, marker := range []string{
+		"getFactoryResponseEventsBySessionId",
+		"after_sequence?: components[\"parameters\"][\"ResponseEventAfterSequence\"]",
+		"dispatch_id?: components[\"parameters\"][\"ResponseEventDispatchID\"]",
+		"kind?: components[\"parameters\"][\"ResponseEventKind\"]",
+		"\"text/event-stream\": string",
+		"400: components[\"responses\"][\"ResponseEventBadRequest\"]",
+		"404: components[\"responses\"][\"ResponseEventSessionNotFound\"]",
+		"410: components[\"responses\"][\"ResponseEventStreamExpired\"]",
+		"500: components[\"responses\"][\"InternalError\"]",
+	} {
+		if !strings.Contains(uiText, marker) {
+			t.Fatalf("generated TypeScript client missing response-event marker %q", marker)
+		}
+	}
+}
+
+func TestGeneratedServerDefersResponseEventHandler(t *testing.T) {
+	serverArtifact, err := os.ReadFile("../generated/server.gen.go")
+	if err != nil {
+		t.Fatalf("read generated server contract: %v", err)
+	}
+	if strings.Contains(string(serverArtifact), "GetFactoryResponseEventsBySessionId") {
+		t.Fatal("generated ServerInterface must defer the response-event handler to its implementation lane")
+	}
+}
 
 var canonicalFactoryEventTypes = []factoryapi.FactoryEventType{
 	factoryapi.FactoryEventTypeRunRequest,
