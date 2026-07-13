@@ -11,17 +11,20 @@ import (
 )
 
 const (
-	cursorToolFallbackName       = "tool_call"
-	cursorToolSummaryMaxDepth    = 3
-	cursorToolSummaryMaxEntries  = 16
-	cursorToolSummaryStringLimit = 256
-	cursorToolRedactedValue      = "<redacted>"
-	cursorToolTruncatedValue     = "<truncated>"
-	cursorToolGapReconnect       = "provider_reconnect"
-	cursorToolGapFlush           = "decoder_flush"
-	cursorToolGapTerminated      = "provider_terminated"
-	cursorToolGapTerminal        = "terminal_result_missing_completion"
-	cursorToolGapFailure         = "provider_terminal_failure"
+	cursorToolFallbackName        = "tool_call"
+	cursorToolSummaryMaxDepth     = 3
+	cursorToolSummaryMaxEntries   = 16
+	cursorToolSummaryKeyLimit     = 64
+	cursorToolSummaryStringLimit  = 256
+	cursorToolSummaryEncodedLimit = 2048
+	cursorToolRedactedValue       = "<redacted>"
+	cursorToolTruncatedValue      = "<truncated>"
+	cursorToolSummaryMarkerKey    = "_summary"
+	cursorToolGapReconnect        = "provider_reconnect"
+	cursorToolGapFlush            = "decoder_flush"
+	cursorToolGapTerminated       = "provider_terminated"
+	cursorToolGapTerminal         = "terminal_result_missing_completion"
+	cursorToolGapFailure          = "provider_terminal_failure"
 )
 
 type cursorToolState struct {
@@ -286,11 +289,7 @@ func cursorSafeToolSummary(raw json.RawMessage) json.RawMessage {
 	if !ok || len(object) == 0 {
 		return nil
 	}
-	encoded, err := json.Marshal(object)
-	if err != nil {
-		return nil
-	}
-	return encoded
+	return encodeBoundedCursorToolSummary(object)
 }
 
 func cursorSafeToolName(name string) string {
@@ -323,13 +322,14 @@ func sanitizeCursorToolValue(key string, value any, depth int, budget *cursorToo
 		}
 		sort.Strings(keys)
 		result := make(map[string]any)
-		for _, field := range keys {
+		for index, field := range keys {
 			if budget.remaining <= 0 {
-				result["summary"] = cursorToolTruncatedValue
+				result[cursorToolSummaryMarkerKey] = cursorToolTruncatedValue
 				break
 			}
 			budget.remaining--
-			result[field] = sanitizeCursorToolValue(field, typed[field], depth+1, budget)
+			safeField := cursorSafeToolFieldName(field, index, result)
+			result[safeField] = sanitizeCursorToolValue(field, typed[field], depth+1, budget)
 		}
 		return result
 	case []any:
@@ -353,6 +353,111 @@ func sanitizeCursorToolValue(key string, value any, depth int, budget *cursorToo
 	default:
 		return cursorToolRedactedValue
 	}
+}
+
+func cursorSafeToolFieldName(field string, index int, existing map[string]any) string {
+	trimmed := strings.TrimSpace(field)
+	sensitive := cursorSensitiveToolKey(trimmed) || cursorSensitiveToolValue(trimmed)
+	if cursorToolFieldNameIsSafe(trimmed, sensitive) {
+		if _, collision := existing[trimmed]; !collision {
+			return trimmed
+		}
+	}
+
+	base := "field"
+	if sensitive {
+		base = "redacted_field"
+	}
+	for suffix := index + 1; ; suffix++ {
+		candidate := fmt.Sprintf("%s_%d", base, suffix)
+		if _, collision := existing[candidate]; !collision {
+			return candidate
+		}
+	}
+}
+
+func cursorToolFieldNameIsSafe(field string, sensitive bool) bool {
+	if field == "" || len(field) > cursorToolSummaryKeyLimit || field == cursorToolSummaryMarkerKey || sensitive {
+		return false
+	}
+	return strings.IndexFunc(field, func(character rune) bool {
+		return !cursorToolFieldNameCharacterIsSafe(character)
+	}) == -1
+}
+
+func cursorToolFieldNameCharacterIsSafe(character rune) bool {
+	return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+		(character >= '0' && character <= '9') || strings.ContainsRune("_.-", character)
+}
+
+func encodeBoundedCursorToolSummary(object map[string]any) json.RawMessage {
+	type summaryField struct {
+		key         string
+		encodedSize int
+	}
+	fields := make([]summaryField, 0, len(object))
+	for key, value := range object {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			continue
+		}
+		fields = append(fields, summaryField{key: key, encodedSize: len(encoded)})
+	}
+	sort.Slice(fields, func(left, right int) bool {
+		if fields[left].encodedSize == fields[right].encodedSize {
+			return fields[left].key < fields[right].key
+		}
+		return fields[left].encodedSize < fields[right].encodedSize
+	})
+
+	bounded := make(map[string]any, len(object))
+	truncated := false
+	for _, field := range fields {
+		bounded[field.key] = object[field.key]
+		encoded, err := json.Marshal(bounded)
+		if err != nil || len(encoded) > cursorToolSummaryEncodedLimit {
+			delete(bounded, field.key)
+			truncated = true
+		}
+	}
+	if truncated {
+		bounded[cursorToolSummaryMarkerKey] = cursorToolTruncatedValue
+	}
+
+	for {
+		encoded, err := json.Marshal(bounded)
+		if err != nil {
+			return nil
+		}
+		if len(encoded) <= cursorToolSummaryEncodedLimit {
+			return encoded
+		}
+		key := largestCursorToolSummaryField(bounded)
+		if key == "" {
+			return nil
+		}
+		delete(bounded, key)
+		bounded[cursorToolSummaryMarkerKey] = cursorToolTruncatedValue
+	}
+}
+
+func largestCursorToolSummaryField(summary map[string]any) string {
+	var largestKey string
+	largestSize := -1
+	for key, value := range summary {
+		if key == cursorToolSummaryMarkerKey {
+			continue
+		}
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			return key
+		}
+		if len(encoded) > largestSize || (len(encoded) == largestSize && key > largestKey) {
+			largestKey = key
+			largestSize = len(encoded)
+		}
+	}
+	return largestKey
 }
 
 func cursorSensitiveToolKey(key string) bool {

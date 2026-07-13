@@ -138,9 +138,10 @@ func TestResponseEventDecoder_CorrelatesSafeToolLifecycleFixture(t *testing.T) {
 	if err := json.Unmarshal(readStarted.ArgumentsSummary, &readArguments); err != nil {
 		t.Fatalf("decode read arguments: %v", err)
 	}
-	if readArguments["path"] != "README.md" || readArguments["prompt"] != cursorToolRedactedValue {
+	if readArguments["path"] != "README.md" {
 		t.Fatalf("read arguments summary = %s, want useful path and redacted prompt", readStarted.ArgumentsSummary)
 	}
+	assertCursorSummaryRedactsKey(t, readArguments, readStarted.ArgumentsSummary, "prompt")
 	if !reflect.DeepEqual(readStarted.ArgumentsSummary, readCompleted.ArgumentsSummary) {
 		t.Fatalf("completed arguments = %s, want retained start summary %s", readCompleted.ArgumentsSummary, readStarted.ArgumentsSummary)
 	}
@@ -388,10 +389,18 @@ func TestResponseEventDecoder_TerminalSnapshotIsBounded(t *testing.T) {
 }
 
 func TestCursorSafeToolSummaryIsDeterministicBoundedAndRedacted(t *testing.T) {
+	sensitiveKey := "prompt: private-key-text-must-not-leak"
+	oversizedKey := strings.Repeat("oversized-key-must-not-leak", cursorToolSummaryKeyLimit)
 	large := map[string]any{
 		"path":          "README.md",
 		"authorization": "Bearer must-not-leak",
 		"output":        strings.Repeat("x", cursorToolSummaryStringLimit+20),
+		sensitiveKey:    "submitted prompt",
+		oversizedKey:    "bounded key value",
+		"nested": map[string]any{
+			"escaped": strings.Repeat("\x00", cursorToolSummaryStringLimit),
+			"details": strings.Repeat("nested output", cursorToolSummaryStringLimit),
+		},
 	}
 	raw, err := json.Marshal(large)
 	if err != nil {
@@ -406,12 +415,52 @@ func TestCursorSafeToolSummaryIsDeterministicBoundedAndRedacted(t *testing.T) {
 	if err := json.Unmarshal(first, &summary); err != nil {
 		t.Fatalf("summary is not valid JSON: %v", err)
 	}
-	if strings.Contains(string(first), "must-not-leak") || summary["authorization"] != cursorToolRedactedValue {
+	if strings.Contains(string(first), "must-not-leak") || strings.Contains(string(first), sensitiveKey) ||
+		strings.Contains(string(first), oversizedKey) {
+		t.Fatalf("summary exposed sensitive or oversized key text: %s", first)
+	}
+	if len(first) > cursorToolSummaryEncodedLimit {
+		t.Fatalf("encoded summary length = %d, want at most %d: %s", len(first), cursorToolSummaryEncodedLimit, first)
+	}
+	if summary["path"] != "README.md" {
+		t.Fatalf("summary lost useful safe context: %s", first)
+	}
+	if !cursorSummaryContainsValue(summary, cursorToolRedactedValue) {
 		t.Fatalf("summary did not redact credential: %s", first)
 	}
 	output, _ := summary["output"].(string)
 	if len(output) > cursorToolSummaryStringLimit+3 || !strings.HasSuffix(output, "...") {
 		t.Fatalf("bounded output = %q", output)
+	}
+}
+
+func cursorSummaryContainsValue(value any, want string) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, nested := range typed {
+			if cursorSummaryContainsValue(nested, want) {
+				return true
+			}
+		}
+	case []any:
+		for _, nested := range typed {
+			if cursorSummaryContainsValue(nested, want) {
+				return true
+			}
+		}
+	case string:
+		return typed == want
+	}
+	return false
+}
+
+func assertCursorSummaryRedactsKey(t *testing.T, decoded map[string]any, summary json.RawMessage, forbiddenKey string) {
+	t.Helper()
+	if !cursorSummaryContainsValue(decoded, cursorToolRedactedValue) {
+		t.Fatalf("summary did not retain a redaction marker: %s", summary)
+	}
+	if strings.Contains(string(summary), forbiddenKey) {
+		t.Fatalf("summary exposed sensitive key %q: %s", forbiddenKey, summary)
 	}
 }
 
@@ -421,9 +470,10 @@ func TestCursorSafeToolSummaryDecodesStructuredFunctionArgumentsAndRejectsUnsafe
 	if err := json.Unmarshal(summary, &decoded); err != nil {
 		t.Fatalf("decode structured string summary: %v", err)
 	}
-	if decoded["path"] != "README.md" || decoded["password"] != cursorToolRedactedValue {
+	if decoded["path"] != "README.md" {
 		t.Fatalf("structured string summary = %s", summary)
 	}
+	assertCursorSummaryRedactsKey(t, decoded, summary, "password")
 	if got := cursorSafeToolName("private prompt: reveal credentials"); got != cursorToolFallbackName {
 		t.Fatalf("unsafe tool name = %q, want fallback", got)
 	}
