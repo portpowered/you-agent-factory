@@ -9,9 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"io"
@@ -20,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 func emitCleanInvocationOutcome(ctx context.Context, cfg RunConfig, runner factoryServiceRunner, runErr error, startedAt time.Time) error {
@@ -377,34 +377,25 @@ const (
 	responseStreamJSONRecordInvocationResult = "invocation_result"
 )
 
-var humanTokenUsageMetadataKeys = []string{
-	"input_tokens",
-	"output_tokens",
-	"total_tokens",
-	"cache_read_tokens",
-	"cache_write_tokens",
-	"cached_input_tokens",
-	"reasoning_output_tokens",
-}
-
-// responseStreamRenderer consumes internal SessionResponseStream segments and
-// writes ordered progress output followed by the final invocation result.
+// responseStreamRenderer writes ordered canonical progress output followed by
+// the final invocation result.
 type responseStreamRenderer interface {
 	stopProgressRendering()
 	writeFinalInvocationResult(result apisurface.FactoryInvocationResult) error
 }
 
-// humanResponseStreamRenderer prints ordered internal SessionResponseStream
-// progress to stdout and keeps the final invocation primary result visually
-// separate from transient progress output.
+// humanResponseStreamRenderer prints canonical response-event progress to
+// stdout and keeps the final invocation result separate from transient output.
 type humanResponseStreamRenderer struct {
-	mu              sync.Mutex
-	output          io.Writer
-	progress        *responseStreamProgressWriter
-	lastSequence    map[string]int64
-	progressLines   int
-	progressSeen    bool
-	backlogNotified bool
+	mu                   sync.Mutex
+	output               io.Writer
+	progress             *responseStreamProgressWriter
+	finalOnce            sync.Once
+	finalErr             error
+	lastResponseSequence int64
+	progressLines        int
+	progressSeen         bool
+	backlogNotified      bool
 }
 
 func newHumanResponseStreamRenderer(output io.Writer) *humanResponseStreamRenderer {
@@ -412,9 +403,8 @@ func newHumanResponseStreamRenderer(output io.Writer) *humanResponseStreamRender
 		output = os.Stdout
 	}
 	return &humanResponseStreamRenderer{
-		output:       output,
-		progress:     newResponseStreamProgressWriter(output),
-		lastSequence: make(map[string]int64),
+		output:   output,
+		progress: newResponseStreamProgressWriter(output),
 	}
 }
 
@@ -425,24 +415,21 @@ func (r *humanResponseStreamRenderer) stopProgressRendering() {
 	r.progress.stopAndDrain()
 }
 
-func (r *humanResponseStreamRenderer) onStreamSegment(result factorysessions.SessionResponseStreamReadResult) {
-	if r == nil {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	for _, event := range result.Events {
-		r.renderEventLocked(event)
-	}
-}
-
 func (r *humanResponseStreamRenderer) writeFinalInvocationResult(
 	result apisurface.FactoryInvocationResult,
 ) error {
 	if r == nil {
 		return fmt.Errorf("response-stream renderer is nil")
 	}
+	r.finalOnce.Do(func() {
+		r.finalErr = r.writeFinalInvocationResultOnce(result)
+	})
+	return r.finalErr
+}
+
+func (r *humanResponseStreamRenderer) writeFinalInvocationResultOnce(
+	result apisurface.FactoryInvocationResult,
+) error {
 	r.stopProgressRendering()
 	r.progress.acquireOutputExclusive()
 	defer r.progress.releaseOutputExclusive()
@@ -526,143 +513,38 @@ func (r *humanResponseStreamRenderer) writePrimaryResult(text string) error {
 	return err
 }
 
-func (r *humanResponseStreamRenderer) renderEventLocked(event responsestream.Event) {
-	dispatchKey := strings.TrimSpace(event.DispatchID)
-	if dispatchKey == "" {
-		dispatchKey = "_"
-	}
-	if event.Sequence > 0 && event.Sequence <= r.lastSequence[dispatchKey] {
-		return
-	}
-	if event.Sequence > 0 {
-		r.lastSequence[dispatchKey] = event.Sequence
-	}
-
-	switch event.Kind {
-	case responsestream.EventKindCompactionSignal:
-		return
-	case responsestream.EventKindStreamCompleted, responsestream.EventKindStreamFailed:
-		return
-	case responsestream.EventKindResponseFragment:
-		return
-	case responsestream.EventKindProgressFragment:
-		if !humanProgressRenderableEvent(event) {
-			return
-		}
-		payload := boundedHumanProgressPayload(event.Payload)
-		if payload == "" {
-			return
-		}
-		r.writeProgressLineLocked(payload)
-	}
-}
-
-func humanProgressRenderableType(eventType responsestream.EventType) bool {
-	switch eventType {
-	case responsestream.EventTypeStarted,
-		responsestream.EventTypeProgress,
-		responsestream.EventTypeFailed,
-		responsestream.EventTypeCanceled,
-		responsestream.EventTypeUnknown:
-		return true
-	default:
-		return false
-	}
-}
-
-func humanProgressRenderableEvent(event responsestream.Event) bool {
-	if !humanProgressRenderableType(event.Type) {
-		return false
-	}
-	if humanTokenUsageProgressEvent(event) {
-		return false
-	}
-	return !humanInternalProgressPayload(event.Payload)
-}
-
-func humanTokenUsageProgressEvent(event responsestream.Event) bool {
-	external := strings.ToLower(strings.TrimSpace(event.ExternalEventType))
-	if external == "token_count" || strings.Contains(external, "token_count") {
-		return true
-	}
-	for _, key := range humanTokenUsageMetadataKeys {
-		if _, ok := event.Metadata[key]; ok {
-			return true
-		}
-	}
-	return humanTokenUsageProgressPayload(event.Payload)
-}
-
-func humanTokenUsageProgressPayload(payload string) bool {
-	lower := strings.ToLower(strings.TrimSpace(payload))
-	if lower == "" {
-		return false
-	}
-	for _, marker := range []string{
-		"input_tokens",
-		"output_tokens",
-		"total_tokens",
-		"cache_read_tokens",
-		"cache_write_tokens",
-		"cached_input_tokens",
-		"reasoning_output_tokens",
-		"token usage",
-		"tokens used",
-	} {
-		if strings.Contains(lower, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-func humanInternalProgressPayload(payload string) bool {
-	lower := strings.ToLower(strings.TrimSpace(payload))
-	if lower == "" {
-		return false
-	}
-	switch {
-	case strings.HasPrefix(lower, "stream ") &&
-		(strings.Contains(lower, "omitted") ||
-			strings.Contains(lower, "compacted") ||
-			strings.Contains(lower, "truncated") ||
-			strings.Contains(lower, "coalesced") ||
-			strings.Contains(lower, "evicted")):
-		return true
-	case strings.HasPrefix(lower, "terminal output backlog"):
-		return true
-	case strings.HasPrefix(lower, "earlier progress unavailable"):
-		return true
-	default:
-		return false
-	}
-}
-
 func boundedHumanProgressPayload(payload string) string {
-	trimmed := strings.TrimSpace(payload)
+	trimmed := normalizeHumanProgressField(payload)
 	if trimmed == "" {
 		return ""
 	}
-	if maxHumanProgressLineBytes <= 0 || len([]byte(trimmed)) <= maxHumanProgressLineBytes {
+	if maxHumanProgressLineBytes <= 0 || len(trimmed) <= maxHumanProgressLineBytes {
 		return trimmed
 	}
-	bytes := []byte(trimmed)
-	return strings.TrimSpace(string(bytes[:maxHumanProgressLineBytes])) + "..."
+	const omissionMarker = "..."
+	budget := maxHumanProgressLineBytes - len(omissionMarker)
+	if budget <= 0 {
+		return omissionMarker
+	}
+	end := 0
+	for end < len(trimmed) {
+		_, size := utf8.DecodeRuneInString(trimmed[end:])
+		if end+size > budget {
+			break
+		}
+		end += size
+	}
+	return strings.TrimSpace(trimmed[:end]) + omissionMarker
 }
 
-func formatCompactionNotice(summary responsestream.CompactionSummary) string {
-	reason := strings.TrimSpace(string(summary.Reason))
-	if reason == "" {
-		reason = "compacted"
-	}
-	if summary.DroppedSequenceCount > 0 {
-		return fmt.Sprintf(
-			"stream %s (%d earlier events omitted)",
-			strings.ToLower(reason),
-			summary.DroppedSequenceCount,
-		)
-	}
-	return fmt.Sprintf("stream %s", strings.ToLower(reason))
+func normalizeHumanProgressField(value string) string {
+	normalized := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || unicode.In(r, unicode.Cf) {
+			return ' '
+		}
+		return r
+	}, value)
+	return strings.Join(strings.Fields(normalized), " ")
 }
 
 func (r *humanResponseStreamRenderer) writeProgressLineLocked(payload string) {

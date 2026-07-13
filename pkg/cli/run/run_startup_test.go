@@ -21,7 +21,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -834,30 +833,6 @@ func writeRunWireTestWorkstationAgentsMD(t *testing.T, factoryDir, workstationNa
 	}
 }
 
-func TestHumanProgressRenderableType(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		eventType responsestream.EventType
-		want      bool
-	}{
-		{eventType: responsestream.EventTypeProgress, want: true},
-		{eventType: responsestream.EventTypeStarted, want: true},
-		{eventType: responsestream.EventTypeTextDelta, want: false},
-		{eventType: responsestream.EventTypeFinalText, want: false},
-	}
-
-	for _, tc := range tests {
-		tc := tc
-		t.Run(string(tc.eventType), func(t *testing.T) {
-			t.Parallel()
-			if got := humanProgressRenderableType(tc.eventType); got != tc.want {
-				t.Fatalf("humanProgressRenderableType(%q) = %t, want %t", tc.eventType, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestBoundedHumanProgressPayload(t *testing.T) {
 	t.Parallel()
 
@@ -868,19 +843,6 @@ func TestBoundedHumanProgressPayload(t *testing.T) {
 	}
 	if !strings.HasSuffix(got, "...") {
 		t.Fatalf("bounded payload = %q, want ellipsis suffix", got)
-	}
-}
-
-func TestFormatCompactionNotice(t *testing.T) {
-	t.Parallel()
-
-	got := formatCompactionNotice(responsestream.CompactionSummary{
-		Reason:                responsestream.CompactionReasonCoalesced,
-		DroppedSequenceCount:  2,
-		FirstRetainedSequence: 5,
-	})
-	if got != "stream coalesced (2 earlier events omitted)" {
-		t.Fatalf("notice = %q", got)
 	}
 }
 

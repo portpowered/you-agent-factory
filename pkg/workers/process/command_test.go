@@ -863,15 +863,11 @@ func spawnCommandHelperChild() {
 		fmt.Fprintf(os.Stderr, "start child: %v\n", err)
 		os.Exit(2)
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(pidFile); err == nil {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(child.Process.Pid)), 0o600); err != nil {
+		fmt.Fprintf(os.Stderr, "write child pid file: %v\n", err)
+		_ = child.Process.Kill()
+		os.Exit(2)
 	}
-	fmt.Fprintln(os.Stderr, "child did not write pid file")
-	os.Exit(2)
 }
 
 func writeCommandHelperPID() {

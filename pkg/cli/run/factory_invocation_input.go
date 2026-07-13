@@ -208,11 +208,6 @@ func defaultBuildInvocationBootstrap(
 	return bootstrap, nil
 }
 
-type sessionResponseStreamInvocationRunner interface {
-	sessionInvocationRunner
-	sessionResponseStreamAttachable
-}
-
 type sessionResponseEventInvocationRunner interface {
 	sessionInvocationRunner
 	sessionResponseEventAttachable
@@ -396,11 +391,11 @@ func startInvocationResponseStream(
 	}
 
 	renderer := newHumanResponseStreamRenderer(cfg.Output)
-	streamInvoker, ok := invoker.(sessionResponseStreamInvocationRunner)
+	streamInvoker, ok := invoker.(sessionResponseEventInvocationRunner)
 	if !ok {
 		return renderer, nil
 	}
-	attachment := startResponseStreamAttachment(ctx, streamInvoker, factorysessions.DefaultSessionID, renderer)
+	attachment := startResponseEventAttachment(ctx, streamInvoker, factorysessions.DefaultSessionID, renderer)
 	if attachment == nil {
 		return renderer, nil
 	}

@@ -165,8 +165,10 @@ primary-result behavior.
   must stay aligned with the shared `InvocationResponse` envelope for both
   successful and non-success invocation results rather than becoming a
   success-only CLI fork. `RunConfig.InvocationOutputMode` and `you run --output`
-  select primary-result-only versus internal `SessionResponseStream` attachment
-  for supported one-shot factory invocations; keep mode validation, unsupported
+  select primary-result-only versus the session-owned canonical
+  `FactoryResponseEvent` subscription for supported one-shot factory invocations.
+  Do not fall back to legacy provider-progress payloads when the canonical
+  subscription is unavailable. Keep mode validation, unsupported
   run-shape rejection, and fallback behavior in `pkg/cli/run/invocation_error.go`,
   stream attachment, bounded human-progress draining, and lossless canonical
   JSON stdout ordering in
@@ -180,20 +182,19 @@ primary-result behavior.
   The `pkg/cli/run` package is at the
   15-file limit; extend existing files instead of adding new ones. Human response-stream
   terminal outcomes use `--- invocation outcome ---` with structured status/error
-  fields. JSON mode subscribes from the latest session-owned canonical response
-  event, emits only `response_event` records, and sends every event plus the
+  fields. Both human and JSON modes subscribe from the latest session-owned
+  canonical response event. Human mode validates kind/phase and renders only its
+  bounded typed allow-list; JSON emits only `response_event` records and sends every event plus the
   final `invocation_result` through one lossless ordered writer. Do not reuse the
   human progress queue's drop or drain-timeout policy for canonical JSON records.
   Keep `service.InvocationBootstrap.SubscribeSessionResponseEventsFromLatest`
   as a transparent forward and explicitly drain the retained subscription after
   stopping its live consumer so an event published at invocation return remains
   ordered before the terminal record.
-  Human-only suppression helpers:
-  `humanProgressRenderableEvent`, `humanInternalProgressPayload`, and
-  `humanTokenUsageProgressEvent` in `pkg/cli/run/run_clean_invocation.go` drop
-  compaction/backlog/stream-gap text and token-usage chatter. Canonical retained
-  window loss reaches JSON mode only as a public `STREAM_GAP` event. Internal stream listing for
-  `pkg/service/runtime_sessions.go` alongside `SubscribeSessionResponseStream`.
+  Canonical retained-window loss reaches both modes as a public `STREAM_GAP`
+  event. The legacy internal stream remains available to non-human compatibility
+  consumers through `pkg/service/runtime_sessions.go`, but is not a CLI human
+  presentation fallback.
   Provider-neutral `FactoryResponseEvent` vocabulary lives in
   `pkg/factorysessions/responseevents` (distinct from internal
   `pkg/factorysessions/responsestream` fragment kinds). Legacy fragment
