@@ -2,13 +2,22 @@ package initializer
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	api "github.com/portpowered/infinite-you/pkg/api"
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
+	"go.uber.org/zap"
 )
 
 func TestComposeSessionAPISurfaceRejectsUnavailableCollaborator(t *testing.T) {
@@ -83,5 +92,68 @@ func TestComposeSessionAPISurfacePassesBoundedCollaboratorsToConstructor(t *test
 	}
 	if constructorCalls != 1 {
 		t.Fatalf("constructor calls = %d, want 1", constructorCalls)
+	}
+}
+
+type expiredResponseEventClock struct {
+	now time.Time
+}
+
+func (c *expiredResponseEventClock) Now() time.Time {
+	return c.now
+}
+
+func TestComposedSessionAPISurfaceReturnsTypedExpiredResponseEventOutcome(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	cfg := &Config{Dir: dir}
+	core, err := BuildCore(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("BuildCore: %v", err)
+	}
+
+	const sessionID = "expired-session"
+	start := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	clock := &expiredResponseEventClock{now: start}
+	session := factorysessions.NewLiveSession(
+		sessionID,
+		dir,
+		dir,
+		dir,
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindNamed, Name: "expired"},
+		nil,
+		false,
+		"test",
+	)
+	session.ResponseEvents = responseeventstore.NewSessionResponseEventStoreWithClock(sessionID, clock)
+	session.ResponseEvents.Complete()
+	clock.now = start.Add(responseeventstore.CompletedStreamRetentionWindow)
+	core.Sessions().Upsert(session, true)
+
+	host := NewSessionRuntimeHostFromCore(core, cfg)
+	services := servicesFromCoreWithModels(core, host.ModelService())
+	surface, err := composeSessionAPISurface(services, host)
+	if err != nil {
+		t.Fatalf("composeSessionAPISurface: %v", err)
+	}
+	server := api.NewServer(surface, 0, zap.NewNop())
+	request := httptest.NewRequest(http.MethodGet, "/factory-sessions/"+sessionID+"/response-events", nil)
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusGone {
+		t.Fatalf("expired response-event status = %d, want 410: %s", recorder.Code, recorder.Body.String())
+	}
+	var response factoryapi.ErrorResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode expired response-event error: %v", err)
+	}
+	if response.Code != factoryapi.ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED || response.Family != factoryapi.ErrorFamilyGone {
+		t.Fatalf("expired response-event error = %#v, want RESPONSE_EVENT_STREAM_EXPIRED/GONE", response)
+	}
+	if contentType := recorder.Header().Get("Content-Type"); strings.Contains(contentType, "text/event-stream") {
+		t.Fatalf("expired response-event Content-Type = %q, want typed JSON before SSE headers", contentType)
 	}
 }
