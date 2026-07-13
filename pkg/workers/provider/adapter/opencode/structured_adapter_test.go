@@ -2,6 +2,7 @@ package opencode_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"reflect"
@@ -176,6 +177,88 @@ func TestStructuredFinalUsesSnapshotWithoutDuplicatingPrecedingDeltas(t *testing
 	}
 	if result.Response.Content != "Hello world" || len(result.Drafts) != 0 {
 		t.Fatalf("final result = %#v, want one authoritative snapshot without semantic drafts", result)
+	}
+}
+
+func TestOpenCodeAuthoritativeFinalResultsPreserveContentBeyondPublicationLimit(t *testing.T) {
+	content := strings.Repeat("x", 300*1024) + "complete-tail"
+	tests := []struct {
+		name            string
+		providerAdapter adapter.Adapter
+		stdout          []byte
+		wantDraft       bool
+	}{
+		{
+			name:            "structured",
+			providerAdapter: newStructuredAdapter(t),
+			stdout: []byte(fmt.Sprintf(
+				`{"type":"text","sessionID":"ses_large","part":{"id":"part_large","text":%q,"time":{"end":1}}}`,
+				content,
+			)),
+		},
+		{
+			name: "final only",
+			providerAdapter: mustNegotiatedAdapter(t, opencode.Decision{
+				Installation: installation(), Version: "0.9.0", Mode: opencode.ModeFinalOnly,
+			}, nil),
+			stdout:    []byte(content),
+			wantDraft: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result, err := tc.providerAdapter.ParseFinal(context.Background(), adapter.FinalParseContext{
+				CommandResult: workerprocess.CommandResult{Stdout: tc.stdout}, FlushReason: adapter.FlushReasonCompleted,
+			})
+			if err != nil {
+				t.Fatalf("ParseFinal() error = %v", err)
+			}
+			if result.Response.Content != content {
+				t.Fatalf("authoritative content length = %d, want %d with complete tail", len(result.Response.Content), len(content))
+			}
+			message := findDraft(result.Drafts, responseevents.KindMessage, responseevents.PhaseCompleted)
+			if tc.wantDraft {
+				assertPublishedMessageIsBounded(t, message, content)
+			} else if message != nil {
+				t.Fatalf("structured final parser emitted duplicate message draft: %#v", message)
+			}
+		})
+	}
+}
+
+func TestStructuredFinalCombinesDistinctCompletedTextPartsInProviderOrder(t *testing.T) {
+	stdout := []byte(
+		`{"type":"text","sessionID":"ses_parts","part":{"id":"part_before","text":"before ","time":{"end":1}}}` + "\n" +
+			`{"type":"tool_use","sessionID":"ses_parts","part":{"id":"tool_middle","callID":"call_middle","tool":"lookup","state":{"status":"completed"}}}` + "\n" +
+			`{"type":"text","sessionID":"ses_parts","part":{"id":"part_after","text":"after","time":{"end":2}}}` + "\n" +
+			`{"type":"text","sessionID":"ses_parts","part":{"id":"part_after","text":"after","time":{"end":2}}}`,
+	)
+	result, err := newStructuredAdapter(t).ParseFinal(context.Background(), adapter.FinalParseContext{
+		CommandResult: workerprocess.CommandResult{Stdout: stdout}, FlushReason: adapter.FlushReasonCompleted,
+	})
+	if err != nil {
+		t.Fatalf("ParseFinal() error = %v", err)
+	}
+	if result.Response.Content != "before after" {
+		t.Fatalf("authoritative content = %q, want provider-ordered distinct text parts", result.Response.Content)
+	}
+}
+
+func assertPublishedMessageIsBounded(t *testing.T, draft *responseevents.Draft, authoritative string) {
+	t.Helper()
+	if draft == nil {
+		t.Fatal("final-only result did not publish an authoritative message snapshot")
+	}
+	var payload responseevents.MessagePayload
+	if err := json.Unmarshal(draft.Payload, &payload); err != nil {
+		t.Fatalf("decode message payload: %v", err)
+	}
+	if len(payload.ContentBlocks) != 1 {
+		t.Fatalf("message payload = %#v", payload)
+	}
+	published := payload.ContentBlocks[0].Text
+	if len(published) >= len(authoritative) || !strings.HasPrefix(authoritative, published) || strings.Contains(published, "complete-tail") {
+		t.Fatalf("published snapshot length = %d, authoritative length = %d", len(published), len(authoritative))
 	}
 }
 

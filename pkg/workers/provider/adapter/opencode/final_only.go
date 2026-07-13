@@ -27,7 +27,7 @@ func parseFinalOnly(_ context.Context, input adapter.FinalParseContext) (adapter
 	if !utf8.Valid(input.CommandResult.Stdout) {
 		return adapter.FinalParseResult{}, unusableFinalOnlyOutput()
 	}
-	content := boundedText(strings.TrimSpace(string(input.CommandResult.Stdout)))
+	content := strings.TrimSpace(string(input.CommandResult.Stdout))
 	if content == "" {
 		return adapter.FinalParseResult{}, unusableFinalOnlyOutput()
 	}
@@ -45,6 +45,7 @@ func unusableFinalOnlyOutput() *structuredTerminalError {
 }
 
 func finalOnlyDrafts(input adapter.FinalParseContext, content string) []responseevents.Draft {
+	publishedContent := boundedText(content)
 	correlate := func(draft responseevents.Draft) responseevents.Draft {
 		draft.RunID = input.RunID
 		draft.DispatchID = input.DispatchID
@@ -60,7 +61,7 @@ func finalOnlyDrafts(input adapter.FinalParseContext, content string) []response
 				Fidelity: responseevents.FidelityFinalOnly,
 			},
 			Payload: marshalCanonicalPayload(responseevents.MessagePayload{
-				Role: "assistant", ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: content}},
+				Role: "assistant", ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: publishedContent}},
 			}),
 		}),
 		correlate(finalOnlyRunDraft(responseevents.PhaseCompleted, "completed")),

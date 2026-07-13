@@ -56,6 +56,8 @@ type parsedStructuredFinal struct {
 func parseStructuredFinal(stdout []byte) (parsedStructuredFinal, error) {
 	var parsed parsedStructuredFinal
 	var deltas strings.Builder
+	var snapshots strings.Builder
+	seenSnapshotParts := make(map[string]struct{})
 	hasSnapshot := false
 	for _, raw := range splitStructuredLines(stdout) {
 		record, err := decodeStructuredRecord(raw)
@@ -73,15 +75,24 @@ func parseStructuredFinal(stdout []byte) (parsedStructuredFinal, error) {
 				continue
 			}
 			if record.Part.Time.End != nil {
-				parsed.content = boundedText(record.Part.Text)
 				hasSnapshot = true
+				partID := strings.TrimSpace(record.Part.ID)
+				if partID != "" {
+					if _, seen := seenSnapshotParts[partID]; seen {
+						continue
+					}
+					seenSnapshotParts[partID] = struct{}{}
+				}
+				snapshots.WriteString(record.Part.Text)
 			} else if !hasSnapshot {
 				deltas.WriteString(record.Part.Text)
 			}
 		}
 	}
-	if !hasSnapshot {
-		parsed.content = boundedText(deltas.String())
+	if hasSnapshot {
+		parsed.content = snapshots.String()
+	} else {
+		parsed.content = deltas.String()
 	}
 	if strings.TrimSpace(parsed.content) == "" {
 		return parsedStructuredFinal{}, errMissingFinalSnapshot
