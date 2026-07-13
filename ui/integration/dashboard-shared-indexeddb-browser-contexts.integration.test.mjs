@@ -221,6 +221,7 @@ async function expectRestoredPage(
     .toBe(expectedChartTicks);
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: the suite owns one shared preview lifecycle around its two-page scenario.
 describe.sequential("shared IndexedDB dashboard browser contexts", () => {
   let preview = null;
 
