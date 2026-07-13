@@ -85,7 +85,9 @@ export function deriveDashboardSynchronizationShellState({
     return shellState("loading");
   }
 
-  return shellState(checkpoint.status === "reusable" ? "current" : "known_empty");
+  return shellState(
+    checkpoint.status === "reusable" ? "current" : "known_empty",
+  );
 }
 
 function shellState(
