@@ -2,6 +2,7 @@ package testkit
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -185,10 +186,15 @@ func sameProviderSession(got, want *interfaces.ProviderSessionMetadata) bool {
 
 func requireFinalOnlyFixture(t *testing.T, fixture FinalOnlyFixture) {
 	t.Helper()
+	requireNoError(t, validateFinalOnlyFixture(fixture))
+}
+
+func validateFinalOnlyFixture(fixture FinalOnlyFixture) error {
 	if fixture.NewAdapter == nil || strings.TrimSpace(fixture.Expected.Content) == "" {
-		t.Fatal("NewAdapter and non-empty expected content are required")
+		return fmt.Errorf("NewAdapter and non-empty expected content are required")
 	}
 	if len(fixture.Failures) < 2 {
-		t.Fatal("empty and malformed final-output failure fixtures are required")
+		return fmt.Errorf("empty and malformed final-output failure fixtures are required")
 	}
+	return nil
 }

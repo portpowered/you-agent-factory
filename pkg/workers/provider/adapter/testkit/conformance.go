@@ -5,6 +5,7 @@ package testkit
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -188,12 +189,24 @@ func assertFullStreamContract(t *testing.T, providerAdapter adapter.Adapter, req
 
 func requireFixture(t *testing.T, fixture FullStreamFixture) {
 	t.Helper()
+	requireNoError(t, validateFullStreamFixture(fixture))
+}
+
+func requireNoError(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func validateFullStreamFixture(fixture FullStreamFixture) error {
 	if fixture.NewAdapter == nil {
-		t.Fatal("NewAdapter is required")
+		return fmt.Errorf("NewAdapter is required")
 	}
 	if len(fixture.ContentAndTools) == 0 || len(fixture.RetryableFailure) == 0 || len(fixture.UnsafeAndRecovering) == 0 || len(fixture.UnterminatedFinal) == 0 {
-		t.Fatal("all full-stream observation fixtures are required")
+		return fmt.Errorf("all full-stream observation fixtures are required")
 	}
+	return nil
 }
 
 func decode(t *testing.T, providerAdapter adapter.Adapter, observations []adapter.Observation, reason adapter.FlushReason) ([]responseevents.Draft, []adapter.Diagnostic) {
@@ -324,14 +337,21 @@ func assertSafeDiagnostics(t *testing.T, diagnostics []adapter.Diagnostic, forbi
 
 func assertSafeText(t *testing.T, field, value string, forbidden []string) {
 	t.Helper()
+	if err := validateSafeText(value, forbidden); err != nil {
+		t.Fatalf("%s %v", field, err)
+	}
+}
+
+func validateSafeText(value string, forbidden []string) error {
 	if len([]rune(value)) > maximumDiagnosticLength {
-		t.Fatalf("%s length = %d, want <= %d", field, len([]rune(value)), maximumDiagnosticLength)
+		return fmt.Errorf("length = %d, want <= %d", len([]rune(value)), maximumDiagnosticLength)
 	}
 	for _, secret := range forbidden {
 		if secret != "" && strings.Contains(value, secret) {
-			t.Fatalf("%s disclosed forbidden input %q", field, secret)
+			return fmt.Errorf("disclosed forbidden input %q", secret)
 		}
 	}
+	return nil
 }
 
 func findDraft(drafts []responseevents.Draft, kind responseevents.Kind, phase responseevents.Phase) *responseevents.Draft {
@@ -355,9 +375,7 @@ func messageText(t *testing.T, draft responseevents.Draft) string {
 
 func mustDecodePayload(t *testing.T, draft responseevents.Draft, target any) {
 	t.Helper()
-	if err := json.Unmarshal(draft.Payload, target); err != nil {
-		t.Fatalf("decode %s/%s payload: %v", draft.Kind, draft.Phase, err)
-	}
+	requireNoError(t, json.Unmarshal(draft.Payload, target))
 }
 
 func observationsForStream(observations []adapter.Observation, stream adapter.OutputStream) []byte {
