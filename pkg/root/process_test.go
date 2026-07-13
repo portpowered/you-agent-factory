@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	processinitializer "github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 )
@@ -83,6 +84,16 @@ func TestProductionRunGraphCompletesConstructionBeforeInitializerFailure(t *test
 	}
 	if initializer.input.Graph == nil {
 		t.Fatal("initializer did not receive the constructed production graph")
+	}
+	closeUnstartedProductionGraph(t, initializer.input.Graph)
+}
+
+func closeUnstartedProductionGraph(t *testing.T, graph *ApplicationGraph) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := processinitializer.RunProcess(ctx, graph); err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("close unstarted production graph: %v", err)
 	}
 }
 
