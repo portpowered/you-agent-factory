@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 )
 
 var errWrongDependency = errors.New("builder received the wrong dependency instance")

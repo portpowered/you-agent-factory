@@ -51,7 +51,7 @@ implementing MCP, API, and website resume smokes here.
 - Dashboard or website inspection work.
 - Public REST contract changes beyond consuming existing durable session routes.
 - Backend persistence redesign or checkpoint-store changes.
-- Generic CLI response-stream renderer work (`pkg/factorysessions/responsestream`).
+- Generic CLI response-stream renderer work (`pkg/factory/sessions/responsestream`).
 - Workflow-specific resume commands outside the shared `you session` surface.
 - Replacing fixture-backed or live-session CLI regression paths.
 

@@ -24,7 +24,7 @@ func TestPackageBoundary_DoesNotImportRootServiceOrFactorySessions(t *testing.T)
 
 	forbiddenRoots := []string{
 		"github.com/portpowered/infinite-you/pkg/service",
-		"github.com/portpowered/infinite-you/pkg/factorysessions",
+		"github.com/portpowered/infinite-you/pkg/factory/sessions",
 	}
 	for _, dep := range strings.Fields(string(output)) {
 		for _, forbidden := range forbiddenRoots {

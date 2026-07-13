@@ -20,11 +20,19 @@ const javascriptOrchestratorImportPrefix = "github.com/portpowered/infinite-you/
 const applicationGraphImportPath = "github.com/portpowered/infinite-you/pkg/wire"
 const repositoryImportPrefix = "github.com/portpowered/infinite-you/"
 
-var retiredPackageRoots = []retiredPackageRoot{
+var factoryRetiredPackageRoots = []retiredPackageRoot{
+	{packagePath: "pkg/packagedfactories", canonicalOwner: "pkg/factory/packages"},
+	{packagePath: "pkg/factorydefinition", canonicalOwner: "pkg/factory/definition"},
+	{packagePath: "pkg/factorysessionexecution", canonicalOwner: "pkg/factory/sessions/execution"},
+	{packagePath: "pkg/factorysessions", canonicalOwner: "pkg/factory/sessions"},
+	{packagePath: "pkg/petri", canonicalOwner: "pkg/orchestrators/petri"},
+}
+
+var retiredPackageRoots = append([]retiredPackageRoot{
 	{packagePath: "pkg/hostedworkers", canonicalOwner: "pkg/workers/hosted"},
 	{packagePath: "pkg/localmodels", canonicalOwner: "pkg/models/local or pkg/models/assets"},
 	{packagePath: "pkg/modelhost", canonicalOwner: "pkg/models/host"},
-}
+}, factoryRetiredPackageRoots...)
 
 var approvedApplicationGraphImporters = []string{
 	"pkg/initializer",
@@ -64,16 +72,11 @@ type generatedCodeException struct {
 var approvedProductPackageFamilies = []string{
 	"pkg/config",
 	"pkg/factory",
-	"pkg/factorydefinition",
-	"pkg/factorysessionexecution",
-	"pkg/factorysessions",
 	"pkg/initializer",
 	"pkg/interfaces",
 	"pkg/internal",
 	"pkg/models",
 	"pkg/orchestrators",
-	"pkg/packagedfactories",
-	"pkg/petri",
 	"pkg/platform",
 	"pkg/root",
 	"pkg/testutil",

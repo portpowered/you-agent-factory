@@ -516,6 +516,101 @@ func TestRunReportsMultipleUnapprovedRootPackagesDeterministically(t *testing.T)
 	}
 }
 
+func TestRunRejectsRecreatedRetiredPackageRootsWithCanonicalOwners(t *testing.T) {
+	t.Parallel()
+
+	for _, owner := range factoryRetiredPackageRoots {
+		owner := owner
+		t.Run(owner.packagePath, func(t *testing.T) {
+			t.Parallel()
+
+			repoRoot := t.TempDir()
+			makeDir(t, repoRoot, owner.packagePath)
+
+			stderr := &bytes.Buffer{}
+			err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+			if err == nil {
+				t.Fatal("run() error = nil, want retired package root failure")
+			}
+			for _, want := range []string{
+				"prohibited retired package root: " + owner.packagePath,
+				"canonical owner: " + owner.canonicalOwner,
+				"move the code to " + owner.canonicalOwner + " and delete the retired root",
+			} {
+				if got := stderr.String(); !strings.Contains(got, want) {
+					t.Fatalf("run() stderr = %q, want substring %q", got, want)
+				}
+			}
+			if got := stderr.String(); strings.Contains(got, "unapproved root package family: "+owner.packagePath) {
+				t.Fatalf("run() stderr = %q, want actionable retired-owner diagnostic only", got)
+			}
+		})
+	}
+}
+
+func TestRunRejectsRetiredFactoryPackageImportsWithCanonicalOwners(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	for index, owner := range factoryRetiredPackageRoots {
+		writeGoImportFile(
+			t,
+			repoRoot,
+			fmt.Sprintf("pkg/service/retired_import_%d.go", index),
+			"service",
+			repositoryImportPrefix+owner.packagePath+"/legacy",
+		)
+	}
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want retired package import failures")
+	}
+	for _, owner := range factoryRetiredPackageRoots {
+		for _, want := range []string{
+			"prohibited retired package import: " + repositoryImportPrefix + owner.packagePath + "/legacy",
+			"canonical owner: " + owner.canonicalOwner,
+			"import " + owner.canonicalOwner + " directly; do not recreate or depend on " + owner.packagePath,
+		} {
+			if got := stderr.String(); !strings.Contains(got, want) {
+				t.Fatalf("run() stderr = %q, want substring %q", got, want)
+			}
+		}
+	}
+	if got := err.Error(); got != fmt.Sprintf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", len(factoryRetiredPackageRoots)) {
+		t.Fatalf("run() error = %q, want one violation per retired import", got)
+	}
+}
+
+func TestRunAcceptsCanonicalConvergedPackageImports(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	for index, owner := range factoryRetiredPackageRoots {
+		writeGoImportFile(
+			t,
+			repoRoot,
+			fmt.Sprintf("pkg/service/canonical_import_%d.go", index),
+			"service",
+			repositoryImportPrefix+owner.canonicalOwner,
+		)
+	}
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, stdout, stderr)
+	if err != nil {
+		t.Fatalf("run() error = %v, want canonical owner imports accepted", err)
+	}
+	if got := stdout.String(); !strings.Contains(got, "package boundary passed") {
+		t.Fatalf("run() stdout = %q, want package-boundary success", got)
+	}
+	if got := stderr.String(); got != "" {
+		t.Fatalf("run() stderr = %q, want empty", got)
+	}
+}
+
 func TestRunBlocksMigrationShimPatternEvenWhenRootFamilyApproved(t *testing.T) {
 	t.Parallel()
 
