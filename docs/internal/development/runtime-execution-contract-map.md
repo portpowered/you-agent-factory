@@ -129,10 +129,9 @@ The required policy surfaces for that later batch are:
 1. the normative package-boundary rules in
    `docs/internal/standards/code/general-backend-standards.md`, including the
    approved-family list and dependency direction;
-2. `cmd/pkgboundarycheck/main.go`, where
-   `approvedProductPackageFamilies` is the executable allowlist and diagnostics
-   direct unapproved families to an existing owner or a rationale-backed policy
-   update;
+2. `cmd/pkgboundarycheck/main.go`, where durable
+   `approvedProductPackageFamilies`, metadata-bearing migration exceptions, and
+   generated-code exceptions are separate executable policy classes;
 3. `cmd/pkgboundarycheck/main_test.go`, which locks allowlist validation,
    generated-code exceptions, blocking diagnostics, deterministic reporting,
    and the `make pkg-boundary`/lint entrypoints; and
