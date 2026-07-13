@@ -52,6 +52,18 @@ func TestTopicAccessors_ReturnConsistentIndependentViews(t *testing.T) {
 		t.Fatalf("topic view lengths = topics %d, summaries %d, entries %d", len(topics), len(summaries), len(entries))
 	}
 
+	wantCommands := acceptedCommandSet(t, commands)
+	assertTopicViewsConsistent(t, topics, summaries, entries, wantCommands)
+
+	topics[0] = "mutated"
+	commands[0] = "mutated"
+	if SupportedTopics()[0] == "mutated" || SupportedTopicCommands()[0] == "mutated" {
+		t.Fatal("topic accessors exposed mutable registry storage")
+	}
+}
+
+func acceptedCommandSet(t *testing.T, commands []string) map[string]bool {
+	t.Helper()
 	wantCommands := make(map[string]bool, len(commands))
 	for _, command := range commands {
 		if wantCommands[command] {
@@ -59,6 +71,11 @@ func TestTopicAccessors_ReturnConsistentIndependentViews(t *testing.T) {
 		}
 		wantCommands[command] = true
 	}
+	return wantCommands
+}
+
+func assertTopicViewsConsistent(t *testing.T, topics []string, summaries []TopicSummary, entries []TopicIndexEntry, wantCommands map[string]bool) {
+	t.Helper()
 	for i, topic := range topics {
 		if summaries[i].Name != topic || entries[i].Name != topic {
 			t.Fatalf("topic view %d names = %q, %q, %q", i, topic, summaries[i].Name, entries[i].Name)
@@ -74,12 +91,6 @@ func TestTopicAccessors_ReturnConsistentIndependentViews(t *testing.T) {
 				t.Fatalf("topic %q alias %q is missing from accepted commands", topic, alias)
 			}
 		}
-	}
-
-	topics[0] = "mutated"
-	commands[0] = "mutated"
-	if SupportedTopics()[0] == "mutated" || SupportedTopicCommands()[0] == "mutated" {
-		t.Fatal("topic accessors exposed mutable registry storage")
 	}
 }
 
