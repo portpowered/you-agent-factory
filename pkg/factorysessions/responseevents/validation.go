@@ -208,6 +208,10 @@ func validateErrorKindPayload(payload json.RawMessage) error {
 }
 
 func validateStreamGapKindPayload(payload json.RawMessage) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return validationError("payload", fmt.Sprintf("payload must decode as StreamGapPayload: %v", err))
+	}
 	var body StreamGapPayload
 	if err := decodePayload(payload, &body, "StreamGapPayload"); err != nil {
 		return err
@@ -219,10 +223,16 @@ func validateStreamGapKindPayload(payload json.RawMessage) error {
 		if body.FromSequence != 0 || body.ToSequence != 0 || body.FirstAvailableSequence != 0 {
 			return validationError("payload.fromSequence", "sequence fields are not allowed for an item-scoped StreamGapPayload")
 		}
+		if err := rejectItemGapSequenceFields(fields); err != nil {
+			return err
+		}
 		return nil
 	}
 	if strings.TrimSpace(body.ToolCallID) != "" {
 		return validationError("payload.affectedItemId", "affectedItemId is required when toolCallId is supplied for StreamGapPayload")
+	}
+	if err := requireRetentionGapFields(fields); err != nil {
+		return err
 	}
 	if body.FromSequence < 0 || body.ToSequence < 0 {
 		return validationError("payload.fromSequence", "fromSequence and toSequence must be non-negative for StreamGapPayload")
@@ -232,6 +242,24 @@ func validateStreamGapKindPayload(payload json.RawMessage) error {
 	}
 	if body.FirstAvailableSequence <= 0 {
 		return validationError("payload.firstAvailableSequence", "firstAvailableSequence must be positive for StreamGapPayload")
+	}
+	return nil
+}
+
+func rejectItemGapSequenceFields(fields map[string]json.RawMessage) error {
+	for _, key := range []string{"fromSequence", "toSequence", "firstAvailableSequence"} {
+		if _, present := fields[key]; present {
+			return validationError("payload."+key, "sequence fields are not allowed for an item-scoped StreamGapPayload")
+		}
+	}
+	return nil
+}
+
+func requireRetentionGapFields(fields map[string]json.RawMessage) error {
+	for _, key := range []string{"fromSequence", "toSequence", "firstAvailableSequence"} {
+		if _, present := fields[key]; !present {
+			return validationError("payload."+key, key+" is required for a retention StreamGapPayload")
+		}
 	}
 	return nil
 }

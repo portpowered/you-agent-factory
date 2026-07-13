@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
@@ -805,18 +806,21 @@ func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndL
 	if len(published) != 4 {
 		t.Fatalf("published fragments = %#v, want 4 ordered fragments; result=%#v", published, result)
 	}
-	assertInferenceProgressFragment(t, published[0], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored malformed JSON record", nil)
-	assertInferenceProgressFragment(t, published[1], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored unknown event type \"mystery\"", nil)
-	assertInferenceProgressFragment(t, published[2], "dispatch-stream-cursor", ResponseFragmentKind, "Plan ", &interfaces.ProviderSessionMetadata{
-		Provider: "cursor",
-		Kind:     "session_id",
-		ID:       "cursor-session-123",
-	})
-	assertInferenceProgressFragment(t, published[3], "dispatch-stream-cursor", ResponseFragmentKind, "done", &interfaces.ProviderSessionMetadata{
-		Provider: "cursor",
-		Kind:     "session_id",
-		ID:       "cursor-session-123",
-	})
+	assertInferenceProgressFragment(t, published[0], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored a malformed JSON record", nil)
+	assertInferenceProgressFragment(t, published[1], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored an unknown record type", nil)
+	for index, wantPhase := range []responseevents.Phase{responseevents.PhaseDelta, responseevents.PhaseCompleted} {
+		fragment := published[index+2]
+		if fragment.ResponseEventDraft == nil {
+			t.Fatalf("published[%d] = %#v, want structured response-event draft", index+2, fragment)
+		}
+		draft := *fragment.ResponseEventDraft
+		if draft.Kind != responseevents.KindMessage || draft.Phase != wantPhase || draft.DispatchID != "dispatch-stream-cursor" {
+			t.Fatalf("published[%d] draft = %#v, want MESSAGE/%s for dispatch", index+2, draft, wantPhase)
+		}
+		if draft.ProviderSessionRef != "cursor-session-123" || draft.Provenance.Provider != "cursor" {
+			t.Fatalf("published[%d] correlation = %#v, want Cursor session", index+2, draft)
+		}
+	}
 }
 
 func TestInferenceProgressPublishingCommandRunner_WithoutPublisherPreservesExecBehavior(t *testing.T) {

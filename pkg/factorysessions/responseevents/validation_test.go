@@ -239,6 +239,43 @@ func TestValidateEvent_RejectsRequiredPayloadFields(t *testing.T) {
 	}
 }
 
+func TestValidateEvent_RejectsIncompleteOrMixedStreamGapShapes(t *testing.T) {
+	t.Parallel()
+	for name, payload := range map[string]json.RawMessage{
+		"empty": json.RawMessage(`{}`),
+		"mixed item and explicit zero sequences": json.RawMessage(
+			`{"affectedItemId":"cursor-tool/call-1","reason":"provider_reconnect","fromSequence":0,"toSequence":0,"firstAvailableSequence":0}`,
+		),
+	} {
+		name, payload := name, payload
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			event := sampleEvent(t, responseevents.KindStreamGap, responseevents.PhaseUpdated, payload)
+			assertValidationField(t, responseevents.ValidateEvent(event), "payload.fromSequence")
+		})
+	}
+}
+
+func TestStreamGapPayload_MarshalPreservesExclusiveShapes(t *testing.T) {
+	t.Parallel()
+	retention, err := json.Marshal(responseevents.StreamGapPayload{FirstAvailableSequence: 1})
+	if err != nil {
+		t.Fatalf("marshal retention gap: %v", err)
+	}
+	if string(retention) != `{"fromSequence":0,"toSequence":0,"firstAvailableSequence":1}` {
+		t.Fatalf("retention gap = %s, want explicit zero sequence bounds", retention)
+	}
+	item, err := json.Marshal(responseevents.StreamGapPayload{
+		AffectedItemID: "cursor-tool/call-1", ToolCallID: "call-1", Reason: "provider_reconnect",
+	})
+	if err != nil {
+		t.Fatalf("marshal item gap: %v", err)
+	}
+	if strings.Contains(string(item), "Sequence") {
+		t.Fatalf("item gap = %s, must omit retention sequence fields", item)
+	}
+}
+
 func TestValidateEvent_AcceptsDeclaredContentBlockKinds(t *testing.T) {
 	t.Parallel()
 

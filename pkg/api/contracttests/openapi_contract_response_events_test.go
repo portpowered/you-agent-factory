@@ -255,6 +255,30 @@ func TestOpenAPIContract_RepresentativeResponseEventFixturesValidate(t *testing.
 	}
 }
 
+func TestOpenAPIContract_StreamGapPayloadAcceptsOnlyCompleteExclusiveShapes(t *testing.T) {
+	doc := loadValidatedOpenAPIContract(t)
+	schema := doc.Components.Schemas["FactoryResponseEventStreamGapPayload"].Value
+	for name, payload := range map[string]map[string]any{
+		"retention": {"fromSequence": float64(1), "toSequence": float64(4), "firstAvailableSequence": float64(5), "reason": "retention_window"},
+		"item":      {"affectedItemId": "cursor-tool/call-1", "toolCallId": "call-1", "reason": "provider_reconnect"},
+	} {
+		if err := schema.VisitJSON(payload); err != nil {
+			t.Fatalf("%s stream gap should validate: %v", name, err)
+		}
+	}
+	for name, payload := range map[string]map[string]any{
+		"empty":                      {},
+		"partial retention":          {"firstAvailableSequence": float64(5)},
+		"item without reason":        {"affectedItemId": "cursor-tool/call-1"},
+		"tool without affected item": {"toolCallId": "call-1", "reason": "provider_reconnect"},
+		"mixed":                      {"fromSequence": float64(1), "toSequence": float64(4), "firstAvailableSequence": float64(5), "affectedItemId": "cursor-tool/call-1", "reason": "provider_reconnect"},
+	} {
+		if err := schema.VisitJSON(payload); err == nil {
+			t.Fatalf("%s stream gap should be rejected: %#v", name, payload)
+		}
+	}
+}
+
 func TestOpenAPIContract_ResponseEventPayloadCoverageFixturesValidate(t *testing.T) {
 	doc := loadValidatedOpenAPIContract(t)
 	fixtures := loadResponseEventPayloadCoverageFixture(t)

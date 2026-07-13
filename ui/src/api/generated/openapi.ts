@@ -3910,30 +3910,35 @@ export interface components {
        */
       retryAttempt?: number;
     };
-    /** @description Discontinuity marker for either unavailable retained response-event sequences or an affected provider item whose lifecycle could not be fully observed. Retention gaps include fromSequence, toSequence, and firstAvailableSequence; item-scoped gaps include affectedItemId and reason. */
-    FactoryResponseEventStreamGapPayload: {
-      /**
-       * Format: int64
-       * @description Lowest unavailable published sequence greater than the reader's cursor.
-       */
-      fromSequence?: number;
-      /**
-       * Format: int64
-       * @description Highest unavailable published sequence in the reader's catch-up window.
-       */
-      toSequence?: number;
-      /**
-       * Format: int64
-       * @description Sequence of the first retained event available to this subscription, or the next sequence that can be published when no retained event matches.
-       */
-      firstAvailableSequence?: number;
-      /** @description Stable item identifier affected by a provider lifecycle discontinuity. */
-      affectedItemId?: string;
-      /** @description Provider tool-call identifier when the affected item is a tool lifecycle. */
-      toolCallId?: string;
-      /** @description Gap reason such as retention_window, provider_reconnect, or provider_terminated. */
-      reason?: string;
-    };
+    /** @description Discontinuity marker for either unavailable retained response-event sequences or an affected provider item whose lifecycle could not be fully observed. Retention gaps include fromSequence, toSequence, and firstAvailableSequence; item-scoped gaps include affectedItemId and reason. The alternatives are exclusive so empty, partial, and mixed payloads are rejected. */
+    FactoryResponseEventStreamGapPayload:
+      | {
+          /**
+           * Format: int64
+           * @description Lowest unavailable published sequence greater than the reader's cursor.
+           */
+          fromSequence: number;
+          /**
+           * Format: int64
+           * @description Highest unavailable published sequence in the reader's catch-up window.
+           */
+          toSequence: number;
+          /**
+           * Format: int64
+           * @description First retained sequence available after the gap.
+           */
+          firstAvailableSequence: number;
+          /** @description Retention-gap reason such as retention_window. */
+          reason?: string;
+        }
+      | {
+          /** @description Stable item identifier affected by a provider lifecycle discontinuity. */
+          affectedItemId: string;
+          /** @description Provider tool-call identifier when the affected item is a tool lifecycle. */
+          toolCallId?: string;
+          /** @description Provider gap reason such as provider_reconnect or provider_terminated. */
+          reason: string;
+        };
     /**
      * @description Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
      * @default REPLACE_CURRENT
