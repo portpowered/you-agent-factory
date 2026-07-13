@@ -625,7 +625,7 @@ as follows:
 | Batch 005 — `create-wire-application-graph` | Active head `8015a87fb4594a1659ab21c6a7720bf324ea7a85`; changed files: `pkg/wire/doc.go`, `pkg/wire/graph.go`, `pkg/wire/graph_test.go`. The dependency-blocked initializer item had no implementation file set yet. |
 | Batch 006 — `converge-transport-family` | Every detailed directive file under `pkg/api/**`, `pkg/apisurface/**`, `pkg/cli/**`, and `pkg/mcp/**`. |
 | Batch 006 — `converge-model-worker-families` | Every detailed directive file under `pkg/workers/**`; the other named source families have no directive file in this snapshot. |
-| Batch 006 — `converge-work-family` | The remaining named source roots (`pkg/invocations` and `pkg/timework`) have no directive file in this snapshot. |
+| Batch 006 — `converge-work-family` | The remaining named source root (`pkg/invocations`) has no directive file in this snapshot. |
 | Batch 006 — `converge-factory-orchestrator-families` | Every detailed directive file under `pkg/factorysessionexecution/**`; the other explicitly named moved roots have no directive file in this snapshot. Core event-first `pkg/factory/**` files are not reserved by this work item. |
 | Batch 006 — `converge-platform-and-interfaces` | Every detailed directive file under `pkg/interfaces/**`, `pkg/internal/cursorstorage/**`, and `pkg/replay/**`, matching the work item's interfaces, cursor-storage, and replay-infrastructure moves. |
 | Batch 007 — `move-session-state-to-factorysessions`, `split-runtime-build-ownership`, and `narrow-factory-service-facade` | Every detailed directive file under `pkg/factorysessionexecution/**` and `pkg/service/**`. |

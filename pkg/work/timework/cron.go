@@ -9,9 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-co-op/gocron/v2"
-	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/robfig/cron/v3"
 )
 
 const (
@@ -22,6 +21,13 @@ const (
 type CronTiming struct {
 	MaxJitter    time.Duration
 	ExpiryWindow time.Duration
+}
+
+// CronScheduleEvaluation describes whether a schedule became due between two
+// explicit instants and identifies the first matching nominal fire time.
+type CronScheduleEvaluation struct {
+	Due       bool
+	NominalAt time.Time
 }
 
 // CronTimeInput contains the stable inputs used to materialize one cron time tick.
@@ -77,10 +83,31 @@ func ParseCronExpiryWindow(cron *interfaces.CronConfig, scheduleWindow time.Dura
 	return expiryWindow, nil
 }
 
-// ValidateCronSchedule validates a standard 5-field cron schedule through gocron.
+// ValidateCronSchedule validates a standard five-field cron schedule.
 func ValidateCronSchedule(schedule string) error {
 	_, err := nextCronScheduleFire(schedule, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC))
 	return err
+}
+
+// EvaluateCronSchedule reports whether a standard five-field schedule became
+// due after lastEvaluatedAt and no later than evaluatedAt. Schedules default to
+// UTC and may declare an explicit timezone. Both instants are explicit so
+// repeated evaluation has no clock or scheduler state.
+func EvaluateCronSchedule(schedule string, lastEvaluatedAt, evaluatedAt time.Time) (CronScheduleEvaluation, error) {
+	lastEvaluatedAt = lastEvaluatedAt.UTC()
+	evaluatedAt = evaluatedAt.UTC()
+	if evaluatedAt.Before(lastEvaluatedAt) {
+		return CronScheduleEvaluation{}, fmt.Errorf("evaluation time %s precedes last evaluation time %s", evaluatedAt.Format(time.RFC3339Nano), lastEvaluatedAt.Format(time.RFC3339Nano))
+	}
+
+	nominalAt, err := nextCronScheduleFire(schedule, lastEvaluatedAt)
+	if err != nil {
+		return CronScheduleEvaluation{}, err
+	}
+	return CronScheduleEvaluation{
+		Due:       !nominalAt.After(evaluatedAt),
+		NominalAt: nominalAt,
+	}, nil
 }
 
 // CronScheduleWindow returns the duration between a nominal cron fire and the
@@ -240,26 +267,15 @@ func nextCronScheduleFire(schedule string, after time.Time) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("cron schedule is required")
 	}
 	after = after.UTC()
-	scheduler, err := gocron.NewScheduler(
-		gocron.WithClock(clockwork.NewFakeClockAt(after)),
-		gocron.WithLocation(time.UTC),
-	)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("create cron schedule parser for %q: %w", schedule, err)
+	parseInput := schedule
+	if !strings.HasPrefix(schedule, "TZ=") && !strings.HasPrefix(schedule, "CRON_TZ=") {
+		parseInput = "CRON_TZ=UTC " + schedule
 	}
-	defer func() {
-		_ = scheduler.Shutdown()
-	}()
-
-	scheduler.Start()
-	job, err := scheduler.NewJob(gocron.CronJob(schedule, false), gocron.NewTask(func() {}))
+	parsed, err := cron.ParseStandard(parseInput)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("invalid cron schedule %q: %w", schedule, err)
 	}
-	next, err := job.NextRun()
-	if err != nil {
-		return time.Time{}, fmt.Errorf("next cron fire for %q: %w", schedule, err)
-	}
+	next := parsed.Next(after)
 	if next.IsZero() {
 		return time.Time{}, fmt.Errorf("cron schedule %q produced no next fire", schedule)
 	}

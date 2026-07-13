@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -67,6 +66,84 @@ func TestParseCronTiming_InvalidScheduleIncludesValue(t *testing.T) {
 	}
 }
 
+func TestEvaluateCronSchedule_DueOnlyAtOrAfterBoundary(t *testing.T) {
+	lastEvaluatedAt := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	for _, test := range []struct {
+		name        string
+		evaluatedAt time.Time
+		wantDue     bool
+	}{
+		{name: "before boundary", evaluatedAt: lastEvaluatedAt.Add(4*time.Minute + 59*time.Second), wantDue: false},
+		{name: "at boundary", evaluatedAt: lastEvaluatedAt.Add(5 * time.Minute), wantDue: true},
+		{name: "after boundary", evaluatedAt: lastEvaluatedAt.Add(7 * time.Minute), wantDue: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := EvaluateCronSchedule("*/5 * * * *", lastEvaluatedAt, test.evaluatedAt)
+			if err != nil {
+				t.Fatalf("EvaluateCronSchedule: %v", err)
+			}
+			if got.Due != test.wantDue {
+				t.Fatalf("due = %t, want %t", got.Due, test.wantDue)
+			}
+			wantNominalAt := lastEvaluatedAt.Add(5 * time.Minute)
+			if !got.NominalAt.Equal(wantNominalAt) {
+				t.Fatalf("nominal at = %s, want %s", got.NominalAt, wantNominalAt)
+			}
+		})
+	}
+}
+
+func TestEvaluateCronSchedule_NormalizesExplicitInstantsToUTC(t *testing.T) {
+	losAngeles, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		t.Fatalf("LoadLocation: %v", err)
+	}
+	lastEvaluatedAt := time.Date(2026, time.July, 13, 8, 59, 30, 0, losAngeles)
+	evaluatedAt := time.Date(2026, time.July, 13, 16, 0, 0, 0, time.UTC)
+
+	first, err := EvaluateCronSchedule("0 * * * *", lastEvaluatedAt, evaluatedAt)
+	if err != nil {
+		t.Fatalf("EvaluateCronSchedule first: %v", err)
+	}
+	second, err := EvaluateCronSchedule("0 * * * *", lastEvaluatedAt, evaluatedAt)
+	if err != nil {
+		t.Fatalf("EvaluateCronSchedule second: %v", err)
+	}
+	if first != second {
+		t.Fatalf("repeated evaluation changed result: first=%+v second=%+v", first, second)
+	}
+	if !first.Due || !first.NominalAt.Equal(time.Date(2026, time.July, 13, 16, 0, 0, 0, time.UTC)) {
+		t.Fatalf("evaluation = %+v, want due at 2026-07-13T16:00:00Z", first)
+	}
+}
+
+func TestEvaluateCronSchedule_HonorsExplicitScheduleTimezone(t *testing.T) {
+	lastEvaluatedAt := time.Date(2026, time.July, 13, 15, 59, 30, 0, time.UTC)
+	evaluatedAt := time.Date(2026, time.July, 13, 16, 0, 0, 0, time.UTC)
+
+	got, err := EvaluateCronSchedule(
+		"CRON_TZ=America/Los_Angeles 0 9 * * *",
+		lastEvaluatedAt,
+		evaluatedAt,
+	)
+	if err != nil {
+		t.Fatalf("EvaluateCronSchedule: %v", err)
+	}
+	if !got.Due || !got.NominalAt.Equal(evaluatedAt) {
+		t.Fatalf("evaluation = %+v, want due at the 09:00 America/Los_Angeles boundary", got)
+	}
+}
+
+func TestEvaluateCronSchedule_RejectsInvalidInput(t *testing.T) {
+	now := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
+	if _, err := EvaluateCronSchedule("not a cron", now, now); err == nil || !strings.Contains(err.Error(), `"not a cron"`) {
+		t.Fatalf("invalid schedule error = %v, want actionable schedule value", err)
+	}
+	if _, err := EvaluateCronSchedule("* * * * *", now, now.Add(-time.Second)); err == nil || !strings.Contains(err.Error(), "precedes") {
+		t.Fatalf("reversed interval error = %v, want explicit ordering error", err)
+	}
+}
+
 func TestCronTimeWorkRequest_UsesCanonicalInternalTimeWorkContract(t *testing.T) {
 	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
 	req, metadata, err := CronTimeWorkRequest("factory/main", interfaces.FactoryWorkstationConfig{
@@ -109,8 +186,7 @@ func TestCronTimeWorkRequest_UsesCanonicalInternalTimeWorkContract(t *testing.T)
 }
 
 func TestCronTimeWorkRequest_EveryMinuteScheduleDeterministicWithFakeClock(t *testing.T) {
-	clock := clockwork.NewFakeClockAt(time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC))
-	nominalAt := clock.Now()
+	nominalAt := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
 	ws := interfaces.FactoryWorkstationConfig{
 		Name: "daily-refresh",
 		Cron: &interfaces.CronConfig{
