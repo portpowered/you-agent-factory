@@ -74,6 +74,9 @@ func Execute(ctx context.Context, registry *Registry, runner StreamingCommandRun
 	if err != nil {
 		return ExecuteResult{}, fmt.Errorf("build provider adapter command: %w", err)
 	}
+	if built.Cleanup != nil {
+		defer built.Cleanup()
+	}
 	decoder, err := selected.NewDecoder(ctx, input.Decoder)
 	if err != nil {
 		return ExecuteResult{}, fmt.Errorf("create provider adapter decoder: %w", err)
@@ -142,7 +145,7 @@ func observeDrafts(drafts []responseevents.Draft, observe func(responseevents.Dr
 
 func commandOutcome(ctx context.Context, result workerprocess.CommandResult, commandErr error) (CommandOutcome, FlushReason) {
 	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) ||
-		errors.Is(commandErr, context.Canceled) || errors.Is(commandErr, context.DeadlineExceeded) {
+		errors.Is(commandErr, context.Canceled) || errors.Is(commandErr, context.DeadlineExceeded) || result.ExitCode == 124 {
 		return CommandOutcomeCanceled, FlushReasonCanceled
 	}
 	if commandErr != nil || result.ExitCode != 0 {
