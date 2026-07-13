@@ -235,7 +235,8 @@ func (r *sequenceProviderRunner) Run(_ context.Context, request CommandRequest) 
 func assertPublishedOpenCodeDraft(t *testing.T, fragments []InferenceProgressFragment, kind responseevents.Kind, phase responseevents.Phase) {
 	t.Helper()
 	for _, fragment := range fragments {
-		if fragment.CanonicalDraft != nil && fragment.CanonicalDraft.Kind == kind && fragment.CanonicalDraft.Phase == phase {
+		draft, ok := fragment.CanonicalDraft.(responseevents.Draft)
+		if ok && draft.Kind == kind && draft.Phase == phase {
 			return
 		}
 	}

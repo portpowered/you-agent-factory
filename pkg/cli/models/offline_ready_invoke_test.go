@@ -15,7 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"

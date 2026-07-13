@@ -13,6 +13,7 @@ import (
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	providerstructured "github.com/portpowered/infinite-you/pkg/workers/provider/structured"
 )
 
 func wrapLocalModelRunner(
@@ -207,7 +208,10 @@ func providerRunnerOptions(
 		workerprovider.WithProviderLogger(logger),
 	}
 	if inferenceProgressPublisher != nil {
-		opts = append(opts, workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher))
+		opts = append(opts,
+			workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher),
+			workerprovider.WithResponseStreamExecutor(providerstructured.NewExecutor()),
+		)
 	}
 	if providerCommandRunner != nil {
 		opts = append(opts, workerprovider.WithProviderCommandRunner(providerCommandRunner))

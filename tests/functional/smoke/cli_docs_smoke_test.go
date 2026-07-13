@@ -56,6 +56,41 @@ var retiredDocsInvocationPatterns = []*regexp.Regexp{
 	regexp.MustCompile("(^|[^[:alnum:]-])agent-factory config([^[:alnum:]-]|$)"),
 }
 
+func TestDocsCommandSmoke_AuthoringFactoriesDescribesMinimalGoalRepeater(t *testing.T) {
+	output := executeDocsSmokeCommand(t, t.TempDir(), "docs", "authoring-factories")
+	for _, want := range []string{
+		"### Built-in `@you/goal` repeater",
+		"goal:init",
+		"goal:execute",
+		"goal:complete",
+		"goal:failed",
+		"REPEATER",
+		"Continue and reject outcomes route back to `goal:init`",
+		"invocationReturn",
+		"primaryResult",
+		"workers/goal-executor/AGENTS.md",
+		"workstations/execute-goal/AGENTS.md",
+		"INVOCATION_RUNTIME_FAILURE",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("you docs authoring-factories missing minimal-goal marker %q:\n%s", want, output)
+		}
+	}
+	for _, stale := range []string{
+		"plan-goal",
+		"check-goal",
+		"review-goal",
+		"structured-review-goal",
+		"goal:plan",
+		"goal:review",
+		"goal:structured-review",
+	} {
+		if strings.Contains(output, stale) {
+			t.Fatalf("you docs authoring-factories contains stale goal topology %q:\n%s", stale, output)
+		}
+	}
+}
+
 func TestDocsCommandSmoke_PackagedTopicsRemainAvailableOutsideRepositoryDocsTree(t *testing.T) {
 	workingDir := t.TempDir()
 	missingDocsTree := filepath.Join(workingDir, "docs")

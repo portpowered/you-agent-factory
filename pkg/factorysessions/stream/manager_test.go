@@ -158,17 +158,58 @@ func TestManager_PublishesCanonicalResponseEventsToSessionStore(t *testing.T) {
 	}
 }
 
-func TestManager_PreservesAdapterCanonicalDraftAndSuppressesDuplicateTerminal(t *testing.T) {
+func TestManager_PublishesProviderCanonicalDraftWithoutLegacyRemapping(t *testing.T) {
 	t.Parallel()
+
 	session := factorysessions.NewLiveSession(
-		"sess-adapter", "/factory", "/workspace", "/workspace",
+		"sess-native-draft", "/factory", "/workspace", "/workspace",
 		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory",
 	)
-	manager := stream.NewManager(&streamTestHost{session: session})
-	publisher := manager.InferenceProgressPublisherFactory(nil)(session.ID)
-	payload, _ := json.Marshal(responseevents.MessagePayload{
+	host := &streamTestHost{session: session}
+	publisher := stream.NewManager(host).InferenceProgressPublisherFactory(nil)(session.ID)
+	payload, err := json.Marshal(responseevents.MessageDeltaPayload{
+		ContentBlockIndex: 2, ContentBlockKind: responseevents.ContentBlockText, TextDelta: "native delta",
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	publisher(workerprovider.CanonicalDraftFragment("dispatch-native", responseevents.Draft{
+		RunID: "dispatch-native", DispatchID: "dispatch-native", ItemID: "claude-message-7",
+		Kind: responseevents.KindMessage, Phase: responseevents.PhaseDelta,
+		Provenance: responseevents.Provenance{
+			Provider: "claude", NativeEventType: "content_block_delta",
+			Delivery: responseevents.DeliveryNativeStream, Representation: responseevents.RepresentationDelta,
+			Fidelity: responseevents.FidelityLossless,
+		},
+		Payload: payload,
+	}))
+
+	events := session.ResponseEvents.Events()
+	if len(events) != 1 || events[0].ItemID != "claude-message-7" || events[0].Provenance.Delivery != responseevents.DeliveryNativeStream {
+		t.Fatalf("canonical events = %#v, want unchanged provider-native identity and provenance", events)
+	}
+	if events[0].Sequence != 1 || events[0].EventID == "" || events[0].RecordedAt.IsZero() {
+		t.Fatalf("publication metadata = %#v, want session-owned identity, sequence, and time", events[0])
+	}
+	if host.published != 0 {
+		t.Fatalf("legacy response-stream publications = %d, want no lossy remapping", host.published)
+	}
+}
+
+func TestManager_SuppressesLegacyTerminalAfterProviderCanonicalDrafts(t *testing.T) {
+	t.Parallel()
+
+	session := factorysessions.NewLiveSession(
+		"sess-adapter-terminal", "/factory", "/workspace", "/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory",
+	)
+	publisher := stream.NewManager(&streamTestHost{session: session}).InferenceProgressPublisherFactory(nil)(session.ID)
+	payload, err := json.Marshal(responseevents.MessagePayload{
 		Role: "assistant", ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: "final answer"}},
 	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
 	draft := responseevents.Draft{
 		RunID: "run-1", DispatchID: "dispatch-1", Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted,
 		Provenance: responseevents.Provenance{
@@ -177,8 +218,8 @@ func TestManager_PreservesAdapterCanonicalDraftAndSuppressesDuplicateTerminal(t 
 		},
 		Payload: payload, ItemID: "message-1", ProviderSessionRef: "session-1",
 	}
-	publisher(workerprovider.CanonicalDraftFragment(draft))
-	terminal := workerprovider.CompletedFragment("dispatch-1", nil)
+	publisher(workerprovider.CanonicalDraftFragment(draft.DispatchID, draft))
+	terminal := workerprovider.CompletedFragment(draft.DispatchID, nil)
 	terminal.SkipCanonical = true
 	publisher(terminal)
 

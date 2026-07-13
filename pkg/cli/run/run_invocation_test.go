@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -1562,60 +1561,111 @@ func TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer(t *testin
 	assertNoServerInvocationProbePortFree(t, probePort)
 }
 
+func TestRun_NamedGoalRepositoryEditReturnsFinalResponseAsPrimaryResult(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for hermetic packaged goal repository edit")
+	}
+
+	preserveRunGlobals(t)
+
+	repositoryDir := t.TempDir()
+	readmePath := filepath.Join(repositoryDir, "README.md")
+	if err := os.WriteFile(readmePath, []byte("before\n"), 0o644); err != nil {
+		t.Fatalf("write repository fixture: %v", err)
+	}
+
+	goalText := "Update README.md in the repository fixture"
+	cfg := namedGoalNoServerInvocationRunConfig(t, goalText)
+	cfg.MockWorkersConfigPath = writePackagedGoalRepositoryEditMockWorkersConfig(t, repositoryDir)
+	var output bytes.Buffer
+	cfg.Output = &output
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	if err := Run(ctx, cfg); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	const finalResponse = "Updated README.md with the completed repository edit."
+	if got := output.String(); got != finalResponse {
+		t.Fatalf("stdout = %q, want final agent response %q", got, finalResponse)
+	}
+	edited, err := os.ReadFile(readmePath)
+	if err != nil {
+		t.Fatalf("read edited repository fixture: %v", err)
+	}
+	if got := string(edited); got != "after\n" {
+		t.Fatalf("README.md = %q, want repository edit", got)
+	}
+}
+
+func TestRun_NamedGoalRepositoryEditWorkerProcess(t *testing.T) {
+	repositoryDir := os.Getenv("YOU_TEST_GOAL_REPOSITORY_DIR")
+	if repositoryDir == "" {
+		return
+	}
+	if err := os.WriteFile(filepath.Join(repositoryDir, "README.md"), []byte("after\n"), 0o644); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "edit repository fixture: %v\n", err)
+		os.Exit(1)
+	}
+	_, _ = fmt.Fprintln(os.Stdout, "Updated README.md with the completed repository edit.")
+	_, _ = fmt.Fprintln(os.Stdout, "<COMPLETE>")
+	os.Exit(0)
+}
+
 func writePackagedGoalNoServerMockWorkersConfig(t *testing.T) string {
 	t.Helper()
 
-	plainEcho, plainArgs := mockWorkerEchoCommand("plain")
-	acceptedEcho, acceptedArgs := mockWorkerEchoCommand("accepted")
 	cfg := factoryconfig.MockWorkersConfig{
 		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
 		MockWorkers: []factoryconfig.MockWorkerConfig{
-			{
-				WorkerName:      "goal-planner",
-				WorkstationName: goal.PackagedPlanWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeAccept,
-			},
 			{
 				WorkerName:      "goal-executor",
 				WorkstationName: goal.PackagedExecuteWorkstationName,
 				RunType:         factoryconfig.MockWorkerRunTypeAccept,
 			},
-			{
-				WorkerName:      "goal-checker",
-				WorkstationName: goal.PackagedCheckWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
-					Command: plainEcho,
-					Args:    plainArgs,
-				},
-			},
-			{
-				WorkerName:      "goal-reviewer",
-				WorkstationName: goal.PackagedReviewWorkstationName,
-				RunType:         factoryconfig.MockWorkerRunTypeScript,
-				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
-					Command: acceptedEcho,
-					Args:    acceptedArgs,
-				},
-			},
 		},
 	}
+	return writeMockWorkersConfig(t, cfg, "mock-workers-packaged-goal-no-server.json")
+}
+
+func writePackagedGoalRepositoryEditMockWorkersConfig(t *testing.T, repositoryDir string) string {
+	t.Helper()
+
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable: %v", err)
+	}
+	cfg := factoryconfig.MockWorkersConfig{
+		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
+		MockWorkers: []factoryconfig.MockWorkerConfig{{
+			WorkerName:      "goal-executor",
+			WorkstationName: goal.PackagedExecuteWorkstationName,
+			RunType:         factoryconfig.MockWorkerRunTypeScript,
+			ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
+				Command:          executable,
+				Args:             []string{"-test.run=^TestRun_NamedGoalRepositoryEditWorkerProcess$"},
+				Env:              map[string]string{"YOU_TEST_GOAL_REPOSITORY_DIR": repositoryDir},
+				WorkingDirectory: repositoryDir,
+				Timeout:          "10s",
+			},
+		}},
+	}
+	return writeMockWorkersConfig(t, cfg, "mock-workers-packaged-goal-repository-edit.json")
+}
+
+func writeMockWorkersConfig(t *testing.T, cfg factoryconfig.MockWorkersConfig, name string) string {
+	t.Helper()
+
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		t.Fatalf("marshal mock workers config: %v", err)
 	}
-	path := filepath.Join(t.TempDir(), "mock-workers-packaged-goal-no-server.json")
+	path := filepath.Join(t.TempDir(), name)
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("write mock workers config: %v", err)
 	}
 	return path
-}
-
-func mockWorkerEchoCommand(output string) (command string, args []string) {
-	if runtime.GOOS == "windows" {
-		return "cmd", []string{"/c", "echo", output}
-	}
-	return "/bin/echo", []string{output}
 }
 
 func reserveNoServerInvocationProbePort(t *testing.T) int {

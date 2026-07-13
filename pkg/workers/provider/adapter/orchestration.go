@@ -32,6 +32,9 @@ type ExecuteInput struct {
 	Command  CommandContext
 	Decoder  DecoderContext
 	Publish  func(DecodeResult)
+	// ObserveDraft receives correlated drafts as decoding progresses. Session
+	// publication metadata remains owned by the caller.
+	ObserveDraft func(responseevents.Draft)
 }
 
 // ExecuteResult contains neutral adapter outputs from one subprocess attempt.
@@ -115,7 +118,8 @@ func executeAttempt(ctx context.Context, selected Adapter, runner StreamingComma
 	result := ExecuteResult{Capabilities: capabilityResult.Capabilities, Request: built.Request}
 	commandResult, commandErr := runner.Run(ctx, built.Request, func(observation Observation) error {
 		decoded, observeErr := decoder.Observe(ctx, observation)
-		result.appendDecoded(decoded)
+		correlateDrafts(decoded.Drafts, input.Decoder)
+		result.appendDecoded(decoded, input.ObserveDraft)
 		publishDecoded(input.Publish, decoded)
 		if observeErr != nil && result.DecodeError == nil {
 			result.DecodeError = observeErr
@@ -127,7 +131,8 @@ func executeAttempt(ctx context.Context, selected Adapter, runner StreamingComma
 	result.Outcome, result.FlushReason = outcome, flushReason
 
 	flushed, flushErr := decoder.Flush(ctx, FlushContext{Reason: flushReason})
-	result.appendDecoded(flushed)
+	correlateDrafts(flushed.Drafts, input.Decoder)
+	result.appendDecoded(flushed, input.ObserveDraft)
 	publishDecoded(input.Publish, flushed)
 	result.FlushError = flushErr
 
@@ -136,7 +141,9 @@ func executeAttempt(ctx context.Context, selected Adapter, runner StreamingComma
 		RunID: input.Decoder.RunID, DispatchID: input.Decoder.DispatchID,
 	})
 	result.Response, result.ParseError = final.Response, parseErr
+	correlateDrafts(final.Drafts, input.Decoder)
 	result.Drafts = append(result.Drafts, final.Drafts...)
+	observeDrafts(final.Drafts, input.ObserveDraft)
 	publishDecoded(input.Publish, DecodeResult{Drafts: final.Drafts})
 	classified := selected.ClassifyFailure(ctx, FailureContext{
 		CommandResult: commandResult, CommandError: commandErr, DecodeError: result.DecodeError,
@@ -161,9 +168,30 @@ func fallbackContext(result ExecuteResult) FallbackContext {
 	}
 }
 
-func (r *ExecuteResult) appendDecoded(decoded DecodeResult) {
+func correlateDrafts(drafts []responseevents.Draft, correlation DecoderContext) {
+	for index := range drafts {
+		if drafts[index].RunID == "" {
+			drafts[index].RunID = correlation.RunID
+		}
+		if drafts[index].DispatchID == "" {
+			drafts[index].DispatchID = correlation.DispatchID
+		}
+	}
+}
+
+func (r *ExecuteResult) appendDecoded(decoded DecodeResult, observe func(responseevents.Draft)) {
 	r.Drafts = append(r.Drafts, decoded.Drafts...)
 	r.Diagnostics = append(r.Diagnostics, decoded.Diagnostics...)
+	observeDrafts(decoded.Drafts, observe)
+}
+
+func observeDrafts(drafts []responseevents.Draft, observe func(responseevents.Draft)) {
+	if observe == nil {
+		return
+	}
+	for _, draft := range drafts {
+		observe(draft)
+	}
 }
 
 func commandOutcome(ctx context.Context, result workerprocess.CommandResult, commandErr error) (CommandOutcome, FlushReason) {

@@ -40,7 +40,15 @@ stopToken: COMPLETE
 Process the input task.
 `)
 	runner := testutil.NewProviderCommandRunner(
-		workers.CommandResult{Stdout: []byte("Done. COMPLETE")},
+		workers.CommandResult{Stdout: []byte(
+			`{"type":"stream_event","session_id":"session-worktree","event":{"type":"message_start","message":{"id":"msg-worktree","role":"assistant","content":[]}}}` + "\n" +
+				`{"type":"stream_event","session_id":"session-worktree","event":{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}}` + "\n" +
+				`{"type":"stream_event","session_id":"session-worktree","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Done. COMPLETE"}}}` + "\n" +
+				`{"type":"stream_event","session_id":"session-worktree","event":{"type":"content_block_stop","index":0}}` + "\n" +
+				`{"type":"stream_event","session_id":"session-worktree","event":{"type":"message_stop"}}` + "\n" +
+				`{"type":"assistant","session_id":"session-worktree","message":{"id":"msg-worktree","role":"assistant","content":[{"type":"text","text":"Done. COMPLETE"}]}}` + "\n" +
+				`{"type":"result","subtype":"success","is_error":false,"result":"Done. COMPLETE","session_id":"session-worktree"}` + "\n",
+		)},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -67,6 +75,7 @@ Process the input task.
 	}
 	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "my-feature-branch"})
 	support.AssertArgsContainSequence(t, call.Args, []string{"--model", "test-model"})
+	support.AssertArgsContainSequence(t, call.Args, []string{"--output-format", "stream-json", "--include-partial-messages"})
 	if len(call.Stdin) != 0 {
 		t.Fatalf("expected Claude prompt to stay in args, got stdin %q", string(call.Stdin))
 	}
