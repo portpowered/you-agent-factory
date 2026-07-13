@@ -23,9 +23,33 @@ type referenceResolver struct {
 	root      string
 	documents map[string]any
 	active    map[string]bool
+	allowed   map[string]struct{}
+}
+
+// LoadAndResolve loads one authored document through the validator's reviewed
+// repository boundary and resolves references only to the explicitly supplied
+// authored documents. It is intended for repository build tooling such as the
+// contract joiner, not runtime consumers.
+func LoadAndResolve(repositoryRoot, document string, authoredDocuments []string) (any, []Diagnostic) {
+	value, issue := loadJSON(repositoryRoot, document, "document")
+	if issue != nil {
+		return nil, []Diagnostic{*issue}
+	}
+	allowed := make(map[string]struct{}, len(authoredDocuments)+1)
+	allowed[normalizeRepositoryPath(document)] = struct{}{}
+	for _, path := range authoredDocuments {
+		allowed[normalizeRepositoryPath(path)] = struct{}{}
+	}
+	resolved, _, diagnostics := resolveReferencesWithin(repositoryRoot, document, value, allowed)
+	sortDiagnostics(diagnostics)
+	return resolved, diagnostics
 }
 
 func resolveReferences(repositoryRoot, document string, value any) (any, []loadedDocument, []Diagnostic) {
+	return resolveReferencesWithin(repositoryRoot, document, value, nil)
+}
+
+func resolveReferencesWithin(repositoryRoot, document string, value any, allowed map[string]struct{}) (any, []loadedDocument, []Diagnostic) {
 	root, err := canonicalRoot(repositoryRoot)
 	if err != nil {
 		return nil, nil, []Diagnostic{newDiagnostic("reference.root", rootPath, "repository root could not be resolved", document)}
@@ -35,6 +59,7 @@ func resolveReferences(repositoryRoot, document string, value any) (any, []loade
 		root:      root,
 		documents: map[string]any{document: value},
 		active:    make(map[string]bool),
+		allowed:   allowed,
 	}
 	resolved, diagnostics := resolver.resolveNode(value, document, nil)
 	if len(diagnostics) != 0 {
@@ -138,6 +163,12 @@ func (r *referenceResolver) classifyReference(referringDocument, reference strin
 func (r *referenceResolver) loadTarget(targetDocument, referringDocument string, segments []string) (any, *Diagnostic) {
 	if value, ok := r.documents[targetDocument]; ok {
 		return value, nil
+	}
+	if r.allowed != nil {
+		if _, ok := r.allowed[targetDocument]; !ok {
+			issue := r.singleIssue("reference.unsupported", "reference target is not an explicit authored input", referringDocument, segments)
+			return nil, &issue
+		}
 	}
 	candidate := filepath.Join(r.root, filepath.FromSlash(targetDocument))
 	canonical, err := filepath.EvalSymlinks(candidate)
