@@ -204,32 +204,16 @@ func TestMapFragment_ResponseFragmentEmitsMessageDelta(t *testing.T) {
 	if event.Kind != responseevents.KindMessage || event.Phase != responseevents.PhaseDelta {
 		t.Fatalf("kind/phase = %q/%q, want MESSAGE/DELTA", event.Kind, event.Phase)
 	}
-	if event.FactorySessionID != "session-abc" || event.RunID != "run-xyz" {
-		t.Fatalf("session/run = %q/%q, want session-abc/run-xyz", event.FactorySessionID, event.RunID)
-	}
-	if event.Sequence != 5 || !event.RecordedAt.Equal(recordedAt) {
-		t.Fatalf("sequence/recordedAt = %d/%v, want 5/%v", event.Sequence, event.RecordedAt, recordedAt)
-	}
-	if event.DispatchID != "dispatch-42" {
-		t.Fatalf("dispatchId = %q, want dispatch-42", event.DispatchID)
-	}
-	if event.ProviderSessionRef != "cursor-session-123" {
-		t.Fatalf("providerSessionRef = %q, want cursor-session-123", event.ProviderSessionRef)
-	}
-	if event.ItemID == "" {
-		t.Fatal("itemId must be synthesized for response fragments")
-	}
-
-	var payload responseevents.MessageDeltaPayload
-	if err := json.Unmarshal(event.Payload, &payload); err != nil {
-		t.Fatalf("unmarshal message delta payload: %v", err)
-	}
-	if payload.ContentBlockIndex != 0 || payload.ContentBlockKind != responseevents.ContentBlockText {
-		t.Fatalf("delta block = index %d kind %q, want 0/TEXT", payload.ContentBlockIndex, payload.ContentBlockKind)
-	}
-	if payload.TextDelta != "hello " {
-		t.Fatalf("textDelta = %q, want hello ", payload.TextDelta)
-	}
+	assertMappedFragmentEnvelope(t, event, mappedFragmentEnvelopeExpectation{
+		sessionID:          "session-abc",
+		runID:              "run-xyz",
+		sequence:           5,
+		recordedAt:         recordedAt,
+		dispatchID:         "dispatch-42",
+		providerSessionRef: "cursor-session-123",
+		wantNonEmptyItemID: true,
+	})
+	assertMessageDeltaPayload(t, event.Payload, "hello ")
 
 	if err := responseevents.ValidateEvent(event); err != nil {
 		t.Fatalf("ValidateEvent() error = %v", err)
@@ -681,32 +665,16 @@ func TestMapFragment_CompactionSignalEmitsStreamGapUpdated(t *testing.T) {
 	if event.Kind != responseevents.KindStreamGap || event.Phase != responseevents.PhaseUpdated {
 		t.Fatalf("kind/phase = %q/%q, want STREAM_GAP/UPDATED", event.Kind, event.Phase)
 	}
-	if event.FactorySessionID != "session-abc" || event.RunID != "run-xyz" {
-		t.Fatalf("session/run = %q/%q, want session-abc/run-xyz", event.FactorySessionID, event.RunID)
-	}
-	if event.Sequence != 10 || !event.RecordedAt.Equal(recordedAt) {
-		t.Fatalf("sequence/recordedAt = %d/%v, want 10/%v", event.Sequence, event.RecordedAt, recordedAt)
-	}
-	if event.DispatchID != "dispatch-42" {
-		t.Fatalf("dispatchId = %q, want dispatch-42", event.DispatchID)
-	}
-	if event.ProviderSessionRef != "cursor-session-123" {
-		t.Fatalf("providerSessionRef = %q, want cursor-session-123", event.ProviderSessionRef)
-	}
-	if event.ItemID != "" {
-		t.Fatal("compaction gap must not synthesize itemId")
-	}
-
-	var payload responseevents.StreamGapPayload
-	if err := json.Unmarshal(event.Payload, &payload); err != nil {
-		t.Fatalf("unmarshal stream gap payload: %v", err)
-	}
-	if payload.FromSequence != 1 || payload.ToSequence != 3 {
-		t.Fatalf("gap bounds = %d/%d, want 1/3", payload.FromSequence, payload.ToSequence)
-	}
-	if payload.Reason != "truncated" {
-		t.Fatalf("gap reason = %q, want truncated", payload.Reason)
-	}
+	assertMappedFragmentEnvelope(t, event, mappedFragmentEnvelopeExpectation{
+		sessionID:          "session-abc",
+		runID:              "run-xyz",
+		sequence:           10,
+		recordedAt:         recordedAt,
+		dispatchID:         "dispatch-42",
+		providerSessionRef: "cursor-session-123",
+		wantEmptyItemID:    true,
+	})
+	assertStreamGapPayload(t, event.Payload, 1, 3, "truncated")
 
 	if err := responseevents.ValidateEvent(event); err != nil {
 		t.Fatalf("ValidateEvent() error = %v", err)

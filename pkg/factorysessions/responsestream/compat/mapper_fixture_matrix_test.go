@@ -97,6 +97,57 @@ var legacyFragmentFixtureMatrix = []struct {
 	},
 }
 
+func assertFixtureMatrixMappedEvent(
+	t *testing.T,
+	event responseevents.FactoryResponseEvent,
+	tc struct {
+		name             string
+		fragment         responsestream.Event
+		wantKind         responseevents.Kind
+		wantPhase        responseevents.Phase
+		wantFidelity     responseevents.Fidelity
+		wantItemIDSynth  bool
+		wantProviderGram string
+	},
+) {
+	t.Helper()
+
+	if event.Kind != tc.wantKind || event.Phase != tc.wantPhase {
+		t.Fatalf("kind/phase = %q/%q, want %q/%q", event.Kind, event.Phase, tc.wantKind, tc.wantPhase)
+	}
+	if event.Provenance.Fidelity != tc.wantFidelity {
+		t.Fatalf("fidelity = %q, want %q", event.Provenance.Fidelity, tc.wantFidelity)
+	}
+	if event.Provenance.Fidelity == responseevents.FidelityLossless {
+		t.Fatal("fragment-sourced events must not claim LOSSLESS fidelity")
+	}
+	if event.Provenance.Delivery != responseevents.DeliverySynthesized {
+		t.Fatalf("delivery = %q, want SYNTHESIZED", event.Provenance.Delivery)
+	}
+
+	if tc.wantItemIDSynth {
+		if event.ItemID == "" {
+			t.Fatal("expected synthesized itemId")
+		}
+	} else if event.ItemID != "" {
+		t.Fatalf("itemId = %q, want empty for non-message fragments", event.ItemID)
+	}
+
+	if tc.wantProviderGram != "" {
+		var payload responseevents.MessageDeltaPayload
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			t.Fatalf("unmarshal message delta payload: %v", err)
+		}
+		if payload.TextDelta != tc.wantProviderGram {
+			t.Fatalf("textDelta = %q, want verbatim fragment payload %q", payload.TextDelta, tc.wantProviderGram)
+		}
+	}
+
+	if err := responseevents.ValidateEvent(event); err != nil {
+		t.Fatalf("ValidateEvent() error = %v", err)
+	}
+}
+
 func TestMapFragment_FixtureMatrixMapsEveryLegacyFragmentKind(t *testing.T) {
 	t.Parallel()
 
@@ -118,41 +169,7 @@ func TestMapFragment_FixtureMatrixMapsEveryLegacyFragmentKind(t *testing.T) {
 				t.Fatalf("event count = %d, want 1", len(events))
 			}
 
-			event := events[0]
-			if event.Kind != tc.wantKind || event.Phase != tc.wantPhase {
-				t.Fatalf("kind/phase = %q/%q, want %q/%q", event.Kind, event.Phase, tc.wantKind, tc.wantPhase)
-			}
-			if event.Provenance.Fidelity != tc.wantFidelity {
-				t.Fatalf("fidelity = %q, want %q", event.Provenance.Fidelity, tc.wantFidelity)
-			}
-			if event.Provenance.Fidelity == responseevents.FidelityLossless {
-				t.Fatal("fragment-sourced events must not claim LOSSLESS fidelity")
-			}
-			if event.Provenance.Delivery != responseevents.DeliverySynthesized {
-				t.Fatalf("delivery = %q, want SYNTHESIZED", event.Provenance.Delivery)
-			}
-
-			if tc.wantItemIDSynth {
-				if event.ItemID == "" {
-					t.Fatal("expected synthesized itemId")
-				}
-			} else if event.ItemID != "" {
-				t.Fatalf("itemId = %q, want empty for non-message fragments", event.ItemID)
-			}
-
-			if tc.wantProviderGram != "" {
-				var payload responseevents.MessageDeltaPayload
-				if err := json.Unmarshal(event.Payload, &payload); err != nil {
-					t.Fatalf("unmarshal message delta payload: %v", err)
-				}
-				if payload.TextDelta != tc.wantProviderGram {
-					t.Fatalf("textDelta = %q, want verbatim fragment payload %q", payload.TextDelta, tc.wantProviderGram)
-				}
-			}
-
-			if err := responseevents.ValidateEvent(event); err != nil {
-				t.Fatalf("ValidateEvent() error = %v", err)
-			}
+			assertFixtureMatrixMappedEvent(t, events[0], tc)
 		})
 	}
 }

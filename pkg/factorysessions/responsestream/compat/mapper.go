@@ -24,60 +24,51 @@ type Context struct {
 	RunID            string
 }
 
+type fragmentMapper func(Context, responsestream.Event) (responseevents.FactoryResponseEvent, error)
+
 // MapFragment converts one legacy response-stream event into canonical
 // FactoryResponseEvent values. Progress, response, terminal stream markers, and
 // compaction signals are supported in this lane; other kinds return
 // ErrUnsupportedFragmentKind until later stories land.
 func MapFragment(ctx Context, fragment responsestream.Event) ([]responseevents.FactoryResponseEvent, error) {
-	switch fragment.Kind {
-	case responsestream.EventKindProgressFragment:
-		event, err := mapProgressFragment(ctx, fragment)
-		if err != nil {
-			return nil, err
-		}
-		if err := responseevents.ValidateEvent(event); err != nil {
-			return nil, fmt.Errorf("mapped progress event invalid: %w", err)
-		}
-		return []responseevents.FactoryResponseEvent{event}, nil
-	case responsestream.EventKindResponseFragment:
-		event, err := mapResponseFragment(ctx, fragment)
-		if err != nil {
-			return nil, err
-		}
-		if err := responseevents.ValidateEvent(event); err != nil {
-			return nil, fmt.Errorf("mapped response event invalid: %w", err)
-		}
-		return []responseevents.FactoryResponseEvent{event}, nil
-	case responsestream.EventKindStreamCompleted:
-		event, err := mapStreamCompletedFragment(ctx, fragment)
-		if err != nil {
-			return nil, err
-		}
-		if err := responseevents.ValidateEvent(event); err != nil {
-			return nil, fmt.Errorf("mapped stream-completed event invalid: %w", err)
-		}
-		return []responseevents.FactoryResponseEvent{event}, nil
-	case responsestream.EventKindStreamFailed:
-		event, err := mapStreamFailedFragment(ctx, fragment)
-		if err != nil {
-			return nil, err
-		}
-		if err := responseevents.ValidateEvent(event); err != nil {
-			return nil, fmt.Errorf("mapped stream-failed event invalid: %w", err)
-		}
-		return []responseevents.FactoryResponseEvent{event}, nil
-	case responsestream.EventKindCompactionSignal:
-		event, err := mapCompactionFragment(ctx, fragment)
-		if err != nil {
-			return nil, err
-		}
-		if err := responseevents.ValidateEvent(event); err != nil {
-			return nil, fmt.Errorf("mapped compaction event invalid: %w", err)
-		}
-		return []responseevents.FactoryResponseEvent{event}, nil
-	default:
+	mapper, label, ok := fragmentMapperForKind(fragment.Kind)
+	if !ok {
 		return nil, fmt.Errorf("%w: %q", ErrUnsupportedFragmentKind, fragment.Kind)
 	}
+	return mapValidatedFragment(mapper, label, ctx, fragment)
+}
+
+func fragmentMapperForKind(kind responsestream.EventKind) (fragmentMapper, string, bool) {
+	switch kind {
+	case responsestream.EventKindProgressFragment:
+		return mapProgressFragment, "progress", true
+	case responsestream.EventKindResponseFragment:
+		return mapResponseFragment, "response", true
+	case responsestream.EventKindStreamCompleted:
+		return mapStreamCompletedFragment, "stream-completed", true
+	case responsestream.EventKindStreamFailed:
+		return mapStreamFailedFragment, "stream-failed", true
+	case responsestream.EventKindCompactionSignal:
+		return mapCompactionFragment, "compaction", true
+	default:
+		return nil, "", false
+	}
+}
+
+func mapValidatedFragment(
+	mapper fragmentMapper,
+	label string,
+	ctx Context,
+	fragment responsestream.Event,
+) ([]responseevents.FactoryResponseEvent, error) {
+	event, err := mapper(ctx, fragment)
+	if err != nil {
+		return nil, err
+	}
+	if err := responseevents.ValidateEvent(event); err != nil {
+		return nil, fmt.Errorf("mapped %s event invalid: %w", label, err)
+	}
+	return []responseevents.FactoryResponseEvent{event}, nil
 }
 
 func mapResponseFragment(ctx Context, fragment responsestream.Event) (responseevents.FactoryResponseEvent, error) {
