@@ -224,7 +224,10 @@ primary-result behavior.
   directly; do not remap it through the lossy legacy fragment mapper. Keep the
   provider's final-result parser independent from decoder observation state so
   streamed message snapshots cannot select or duplicate invocation
-  `primaryResult`.
+  `primaryResult`. For typed item unions, classify semantics only from the exact
+  nested item discriminator, retain the provider's native item ID across start,
+  update, and completion records, and represent the completed full item as the
+  authoritative snapshot rather than synthesizing a second completed item.
   Session-scoped immutable response-event storage lives in
   `pkg/factorysessions/responseeventstore` with
   `factorysessions.SessionResponseEventStore` aliases in `types.go`; it is

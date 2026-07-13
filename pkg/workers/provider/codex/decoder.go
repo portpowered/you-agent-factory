@@ -56,12 +56,6 @@ type recordEnvelope struct {
 	Item     json.RawMessage `json:"item"`
 }
 
-type itemEnvelope struct {
-	ID   string `json:"id"`
-	Type string `json:"type"`
-	Text string `json:"text"`
-}
-
 func (d *Decoder) decodeRecord(raw []byte) adapter.DecodeResult {
 	if len(bytes.TrimSpace(raw)) == 0 {
 		return adapter.DecodeResult{}
@@ -83,28 +77,11 @@ func (d *Decoder) decodeRecord(raw []byte) adapter.DecodeResult {
 		return oneDraft(d.lifecycleDraft(responseevents.KindTurn, responseevents.PhaseStarted, "started", "turn.started"))
 	case "turn.completed":
 		return oneDraft(d.lifecycleDraft(responseevents.KindTurn, responseevents.PhaseCompleted, "completed", "turn.completed"))
-	case "item.completed":
-		return d.decodeCompletedItem(record.Item)
+	case "item.started", "item.updated", "item.completed":
+		return d.decodeItem(record.Type, record.Item)
 	default:
 		return diagnostic("codex_unknown_event", "codex JSONL event type is not supported: "+safeDiscriminator(record.Type))
 	}
-}
-
-func (d *Decoder) decodeCompletedItem(raw json.RawMessage) adapter.DecodeResult {
-	var item itemEnvelope
-	if err := json.Unmarshal(raw, &item); err != nil || strings.TrimSpace(item.ID) == "" {
-		return diagnostic("codex_malformed_item", diagnosticMessage)
-	}
-	if item.Type != "agent_message" {
-		return diagnostic("codex_unknown_item", "codex JSONL item type is not supported: "+safeDiscriminator(item.Type))
-	}
-	payload, _ := json.Marshal(responseevents.MessagePayload{Role: "assistant", ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: item.Text}}})
-	return oneDraft(responseevents.Draft{
-		RunID: d.context.RunID, DispatchID: d.context.DispatchID, TurnID: d.turnID,
-		ItemID: strings.TrimSpace(item.ID), ProviderSessionRef: d.threadID,
-		Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted,
-		Provenance: provenance("item.completed", responseevents.RepresentationSnapshot), Payload: payload,
-	})
 }
 
 func (d *Decoder) lifecycleDraft(kind responseevents.Kind, phase responseevents.Phase, status, nativeType string) responseevents.Draft {
