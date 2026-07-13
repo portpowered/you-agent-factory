@@ -49,11 +49,7 @@ properties:
   provenance:
     $ref: ./FactoryResponseEventProvenance.yaml
   payload:
-    type: object
-    description: >-
-      Kind-aligned public payload. Typed payload schemas and the discriminated
-      union are declared in companion fragments and wired through the OpenAPI
-      entrypoint in a later registration story.
+    $ref: ./FactoryResponseEventPayload.yaml
   dispatchId:
     type: string
     description: Optional dispatch correlation identifier.

@@ -1,0 +1,10 @@
+type: object
+additionalProperties: false
+description: Reasoning summary snapshot or delta payload.
+properties:
+  summary:
+    type: string
+    description: Full reasoning summary text when emitting a snapshot.
+  summaryDelta:
+    type: string
+    description: Incremental reasoning summary text when emitting a delta.

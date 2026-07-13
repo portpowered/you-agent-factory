@@ -1,0 +1,15 @@
+type: object
+additionalProperties: false
+description: Image reference content block.
+required:
+  - kind
+  - imageRef
+properties:
+  kind:
+    allOf:
+      - $ref: ../FactoryResponseEventContentBlockKind.yaml
+    enum:
+      - IMAGE_REF
+  imageRef:
+    type: string
+    description: Reference to an image artifact or URL.

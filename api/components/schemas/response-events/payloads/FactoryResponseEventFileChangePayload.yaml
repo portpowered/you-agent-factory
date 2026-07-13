@@ -1,0 +1,16 @@
+type: object
+additionalProperties: false
+description: Observed file mutation payload.
+required:
+  - path
+  - operation
+properties:
+  path:
+    type: string
+    description: Observed file path relative to the workspace or artifact root.
+  operation:
+    type: string
+    description: Observed file operation such as create, update, or delete.
+  summary:
+    type: string
+    description: Optional human-readable summary of the mutation.

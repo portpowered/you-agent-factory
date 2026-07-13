@@ -1,0 +1,9 @@
+type: object
+additionalProperties: false
+description: Session-scoped lifecycle and capability metadata payload.
+properties:
+  status:
+    type: string
+    description: Session lifecycle status when applicable.
+  capabilities:
+    $ref: ../FactoryResponseEventCapabilities.yaml

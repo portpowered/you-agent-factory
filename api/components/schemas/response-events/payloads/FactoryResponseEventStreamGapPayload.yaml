@@ -1,0 +1,20 @@
+type: object
+additionalProperties: false
+description: Discontinuity marker in the retained response-event stream.
+required:
+  - fromSequence
+  - toSequence
+properties:
+  fromSequence:
+    type: integer
+    format: int64
+    minimum: 0
+    description: Last retained sequence before the gap.
+  toSequence:
+    type: integer
+    format: int64
+    minimum: 0
+    description: First available sequence after the gap.
+  reason:
+    type: string
+    description: Optional reason for the stream gap such as retention_window.

@@ -1,0 +1,7 @@
+type: object
+additionalProperties: false
+description: Run-scoped lifecycle metadata payload.
+properties:
+  status:
+    type: string
+    description: Run lifecycle status when applicable.
