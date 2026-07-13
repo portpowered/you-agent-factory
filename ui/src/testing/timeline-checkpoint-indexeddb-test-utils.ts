@@ -2,11 +2,15 @@ interface StoredCheckpointEnvelope {
   storageKey?: string;
 }
 
-export function createTimelineCheckpointIndexedDBTestDouble(): {
+export function createTimelineCheckpointIndexedDBTestDouble(
+  options: { writeError?: Error } = {},
+): {
   indexedDB: IDBFactory;
   records: Map<string, StoredCheckpointEnvelope>;
+  writeAttempts: () => number;
 } {
   const records = new Map<string, StoredCheckpointEnvelope>();
+  let attemptedWrites = 0;
   const database = {
     close: () => {},
     createObjectStore: () => undefined,
@@ -33,8 +37,16 @@ export function createTimelineCheckpointIndexedDBTestDouble(): {
             ),
           get: (key: string) => indexedDBTestRequest(records.get(key)),
           getAll: () => indexedDBTestRequest([...records.values()]),
-          put: (value: StoredCheckpointEnvelope) =>
-            indexedDBTestRequest(
+          put: (value: StoredCheckpointEnvelope) => {
+            attemptedWrites += 1;
+            if (options.writeError) {
+              return indexedDBErrorTestRequest(options.writeError, () => {
+                (transaction.onerror as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                );
+              });
+            }
+            return indexedDBTestRequest(
               value.storageKey ?? "",
               () => {
                 if (value.storageKey) {
@@ -45,7 +57,8 @@ export function createTimelineCheckpointIndexedDBTestDouble(): {
                 (transaction.oncomplete as ((event: Event) => void) | null)?.(
                   {} as Event,
                 ),
-            ),
+            );
+          },
         }),
       };
       return transaction;
@@ -63,6 +76,7 @@ export function createTimelineCheckpointIndexedDBTestDouble(): {
       },
     } as unknown as IDBFactory,
     records,
+    writeAttempts: () => attemptedWrites,
   };
 }
 

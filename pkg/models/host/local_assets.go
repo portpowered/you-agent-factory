@@ -1,0 +1,146 @@
+package modelhost
+
+import (
+	"context"
+	"strings"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+)
+
+type localAssetGateway struct {
+	puller localmodels.AssetPuller
+}
+
+// NewLocalAssetGateway adapts pkg/models/local asset integration for the model host boundary.
+func NewLocalAssetGateway(puller localmodels.AssetPuller) AssetGateway {
+	if puller == nil {
+		return nil
+	}
+	return localAssetGateway{puller: puller}
+}
+
+func (g localAssetGateway) PullModel(
+	ctx context.Context,
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+) (AssetPullResult, error) {
+	result, err := localmodels.PullModelWithOptions(g.puller, ctx, runtimeCfg, modelName, localmodels.PullOptions{
+		RuntimeCacheInspector: g.puller,
+		SourceResolver:        localmodels.DefaultManagedRuntimeSourceResolver(),
+	})
+	outcome := factoryapi.ManagedRuntimePullOutcome(strings.TrimSpace(result.ManagedPullOutcome))
+	if outcome == "" && err == nil {
+		outcome = factoryapi.ManagedRuntimePullOutcomeINSTALLEDSUCCESSFULLY
+	}
+	if err != nil {
+		if outcome == "" {
+			outcome = factoryapi.ManagedRuntimePullOutcomeUNSUPPORTEDRUNTIME
+		}
+		pullResult := AssetPullResult{
+			PullOutcome: outcome,
+			Snapshot:    snapshotFromPullResult(result),
+		}
+		return pullResult, err
+	}
+	return assetPullResultFromService(result, outcome), nil
+}
+
+func (g localAssetGateway) InspectRuntimeCache(
+	ctx context.Context,
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+) (CacheInspection, error) {
+	inspection, err := g.puller.InspectRuntimeCache(ctx, runtimeCfg, modelName)
+	if err != nil {
+		return CacheInspection{}, err
+	}
+	return CacheInspection{
+		Supported:          inspection.Supported,
+		Installed:          inspection.Installed,
+		Revision:           inspection.Revision,
+		CachePath:          inspection.CachePath,
+		InstalledFileCount: inspection.InstalledFileCount,
+		MissingAssets:      append([]string(nil), inspection.MissingAssets...),
+		PartialArtifacts:   inspection.PartialArtifacts,
+	}, nil
+}
+
+func snapshotFromPullResult(result apisurface.ModelPullResult) ReadinessSnapshot {
+	readiness := factoryapi.ManagedRuntimeReadinessState(strings.TrimSpace(result.ReadinessState))
+	if readiness == "" {
+		readiness = factoryapi.ManagedRuntimeReadinessStateREADY
+	}
+	lifecycle := factoryapi.ManagedRuntimeLifecycleState(strings.TrimSpace(result.LifecycleState))
+	if lifecycle == "" {
+		lifecycle = factoryapi.ManagedRuntimeLifecycleStateINSTALLED
+	}
+	diagnostics := map[string]string{
+		"readinessState": string(readiness),
+		"lifecycleState": string(lifecycle),
+		"locality":       result.ProviderLocality,
+	}
+	if result.SourceKind != "" {
+		diagnostics["sourceKind"] = result.SourceKind
+		diagnostics["sourceId"] = result.SourceID
+		diagnostics["resolverNotes"] = result.ResolverNotes
+	}
+	return ReadinessSnapshot{
+		Identity: Identity{
+			Name:          strings.TrimSpace(result.ModelName),
+			Locality:      factoryapi.WorkerModelLocality(result.ProviderLocality),
+			SourceKind:    result.SourceKind,
+			SourceID:      result.SourceID,
+			ResolverNotes: result.ResolverNotes,
+		},
+		ReadinessState: readiness,
+		LifecycleState: lifecycle,
+		FailureClass:   FailureClassForReadinessState(readiness),
+		Diagnostics:    diagnostics,
+	}
+}
+
+func assetPullResultFromService(result apisurface.ModelPullResult, outcome factoryapi.ManagedRuntimePullOutcome) AssetPullResult {
+	files := make([]PullDownloadedFile, 0, len(result.DownloadedFiles))
+	for _, file := range result.DownloadedFiles {
+		files = append(files, PullDownloadedFile{
+			Path:   file.Path,
+			Bytes:  file.Bytes,
+			SHA256: file.SHA256,
+		})
+	}
+	return AssetPullResult{
+		PullOutcome:     outcome,
+		Snapshot:        snapshotFromPullResult(result),
+		LegacyOutcome:   strings.TrimSpace(result.Outcome),
+		CachePath:       strings.TrimSpace(result.CachePath),
+		Revision:        strings.TrimSpace(result.Revision),
+		DownloadedFiles: files,
+	}
+}
+
+type localSourceResolverAdapter struct {
+	inner localmodels.ManagedRuntimeSourceResolver
+}
+
+// DefaultManagedRuntimeSourceResolverAdapter exposes the production source resolver through modelhost.
+func DefaultManagedRuntimeSourceResolverAdapter() SourceResolver {
+	return localSourceResolverAdapter{inner: localmodels.DefaultManagedRuntimeSourceResolver()}
+}
+
+func (a localSourceResolverAdapter) Resolve(modelName, backend, loadPolicy, provider string) SourceResolution {
+	resource := interfaces.ResourceConfig{
+		Backend:    backend,
+		LoadPolicy: loadPolicy,
+		Provider:   provider,
+	}
+	resolution := a.inner.Resolve(modelName, &resource)
+	return SourceResolution{
+		SourceKind:    resolution.SourceKind,
+		SourceID:      resolution.SourceID,
+		ResolverNotes: resolution.ResolverNotes,
+	}
+}

@@ -8,7 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 func TestConfigMapping_WorkstationTypeDefaultsToStandard(t *testing.T) {
@@ -178,7 +178,6 @@ func TestConfigMapping_WorkstationKindPollerUsesImplicitFailureRouting(t *testin
 		t.Fatalf("poller failure arcs = %+v, want default failed-state routing", tr.FailureArcs)
 	}
 }
-
 
 func TestConfigMapping_ModelInvokeWorkstationUsesImplicitFailureRouting(t *testing.T) {
 	input := &interfaces.FactoryConfig{
@@ -562,7 +561,6 @@ func TestConfigMapping_DefaultNonRepeaterFanInRejectionUsesFailureDestinations(t
 	assertTransitionArcPlaces(t, tr.RejectionArcs, "task:failed", "page:failed")
 }
 
-
 func assertTransitionArcPlaces(t *testing.T, arcs []petri.Arc, wantPlaces ...string) {
 	t.Helper()
 
@@ -576,7 +574,6 @@ func assertTransitionArcPlaces(t *testing.T, arcs []petri.Arc, wantPlaces ...str
 		}
 	}
 }
-
 
 func TestConfigMapping_ValidationRejectsSingleInputWithTwoSameTypeOutputs(t *testing.T) {
 	input := &interfaces.FactoryConfig{

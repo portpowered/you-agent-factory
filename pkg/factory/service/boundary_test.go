@@ -24,12 +24,12 @@ func TestPackageBoundary_DoesNotImportRootServiceOrStatefulFactorySessions(t *te
 
 	forbiddenRoots := []string{
 		"github.com/portpowered/infinite-you/pkg/service",
-		"github.com/portpowered/infinite-you/pkg/factorysessions",
+		"github.com/portpowered/infinite-you/pkg/factory/sessions",
 	}
 	// Provider adapters share the pure canonical response-event vocabulary.
 	// Session registries, stores, projections, and runtime state remain forbidden.
 	allowedFactorySessionLeaves := map[string]struct{}{
-		"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents": {},
+		"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents": {},
 	}
 	for _, dep := range strings.Fields(string(output)) {
 		if _, allowed := allowedFactorySessionLeaves[dep]; allowed {

@@ -10,10 +10,10 @@ package initializer
 import (
 	"context"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 )
 
 // Services exposes initializer-produced domain collaborators for in-process callers.

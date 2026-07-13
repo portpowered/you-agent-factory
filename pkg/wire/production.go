@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/composebridge"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/mcp/server"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"go.uber.org/zap"
 )
@@ -112,13 +114,15 @@ func assembleProductionGraph(
 	}
 	host := runtimehost.NewHostFromCore(core)
 	shell := runtimehost.HostShell{Host: host}
+	models := composeModelService(core, host, cfg)
+	host = runtimehost.AttachModelServiceCollaborator(shell, models)
+	shell = runtimehost.HostShell{Host: host}
 	host = runtimehost.AttachFactorySaveCollaborator(shell, runtimehost.ProvideFactorySaveCollaborator(shell, cfg))
 	applicationRuntime, err := runtimehost.NewApplicationRuntime(host)
 	if err != nil {
 		return nil, fmt.Errorf("construct runtime lifecycle: %w", err)
 	}
 
-	models := host.ModelService()
 	sessions := host.SessionAPI()
 	definition := host.FactoryDefinitionAPI()
 	apiSurface, err := apisurface.NewSessionAPISurface(
@@ -185,6 +189,50 @@ func assembleProductionGraph(
 		Sidecars:  sidecars,
 		resources: resources,
 	}, nil
+}
+
+type modelPullMetricsAdapter struct {
+	inner runtimehost.ModelPullMetricsRecorder
+}
+
+func (a modelPullMetricsAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
+	a.inner.RecordModelPullMetric(runtimehost.InvocationMetric{Name: metric.Name, Labels: metric.Labels})
+}
+
+func composeModelService(
+	core *runtimehost.Core,
+	host *runtimehost.Host,
+	cfg *runtimehost.Config,
+) apisurface.ModelAPI {
+	if cfg != nil && cfg.ModelAPI != nil {
+		return cfg.ModelAPI
+	}
+	if core == nil || host == nil {
+		return modelsservice.New(modelsservice.Dependencies{})
+	}
+
+	var metrics modelsservice.PullMetricsRecorder
+	runnerID := ""
+	if cfg != nil && cfg.ModelPullMetricsRecorder != nil {
+		metrics = modelPullMetricsAdapter{inner: cfg.ModelPullMetricsRecorder}
+	}
+	if cfg != nil {
+		runnerID = cfg.RunnerID
+	}
+	now := time.Now
+	if core.Clock() != nil {
+		now = core.Clock().Now
+	}
+	return modelsservice.New(modelsservice.Dependencies{
+		RuntimeConfig:           host.CurrentModelRuntimeConfig,
+		ModelHost:               core.ModelHost(),
+		ModelAssetPuller:        core.ModelAssetPuller(),
+		Logger:                  core.Logger(),
+		Clock:                   now,
+		ModelPullMetrics:        metrics,
+		ModelInvocationExecutor: host.BuildModelInvocationExecutor,
+		FactoryRunnerID:         runnerID,
+	})
 }
 
 func buildProductionSidecars(

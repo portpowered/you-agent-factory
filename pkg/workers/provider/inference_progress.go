@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
@@ -62,6 +62,9 @@ type InferenceProgressFragment struct {
 	ExternalEventType  string
 	Metadata           map[string]string
 	CanonicalDraft     any
+	// CanonicalEventAlreadyPublished keeps a compatibility terminal marker
+	// from projecting a second canonical failure after a native terminal draft.
+	CanonicalEventAlreadyPublished bool
 }
 
 // CanonicalDraftFragment carries one provider-native canonical response draft
@@ -133,6 +136,10 @@ type InferenceProgressPublishingCommandRunner struct {
 	Publisher InferenceProgressPublisher
 	Logger    logging.Logger
 }
+
+// SupportsResponseStreaming reports that the runner observes subprocess output
+// incrementally and can therefore consume native streaming protocols.
+func (InferenceProgressPublishingCommandRunner) SupportsResponseStreaming() bool { return true }
 
 // Run executes the provider subprocess and publishes incremental stdout/stderr
 // fragments into the configured internal session response stream.

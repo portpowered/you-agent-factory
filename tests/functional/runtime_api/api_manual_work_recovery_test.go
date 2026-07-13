@@ -11,7 +11,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -174,12 +174,6 @@ func requireGeneratedWorkByID(t *testing.T, baseURL, workID string) factoryapi.W
 	}
 	t.Fatalf("work ID %q missing from generated work response: %#v", workID, work)
 	return factoryapi.Work{}
-}
-
-func getGeneratedWorkByID(t *testing.T, baseURL, workID string) factoryapi.Work {
-	t.Helper()
-
-	return getGeneratedJSON[factoryapi.Work](t, support.DefaultSessionWorkURL(baseURL, "/work/"+workID))
 }
 
 func assertManualRecoveryWorkStateChangeEvents(t *testing.T, server *functionalAPIServer, parentWorkID, childWorkID string) {

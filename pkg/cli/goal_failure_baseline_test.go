@@ -15,7 +15,7 @@ import (
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 )
 
 // Hermetic S02 failure-baseline fixtures for one-shot goal/model CLI paths. Each
@@ -321,7 +321,7 @@ func assertInvalidTopologyMaterializationOperatorDiagnostics(t *testing.T, err e
 	}
 }
 
-func corruptGoalFactoryPlanOutputStateForTest(t *testing.T, factoryDir, stateName string) {
+func corruptGoalFactoryExecuteOutputStateForTest(t *testing.T, factoryDir, stateName string) {
 	t.Helper()
 
 	factoryPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
@@ -343,13 +343,13 @@ func corruptGoalFactoryPlanOutputStateForTest(t *testing.T, factoryDir, stateNam
 		if !ok {
 			continue
 		}
-		if candidate["name"] == "plan-goal" {
+		if candidate["name"] == goal.PackagedExecuteWorkstationName {
 			workstation = candidate
 			break
 		}
 	}
 	if workstation == nil {
-		t.Fatal("factory.json plan-goal workstation not found")
+		t.Fatal("factory.json execute-goal workstation not found")
 	}
 	outputs, ok := workstation["outputs"].([]any)
 	if !ok || len(outputs) == 0 {
@@ -400,7 +400,7 @@ func TestFailureBaseline_InvalidTopology_RunNamedGoalRejectsCorruptedMaterialize
 	}
 
 	factoryDir := materializedGoalDir(env.homeDir)
-	corruptGoalFactoryPlanOutputStateForTest(t, factoryDir, "missing-plan-state")
+	corruptGoalFactoryExecuteOutputStateForTest(t, factoryDir, "missing-output-state")
 
 	runCalled = false
 	env.root.SetArgs([]string{

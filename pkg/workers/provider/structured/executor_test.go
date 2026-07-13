@@ -2,6 +2,7 @@ package structured_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/structured"
@@ -93,6 +94,115 @@ func TestProductionResponseStreamClaudeRejectsImageBeforeRunner(t *testing.T) {
 	}
 }
 
+func TestProductionProviderBoundarySelectsStructuredCodexOnlyForCapableRunner(t *testing.T) {
+	req := interfaces.ProviderInferenceRequest{
+		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-codex-production"},
+		ModelProvider: string(interfaces.ModelProviderCodex), Model: "gpt-test",
+		UserMessage: "private prompt", WorkingDirectory: t.TempDir(),
+	}
+	plainRunner := &recordingRunner{result: workerprovider.CommandResult{Stdout: []byte("plain answer")}}
+	plainProvider := workerprovider.NewScriptWrapProvider(
+		workerprovider.WithProviderCommandRunner(plainRunner),
+		workerprovider.WithInferenceProgressPublisher(func(workerprovider.InferenceProgressFragment) {}),
+		workerprovider.WithResponseStreamExecutor(structured.NewExecutor()),
+	)
+	plainResponse, err := plainProvider.Infer(context.Background(), req)
+	if err != nil || plainResponse.Content != "plain answer" || slices.Contains(plainRunner.request.Args, "--json") {
+		t.Fatalf("non-streaming response/request = %#v / %#v, %v", plainResponse, plainRunner.request, err)
+	}
+
+	streamRunner := &codexCapableRunner{recordingRunner: recordingRunner{result: workerprovider.CommandResult{Stdout: []byte(structuredCodexOutput())}}}
+	var published []workerprovider.InferenceProgressFragment
+	streamProvider := workerprovider.NewScriptWrapProvider(
+		workerprovider.WithProviderCommandRunner(streamRunner),
+		workerprovider.WithInferenceProgressPublisher(func(fragment workerprovider.InferenceProgressFragment) { published = append(published, fragment) }),
+		workerprovider.WithResponseStreamExecutor(structured.NewExecutor()),
+	)
+	streamResponse, err := streamProvider.Infer(context.Background(), req)
+	if err != nil {
+		t.Fatalf("response-stream Infer: %v", err)
+	}
+	if streamResponse.Content != "authoritative answer" || streamResponse.ProviderSession == nil || streamResponse.ProviderSession.ID != "thread-codex-production" {
+		t.Fatalf("response-stream response = %#v", streamResponse)
+	}
+	if !slices.Contains(streamRunner.request.Args, "--json") || string(streamRunner.request.Stdin) != req.UserMessage || streamRunner.request.WorkDir != req.WorkingDirectory {
+		t.Fatalf("response-stream request = %#v", streamRunner.request)
+	}
+	if !publishedDraft(published, responseevents.KindMessage, responseevents.PhaseCompleted, "message-codex-production") {
+		t.Fatalf("published fragments = %#v, want authoritative native message", published)
+	}
+	assertPublishedCodexErrorItem(t, published)
+}
+
+func assertPublishedCodexErrorItem(t *testing.T, published []workerprovider.InferenceProgressFragment) {
+	t.Helper()
+	errorDraft := publishedDraftByIdentity(published, responseevents.KindError, responseevents.PhaseUpdated, "error-codex-production")
+	if errorDraft == nil || errorDraft.Provenance.NativeEventType != "item.completed" {
+		t.Fatalf("published fragments = %#v, want non-terminal native error item", published)
+	}
+	var errorPayload responseevents.ErrorPayload
+	if err := json.Unmarshal(errorDraft.Payload, &errorPayload); err != nil {
+		t.Fatalf("decode error item payload: %v", err)
+	}
+	if errorPayload.Code != "codex_item_error" || errorPayload.Message != "A recoverable operation was skipped." || errorPayload.Retryable {
+		t.Fatalf("error item payload = %#v", errorPayload)
+	}
+}
+
+func TestExecutorReconcilesCodexTerminalDraftsWithCommandOutcome(t *testing.T) {
+	tests := []struct {
+		name            string
+		result          workerprovider.CommandResult
+		runErr          error
+		wantFailure     interfaces.WorkFailureType
+		wantNativeError string
+	}{
+		{
+			name: "recognized failure survives later cleanup",
+			result: workerprovider.CommandResult{Stdout: []byte(strings.Join([]string{
+				`{"type":"thread.started","thread_id":"thread-terminal"}`,
+				`{"type":"turn.failed","error":{"message":"unexpected status 429"}}`,
+				`{"type":"error","message":"cleanup detail"}`,
+			}, "\n") + "\n")},
+			wantFailure: interfaces.WorkFailureTypeThrottled, wantNativeError: "turn.failed",
+		},
+		{
+			name:   "deadline suppresses native failure",
+			result: workerprovider.CommandResult{Stdout: []byte(`{"type":"turn.failed","error":{"message":"unexpected status 429"}}` + "\n")},
+			runErr: context.DeadlineExceeded, wantFailure: interfaces.WorkFailureTypeTimeout,
+		},
+		{
+			name:        "exit 124 suppresses native failure",
+			result:      workerprovider.CommandResult{ExitCode: 124, Stdout: []byte(`{"type":"turn.failed","error":{"message":"unexpected status 429"}}` + "\n")},
+			wantFailure: interfaces.WorkFailureTypeTimeout,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &recordingRunner{result: tc.result, err: tc.runErr}
+			var published []workerprovider.InferenceProgressFragment
+			result := structured.NewExecutor().Execute(context.Background(), interfaces.ProviderInferenceRequest{
+				Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-terminal"}, ModelProvider: string(interfaces.ModelProviderCodex), UserMessage: "private prompt",
+			}, false, nil, runner, func(fragment workerprovider.InferenceProgressFragment) { published = append(published, fragment) }, nil)
+			if result.FailureType != tc.wantFailure {
+				t.Fatalf("failure = %#v, want %q", result, tc.wantFailure)
+			}
+			var nativeErrors []responseevents.Draft
+			for _, fragment := range published {
+				if draft, ok := fragment.CanonicalDraft.(responseevents.Draft); ok && draft.Kind == responseevents.KindError {
+					nativeErrors = append(nativeErrors, draft)
+				}
+			}
+			if tc.wantNativeError == "" && len(nativeErrors) != 0 {
+				t.Fatalf("native terminal drafts = %#v, want none", nativeErrors)
+			}
+			if tc.wantNativeError != "" && (len(nativeErrors) != 1 || nativeErrors[0].Provenance.NativeEventType != tc.wantNativeError || !result.CanonicalFailurePublished) {
+				t.Fatalf("native terminal drafts/result = %#v / %#v", nativeErrors, result)
+			}
+		})
+	}
+}
+
 func TestExecutorStreamsRealCommandAndReportsSupport(t *testing.T) {
 	executor := structured.NewExecutor()
 	if !executor.Supports(" CLAUDE ") || executor.Supports("unknown-provider") {
@@ -116,7 +226,7 @@ func TestExecutorStreamsRealCommandAndReportsSupport(t *testing.T) {
 		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-real-command"},
 		ModelProvider: string(interfaces.ModelProviderClaude), UserMessage: "private prompt",
 		EnvVars: map[string]string{"CLAUDE_FIXTURE": fixturePath},
-	}, false, nil, func(fragment workerprovider.InferenceProgressFragment) {
+	}, false, nil, nil, func(fragment workerprovider.InferenceProgressFragment) {
 		published = append(published, fragment)
 	}, nil)
 	if result.Err != nil || result.FailureType != "" || result.Response.Content != "authoritative answer" {
@@ -132,7 +242,7 @@ func TestExecutorReturnsStructuredFailureFromBufferedRunner(t *testing.T) {
 	result := executor.Execute(context.Background(), interfaces.ProviderInferenceRequest{
 		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-failure"},
 		ModelProvider: string(interfaces.ModelProviderClaude), UserMessage: "private prompt",
-	}, false, &recordingRunner{result: workerprovider.CommandResult{
+	}, false, nil, &recordingRunner{result: workerprovider.CommandResult{
 		Stdout: []byte(`{"type":"system","subtype":"api_retry","attempt":2,"retry_delay_ms":1000}` + "\n"),
 		Stderr: []byte("private provider warning"), ExitCode: 1,
 	}}, nil, nil)
@@ -189,17 +299,45 @@ func structuredClaudeOutput() string {
 	}, "\n") + "\n"
 }
 
+func structuredCodexOutput() string {
+	return strings.Join([]string{
+		`{"type":"thread.started","thread_id":"thread-codex-production"}`,
+		`{"type":"turn.started"}`,
+		`{"type":"item.completed","item":{"id":"error-codex-production","type":"error","message":"A recoverable operation was skipped."}}`,
+		`{"type":"item.completed","item":{"id":"message-codex-production","type":"agent_message","text":"authoritative answer"}}`,
+		`{"type":"turn.completed","usage":{"input_tokens":4,"output_tokens":2}}`,
+	}, "\n") + "\n"
+}
+
+func publishedDraft(fragments []workerprovider.InferenceProgressFragment, kind responseevents.Kind, phase responseevents.Phase, itemID string) bool {
+	return publishedDraftByIdentity(fragments, kind, phase, itemID) != nil
+}
+
+func publishedDraftByIdentity(fragments []workerprovider.InferenceProgressFragment, kind responseevents.Kind, phase responseevents.Phase, itemID string) *responseevents.Draft {
+	for _, fragment := range fragments {
+		if draft, ok := fragment.CanonicalDraft.(responseevents.Draft); ok && draft.Kind == kind && draft.Phase == phase && draft.ItemID == itemID {
+			return &draft
+		}
+	}
+	return nil
+}
+
 type recordingRunner struct {
 	request workerprovider.CommandRequest
 	result  workerprovider.CommandResult
 	calls   int
+	err     error
 }
 
 func (r *recordingRunner) Run(_ context.Context, req workerprovider.CommandRequest) (workerprovider.CommandResult, error) {
 	r.calls++
 	r.request = req
-	return r.result, nil
+	return r.result, r.err
 }
+
+type codexCapableRunner struct{ recordingRunner }
+
+func (*codexCapableRunner) SupportsResponseStreaming() bool { return true }
 
 func assertCommandEnv(t *testing.T, env []string, name, want string) {
 	t.Helper()

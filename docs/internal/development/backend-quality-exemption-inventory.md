@@ -81,8 +81,8 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 | `pkg/factory/subsystems` | 1 | 1 | directive + coverage baseline |
 | `pkg/factory/subsystems/dispatchertests` | 1 | 1 | directive only |
 | `pkg/factory/validation` | 2 | 1 | directive + coverage baseline |
-| `pkg/factorysessionexecution` | 26 | 8 | directive only |
-| `pkg/factorysessionexecution/fixtures` | 5 | 3 | directive only |
+| `pkg/factory/sessions/execution` | 26 | 8 | directive only |
+| `pkg/factory/sessions/execution/fixtures` | 5 | 3 | directive only |
 | `pkg/interfaces` | 3 | 2 | directive + coverage baseline |
 | `pkg/internal/cursorstorage` | 10 | 5 | directive + coverage baseline |
 | `pkg/mcp/factorysession` | 9 | 4 | directive + coverage baseline |
@@ -127,14 +127,14 @@ directive occurrence in the focused scan:
 - `pkg/factorysessions/dataplane`
 - `pkg/factorysessions/service`
 - `pkg/factorysessions/stream`
-- `pkg/hostedworkers`
-- `pkg/hostedworkers/linear`
+- `pkg/workers/hosted`
+- `pkg/workers/hosted/linear`
 - `pkg/invocations`
-- `pkg/localmodels`
-- `pkg/localmodels/assets`
+- `pkg/models/local`
+- `pkg/models/assets`
 - `pkg/logging`
 - `pkg/mcp/server`
-- `pkg/modelhost`
+- `pkg/models/host`
 - `pkg/orchestrators/javascript/policy`
 - `pkg/orchestrators/javascript/preview`
 - `pkg/orchestrators/javascript/result`
@@ -400,50 +400,50 @@ Owner: `pkg/factory/validation` package maintainers. Status: **directive + cover
 | `pkg/factory/validation/validation_test.go:1` | `backendsizecheck:ignore-file` | `pkg/factory/validation/validation_test.go` | T | T gate |
 | `pkg/factory/validation/validation_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/factory/validation/validation_test.go` | T | T gate |
 
-### `pkg/factorysessionexecution`
+### `pkg/factory/sessions/execution`
 
-Owner: `pkg/factorysessionexecution` package maintainers. Status: **directive only**.
-
-| Source | Directive rule | Target | Reason | Evidence |
-| --- | --- | --- | --- | --- |
-| `pkg/factorysessionexecution/control.go:411` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `applyRuntimeExtendedLifecycleControl` | R | R gate |
-| `pkg/factorysessionexecution/control.go:412` | `backendsizecheck:ignore-function` | `applyRuntimeExtendedLifecycleControl` | R | R gate |
-| `pkg/factorysessionexecution/control.go:413` | `pkgmaintcheck:ignore-function-lines` | `applyRuntimeExtendedLifecycleControl` | R | R gate |
-| `pkg/factorysessionexecution/control.go:519` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `applyRuntimeAcceptedLifecycleControl` | R | R gate |
-| `pkg/factorysessionexecution/fake_fixture.go:93` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `parseFakeScenarioFromFixture` | R | R gate |
-| `pkg/factorysessionexecution/fake_fixture.go:222` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `sessionReadFromFixtureMap` | R | R gate |
-| `pkg/factorysessionexecution/fake_service.go:449` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `applyLifecycleControl` | R | R gate |
-| `pkg/factorysessionexecution/fake_service.go:548` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `mutateSessionForControl` | R | R gate |
-| `pkg/factorysessionexecution/fake_service_runtime_test.go:1` | `backendsizecheck:ignore-file` | `pkg/factorysessionexecution/fake_service_runtime_test.go` | T | T gate |
-| `pkg/factorysessionexecution/fake_service_runtime_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/factorysessionexecution/fake_service_runtime_test.go` | T | T gate |
-| `pkg/factorysessionexecution/fake_service_runtime_test.go:234` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestFakeService_InternalLifecycleHelpers` | T | T gate |
-| `pkg/factorysessionexecution/fake_service_runtime_test.go:2274` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestJavaScriptRuntimeService_LateChildResultAfterInterrupt_SuppressesNormalRouting` | T | T gate |
-| `pkg/factorysessionexecution/fake_service_runtime_test.go:2368` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestFakeService_InterruptAcceptedBeforeCompletion_ObservableDispatchAndEventOutcomes` | T | T gate |
-| `pkg/factorysessionexecution/fake_service_runtime_test.go:2668` | `pkgmaintcheck:ignore-function-lines` | `TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState` | T | T gate |
-| `pkg/factorysessionexecution/fake_service_runtime_test.go:2669` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState` | T | T gate |
-| `pkg/factorysessionexecution/fake_service_test.go:1` | `backendsizecheck:ignore-file` | `pkg/factorysessionexecution/fake_service_test.go` | T | T gate |
-| `pkg/factorysessionexecution/fake_service_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/factorysessionexecution/fake_service_test.go` | T | T gate |
-| `pkg/factorysessionexecution/fake_service_test.go:1007` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail` | T | T gate |
-| `pkg/factorysessionexecution/fake_service_test.go:1832` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestFakeService_InterruptDispatch_RecordsDispatchInterruptedEvent` | T | T gate |
-| `pkg/factorysessionexecution/fake_service_test.go:2195` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestFakeService_PauseResumeAppendsLifecycleControlEventsWithoutNoOpMutation` | T | T gate |
-| `pkg/factorysessionexecution/lifecycle.go:102` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `EvaluateLifecycleControl` | R | R gate |
-| `pkg/factorysessionexecution/listing.go:90` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `MatchesDurableSessionListFilters` | R | R gate |
-| `pkg/factorysessionexecution/listing.go:251` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `matchesLifecycleTimeFilters` | R | R gate |
-| `pkg/factorysessionexecution/resume.go:1` | `backendsizecheck:ignore-file` | `pkg/factorysessionexecution/resume.go` | F | F gate |
-| `pkg/factorysessionexecution/resume.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/factorysessionexecution/resume.go` | F | F gate |
-| `pkg/factorysessionexecution/resume.go:184` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `validateDurableResumeFacts` | R | R gate |
-
-### `pkg/factorysessionexecution/fixtures`
-
-Owner: `pkg/factorysessionexecution/fixtures` package maintainers. Status: **directive only**.
+Owner: `pkg/factory/sessions/execution` package maintainers. Status: **directive only**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/factorysessionexecution/fixtures/inspection_test.go:237` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestFakeService_InterruptDispatchRace_ObservableServiceOutcomes` | T | T gate |
-| `pkg/factorysessionexecution/fixtures/runtime_live_child_test.go:371` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatchOnWorkflowFailure` | T | T gate |
-| `pkg/factorysessionexecution/fixtures/runtime_live_child_test.go:701` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertParallelFailureFailedDispatch` | T | T gate |
-| `pkg/factorysessionexecution/fixtures/runtime_restart_resume_test.go:1` | `backendsizecheck:ignore-file` | `pkg/factorysessionexecution/fixtures/runtime_restart_resume_test.go` | T | T gate |
-| `pkg/factorysessionexecution/fixtures/runtime_restart_resume_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/factorysessionexecution/fixtures/runtime_restart_resume_test.go` | T | T gate |
+| `pkg/factory/sessions/execution/control.go:411` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `applyRuntimeExtendedLifecycleControl` | R | R gate |
+| `pkg/factory/sessions/execution/control.go:412` | `backendsizecheck:ignore-function` | `applyRuntimeExtendedLifecycleControl` | R | R gate |
+| `pkg/factory/sessions/execution/control.go:413` | `pkgmaintcheck:ignore-function-lines` | `applyRuntimeExtendedLifecycleControl` | R | R gate |
+| `pkg/factory/sessions/execution/control.go:519` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `applyRuntimeAcceptedLifecycleControl` | R | R gate |
+| `pkg/factory/sessions/execution/fake_fixture.go:93` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `parseFakeScenarioFromFixture` | R | R gate |
+| `pkg/factory/sessions/execution/fake_fixture.go:222` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `sessionReadFromFixtureMap` | R | R gate |
+| `pkg/factory/sessions/execution/fake_service.go:449` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `applyLifecycleControl` | R | R gate |
+| `pkg/factory/sessions/execution/fake_service.go:548` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `mutateSessionForControl` | R | R gate |
+| `pkg/factory/sessions/execution/fake_service_runtime_test.go:1` | `backendsizecheck:ignore-file` | `pkg/factory/sessions/execution/fake_service_runtime_test.go` | T | T gate |
+| `pkg/factory/sessions/execution/fake_service_runtime_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/factory/sessions/execution/fake_service_runtime_test.go` | T | T gate |
+| `pkg/factory/sessions/execution/fake_service_runtime_test.go:234` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestFakeService_InternalLifecycleHelpers` | T | T gate |
+| `pkg/factory/sessions/execution/fake_service_runtime_test.go:2274` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestJavaScriptRuntimeService_LateChildResultAfterInterrupt_SuppressesNormalRouting` | T | T gate |
+| `pkg/factory/sessions/execution/fake_service_runtime_test.go:2368` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestFakeService_InterruptAcceptedBeforeCompletion_ObservableDispatchAndEventOutcomes` | T | T gate |
+| `pkg/factory/sessions/execution/fake_service_runtime_test.go:2668` | `pkgmaintcheck:ignore-function-lines` | `TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState` | T | T gate |
+| `pkg/factory/sessions/execution/fake_service_runtime_test.go:2669` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState` | T | T gate |
+| `pkg/factory/sessions/execution/fake_service_test.go:1` | `backendsizecheck:ignore-file` | `pkg/factory/sessions/execution/fake_service_test.go` | T | T gate |
+| `pkg/factory/sessions/execution/fake_service_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/factory/sessions/execution/fake_service_test.go` | T | T gate |
+| `pkg/factory/sessions/execution/fake_service_test.go:1007` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail` | T | T gate |
+| `pkg/factory/sessions/execution/fake_service_test.go:1832` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestFakeService_InterruptDispatch_RecordsDispatchInterruptedEvent` | T | T gate |
+| `pkg/factory/sessions/execution/fake_service_test.go:2195` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestFakeService_PauseResumeAppendsLifecycleControlEventsWithoutNoOpMutation` | T | T gate |
+| `pkg/factory/sessions/execution/lifecycle.go:102` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `EvaluateLifecycleControl` | R | R gate |
+| `pkg/factory/sessions/execution/listing.go:90` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `MatchesDurableSessionListFilters` | R | R gate |
+| `pkg/factory/sessions/execution/listing.go:251` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `matchesLifecycleTimeFilters` | R | R gate |
+| `pkg/factory/sessions/execution/resume.go:1` | `backendsizecheck:ignore-file` | `pkg/factory/sessions/execution/resume.go` | F | F gate |
+| `pkg/factory/sessions/execution/resume.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/factory/sessions/execution/resume.go` | F | F gate |
+| `pkg/factory/sessions/execution/resume.go:184` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `validateDurableResumeFacts` | R | R gate |
+
+### `pkg/factory/sessions/execution/fixtures`
+
+Owner: `pkg/factory/sessions/execution/fixtures` package maintainers. Status: **directive only**.
+
+| Source | Directive rule | Target | Reason | Evidence |
+| --- | --- | --- | --- | --- |
+| `pkg/factory/sessions/execution/fixtures/inspection_test.go:237` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestFakeService_InterruptDispatchRace_ObservableServiceOutcomes` | T | T gate |
+| `pkg/factory/sessions/execution/fixtures/runtime_live_child_test.go:371` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatchOnWorkflowFailure` | T | T gate |
+| `pkg/factory/sessions/execution/fixtures/runtime_live_child_test.go:701` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertParallelFailureFailedDispatch` | T | T gate |
+| `pkg/factory/sessions/execution/fixtures/runtime_restart_resume_test.go:1` | `backendsizecheck:ignore-file` | `pkg/factory/sessions/execution/fixtures/runtime_restart_resume_test.go` | T | T gate |
+| `pkg/factory/sessions/execution/fixtures/runtime_restart_resume_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/factory/sessions/execution/fixtures/runtime_restart_resume_test.go` | T | T gate |
 
 ### `pkg/interfaces`
 
@@ -626,9 +626,9 @@ as follows:
 | Batch 006 — `converge-transport-family` | Every detailed directive file under `pkg/api/**`, `pkg/apisurface/**`, `pkg/cli/**`, and `pkg/mcp/**`. |
 | Batch 006 — `converge-model-worker-families` | Every detailed directive file under `pkg/workers/**`; the other named source families have no directive file in this snapshot. |
 | Batch 006 — `converge-work-family` | The named source roots (`pkg/invocations`, `pkg/materialize`, `pkg/timework`, `pkg/workcontent`, `pkg/workgraph`, and `pkg/workquery`) have no directive file in this snapshot. |
-| Batch 006 — `converge-factory-orchestrator-families` | Every detailed directive file under `pkg/factorysessionexecution/**`; the other explicitly named moved roots have no directive file in this snapshot. Core event-first `pkg/factory/**` files are not reserved by this work item. |
+| Batch 006 — `converge-factory-orchestrator-families` | Every detailed directive file under `pkg/factory/sessions/execution/**`; the other explicitly named moved roots have no directive file in this snapshot. Core event-first `pkg/factory/**` files are not reserved by this work item. |
 | Batch 006 — `converge-platform-and-interfaces` | Every detailed directive file under `pkg/interfaces/**`, `pkg/internal/cursorstorage/**`, and `pkg/replay/**`, matching the work item's interfaces, cursor-storage, and replay-infrastructure moves. |
-| Batch 007 — `move-session-state-to-factorysessions`, `split-runtime-build-ownership`, and `narrow-factory-service-facade` | Every detailed directive file under `pkg/factorysessionexecution/**` and `pkg/service/**`. |
+| Batch 007 — `move-session-state-to-factorysessions`, `split-runtime-build-ownership`, and `narrow-factory-service-facade` | Every detailed directive file under `pkg/factory/sessions/execution/**` and `pkg/service/**`. |
 | Batch 008 — `retire-legacy-composition-entrypoints` and `delete-host-composition-shims` | Every detailed directive file under `pkg/runtimehost/**` and `pkg/service/**`. Other Batch 008 deletion items have no additional directive file in this snapshot. |
 
 The overlay covers all **177** active occurrences across all **93** handwritten files:
@@ -641,7 +641,7 @@ every file in the named path set; the two file exceptions add the named PR colli
 | `pkg/api/**` | 6 | 12 | **Externally owned:** Batch 006 transport-family convergence |
 | `pkg/apisurface/**` | 6 | 8 | **Externally owned:** Batch 006 transport-family convergence |
 | `pkg/cli/**` | 12 | 18 | **Externally owned:** Batch 006 transport-family convergence; `pkg/cli/root_run_test.go` also collides with Batch 005 `create-root-process-owner` |
-| `pkg/factorysessionexecution/**` | 11 | 31 | **Externally owned:** Batch 006 factory/orchestrator convergence and Batch 007 session/service convergence |
+| `pkg/factory/sessions/execution/**` | 11 | 31 | **Externally owned:** Batch 006 factory/orchestrator convergence and Batch 007 session/service convergence |
 | `pkg/interfaces/**` | 2 | 3 | **Externally owned:** Batch 006 platform/interfaces convergence |
 | `pkg/internal/cursorstorage/**` | 5 | 10 | **Externally owned:** Batch 006 platform/interfaces convergence |
 | `pkg/mcp/**` | 4 | 9 | **Externally owned:** Batch 006 transport-family convergence |
@@ -693,7 +693,7 @@ but all files were compared when selecting the cohort.
 | #1040 `you-goal-b07-stream-program-gate` | `41ad64d6d527d7bb6c09131f94e71c879318f9f3` | `docs/internal/development/plans/you-goal/api-cli-response-stream-parity.md`; `docs/internal/development/plans/you-goal/goal-response-stream-integration.md`; `docs/internal/development/plans/you-goal/stream-responses-final-audit.md`; `docs/internal/development/plans/you-goal/subagent-response-stream-integration.md`; `docs/internal/processes/api-relevant-files.md`; `docs/internal/processes/invocation-relevant-files.md`; `pkg/cli/root.go`; `pkg/packagedfactories/subagent/materialize_test.go`; `pkg/workers/service/hosted_poller_test.go`; `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`; `tests/functional/smoke/cli_named_goal_routing_smoke_test.go`; `tests/functional/smoke/cli_named_response_stream_api_parity_smoke_test.go`; `tests/functional/smoke/cli_named_subagent_response_stream_smoke_test.go` |
 | #1062 `fix-sessions` | `76db760b53e0cb0a15b5da8485d4a74f851eb93d` | `factory/workstations/review/AGENTS.md`; `pkg/runtimehost/model_catalog_test.go`; `pkg/runtimehost/runtime_sessions.go` |
 | #1064 `stream-b03-sse-contract` | `be3d3136a5135be080597e488184b054a082a840` | `api/codegen_config/client.yaml`; `api/codegen_config/server.yaml`; `api/components/parameters/ResponseEventAfterSequence.yaml`; `api/components/parameters/ResponseEventDispatchID.yaml`; `api/components/parameters/ResponseEventKind.yaml`; `api/components/responses/ResponseEventBadRequest.yaml`; `api/components/responses/ResponseEventSessionNotFound.yaml`; `api/components/responses/ResponseEventStreamExpired.yaml`; `api/components/schemas/api/ErrorFamily.yaml`; `api/components/schemas/api/ErrorResponse.yaml`; `api/openapi-main.yaml`; `api/openapi.yaml`; `contracts/testdata/baseline/rest-operations.json`; `docs/internal/processes/api-relevant-files.md`; `pkg/api/contracttests/generated_contract_common_test.go`; `pkg/api/contracttests/openapi_contract_authoring_test.go`; `pkg/api/contracttests/openapi_contract_response_events_test.go`; `pkg/api/contracttests/openapi_contract_surface_test.go`; `pkg/api/generated/server.gen.go`; `pkg/config/openapitests/parity_inventory_test.go`; `pkg/generatedclient/client.gen.go`; `ui/src/api/generated/openapi.ts` |
-| #1066 `stream-b03-provider-adapter-kernel` | `f680f5737f131888137969574b2721f462f40b67` | `pkg/factorysessions/responseevents/draft.go`; `pkg/factorysessions/responseevents/draft_test.go`; `pkg/workers/provider/adapter/contract.go`; `pkg/workers/provider/adapter/contract_test.go`; `pkg/workers/provider/adapter/orchestration.go`; `pkg/workers/provider/adapter/orchestration_test.go`; `pkg/workers/provider/adapter/registry.go`; `pkg/workers/provider/adapter/registry_test.go`; `pkg/workers/provider/adapter/testkit/conformance.go`; `pkg/workers/provider/adapter/testkit/final_only_conformance.go`; `pkg/workers/provider/adapter/testkit/final_only_test.go`; `pkg/workers/provider/adapter/testkit/full_stream_test.go` |
+| #1066 `stream-b03-provider-adapter-kernel` | `f680f5737f131888137969574b2721f462f40b67` | `pkg/factory/sessions/responseevents/draft.go`; `pkg/factory/sessions/responseevents/draft_test.go`; `pkg/workers/provider/adapter/contract.go`; `pkg/workers/provider/adapter/contract_test.go`; `pkg/workers/provider/adapter/orchestration.go`; `pkg/workers/provider/adapter/orchestration_test.go`; `pkg/workers/provider/adapter/registry.go`; `pkg/workers/provider/adapter/registry_test.go`; `pkg/workers/provider/adapter/testkit/conformance.go`; `pkg/workers/provider/adapter/testkit/final_only_conformance.go`; `pkg/workers/provider/adapter/testkit/final_only_test.go`; `pkg/workers/provider/adapter/testkit/full_stream_test.go` |
 
 Active website-session work was also excluded from cohort selection. PR #1037's exact set
 is in the open-PR table; the other active sets were:

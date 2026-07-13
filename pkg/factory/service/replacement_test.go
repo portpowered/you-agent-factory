@@ -12,7 +12,7 @@ import (
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"go.uber.org/zap"
 )
 
@@ -64,7 +64,7 @@ func TestStartReplacement_AttachesSidecarsAfterReadinessInServiceMode(t *testing
 			Factory: factoryStub,
 			Logger:  zap.NewNop(),
 		},
-		Clock: clockwork.NewFakeClock(),
+		Clock:                       clockwork.NewFakeClock(),
 		AttachSidecarsInServiceMode: true,
 		AttachSidecars: func(_ context.Context, replacement *factoryservice.Handle) error {
 			if replacement == nil {

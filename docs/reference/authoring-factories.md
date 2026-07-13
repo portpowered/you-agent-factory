@@ -295,6 +295,34 @@ result modes, `you docs sessions` for stopped-run inspection and recovery, and
 `you docs models` for TTS readiness, direct invocation, and audio or JSON
 result choices.
 
+### Built-in `@you/goal` repeater
+
+The shipped goal factory is deliberately minimal. It defines only `goal:init`,
+`goal:execute`, `goal:complete`, and `goal:failed`, with one `goal-executor`
+worker and one `execute-goal` `AGENT_RUN` workstation using `REPEATER`
+behavior. Continue and reject outcomes route back to `goal:init` for another
+pass. An accepted response ending with `<COMPLETE>` advances to
+`goal:complete`, while worker or workstation failure routes to `goal:failed`.
+
+The factory's explicit `invocationReturn` selects `goal:complete`. The executor's
+final response, with the control token removed, is therefore returned as the
+invocation `primaryResult` instead of echoing the submitted goal text.
+
+The materialized built-in contains only these prompt-bearing entries:
+
+```text
+workers/goal-executor/AGENTS.md
+workstations/execute-goal/AGENTS.md
+```
+
+Stopped runs use the shared invocation recovery codes and inspection flow,
+including `INVOCATION_PAUSED`, `INVOCATION_INTERRUPTED`,
+`INVOCATION_RUNTIME_FAILURE`, `INVOCATION_TIMED_OUT`, and
+`INVOCATION_PRIMARY_RESULT_UNRESOLVED`. Customized materialized factories can
+also surface `INVOCATION_BLOCKED` or `INVOCATION_NEEDS_HUMAN`. Run
+`you docs sessions` for the inspect-first recovery steps; the built-in does not
+add goal-specific inspect or resume commands.
+
 On the first invocation the CLI materializes the built-in into
 `~/.you-agent-factory/you-agent-factories`, then loads later runs from that on-disk copy.
 That keeps the built-in editable: if you modify the materialized
