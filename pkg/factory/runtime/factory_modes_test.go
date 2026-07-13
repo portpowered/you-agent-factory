@@ -551,3 +551,146 @@ func TestGetEngineStateSnapshot_AggregatesRuntimeLifecycleUptimeAndTopology(t *t
 		t.Fatal("timed out waiting for factory run to stop")
 	}
 }
+
+func TestRuntimeVisitCountRoutesSharedTraceSiblingsIndependentlyAtThreshold(t *testing.T) {
+	const (
+		maxReviews  = 3
+		sharedTrace = "trace-shared-siblings"
+	)
+	f, err := New(
+		factory.WithNet(buildVisitCountSiblingIsolationNet(maxReviews)),
+		factory.WithServiceMode(),
+		factory.WithInlineDispatch(),
+		factory.WithWorkerExecutor("mock", &passExecutor{}),
+		factory.WithLogger(logging.NoopLogger{}),
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx := context.Background()
+	if _, err := submitWorkRequests(ctx, f, sharedTraceSiblingSubmissions(sharedTrace)); err != nil {
+		t.Fatalf("SubmitWorkRequest: %v", err)
+	}
+	tickable := tickableFactory(t, f)
+	for completedReviews := 1; completedReviews <= maxReviews; completedReviews++ {
+		if err := tickable.Tick(ctx); err != nil {
+			t.Fatalf("Tick review cycle %d: %v", completedReviews, err)
+		}
+		snapshot := runtimeSnapshot(t, f)
+		assertWorkVisitState(t, snapshot, "work-repeated", "task:review", completedReviews)
+		assertWorkVisitState(t, snapshot, "work-unaffected", "task:held", 0)
+		assertReviewDispatch(t, snapshot, completedReviews-1, "work-repeated")
+	}
+
+	if err := tickable.Tick(ctx); err != nil {
+		t.Fatalf("Tick loop breaker: %v", err)
+	}
+	exhausted := runtimeSnapshot(t, f)
+	assertWorkVisitState(t, exhausted, "work-repeated", "task:failed", maxReviews)
+	assertWorkVisitState(t, exhausted, "work-unaffected", "task:held", 0)
+	if len(exhausted.DispatchHistory) != maxReviews {
+		t.Fatalf("dispatch count after exhaustion = %d, want %d", len(exhausted.DispatchHistory), maxReviews)
+	}
+
+	if _, err := f.MoveWork(ctx, "work-unaffected", "review", interfaces.WorkStateChangeSourceCLI, ""); err != nil {
+		t.Fatalf("MoveWork unaffected sibling to review: %v", err)
+	}
+	if err := tickable.Tick(ctx); err != nil {
+		t.Fatalf("Tick unaffected sibling first review: %v", err)
+	}
+	independent := runtimeSnapshot(t, f)
+	assertWorkVisitState(t, independent, "work-unaffected", "task:review", 1)
+	assertReviewDispatch(t, independent, maxReviews, "work-unaffected")
+}
+
+func buildVisitCountSiblingIsolationNet(maxReviews int) *state.Net {
+	workType := &state.WorkType{
+		ID:   "task",
+		Name: "Task",
+		States: []state.StateDefinition{
+			{Value: "held", Category: state.StateCategoryInitial},
+			{Value: "review", Category: state.StateCategoryProcessing},
+			{Value: "done", Category: state.StateCategoryTerminal},
+			{Value: "failed", Category: state.StateCategoryFailed},
+		},
+	}
+	places := make(map[string]*petri.Place)
+	for _, place := range workType.GeneratePlaces() {
+		places[place.ID] = place
+	}
+	reviewInput := petri.Arc{
+		ID: "review-in", Name: "work", PlaceID: "task:review", Direction: petri.ArcInput,
+		Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+	}
+	return &state.Net{
+		ID: "visit-count-sibling-isolation", Places: places,
+		WorkTypes: map[string]*state.WorkType{"task": workType}, Resources: make(map[string]*state.ResourceDef),
+		Transitions: map[string]*petri.Transition{
+			"quality-check": {
+				ID: "quality-check", Name: "quality-check", Type: petri.TransitionNormal, WorkerType: "mock",
+				InputArcs:  []petri.Arc{reviewInput},
+				OutputArcs: []petri.Arc{{ID: "review-again", PlaceID: "task:review", Direction: petri.ArcOutput}},
+			},
+			"review-loop-breaker": {
+				ID: "review-loop-breaker", Name: "review-loop-breaker", Type: petri.TransitionExhaustion,
+				InputArcs: []petri.Arc{{
+					ID: "exhausted-review", Name: "work", PlaceID: "task:review", Direction: petri.ArcInput,
+					Cardinality: petri.ArcCardinality{Mode: petri.CardinalityOne},
+					Guard:       &petri.VisitCountGuard{TransitionID: "quality-check", MaxVisits: maxReviews},
+				}},
+				OutputArcs: []petri.Arc{{ID: "review-failed", PlaceID: "task:failed", Direction: petri.ArcOutput}},
+			},
+		},
+	}
+}
+
+func sharedTraceSiblingSubmissions(sharedTrace string) []interfaces.SubmitRequest {
+	return []interfaces.SubmitRequest{
+		{RequestID: "request-shared-siblings", WorkID: "work-repeated", Name: "repeated", WorkTypeID: "task", TargetState: "review", CurrentChainingTraceID: sharedTrace, TraceID: sharedTrace},
+		{RequestID: "request-shared-siblings", WorkID: "work-unaffected", Name: "unaffected", WorkTypeID: "task", TargetState: "held", CurrentChainingTraceID: sharedTrace, TraceID: sharedTrace},
+	}
+}
+
+func runtimeSnapshot(t *testing.T, f factory.Factory) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	t.Helper()
+	snapshot, err := f.GetEngineStateSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("GetEngineStateSnapshot: %v", err)
+	}
+	return snapshot
+}
+
+func assertWorkVisitState(t *testing.T, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], workID, placeID string, visits int) {
+	t.Helper()
+	for _, token := range snapshot.Marking.Tokens {
+		if token.Color.WorkID != workID {
+			continue
+		}
+		if token.PlaceID != placeID {
+			t.Fatalf("work %s place = %q, want %q", workID, token.PlaceID, placeID)
+		}
+		if got := token.History.TotalVisits["quality-check"]; got != visits {
+			t.Fatalf("work %s quality-check visits = %d, want %d", workID, got, visits)
+		}
+		return
+	}
+	t.Fatalf("work %s missing from marking", workID)
+}
+
+func assertReviewDispatch(t *testing.T, snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], index int, workID string) {
+	t.Helper()
+	if len(snapshot.DispatchHistory) <= index {
+		t.Fatalf("dispatch history count = %d, want index %d", len(snapshot.DispatchHistory), index)
+	}
+	dispatch := snapshot.DispatchHistory[index]
+	if dispatch.TransitionID != "quality-check" {
+		t.Fatalf("dispatch[%d] transition = %q, want quality-check", index, dispatch.TransitionID)
+	}
+	for _, token := range dispatch.ConsumedTokens {
+		if token.Color.WorkID == workID {
+			return
+		}
+	}
+	t.Fatalf("dispatch[%d] did not consume work %s", index, workID)
+}
