@@ -744,10 +744,7 @@ func loadWorkersFromConfig(
 	preflight := runnerSelectionPreflight{
 		skipCommandAvailability: providerOverride != nil || providerCommandRunner != nil || skipBuiltInRunnerPrerequisiteValidation,
 	}
-	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryRunnerID, runtimeCfg, preflight); err != nil {
-		return nil, err
-	}
-	if err := invocations.ValidateInvocationSkipPermissionsWorkers(factoryCfg, runtimeCfg, invocationSkipPermissionsOverride); err != nil {
+	if err := validateWorkerLoadPreflight(factoryCfg, factoryRunnerID, runtimeCfg, preflight, invocationSkipPermissionsOverride); err != nil {
 		return nil, err
 	}
 	for _, workerCfg := range factoryCfg.Workers {
@@ -785,6 +782,19 @@ func loadWorkersFromConfig(
 		}))
 	}
 	return opts, nil
+}
+
+func validateWorkerLoadPreflight(
+	factoryCfg *interfaces.FactoryConfig,
+	factoryRunnerID string,
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	preflight runnerSelectionPreflight,
+	invocationSkipPermissionsOverride *bool,
+) error {
+	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryRunnerID, runtimeCfg, preflight); err != nil {
+		return err
+	}
+	return invocations.ValidateInvocationSkipPermissionsWorkers(factoryCfg, runtimeCfg, invocationSkipPermissionsOverride)
 }
 
 func configuredWorkstationExecutor(
