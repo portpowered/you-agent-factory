@@ -191,7 +191,7 @@ you use this proof for closeout review.
 
 | Need | Use |
 |------|-----|
-| Validate JavaScript source before durable execution | [Canonical JavaScript Factory Session Path](#canonical-javascript-factory-session-path) and `you docs orchestrators` |
+| Validate JavaScript source before durable execution | [JavaScript Factory Session model](#javascript-factory-session-model) and `you docs javascript-workflows` |
 | Recover a stopped `@you/goal` run through existing session and work controls | [Stopped goal inspect and recovery](#stopped-goal-inspect-and-recovery) and `you docs run` |
 | Confirm anything is listening before `you submit` or `POST /factory-sessions/{session_id}/work` | [Session list](#session-list) |
 | Read the active factory name and directory on a live host | [Factory query](#factory-query) |
