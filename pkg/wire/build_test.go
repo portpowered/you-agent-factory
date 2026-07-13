@@ -120,6 +120,7 @@ func TestBuildRejectsTypedNilConstructedCollaborator(t *testing.T) {
 		var api *recordingLifecycle
 		return wire.Constructed[wire.TransportLifecycles]{Value: wire.TransportLifecycles{
 			API: api,
+			CLI: fixture.transports.CLI,
 			MCP: fixture.transports.MCP,
 		}}, nil
 	}

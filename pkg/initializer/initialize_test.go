@@ -2,8 +2,10 @@ package initializer_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config"
@@ -13,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/pkg/wire"
 	"go.uber.org/zap"
 )
 
@@ -282,4 +285,112 @@ func TestSessionRuntimeHost_NilReceiverMethodsAreSafe(t *testing.T) {
 	if host.CompatibilityServiceShell() != nil {
 		t.Fatal("expected nil compatibility shell for nil host")
 	}
+}
+
+func TestStartConsumesGraphAndActivatesSelectedMode(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name      string
+		mode      initializer.Mode
+		wantStart []string
+	}{
+		{name: "API", mode: initializer.ModeAPI, wantStart: []string{"runtime", "workers", "dashboard", "api"}},
+		{name: "CLI", mode: initializer.ModeCLI, wantStart: []string{"runtime", "workers", "dashboard", "cli"}},
+		{name: "MCP", mode: initializer.ModeMCP, wantStart: []string{"mcp"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			fixture := newApplicationFixture()
+			application, err := initializer.Start(context.Background(), test.mode, fixture.graph)
+			if err != nil {
+				t.Fatalf("Start() error = %v", err)
+			}
+			if application.Graph() != fixture.graph {
+				t.Fatal("Start() replaced the constructed graph")
+			}
+			if !reflect.DeepEqual(fixture.starts, test.wantStart) {
+				t.Fatalf("start order = %v, want %v", fixture.starts, test.wantStart)
+			}
+
+			if err := application.Shutdown(context.Background()); err != nil {
+				t.Fatalf("Shutdown() error = %v", err)
+			}
+			wantStops := reversed(test.wantStart)
+			if !reflect.DeepEqual(fixture.stops, wantStops) {
+				t.Fatalf("stop order = %v, want %v", fixture.stops, wantStops)
+			}
+			if err := application.Shutdown(context.Background()); err != nil {
+				t.Fatalf("second Shutdown() error = %v", err)
+			}
+			if !reflect.DeepEqual(fixture.stops, wantStops) {
+				t.Fatalf("second shutdown changed stops to %v", fixture.stops)
+			}
+		})
+	}
+}
+
+func TestStartFailureUnwindsActivatedCollaborators(t *testing.T) {
+	t.Parallel()
+
+	fixture := newApplicationFixture()
+	cause := errors.New("listener unavailable")
+	fixture.api.startErr = cause
+
+	application, err := initializer.Start(context.Background(), initializer.ModeAPI, fixture.graph)
+	if application != nil || !errors.Is(err, cause) {
+		t.Fatalf("Start() = (%v, %v), want nil application wrapping cause", application, err)
+	}
+	if want := []string{"dashboard", "workers", "runtime"}; !reflect.DeepEqual(fixture.stops, want) {
+		t.Fatalf("stop order = %v, want %v", fixture.stops, want)
+	}
+}
+
+type applicationFixture struct {
+	graph  *wire.Graph
+	starts []string
+	stops  []string
+	api    *applicationLifecycle
+}
+
+func newApplicationFixture() *applicationFixture {
+	fixture := &applicationFixture{}
+	lifecycle := func(name string) *applicationLifecycle {
+		return &applicationLifecycle{name: name, starts: &fixture.starts, stops: &fixture.stops}
+	}
+	fixture.api = lifecycle("api")
+	fixture.graph = &wire.Graph{
+		Transports: wire.TransportLifecycles{API: fixture.api, CLI: lifecycle("cli"), MCP: lifecycle("mcp")},
+		Sidecars: wire.SidecarLifecycles{
+			Runtime:   lifecycle("runtime"),
+			Workers:   lifecycle("workers"),
+			Dashboard: lifecycle("dashboard"),
+		},
+	}
+	return fixture
+}
+
+type applicationLifecycle struct {
+	name     string
+	starts   *[]string
+	stops    *[]string
+	startErr error
+}
+
+func (l *applicationLifecycle) Start(context.Context) error {
+	*l.starts = append(*l.starts, l.name)
+	return l.startErr
+}
+
+func (l *applicationLifecycle) Stop(context.Context) error {
+	*l.stops = append(*l.stops, l.name)
+	return nil
+}
+
+func reversed(values []string) []string {
+	result := make([]string, len(values))
+	for index := range values {
+		result[len(values)-1-index] = values[index]
+	}
+	return result
 }

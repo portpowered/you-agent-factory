@@ -116,7 +116,7 @@ func validFixture(t *testing.T) *buildFixture {
 			FactorySessions:   &factorysessionsservice.Service{},
 			DurableExecution:  durable,
 		},
-		transports: wire.TransportLifecycles{API: &recordingLifecycle{}, MCP: &recordingLifecycle{}},
+		transports: wire.TransportLifecycles{API: &recordingLifecycle{}, CLI: &recordingLifecycle{}, MCP: &recordingLifecycle{}},
 		sidecars: wire.SidecarLifecycles{
 			Runtime:   &recordingLifecycle{},
 			Workers:   &recordingLifecycle{},
@@ -177,6 +177,7 @@ func assertNoLifecycleCalls(t *testing.T, fixture *buildFixture) {
 	t.Helper()
 	for name, lifecycle := range map[string]*recordingLifecycle{
 		"api":       fixture.transports.API.(*recordingLifecycle),
+		"cli":       fixture.transports.CLI.(*recordingLifecycle),
 		"mcp":       fixture.transports.MCP.(*recordingLifecycle),
 		"runtime":   fixture.sidecars.Runtime.(*recordingLifecycle),
 		"workers":   fixture.sidecars.Workers.(*recordingLifecycle),

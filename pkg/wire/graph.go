@@ -46,6 +46,7 @@ type RuntimeDependencies struct {
 // may activate for a selected process mode.
 type TransportLifecycles struct {
 	API Lifecycle
+	CLI Lifecycle
 	MCP Lifecycle
 }
 

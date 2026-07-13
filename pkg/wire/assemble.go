@@ -36,6 +36,8 @@ func validateTransports(transports TransportLifecycles) error {
 	switch {
 	case isNil(transports.API):
 		return errors.New("API transport lifecycle is required")
+	case isNil(transports.CLI):
+		return errors.New("CLI transport lifecycle is required")
 	case isNil(transports.MCP):
 		return errors.New("MCP transport lifecycle is required")
 	default:
