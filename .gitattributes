@@ -3,3 +3,4 @@ contracts/testdata/baseline/** text eol=lf
 pkg/config/globalconfiginventory/testdata/** text eol=lf
 pkg/config/operatorconfig/testdata/** text eol=lf
 pkg/config/systemconfig/testdata/** text eol=lf
+internal/contractjoiner/testdata/canonical/golden/** text eol=lf
