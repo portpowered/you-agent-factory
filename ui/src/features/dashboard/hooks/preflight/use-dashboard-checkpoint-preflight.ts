@@ -6,7 +6,10 @@ import type {
   FactoryTimelineCheckpoint,
   TimelineCheckpointStreamIdentity,
 } from "../../../timeline/public";
-import { clearTimelineCheckpointsForSession } from "../../../timeline/public";
+import {
+  clearTimelineCheckpointsForSession,
+  deletePersistedTimelineCheckpoint,
+} from "../../../timeline/public";
 import {
   isDefaultToRuntimeSessionAliasRemap,
   recoverDashboardSessionScopedState,
@@ -66,7 +69,10 @@ export function useDashboardCheckpointPreflight({
   checkpointsDisabled: boolean;
   rawSessionID: string | null;
   refreshToken: number;
-  restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => void;
+  restoreCheckpoint: (
+    streamIdentity: TimelineCheckpointStreamIdentity,
+    checkpoint: FactoryTimelineCheckpoint,
+  ) => void;
 }): UseDashboardCheckpointPreflightResult {
   const queryClient = useQueryClient();
   const remapSelectedSessionID = useRemapDashboardSelectedSession();
@@ -155,11 +161,19 @@ export function useDashboardCheckpointPreflight({
       if (!remainsActive(resolution.requestedSessionId)) return;
 
       if (resolution.clearRequestedSessionCheckpoint) {
-        await clearTimelineCheckpointsForSession(
-          window.indexedDB,
-          resolution.requestedSessionId,
-          { signal },
-        );
+        if (resolution.checkpointToDelete) {
+          await deletePersistedTimelineCheckpoint(
+            window.indexedDB,
+            resolution.checkpointToDelete,
+            { signal },
+          );
+        } else {
+          await clearTimelineCheckpointsForSession(
+            window.indexedDB,
+            resolution.requestedSessionId,
+            { signal },
+          );
+        }
         if (!remainsActive(resolution.requestedSessionId)) return;
         recoverDashboardSessionScopedState(
           queryClient,
@@ -198,7 +212,7 @@ export function useDashboardCheckpointPreflight({
         remapSelectedSessionID(resolution.resolvedSessionId);
       }
       if (resolution.kind === "resume" && resolution.checkpoint) {
-        restoreCheckpoint({
+        restoreCheckpoint(resolution.streamIdentity, {
           ...resolution.checkpoint,
           syncIdentity: checkpointSyncIdentityFromPreflight(
             resolution.streamIdentity,

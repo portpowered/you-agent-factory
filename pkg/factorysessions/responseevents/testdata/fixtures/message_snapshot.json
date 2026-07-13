@@ -10,6 +10,7 @@
   "provenance": {
     "provider": "example-provider",
     "nativeEventType": "message.completed",
+    "nativeEventSubtype": "assistant.final",
     "delivery": "NATIVE_STREAM",
     "representation": "SNAPSHOT",
     "fidelity": "LOSSLESS"
@@ -34,5 +35,6 @@
   "dispatchId": "dispatch-001",
   "turnId": "turn-001",
   "itemId": "item-msg-002",
-  "parentItemId": "item-msg-001"
+  "parentItemId": "item-msg-001",
+  "providerSessionRef": "provider-session-001"
 }

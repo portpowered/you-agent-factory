@@ -2907,41 +2907,16 @@ func TestFactoryService_PausedSessionBufferedWorkerResult_DoesNotAffectOtherSess
 		release:     make(chan struct{}),
 	}
 
-	rootDir := t.TempDir()
 	secondDir := t.TempDir()
-	writeFactoryJSON(t, rootDir, minimalFactoryConfig())
 	writeFactoryJSON(t, secondDir, minimalFactoryConfig())
 
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:               rootDir,
-		RuntimeMode:       interfaces.RuntimeModeService,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		ExtraOptions: []factory.FactoryOption{
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+		extraOptions: []factory.FactoryOption{
 			factory.WithWorkerExecutor("worker-a", blocking),
 		},
 	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-
-	runCtx, cancelRun := context.WithCancel(context.Background())
-	runErrCh := make(chan error, 1)
-	go func() {
-		runErrCh <- svc.Run(runCtx)
-	}()
-	defer func() {
-		cancelRun()
-		select {
-		case err := <-runErrCh:
-			if err != nil {
-				t.Fatalf("Run after cancellation: %v", err)
-			}
-		case <-time.After(time.Second):
-			t.Fatal("timed out waiting for service shutdown")
-		}
-	}()
-
-	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
+	svc := harness.svc
 	openResult, err := svc.OpenFactorySessionFromFolder(context.Background(), secondDir, nil, false, false)
 	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder: %v", err)

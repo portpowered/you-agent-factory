@@ -3,6 +3,7 @@ package configinitcmd_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,7 +14,70 @@ import (
 	configinitcmd "github.com/portpowered/infinite-you/pkg/cli/configinit"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
+	"github.com/spf13/cobra"
 )
+
+func TestConfigInitCommand_UsesSuppliedHomeResolver(t *testing.T) {
+	originalRunInit := configinitcmd.RunInit
+	defer func() { configinitcmd.RunInit = originalRunInit }()
+
+	homeDir := t.TempDir()
+	var got configinitcmd.InitConfig
+	configinitcmd.RunInit = func(cfg configinitcmd.InitConfig) error {
+		got = cfg
+		return nil
+	}
+	cmd := configinitcmd.NewSystemConfigCommand("you", configinitcmd.CommandGlobals{
+		JSON: func() bool { return false }, HomeDir: func() (string, error) { return homeDir, nil },
+	}, configinitcmd.CommandDiagnostics{
+		Writer: func(*cobra.Command) io.Writer { return io.Discard }, Verbose: func() bool { return false },
+	})
+	cmd.SetArgs([]string{"init"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if got.HomeDir != homeDir {
+		t.Fatalf("InitConfig.HomeDir = %q, want %q", got.HomeDir, homeDir)
+	}
+}
+
+func TestConfigInitCommand_ReturnsSuppliedHomeResolverFailure(t *testing.T) {
+	wantErr := errors.New("home unavailable")
+	cmd := configinitcmd.NewSystemConfigCommand("you", configinitcmd.CommandGlobals{
+		JSON: func() bool { return false }, HomeDir: func() (string, error) { return "", wantErr },
+	}, configinitcmd.CommandDiagnostics{
+		Writer: func(*cobra.Command) io.Writer { return io.Discard }, Verbose: func() bool { return false },
+	})
+	cmd.SetArgs([]string{"init"})
+	if err := cmd.Execute(); !errors.Is(err, wantErr) {
+		t.Fatalf("Execute() error = %v, want wrapped %v", err, wantErr)
+	}
+}
+
+func TestConfigCommand_ShowsHelpAndRejectsUnexpectedArguments(t *testing.T) {
+	newCommand := func() *cobra.Command {
+		return configinitcmd.NewSystemConfigCommand("you", configinitcmd.CommandGlobals{
+			JSON: func() bool { return false },
+		}, configinitcmd.CommandDiagnostics{
+			Writer: func(*cobra.Command) io.Writer { return io.Discard }, Verbose: func() bool { return false },
+		})
+	}
+	var help bytes.Buffer
+	command := newCommand()
+	command.SetOut(&help)
+	if err := command.Execute(); err != nil {
+		t.Fatalf("Execute(config) error = %v", err)
+	}
+	if !strings.Contains(help.String(), "Initialize operator and system configuration") {
+		t.Fatalf("help output = %q", help.String())
+	}
+
+	command = newCommand()
+	command.SetArgs([]string{"unexpected"})
+	if err := command.Execute(); err == nil || !strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("Execute(config unexpected) error = %v, want unknown command", err)
+	}
+}
 
 func TestConfigInitCommand_MapsGlobalJSONFlagToInitConfig(t *testing.T) {
 	originalRunInit := configinitcmd.RunInit

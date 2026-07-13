@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -393,7 +394,6 @@ func TestFileWatcher_JSONFactoryRequestBatchMapsWorkTypeName(t *testing.T) {
 	}
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this watcher batch-contract test keeps parent-child mapping and canonical submit assertions in one scenario.
 func TestFileWatcher_JSONFactoryRequestBatchAcceptsParentChildByWorkName(t *testing.T) {
 	dir := setupWatchDir(t)
 	data := []byte(`{
@@ -441,29 +441,23 @@ func TestFileWatcher_JSONFactoryRequestBatchAcceptsParentChildByWorkName(t *test
 		t.Fatalf("child relations = %d, want 2", len(child.Relations))
 	}
 
-	var foundParentChild bool
-	var foundDependsOn bool
+	relationsByType := make(map[interfaces.RelationType]interfaces.Relation, len(child.Relations))
 	for _, relation := range child.Relations {
-		switch relation.Type {
-		case interfaces.RelationParentChild:
-			foundParentChild = true
-			if relation.TargetWorkID != "batch-request-batch-parent-child-parent" {
-				t.Fatalf("parent-child target = %q, want batch-request-batch-parent-child-parent", relation.TargetWorkID)
-			}
-		case interfaces.RelationDependsOn:
-			foundDependsOn = true
-			if relation.TargetWorkID != "batch-request-batch-parent-child-prerequisite" {
-				t.Fatalf("depends_on target = %q, want batch-request-batch-parent-child-prerequisite", relation.TargetWorkID)
-			}
-		default:
-			t.Fatalf("unexpected relation = %#v", relation)
-		}
+		relationsByType[relation.Type] = relation
 	}
-	if !foundParentChild {
-		t.Fatal("missing parent-child relation")
+	wantRelations := map[interfaces.RelationType]interfaces.Relation{
+		interfaces.RelationParentChild: {
+			Type:         interfaces.RelationParentChild,
+			TargetWorkID: "batch-request-batch-parent-child-parent",
+		},
+		interfaces.RelationDependsOn: {
+			Type:          interfaces.RelationDependsOn,
+			TargetWorkID:  "batch-request-batch-parent-child-prerequisite",
+			RequiredState: "complete",
+		},
 	}
-	if !foundDependsOn {
-		t.Fatal("missing depends_on relation")
+	if !reflect.DeepEqual(relationsByType, wantRelations) {
+		t.Fatalf("child relations = %#v, want %#v", relationsByType, wantRelations)
 	}
 }
 

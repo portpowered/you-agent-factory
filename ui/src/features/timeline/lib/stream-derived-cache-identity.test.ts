@@ -32,10 +32,11 @@ describe("stream-derived cache identity", () => {
     expect(streamDerivedCacheKeyPrefix(IDENTITY_FIXTURE)).toEqual([
       "backend-scope-a",
       "a1b2c3d4-e5f6-4789-a012-3456789abcde",
+      "logical-default",
       "2026-06-26T00:00:00Z",
     ]);
     expect(streamDerivedCheckpointStorageKey(IDENTITY_FIXTURE)).toBe(
-      "backend-scope-a::a1b2c3d4-e5f6-4789-a012-3456789abcde::2026-06-26T00:00:00Z",
+      "backend-scope-a::a1b2c3d4-e5f6-4789-a012-3456789abcde::logical-default::2026-06-26T00:00:00Z",
     );
   });
 });

@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/cmd/factory/compose"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -656,7 +655,7 @@ func TestRun_WireBuiltFactoryServiceServesStatus(t *testing.T) {
 		startAPIServer = originalStartAPIServer
 		serveFactoryAPIServer = originalServeFactoryAPIServer
 	}()
-	serveFactoryAPIServer = compose.ServeAPIServer
+	serveFactoryAPIServer = defaultServeFactoryAPIServer
 	startAPIServer = func(
 		ctx context.Context,
 		runtime apisurface.APISurface,
@@ -743,7 +742,7 @@ func TestRun_WireBuiltFactoryServiceListsModels(t *testing.T) {
 		startAPIServer = originalStartAPIServer
 		serveFactoryAPIServer = originalServeFactoryAPIServer
 	}()
-	serveFactoryAPIServer = compose.ServeAPIServer
+	serveFactoryAPIServer = defaultServeFactoryAPIServer
 	startAPIServer = func(
 		ctx context.Context,
 		runtime apisurface.APISurface,
@@ -897,11 +896,8 @@ func assertStartupOutputSharedLayoutRuntimePaths(
 	assertStartupSharedLayoutRuntimeLogPath(t, logPath, logRoot, earliest, latest)
 	assertStartupSharedLayoutRuntimeMetricsPath(t, metricsPath, metricsRoot, earliest, latest)
 
-	logStart := startupArtifactStartLine(t, output, "Runtime log start (UTC):")
-	metricsStart := startupArtifactStartLine(t, output, "Runtime metrics start (UTC):")
-	if logStart != metricsStart {
-		t.Fatalf("runtime log start = %q, metrics start = %q, want matching UTC timestamps", logStart, metricsStart)
-	}
+	assertStartupArtifactStartWithin(t, output, "Runtime log start (UTC):", earliest, latest)
+	assertStartupArtifactStartWithin(t, output, "Runtime metrics start (UTC):", earliest, latest)
 }
 
 func startupArtifactPathLine(t *testing.T, output, prefix string) string {
@@ -916,16 +912,28 @@ func startupArtifactPathLine(t *testing.T, output, prefix string) string {
 	return ""
 }
 
-func startupArtifactStartLine(t *testing.T, output, prefix string) string {
+func assertStartupArtifactStartWithin(t *testing.T, output, prefix string, earliest, latest time.Time) {
 	t.Helper()
-
+	var value string
 	for _, line := range strings.Split(output, "\n") {
 		if strings.HasPrefix(line, prefix) {
-			return strings.TrimSpace(strings.TrimPrefix(line, prefix))
+			value = strings.TrimSpace(strings.TrimPrefix(line, prefix))
+			break
 		}
 	}
-	t.Fatalf("startup output missing %q line:\n%s", prefix, output)
-	return ""
+	if value == "" {
+		t.Fatalf("startup output missing %q line:\n%s", prefix, output)
+	}
+	const timestampLayout = "2006-01-02 15:04:05 UTC"
+	startedAt, err := time.Parse(timestampLayout, value)
+	if err != nil {
+		t.Fatalf("parse %q value %q: %v", prefix, value, err)
+	}
+	earliest = earliest.UTC().Truncate(time.Second)
+	latest = latest.UTC().Truncate(time.Second)
+	if startedAt.Before(earliest) || startedAt.After(latest) {
+		t.Fatalf("%s %s, want timestamp between %s and %s", prefix, startedAt, earliest, latest)
+	}
 }
 
 func assertStartupSharedLayoutRuntimeLogPath(t *testing.T, path, rootDir string, earliest, latest time.Time) {

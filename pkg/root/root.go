@@ -1,32 +1,77 @@
-// Package root selects the process mode and transfers a constructed graph to
-// pkg/initializer. Dependency construction belongs to pkg/wire and lifecycle
-// execution belongs to pkg/initializer.
 package root
 
 import (
 	"context"
 	"fmt"
+	"runtime"
+	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/initializer"
-	"github.com/portpowered/infinite-you/pkg/wire"
+	"github.com/portpowered/infinite-you/pkg/cli"
+	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
+	"github.com/spf13/cobra"
 )
 
-// Inputs contains normalized process selection and explicit graph inputs.
-type Inputs struct {
-	Mode  initializer.Mode
-	Graph wire.Inputs
+// NewCommand constructs a fresh compatible command tree for one normalized
+// process execution.
+func NewCommand(input ProcessInput) *cobra.Command {
+	return NewCommandWithDependencies(input, Dependencies{})
 }
 
-// Start constructs one graph before delegating lifecycle activation to
-// initializer. A construction failure cannot expose a partially started app.
-func Start(ctx context.Context, inputs Inputs) (*initializer.Application, error) {
-	graph, err := wire.Build(ctx, inputs.Graph)
+// NewCommandWithDependencies constructs a command using explicit process
+// construction and lifecycle boundaries.
+func NewCommandWithDependencies(input ProcessInput, dependencies Dependencies) *cobra.Command {
+	dependencies = normalizeDependencies(dependencies)
+	command := cli.NewRootCommandWithOptions(cli.RootCommandOptions{
+		HomeDir:   func() (string, error) { return homeDir(input) },
+		LookupEnv: input.LookupEnv,
+		Startup: func(ctx context.Context, request startupcli.Request) error {
+			return executeStartup(ctx, request, dependencies)
+		},
+	})
+	command.SetArgs(input.Arguments())
+	command.SetIn(input.stdin)
+	command.SetOut(input.stdout)
+	command.SetErr(input.stderr)
+	command.SetContext(input.context)
+	return command
+}
+
+// Execute normalizes input and executes a fresh command instance.
+func Execute(input Input) error {
+	normalized, err := Normalize(input)
 	if err != nil {
-		return nil, fmt.Errorf("start process: %w", err)
+		return err
 	}
-	application, err := initializer.Start(ctx, inputs.Mode, graph)
+	return NewCommand(normalized).Execute()
+}
+
+// ExecuteWithDependencies executes one process with explicit graph and
+// initializer boundaries. It is the deterministic process-level test seam.
+func ExecuteWithDependencies(input Input, dependencies Dependencies) error {
+	normalized, err := Normalize(input)
 	if err != nil {
-		return nil, fmt.Errorf("start process: %w", err)
+		return err
 	}
-	return application, nil
+	return NewCommandWithDependencies(normalized, dependencies).Execute()
+}
+
+func homeDir(input ProcessInput) (string, error) {
+	var home string
+	switch runtime.GOOS {
+	case "windows":
+		home, _ = input.LookupEnv("USERPROFILE")
+		if home == "" {
+			drive, _ := input.LookupEnv("HOMEDRIVE")
+			path, _ := input.LookupEnv("HOMEPATH")
+			home = drive + path
+		}
+	case "plan9":
+		home, _ = input.LookupEnv("home")
+	default:
+		home, _ = input.LookupEnv("HOME")
+	}
+	if strings.TrimSpace(home) != "" {
+		return home, nil
+	}
+	return "", fmt.Errorf("home directory is not defined in the supplied environment")
 }

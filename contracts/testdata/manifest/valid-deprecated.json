@@ -1,0 +1,36 @@
+{
+  "formatVersion": "1.0.0",
+  "packageId": "example.contracts",
+  "packageVersion": "2.4.0",
+  "sourceCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "familyFormatVersions": {"example.widgets": "1.2.0"},
+  "exports": {
+    "example.widget.legacy": {
+      "path": "contracts/example/widgets/legacy.schema.json",
+      "family": "example.widgets",
+      "artifactHash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.widget.legacy",
+        "documentation": {
+          "title": {"id": "example.widget.legacy.title", "canonicalEnglish": "Legacy widget"},
+          "description": {"id": "example.widget.legacy.description", "canonicalEnglish": "Describes the legacy widget export."}
+        },
+        "examples": ["legacy"],
+        "visibility": "internal",
+        "sourceHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.widget.legacy",
+        "state": "deprecated",
+        "since": "1.0.0",
+        "deprecated": "2.0.0",
+        "successor": {
+          "targetItemId": "example.widget.create",
+          "canonicalEnglish": "Use the create widget export."
+        }
+      }
+    }
+  }
+}

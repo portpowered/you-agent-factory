@@ -12,6 +12,7 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/jonboulle/clockwork v0.5.0
 	github.com/oapi-codegen/runtime v1.1.1
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/spf13/cobra v1.10.2
 	github.com/tdewolff/parse/v2 v2.8.13
 	go.uber.org/zap v1.27.1

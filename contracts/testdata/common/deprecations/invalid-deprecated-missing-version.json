@@ -1,0 +1,10 @@
+{
+  "formatVersion": "1.0.0",
+  "itemId": "example.widget.create",
+  "state": "deprecated",
+  "since": "1.0.0",
+  "successor": {
+    "targetItemId": "example.widget.submit",
+    "canonicalEnglish": "Use the replacement."
+  }
+}

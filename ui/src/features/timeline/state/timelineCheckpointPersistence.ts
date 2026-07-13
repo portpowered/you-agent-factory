@@ -1,4 +1,7 @@
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import {
+  DEFAULT_FACTORY_SESSION_ID,
+  isDefaultFactorySessionID,
+} from "../../../api/session-routing";
 import {
   identityMismatchDiagnostic,
   recordSessionPersistenceInvalidation,
@@ -15,12 +18,15 @@ import {
   indexedDBRequestToPromise,
   openCheckpointDatabase,
 } from "./checkpoint-persistence/indexedDBCheckpointRequests";
+import {
+  buildPersistedCheckpoint,
+  CHECKPOINT_SCHEMA_VERSION_GUARDED,
+  hydrateCheckpoint,
+  isSupportedPersistedTimelineCheckpoint,
+  type PersistedTimelineCheckpoint,
+} from "./checkpoint-persistence/timelineCheckpointCodec";
 import type { FactoryTimelineCheckpoint } from "./timeline/storeState";
-import type { ReplayWorldState } from "./timeline/types";
-
-const CHECKPOINT_SCHEMA_VERSION_GUARDED = 3;
 const CHECKPOINT_STORE_NAME = "checkpoints";
-const MAX_COMPACT_TEXT_CHARS = 512;
 
 export type TimelineCheckpointStreamIdentity = StreamDerivedCacheIdentity;
 
@@ -29,6 +35,16 @@ interface TimelineCheckpointEnvelope {
   schemaVersion: number;
   storageKey: string;
   streamIdentity: TimelineCheckpointStreamIdentity;
+}
+
+function normalizeConcreteFactorySessionID(
+  factorySessionID: string | null | undefined,
+): string | null {
+  const normalizedFactorySessionID = factorySessionID?.trim() ?? "";
+  if (isDefaultFactorySessionID(normalizedFactorySessionID)) {
+    return null;
+  }
+  return normalizedFactorySessionID;
 }
 
 function matchesStoredCheckpointFactorySessionID(
@@ -41,14 +57,6 @@ function matchesStoredCheckpointFactorySessionID(
   return (
     requestedSessionID !== "" && storedFactorySessionID === requestedSessionID
   );
-}
-
-interface PersistedTimelineCheckpoint {
-  afterEventId?: string;
-  afterSequence?: number;
-  replayState: ReplayWorldState;
-  selectedTick: number;
-  syncIdentity?: FactoryTimelineCheckpoint["syncIdentity"];
 }
 
 async function writeIndexedCheckpoint(
@@ -136,7 +144,7 @@ export async function peekPersistedTimelineCheckpoint(
   sessionID: string | null,
   options: { signal?: AbortSignal } = {},
 ): Promise<PersistedTimelineCheckpointPeek | null> {
-  const normalizedSessionID = sessionID?.trim();
+  const normalizedSessionID = normalizeConcreteFactorySessionID(sessionID);
   if (!indexedDB || !normalizedSessionID) {
     return null;
   }
@@ -152,7 +160,7 @@ export async function peekPersistedTimelineCheckpoint(
     if (
       !envelope ||
       envelope.schemaVersion !== CHECKPOINT_SCHEMA_VERSION_GUARDED ||
-      !envelope.checkpoint?.replayState
+      !isSupportedPersistedTimelineCheckpoint(envelope.checkpoint)
     ) {
       return null;
     }
@@ -174,7 +182,7 @@ export async function clearTimelineCheckpointsForSession(
   sessionID: string | null,
   options: { signal?: AbortSignal } = {},
 ): Promise<void> {
-  const normalizedSessionID = sessionID?.trim();
+  const normalizedSessionID = normalizeConcreteFactorySessionID(sessionID);
   if (!indexedDB || !normalizedSessionID) {
     return;
   }
@@ -223,55 +231,13 @@ export async function clearTimelineCheckpoint(
   await deleteIndexedCheckpoint(indexedDB, storageKey).catch(() => {});
 }
 
-function compactText(value: string): string {
-  if (value.length <= MAX_COMPACT_TEXT_CHARS) {
-    return value;
-  }
-  // hardcoded-ui-copy-exception: non-product-diagnostic
-  return `${value.slice(0, MAX_COMPACT_TEXT_CHARS)}\n\n[checkpoint truncated ${value.length - MAX_COMPACT_TEXT_CHARS} chars]`;
-}
-
-function compactReplayState(state: ReplayWorldState): ReplayWorldState {
-  const compacted = structuredClone(state);
-
-  for (const [textBlobID, value] of Object.entries(compacted.textBlobsByID)) {
-    compacted.textBlobsByID[textBlobID] = compactText(value);
-  }
-
-  return compacted;
-}
-
-function buildPersistedCheckpoint(
-  checkpoint: FactoryTimelineCheckpoint,
-): PersistedTimelineCheckpoint {
-  return {
-    afterEventId: checkpoint.afterEventId,
-    afterSequence: checkpoint.afterSequence,
-    replayState: compactReplayState(checkpoint.replayState),
-    selectedTick: checkpoint.selectedTick,
-    syncIdentity: checkpoint.syncIdentity,
-  };
-}
-
-function hydrateCheckpoint(
-  checkpoint: PersistedTimelineCheckpoint,
-): FactoryTimelineCheckpoint {
-  return {
-    afterEventId: checkpoint.afterEventId,
-    afterSequence: checkpoint.afterSequence,
-    replayState: checkpoint.replayState,
-    selectedTick: checkpoint.selectedTick,
-    syncIdentity: checkpoint.syncIdentity,
-  };
-}
-
 function parseStoredCheckpoint(
   envelope: TimelineCheckpointEnvelope,
   expectedIdentity: TimelineCheckpointStreamIdentity | null,
 ): FactoryTimelineCheckpoint | null {
   if (
     envelope.schemaVersion !== CHECKPOINT_SCHEMA_VERSION_GUARDED ||
-    !envelope.checkpoint?.replayState
+    !isSupportedPersistedTimelineCheckpoint(envelope.checkpoint)
   ) {
     return null;
   }
@@ -307,11 +273,7 @@ function recordCheckpointIdentityMismatch(
 function persistenceScopeFromTimelineIdentity(
   identity: TimelineCheckpointStreamIdentity,
 ): SessionPersistenceIdentityScope {
-  return {
-    backendScopeID: identity.backendScopeID,
-    factorySessionID: identity.factorySessionID,
-    streamGenerationID: identity.streamGenerationID,
-  };
+  return identity;
 }
 
 function checkpointStorageKey(
@@ -347,8 +309,9 @@ export async function findStoredCheckpointEnvelopeByFactorySessionID(
   indexedDB: IndexedDBLike | undefined,
   factorySessionID: string,
 ): Promise<TimelineCheckpointEnvelope | null> {
-  const normalizedFactorySessionID = factorySessionID.trim();
-  if (!indexedDB || normalizedFactorySessionID === "") {
+  const normalizedFactorySessionID =
+    normalizeConcreteFactorySessionID(factorySessionID);
+  if (!indexedDB || !normalizedFactorySessionID) {
     return null;
   }
 

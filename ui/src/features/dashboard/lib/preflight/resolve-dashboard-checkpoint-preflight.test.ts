@@ -66,6 +66,7 @@ describe("resolveDashboardCheckpointPreflight", () => {
     });
 
     expect(result).toMatchObject({
+      checkpointToDelete: null,
       clearRequestedSessionCheckpoint: false,
       kind: "resume",
       reconnectCursor: { afterEventId: "event-7", afterSequence: 7 },
@@ -104,6 +105,9 @@ describe("resolveDashboardCheckpointPreflight", () => {
         requestedSessionId: "session-a",
       }),
     ).resolves.toMatchObject({
+      checkpointToDelete: expect.objectContaining({
+        storageKey: "checkpoint-session-a",
+      }),
       clearRequestedSessionCheckpoint: true,
       kind: "remap",
       requestedSessionId: "session-a",
@@ -128,6 +132,9 @@ describe("resolveDashboardCheckpointPreflight", () => {
         requestedSessionId: "session-a",
       }),
     ).resolves.toEqual({
+      checkpointToDelete: expect.objectContaining({
+        storageKey: "checkpoint-session-a",
+      }),
       clearRequestedSessionCheckpoint: true,
       kind: "recovery",
       reasonCode: FactorySessionSyncPreflightReasonCode.session_not_found,

@@ -3,6 +3,7 @@ import type {
   TimelineCheckpointStreamIdentity,
 } from "../features/timeline/public";
 import { emptyReplayWorldState } from "../features/timeline/state/timeline/replayWorldStateSupport";
+import { createMaterializedWorkOutcomeState } from "../features/work-outcome/public/materializer";
 
 export interface MultiSessionTimelineCheckpointFixture {
   checkpoint: FactoryTimelineCheckpoint;
@@ -46,6 +47,7 @@ function createSessionFixture({
     checkpoint: {
       afterEventId,
       afterSequence,
+      materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
       replayState,
       selectedTick,
       syncIdentity: {

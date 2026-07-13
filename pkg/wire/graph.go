@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	factorysessionsservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	modelservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -180,6 +181,26 @@ func (g *Graph) Close() error {
 		return nil
 	}
 	return g.resources.Close()
+}
+
+// Lifecycles exposes only the named activation edges consumed by initializer.
+func (g *Graph) Lifecycles() initializer.ApplicationLifecycles {
+	if g == nil {
+		return initializer.ApplicationLifecycles{}
+	}
+	return initializer.ApplicationLifecycles{
+		API: g.Transports.API, CLI: g.Transports.CLI, MCP: g.Transports.MCP,
+		Runtime: g.Sidecars.Runtime, Workers: g.Sidecars.Workers, Dashboard: g.Sidecars.Dashboard,
+	}
+}
+
+// RuntimeLogMetadata returns immutable startup diagnostics without exposing
+// the runtime host that owns the underlying sinks.
+func (g *Graph) RuntimeLogMetadata() runtimehost.RuntimeLogDiagnostics {
+	if g == nil {
+		return runtimehost.RuntimeLogDiagnostics{}
+	}
+	return g.RuntimeLog
 }
 
 func validatePhasedInputs(inputs phasedInputs) error {

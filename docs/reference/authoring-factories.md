@@ -237,7 +237,7 @@ invocation.
 Use mock workers for the first routing check with the directory layout:
 
 ```bash
-you run --dir ./factory --with-mock-workers
+you run --dir ./factory --with-mock-workers --work ./docs/examples/startup-work.json
 ```
 
 Or combine `--factory` with mock workers when testing a portable config:
@@ -272,7 +272,7 @@ By default persisted project factories live under `./factory`, and
 global shared root at `~/.you-agent-factory/you-agent-factories`.
 
 ```bash
-you run --named my-team-review
+you run --named my-team-review "Review the release notes"
 ```
 
 This precedence is selection-only: the CLI chooses exactly one matching named
@@ -284,16 +284,16 @@ named-factory path:
 
 ```bash
 you run --named @you/goal "Ship the login fix by Friday"
-you run --named @you/tts
+you run --named @you/tts --output primary "Read the release summary."
 ```
 
 Start with `@you/goal` when you want a goal-oriented factory you can run
 immediately and customize on disk instead of authoring `factory.json` from
 scratch. Start with `@you/tts` when you need the inference-oriented packaged
-TTS example. See `you docs packaged-goal` for the goal batch workflow, stdout
-primary result, supported headless operator-interaction scope, and
-`you docs packaged-tts` for the full packaged TTS workflow, default
-metadata result, materialization path, and edit-after-materialize behavior.
+TTS example. See `you docs run` for named-Factory invocation inputs and stdout
+result modes, `you docs sessions` for stopped-run inspection and recovery, and
+`you docs models` for TTS readiness, direct invocation, and audio or JSON
+result choices.
 
 On the first invocation the CLI materializes the built-in into
 `~/.you-agent-factory/you-agent-factories`, then loads later runs from that on-disk copy.
@@ -699,13 +699,13 @@ Run `you docs mock-workers` for the full JSON contract, selection fields,
 For this review-loop walkthrough, start with:
 
 ```bash
-you run --dir ./factory --with-mock-workers
+you run --dir ./factory --with-mock-workers --work ./docs/examples/startup-work.json
 ```
 
 To exercise the checked-in rejection example:
 
 ```bash
-you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json
+you run --dir ./factory --with-mock-workers ./docs/examples/mock-workers.json --work ./docs/examples/startup-work.json
 ```
 
 Reusable inputs live under [`docs/examples/`](../examples/README.md), including

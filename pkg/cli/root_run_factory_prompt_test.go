@@ -90,7 +90,7 @@ func TestRunCommand_FactoryFlagDocumentsPortableRun(t *testing.T) {
 	if !strings.Contains(runCmd.Long, "INVOCATION_INPUT_SOURCE_CONFLICT") {
 		t.Fatal("expected run command long help text to document the stable input conflict code")
 	}
-	if !strings.Contains(runCmd.Long, "you docs config") || !strings.Contains(runCmd.Long, "you docs sessions") {
+	if !strings.Contains(runCmd.Long, "you docs run") || !strings.Contains(runCmd.Long, "you docs sessions") {
 		t.Fatal("expected run command long help text to point to invocation reference docs")
 	}
 	if !strings.Contains(runCmd.Example, "run --factory ./factory.json \"Fix the lint issues\"") {

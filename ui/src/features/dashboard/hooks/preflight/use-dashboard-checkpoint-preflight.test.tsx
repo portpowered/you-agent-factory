@@ -127,6 +127,7 @@ describe("useDashboardCheckpointPreflight bootstrap", () => {
       "resolveDashboardCheckpointPreflight",
     ).mockResolvedValue({
       checkpoint: null,
+      checkpointToDelete: null,
       clearRequestedSessionCheckpoint: false,
       kind: "resume",
       reconnectCursor: {
@@ -326,6 +327,7 @@ describe("useDashboardCheckpointPreflight superseded session races", () => {
     expect(race.result.current.persistedCheckpoint?.selectedTick).toBe(22);
     expect(race.restoreCheckpoint).toHaveBeenCalledTimes(1);
     expect(race.restoreCheckpoint).toHaveBeenCalledWith(
+      expect.objectContaining({ factorySessionID: SESSION_B }),
       expect.objectContaining({ selectedTick: 22 }),
     );
     expect(race.readCheckpointSpy).toHaveBeenCalledTimes(1);
@@ -361,6 +363,7 @@ describe("useDashboardCheckpointPreflight recovery and errors", () => {
       "resolveDashboardCheckpointPreflight",
     ).mockResolvedValue({
       clearRequestedSessionCheckpoint: true,
+      checkpointToDelete: null,
       kind: "recovery",
       reasonCode: "session_not_found",
       requestedSessionId: "missing-session",
@@ -397,6 +400,7 @@ describe("useDashboardCheckpointPreflight recovery and errors", () => {
       "resolveDashboardCheckpointPreflight",
     ).mockResolvedValue({
       clearRequestedSessionCheckpoint: true,
+      checkpointToDelete: null,
       error: new Error("validation failed"),
       kind: "error",
       requestedSessionId: "session-live-001",

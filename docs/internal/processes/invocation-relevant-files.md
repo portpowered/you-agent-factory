@@ -124,7 +124,7 @@ primary-result behavior.
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
   `cmd/factory/compose.InjectCLITransport`; Wire providers must not read
   `~/.you-agent-factory/config.json` or `YOU_DEFAULT_WORKER_MODEL_*` directly.
-- Initializer-backed CLI local in-process startup belongs in `pkg/initializer/cli_transport.go` (`InitializeCLITransport`, `CLITransport.Runner`, `CLITransport.Run`), `cmd/factory/compose/cli_transport.go` (`InjectCLITransport`, `InjectCLIRunner`), and `cmd/factory/main.go` (`buildCLIRunner` registered through `run.SetBuildFactoryService`). Pass `transport.Runner()` to `pkg/cli/run` rather than `compose.InjectFactoryService` when proving the initializer composition path; dashboard-suppressed non-invocation CLI runs (`--quiet`, work-file batch, clean-invocation batch) stay on `service.BuildFactoryService` through `InjectCLIRunner`, while dashboard-suppressed one-shot invocation uses `service.BuildInvocationBootstrap` / `service.NormalizeInvocationBootstrapConfig` from `pkg/service/factory_build.go` via `pkg/cli/run/factory_invocation_input.go` only. `InvocationBootstrap.InvokeFactorySession` and `InvocationBootstrap.CloseFactorySession` must stay transparent forwards to the wrapped `FactoryService`; `runFactoryInvocation` releases sessions through `releaseInvocationSession` after invocation instead of a CLI-local submit/wait loop. Compose regression coverage for quiet batch work-file preservation lives in `cmd/factory/compose/compose_test.go` (`TestInjectCLIRunner_DashboardSuppressedQuietBatchPreservesWorkFileAndBatchMode`). Focused smoke coverage lives in `pkg/initializer/cli_transport_test.go`, `pkg/service/invocation_bootstrap_test.go`, `pkg/service/invocation_bootstrap_ownership_test.go`, and consolidated startup parity plus cross-transport composition evidence in `pkg/initializer/startup_compatibility_test.go`.   Focused initializer migration verification: `go test ./cmd/... ./pkg/api/... ./pkg/cli/... ./pkg/mcp/... ./pkg/initializer/... -short`.
+- Process startup follows `cmd/factory -> pkg/root -> pkg/wire -> pkg/initializer`: `pkg/cli/startup` carries parsed run or MCP inputs, `pkg/root` selects one `initializer.ProcessPolicy`, `pkg/wire/process.go` applies that policy while constructing exactly one typed `initializer.ProcessGraph`, and `pkg/initializer/core.go` validates the graph policy before starting the already-built graph. Do not duplicate or recompute mode/sidecar policy downstream; API, dashboard, runtime mode, worker-scheduler, and watcher enablement must be governed by the root-selected policy carried on the graph. Keep domain construction out of root and do not restore root-local deferred lifecycle closures or process-global builder registration. The normalized root home must likewise remain authoritative: thread it through config initialization, named-factory lookup, `run.RunConfig.HomeDir`, system-config persistence, automatic recording, runtime logging, and runtime metrics rather than consulting ambient process globals after command construction. Run construction is split between `run.BuildApplication` and `Application.Run`; MCP construction is split between `mcp.BuildServeApplication` and `ServeApplication.Run`, so construction failures occur before initializer startup. Initializer-backed local construction uses `pkg/initializer/cli_transport.go` (`InitializeCLITransport`, `CLITransport.Runner`) and `pkg/wire/cli.go` (`BuildCLIRunner`). Dashboard-suppressed non-invocation CLI runs (`--quiet`, work-file batch, clean-invocation batch) stay on `service.BuildFactoryService` through `wire.BuildCLIRunner`, while dashboard-suppressed one-shot invocation uses `service.BuildInvocationBootstrap` / `service.NormalizeInvocationBootstrapConfig` from `pkg/service/factory_build.go` via `pkg/cli/run/factory_invocation_input.go` only. `InvocationBootstrap.InvokeFactorySession` and `InvocationBootstrap.CloseFactorySession` must stay transparent forwards to the wrapped `FactoryService`; `runFactoryInvocation` releases sessions through `releaseInvocationSession` after invocation instead of a CLI-local submit/wait loop. Boundary coverage lives in `pkg/root/process_test.go`, `pkg/wire/process_test.go`, `pkg/initializer/initialize_test.go`, and the compiled-binary matrix in `tests/release/root_process_smoke_test.go`; transport parity coverage remains in `pkg/initializer/startup_compatibility_test.go`. Focused initializer migration verification: `go test ./cmd/... ./pkg/api/... ./pkg/cli/... ./pkg/mcp/... ./pkg/initializer/... -short`.
 - `you models invoke` reuses the same `service.BuildInvocationBootstrap` /
   `service.NormalizeInvocationBootstrapConfig` path as one-shot factory
   invocation, wired from `pkg/cli/models/bootstrap_invoke.go`. The CLI must call
@@ -218,7 +218,13 @@ primary-result behavior.
   store alongside legacy response streams; keep this lifecycle state on
   `LiveSession`, not `FactoryService`.
   `SessionResponseEventStore.Subscribe(afterSequence)` delivers retained events
-  after the cursor, then continues live via `Subscription.Next`; optional
+  after the cursor, then continues live via `Subscription.Next`. Retention keeps
+  ordered unavailable-sequence spans separate from immutable retained events;
+  stale reads receive one cursor-clipped `STREAM_GAP`/`UPDATED` marker with
+  `retention_window` reason and lossy provenance before catch-up. The marker is
+  out-of-band at sequence zero and advances only the private subscription
+  cursor, so it never consumes, reuses, or renumbers published identities;
+  optional
   `WithDispatchFilter(dispatchID)` omits non-matching events while preserving
   each delivered event's global session sequence and eventId. `Complete()` stops
   further publishes while retained events remain for catch-up; catch-up readers
@@ -335,9 +341,10 @@ primary-result behavior.
   Keep usage lines, parameter descriptions, defaults, accepted values, output
   hints, and example rendering derived from `interfaces.InvocationSignatureConfig`
   instead of hard-coding packaged-factory argument inventories in CLI help.
-- `docs/reference/packaged-fusion.md` is the packaged `you docs packaged-fusion`
-  customer guide for `@you/fusion` invocation, signature-aware help, examples,
-  materialization, and edit-after-materialize behavior.
+- `docs/reference/run.md` (`you docs run`) owns supported `@you/fusion`
+  invocation and signature-aware help. Factory materialization, examples, and
+  edit-after-materialize behavior belong in
+  `docs/reference/authoring-factories.md`.
 - `pkg/packagedfactories/goal/` owns packaged goal factory metadata constants and
   config-load regression coverage for the authored `invocationReturn` policy that
   selects terminal `goal:complete` work content as the primary result.
@@ -447,22 +454,23 @@ primary-result behavior.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk
   worker model so customer edits to materialized `factory.json` affect the next
   invocation result.
-- `docs/reference/packaged-goal.md` is the packaged `you docs packaged-goal`
-  customer guide for `@you/goal` batch invocation, stdout primary result, operator
-  controls during active execution, internal-only CLI response-stream scope, and
-  the supported headless operator-interaction scope without widening localhost
-  listener promises. Packaged docs proof lives in
-  `pkg/cli/docs/docs_packaged_reference_test.go` and
+- `docs/reference/run.md` (`you docs run`) owns supported `@you/goal` batch
+  invocation, stdout primary-result, and response-stream guidance.
+  `docs/reference/sessions.md` owns operator controls and inspect-first recovery;
+  `docs/reference/authoring-factories.md` owns named Factory authoring and
+  materialization. Prove packaged guidance through the installed command in
   `tests/functional/smoke/cli_docs_smoke_test.go`; maintainer final-verification
   evidence for public-contract boundaries lives in
   `docs/internal/development/plans/you-goal/api-contract-audit.md`.
 - `docs/reference/models.md` is the customer guide for `INFERENCE_RUN`,
   `INFERENCE_WORKER`, managed-runtime `/models` surfaces, local modelhost lease
   execution, and legacy `MODEL_INVOKE` / `MODEL_WORKER` migration aliases.
-- `docs/reference/packaged-tts.md` is the packaged `you docs packaged-tts`
-  customer guide for `@you/tts` invocation, materialization, metadata result,
-  edit-after-materialize behavior, and raw-artifact streaming scope. Prefer
-  `INFERENCE_WORKER` / `INFERENCE_RUN` terminology there while documenting
+- `docs/reference/models.md` (`you docs models`) owns supported TTS discovery,
+  readiness, direct invocation, result selection, and raw-audio output guidance.
+  Named `@you/tts` invocation belongs in `docs/reference/run.md`; Factory
+  authoring, materialization, metadata, and edit-after-materialize behavior
+  belong in `docs/reference/authoring-factories.md`. Prefer `INFERENCE_WORKER` /
+  `INFERENCE_RUN` terminology in retained guidance while documenting
   `MODEL_WORKER` / `MODEL_INVOKE` as migration aliases.
 - `pkg/packagedfactories/tts/observability.go` classifies packaged TTS loading,
   model-not-ready, and generation-failure outcomes and defines stable invocation
@@ -512,14 +520,13 @@ primary-result behavior.
   instead of submitted input text or raw audio payload bytes.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
-- `docs/reference/packaged-goal.md` is the customer-facing reference for
-  packaged `@you/goal` invocation behavior, including operator-visible blocked,
-  needs-human, paused, interrupted, failed, timed-out, and unresolved-primary-result
-  outcomes plus recovery through existing session/work commands. Keep the
-  `@you/goal`-specific inspect-first recovery sequence there, but keep the
-  shared `FactorySession`/`Work` control vocabulary and command ownership in
-  `docs/reference/sessions.md` so future goal lanes extend one operator flow
-  instead of inventing route- or factory-specific recovery docs.
+- `docs/reference/run.md` is the customer-facing owner for packaged `@you/goal`
+  invocation behavior. Operator-visible blocked, needs-human, paused,
+  interrupted, failed, timed-out, and unresolved-primary-result outcomes plus
+  inspect-first recovery belong in `docs/reference/sessions.md`; keep shared
+  `FactorySession`/`Work` control vocabulary there so future goal lanes extend
+  one operator flow instead of inventing route- or factory-specific recovery
+  docs.
 - `docs/reference/config.md` and `docs/reference/sessions.md` are the packaged
   `you docs` reference topics for invocation input sources, return policy, and
   the session-scoped invocation API.

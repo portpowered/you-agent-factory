@@ -3,9 +3,14 @@ export {
   type StreamDerivedCacheIdentity,
   streamDerivedCacheKeyPrefix,
 } from "../lib/stream-derived-cache-identity";
+export {
+  factoryTimelineEntryKey,
+  type FactoryTimelineEntryKey,
+} from "../state/entries/factoryTimelineEntry";
 export { readFactoryTimelineDebugOptions } from "../state/factoryTimelineDebug";
 export {
   type FactoryTimelineCheckpoint,
+  type FactoryTimelineEntryState,
   type FactoryTimelineSyncIdentity,
   useFactoryTimelineStore,
 } from "../state/factoryTimelineStore";
@@ -22,4 +27,5 @@ export {
   readTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
 } from "../state/timelineCheckpointPersistence";
+export { deletePersistedTimelineCheckpoint } from "../state/checkpoint-persistence/deletePersistedTimelineCheckpoint";
 export { reconnectCursorFromCheckpoint } from "../state/timelineCheckpointReconnect";

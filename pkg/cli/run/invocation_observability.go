@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
 )
@@ -30,6 +31,28 @@ const (
 	cleanInvocationOutcomeTimeout      = "timeout"
 	cleanInvocationErrorSummaryLimit   = 160
 )
+
+type runtimeLogDiagnosticsProvider interface {
+	RuntimeLogDiagnostics() service.RuntimeLogDiagnostics
+}
+
+type runtimeHostLogDiagnosticsProvider interface {
+	RuntimeLogDiagnostics() runtimehost.RuntimeLogDiagnostics
+}
+
+func runtimeLogDiagnosticsForRunner(runner factoryServiceRunner) service.RuntimeLogDiagnostics {
+	if provider, ok := runner.(runtimeLogDiagnosticsProvider); ok {
+		return provider.RuntimeLogDiagnostics()
+	}
+	if provider, ok := runner.(runtimeHostLogDiagnosticsProvider); ok {
+		diagnostics := provider.RuntimeLogDiagnostics()
+		return service.RuntimeLogDiagnostics{
+			Path: diagnostics.Path, RootDir: diagnostics.RootDir, StartTimeUTC: diagnostics.StartTimeUTC,
+			MetricsPath: diagnostics.MetricsPath, MetricsRootDir: diagnostics.MetricsRootDir, MetricsStartTimeUTC: diagnostics.MetricsStartTimeUTC,
+		}
+	}
+	return service.RuntimeLogDiagnostics{}
+}
 
 type cleanInvocationCounterSet struct {
 	attempts          atomic.Int64
@@ -419,15 +442,15 @@ const (
 // terminal stdout writes so a slow or blocked consumer does not stall provider
 // dispatch or invocation completion indefinitely.
 type responseStreamProgressWriter struct {
-	mu             sync.Mutex
-	outputMu       sync.Mutex
-	output         io.Writer
-	queue          chan []byte
-	wg             sync.WaitGroup
-	closed         bool
-	drainTimedOut  bool
-	droppedLines   int
-	pendingNotice  []byte
+	mu            sync.Mutex
+	outputMu      sync.Mutex
+	output        io.Writer
+	queue         chan []byte
+	wg            sync.WaitGroup
+	closed        bool
+	drainTimedOut bool
+	droppedLines  int
+	pendingNotice []byte
 }
 
 func newResponseStreamProgressWriter(output io.Writer) *responseStreamProgressWriter {

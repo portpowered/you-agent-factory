@@ -1,6 +1,7 @@
 package apicontract_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,7 +10,73 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"gopkg.in/yaml.v3"
 )
+
+const responseEventStreamPath = "/factory-sessions/{session_id}/response-events"
+
+func loadAuthoredComponentFragment(t *testing.T, path string) map[string]any {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read authored component %s: %v", path, err)
+	}
+	var fragment map[string]any
+	if err := yaml.Unmarshal(data, &fragment); err != nil {
+		t.Fatalf("parse authored component %s: %v", path, err)
+	}
+	return fragment
+}
+
+func assertQueryParameter(t *testing.T, parameter map[string]any, name string) {
+	t.Helper()
+	if parameter["name"] != name || parameter["in"] != "query" || parameter["required"] != false {
+		t.Fatalf("parameter %s identity = %#v", name, parameter)
+	}
+}
+
+func objectField(t *testing.T, object map[string]any, field string) map[string]any {
+	t.Helper()
+	value, ok := object[field].(map[string]any)
+	if !ok {
+		t.Fatalf("field %s is missing", field)
+	}
+	return value
+}
+
+func assertResponseFragmentSchema(t *testing.T, response map[string]any, wantRef string) {
+	t.Helper()
+	content := objectField(t, response, "content")
+	applicationJSON := objectField(t, content, "application/json")
+	schema := objectField(t, applicationJSON, "schema")
+	if got := schema["$ref"]; got != wantRef {
+		t.Fatalf("response schema ref = %v, want %s", got, wantRef)
+	}
+}
+
+func assertResponseFragmentExampleCodes(t *testing.T, response map[string]any, wantCodes ...string) {
+	t.Helper()
+	examples := objectField(t, objectField(t, objectField(t, response, "content"), "application/json"), "examples")
+	gotCodes := make(map[string]bool, len(examples))
+	for _, rawExample := range examples {
+		example, ok := rawExample.(map[string]any)
+		if !ok {
+			t.Fatal("response example must be an object")
+		}
+		value := objectField(t, example, "value")
+		code, ok := value["code"].(string)
+		if !ok {
+			t.Fatal("response example code must be a string")
+		}
+		gotCodes[code] = true
+	}
+	for _, wantCode := range wantCodes {
+		if !gotCodes[wantCode] {
+			t.Fatalf("response examples missing code %s", wantCode)
+		}
+	}
+}
 
 var canonicalFactoryResponseEventKindValues = []string{
 	"SESSION",
@@ -281,55 +348,42 @@ func TestOpenAPIContract_PublicArtifactsExposeFactoryResponseEventContract(t *te
 	}
 }
 
-func TestOpenAPIContract_NoResponseEventSSERoute(t *testing.T) {
-	doc := loadBundledOpenAPIDocument(t)
-	paths, ok := doc["paths"].(map[string]any)
-	if !ok {
-		t.Fatal("paths object is missing")
-	}
-	for path := range paths {
-		if strings.Contains(path, "response-events") {
-			t.Fatalf("paths must not expose response-event SSE route %q in this lane", path)
-		}
-	}
-}
-
 func TestOpenAPIAuthoring_ResponseEventSchemasUseDedicatedFragments(t *testing.T) {
 	doc := loadAuthoredOpenAPIDoc(t)
 	schemas := componentSchemas(t, doc)
 	expectedRefs := map[string]string{
-		"FactoryResponseEvent":                              "./components/schemas/response-events/FactoryResponseEvent.yaml",
-		"FactoryResponseEventKind":                        "./components/schemas/response-events/FactoryResponseEventKind.yaml",
-		"FactoryResponseEventPhase":                       "./components/schemas/response-events/FactoryResponseEventPhase.yaml",
-		"FactoryResponseEventProvenance":                  "./components/schemas/response-events/FactoryResponseEventProvenance.yaml",
-		"FactoryResponseEventProvenanceDelivery":          "./components/schemas/response-events/FactoryResponseEventProvenanceDelivery.yaml",
-		"FactoryResponseEventProvenanceRepresentation":    "./components/schemas/response-events/FactoryResponseEventProvenanceRepresentation.yaml",
-		"FactoryResponseEventProvenanceFidelity":          "./components/schemas/response-events/FactoryResponseEventProvenanceFidelity.yaml",
-		"FactoryResponseEventCapabilities":                "./components/schemas/response-events/FactoryResponseEventCapabilities.yaml",
-		"FactoryResponseEventPayload":                     "./components/schemas/response-events/FactoryResponseEventPayload.yaml",
-		"FactoryResponseEventContentBlock":                "./components/schemas/response-events/FactoryResponseEventContentBlock.yaml",
-		"FactoryResponseEventContentBlockKind":            "./components/schemas/response-events/FactoryResponseEventContentBlockKind.yaml",
-		"FactoryResponseEventTextContentBlock":            "./components/schemas/response-events/content-blocks/FactoryResponseEventTextContentBlock.yaml",
+		"FactoryResponseEvent":                             "./components/schemas/response-events/FactoryResponseEvent.yaml",
+		"FactoryResponseEventKind":                         "./components/schemas/response-events/FactoryResponseEventKind.yaml",
+		"FactoryResponseEventPhase":                        "./components/schemas/response-events/FactoryResponseEventPhase.yaml",
+		"FactoryResponseEventProvenance":                   "./components/schemas/response-events/FactoryResponseEventProvenance.yaml",
+		"FactoryResponseEventProvenanceDelivery":           "./components/schemas/response-events/FactoryResponseEventProvenanceDelivery.yaml",
+		"FactoryResponseEventProvenanceRepresentation":     "./components/schemas/response-events/FactoryResponseEventProvenanceRepresentation.yaml",
+		"FactoryResponseEventProvenanceFidelity":           "./components/schemas/response-events/FactoryResponseEventProvenanceFidelity.yaml",
+		"FactoryResponseEventCapabilities":                 "./components/schemas/response-events/FactoryResponseEventCapabilities.yaml",
+		"FactoryResponseEventPayload":                      "./components/schemas/response-events/FactoryResponseEventPayload.yaml",
+		"FactoryResponseEventContentBlock":                 "./components/schemas/response-events/FactoryResponseEventContentBlock.yaml",
+		"FactoryResponseEventContentBlockKind":             "./components/schemas/response-events/FactoryResponseEventContentBlockKind.yaml",
+		"FactoryResponseEventTextContentBlock":             "./components/schemas/response-events/content-blocks/FactoryResponseEventTextContentBlock.yaml",
 		"FactoryResponseEventReasoningSummaryContentBlock": "./components/schemas/response-events/content-blocks/FactoryResponseEventReasoningSummaryContentBlock.yaml",
-		"FactoryResponseEventToolRequestContentBlock":     "./components/schemas/response-events/content-blocks/FactoryResponseEventToolRequestContentBlock.yaml",
-		"FactoryResponseEventImageRefContentBlock":        "./components/schemas/response-events/content-blocks/FactoryResponseEventImageRefContentBlock.yaml",
-		"FactoryResponseEventResourceRefContentBlock":     "./components/schemas/response-events/content-blocks/FactoryResponseEventResourceRefContentBlock.yaml",
+		"FactoryResponseEventToolRequestContentBlock":      "./components/schemas/response-events/content-blocks/FactoryResponseEventToolRequestContentBlock.yaml",
+		"FactoryResponseEventImageRefContentBlock":         "./components/schemas/response-events/content-blocks/FactoryResponseEventImageRefContentBlock.yaml",
+		"FactoryResponseEventResourceRefContentBlock":      "./components/schemas/response-events/content-blocks/FactoryResponseEventResourceRefContentBlock.yaml",
 		"FactoryResponseEventStructuredOutputContentBlock": "./components/schemas/response-events/content-blocks/FactoryResponseEventStructuredOutputContentBlock.yaml",
-		"FactoryResponseEventSessionPayload":              "./components/schemas/response-events/payloads/FactoryResponseEventSessionPayload.yaml",
-		"FactoryResponseEventRunPayload":                  "./components/schemas/response-events/payloads/FactoryResponseEventRunPayload.yaml",
-		"FactoryResponseEventTurnPayload":                 "./components/schemas/response-events/payloads/FactoryResponseEventTurnPayload.yaml",
-		"FactoryResponseEventMessagePayload":              "./components/schemas/response-events/payloads/FactoryResponseEventMessagePayload.yaml",
-		"FactoryResponseEventMessageDeltaPayload":         "./components/schemas/response-events/payloads/FactoryResponseEventMessageDeltaPayload.yaml",
-		"FactoryResponseEventReasoningPayload":            "./components/schemas/response-events/payloads/FactoryResponseEventReasoningPayload.yaml",
-		"FactoryResponseEventToolPayload":                 "./components/schemas/response-events/payloads/FactoryResponseEventToolPayload.yaml",
-		"FactoryResponseEventToolDeltaPayload":            "./components/schemas/response-events/payloads/FactoryResponseEventToolDeltaPayload.yaml",
-		"FactoryResponseEventFileChangePayload":           "./components/schemas/response-events/payloads/FactoryResponseEventFileChangePayload.yaml",
-		"FactoryResponseEventPlanPayload":                 "./components/schemas/response-events/payloads/FactoryResponseEventPlanPayload.yaml",
-		"FactoryResponseEventPlanStep":                    "./components/schemas/response-events/payloads/FactoryResponseEventPlanStep.yaml",
-		"FactoryResponseEventProgressPayload":             "./components/schemas/response-events/payloads/FactoryResponseEventProgressPayload.yaml",
-		"FactoryResponseEventUsagePayload":                "./components/schemas/response-events/payloads/FactoryResponseEventUsagePayload.yaml",
-		"FactoryResponseEventErrorPayload":                "./components/schemas/response-events/payloads/FactoryResponseEventErrorPayload.yaml",
-		"FactoryResponseEventStreamGapPayload":            "./components/schemas/response-events/payloads/FactoryResponseEventStreamGapPayload.yaml",
+		"FactoryResponseEventSessionPayload":               "./components/schemas/response-events/payloads/FactoryResponseEventSessionPayload.yaml",
+		"FactoryResponseEventRunPayload":                   "./components/schemas/response-events/payloads/FactoryResponseEventRunPayload.yaml",
+		"FactoryResponseEventTurnPayload":                  "./components/schemas/response-events/payloads/FactoryResponseEventTurnPayload.yaml",
+		"FactoryResponseEventMessagePayload":               "./components/schemas/response-events/payloads/FactoryResponseEventMessagePayload.yaml",
+		"FactoryResponseEventMessageDeltaPayload":          "./components/schemas/response-events/payloads/FactoryResponseEventMessageDeltaPayload.yaml",
+		"FactoryResponseEventReasoningPayload":             "./components/schemas/response-events/payloads/FactoryResponseEventReasoningPayload.yaml",
+		"FactoryResponseEventToolPayload":                  "./components/schemas/response-events/payloads/FactoryResponseEventToolPayload.yaml",
+		"FactoryResponseEventToolDeltaPayload":             "./components/schemas/response-events/payloads/FactoryResponseEventToolDeltaPayload.yaml",
+		"FactoryResponseEventFileChangePayload":            "./components/schemas/response-events/payloads/FactoryResponseEventFileChangePayload.yaml",
+		"FactoryResponseEventPlanPayload":                  "./components/schemas/response-events/payloads/FactoryResponseEventPlanPayload.yaml",
+		"FactoryResponseEventPlanStep":                     "./components/schemas/response-events/payloads/FactoryResponseEventPlanStep.yaml",
+		"FactoryResponseEventProgressPayload":              "./components/schemas/response-events/payloads/FactoryResponseEventProgressPayload.yaml",
+		"FactoryResponseEventUsagePayload":                 "./components/schemas/response-events/payloads/FactoryResponseEventUsagePayload.yaml",
+		"FactoryResponseEventErrorPayload":                 "./components/schemas/response-events/payloads/FactoryResponseEventErrorPayload.yaml",
+		"FactoryResponseEventStreamGapPayload":             "./components/schemas/response-events/payloads/FactoryResponseEventStreamGapPayload.yaml",
 	}
 	for schemaName, wantRef := range expectedRefs {
 		assertSchemaRef(t, schemas, schemaName, wantRef)
@@ -360,6 +414,7 @@ func TestOpenAPIContract_FactoryEventLaneRemainsIsolatedFromResponseEvents(t *te
 		t.Fatal("paths object is missing")
 	}
 	assertEventStreamSchemaRef(t, pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get"), "#/components/schemas/FactoryEvent")
+	assertEventStreamSchemaRef(t, pathOperation(t, paths, responseEventStreamPath, "get"), "#/components/schemas/FactoryResponseEvent")
 	assertEventStreamSchemaRef(t, pathOperation(t, paths, "/events", "get"), "#/components/schemas/FactoryEvent")
 }
 
@@ -543,6 +598,74 @@ func TestGeneratedFactoryResponseEventRepresentativeFixturesRoundTrip(t *testing
 			decodeRoundTripJSON(t, raw, &event, "representative response-event fixture "+fixtureName)
 			assertGeneratedFactoryResponseEventRoundTrip(t, event)
 		})
+	}
+}
+
+func TestFactoryResponseEventRepresentativeFixturesHaveCanonicalWireParity(t *testing.T) {
+	for _, fixtureName := range representativeResponseEventFixtureNames {
+		fixtureName := fixtureName
+		t.Run(fixtureName, func(t *testing.T) {
+			raw := readRepresentativeResponseEventFixtureBytes(t, fixtureName)
+
+			var domainEvent responseevents.FactoryResponseEvent
+			if err := json.Unmarshal(raw, &domainEvent); err != nil {
+				t.Fatalf("unmarshal domain FactoryResponseEvent: %v", err)
+			}
+			var generatedEvent factoryapi.FactoryResponseEvent
+			if err := json.Unmarshal(raw, &generatedEvent); err != nil {
+				t.Fatalf("unmarshal generated FactoryResponseEvent: %v", err)
+			}
+
+			domainJSON, err := json.Marshal(domainEvent)
+			if err != nil {
+				t.Fatalf("marshal domain FactoryResponseEvent: %v", err)
+			}
+			generatedJSON, err := json.Marshal(generatedEvent)
+			if err != nil {
+				t.Fatalf("marshal generated FactoryResponseEvent: %v", err)
+			}
+			if !bytes.Equal(domainJSON, generatedJSON) {
+				t.Fatalf(
+					"canonical FactoryResponseEvent bytes differ:\ndomain=%s\ngenerated=%s",
+					domainJSON,
+					generatedJSON,
+				)
+			}
+
+			if fixtureName == "stream_gap" {
+				assertStreamGapBounds(t, domainEvent.Payload, 100, 150)
+				assertStreamGapBounds(t, generatedJSONPayload(t, generatedEvent), 100, 150)
+			}
+		})
+	}
+}
+
+func generatedJSONPayload(t *testing.T, event factoryapi.FactoryResponseEvent) json.RawMessage {
+	t.Helper()
+	encoded, err := json.Marshal(event.Payload)
+	if err != nil {
+		t.Fatalf("marshal generated FactoryResponseEvent payload: %v", err)
+	}
+	return encoded
+}
+
+func assertStreamGapBounds(t *testing.T, payload json.RawMessage, wantFrom, wantTo int64) {
+	t.Helper()
+	var gap struct {
+		FromSequence int64 `json:"fromSequence"`
+		ToSequence   int64 `json:"toSequence"`
+	}
+	if err := json.Unmarshal(payload, &gap); err != nil {
+		t.Fatalf("unmarshal STREAM_GAP payload: %v", err)
+	}
+	if gap.FromSequence != wantFrom || gap.ToSequence != wantTo {
+		t.Fatalf(
+			"STREAM_GAP bounds = %d..%d, want %d..%d",
+			gap.FromSequence,
+			gap.ToSequence,
+			wantFrom,
+			wantTo,
+		)
 	}
 }
 
@@ -777,15 +900,12 @@ func assertGeneratedFactoryResponseEventRoundTrip(t *testing.T, event factoryapi
 
 	var roundTripped factoryapi.FactoryResponseEvent
 	decodeRoundTripJSON(t, encoded, &roundTripped, "round-tripped response-event "+event.EventId)
-	if roundTripped.Kind != event.Kind || roundTripped.Phase != event.Phase {
-		t.Fatalf(
-			"round-tripped response-event %s kind/phase = %s/%s, want %s/%s",
-			event.EventId,
-			roundTripped.Kind,
-			roundTripped.Phase,
-			event.Kind,
-			event.Phase,
-		)
+	roundTrippedJSON, err := json.Marshal(roundTripped)
+	if err != nil {
+		t.Fatalf("marshal round-tripped FactoryResponseEvent %s: %v", event.EventId, err)
+	}
+	if !bytes.Equal(encoded, roundTrippedJSON) {
+		t.Fatalf("generated FactoryResponseEvent round trip changed wire bytes:\nbefore=%s\nafter=%s", encoded, roundTrippedJSON)
 	}
 	assertGeneratedFactoryResponseEventPayloadDecodes(t, roundTripped)
 }

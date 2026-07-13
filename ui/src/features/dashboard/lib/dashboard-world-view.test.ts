@@ -27,6 +27,7 @@ describe("deriveDashboardWorldViewShellState", () => {
     expect(
       deriveDashboardWorldViewShellState({
         eventCount: 0,
+        hasRestoredCheckpoint: false,
         rawSessionID: "session-alpha",
         selectedTick: 0,
         streamState: CONNECTING_STREAM,
@@ -41,12 +42,14 @@ describe("deriveDashboardWorldViewShellState", () => {
   it("transitions from loading to error when the stream goes offline before the first event", () => {
     const loading = deriveDashboardWorldViewShellState({
       eventCount: 0,
+      hasRestoredCheckpoint: false,
       rawSessionID: "session-alpha",
       selectedTick: 0,
       streamState: CONNECTING_STREAM,
     });
     const errored = deriveDashboardWorldViewShellState({
       eventCount: 0,
+      hasRestoredCheckpoint: false,
       rawSessionID: "session-alpha",
       selectedTick: 0,
       streamState: OFFLINE_STREAM,
@@ -62,12 +65,14 @@ describe("deriveDashboardWorldViewShellState", () => {
   it("transitions from loading to success once streamed events arrive", () => {
     const loading = deriveDashboardWorldViewShellState({
       eventCount: 0,
+      hasRestoredCheckpoint: false,
       rawSessionID: "session-alpha",
       selectedTick: 0,
       streamState: CONNECTING_STREAM,
     });
     const ready = deriveDashboardWorldViewShellState({
       eventCount: 2,
+      hasRestoredCheckpoint: false,
       rawSessionID: "session-alpha",
       selectedTick: 2,
       streamState: CONNECTING_STREAM,
@@ -83,6 +88,7 @@ describe("deriveDashboardWorldViewShellState", () => {
     expect(
       deriveDashboardWorldViewShellState({
         eventCount: 0,
+        hasRestoredCheckpoint: false,
         rawSessionID: null,
         selectedTick: 0,
         streamState: OFFLINE_STREAM,
@@ -97,6 +103,7 @@ describe("deriveDashboardWorldViewShellState", () => {
   it("treats replay recovery failure as a shell error before the first event", () => {
     const errored = deriveDashboardWorldViewShellState({
       eventCount: 0,
+      hasRestoredCheckpoint: false,
       rawSessionID: "session-alpha",
       selectedTick: 0,
       streamState: RECOVERY_FAILED_STREAM,
@@ -107,9 +114,10 @@ describe("deriveDashboardWorldViewShellState", () => {
     expect(errored.hasEvents).toBe(false);
   });
 
-  it.fails("treats a hydrated tick-zero checkpoint as current while the reopened stream is quiet", () => {
+  it("treats a hydrated tick-zero checkpoint as current while the reopened stream is quiet", () => {
     const ready = deriveDashboardWorldViewShellState({
       eventCount: 0,
+      hasRestoredCheckpoint: true,
       rawSessionID: "session-alpha",
       selectedTick: 0,
       streamState: LIVE_STREAM,
@@ -125,6 +133,7 @@ describe("deriveDashboardWorldViewShellState", () => {
   it("treats a hydrated nonzero checkpoint as current while the reopened stream is quiet", () => {
     const ready = deriveDashboardWorldViewShellState({
       eventCount: 0,
+      hasRestoredCheckpoint: true,
       rawSessionID: "session-alpha",
       selectedTick: 7,
       streamState: LIVE_STREAM,

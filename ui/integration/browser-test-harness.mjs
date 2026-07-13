@@ -26,7 +26,38 @@ export const defaultFactorySessionID = "~default";
 export const resolvedDefaultFactorySessionID =
   "019e0000-0000-7000-8000-000000000042";
 export const timelineCheckpointDBVersion = 3;
-export const timelineCheckpointSchemaVersion = 3;
+export const timelineCheckpointSchemaVersion = 4;
+
+export function emptyMaterializedWorkOutcomeState(cursor) {
+  return {
+    accumulator: {
+      activeDispatchesByID: {},
+      appliedEventCount: 0,
+      completedAcceptedCount: 0,
+      completedDispatchCount: 0,
+      failedWorkItemsByID: {},
+      initialPlaceIDs: [],
+      workItemsByID: {},
+    },
+    counts: {
+      completed: 0,
+      dispatched: 0,
+      failed: 0,
+      inFlight: 0,
+      queued: 0,
+    },
+    cursor: {
+      eventID: cursor.afterEventId,
+      eventTime: cursor.eventTime ?? "1970-01-01T00:00:00Z",
+      sequence: cursor.afterSequence,
+      tick: cursor.selectedTick,
+    },
+    failedByWorkType: {},
+    failedWorkLabels: [],
+    samples: [],
+    version: 1,
+  };
+}
 
 function isDefaultFactorySessionSelector(sessionID) {
   return (
