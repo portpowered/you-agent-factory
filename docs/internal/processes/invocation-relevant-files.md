@@ -197,7 +197,21 @@ primary-result behavior.
   presentation fallback.
   Provider-neutral `FactoryResponseEvent` vocabulary lives in
   `pkg/factorysessions/responseevents` (distinct from internal
-  `pkg/factorysessions/responsestream` fragment kinds). Legacy fragment
+  `pkg/factorysessions/responsestream` fragment kinds).
+
+  Provider-native structured response adapters live in provider-owned
+  subpackages under `pkg/workers/provider/` and implement the neutral lifecycle
+  in `pkg/workers/provider/adapter`. Keep each decoder invocation-local and
+  stateful, return only canonical `responseevents.Draft` values plus bounded
+  diagnostics, and leave event ID, sequence, recorded time, and Factory Session
+  publication to the session owner. Adapter `BuildCommand` selects structured
+  output only for the response-adapter execution path; the established
+  final-only provider command path must remain unchanged until its caller
+  explicitly opts into response streaming. Native JSONL fixture tests should
+  fragment reads and flush an unterminated final record so command selection,
+  decoder buffering, and final-result parsing are proven independently.
+
+  Legacy fragment
   compatibility mapping lives in `pkg/factorysessions/responsestream/compat`
   (`MapFragment` over `responsestream.Event` with session/run `Context`); keep
   the mapper pure, table-tested, and free of CLI/HTTP/provider imports while
