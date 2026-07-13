@@ -90,7 +90,7 @@ describe("App dashboard session stream loading", () => {
     await settleAppShellDashboardEffects();
   });
 
-  it.fails("renders a restored tick-zero checkpoint after preflight and a quiet stream open", async () => {
+  it("renders a restored tick-zero checkpoint after preflight and a quiet stream open", async () => {
     const messages = getHeaderControlsMessages("en");
     const fixture = createQuietCheckpointReloadFixture(0);
     await fixture.installCheckpoint();
@@ -118,6 +118,8 @@ describe("App dashboard session stream loading", () => {
       preflightCompleted: true,
       streamOpened: false,
     });
+    expect(stream.url).toContain("after_event_id=quiet-checkpoint-event-0");
+    expect(stream.url).toContain("after_sequence=0");
 
     act(() => {
       fixture.openStream(stream);

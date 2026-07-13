@@ -1,0 +1,21 @@
+{
+  "formatVersion": "1.0.0",
+  "itemId": "example.widget-create",
+  "documentation": {
+    "title": {
+      "id": "example.widget-create.title",
+      "canonicalEnglish": "Create a widget"
+    },
+    "description": {
+      "id": "example.widget-create.description",
+      "canonicalEnglish": "Creates one widget from the supplied JSON document."
+    }
+  },
+  "examples": [
+    { "name": "sample", "enabled": true },
+    [1, 2, 3],
+    null
+  ],
+  "visibility": "public",
+  "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+}
