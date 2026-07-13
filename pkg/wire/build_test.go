@@ -101,12 +101,12 @@ func TestBuildRejectsIncompleteConstructedCollaborator(t *testing.T) {
 	fixture := validFixture(t)
 	fixture.inputs.Build.ModelWorkers = func(context.Context, wire.RuntimeDependencies) (wire.Constructed[wire.ModelWorkerServices], error) {
 		services := fixture.modelWorkers
-		services.Provider = nil
+		services.WorkerProvider = nil
 		return wire.Constructed[wire.ModelWorkerServices]{Value: services}, nil
 	}
 
 	graph, err := wire.Build(context.Background(), fixture.inputs)
-	if graph != nil || err == nil || !strings.Contains(err.Error(), "construct model and worker/provider services: provider is required") {
+	if graph != nil || err == nil || !strings.Contains(err.Error(), "construct model and worker/provider services: worker/provider runtime builder is required") {
 		t.Fatalf("Build() = (%v, %v), want missing provider construction error", graph, err)
 	}
 	assertNoLifecycleCalls(t, fixture)

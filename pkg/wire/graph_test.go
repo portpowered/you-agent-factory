@@ -13,8 +13,8 @@ import (
 	factorysessionsservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelservice "github.com/portpowered/infinite-you/pkg/models/service"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/wire"
-	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
@@ -49,7 +49,7 @@ func assertRuntimeIdentity(t *testing.T, graph *wire.Graph, fixture *buildFixtur
 
 func assertDomainServiceIdentity(t *testing.T, graph *wire.Graph, fixture *buildFixture) {
 	t.Helper()
-	if graph.Models != fixture.modelWorkers.Models || graph.Workers != fixture.modelWorkers.Workers || graph.Provider != fixture.modelWorkers.Provider {
+	if graph.Models != fixture.modelWorkers.Models || graph.Workers != fixture.modelWorkers.Workers || graph.WorkerProvider != fixture.modelWorkers.WorkerProvider {
 		t.Fatal("graph did not retain model and worker/provider service identity")
 	}
 	if graph.FactorySessions != fixture.sessions.FactorySessions || graph.DurableExecution != fixture.sessions.DurableExecution {
@@ -107,9 +107,9 @@ func validFixture(t *testing.T) *buildFixture {
 	fixture := &buildFixture{
 		persistence: &memoryStore{},
 		modelWorkers: wire.ModelWorkerServices{
-			Models:   &modelservice.Service{},
-			Workers:  workersservice.New(workersservice.Config{}),
-			Provider: providerExecutor{},
+			Models:         &modelservice.Service{},
+			Workers:        workersservice.New(workersservice.Config{}),
+			WorkerProvider: runtimebuild.New(runtimebuild.Config{}, fixedClock{}, zap.NewNop(), nil),
 		},
 		sessions: wire.FactorySessionServices{
 			FactoryDefinition: &factorydefinition.Service{},
@@ -164,7 +164,7 @@ func validInputs(loaded *factoryconfig.LoadedFactoryConfig, fixture *buildFixtur
 			},
 			Sidecars: func(_ context.Context, deps wire.SidecarDependencies) (wire.Constructed[wire.SidecarLifecycles], error) {
 				fixture.buildCount[4]++
-				if deps.Runtime.Persistence != fixture.persistence || deps.Provider != fixture.modelWorkers.Provider || deps.DurableExecution != fixture.sessions.DurableExecution {
+				if deps.Runtime.Persistence != fixture.persistence || deps.WorkerProvider != fixture.modelWorkers.WorkerProvider || deps.DurableExecution != fixture.sessions.DurableExecution {
 					return wire.Constructed[wire.SidecarLifecycles]{}, errWrongDependency
 				}
 				return wire.Constructed[wire.SidecarLifecycles]{Value: fixture.sidecars}, nil
@@ -201,12 +201,6 @@ func (*memoryStore) Save(string, []byte) error   { return nil }
 func (*memoryStore) Load(string) ([]byte, error) { return nil, nil }
 
 var _ runtimepersist.Store = (*memoryStore)(nil)
-
-type providerExecutor struct{}
-
-func (providerExecutor) Execute(context.Context, providerexecution.ExecutionInput) (providerexecution.ExecutionResult, error) {
-	return providerexecution.ExecutionResult{}, nil
-}
 
 type recordingLifecycle struct {
 	starts int

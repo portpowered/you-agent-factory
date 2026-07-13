@@ -14,7 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
 	factorysessionsservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	modelservice "github.com/portpowered/infinite-you/pkg/models/service"
-	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
@@ -59,11 +59,13 @@ type SidecarLifecycles struct {
 }
 
 // ModelWorkerServices contains the model and worker/provider collaborators
-// created in one dependency-ordered construction phase.
+// created in one dependency-ordered construction phase. WorkerProvider is the
+// runtime builder that creates worker-specific provider runners; production
+// does not have one process-wide provider executor.
 type ModelWorkerServices struct {
-	Models   *modelservice.Service
-	Workers  *workersservice.Service
-	Provider providerexecution.Executor
+	Models         *modelservice.Service
+	Workers        *workersservice.Service
+	WorkerProvider *runtimebuild.Service
 }
 
 // FactorySessionServices contains the session collaborators created after
@@ -90,7 +92,7 @@ type SidecarDependencies struct {
 	Runtime          RuntimeDependencies
 	Models           *modelservice.Service
 	Workers          *workersservice.Service
-	Provider         providerexecution.Executor
+	WorkerProvider   *runtimebuild.Service
 	FactorySessions  *factorysessionsservice.Service
 	DurableExecution factorysessionexecution.Service
 }
@@ -131,7 +133,7 @@ type Graph struct {
 	Runtime           RuntimeDependencies
 	Models            *modelservice.Service
 	Workers           *workersservice.Service
-	Provider          providerexecution.Executor
+	WorkerProvider    *runtimebuild.Service
 	FactoryDefinition *factorydefinition.Service
 	FactorySessions   *factorysessionsservice.Service
 	DurableExecution  factorysessionexecution.Service

@@ -12,8 +12,8 @@ func validateModelWorkers(services ModelWorkerServices) error {
 		return errors.New("models is required")
 	case services.Workers == nil:
 		return errors.New("workers is required")
-	case isNil(services.Provider):
-		return errors.New("provider is required")
+	case services.WorkerProvider == nil:
+		return errors.New("worker/provider runtime builder is required")
 	default:
 		return nil
 	}
@@ -78,7 +78,7 @@ func newSidecarDependencies(
 		Runtime:          runtime,
 		Models:           models.Models,
 		Workers:          models.Workers,
-		Provider:         models.Provider,
+		WorkerProvider:   models.WorkerProvider,
 		FactorySessions:  sessions.FactorySessions,
 		DurableExecution: sessions.DurableExecution,
 	}
@@ -99,7 +99,7 @@ func newGraph(
 		Runtime:           runtime,
 		Models:            models.Models,
 		Workers:           models.Workers,
-		Provider:          models.Provider,
+		WorkerProvider:    models.WorkerProvider,
 		FactoryDefinition: sessions.FactoryDefinition,
 		FactorySessions:   sessions.FactorySessions,
 		DurableExecution:  sessions.DurableExecution,

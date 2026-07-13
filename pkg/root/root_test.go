@@ -15,8 +15,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/root"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/wire"
-	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
@@ -98,7 +98,7 @@ func newRootFixture(t *testing.T) *rootFixture {
 	fixture := &rootFixture{models: modelservice.New(modelservice.Dependencies{}), durable: durable}
 	persistence := rootMemoryStore{}
 	workers := workersservice.New(workersservice.Config{})
-	provider := rootProviderExecutor{}
+	workerProvider := runtimebuild.New(runtimebuild.Config{}, rootClock{}, zap.NewNop(), nil)
 	sessions := &factorysessionsservice.Service{}
 	definition := &factorydefinition.Service{}
 	lifecycle := func() wire.Lifecycle { return &rootLifecycle{fixture: fixture} }
@@ -115,7 +115,7 @@ func newRootFixture(t *testing.T) *rootFixture {
 				return wire.Constructed[runtimepersist.Store]{Value: persistence, Resource: rootCloser{fixture: fixture}}, nil
 			},
 			ModelWorkers: func(context.Context, wire.RuntimeDependencies) (wire.Constructed[wire.ModelWorkerServices], error) {
-				return wire.Constructed[wire.ModelWorkerServices]{Value: wire.ModelWorkerServices{Models: fixture.models, Workers: workers, Provider: provider}}, nil
+				return wire.Constructed[wire.ModelWorkerServices]{Value: wire.ModelWorkerServices{Models: fixture.models, Workers: workers, WorkerProvider: workerProvider}}, nil
 			},
 			FactorySessions: func(context.Context, wire.RuntimeDependencies, wire.ModelWorkerServices) (wire.Constructed[wire.FactorySessionServices], error) {
 				return wire.Constructed[wire.FactorySessionServices]{Value: wire.FactorySessionServices{FactoryDefinition: definition, FactorySessions: sessions, DurableExecution: durable}}, nil
@@ -135,12 +135,6 @@ type rootMemoryStore struct{}
 
 func (rootMemoryStore) Save(string, []byte) error   { return nil }
 func (rootMemoryStore) Load(string) ([]byte, error) { return nil, nil }
-
-type rootProviderExecutor struct{}
-
-func (rootProviderExecutor) Execute(context.Context, providerexecution.ExecutionInput) (providerexecution.ExecutionResult, error) {
-	return providerexecution.ExecutionResult{}, nil
-}
 
 type rootLifecycle struct{ fixture *rootFixture }
 
