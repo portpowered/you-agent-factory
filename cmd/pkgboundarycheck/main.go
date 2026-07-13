@@ -68,7 +68,6 @@ var approvedProductPackageFamilies = []string{
 	"pkg/models",
 	"pkg/orchestrators",
 	"pkg/packagedfactories",
-	"pkg/petri",
 	"pkg/platform",
 	"pkg/root",
 	"pkg/testutil",

@@ -3,7 +3,7 @@ package bootstrap_portability
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 func assertTokenPayload(t *testing.T, snap *petri.MarkingSnapshot, placeID, want string) {

@@ -119,7 +119,7 @@ treated as compatibility aliases when they still exist.
 
 Petri-net vocabulary such as tokens, places, transitions, markings, and guards
 is allowed only when the text explicitly describes internal implementation
-details or `pkg/petri` ownership. It should not be the primary wording for
+details or `pkg/orchestrators/petri` ownership. It should not be the primary wording for
 customer-facing Factory Session, Work, or event-stream behavior.
 
 ## Focused Verification

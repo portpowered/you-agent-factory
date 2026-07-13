@@ -9,7 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 )
@@ -838,7 +838,7 @@ func TestConfigMapping_MatchesFieldsGuardBuildsSelectorGuardsAcrossAllInputsByDe
 				{StateName: "ready", WorkTypeName: "task"},
 				{StateName: "ready", WorkTypeName: "asset"},
 			},
-			Outputs: []interfaces.IOConfig{{StateName: "matched", WorkTypeName: "asset"}},
+			Outputs:   []interfaces.IOConfig{{StateName: "matched", WorkTypeName: "asset"}},
 			OnFailure: []interfaces.IOConfig{{StateName: "failed", WorkTypeName: "asset"}},
 			Guards: []interfaces.GuardConfig{{
 				Type:        interfaces.GuardTypeMatchesFields,

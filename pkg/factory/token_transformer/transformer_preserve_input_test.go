@@ -8,7 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 func TestOutputToken_PreserveInput_SameType_KeepsConsumedPayload(t *testing.T) {
@@ -407,9 +407,9 @@ func TestOutputToken_PreserveInput_OutcomeLanes_KeepConsumedPayload(t *testing.T
 	)
 
 	tests := []struct {
-		name    string
-		placeID string
-		outcome interfaces.WorkOutcome
+		name     string
+		placeID  string
+		outcome  interfaces.WorkOutcome
 		feedback string
 		errText  string
 	}{
@@ -514,10 +514,10 @@ func TestOutputToken_PreserveInput_MultiOutput_EachLaneKeepsConsumedWorkData(t *
 		"review-c:init": {ID: "review-c:init", TypeID: "review-c", State: "init"},
 	}
 	workTypes := map[string]*state.WorkType{
-		"task":      {ID: "task"},
-		"review-a":  {ID: "review-a"},
-		"review-b":  {ID: "review-b"},
-		"review-c":  {ID: "review-c"},
+		"task":     {ID: "task"},
+		"review-a": {ID: "review-a"},
+		"review-b": {ID: "review-b"},
+		"review-c": {ID: "review-c"},
 	}
 	transformer := New(places, workTypes, WithWorkIDGenerator(petri.NewWorkIDGenerator()))
 	inputColors := []interfaces.TokenColor{{

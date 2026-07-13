@@ -100,7 +100,7 @@ the standards.
   `pkg/materialize/` contain shared work and invocation helpers.
 - `pkg/localmodels/` contains managed model runtime catalog, readiness,
   lifecycle, source resolution, cache, pull, and invocation support.
-- `pkg/petri/` contains internal Petri-net primitives.
+- `pkg/orchestrators/petri/` contains internal Petri-net primitives.
 - `pkg/service/` coordinates backend service behavior across sessions,
   runtime construction, model catalog, replay, ingestion, and factory save or
   validation flows.

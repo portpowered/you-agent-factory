@@ -34,7 +34,7 @@ func TestTransitionContractGuard_RuntimeOwnedFieldsStayDeleted(t *testing.T) {
 func TestTransitionContractGuard_ProductionTransitionLiteralsStayTopologyOnly(t *testing.T) {
 	t.Parallel()
 
-	moduleRoot := filepath.Clean(filepath.Join("..", ".."))
+	moduleRoot := filepath.Clean(filepath.Join("..", "..", ".."))
 	err := walkTransitionGuardProductionFiles(moduleRoot, func(path string, file *ast.File) error {
 		petriAliases := transitionImportAliases(file)
 		ast.Inspect(file, func(node ast.Node) bool {
@@ -143,7 +143,7 @@ func walkTransitionGuardProductionFiles(moduleRoot string, visit func(path strin
 func transitionImportAliases(file *ast.File) map[string]struct{} {
 	aliases := map[string]struct{}{}
 	for _, imp := range file.Imports {
-		if imp.Path == nil || imp.Path.Value != `"github.com/portpowered/infinite-you/pkg/petri"` {
+		if imp.Path == nil || imp.Path.Value != `"github.com/portpowered/infinite-you/pkg/orchestrators/petri"` {
 			continue
 		}
 		name := "petri"

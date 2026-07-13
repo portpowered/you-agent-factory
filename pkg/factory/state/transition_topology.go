@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 // NormalizeTransitionTopology materializes implicit routing onto transition arc sets.

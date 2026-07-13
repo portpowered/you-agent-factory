@@ -12,7 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/controlplane"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 type readTestHost struct {
