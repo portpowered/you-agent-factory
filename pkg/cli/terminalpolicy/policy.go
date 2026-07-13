@@ -103,18 +103,17 @@ func (p Policy) HumanTerminalWriter(stdout io.Writer) io.Writer {
 	return stdout
 }
 
-// BuildLogger creates the zap logger for this policy through the logger builder
-// supplied by the CLI composition boundary. Quiet mode discards terminal logger
-// output while still allowing BuildRuntimeLogger to tee structured runtime
-// records into rolling file sinks.
-func (p Policy) BuildLogger(build func(verbose, debug bool) (*zap.Logger, error)) (*zap.Logger, error) {
+// BuildLogger creates the zap logger for this policy. Quiet mode discards
+// terminal logger output while still allowing BuildRuntimeLogger to tee
+// structured runtime records into rolling file sinks.
+func (p Policy) BuildLogger() (*zap.Logger, error) {
 	switch p.Mode() {
 	case ModeQuiet:
 		return zap.NewNop(), nil
 	case ModeNormal:
 		return logging.BuildTerminalMutedLogger()
 	default:
-		return build(p.VerboseEnabled(), p.DebugEnabled())
+		return logging.BuildLogger(p.VerboseEnabled(), p.DebugEnabled())
 	}
 }
 

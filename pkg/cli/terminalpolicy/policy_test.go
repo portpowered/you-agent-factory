@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/logging"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -102,7 +101,7 @@ func TestDiagnosticsEnabled_PrefersResolvedPolicy(t *testing.T) {
 }
 
 func TestBuildLogger_FollowsResolvedMode(t *testing.T) {
-	quietLogger, err := Resolve(Options{Quiet: true}).BuildLogger(logging.BuildLogger)
+	quietLogger, err := Resolve(Options{Quiet: true}).BuildLogger()
 	if err != nil {
 		t.Fatalf("BuildLogger quiet: %v", err)
 	}
@@ -110,7 +109,7 @@ func TestBuildLogger_FollowsResolvedMode(t *testing.T) {
 		t.Fatal("expected quiet logger to discard info level output")
 	}
 
-	normalLogger, err := Resolve(Options{}).BuildLogger(logging.BuildLogger)
+	normalLogger, err := Resolve(Options{}).BuildLogger()
 	if err != nil {
 		t.Fatalf("BuildLogger normal: %v", err)
 	}
@@ -121,7 +120,7 @@ func TestBuildLogger_FollowsResolvedMode(t *testing.T) {
 		t.Fatal("expected normal logger to enable warn level")
 	}
 
-	verboseLogger, err := Resolve(Options{Verbose: true}).BuildLogger(logging.BuildLogger)
+	verboseLogger, err := Resolve(Options{Verbose: true}).BuildLogger()
 	if err != nil {
 		t.Fatalf("BuildLogger verbose: %v", err)
 	}
@@ -138,7 +137,7 @@ func TestBuildLogger_NormalModeDoesNotWriteStructuredLogsToStderr(t *testing.T) 
 	}
 	os.Stderr = writePipe
 
-	logger, err := Resolve(Options{}).BuildLogger(logging.BuildLogger)
+	logger, err := Resolve(Options{}).BuildLogger()
 	if err != nil {
 		t.Fatalf("BuildLogger normal: %v", err)
 	}
