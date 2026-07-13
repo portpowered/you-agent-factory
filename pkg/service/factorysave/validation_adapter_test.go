@@ -7,7 +7,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 )
 
 type validationDefinitionHost struct {

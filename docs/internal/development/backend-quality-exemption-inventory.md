@@ -122,11 +122,11 @@ directive occurrence in the focused scan:
 - `pkg/factory/throttle`
 - `pkg/factory/token_transformer`
 - `pkg/factory/sessions/execution/runtimepersist`
-- `pkg/factorysessions`
-- `pkg/factorysessions/controlplane`
-- `pkg/factorysessions/dataplane`
-- `pkg/factorysessions/service`
-- `pkg/factorysessions/stream`
+- `pkg/factory/sessions`
+- `pkg/factory/sessions/controlplane`
+- `pkg/factory/sessions/dataplane`
+- `pkg/factory/sessions/service`
+- `pkg/factory/sessions/stream`
 - `pkg/hostedworkers`
 - `pkg/hostedworkers/linear`
 - `pkg/invocations`
@@ -693,7 +693,7 @@ but all files were compared when selecting the cohort.
 | #1040 `you-goal-b07-stream-program-gate` | `41ad64d6d527d7bb6c09131f94e71c879318f9f3` | `docs/internal/development/plans/you-goal/api-cli-response-stream-parity.md`; `docs/internal/development/plans/you-goal/goal-response-stream-integration.md`; `docs/internal/development/plans/you-goal/stream-responses-final-audit.md`; `docs/internal/development/plans/you-goal/subagent-response-stream-integration.md`; `docs/internal/processes/api-relevant-files.md`; `docs/internal/processes/invocation-relevant-files.md`; `pkg/cli/root.go`; `pkg/packagedfactories/subagent/materialize_test.go`; `pkg/workers/service/hosted_poller_test.go`; `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`; `tests/functional/smoke/cli_named_goal_routing_smoke_test.go`; `tests/functional/smoke/cli_named_response_stream_api_parity_smoke_test.go`; `tests/functional/smoke/cli_named_subagent_response_stream_smoke_test.go` |
 | #1062 `fix-sessions` | `76db760b53e0cb0a15b5da8485d4a74f851eb93d` | `factory/workstations/review/AGENTS.md`; `pkg/runtimehost/model_catalog_test.go`; `pkg/runtimehost/runtime_sessions.go` |
 | #1064 `stream-b03-sse-contract` | `be3d3136a5135be080597e488184b054a082a840` | `api/codegen_config/client.yaml`; `api/codegen_config/server.yaml`; `api/components/parameters/ResponseEventAfterSequence.yaml`; `api/components/parameters/ResponseEventDispatchID.yaml`; `api/components/parameters/ResponseEventKind.yaml`; `api/components/responses/ResponseEventBadRequest.yaml`; `api/components/responses/ResponseEventSessionNotFound.yaml`; `api/components/responses/ResponseEventStreamExpired.yaml`; `api/components/schemas/api/ErrorFamily.yaml`; `api/components/schemas/api/ErrorResponse.yaml`; `api/openapi-main.yaml`; `api/openapi.yaml`; `contracts/testdata/baseline/rest-operations.json`; `docs/internal/processes/api-relevant-files.md`; `pkg/api/contracttests/generated_contract_common_test.go`; `pkg/api/contracttests/openapi_contract_authoring_test.go`; `pkg/api/contracttests/openapi_contract_response_events_test.go`; `pkg/api/contracttests/openapi_contract_surface_test.go`; `pkg/api/generated/server.gen.go`; `pkg/config/openapitests/parity_inventory_test.go`; `pkg/generatedclient/client.gen.go`; `ui/src/api/generated/openapi.ts` |
-| #1066 `stream-b03-provider-adapter-kernel` | `f680f5737f131888137969574b2721f462f40b67` | `pkg/factorysessions/responseevents/draft.go`; `pkg/factorysessions/responseevents/draft_test.go`; `pkg/workers/provider/adapter/contract.go`; `pkg/workers/provider/adapter/contract_test.go`; `pkg/workers/provider/adapter/orchestration.go`; `pkg/workers/provider/adapter/orchestration_test.go`; `pkg/workers/provider/adapter/registry.go`; `pkg/workers/provider/adapter/registry_test.go`; `pkg/workers/provider/adapter/testkit/conformance.go`; `pkg/workers/provider/adapter/testkit/final_only_conformance.go`; `pkg/workers/provider/adapter/testkit/final_only_test.go`; `pkg/workers/provider/adapter/testkit/full_stream_test.go` |
+| #1066 `stream-b03-provider-adapter-kernel` | `f680f5737f131888137969574b2721f462f40b67` | `pkg/factory/sessions/responseevents/draft.go`; `pkg/factory/sessions/responseevents/draft_test.go`; `pkg/workers/provider/adapter/contract.go`; `pkg/workers/provider/adapter/contract_test.go`; `pkg/workers/provider/adapter/orchestration.go`; `pkg/workers/provider/adapter/orchestration_test.go`; `pkg/workers/provider/adapter/registry.go`; `pkg/workers/provider/adapter/registry_test.go`; `pkg/workers/provider/adapter/testkit/conformance.go`; `pkg/workers/provider/adapter/testkit/final_only_conformance.go`; `pkg/workers/provider/adapter/testkit/final_only_test.go`; `pkg/workers/provider/adapter/testkit/full_stream_test.go` |
 
 Active website-session work was also excluded from cohort selection. PR #1037's exact set
 is in the open-PR table; the other active sets were:

@@ -12,7 +12,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 )
 
 // ErrCurrentFactoryNotFound reports that no durable current-factory pointer

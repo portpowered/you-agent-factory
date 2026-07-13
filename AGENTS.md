@@ -92,9 +92,8 @@ the standards.
 - `pkg/factory/` contains the core runtime engine, event history, projections,
   requests, validation, scheduling, subsystems, runtime support, and workstation
   config plumbing.
-- `pkg/factorysessions/` and `pkg/factory/sessions/execution/` contain
-  session-level projection/read models and durable/live session execution
-  contracts.
+- `pkg/factory/sessions/` contains live and durable session state, projections,
+  lifecycle gateways, response streams, and execution contracts.
 - `pkg/interfaces/` contains shared domain interfaces and public-ish runtime
   types used across subsystems.
 - `pkg/invocations/`, `pkg/workcontent/`, `pkg/workquery/`, and

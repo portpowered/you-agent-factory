@@ -59,7 +59,6 @@ var approvedProductPackageFamilies = []string{
 	"pkg/factory",
 	"pkg/factorydefinition",
 	"pkg/factorysessionexecution",
-	"pkg/factorysessions",
 	"pkg/hostedworkers",
 	"pkg/initializer",
 	"pkg/interfaces",

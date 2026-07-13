@@ -14,11 +14,11 @@ github.com/portpowered/infinite-you/pkg/config/factoryrun
 github.com/portpowered/infinite-you/pkg/config/inboxgitkeep
 github.com/portpowered/infinite-you/pkg/factory/runtime/buffers
 github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist
-github.com/portpowered/infinite-you/pkg/factorysessions
-github.com/portpowered/infinite-you/pkg/factorysessions/controlplane
-github.com/portpowered/infinite-you/pkg/factorysessions/dataplane
-github.com/portpowered/infinite-you/pkg/factorysessions/service
-github.com/portpowered/infinite-you/pkg/factorysessions/stream
+github.com/portpowered/infinite-you/pkg/factory/sessions
+github.com/portpowered/infinite-you/pkg/factory/sessions/controlplane
+github.com/portpowered/infinite-you/pkg/factory/sessions/dataplane
+github.com/portpowered/infinite-you/pkg/factory/sessions/service
+github.com/portpowered/infinite-you/pkg/factory/sessions/stream
 github.com/portpowered/infinite-you/pkg/hostedworkers
 github.com/portpowered/infinite-you/pkg/hostedworkers/linear
 github.com/portpowered/infinite-you/pkg/internal/cursorstorage

@@ -196,9 +196,9 @@ primary-result behavior.
   consumers through `pkg/service/runtime_sessions.go`, but is not a CLI human
   presentation fallback.
   Provider-neutral `FactoryResponseEvent` vocabulary lives in
-  `pkg/factorysessions/responseevents` (distinct from internal
-  `pkg/factorysessions/responsestream` fragment kinds). Legacy fragment
-  compatibility mapping lives in `pkg/factorysessions/responsestream/compat`
+  `pkg/factory/sessions/responseevents` (distinct from internal
+  `pkg/factory/sessions/responsestream` fragment kinds). Legacy fragment
+  compatibility mapping lives in `pkg/factory/sessions/responsestream/compat`
   (`MapFragment` over `responsestream.Event` with session/run `Context`); keep
   the mapper pure, table-tested, and free of CLI/HTTP/provider imports while
   later transport lanes adopt mapped canonical events. Response fragments map to
@@ -218,7 +218,7 @@ primary-result behavior.
   `compat/testdata/primary_result_regression/` and are asserted by
   `primary_result_regression_test.go` without wiring the mapper into selection.
   Session-scoped immutable response-event storage lives in
-  `pkg/factorysessions/responseeventstore` with
+  `pkg/factory/sessions/responseeventstore` with
   `factorysessions.SessionResponseEventStore` aliases in `types.go`; it is
   session-runtime-local state separate from canonical `FactoryEvent` history.
   `factorysessions.NewLiveSession` allocates one store using the canonical

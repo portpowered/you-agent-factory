@@ -10,7 +10,7 @@ import (
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
-	factorysessionsservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
+	factorysessionsservice "github.com/portpowered/infinite-you/pkg/factory/sessions/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
