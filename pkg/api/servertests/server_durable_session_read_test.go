@@ -675,12 +675,20 @@ func drainAPILifecycleRuntimeSessions(t *testing.T, service factorysessionexecut
 
 func removeAPILifecycleProjectState(t *testing.T, projectRoot string) {
 	t.Helper()
+	const (
+		cleanupTimeout      = 5 * time.Second
+		cleanupPollInterval = 25 * time.Millisecond
+		cleanupQuietPeriod  = 250 * time.Millisecond
+	)
 	runtimeStateRoot := filepath.Join(projectRoot, ".you-agent-factory")
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(cleanupTimeout)
 	var absentSince time.Time
 	for time.Now().Before(deadline) {
 		_, statErr := os.Stat(runtimeStateRoot)
 		if statErr == nil {
+			// Terminate can publish its terminal projection before the async
+			// runner completes its final persistence write. Reset the quiet
+			// period whenever that late write recreates runtime state.
 			absentSince = time.Time{}
 		} else if !errors.Is(statErr, os.ErrNotExist) {
 			absentSince = time.Time{}
@@ -688,15 +696,15 @@ func removeAPILifecycleProjectState(t *testing.T, projectRoot string) {
 
 		if err := os.RemoveAll(runtimeStateRoot); err != nil {
 			absentSince = time.Time{}
-			time.Sleep(25 * time.Millisecond)
+			time.Sleep(cleanupPollInterval)
 			continue
 		}
 		if absentSince.IsZero() {
 			absentSince = time.Now()
-		} else if time.Since(absentSince) >= 100*time.Millisecond {
+		} else if time.Since(absentSince) >= cleanupQuietPeriod {
 			return
 		}
-		time.Sleep(25 * time.Millisecond)
+		time.Sleep(cleanupPollInterval)
 	}
 	t.Errorf("runtime state directory %q did not remain removed during cleanup", runtimeStateRoot)
 }
