@@ -5,6 +5,7 @@ import { vi } from "vitest";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { DashboardSessionStoreTestProvider } from "../../../testing/dashboard-session-test-provider";
 import {
   CURRENT_FACTORY_DEFINITION_QUERY_KEY,
   CURRENT_FACTORY_DEFINITION_QUERY_KEY_PREFIX,
@@ -15,7 +16,6 @@ import {
   useFactoryTimelineStore,
   type WorldState,
 } from "../../timeline/state/factoryTimelineStore";
-import { DashboardSessionProvider } from "../session/dashboard-session-provider";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 
@@ -53,7 +53,9 @@ function createWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: PropsWithChildren) {
     return (
       <QueryClientProvider client={queryClient}>
-        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+        <DashboardSessionStoreTestProvider>
+          {children}
+        </DashboardSessionStoreTestProvider>
       </QueryClientProvider>
     );
   };

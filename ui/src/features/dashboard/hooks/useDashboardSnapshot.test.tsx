@@ -5,7 +5,11 @@ import { vi } from "vitest";
 
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { FACTORY_EVENT_TYPES } from "../../../api/events";
+import * as factorySessionsAPI from "../../../api/factory-sessions";
+import { FACTORY_SESSIONS_QUERY_KEY } from "../../../api/factory-sessions/query-keys";
+import { FactorySessionSyncPreflightReasonCode } from "../../../api/generated/openapi";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { DashboardSessionStoreTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { createReplayHarness } from "../../../testing/replay-harness";
 import {
   type canonicalSessionLifecycleReplayEvents,
@@ -25,9 +29,7 @@ import {
 } from "../../timeline/state/factoryTimelineStore";
 import { emptyReplayWorldState } from "../../timeline/state/timeline/replayWorldStateSupport";
 import { readTimelineCheckpoint } from "../../timeline/state/timelineCheckpointPersistence";
-import * as factorySessionsAPI from "../../../api/factory-sessions";
-import { FactorySessionSyncPreflightReasonCode } from "../../../api/generated/openapi";
-import { DashboardSessionProvider } from "../session/dashboard-session-provider";
+import { createMaterializedWorkOutcomeState } from "../../work-outcome/public/materializer";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,
@@ -43,6 +45,9 @@ const DEFAULT_LOGICAL_SESSION_KEY_ID = "lsk-default-folder";
 const DEFAULT_RUNTIME_FACTORY_SESSION_ID =
   "550e8400-e29b-41d4-a716-446655440000";
 const RESOLVED_DEFAULT_SESSION_UUID = DEFAULT_RUNTIME_FACTORY_SESSION_ID;
+const STALE_FACTORY_SESSION_UUID = "66666666-6666-4666-8666-666666666666";
+const BETA_FACTORY_SESSION_UUID = "77777777-7777-4777-8777-777777777777";
+const REMAPPED_FACTORY_SESSION_UUID = "88888888-8888-4888-8888-888888888888";
 
 function defaultStreamIdentity(
   factorySessionID = RESOLVED_DEFAULT_SESSION_UUID,
@@ -109,20 +114,31 @@ function installIndexedDBTestDouble() {
     objectStoreNames: {
       contains: () => true,
     },
-    transaction: () => ({
-      objectStore: () => ({
-        delete: (key: string) =>
-          indexedDBRequest(undefined, () => {
-            records.delete(key);
-          }),
-        get: (key: string) => indexedDBRequest(records.get(key)),
-        getAll: () => indexedDBRequest([...records.values()]),
-        put: (value: { sessionID: string; storageKey?: string }) =>
-          indexedDBRequest(value.storageKey ?? value.sessionID, () => {
-            records.set(value.storageKey ?? value.sessionID, value);
-          }),
-      }),
-    }),
+    transaction: () => {
+      const transaction = {
+        oncomplete: null,
+        objectStore: () => ({
+          delete: (key: string) =>
+            indexedDBRequest(
+              undefined,
+              () => {
+                records.delete(key);
+              },
+              () =>
+                (transaction.oncomplete as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                ),
+            ),
+          get: (key: string) => indexedDBRequest(records.get(key)),
+          getAll: () => indexedDBRequest([...records.values()]),
+          put: (value: { sessionID: string; storageKey?: string }) =>
+            indexedDBRequest(value.storageKey ?? value.sessionID, () => {
+              records.set(value.storageKey ?? value.sessionID, value);
+            }),
+        }),
+      };
+      return transaction;
+    },
   };
   const indexedDB = {
     open: () => {
@@ -143,7 +159,11 @@ function installIndexedDBTestDouble() {
   return records;
 }
 
-function indexedDBRequest<T>(result: T, beforeSuccess?: () => void) {
+function indexedDBRequest<T>(
+  result: T,
+  beforeSuccess?: () => void,
+  afterSuccess?: () => void,
+) {
   const request = {
     error: null,
     onblocked: null,
@@ -159,6 +179,7 @@ function indexedDBRequest<T>(result: T, beforeSuccess?: () => void) {
   window.setTimeout(() => {
     beforeSuccess?.();
     request.onsuccess?.({} as Event);
+    afterSuccess?.();
   }, 0);
 
   return request;
@@ -180,6 +201,7 @@ function checkpointStorageKey(
   return [
     DEFAULT_BACKEND_SCOPE_ID,
     factorySessionID,
+    DEFAULT_LOGICAL_SESSION_KEY_ID,
     DEFAULT_STREAM_GENERATION_ID,
   ].join("::");
 }
@@ -191,6 +213,7 @@ describe("useDashboardSnapshot composer", () => {
 
   beforeEach(() => {
     replayHarness.install();
+    window.history.replaceState({}, "", "/");
     indexedDBRecords = installIndexedDBTestDouble();
     getFactorySessionSyncPreflightSpy = vi
       .spyOn(factorySessionsAPI, "getFactorySessionSyncPreflight")
@@ -222,6 +245,7 @@ describe("useDashboardSnapshot composer", () => {
   });
 
   afterEach(() => {
+    window.history.replaceState({}, "", "/");
     vi.unstubAllGlobals();
     getFactorySessionSyncPreflightSpy.mockRestore();
     replayHarness.reset();
@@ -278,15 +302,16 @@ describe("useDashboardSnapshot composer", () => {
     expect(result.current.error).toBeNull();
   });
 
-  it("preflights the selected session before restoring checkpoints or opening the stream", async () => {
+  it("preflights an unresolved default without borrowing concrete identity hints", async () => {
     indexedDBRecords.set(checkpointStorageKey(), {
       checkpoint: {
         afterEventId: "event-2",
         afterSequence: 2,
-        replayState: emptyReplayWorldState(SEEDED_SNAPSHOT.tick_count),
-        selectedTick: SEEDED_SNAPSHOT.tick_count,
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
+        replayState: emptyReplayWorldState(17),
+        selectedTick: 17,
       },
-      schemaVersion: 3,
+      schemaVersion: 4,
       storageKey: checkpointStorageKey(),
       streamIdentity: defaultStreamIdentity(),
     });
@@ -309,22 +334,14 @@ describe("useDashboardSnapshot composer", () => {
     await waitFor(() => {
       expect(getFactorySessionSyncPreflightSpy).toHaveBeenCalledWith(
         DEFAULT_FACTORY_SESSION_ID,
-        {
-          afterEventId: "event-2",
-          afterSequence: 2,
-        },
-        {
-          backendScopeId: DEFAULT_BACKEND_SCOPE_ID,
-          logicalSessionKeyId: DEFAULT_LOGICAL_SESSION_KEY_ID,
-        },
+        undefined,
+        { signal: expect.any(AbortSignal) },
       );
     });
     await waitFor(() => {
       expect(replayHarness.getStreams()).toHaveLength(1);
     });
-    expect(useFactoryTimelineStore.getState().selectedTick).toBe(
-      SEEDED_SNAPSHOT.tick_count,
-    );
+    expect(useFactoryTimelineStore.getState().selectedTick).toBe(17);
   });
 
   it("surfaces a recoverable preflight recovery state when sync preflight cannot resolve the session", async () => {
@@ -437,6 +454,68 @@ describe("useDashboardSnapshot composer", () => {
     ).toBeNull();
   });
 
+  it("advances replay and materialized outcomes when checkpoint persistence is disabled", async () => {
+    window.history.replaceState({}, "", "/?afDisableTimelineCheckpoint=1");
+    useFactoryTimelineStore.getState().reset();
+
+    const { result } = renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    expect(getFactorySessionSyncPreflightSpy).not.toHaveBeenCalled();
+
+    await act(async () => {
+      replayHarness.getStreams()[0]?.emit("message", {
+        context: {
+          eventTime: "2026-07-13T10:00:01Z",
+          sequence: 1,
+          tick: 1,
+        },
+        id: "disabled-checkpoint-work-request",
+        payload: {
+          source: "api",
+          type: "FACTORY_REQUEST_BATCH",
+          works: [
+            {
+              name: "Diagnostic timeline story",
+              traceId: "trace-disabled-checkpoint",
+              workId: "work-disabled-checkpoint",
+              workTypeName: "story",
+            },
+          ],
+        },
+        type: FACTORY_EVENT_TYPES.workRequest,
+      });
+      await new Promise<void>((resolve) => {
+        window.setTimeout(() => resolve(), 20);
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.snapshot?.tick_count).toBe(1);
+    });
+    expect(useFactoryTimelineStore.getState()).toMatchObject({
+      currentReplayCheckpoint: {
+        afterEventId: "disabled-checkpoint-work-request",
+        afterSequence: 1,
+        selectedTick: 1,
+      },
+      events: [{ id: "disabled-checkpoint-work-request" }],
+      latestTick: 1,
+      materializedWorkOutcomeState: {
+        accumulator: { appliedEventCount: 1 },
+        cursor: {
+          eventID: "disabled-checkpoint-work-request",
+          sequence: 1,
+          tick: 1,
+        },
+      },
+    });
+  });
+
   it("hydrates a persisted checkpoint and opens the stream after its cursor", async () => {
     useFactoryTimelineStore.getState().reset();
 
@@ -488,10 +567,7 @@ describe("useDashboardSnapshot composer", () => {
     });
     await waitFor(async () => {
       await expect(
-        readTimelineCheckpoint(
-          window.indexedDB,
-          defaultStreamIdentity(),
-        ),
+        readTimelineCheckpoint(window.indexedDB, defaultStreamIdentity()),
       ).resolves.toEqual(
         expect.objectContaining({
           afterEventId: "checkpoint-event-7",
@@ -564,16 +640,17 @@ describe("useDashboardSnapshot composer", () => {
     expect(indexedDBRecords.has(checkpointStorageKey())).toBe(false);
   });
 
-  it("clears a stale reconnect checkpoint and silently replays from scratch", async () => {
+  it("does not clear a concrete checkpoint for an unresolved default", async () => {
     useFactoryTimelineStore.getState().reset();
     indexedDBRecords.set(checkpointStorageKey(), {
       checkpoint: {
         afterEventId: "checkpoint-event-7",
         afterSequence: 7,
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
         replayState: emptyReplayWorldState(7),
         selectedTick: 7,
       },
-      schemaVersion: 3,
+      schemaVersion: 4,
       storageKey: checkpointStorageKey(),
       streamIdentity: defaultStreamIdentity(),
     });
@@ -605,8 +682,8 @@ describe("useDashboardSnapshot composer", () => {
     });
     await expect(
       readTimelineCheckpoint(window.indexedDB, defaultStreamIdentity()),
-    ).resolves.toBe(null);
-    expect(indexedDBRecords.has(checkpointStorageKey())).toBe(false);
+    ).resolves.toEqual(expect.objectContaining({ selectedTick: 7 }));
+    expect(indexedDBRecords.has(checkpointStorageKey())).toBe(true);
   });
 
   it("remaps the ~default alias to the resolved UUID runtime identity", async () => {
@@ -636,47 +713,88 @@ describe("useDashboardSnapshot composer", () => {
     expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
       DEFAULT_FACTORY_SESSION_ID,
     );
-    expect(indexedDBRecords.has(checkpointStorageKey())).toBe(
-      false,
-    );
+    expect(indexedDBRecords.has(checkpointStorageKey())).toBe(false);
   });
 
   it("remaps a stale factory session id through logical identity without reusing the reconnect cursor", async () => {
-    const remappedSessionID = "session-remapped-002";
-    const staleStreamIdentity = defaultStreamIdentity("session-stale-001");
-    indexedDBRecords.set(checkpointStorageKey("session-stale-001"), {
+    const remappedSessionID = REMAPPED_FACTORY_SESSION_UUID;
+    const staleSessionID = STALE_FACTORY_SESSION_UUID;
+    const betaSessionID = BETA_FACTORY_SESSION_UUID;
+    const staleStreamIdentity = defaultStreamIdentity(staleSessionID);
+    indexedDBRecords.set(checkpointStorageKey(staleSessionID), {
       checkpoint: {
         afterEventId: "checkpoint-event-7",
         afterSequence: 7,
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
         replayState: emptyReplayWorldState(7),
         selectedTick: 7,
         syncIdentity: {
           backendScopeId: DEFAULT_BACKEND_SCOPE_ID,
-          factorySessionId: "session-stale-001",
+          factorySessionId: staleSessionID,
           logicalSessionKeyId: DEFAULT_LOGICAL_SESSION_KEY_ID,
-          streamGenerationId: "2026-06-27T00:00:00Z",
+          streamGenerationId: DEFAULT_STREAM_GENERATION_ID,
         },
       },
-      schemaVersion: 3,
-      storageKey: checkpointStorageKey("session-stale-001"),
+      schemaVersion: 4,
+      storageKey: checkpointStorageKey(staleSessionID),
       streamIdentity: staleStreamIdentity,
     });
-    useDashboardSessionStore.setState({
-      pausedSessionIDs: [],
-      selectedSessionID: "session-stale-001",
+    indexedDBRecords.set(checkpointStorageKey(betaSessionID), {
+      checkpoint: {
+        afterEventId: "beta-event-9",
+        afterSequence: 9,
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
+        replayState: emptyReplayWorldState(9),
+        selectedTick: 9,
+      },
+      schemaVersion: 4,
+      storageKey: checkpointStorageKey(betaSessionID),
+      streamIdentity: defaultStreamIdentity(betaSessionID),
     });
-    getFactorySessionSyncPreflightSpy.mockResolvedValue(
+    queryClient.setQueryData(["session-isolation", staleSessionID], {
+      value: "stale",
+    });
+    queryClient.setQueryData(["session-isolation", betaSessionID], {
+      value: "beta",
+    });
+    queryClient.setQueryData(FACTORY_SESSIONS_QUERY_KEY, [
+      {
+        factoryDir: "/workspace/default",
+        folderPath: "/workspace/default",
+        id: staleSessionID,
+        isDefault: true,
+        project: "default",
+        target: { kind: "default" },
+      },
+      {
+        factoryDir: "/workspace/beta",
+        folderPath: "/workspace/beta",
+        id: betaSessionID,
+        isDefault: false,
+        project: "beta",
+        target: { kind: "named", name: "beta" },
+      },
+    ]);
+    useDashboardSessionStore.setState({
+      pausedSessionIDs: [staleSessionID, betaSessionID],
+      selectedSessionID: staleSessionID,
+      sessionTabOrder: [staleSessionID, betaSessionID],
+    });
+    getFactorySessionSyncPreflightSpy.mockImplementation(async (sessionID) =>
       buildSyncPreflightResponse({
         checkpointReusable: false,
         factorySessionId: remappedSessionID,
-        reasonCode: FactorySessionSyncPreflightReasonCode.logical_session_remap,
+        reasonCode:
+          sessionID === remappedSessionID
+            ? FactorySessionSyncPreflightReasonCode.ok
+            : FactorySessionSyncPreflightReasonCode.logical_session_remap,
         reconnectCursor: {
           afterEventId: "checkpoint-event-7",
           afterSequence: 7,
           provided: true,
           validForStreamGeneration: false,
         },
-        requestedSessionId: "session-stale-001",
+        requestedSessionId: sessionID,
         streamGenerationId: DEFAULT_STREAM_GENERATION_ID,
       }),
     );
@@ -695,23 +813,42 @@ describe("useDashboardSnapshot composer", () => {
     expect(useDashboardSessionStore.getState().selectedSessionID).toBe(
       remappedSessionID,
     );
-    expect(indexedDBRecords.has(checkpointStorageKey("session-stale-001"))).toBe(
+    expect(useDashboardSessionStore.getState().sessionTabOrder).toEqual([
+      remappedSessionID,
+      betaSessionID,
+    ]);
+    expect(useDashboardSessionStore.getState().pausedSessionIDs).toEqual([
+      betaSessionID,
+    ]);
+    expect(indexedDBRecords.has(checkpointStorageKey(staleSessionID))).toBe(
       false,
     );
+    expect(indexedDBRecords.has(checkpointStorageKey(betaSessionID))).toBe(
+      true,
+    );
+    expect(
+      queryClient.getQueryData(["session-isolation", betaSessionID]),
+    ).toEqual({ value: "beta" });
+    expect(
+      queryClient
+        .getQueryData<Array<{ id: string }>>(FACTORY_SESSIONS_QUERY_KEY)
+        ?.map((session) => session.id),
+    ).toEqual([remappedSessionID, betaSessionID]);
   });
 
   it("remaps a stale session using envelope stream identity when checkpoint sync identity is absent", async () => {
-    const remappedSessionID = "session-remapped-002";
-    const staleSessionID = "session-stale-001";
+    const remappedSessionID = REMAPPED_FACTORY_SESSION_UUID;
+    const staleSessionID = STALE_FACTORY_SESSION_UUID;
     const staleStreamIdentity = defaultStreamIdentity(staleSessionID);
     indexedDBRecords.set(checkpointStorageKey(staleSessionID), {
       checkpoint: {
         afterEventId: "checkpoint-event-7",
         afterSequence: 7,
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
         replayState: emptyReplayWorldState(7),
         selectedTick: 7,
       },
-      schemaVersion: 3,
+      schemaVersion: 4,
       storageKey: checkpointStorageKey(staleSessionID),
       streamIdentity: staleStreamIdentity,
     });
@@ -719,18 +856,21 @@ describe("useDashboardSnapshot composer", () => {
       pausedSessionIDs: [],
       selectedSessionID: staleSessionID,
     });
-    getFactorySessionSyncPreflightSpy.mockResolvedValue(
+    getFactorySessionSyncPreflightSpy.mockImplementation(async (sessionID) =>
       buildSyncPreflightResponse({
         checkpointReusable: false,
         factorySessionId: remappedSessionID,
-        reasonCode: FactorySessionSyncPreflightReasonCode.logical_session_remap,
+        reasonCode:
+          sessionID === remappedSessionID
+            ? FactorySessionSyncPreflightReasonCode.ok
+            : FactorySessionSyncPreflightReasonCode.logical_session_remap,
         reconnectCursor: {
           afterEventId: "checkpoint-event-7",
           afterSequence: 7,
           provided: true,
           validForStreamGeneration: false,
         },
-        requestedSessionId: staleSessionID,
+        requestedSessionId: sessionID,
         streamGenerationId: DEFAULT_STREAM_GENERATION_ID,
       }),
     );
@@ -746,10 +886,10 @@ describe("useDashboardSnapshot composer", () => {
           afterEventId: "checkpoint-event-7",
           afterSequence: 7,
         },
-        {
+        expect.objectContaining({
           backendScopeId: DEFAULT_BACKEND_SCOPE_ID,
           logicalSessionKeyId: DEFAULT_LOGICAL_SESSION_KEY_ID,
-        },
+        }),
       );
     });
     await waitFor(() => {
@@ -1059,7 +1199,10 @@ describe("useDashboardSnapshot session lifecycle replay", () => {
     );
     expect(reconnectStream.url).toContain("after_sequence=2");
 
-    await emitStreamMessage(reconnectStream, sessionLifecycleControlResumeEvent);
+    await emitStreamMessage(
+      reconnectStream,
+      sessionLifecycleControlResumeEvent,
+    );
 
     await waitFor(() => {
       expect(result.current.snapshot?.runtime?.session?.bracket).toMatchObject({
@@ -1077,7 +1220,9 @@ function createWrapper(queryClient: QueryClient) {
   return function Wrapper({ children }: PropsWithChildren) {
     return (
       <QueryClientProvider client={queryClient}>
-        <DashboardSessionProvider>{children}</DashboardSessionProvider>
+        <DashboardSessionStoreTestProvider>
+          {children}
+        </DashboardSessionStoreTestProvider>
       </QueryClientProvider>
     );
   };

@@ -1,0 +1,16 @@
+type: object
+additionalProperties: false
+description: Structured JSON output content block.
+required:
+  - kind
+  - structuredOutput
+properties:
+  kind:
+    allOf:
+      - $ref: ../FactoryResponseEventContentBlockKind.yaml
+    enum:
+      - STRUCTURED_OUTPUT
+  structuredOutput:
+    type: object
+    description: Structured JSON output value.
+    additionalProperties: true

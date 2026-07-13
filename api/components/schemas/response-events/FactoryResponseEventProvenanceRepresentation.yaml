@@ -1,0 +1,14 @@
+type: string
+description: Shape fidelity model used for the public payload.
+x-enum-varnames:
+  - FactoryResponseEventProvenanceRepresentationDelta
+  - FactoryResponseEventProvenanceRepresentationSnapshot
+  - FactoryResponseEventProvenanceRepresentationNotification
+enum:
+  - DELTA
+  - SNAPSHOT
+  - NOTIFICATION
+x-enum-descriptions:
+  - Incremental delta payload semantics.
+  - Full snapshot payload semantics.
+  - Notification-style update semantics.

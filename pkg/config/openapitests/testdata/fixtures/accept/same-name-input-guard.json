@@ -1,0 +1,17 @@
+{
+  "name": "same-name-input-guard-factory",
+  "workTypes": [
+    {"name": "planItem", "states": [{"name": "ready", "type": "PROCESSING"}]},
+    {"name": "taskItem", "states": [{"name": "ready", "type": "PROCESSING"}, {"name": "matched", "type": "TERMINAL"}]}
+  ],
+  "workers": [{"name": "matcher"}],
+  "workstations": [{
+    "name": "match-items",
+    "worker": "matcher",
+    "inputs": [
+      {"workType": "planItem", "state": "ready"},
+      {"workType": "taskItem", "state": "ready", "guards": [{"type": "SAME_NAME", "matchInput": "planItem"}]}
+    ],
+    "outputs": [{"workType": "taskItem", "state": "matched"}]
+  }]
+}

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "agent-factory.response-event.v1",
+  "eventId": "evt-text-delta-001",
+  "sequence": 42,
+  "recordedAt": "2026-07-13T12:00:00Z",
+  "factorySessionId": "session-fixture-001",
+  "runId": "run-fixture-001",
+  "kind": "MESSAGE",
+  "phase": "DELTA",
+  "provenance": {
+    "provider": "example-provider",
+    "nativeEventType": "message.delta",
+    "delivery": "NATIVE_STREAM",
+    "representation": "DELTA",
+    "fidelity": "LOSSLESS"
+  },
+  "payload": {
+    "contentBlockIndex": 0,
+    "contentBlockKind": "TEXT",
+    "textDelta": "Hello"
+  },
+  "dispatchId": "dispatch-001",
+  "turnId": "turn-001",
+  "itemId": "item-msg-001",
+  "providerSessionRef": "provider-session-001"
+}

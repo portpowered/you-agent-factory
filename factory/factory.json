@@ -550,8 +550,7 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "id": "processor",
-      "modelProvider": "CURSOR",
-      "model": "composer-2.5",
+      "modelProvider": "CODEX",
       "name": "processor",
       "skipPermissions": true,
       "stopToken": "\u003cCOMPLETE\u003e",
@@ -570,8 +569,7 @@
     {
       "executorProvider": "SCRIPT_WRAP",
       "id": "planner",
-      "model": "grok-4.5-high",
-      "modelProvider": "CURSOR",
+      "modelProvider": "CODEX",
       "name": "planner",
       "skipPermissions": true,
       "stopToken": "\u003cCOMPLETE\u003e",

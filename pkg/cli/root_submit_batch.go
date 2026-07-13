@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
@@ -184,4 +185,55 @@ func resolveRunFlagValue(flag *pflag.Flag, args []string, index int, hasInlineVa
 		return "", false, fmt.Errorf("flag needs an argument: %s", "--"+flag.Name)
 	}
 	return args[index+1], true, nil
+}
+
+// ParseArgvForCLIInputsInventory parses argv on a fresh production root through
+// the target command's flag and positional validators without invoking RunE.
+// Run uses its custom tokenizer because the command sets DisableFlagParsing.
+func ParseArgvForCLIInputsInventory(argv []string) (*cobra.Command, []string, error) {
+	root := NewRootCommand()
+	root.SilenceErrors = true
+	root.SilenceUsage = true
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+
+	cmd, flagArgs, err := root.Find(argv)
+	if err != nil {
+		return cmd, nil, err
+	}
+
+	cmd.InitDefaultHelpFlag()
+
+	if cmd.DisableFlagParsing {
+		remainder, err := parseRunCommandArgs(cmd, flagArgs)
+		if err != nil {
+			return cmd, nil, err
+		}
+		if err := cmd.ValidateArgs(remainder); err != nil {
+			return cmd, remainder, err
+		}
+		if err := cmd.ValidateRequiredFlags(); err != nil {
+			return cmd, remainder, err
+		}
+		if err := cmd.ValidateFlagGroups(); err != nil {
+			return cmd, remainder, err
+		}
+		return cmd, remainder, nil
+	}
+
+	if err := cmd.ParseFlags(flagArgs); err != nil {
+		return cmd, nil, err
+	}
+
+	positionals := cmd.Flags().Args()
+	if err := cmd.ValidateArgs(positionals); err != nil {
+		return cmd, positionals, err
+	}
+	if err := cmd.ValidateRequiredFlags(); err != nil {
+		return cmd, positionals, err
+	}
+	if err := cmd.ValidateFlagGroups(); err != nil {
+		return cmd, positionals, err
+	}
+	return cmd, positionals, nil
 }

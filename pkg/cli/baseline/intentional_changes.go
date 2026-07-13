@@ -56,9 +56,14 @@ func ValidateIntentionalChangesLedger(root *cobra.Command, runCmd *cobra.Command
 		return err
 	}
 
-	commandTree := SerializeCommandTree(root)
-	runFlags := SerializeRunFlags(runCmd)
+	return validateLedgerAgainstBaselines(
+		ledger,
+		SerializeCommandTree(root),
+		SerializeRunFlags(runCmd),
+	)
+}
 
+func validateLedgerAgainstBaselines(ledger IntentionalChangesLedger, commandTree, runFlags string) error {
 	for _, removal := range ledger.PlannedRemovals {
 		switch removal.Surface {
 		case "run_flag":

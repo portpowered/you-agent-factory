@@ -71,16 +71,17 @@ func TestRootCommand_SharedDiagnosticsFlagsAvailableOnCoveredCommands(t *testing
 		{"work", "list"},
 		{"factory", "query"},
 		{"factory", "list"},
-		{"factory", "save"},
-		{"factory", "save", "staging"},
+		{"factory", "create"},
+		{"factory", "replace-current"},
 		{"factory", "update", "staging"},
 		{"factory", "delete", "staging"},
 		{"models", "list"},
 		{"models", "inspect"},
 		{"models", "invoke"},
 		{"models", "pull"},
-		{"config", "flatten"},
-		{"config", "expand"},
+		{"factory", "config", "flatten"},
+		{"factory", "config", "expand"},
+		{"factory", "config", "validate"},
 		{"init"},
 		{"docs", "config"},
 	}
@@ -642,14 +643,14 @@ func TestRunCommand_ContinuouslyFlag(t *testing.T) {
 	if runCmd.Long == "" {
 		t.Fatal("expected run command long help text")
 	}
-	if !strings.Contains(runCmd.Long, "run you with no arguments") {
-		t.Fatal("expected run command long help text to point users to no-arg default flow")
+	if !strings.Contains(runCmd.Long, "you run --work ./docs/examples/startup-work.json") {
+		t.Fatal("expected run command long help text to provide explicit default Work")
 	}
 	if !strings.Contains(runCmd.Long, "factory/inputs/task/default") {
 		t.Fatal("expected run command long help text to mention default task input path")
 	}
-	if !strings.Contains(runCmd.Example, "factory/inputs/task/default") {
-		t.Fatal("expected run command examples to mention default task input path")
+	if !strings.Contains(runCmd.Example, "run --work ./docs/examples/startup-work.json") {
+		t.Fatal("expected run command examples to provide explicit default Work")
 	}
 }
 
@@ -693,6 +694,110 @@ func TestRunCommand_WithMockWorkersFlag(t *testing.T) {
 	}
 	if !strings.Contains(runCmd.Long, "--with-mock-workers") {
 		t.Fatal("expected run command long help text to mention --with-mock-workers")
+	}
+}
+
+func TestRunCommand_SkipPermissionsFlag(t *testing.T) {
+	root := NewRootCommand()
+	runCmd, _, err := root.Find([]string{"run"})
+	if err != nil {
+		t.Fatalf("find run: %v", err)
+	}
+
+	flag := runCmd.Flags().Lookup("skip-permissions")
+	if flag == nil {
+		t.Fatal("expected --skip-permissions flag on run command")
+	}
+	if flag.DefValue != "false" {
+		t.Errorf("default skip-permissions = %q, want false", flag.DefValue)
+	}
+	if !strings.Contains(flag.Usage, "invocation-only unsafe permission bypass") {
+		t.Errorf("skip-permissions usage = %q", flag.Usage)
+	}
+	if !strings.Contains(runCmd.Long, "--skip-permissions") {
+		t.Fatal("expected run command long help text to mention --skip-permissions")
+	}
+}
+
+func TestRunCommand_SkipPermissionsFlagMapsToRunConfig(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--skip-permissions"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --skip-permissions: %v", err)
+	}
+	if got.InvocationSkipPermissionsOverride == nil {
+		t.Fatal("expected --skip-permissions to set invocation override")
+	}
+	if !*got.InvocationSkipPermissionsOverride {
+		t.Fatal("expected invocation skip-permissions override to be true")
+	}
+}
+
+func TestRunCommand_WithoutSkipPermissionsLeavesInvocationOverrideUnset(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var got runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run: %v", err)
+	}
+	if got.InvocationSkipPermissionsOverride != nil {
+		t.Fatalf("invocation skip-permissions override = %#v, want nil when flag omitted", got.InvocationSkipPermissionsOverride)
+	}
+}
+
+func TestRunCommand_WorkflowFlagRejected(t *testing.T) {
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	runCalled := false
+	runCLI = func(context.Context, runcli.RunConfig) error {
+		runCalled = true
+		return nil
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--workflow", "workflow-1"})
+
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("expected run-level --workflow to be rejected")
+	}
+	if !strings.Contains(err.Error(), "unknown flag: --workflow") {
+		t.Fatalf("error = %q, want unknown flag --workflow", err.Error())
+	}
+	if runCalled {
+		t.Fatal("run command should not execute when --workflow is unsupported")
 	}
 }
 
@@ -897,7 +1002,6 @@ func TestRunCommand_QuietFlagMapsToRunConfig(t *testing.T) {
 		"--quiet",
 		"--no-record",
 		"--dir", "custom-factory",
-		"--workflow", "workflow-1",
 		"--work", "work.json",
 	})
 
@@ -911,8 +1015,8 @@ func TestRunCommand_QuietFlagMapsToRunConfig(t *testing.T) {
 	if got.Dir != "custom-factory" {
 		t.Errorf("dir = %q, want %q", got.Dir, "custom-factory")
 	}
-	if got.Workflow != "workflow-1" {
-		t.Errorf("workflow = %q, want %q", got.Workflow, "workflow-1")
+	if got.Workflow != "" {
+		t.Errorf("workflow = %q, want empty (run-level --workflow removed)", got.Workflow)
 	}
 	if got.WorkFile != "work.json" {
 		t.Errorf("work file = %q, want %q", got.WorkFile, "work.json")
@@ -1353,6 +1457,72 @@ func TestRootCommand_DefaultWorkerModelProviderFlagMapsToRunConfig(t *testing.T)
 	}
 }
 
+func TestRootCommand_ExplicitEnvironmentIsIsolatedAndFlagsRetainPrecedence(t *testing.T) {
+	homeDir := t.TempDir()
+	configPath := operatorconfig.DefaultConfigPath(homeDir)
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(configPath, []byte(`{"defaults":{"workerModelProvider":"claude"}}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	originalRunCLI := runCLI
+	defer func() { runCLI = originalRunCLI }()
+	var got []runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		got = append(got, cfg)
+		return nil
+	}
+
+	newCommand := func(environment map[string]string) *cobra.Command {
+		return NewRootCommandWithOptions(RootCommandOptions{
+			HomeDir: func() (string, error) { return homeDir, nil },
+			LookupEnv: func(name string) (string, bool) {
+				value, ok := environment[name]
+				return value, ok
+			},
+		})
+	}
+
+	first := newCommand(map[string]string{operatorconfig.EnvDefaultWorkerModelProvider: "codex"})
+	first.SetOut(io.Discard)
+	first.SetErr(io.Discard)
+	first.SetArgs([]string{"run", "--default-worker-model-provider", "gemini", "--no-record"})
+	if err := first.Execute(); err != nil {
+		t.Fatalf("first Execute() error = %v", err)
+	}
+
+	second := newCommand(map[string]string{operatorconfig.EnvDefaultWorkerModelProvider: "codex"})
+	second.SetOut(io.Discard)
+	second.SetErr(io.Discard)
+	second.SetArgs(nil)
+	if err := second.Execute(); err != nil {
+		t.Fatalf("second Execute() error = %v", err)
+	}
+
+	third := newCommand(map[string]string{operatorconfig.EnvDefaultWorkerModelProvider: ""})
+	third.SetOut(io.Discard)
+	third.SetErr(io.Discard)
+	third.SetArgs(nil)
+	if err := third.Execute(); err != nil {
+		t.Fatalf("third Execute() error = %v", err)
+	}
+
+	if len(got) != 3 {
+		t.Fatalf("run calls = %d, want 3", len(got))
+	}
+	if got[0].OperatorDefaults.WorkerModelProvider != "GEMINI" || got[0].OperatorDefaults.WorkerModelProviderSource != operatorconfig.SourceFlag {
+		t.Fatalf("first defaults = %+v, want GEMINI from flag", got[0].OperatorDefaults)
+	}
+	if got[1].OperatorDefaults.WorkerModelProvider != "CODEX" || got[1].OperatorDefaults.WorkerModelProviderSource != operatorconfig.SourceEnv {
+		t.Fatalf("second defaults = %+v, want CODEX from environment", got[1].OperatorDefaults)
+	}
+	if got[2].OperatorDefaults.WorkerModelProvider != "CLAUDE" || got[2].OperatorDefaults.WorkerModelProviderSource != operatorconfig.SourceFile {
+		t.Fatalf("third defaults = %+v, want CLAUDE from file", got[2].OperatorDefaults)
+	}
+}
+
 func TestRootCommand_DefaultWorkerModelFlagMapsToRunConfig(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
@@ -1507,7 +1677,17 @@ func setupNamedGoalCLIEnv(t *testing.T) namedGoalCLIEnv {
 }
 
 func materializedGoalDir(homeDir string) string {
-	return filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories", "@you%2Fgoal")
+	return filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories", "@you", "goal")
+}
+
+func assertFreshGoalMaterializationHasNoEncodedLeaf(t *testing.T, homeDir string) {
+	t.Helper()
+
+	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
+	encodedDir := filepath.Join(globalRoot, "@you%2Fgoal")
+	if _, err := os.Stat(encodedDir); !os.IsNotExist(err) {
+		t.Fatalf("fresh init must not create encoded goal leaf at %s: stat %v", encodedDir, err)
+	}
 }
 
 func executeNamedGoalRun(t *testing.T, root *cobra.Command) {
@@ -1546,6 +1726,7 @@ func assertBuiltInGoalFirstUseResolution(t *testing.T, got runcli.RunConfig, hom
 		t.Fatalf("materialized factory dir = %q, want %q", got.NamedFactoryResolution.FactoryDir, wantMaterializedDir)
 	}
 	assertMaterializedGoalSplitLayout(t, wantMaterializedDir)
+	assertFreshGoalMaterializationHasNoEncodedLeaf(t, homeDir)
 }
 
 func assertMaterializedGoalSplitLayout(t *testing.T, materializedDir string) {

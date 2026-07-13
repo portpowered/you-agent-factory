@@ -2,8 +2,9 @@ import { act, renderHook } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { DashboardSessionStoreTestProvider } from "../../../testing/dashboard-session-test-provider";
 import { useFactoryTimelineStore } from "../../timeline/state/factoryTimelineStore";
-import { DashboardSessionProvider } from "../session/dashboard-session-provider";
+import { emptyReplayWorldState } from "../../timeline/state/timeline/replayWorldStateSupport";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,
@@ -13,7 +14,11 @@ import { useDashboardWorldView } from "./useDashboardWorldView";
 
 function createWrapper() {
   return function Wrapper({ children }: PropsWithChildren) {
-    return <DashboardSessionProvider>{children}</DashboardSessionProvider>;
+    return (
+      <DashboardSessionStoreTestProvider>
+        {children}
+      </DashboardSessionStoreTestProvider>
+    );
   };
 }
 
@@ -63,6 +68,23 @@ describe("useDashboardWorldView", () => {
     expect(result.current.error?.message).toBe(
       "Factory event stream disconnected. Showing last event state.",
     );
+    expect(result.current.hasEvents).toBe(false);
+  });
+
+  it("treats a restored tick-zero checkpoint as ready before events arrive", () => {
+    useFactoryTimelineStore.getState().restoreCheckpoint({
+      afterEventId: "event-0",
+      afterSequence: 0,
+      replayState: emptyReplayWorldState(0),
+      selectedTick: 0,
+    });
+
+    const { result } = renderHook(() => useDashboardWorldView(), {
+      wrapper: createWrapper(),
+    });
+
+    expect(result.current.isInitialLoading).toBe(false);
+    expect(result.current.snapshot?.tick_count).toBe(0);
     expect(result.current.hasEvents).toBe(false);
   });
 });

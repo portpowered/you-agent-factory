@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
@@ -28,7 +29,7 @@ func TestInstallScript_InstallsLatestReleaseArchiveAndPrintsPathGuidance(t *test
 
 	archiveName := "you_1.2.3_linux_amd64.tar.gz"
 	checksumName := "you_1.2.3_checksums.txt"
-	archiveBytes := buildTarGzArchive(t, "you", []byte("#!/usr/bin/env sh\necho installed-from-test\n"))
+	archiveBytes := buildTarGzArchive(t, "you", readInstallTestBinary(t))
 	checksumContents := fmt.Sprintf("%s  %s\n", sha256Hex(archiveBytes), archiveName)
 	requests := make([]string, 0, 3)
 
@@ -49,13 +50,14 @@ func TestInstallScript_InstallsLatestReleaseArchiveAndPrintsPathGuidance(t *test
 	}))
 	defer server.Close()
 
+	homeDir := t.TempDir()
 	installDir := filepath.Join(t.TempDir(), "bin")
 	output, err := runInstallScript(t, []string{
 		"INFINITE_YOU_INSTALL_BASE_URL=" + server.URL + "/releases",
 		"INFINITE_YOU_INSTALL_DIR=" + installDir,
 		"INFINITE_YOU_INSTALL_OS=linux",
 		"INFINITE_YOU_INSTALL_ARCH=amd64",
-		"HOME=" + t.TempDir(),
+		"HOME=" + homeDir,
 	})
 	if err != nil {
 		t.Fatalf("run install.sh: %v\n%s", err, output)
@@ -76,18 +78,19 @@ func TestInstallScript_InstallsLatestReleaseArchiveAndPrintsPathGuidance(t *test
 	if !strings.Contains(output, "Installed you v1.2.3 to "+installedBinary) {
 		t.Fatalf("install output = %q, want installed path message", output)
 	}
+	if !strings.Contains(output, "Initializing operator/system config and default factories.") {
+		t.Fatalf("install output = %q, want post-install config init message", output)
+	}
+	if !strings.Contains(output, "Created system config at") {
+		t.Fatalf("install output = %q, want config init success output", output)
+	}
 	if !strings.Contains(output, "Add it to your PATH with:") {
 		t.Fatalf("install output = %q, want PATH guidance", output)
 	}
 
-	run := exec.Command(installedBinary)
-	run.Env = append(os.Environ(), "PATH="+os.Getenv("PATH"))
-	commandOutput, runErr := run.CombinedOutput()
-	if runErr != nil {
-		t.Fatalf("run installed binary: %v\n%s", runErr, commandOutput)
-	}
-	if strings.TrimSpace(string(commandOutput)) != "installed-from-test" {
-		t.Fatalf("installed binary output = %q, want installed-from-test", string(commandOutput))
+	configPath := defaultpaths.OperatorConfigPath(homeDir)
+	if _, statErr := os.Stat(configPath); statErr != nil {
+		t.Fatalf("stat post-install config: %v", statErr)
 	}
 }
 
@@ -131,6 +134,51 @@ func TestInstallScript_FailsOnChecksumMismatch(t *testing.T) {
 	}
 }
 
+func TestInstallScript_FailsWhenPostInstallConfigInitFails(t *testing.T) {
+	t.Parallel()
+
+	skipIfInstallScriptUnsupported(t)
+
+	archiveName := "you_1.2.3_linux_amd64.tar.gz"
+	checksumName := "you_1.2.3_checksums.txt"
+	archiveBytes := buildTarGzArchive(t, "you", readInstallTestBinary(t))
+	checksumContents := fmt.Sprintf("%s  %s\n", sha256Hex(archiveBytes), archiveName)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/releases/download/v1.2.3/" + archiveName:
+			w.Write(archiveBytes)
+		case "/releases/download/v1.2.3/" + checksumName:
+			w.Write([]byte(checksumContents))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	homeDir := t.TempDir()
+	configParent := filepath.Dir(defaultpaths.OperatorConfigPath(homeDir))
+	if err := os.WriteFile(configParent, []byte("blocked"), 0o644); err != nil {
+		t.Fatalf("write blocking config parent: %v", err)
+	}
+
+	installDir := filepath.Join(t.TempDir(), "bin")
+	output, err := runInstallScript(t, []string{
+		"INFINITE_YOU_INSTALL_BASE_URL=" + server.URL + "/releases",
+		"INFINITE_YOU_INSTALL_DIR=" + installDir,
+		"INFINITE_YOU_INSTALL_OS=linux",
+		"INFINITE_YOU_INSTALL_ARCH=amd64",
+		"INFINITE_YOU_VERSION=1.2.3",
+		"HOME=" + homeDir,
+	})
+	if err == nil {
+		t.Fatalf("run install.sh: expected post-install config init failure\n%s", output)
+	}
+	if !strings.Contains(output, "failed to initialize operator/system config and default factories") {
+		t.Fatalf("install output = %q, want actionable config init failure message", output)
+	}
+}
+
 func TestInstallScript_FailsOnUnsupportedOperatingSystem(t *testing.T) {
 	t.Parallel()
 
@@ -156,7 +204,7 @@ func TestSmokeInstallScript_InstallsHostedScriptAndSmokesBinary(t *testing.T) {
 
 	archiveName := "you_1.2.3_linux_amd64.tar.gz"
 	checksumName := "you_1.2.3_checksums.txt"
-	archiveBytes := buildTarGzArchive(t, "you", []byte("#!/usr/bin/env sh\nif [ \"${1:-}\" = \"--help\" ]; then\n  exit 0\nfi\necho installed-from-smoke\n"))
+	archiveBytes := buildTarGzArchive(t, "you", readInstallTestBinary(t))
 	checksumContents := fmt.Sprintf("%s  %s\n", sha256Hex(archiveBytes), archiveName)
 	installScript := readInstallScript(t)
 
@@ -246,6 +294,17 @@ func readInstallScript(t *testing.T) []byte {
 	contents, err := os.ReadFile(filepath.Join(testutil.MustRepoRoot(t), repoInstallScriptPath))
 	if err != nil {
 		t.Fatalf("read install.sh: %v", err)
+	}
+	return contents
+}
+
+func readInstallTestBinary(t *testing.T) []byte {
+	t.Helper()
+
+	binaryPath := buildReleaseSmokeBinary(t)
+	contents, err := os.ReadFile(binaryPath)
+	if err != nil {
+		t.Fatalf("read install test binary: %v", err)
 	}
 	return contents
 }

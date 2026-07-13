@@ -2,8 +2,12 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../api/events";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
-import { buildWorkOutcomeTimelineSamplesFromEvents } from "../hooks/useWorkOutcomeChart";
 import { getDashboardWorkChartSeriesStyle } from "../lib/chart-contract";
+import {
+  createMaterializedWorkOutcomeState,
+  reduceMaterializedWorkOutcomeEvents,
+  selectMaterializedWorkOutcomeSamples,
+} from "../lib/materializer/materialized-work-outcome";
 import { buildWorkChartModel, type WorkChartModel } from "../lib/trends";
 import { getWorkOutcomeMessages } from "../messages/work-outcome";
 import { WorkChartCard } from "./d3-information-card";
@@ -195,8 +199,8 @@ const edgeZoomWorkChartModel: WorkChartModel = {
 };
 
 const liveSessionLikeModel = buildWorkChartModel(
-  buildWorkOutcomeTimelineSamplesFromEvents(
-    [
+  selectMaterializedWorkOutcomeSamples(
+    reduceMaterializedWorkOutcomeEvents(createMaterializedWorkOutcomeState(), [
       workOutcomeEvent("run-started", 0, FACTORY_EVENT_TYPES.runRequest, {
         factory: {
           resources: [{ capacity: 10, name: "executor-slot" }],
@@ -335,7 +339,7 @@ const liveSessionLikeModel = buildWorkChartModel(
         },
         { dispatchId: "dispatch-plan-c" },
       ),
-    ],
+    ]),
     12,
   ),
   "session",

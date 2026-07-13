@@ -645,3 +645,66 @@ func postFactorySessionRetryDispatchRaw(
 	}
 	return resp, nil
 }
+
+func drainAPILifecycleRuntimeSessions(t *testing.T, service factorysessionexecution.Service) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		list, err := service.ListSessions(context.Background(), factorysessionexecution.ListSessionsRequest{
+			Scope: factorysessionexecution.SessionListScopeAll,
+		})
+		if err != nil {
+			return
+		}
+		pending := false
+		for _, session := range list.DurableSessions {
+			if factorysessionexecution.IsTerminalLifecycleStatus(session.Status) {
+				continue
+			}
+			pending = true
+			_, _ = service.Terminate(context.Background(), session.SessionID, factorysessionexecution.ControlRequest{
+				Reason: "test cleanup",
+			})
+		}
+		if !pending {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
+func removeAPILifecycleProjectState(t *testing.T, projectRoot string) {
+	t.Helper()
+	const (
+		cleanupTimeout      = 5 * time.Second
+		cleanupPollInterval = 25 * time.Millisecond
+		cleanupQuietPeriod  = 250 * time.Millisecond
+	)
+	runtimeStateRoot := filepath.Join(projectRoot, ".you-agent-factory")
+	deadline := time.Now().Add(cleanupTimeout)
+	var absentSince time.Time
+	for time.Now().Before(deadline) {
+		_, statErr := os.Stat(runtimeStateRoot)
+		if statErr == nil {
+			// Terminate can publish its terminal projection before the async
+			// runner completes its final persistence write. Reset the quiet
+			// period whenever that late write recreates runtime state.
+			absentSince = time.Time{}
+		} else if !errors.Is(statErr, os.ErrNotExist) {
+			absentSince = time.Time{}
+		}
+
+		if err := os.RemoveAll(runtimeStateRoot); err != nil {
+			absentSince = time.Time{}
+			time.Sleep(cleanupPollInterval)
+			continue
+		}
+		if absentSince.IsZero() {
+			absentSince = time.Now()
+		} else if time.Since(absentSince) >= cleanupQuietPeriod {
+			return
+		}
+		time.Sleep(cleanupPollInterval)
+	}
+	t.Errorf("runtime state directory %q did not remain removed during cleanup", runtimeStateRoot)
+}

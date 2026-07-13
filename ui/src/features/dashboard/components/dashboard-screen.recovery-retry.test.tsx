@@ -13,6 +13,7 @@ import {
   useFactoryTimelineStore,
 } from "../../timeline/public";
 import { emptyReplayWorldState } from "../../timeline/state/timeline/replayWorldStateSupport";
+import { createMaterializedWorkOutcomeState } from "../../work-outcome/public/materializer";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,
@@ -63,7 +64,11 @@ vi.mock("../../header/public", () => ({
   }) => <StatusPanelProbe detail={detail} title={title} />,
 }));
 
-function indexedDBRequest<T>(result: T, beforeSuccess?: () => void) {
+function indexedDBRequest<T>(
+  result: T,
+  beforeSuccess?: () => void,
+  afterSuccess?: () => void,
+) {
   const request = {
     error: null,
     onblocked: null,
@@ -79,6 +84,7 @@ function indexedDBRequest<T>(result: T, beforeSuccess?: () => void) {
   window.setTimeout(() => {
     beforeSuccess?.();
     request.onsuccess?.({} as Event);
+    afterSuccess?.();
   }, 0);
 
   return request;
@@ -92,20 +98,38 @@ function installIndexedDBTestDouble() {
     objectStoreNames: {
       contains: () => true,
     },
-    transaction: () => ({
-      objectStore: () => ({
-        delete: (key: string) =>
-          indexedDBRequest(undefined, () => {
-            records.delete(key);
-          }),
-        get: (key: string) => indexedDBRequest(records.get(key)),
-        getAll: () => indexedDBRequest([...records.values()]),
-        put: (value: { sessionID: string; storageKey?: string }) =>
-          indexedDBRequest(value.storageKey ?? value.sessionID, () => {
-            records.set(value.storageKey ?? value.sessionID, value);
-          }),
-      }),
-    }),
+    transaction: () => {
+      const transaction = {
+        oncomplete: null,
+        objectStore: () => ({
+          delete: (key: string) =>
+            indexedDBRequest(
+              undefined,
+              () => {
+                records.delete(key);
+              },
+              () =>
+                (transaction.oncomplete as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                ),
+            ),
+          get: (key: string) => indexedDBRequest(records.get(key)),
+          getAll: () => indexedDBRequest([...records.values()]),
+          put: (value: { sessionID: string; storageKey?: string }) =>
+            indexedDBRequest(
+              value.storageKey ?? value.sessionID,
+              () => {
+                records.set(value.storageKey ?? value.sessionID, value);
+              },
+              () =>
+                (transaction.oncomplete as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                ),
+            ),
+        }),
+      };
+      return transaction;
+    },
   };
   const indexedDB = {
     open: () => {
@@ -136,6 +160,7 @@ function createWrapper(queryClient: QueryClient) {
 describe("DashboardScreen stale-cursor retry", () => {
   let queryClient: QueryClient;
   let getFactorySessionSyncPreflightSpy: ReturnType<typeof vi.spyOn>;
+  let listFactorySessionsSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     replayHarness.install();
@@ -160,32 +185,51 @@ describe("DashboardScreen stale-cursor retry", () => {
           provided: true,
           validForStreamGeneration: true,
         },
-        requestedSessionId: DEFAULT_FACTORY_SESSION_ID,
+        requestedSessionId: RESOLVED_DEFAULT_SESSION_UUID,
         streamGenerationId: "2026-06-26T00:00:00Z",
       });
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes(`/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`)) {
-        return new Response(
-          JSON.stringify({
-            factorySessionId: RESOLVED_DEFAULT_SESSION_UUID,
-            outcome: "CURSOR_STALE",
-            retry: {
-              omitAfterEventId: true,
-              omitAfterSequence: true,
+    listFactorySessionsSpy = vi
+      .spyOn(factorySessionsAPI, "listFactorySessions")
+      .mockResolvedValue([
+        {
+          factoryDir: "/workspace/root",
+          folderPath: "/workspace/root",
+          id: RESOLVED_DEFAULT_SESSION_UUID,
+          isDefault: true,
+          project: "root",
+          target: { kind: "default" },
+        },
+      ]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (
+          url.includes(
+            `/factory-sessions/${RESOLVED_DEFAULT_SESSION_UUID}/events`,
+          )
+        ) {
+          return new Response(
+            JSON.stringify({
+              factorySessionId: RESOLVED_DEFAULT_SESSION_UUID,
+              outcome: "CURSOR_STALE",
+              retry: {
+                omitAfterEventId: true,
+                omitAfterSequence: true,
+              },
+            }),
+            {
+              headers: {
+                "Content-Type": "application/json",
+              },
+              status: 200,
             },
-          }),
-          {
-            headers: {
-              "Content-Type": "application/json",
-            },
-            status: 200,
-          },
-        );
-      }
+          );
+        }
 
-      throw new Error(`unexpected fetch for ${url}`);
-    }));
+        throw new Error(`unexpected fetch for ${url}`);
+      }),
+    );
     useDashboardBentoStore.setState({
       refreshToken: 0,
       selectedTraceID: null,
@@ -205,6 +249,7 @@ describe("DashboardScreen stale-cursor retry", () => {
   afterEach(() => {
     replayHarness.reset();
     getFactorySessionSyncPreflightSpy.mockRestore();
+    listFactorySessionsSpy.mockRestore();
     vi.unstubAllGlobals();
     useDashboardBentoStore.setState({
       refreshToken: 0,
@@ -230,6 +275,7 @@ describe("DashboardScreen stale-cursor retry", () => {
       {
         afterEventId: "checkpoint-event-7",
         afterSequence: 7,
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
         replayState: emptyReplayWorldState(7),
         selectedTick: 7,
       },

@@ -10,7 +10,6 @@ import {
 } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ImportFactoryValue } from "./api/session-factory";
-import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
 import * as factoryPngExportModule from "./features/export/lib/factory-png-export";
 import {
   createDeferredPromise,
@@ -22,6 +21,7 @@ import {
   installExportDownloadProbe,
   toArrayBuffer,
 } from "./testing/app-shell-export-test-utils";
+import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./testing/app-shell-session-preflight-test-utils";
 import {
   baselineSnapshot,
   chainRenderAppFetchMock,
@@ -44,7 +44,8 @@ describe("App shell export dialog flows", () => {
     chainRenderAppFetchMock(fetchMock, async (path, method) => {
       if (
         method === "GET" &&
-        path === "/factory-sessions/~default/factory"
+        path ===
+          `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory`
       ) {
         return jsonResponse(currentSessionFactoryExportAPIResponse);
       }
@@ -93,7 +94,9 @@ describe("App shell export dialog flows", () => {
       expect(nonPromptTemplateFetchPaths(fetchMock)).toEqual([]);
       expect(
         fetchCallPaths(fetchMock).filter((path) => path.endsWith("/factory")),
-      ).toContain(`/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/factory`);
+      ).toContain(
+        `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory`,
+      );
       expect(exportProbe.getDownloadedBlob()).toBeNull();
       expect(exportProbe.getDownloadedFilename()).toBe("");
     } finally {
@@ -148,7 +151,8 @@ describe("App shell export dialog flows", () => {
     chainRenderAppFetchMock(fetchMock, async (path, method) => {
       if (
         method !== "GET" ||
-        path !== `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/factory`
+        path !==
+          `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory`
       ) {
         return undefined;
       }
@@ -251,7 +255,8 @@ describe("App shell export dialog flows", () => {
     chainRenderAppFetchMock(fetchMock, async (path, method) => {
       if (
         method === "GET" &&
-        path === "/factory-sessions/~default/factory"
+        path ===
+          `/factory-sessions/${APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID}/factory`
       ) {
         return jsonResponse(currentSessionFactoryExportAPIResponse);
       }

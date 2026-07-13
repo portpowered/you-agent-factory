@@ -4,14 +4,17 @@ enum:
   - BAD_REQUEST
   - CONFLICT
   - NOT_FOUND
+  - GONE
   - INTERNAL_SERVER_ERROR
 x-enum-varnames:
   - ErrorFamilyBadRequest
   - ErrorFamilyConflict
   - ErrorFamilyNotFound
+  - ErrorFamilyGone
   - ErrorFamilyInternalServerError
 x-enum-descriptions:
   - Request payload or parameter validation failed.
   - The request conflicts with current resource state.
   - The requested resource does not exist.
+  - The requested resource previously existed but is no longer retained.
   - The server failed while handling an otherwise valid request.

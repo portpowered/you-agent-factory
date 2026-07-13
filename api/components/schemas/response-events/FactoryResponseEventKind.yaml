@@ -1,0 +1,43 @@
+type: string
+description: >-
+  Semantic category of one FactoryResponseEvent. Response events are ephemeral
+  observation records and must not derive canonical factory replay state.
+x-enum-varnames:
+  - FactoryResponseEventKindSession
+  - FactoryResponseEventKindRun
+  - FactoryResponseEventKindTurn
+  - FactoryResponseEventKindMessage
+  - FactoryResponseEventKindReasoning
+  - FactoryResponseEventKindTool
+  - FactoryResponseEventKindFileChange
+  - FactoryResponseEventKindPlan
+  - FactoryResponseEventKindProgress
+  - FactoryResponseEventKindUsage
+  - FactoryResponseEventKindError
+  - FactoryResponseEventKindStreamGap
+enum:
+  - SESSION
+  - RUN
+  - TURN
+  - MESSAGE
+  - REASONING
+  - TOOL
+  - FILE_CHANGE
+  - PLAN
+  - PROGRESS
+  - USAGE
+  - ERROR
+  - STREAM_GAP
+x-enum-descriptions:
+  - Session-scoped lifecycle and capability metadata.
+  - Run-scoped lifecycle metadata.
+  - Turn-scoped lifecycle metadata.
+  - Assistant or user message snapshots and deltas.
+  - Reasoning summary snapshots and deltas.
+  - Tool lifecycle metadata and bounded summaries.
+  - Observed file mutation notifications.
+  - Published plan updates.
+  - Coarse progress notifications.
+  - Token or model usage accounting.
+  - Provider-neutral error notifications with optional retry metadata.
+  - Discontinuity markers in the retained response-event stream.

@@ -1,12 +1,31 @@
 package mcpcli
 
 import (
+	"bytes"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 )
+
+func TestNewServeCommand_HelpRoutesToCanonicalMCPTopic(t *testing.T) {
+	cmd := NewServeCommand()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetArgs([]string{"--help"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got := output.String(); !strings.Contains(got, "you docs mcp") {
+		t.Fatalf("help missing canonical MCP topic:\n%s", got)
+	} else if strings.Contains(got, "mcp-hosts") {
+		t.Fatalf("help still routes to retired MCP topic:\n%s", got)
+	} else if !strings.Contains(got, "pkg/api/testdata/durable-session-contract-fixtures.json") {
+		t.Fatalf("help missing the real fixture catalog path:\n%s", got)
+	}
+}
 
 func TestResolveServeService_RuntimeBackedSelectsJavaScriptRuntimeService(t *testing.T) {
 	projectRoot := t.TempDir()

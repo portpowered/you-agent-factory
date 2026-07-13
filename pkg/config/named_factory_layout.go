@@ -141,22 +141,7 @@ func ListNamedFactories(rootDir string) ([]NamedFactoryListEntry, error) {
 
 	collector := newNamedFactoryListCollector(currentName, len(children))
 	for _, child := range children {
-		if !child.IsDir() {
-			continue
-		}
-		name := child.Name()
-		if isReservedNamedFactoryListDir(name) {
-			continue
-		}
-		factoryDir := filepath.Join(rootDir, name)
-		if err := requireFactoryConfig(factoryDir); err != nil {
-			continue
-		}
-		displayName, err := NamedFactoryLayoutSegmentToName(name)
-		if err != nil {
-			continue
-		}
-		collector.append(displayName, factoryDir)
+		collectNamedFactoriesFromRootChild(rootDir, child, collector)
 	}
 
 	entries := collector.entries()
@@ -185,6 +170,64 @@ func validateNamedFactoryListRoot(rootDir string) error {
 
 func isReservedNamedFactoryListDir(name string) bool {
 	return name == interfaces.InputsDir || name == interfaces.WorkersDir || name == interfaces.WorkstationsDir
+}
+
+func isNamedFactoryStagingDir(name string) bool {
+	return strings.HasPrefix(name, ".") && strings.Contains(name, ".staging-")
+}
+
+func isLegacyEncodedNamedFactoryLeaf(name string) bool {
+	return strings.Contains(name, "%2F")
+}
+
+func shouldSkipNamedFactoryListEntry(name string) bool {
+	return isReservedNamedFactoryListDir(name) ||
+		isNamedFactoryStagingDir(name) ||
+		isLegacyEncodedNamedFactoryLeaf(name)
+}
+
+func collectNamedFactoriesFromRootChild(rootDir string, child os.DirEntry, collector *namedFactoryListCollector) {
+	if !child.IsDir() {
+		return
+	}
+	name := child.Name()
+	if shouldSkipNamedFactoryListEntry(name) {
+		return
+	}
+	factoryDir := filepath.Join(rootDir, name)
+	if err := requireFactoryConfig(factoryDir); err == nil {
+		displayName, err := NamedFactoryLayoutSegmentToName(name)
+		if err != nil {
+			return
+		}
+		collector.append(displayName, factoryDir)
+		return
+	}
+	collectScopedNamedFactories(factoryDir, name, collector)
+}
+
+func collectScopedNamedFactories(scopeDir, scopeName string, collector *namedFactoryListCollector) {
+	if !strings.HasPrefix(scopeName, scopedNamedFactoryPrefix) {
+		return
+	}
+	scopeChildren, err := os.ReadDir(scopeDir)
+	if err != nil {
+		return
+	}
+	for _, scopeChild := range scopeChildren {
+		if !scopeChild.IsDir() || isNamedFactoryStagingDir(scopeChild.Name()) {
+			continue
+		}
+		scopedFactoryDir := filepath.Join(scopeDir, scopeChild.Name())
+		if err := requireFactoryConfig(scopedFactoryDir); err != nil {
+			continue
+		}
+		displayName, err := NamedFactoryNameFromPathSegments([]string{scopeName, scopeChild.Name()})
+		if err != nil {
+			continue
+		}
+		collector.append(displayName, scopedFactoryDir)
+	}
 }
 
 type namedFactoryListCollector struct {
@@ -242,11 +285,7 @@ func DeleteNamedFactory(rootDir, name string) error {
 		return fmt.Errorf("factory root is required")
 	}
 
-	segment, err := NamedFactoryNameToLayoutSegment(name)
-	if err != nil {
-		return err
-	}
-	canonicalName, err := NamedFactoryLayoutSegmentToName(segment)
+	canonicalName, err := canonicalNamedFactoryName(name)
 	if err != nil {
 		return err
 	}
@@ -263,13 +302,112 @@ func DeleteNamedFactory(rootDir, name string) error {
 	if current == canonicalName {
 		return fmt.Errorf(
 			"delete factory %q: %w: switch .current-factory to another factory first",
-			segment,
+			canonicalName,
 			ErrNamedFactoryIsCurrent,
 		)
 	}
 
 	if err := os.RemoveAll(factoryDir); err != nil {
-		return fmt.Errorf("delete factory %q: %w", segment, err)
+		return fmt.Errorf("delete factory %q: %w", canonicalName, err)
 	}
 	return nil
+}
+
+// BuiltInNamedFactoryInitOutcome reports whether init created or skipped one
+// packaged default factory.
+type BuiltInNamedFactoryInitOutcome string
+
+const (
+	BuiltInNamedFactoryCreated BuiltInNamedFactoryInitOutcome = "created"
+	BuiltInNamedFactorySkipped BuiltInNamedFactoryInitOutcome = "skipped"
+)
+
+// BuiltInNamedFactoryInitResult summarizes one packaged default factory ensure
+// operation under a global named-factories root.
+type BuiltInNamedFactoryInitResult struct {
+	Name       string
+	FactoryDir string
+	Outcome    BuiltInNamedFactoryInitOutcome
+}
+
+// BuiltInNamedFactoryNames returns the sorted canonical names for packaged
+// default factories materialized during you config init.
+func BuiltInNamedFactoryNames() []string {
+	return builtInNamedFactoryNamesSorted()
+}
+
+// EnsureBuiltInNamedFactories materializes each packaged default factory under
+// globalRoot using the hierarchical named-factories layout. Existing factory
+// directories are left unchanged.
+func EnsureBuiltInNamedFactories(globalRoot string) ([]BuiltInNamedFactoryInitResult, error) {
+	globalRoot = strings.TrimSpace(globalRoot)
+	if globalRoot == "" {
+		return nil, fmt.Errorf("global factory root is required")
+	}
+
+	names := builtInNamedFactoryNamesSorted()
+	results := make([]BuiltInNamedFactoryInitResult, 0, len(names))
+	for _, name := range names {
+		factoryDir, outcome, err := ensureBuiltInNamedFactoryWithOutcome(globalRoot, name)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, BuiltInNamedFactoryInitResult{
+			Name:       name,
+			FactoryDir: factoryDir,
+			Outcome:    outcome,
+		})
+	}
+	return results, nil
+}
+
+func builtInNamedFactoryNamesSorted() []string {
+	names := make([]string, 0, len(builtInNamedFactoryCatalog))
+	for name := range builtInNamedFactoryCatalog {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func ensureBuiltInNamedFactoryWithOutcome(
+	globalRoot, canonicalName string,
+) (string, BuiltInNamedFactoryInitOutcome, error) {
+	payload, ok := builtInNamedFactoryCatalog[canonicalName]
+	if !ok {
+		return "", "", fmt.Errorf("unknown built-in named factory %q", canonicalName)
+	}
+
+	targetDir, err := MapNamedFactoryDir(globalRoot, canonicalName)
+	if err != nil {
+		return "", "", fmt.Errorf("materialize packaged default factory %q in global root %s: %w", canonicalName, globalRoot, err)
+	}
+	if _, err := os.Stat(targetDir); err == nil {
+		if err := requireFactoryConfig(targetDir); err != nil {
+			return "", "", fmt.Errorf(
+				"materialize packaged default factory %q in global root %s: existing target invalid: %w",
+				canonicalName,
+				globalRoot,
+				err,
+			)
+		}
+		upgradedDir, err := upgradeMaterializedBuiltInNamedFactoryIfNeeded(globalRoot, canonicalName, targetDir)
+		if err != nil {
+			return "", "", err
+		}
+		return upgradedDir, BuiltInNamedFactorySkipped, nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return "", "", fmt.Errorf(
+			"materialize packaged default factory %q in global root %s: check existing target: %w",
+			canonicalName,
+			globalRoot,
+			err,
+		)
+	}
+
+	factoryDir, err := PersistNamedFactory(globalRoot, canonicalName, payload)
+	if err != nil {
+		return "", "", fmt.Errorf("materialize packaged default factory %q in global root %s: %w", canonicalName, globalRoot, err)
+	}
+	return factoryDir, BuiltInNamedFactoryCreated, nil
 }

@@ -26,7 +26,38 @@ export const defaultFactorySessionID = "~default";
 export const resolvedDefaultFactorySessionID =
   "019e0000-0000-7000-8000-000000000042";
 export const timelineCheckpointDBVersion = 3;
-export const timelineCheckpointSchemaVersion = 3;
+export const timelineCheckpointSchemaVersion = 4;
+
+export function emptyMaterializedWorkOutcomeState(cursor) {
+  return {
+    accumulator: {
+      activeDispatchesByID: {},
+      appliedEventCount: 0,
+      completedAcceptedCount: 0,
+      completedDispatchCount: 0,
+      failedWorkItemsByID: {},
+      initialPlaceIDs: [],
+      workItemsByID: {},
+    },
+    counts: {
+      completed: 0,
+      dispatched: 0,
+      failed: 0,
+      inFlight: 0,
+      queued: 0,
+    },
+    cursor: {
+      eventID: cursor.afterEventId,
+      eventTime: cursor.eventTime ?? "1970-01-01T00:00:00Z",
+      sequence: cursor.afterSequence,
+      tick: cursor.selectedTick,
+    },
+    failedByWorkType: {},
+    failedWorkLabels: [],
+    samples: [],
+    version: 1,
+  };
+}
 
 function isDefaultFactorySessionSelector(sessionID) {
   return (
@@ -600,12 +631,15 @@ function resolveRuntimeCommand(args) {
 
 function spawnRuntime(args, extraEnv = {}, options = {}) {
   const runtime = resolveRuntimeCommand(args);
-  return spawn(runtime.command, runtime.args, {
+  const child = spawn(runtime.command, runtime.args, {
     cwd: packageRoot,
+    detached: process.platform !== "win32",
     env: createBunEnv(extraEnv, options),
     shell: false,
     stdio: "pipe",
   });
+  child[repoProcessGroupKey] = process.platform !== "win32";
+  return child;
 }
 
 function spawnRepoProcess(command, args, options = {}) {
@@ -1044,7 +1078,7 @@ export async function startBrowserPreview() {
   const preview = await state.previewPromise;
   return {
     ...preview,
-    stop: async () => {},
+    stop: stopBrowserPreview,
   };
 }
 
@@ -1373,7 +1407,7 @@ export async function startFactoryApiServer({
     return {
       factoryDir: sessionState.session.factoryDir,
       folderPath: sessionState.session.folderPath,
-      id: sessionState.session.id,
+      id: resolvedFactorySessionIDForSession(sessionState.session),
       isDefault: sessionState.session.isDefault,
       project: sessionState.session.project,
       runtime: {
@@ -1407,7 +1441,7 @@ export async function startFactoryApiServer({
   }
 
   function bumpEditableFactoryDefinitionVersion(sessionID) {
-    const sessionState = sessionRegistry.state.get(sessionID);
+    const sessionState = sessionStateForRequest(sessionID);
     sessionState.version = {
       logical: sessionState.version.logical + 1,
       physical: new Date().toISOString(),
@@ -1440,7 +1474,9 @@ export async function startFactoryApiServer({
       });
       response.end(
         JSON.stringify({
-          sessions: sessionRegistry.sessions,
+          sessions: sessionRegistry.sessions.map((session) =>
+            buildFactorySessionDocument(session.id),
+          ),
         }),
       );
       return;

@@ -1,0 +1,337 @@
+[
+  {
+    "schemaVersion": "agent-factory.response-event.v1",
+    "eventId": "evt-coverage-session-001",
+    "sequence": 1,
+    "recordedAt": "2026-07-13T12:00:00Z",
+    "factorySessionId": "session-coverage-001",
+    "runId": "run-coverage-001",
+    "kind": "SESSION",
+    "phase": "STARTED",
+    "provenance": {
+      "provider": "example-provider",
+      "nativeEventType": "session.started",
+      "delivery": "NATIVE_STREAM",
+      "representation": "NOTIFICATION",
+      "fidelity": "LIFECYCLE_ONLY"
+    },
+    "payload": {
+      "status": "started",
+      "capabilities": {
+        "nativeStreaming": true,
+        "messageDeltas": true,
+        "messageSnapshots": true,
+        "reasoningSummaries": false,
+        "toolLifecycle": true,
+        "toolOutputDeltas": true,
+        "fileChanges": false,
+        "plans": false,
+        "usage": true,
+        "stableItemIds": true,
+        "providerReconnect": true
+      }
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.response-event.v1",
+    "eventId": "evt-coverage-run-001",
+    "sequence": 2,
+    "recordedAt": "2026-07-13T12:00:01Z",
+    "factorySessionId": "session-coverage-001",
+    "runId": "run-coverage-001",
+    "kind": "RUN",
+    "phase": "STARTED",
+    "provenance": {
+      "provider": "example-provider",
+      "nativeEventType": "run.started",
+      "delivery": "NATIVE_STREAM",
+      "representation": "NOTIFICATION",
+      "fidelity": "LIFECYCLE_ONLY"
+    },
+    "payload": {
+      "status": "running"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.response-event.v1",
+    "eventId": "evt-coverage-turn-001",
+    "sequence": 3,
+    "recordedAt": "2026-07-13T12:00:02Z",
+    "factorySessionId": "session-coverage-001",
+    "runId": "run-coverage-001",
+    "kind": "TURN",
+    "phase": "STARTED",
+    "provenance": {
+      "provider": "example-provider",
+      "nativeEventType": "turn.started",
+      "delivery": "NATIVE_STREAM",
+      "representation": "NOTIFICATION",
+      "fidelity": "LIFECYCLE_ONLY"
+    },
+    "payload": {
+      "turnIndex": 0,
+      "status": "active"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.response-event.v1",
+    "eventId": "evt-coverage-message-snapshot-001",
+    "sequence": 4,
+    "recordedAt": "2026-07-13T12:00:03Z",
+    "factorySessionId": "session-coverage-001",
+    "runId": "run-coverage-001",
+    "kind": "MESSAGE",
+    "phase": "COMPLETED",
+    "provenance": {
+      "provider": "example-provider",
+      "nativeEventType": "message.completed",
+      "delivery": "NATIVE_STREAM",
+      "representation": "SNAPSHOT",
+      "fidelity": "LOSSLESS"
+    },
+    "payload": {
+      "role": "assistant",
+      "contentBlocks": [
+        {
+          "kind": "TEXT",
+          "text": "Coverage snapshot message."
+        }
+      ]
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.response-event.v1",
+    "eventId": "evt-coverage-message-delta-001",
+    "sequence": 5,
+    "recordedAt": "2026-07-13T12:00:04Z",
+    "factorySessionId": "session-coverage-001",
+    "runId": "run-coverage-001",
+    "kind": "MESSAGE",
+    "phase": "DELTA",
+    "provenance": {
+      "provider": "example-provider",
+      "nativeEventType": "message.delta",
+      "delivery": "NATIVE_STREAM",
+      "representation": "DELTA",
+      "fidelity": "LOSSLESS"
+    },
+    "payload": {
+      "contentBlockIndex": 0,
+      "contentBlockKind": "TEXT",
+      "textDelta": "delta"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.response-event.v1",
+    "eventId": "evt-coverage-reasoning-001",
+    "sequence": 6,
+    "recordedAt": "2026-07-13T12:00:05Z",
+    "factorySessionId": "session-coverage-001",
+    "runId": "run-coverage-001",
+    "kind": "REASONING",
+    "phase": "DELTA",
+    "provenance": {
+      "provider": "example-provider",
+      "nativeEventType": "reasoning.delta",
+      "delivery": "NATIVE_STREAM",
+      "representation": "DELTA",
+      "fidelity": "LOSSLESS"
+    },
+    "payload": {
+      "summaryDelta": "Considering options."
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.response-event.v1",
+    "eventId": "evt-coverage-tool-lifecycle-001",
+    "sequence": 7,
+    "recordedAt": "2026-07-13T12:00:06Z",
+    "factorySessionId": "session-coverage-001",
+    "runId": "run-coverage-001",
+    "kind": "TOOL",
+    "phase": "COMPLETED",
+    "provenance": {
+      "provider": "example-provider",
+      "nativeEventType": "tool.completed",
+      "delivery": "NATIVE_STREAM",
+      "representation": "SNAPSHOT",
+      "fidelity": "LIFECYCLE_ONLY"
+    },
+    "payload": {
+      "toolCallId": "call-coverage-001",
+      "toolName": "search",
+      "status": "completed",
+      "argumentsSummary": {
+        "query": "coverage"
+      },
+      "resultSummary": {
+        "hits": 1
+      }
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.response-event.v1",
+    "eventId": "evt-coverage-tool-delta-001",
+    "sequence": 8,
+    "recordedAt": "2026-07-13T12:00:07Z",
+    "factorySessionId": "session-coverage-001",
+    "runId": "run-coverage-001",
+    "kind": "TOOL",
+    "phase": "DELTA",
+    "provenance": {
+      "provider": "example-provider",
+      "nativeEventType": "tool.delta",
+      "delivery": "NATIVE_STREAM",
+      "representation": "DELTA",
+      "fidelity": "LOSSLESS"
+    },
+    "payload": {
+      "toolCallId": "call-coverage-001",
+      "outputDelta": "partial output"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.response-event.v1",
+    "eventId": "evt-coverage-file-change-001",
+    "sequence": 9,
+    "recordedAt": "2026-07-13T12:00:08Z",
+    "factorySessionId": "session-coverage-001",
+    "runId": "run-coverage-001",
+    "kind": "FILE_CHANGE",
+    "phase": "UPDATED",
+    "provenance": {
+      "provider": "example-provider",
+      "nativeEventType": "file.updated",
+      "delivery": "NATIVE_STREAM",
+      "representation": "NOTIFICATION",
+      "fidelity": "NORMALIZED"
+    },
+    "payload": {
+      "path": "src/main.go",
+      "operation": "update",
+      "summary": "Edited main entrypoint"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.response-event.v1",
+    "eventId": "evt-coverage-plan-001",
+    "sequence": 10,
+    "recordedAt": "2026-07-13T12:00:09Z",
+    "factorySessionId": "session-coverage-001",
+    "runId": "run-coverage-001",
+    "kind": "PLAN",
+    "phase": "UPDATED",
+    "provenance": {
+      "provider": "example-provider",
+      "nativeEventType": "plan.updated",
+      "delivery": "NATIVE_STREAM",
+      "representation": "SNAPSHOT",
+      "fidelity": "LOSSLESS"
+    },
+    "payload": {
+      "summary": "Two-step plan",
+      "steps": [
+        {
+          "id": "step-1",
+          "description": "Inspect repository",
+          "status": "completed"
+        },
+        {
+          "id": "step-2",
+          "description": "Apply fix",
+          "status": "active"
+        }
+      ]
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.response-event.v1",
+    "eventId": "evt-coverage-progress-001",
+    "sequence": 11,
+    "recordedAt": "2026-07-13T12:00:10Z",
+    "factorySessionId": "session-coverage-001",
+    "runId": "run-coverage-001",
+    "kind": "PROGRESS",
+    "phase": "UPDATED",
+    "provenance": {
+      "provider": "example-provider",
+      "nativeEventType": "progress.updated",
+      "delivery": "SYNTHESIZED",
+      "representation": "NOTIFICATION",
+      "fidelity": "LOSSY"
+    },
+    "payload": {
+      "label": "build",
+      "message": "Halfway done",
+      "percentComplete": 50
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.response-event.v1",
+    "eventId": "evt-coverage-usage-001",
+    "sequence": 12,
+    "recordedAt": "2026-07-13T12:00:11Z",
+    "factorySessionId": "session-coverage-001",
+    "runId": "run-coverage-001",
+    "kind": "USAGE",
+    "phase": "UPDATED",
+    "provenance": {
+      "provider": "example-provider",
+      "nativeEventType": "usage.updated",
+      "delivery": "NATIVE_FINAL",
+      "representation": "NOTIFICATION",
+      "fidelity": "LOSSLESS"
+    },
+    "payload": {
+      "inputTokens": 100,
+      "outputTokens": 25,
+      "totalTokens": 125,
+      "model": "example-model-v1"
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.response-event.v1",
+    "eventId": "evt-coverage-error-001",
+    "sequence": 13,
+    "recordedAt": "2026-07-13T12:00:12Z",
+    "factorySessionId": "session-coverage-001",
+    "runId": "run-coverage-001",
+    "kind": "ERROR",
+    "phase": "FAILED",
+    "provenance": {
+      "provider": "example-provider",
+      "nativeEventType": "error.terminal",
+      "delivery": "SYNTHESIZED",
+      "representation": "NOTIFICATION",
+      "fidelity": "NORMALIZED"
+    },
+    "payload": {
+      "code": "provider_unavailable",
+      "message": "Provider unavailable",
+      "retryable": false
+    }
+  },
+  {
+    "schemaVersion": "agent-factory.response-event.v1",
+    "eventId": "evt-coverage-stream-gap-001",
+    "sequence": 14,
+    "recordedAt": "2026-07-13T12:00:13Z",
+    "factorySessionId": "session-coverage-001",
+    "runId": "run-coverage-001",
+    "kind": "STREAM_GAP",
+    "phase": "UPDATED",
+    "provenance": {
+      "provider": "example-provider",
+      "nativeEventType": "stream.gap",
+      "delivery": "SYNTHESIZED",
+      "representation": "NOTIFICATION",
+      "fidelity": "LOSSY"
+    },
+    "payload": {
+      "fromSequence": 10,
+      "toSequence": 20,
+      "firstAvailableSequence": 21,
+      "reason": "retention_window"
+    }
+  }
+]

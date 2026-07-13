@@ -17,9 +17,9 @@ type testPipeline struct {
 	results      *buffers.TypedBuffer[interfaces.WorkResult]
 }
 
-func newTestPipeline(n *state.Net) *testPipeline {
+func newTestPipeline(n *state.Net, opts ...TransitionerOption) *testPipeline {
 	return &testPipeline{
-		transitioner: NewTransitioner(n, nil),
+		transitioner: NewTransitioner(n, nil, opts...),
 		results:      buffers.NewTypedBuffer[interfaces.WorkResult](16),
 	}
 }
@@ -426,15 +426,15 @@ func TestHistoryTransitionerPipeline_InternalServerFailureRequeuesFromNormalized
 	}
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this failure-pipeline regression keeps the retryable Windows exit corpus and metadata assertions inline.
 func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPreservesRetryableProviderMetadata(t *testing.T) {
-	n := buildPipelineNet()
-	tp := newTestPipeline(n)
-	errorText := "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)"
+	const errorText = "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)"
+	createdAt := time.Date(2026, time.April, 6, 11, 5, 0, 0, time.UTC)
+	failedAt := createdAt.Add(5 * time.Minute)
 	providerFailure := &interfaces.WorkFailureMetadata{
 		Family: interfaces.WorkFailureFamilyRetryable,
 		Type:   interfaces.WorkFailureTypeInternalServerError,
 	}
+	tp := newTestPipeline(buildPipelineNet(), WithTransitionerClock(func() time.Time { return failedAt }))
 	tp.WriteResult(interfaces.WorkResult{
 		DispatchID:      "d-1",
 		TransitionID:    "t1",
@@ -448,7 +448,7 @@ func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPr
 		"t1",
 		"d-1",
 		interfaces.TokenColor{WorkID: "w-codex-windows-4294967295", WorkTypeID: "wt-code"},
-		time.Date(2026, time.April, 6, 11, 5, 0, 0, time.UTC),
+		createdAt,
 	)
 	result, err := tp.Execute(context.Background(), &snapshot)
 	if err != nil {
@@ -457,9 +457,60 @@ func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPr
 	if result == nil || len(result.Mutations) != 1 {
 		t.Fatalf("expected 1 mutation, got %+v", result)
 	}
-	if result.Mutations[0].ToPlace != "wt-code:init" {
-		t.Fatalf("ToPlace = %s, want wt-code:init", result.Mutations[0].ToPlace)
+	assertWindowsProviderFailureRequeue(t, result.Mutations[0], createdAt, failedAt, errorText)
+	completedMetadata := assertWindowsProviderFailedDispatch(t, result, errorText)
+
+	providerFailure.Type = interfaces.WorkFailureTypeAuthFailure
+	providerFailure.Family = interfaces.WorkFailureFamilyTerminal
+	assertRetryableInternalServerMetadata(t, completedMetadata)
+}
+
+func assertWindowsProviderFailureRequeue(
+	t *testing.T,
+	mutation interfaces.MarkingMutation,
+	createdAt time.Time,
+	failedAt time.Time,
+	errorText string,
+) {
+	t.Helper()
+	if mutation.ToPlace != "wt-code:init" {
+		t.Fatalf("ToPlace = %s, want wt-code:init", mutation.ToPlace)
 	}
+	token := mutation.NewToken
+	if token.Color.WorkID != "w-codex-windows-4294967295" {
+		t.Fatalf("WorkID = %s, want w-codex-windows-4294967295", token.Color.WorkID)
+	}
+	if !token.CreatedAt.Equal(createdAt) || !token.EnteredAt.Equal(failedAt) {
+		t.Fatalf("token timestamps = (%v, %v), want (%v, %v)", token.CreatedAt, token.EnteredAt, createdAt, failedAt)
+	}
+	assertWindowsProviderFailureHistory(t, token.History, failedAt, errorText)
+}
+
+func assertWindowsProviderFailureHistory(t *testing.T, history interfaces.TokenHistory, failedAt time.Time, errorText string) {
+	t.Helper()
+	if got := history.TotalVisits["t1"]; got != 1 {
+		t.Fatalf("TotalVisits[t1] = %d, want 1", got)
+	}
+	if got := history.ConsecutiveFailures["t1"]; got != 1 {
+		t.Fatalf("ConsecutiveFailures[t1] = %d, want 1", got)
+	}
+	if history.LastError != errorText {
+		t.Fatalf("LastError = %q, want %q", history.LastError, errorText)
+	}
+	if len(history.FailureLog) != 1 {
+		t.Fatalf("FailureLog length = %d, want 1", len(history.FailureLog))
+	}
+	record := history.FailureLog[0]
+	if record.TransitionID != "t1" || record.Attempt != 1 {
+		t.Fatalf("FailureLog identity = (%q, attempt %d), want (t1, attempt 1)", record.TransitionID, record.Attempt)
+	}
+	if record.Error != errorText || !record.Timestamp.Equal(failedAt) {
+		t.Fatalf("FailureLog evidence = (%q, %v), want (%q, %v)", record.Error, record.Timestamp, errorText, failedAt)
+	}
+}
+
+func assertWindowsProviderFailedDispatch(t *testing.T, result *interfaces.TickResult, errorText string) *interfaces.WorkFailureMetadata {
+	t.Helper()
 	if len(result.CompletedDispatches) != 1 {
 		t.Fatalf("completed dispatch count = %d, want 1", len(result.CompletedDispatches))
 	}
@@ -473,23 +524,20 @@ func TestHistoryTransitionerPipeline_CodexWindowsExitCode4294967295RequeuesAndPr
 	if completed.FailureMetadata == nil {
 		t.Fatal("expected completed dispatch failure metadata")
 	}
-	if completed.FailureMetadata.Type != interfaces.WorkFailureTypeInternalServerError {
-		t.Fatalf("completed dispatch failure type = %q, want %q", completed.FailureMetadata.Type, interfaces.WorkFailureTypeInternalServerError)
+	return completed.FailureMetadata
+}
+
+func assertRetryableInternalServerMetadata(t *testing.T, metadata *interfaces.WorkFailureMetadata) {
+	t.Helper()
+	if metadata.Type != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("completed dispatch failure type after source mutation = %q, want %q", metadata.Type, interfaces.WorkFailureTypeInternalServerError)
 	}
-	if completed.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("completed dispatch failure family = %q, want %q", completed.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
+	if metadata.Family != interfaces.WorkFailureFamilyRetryable {
+		t.Fatalf("completed dispatch failure family after source mutation = %q, want %q", metadata.Family, interfaces.WorkFailureFamilyRetryable)
 	}
-	decision := workerprovider.WorkFailureDecisionFromMetadata(completed.FailureMetadata)
+	decision := workerprovider.WorkFailureDecisionFromMetadata(metadata)
 	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
-		t.Fatalf("WorkFailureDecisionFromMetadata(%#v) = %#v, want retryable non-terminal non-throttle", completed.FailureMetadata, decision)
-	}
-	providerFailure.Type = interfaces.WorkFailureTypeAuthFailure
-	providerFailure.Family = interfaces.WorkFailureFamilyTerminal
-	if completed.FailureMetadata.Type != interfaces.WorkFailureTypeInternalServerError {
-		t.Fatalf("completed dispatch failure type after source mutation = %q, want detached original", completed.FailureMetadata.Type)
-	}
-	if completed.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("completed dispatch failure family after source mutation = %q, want detached original", completed.FailureMetadata.Family)
+		t.Fatalf("WorkFailureDecisionFromMetadata(%#v) = %#v, want retryable non-terminal non-throttle", metadata, decision)
 	}
 }
 

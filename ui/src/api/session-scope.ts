@@ -19,9 +19,11 @@ export interface SessionScope {
 export function buildSessionScope(
   selectedSessionID: string | null,
   pausedSessionIDs: readonly string[],
+  resolvedDefault = false,
 ): SessionScope {
-  const isDefault = isDefaultFactorySessionID(selectedSessionID);
-  const sessionID = isDefault
+  const usesDefaultSelector = isDefaultFactorySessionID(selectedSessionID);
+  const isDefault = usesDefaultSelector || resolvedDefault;
+  const sessionID = usesDefaultSelector
     ? DEFAULT_FACTORY_SESSION_ID
     : (selectedSessionID ?? DEFAULT_FACTORY_SESSION_ID);
 

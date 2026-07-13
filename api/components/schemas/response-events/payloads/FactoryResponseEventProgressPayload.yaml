@@ -1,0 +1,18 @@
+type: object
+additionalProperties: false
+description: Coarse progress notification payload.
+required:
+  - label
+properties:
+  label:
+    type: string
+    description: Short progress label for UI or CLI consumers.
+  message:
+    type: string
+    description: Optional longer progress message.
+  percentComplete:
+    type: number
+    format: double
+    minimum: 0
+    maximum: 100
+    description: Optional completion percentage when known.

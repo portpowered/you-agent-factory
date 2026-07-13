@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -29,6 +30,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/logicaltarget"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -218,7 +220,7 @@ func (fs *FactoryService) registerLiveSession(
 		sessionID == defaultFactorySessionID,
 		registration.project,
 	)
-	factorysessions.EnsureRuntimeFactorySessionID(session)
+	factorysessions.BindResponseEventCompletion(session, handle.Bundle.EventHistory.AddGeneratedRecorder)
 	fs.sessions.Upsert(session, selectSession)
 }
 
@@ -354,6 +356,80 @@ func (fs *FactoryService) MoveWork(ctx context.Context, workID, stateName string
 
 func (fs *FactoryService) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
 	return fs.requireCoordinator().SubscribeFactoryEventsForSession(ctx, sessionID, reconnect)
+}
+
+func (fs *FactoryService) SubscribeFactoryResponseEventsForSession(ctx context.Context, sessionID string, afterSequence int64, dispatchID string) (apisurface.FactoryResponseEventSubscription, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	session := fs.responseEventSession(sessionID)
+	if session == nil {
+		return nil, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
+	}
+	if session.ResponseEvents == nil {
+		return nil, fmt.Errorf("response event store unavailable for factory session %q", sessionID)
+	}
+	options := []responseeventstore.SubscribeOption{}
+	if strings.TrimSpace(dispatchID) != "" {
+		options = append(options, responseeventstore.WithDispatchFilter(dispatchID))
+	}
+	subscription, err := session.ResponseEvents.Subscribe(afterSequence, options...)
+	if err != nil {
+		if errors.Is(err, responseeventstore.ErrStoreExpired) {
+			return nil, fmt.Errorf("%w: %s", apisurface.ErrFactoryResponseEventStreamExpired, sessionID)
+		}
+		return nil, err
+	}
+	return &factoryResponseEventSubscription{subscription: subscription}, nil
+}
+
+type factoryResponseEventSubscription struct {
+	subscription *responseeventstore.Subscription
+}
+
+func (s *factoryResponseEventSubscription) Next(ctx context.Context) ([]apisurface.FactoryResponseEventRecord, error) {
+	events, err := s.subscription.Next(ctx)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]apisurface.FactoryResponseEventRecord, 0, len(events))
+	for _, event := range events {
+		data, err := json.Marshal(event)
+		if err != nil {
+			return nil, fmt.Errorf("serialize factory response event: %w", err)
+		}
+		records = append(records, apisurface.FactoryResponseEventRecord{Sequence: event.Sequence, Kind: string(event.Kind), Data: data})
+	}
+	return records, nil
+}
+
+func (s *factoryResponseEventSubscription) Detach() {
+	if s != nil && s.subscription != nil {
+		s.subscription.Detach()
+	}
+}
+
+func (fs *FactoryService) responseEventSession(sessionID string) *factorysessions.LiveSession {
+	if fs == nil || fs.sessions == nil {
+		return nil
+	}
+	requestedID := strings.TrimSpace(sessionID)
+	if requestedID == "" {
+		return nil
+	}
+	if requestedID == factorysessions.DefaultSessionID {
+		return fs.sessions.DefaultSession()
+	}
+	if session := fs.sessions.Get(requestedID); session != nil {
+		return session
+	}
+	for _, registeredID := range fs.sessions.IDs() {
+		session := fs.sessions.Get(registeredID)
+		if factorysessions.CanonicalFactorySessionID(session) == requestedID {
+			return session
+		}
+	}
+	return nil
 }
 
 func (c *runtimeFactoryCoordinator) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
@@ -660,7 +736,10 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 		session.Project,
 	)
 	replacementSession.RuntimeFactorySessionID = session.RuntimeFactorySessionID
-	factorysessions.EnsureRuntimeFactorySessionID(replacementSession)
+	replacementSession.ResponseEvents = factorysessions.NewSessionResponseEventStore(
+		factorysessions.CanonicalFactorySessionID(replacementSession),
+	)
+	factorysessions.BindResponseEventCompletion(replacementSession, replacement.EventHistory.AddGeneratedRecorder)
 	fs.sessions.Upsert(replacementSession, isActiveSession)
 	if isActiveSession {
 		fs.setRunState(serviceCtx, session.ID, replacementHandle)
@@ -1066,7 +1145,7 @@ func (fs *FactoryService) buildSessionProjectionContext(
 		checkpointStore = fs.requireSessionGateway().JavaScriptCheckpointStore(session)
 		projectionCtx.JavaScriptCheckpoints = checkpointStore.List()
 	}
-	projectionCtx.JavaScript, err = fs.projectJavaScriptRuntimeState(session, checkpointStore, snapshot.TickCount)
+	projectionCtx.JavaScript, projectionCtx.JavaScriptSession, err = fs.projectJavaScriptRuntimeState(session, checkpointStore, snapshot.TickCount)
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
@@ -1080,17 +1159,19 @@ func (fs *FactoryService) projectJavaScriptRuntimeState(
 	session *factorysessions.LiveSession,
 	checkpointStore *factorysessions.JavaScriptCheckpointStore,
 	selectedTick int,
-) (*interfaces.FactorySessionJavaScriptRuntimeState, error) {
+) (*interfaces.FactorySessionJavaScriptRuntimeState, *interfaces.FactoryWorldSessionBracketState, error) {
 	state := (*interfaces.FactorySessionJavaScriptRuntimeState)(nil)
+	bracket := (*interfaces.FactoryWorldSessionBracketState)(nil)
 	handle := liveSessionHandle(session)
 	if handle != nil && handle.Bundle != nil && handle.Bundle.EventHistory != nil {
 		worldState, err := projections.ReconstructFactoryWorldState(handle.Bundle.EventHistory.Events(), selectedTick)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		state = worldState.JavaScriptRuntime
+		bracket = worldState.SessionBracket
 	}
-	return factorysessions.JavaScriptRuntimeStateFromCheckpoints(checkpointStore, state), nil
+	return factorysessions.JavaScriptRuntimeStateFromCheckpoints(checkpointStore, state), bracket, nil
 }
 
 func (fs *FactoryService) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
@@ -1153,6 +1234,7 @@ func (fs *FactoryService) closeSessionResponseStreams(session *factorysessions.L
 }
 
 func (fs *FactoryService) closeSessionResponseStreamsDirect(session *factorysessions.LiveSession) {
+	session.CloseResponseEvents()
 	streams := fs.sessionResponseStreams(session)
 	if streams == nil {
 		return
@@ -1181,6 +1263,22 @@ func (fs *FactoryService) SubscribeSessionResponseStream(
 
 func (fs *FactoryService) SessionResponseStreamDispatchIDs(sessionID string) ([]string, error) {
 	return fs.requireSessionGateway().SessionResponseStreamDispatchIDs(sessionID)
+}
+
+// SubscribeSessionResponseEventsFromLatest attaches to canonical response
+// events published after the call begins. This keeps one-shot CLI invocations
+// from replaying observation records left by earlier work in the live session.
+func (fs *FactoryService) SubscribeSessionResponseEventsFromLatest(
+	sessionID string,
+) (*responseeventstore.Subscription, error) {
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if session.ResponseEvents == nil {
+		return nil, fmt.Errorf("factory session %q response-event stream is unavailable", sessionID)
+	}
+	return session.ResponseEvents.Subscribe(session.ResponseEvents.LatestSequence())
 }
 
 func (fs *FactoryService) newSessionResponseStreamInstance() *factorysessions.SessionResponseStream {
@@ -1350,7 +1448,6 @@ func (fs *FactoryService) observeResponseStreamCompaction(
 	emitSessionResponseStreamMetric(session, sessionID, runtimeMetricSessionResponseStreamCompacted, fields)
 	if handle := liveSessionHandle(session); handle != nil && handle.Bundle != nil && handle.Bundle.Logger != nil {
 		handle.Bundle.Logger.Warn("session response stream compacted internal provider progress",
-			zap.String("session_id", sessionID),
 			zap.String("dispatch_id", dispatchID),
 			zap.String("compaction_reason", string(summary.Reason)),
 			zap.Int("dropped_sequence_count", summary.DroppedSequenceCount),

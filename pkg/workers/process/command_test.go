@@ -19,6 +19,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
+// commandHelperSpawnTimeoutBudget allows slow CI hosts (especially Windows) to
+// start the helper, spawn the child, and write the pid file before the test
+// context deadline fires. spawn-child sleeps 10s after spawning.
+const commandHelperSpawnTimeoutBudget = 3 * time.Second
+
 func canonicalWorkerTestPath(value string) string {
 	if value == "" {
 		return ""
@@ -224,7 +229,7 @@ func testExecCommandRunnerAgentStyleSuccessLeavesNoChildProcess(t *testing.T) {
 
 func TestExecCommandRunner_ContextDeadlineTerminatesSpawnedChildProcess(t *testing.T) {
 	pidFile := filepath.Join(t.TempDir(), "child.pid")
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), commandHelperSpawnTimeoutBudget)
 	defer cancel()
 
 	result, err := ExecCommandRunner{}.Run(ctx, CommandRequest{
@@ -249,7 +254,7 @@ func TestExecCommandRunner_ContextDeadlineTerminatesSpawnedChildProcess(t *testi
 		t.Fatalf("ExitCode = %d, want zero value for timeout system error", result.ExitCode)
 	}
 
-	childPID := readCommandHelperPID(t, pidFile)
+	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
 	t.Cleanup(func() {
 		commandTestTerminateProcess(childPID)
 	})
@@ -266,7 +271,7 @@ func TestExecCommandRunner_ContextCancelTerminatesSpawnedChildProcess(t *testing
 	go func() {
 		deadline := time.Now().Add(3 * time.Second)
 		for time.Now().Before(deadline) {
-			if _, err := os.Stat(pidFile); err == nil {
+			if _, err := readCommandHelperPIDFile(pidFile); err == nil {
 				cancel()
 				return
 			}
@@ -371,7 +376,7 @@ func TestExecCommandRunner_LogsSuccessfulPostRunCleanupNoOp(t *testing.T) {
 func TestExecCommandRunner_LogsCancelCleanupForceKillSuccess(t *testing.T) {
 	logger := &recordingCommandLogger{}
 	pidFile := filepath.Join(t.TempDir(), "child.pid")
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	req := commandCleanupTestRequest(t)
@@ -386,18 +391,24 @@ func TestExecCommandRunner_LogsCancelCleanupForceKillSuccess(t *testing.T) {
 	)
 	req.Command = os.Args[0]
 
-	_, err := ExecCommandRunner{Logger: logger}.Run(ctx, req)
-	if err == nil {
-		t.Fatal("Run error = nil, want context deadline error")
-	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("Run error = %v, want %v", err, context.DeadlineExceeded)
-	}
+	runDone := make(chan error, 1)
+	go func() {
+		_, err := ExecCommandRunner{Logger: logger}.Run(ctx, req)
+		runDone <- err
+	}()
 
-	childPID := readCommandHelperPID(t, pidFile)
+	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
 	t.Cleanup(func() {
 		commandTestTerminateProcess(childPID)
 	})
+	cancel()
+	err := <-runDone
+	if err == nil {
+		t.Fatal("Run error = nil, want context canceled error")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run error = %v, want %v", err, context.Canceled)
+	}
 
 	cancelCompleted := commandCleanupCompletedLogsForReason(logger, commandProcessCleanupReasonCancel)
 	if len(cancelCompleted) == 0 {
@@ -852,15 +863,11 @@ func spawnCommandHelperChild() {
 		fmt.Fprintf(os.Stderr, "start child: %v\n", err)
 		os.Exit(2)
 	}
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(pidFile); err == nil {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(child.Process.Pid)), 0o600); err != nil {
+		fmt.Fprintf(os.Stderr, "write child pid file: %v\n", err)
+		_ = child.Process.Kill()
+		os.Exit(2)
 	}
-	fmt.Fprintln(os.Stderr, "child did not write pid file")
-	os.Exit(2)
 }
 
 func writeCommandHelperPID() {
@@ -886,16 +893,11 @@ func waitForCommandHelperPID(t *testing.T, pidFile string, timeout time.Duration
 	deadline := time.Now().Add(timeout)
 	var lastErr error
 	for timeout <= 0 || time.Now().Before(deadline) {
-		raw, err := os.ReadFile(pidFile)
+		pid, err := readCommandHelperPIDFile(pidFile)
 		if err == nil {
-			pid, parseErr := strconv.Atoi(strings.TrimSpace(string(raw)))
-			if parseErr == nil && pid > 0 {
-				return pid
-			}
-			lastErr = parseErr
-		} else {
-			lastErr = err
+			return pid
 		}
+		lastErr = err
 		if timeout <= 0 {
 			break
 		}
@@ -906,6 +908,21 @@ func waitForCommandHelperPID(t *testing.T, pidFile string, timeout time.Duration
 	}
 	t.Fatalf("parse child pid from %s: %v", pidFile, lastErr)
 	return 0
+}
+
+func readCommandHelperPIDFile(pidFile string) (int, error) {
+	raw, err := os.ReadFile(pidFile)
+	if err != nil {
+		return 0, err
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(raw)))
+	if err != nil {
+		return 0, err
+	}
+	if pid <= 0 {
+		return 0, fmt.Errorf("child pid must be positive, got %d", pid)
+	}
+	return pid, nil
 }
 
 func waitForCommandHelperProcessExit(pid int, timeout time.Duration) bool {

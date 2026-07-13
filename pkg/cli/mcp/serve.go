@@ -3,12 +3,14 @@ package mcpcli
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
@@ -22,21 +24,39 @@ type ServeConfig struct {
 	RuntimeBacked      bool
 	ProjectRoot        string
 	Service            factorysessionexecution.Service
-	Stdin              *os.File
-	Stdout             *os.File
+	Stdin              io.Reader
+	Stdout             io.Writer
 }
 
 // RunServe starts the Factory Session MCP stdio server until stdin closes or the
 // process receives SIGINT/SIGTERM.
 func RunServe(ctx context.Context, cfg ServeConfig) error {
-	service, err := resolveServeService(cfg)
+	application, err := BuildServeApplication(cfg)
 	if err != nil {
 		return err
+	}
+	return application.Run(ctx)
+}
+
+// ServeApplication is the already-constructed MCP transport graph consumed by
+// the initializer lifecycle boundary.
+type ServeApplication struct {
+	server *mcpserver.Server
+	stdin  io.Reader
+	stdout io.Writer
+}
+
+// BuildServeApplication constructs the MCP service, client, and server without
+// starting stdio processing.
+func BuildServeApplication(cfg ServeConfig) (*ServeApplication, error) {
+	service, err := ResolveServeService(cfg)
+	if err != nil {
+		return nil, err
 	}
 	client := mcpfactorysession.NewClientWithService(service)
 	server, err := mcpserver.New(mcpserver.Options{Client: client})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	stdin := cfg.Stdin
@@ -47,10 +67,24 @@ func RunServe(ctx context.Context, cfg ServeConfig) error {
 	if stdout == nil {
 		stdout = os.Stdout
 	}
+	return &ServeApplication{server: server, stdin: stdin, stdout: stdout}, nil
+}
 
+// ResolveServeService constructs the durable Factory Session execution
+// collaborator selected by MCP command inputs without starting stdio serving.
+// Production composition passes this exact instance into the application graph.
+func ResolveServeService(cfg ServeConfig) (factorysessionexecution.Service, error) {
+	return resolveServeService(cfg)
+}
+
+// Run starts stdio handling for an MCP graph that has already been built.
+func (application *ServeApplication) Run(ctx context.Context) error {
+	if application == nil || application.server == nil {
+		return fmt.Errorf("run MCP application: graph is required")
+	}
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return server.ServeStdio(ctx, stdin, stdout)
+	return application.server.ServeStdio(ctx, application.stdin, application.stdout)
 }
 
 func resolveServeService(cfg ServeConfig) (factorysessionexecution.Service, error) {
@@ -126,6 +160,10 @@ func resolveFixtureCatalogPath(explicit string) (string, error) {
 
 // NewServeCommand constructs `you mcp serve`.
 func NewServeCommand() *cobra.Command {
+	return newServeCommand(nil)
+}
+
+func newServeCommand(startup startupcli.Handler) *cobra.Command {
 	var fixtureCatalogPath string
 	var runtimeBacked bool
 	var projectRoot string
@@ -140,21 +178,36 @@ func NewServeCommand() *cobra.Command {
 			"of the fixture catalog. Runtime mode requires workflow sources to resolve from the MCP " +
 			"host working directory or an explicit --project-root.\n\n" +
 			"Set the MCP host working directory to the project root where workflow sources and the " +
-			"fixture catalog resolve. See `you docs mcp-hosts` for host-specific configuration examples.",
+			"fixture catalog resolve. See `you docs mcp` for host configuration, serve modes, smoke, and troubleshooting.",
 		Example: "  # Typical MCP host child-process launch.\n" +
 			"  you mcp serve\n\n" +
 			"  # Explicit fixture catalog for offline smoke outside the repository root.\n" +
-			"  you mcp serve --fixture-catalog ./pkg/factorysessionexecution/fixtures/durable-session-contract-fixtures.json\n\n" +
+			"  you mcp serve --fixture-catalog ./pkg/api/testdata/durable-session-contract-fixtures.json\n\n" +
 			"  # Runtime-backed serve against live durable JavaScript execution.\n" +
 			"  you mcp serve --runtime",
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			if runtimeBacked && strings.TrimSpace(fixtureCatalogPath) != "" {
 				return fmt.Errorf("cannot combine --runtime with --fixture-catalog")
 			}
-			return RunServe(cmd.Context(), ServeConfig{
+			cfg := ServeConfig{
 				FixtureCatalogPath: fixtureCatalogPath,
 				RuntimeBacked:      runtimeBacked,
 				ProjectRoot:        projectRoot,
+				Stdin:              cmd.InOrStdin(),
+				Stdout:             cmd.OutOrStdout(),
+			}
+			if startup == nil {
+				return RunServe(cmd.Context(), cfg)
+			}
+			return startup(cmd.Context(), startupcli.Request{
+				Kind: startupcli.KindMCPServe,
+				MCP: startupcli.MCPIntent{
+					FixtureCatalogPath: cfg.FixtureCatalogPath,
+					RuntimeBacked:      cfg.RuntimeBacked,
+					ProjectRoot:        cfg.ProjectRoot,
+					Stdin:              cfg.Stdin,
+					Stdout:             cfg.Stdout,
+				},
 			})
 		},
 	}
@@ -181,10 +234,16 @@ func NewServeCommand() *cobra.Command {
 
 // NewCommand constructs the `you mcp` command group.
 func NewCommand() *cobra.Command {
+	return NewCommandWithStartup(nil)
+}
+
+// NewCommandWithStartup constructs the MCP command group with process startup
+// delegated to the supplied root handler.
+func NewCommandWithStartup(startup startupcli.Handler) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "mcp",
 		Short: "Model Context Protocol servers for Factory Session tools",
 	}
-	cmd.AddCommand(NewServeCommand())
+	cmd.AddCommand(newServeCommand(startup))
 	return cmd
 }

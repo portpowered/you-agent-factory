@@ -4,22 +4,439 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+	"unicode/utf8"
+
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
-	"os"
-	"path/filepath"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"testing"
-	"time"
 )
+
+type canonicalResponseEventRunStub struct {
+	stubResponseStreamInvocationService
+	store      *factorysessions.SessionResponseEventStore
+	subscribed chan struct{}
+	once       sync.Once
+}
+
+func (s *canonicalResponseEventRunStub) SubscribeSessionResponseEventsFromLatest(
+	_ string,
+) (*responseeventstore.Subscription, error) {
+	subscription, err := s.store.Subscribe(s.store.LatestSequence())
+	if err == nil {
+		s.once.Do(func() { close(s.subscribed) })
+	}
+	return subscription, err
+}
+
+func TestRun_HumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
+	preserveRunGlobals(t)
+
+	const canary = "SECRET_PROVIDER_PAYLOAD_7f8a"
+	const answer = "authoritative answer"
+	var output strings.Builder
+	legacy := newRecordingResponseStreamAttachable()
+	legacy.ensureDispatch("dispatch-1")
+	store := factorysessions.NewSessionResponseEventStore(factorysessions.DefaultSessionID)
+	stub := &canonicalResponseEventRunStub{
+		stubResponseStreamInvocationService: stubResponseStreamInvocationService{
+			stubInvocationService: stubInvocationService{run: func(ctx context.Context) error {
+				<-ctx.Done()
+				return nil
+			}},
+			attachable: legacy,
+		},
+		store: store, subscribed: make(chan struct{}),
+	}
+	stub.invoke = func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+		select {
+		case <-stub.subscribed:
+		case <-time.After(2 * time.Second):
+			t.Fatal("canonical response-event subscription was not established")
+		}
+		legacy.stream("dispatch-1").Append(responsestream.Event{
+			Kind: responsestream.EventKindProgressFragment, Type: responsestream.EventTypeProgress,
+			Payload: canary,
+		})
+		attempt := 2
+		events := []responseevents.FactoryResponseEvent{
+			humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseCompleted, responseevents.ReasoningPayload{Summary: "selected safe path"}),
+			humanResponseEvent(responseevents.KindTool, responseevents.PhaseStarted, responseevents.ToolPayload{
+				ToolCallID: "call-1", ToolName: "search", ArgumentsSummary: json.RawMessage(`{"secret":"` + canary + `"}`),
+			}),
+			humanResponseEvent(responseevents.KindTool, responseevents.PhaseDelta, responseevents.ToolDeltaPayload{ToolCallID: "call-1", OutputDelta: canary}),
+			humanResponseEvent(responseevents.KindError, responseevents.PhaseUpdated, responseevents.ErrorPayload{
+				Code: "rate_limited", Message: canary, Retryable: true, RetryAttempt: &attempt,
+			}),
+			humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "planning", Message: "next step"}),
+			humanResponseEvent(responseevents.KindMessage, responseevents.PhaseDelta, responseevents.MessageDeltaPayload{
+				ContentBlockIndex: 0, ContentBlockKind: responseevents.ContentBlockText, TextDelta: answer,
+			}),
+			humanResponseEvent(responseevents.KindUsage, responseevents.PhaseUpdated, responseevents.UsagePayload{InputTokens: 99, Model: canary}),
+			humanResponseEvent(responseevents.KindStreamGap, responseevents.PhaseUpdated, responseevents.StreamGapPayload{
+				FromSequence: 40, ToSequence: 44, FirstAvailableSequence: 45, Reason: "retention window",
+			}),
+		}
+		for _, event := range events {
+			if _, err := store.Publish(event); err != nil {
+				t.Fatalf("publish canonical response event: %v", err)
+			}
+		}
+		store.Complete()
+		return apisurface.FactoryInvocationResult{
+			Status:        factoryapi.InvocationTerminalStatusCompleted,
+			PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: answer}},
+		}, nil
+	}
+	buildInvocationBootstrap = func(context.Context, *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+		return stub, nil
+	}
+
+	text := "prompt"
+	err := Run(context.Background(), RunConfig{
+		FactoryConfigPath: "/tmp/factory.json", InvocationPositionalText: &text,
+		InvocationOutputMode: InvocationOutputResponseStream, StdinIsTTY: func() bool { return true }, Output: &output,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	want := "reasoning: selected safe path\n" +
+		"tool: name=search call=call-1 status=started\n" +
+		"retry: code=rate_limited attempt=2\n" +
+		"progress: planning — next step\n" +
+		"stream gap: sequences 40-44 unavailable (reason=retention window)\n\n" +
+		responseStreamPrimaryResultHeader + "\n" + answer
+	if got := output.String(); got != want {
+		t.Fatalf("output = %q, want %q", got, want)
+	}
+	if strings.Contains(output.String(), canary) || len(legacy.subscribeCalls) != 0 {
+		t.Fatalf("human output used unsafe legacy/provider data: %q", output.String())
+	}
+}
+
+func TestHumanResponseStreamRenderer_CanonicalNonToolGolden(t *testing.T) {
+	attempt, delay, percent := 3, int64(12), 42.5
+	tests := []struct {
+		name  string
+		event responseevents.FactoryResponseEvent
+		want  string
+	}{
+		{"reasoning started", humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseStarted, responseevents.ReasoningPayload{}), "reasoning: started\n"},
+		{"reasoning delta", humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseDelta, responseevents.ReasoningPayload{SummaryDelta: "compare\noptions"}), "reasoning: compare options\n"},
+		{"reasoning completed", humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseCompleted, responseevents.ReasoningPayload{Summary: "selected path"}), "reasoning: selected path\n"},
+		{"reasoning completed empty", humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseCompleted, responseevents.ReasoningPayload{}), "reasoning: completed\n"},
+		{"retry minimal", humanResponseEvent(responseevents.KindError, responseevents.PhaseUpdated, responseevents.ErrorPayload{Code: "busy", Message: "hidden", Retryable: true}), "retry: code=busy\n"},
+		{"retry full", humanResponseEvent(responseevents.KindError, responseevents.PhaseUpdated, responseevents.ErrorPayload{Code: "rate_limited", Message: "hidden", RetryAttempt: &attempt, RetryAfterSeconds: &delay}), "retry: code=rate_limited attempt=3 retry-in=12s\n"},
+		{"throttle", humanResponseEvent(responseevents.KindError, responseevents.PhaseUpdated, responseevents.ErrorPayload{Code: "throttled", Message: "hidden"}), "retry: code=throttled\n"},
+		{"progress minimal", humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "planning"}), "progress: planning\n"},
+		{"progress full", humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "review", Message: "checking\r\nresults", PercentComplete: &percent}), "progress: review — checking results (42.5%)\n"},
+		{"stream gap", humanResponseEvent(responseevents.KindStreamGap, responseevents.PhaseUpdated, responseevents.StreamGapPayload{FromSequence: 8, ToSequence: 14, FirstAvailableSequence: 15, Reason: "retention\nwindow"}), "stream gap: sequences 8-14 unavailable (reason=retention window)\n"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var output strings.Builder
+			renderer := newHumanResponseStreamRenderer(&output)
+			renderer.onResponseEvents([]responseevents.FactoryResponseEvent{tc.event})
+			renderer.stopProgressRendering()
+			if got := output.String(); got != tc.want {
+				t.Fatalf("output = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func humanResponseEvent(kind responseevents.Kind, phase responseevents.Phase, payload any) responseevents.FactoryResponseEvent {
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return responseevents.FactoryResponseEvent{Kind: kind, Phase: phase, Payload: encoded}
+}
+
+func TestHumanResponseStreamRenderer_CanonicalMessagesDoNotDuplicatePrimaryResult(t *testing.T) {
+	t.Parallel()
+
+	messageEvents := []responseevents.FactoryResponseEvent{
+		humanResponseEvent(responseevents.KindMessage, responseevents.PhaseDelta, responseevents.MessageDeltaPayload{
+			ContentBlockIndex: 0, ContentBlockKind: responseevents.ContentBlockText, TextDelta: "final ",
+		}),
+		humanResponseEvent(responseevents.KindMessage, responseevents.PhaseCompleted, responseevents.MessagePayload{
+			Role: "assistant", ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: "final answer"}},
+		}),
+	}
+	result := apisurface.FactoryInvocationResult{
+		Status: factoryapi.InvocationTerminalStatusCompleted,
+		PrimaryResult: []interfaces.WorkContentPart{
+			{Type: interfaces.WorkContentPartTypeText, Text: "final answer"},
+		},
+	}
+
+	t.Run("suppressed messages preserve plain output", func(t *testing.T) {
+		var output strings.Builder
+		renderer := newHumanResponseStreamRenderer(&output)
+		renderer.onResponseEvents(messageEvents)
+		if err := renderer.writeFinalInvocationResult(result); err != nil {
+			t.Fatalf("writeFinalInvocationResult: %v", err)
+		}
+		if got := output.String(); got != "final answer" {
+			t.Fatalf("output = %q, want unchanged primary result", got)
+		}
+	})
+
+	t.Run("progress precedes one authoritative answer", func(t *testing.T) {
+		var output strings.Builder
+		renderer := newHumanResponseStreamRenderer(&output)
+		events := append(messageEvents, humanResponseEvent(
+			responseevents.KindProgress,
+			responseevents.PhaseUpdated,
+			responseevents.ProgressPayload{Label: "checking result"},
+		))
+		renderer.onResponseEvents(events)
+		if err := renderer.writeFinalInvocationResult(result); err != nil {
+			t.Fatalf("writeFinalInvocationResult: %v", err)
+		}
+		want := "progress: checking result\n\n--- primary result ---\nfinal answer"
+		if got := output.String(); got != want || strings.Count(got, "final answer") != 1 {
+			t.Fatalf("output = %q, want %q with one answer", got, want)
+		}
+	})
+}
+
+func TestHumanResponseStreamRenderer_TerminalBlockIsWrittenOnce(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		result apisurface.FactoryInvocationResult
+		want   string
+	}{
+		{
+			name: "success",
+			result: apisurface.FactoryInvocationResult{Status: factoryapi.InvocationTerminalStatusCompleted,
+				PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "answer"}}},
+			want: "answer",
+		},
+		{
+			name:   "failure",
+			result: apisurface.FactoryInvocationResult{Status: factoryapi.InvocationTerminalStatusFailed, ErrorCode: "FAILED_SAFE"},
+			want:   "--- invocation outcome ---\nstatus: FAILED\nerror: FAILED_SAFE\n",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var output strings.Builder
+			renderer := newHumanResponseStreamRenderer(&output)
+			var wg sync.WaitGroup
+			errs := make(chan error, 8)
+			for range 8 {
+				wg.Add(1)
+				go func() { defer wg.Done(); errs <- renderer.writeFinalInvocationResult(tc.result) }()
+			}
+			wg.Wait()
+			close(errs)
+			for err := range errs {
+				if err != nil {
+					t.Fatalf("writeFinalInvocationResult: %v", err)
+				}
+			}
+			if got := output.String(); got != tc.want {
+				t.Fatalf("output = %q, want one terminal block %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestHumanResponseStreamRenderer_CanonicalToolLifecycleGolden(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		phase  responseevents.Phase
+		status string
+		want   string
+	}{
+		{name: "started", phase: responseevents.PhaseStarted, status: "provider-pending", want: "started"},
+		{name: "completed", phase: responseevents.PhaseCompleted, status: "provider-done", want: "completed"},
+		{name: "failed", phase: responseevents.PhaseFailed, status: "provider-crashed", want: "failed"},
+		{name: "canceled", phase: responseevents.PhaseCanceled, status: "provider-aborted", want: "canceled"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			event := humanResponseEvent(responseevents.KindTool, tc.phase, responseevents.ToolPayload{
+				ToolCallID: "call\r\n42", ToolName: "read\nfile", Status: tc.status,
+			})
+			var output strings.Builder
+			renderer := newHumanResponseStreamRenderer(&output)
+			renderer.onResponseEvents([]responseevents.FactoryResponseEvent{event})
+			renderer.stopProgressRendering()
+			want := "tool: name=read file call=call 42 status=" + tc.want + "\n"
+			if got := output.String(); got != want {
+				t.Fatalf("output = %q, want %q", got, want)
+			}
+		})
+	}
+}
+
+func TestHumanResponseStreamRenderer_ToolLifecyclePreservesCorrelationOrder(t *testing.T) {
+	t.Parallel()
+
+	events := []responseevents.FactoryResponseEvent{
+		humanResponseEvent(responseevents.KindTool, responseevents.PhaseStarted, responseevents.ToolPayload{ToolCallID: "call-a", ToolName: "search"}),
+		humanResponseEvent(responseevents.KindTool, responseevents.PhaseStarted, responseevents.ToolPayload{ToolCallID: "call-b", ToolName: "read"}),
+		humanResponseEvent(responseevents.KindTool, responseevents.PhaseCompleted, responseevents.ToolPayload{ToolCallID: "call-b", ToolName: "read"}),
+		humanResponseEvent(responseevents.KindTool, responseevents.PhaseFailed, responseevents.ToolPayload{ToolCallID: "call-a", ToolName: "search"}),
+	}
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	renderer.onResponseEvents(events)
+	renderer.stopProgressRendering()
+	want := "tool: name=search call=call-a status=started\n" +
+		"tool: name=read call=call-b status=started\n" +
+		"tool: name=read call=call-b status=completed\n" +
+		"tool: name=search call=call-a status=failed\n"
+	if got := output.String(); got != want {
+		t.Fatalf("output = %q, want ordered lifecycle %q", got, want)
+	}
+}
+
+func TestHumanResponseStreamRenderer_ToolDataNeverLeaks(t *testing.T) {
+	t.Parallel()
+
+	canaries := []string{
+		"SECRET_ARGUMENT", "SECRET_RESULT", "SECRET_DELTA", "SECRET_STATUS",
+		"SECRET_RAW_PAYLOAD", "SECRET_PROMPT", "SECRET_CREDENTIAL",
+		"SECRET_ENVIRONMENT", "SECRET_PROVENANCE",
+	}
+	lifecycle := humanResponseEvent(responseevents.KindTool, responseevents.PhaseCompleted, map[string]any{
+		"toolCallId": "call-safe", "toolName": "safe-tool", "status": canaries[3],
+		"argumentsSummary":   map[string]string{"argument": canaries[0], "prompt": canaries[5], "credential": canaries[6]},
+		"resultSummary":      map[string]string{"result": canaries[1], "environment": canaries[7]},
+		"rawProviderPayload": canaries[4],
+	})
+	lifecycle.Provenance = responseevents.Provenance{
+		Provider: canaries[8], NativeEventType: canaries[8],
+		Delivery: responseevents.DeliveryNativeStream, Representation: responseevents.RepresentationNotification,
+		Fidelity: responseevents.FidelityLifecycleOnly,
+	}
+	delta := humanResponseEvent(responseevents.KindTool, responseevents.PhaseDelta, responseevents.ToolDeltaPayload{
+		ToolCallID: "call-safe", OutputDelta: canaries[2],
+	})
+
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{lifecycle, delta})
+	renderer.stopProgressRendering()
+	got := output.String()
+	if want := "tool: name=safe-tool call=call-safe status=completed\n"; got != want {
+		t.Fatalf("output = %q, want lifecycle-only %q", got, want)
+	}
+	for _, canary := range canaries {
+		if strings.Contains(got, canary) {
+			t.Fatalf("human output leaked %q: %q", canary, got)
+		}
+	}
+}
+
+func TestHumanResponseStreamRenderer_ToolIdentityIsUTF8SafeAndBounded(t *testing.T) {
+	t.Parallel()
+
+	event := humanResponseEvent(responseevents.KindTool, responseevents.PhaseStarted, responseevents.ToolPayload{
+		ToolCallID: "call\x00id", ToolName: strings.Repeat("界", maxHumanProgressLineBytes),
+		ArgumentsSummary: json.RawMessage(`{"secret":"must-not-render"}`),
+	})
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{event})
+	renderer.stopProgressRendering()
+	got := strings.TrimSuffix(output.String(), "\n")
+	if !utf8.ValidString(got) || len([]byte(got)) > maxHumanProgressLineBytes {
+		t.Fatalf("bounded tool output is invalid: bytes=%d output=%q", len([]byte(got)), got)
+	}
+	if strings.ContainsRune(got, '\x00') || strings.Contains(got, "must-not-render") || !strings.HasSuffix(got, "...") {
+		t.Fatalf("tool output was not safely normalized and redacted: %q", got)
+	}
+}
+
+func TestHumanResponseStreamRenderer_CanonicalOutputIsUTF8SafeAndBounded(t *testing.T) {
+	t.Parallel()
+
+	event := humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseCompleted, responseevents.ReasoningPayload{
+		Summary: strings.Repeat("界", maxHumanProgressLineBytes),
+	})
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{event})
+	renderer.stopProgressRendering()
+
+	got := strings.TrimSuffix(output.String(), "\n")
+	if !utf8.ValidString(got) {
+		t.Fatalf("output is not valid UTF-8: %q", got)
+	}
+	if len([]byte(got)) > maxHumanProgressLineBytes {
+		t.Fatalf("output is %d bytes, want at most %d", len([]byte(got)), maxHumanProgressLineBytes)
+	}
+	if !strings.HasSuffix(got, "...") {
+		t.Fatalf("output = %q, want stable omission marker", got)
+	}
+}
+
+func TestHumanResponseStreamRenderer_CanonicalEventsPreserveSessionOrderAndSkipDuplicateSequences(t *testing.T) {
+	t.Parallel()
+
+	first := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "first"})
+	first.Sequence = 1
+	duplicate := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "duplicate"})
+	duplicate.Sequence = 1
+	second := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "second"})
+	second.Sequence = 2
+
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{first, duplicate, second})
+	renderer.stopProgressRendering()
+	if got, want := output.String(), "progress: first\nprogress: second\n"; got != want {
+		t.Fatalf("output = %q, want ordered unique output %q", got, want)
+	}
+}
+
+func TestHumanResponseStreamRenderer_CanonicalInvalidEventsDoNotLeakPayload(t *testing.T) {
+	t.Parallel()
+
+	const canary = "RAW_UNKNOWN_PROVIDER_EVENT_CANARY"
+	const answer = "authoritative answer"
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	unknownKind := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: canary})
+	unknownKind.Kind = responseevents.Kind("PROVIDER_NATIVE_UNKNOWN")
+	invalidPhase := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: canary})
+	invalidPhase.Phase = responseevents.PhaseCompleted
+	invalidPayload := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: canary})
+	invalidPayload.Payload = json.RawMessage(`{"label":"` + canary + `"`)
+
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{unknownKind, invalidPhase, invalidPayload})
+	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
+		Status:        factoryapi.InvocationTerminalStatusCompleted,
+		PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: answer}},
+	}); err != nil {
+		t.Fatalf("write final invocation result: %v", err)
+	}
+	if got := output.String(); got != answer {
+		t.Fatalf("invalid canonical event leaked through human stdout: %q", got)
+	}
+}
 
 func TestRun_BootstrapErrorSkipsServiceStart(t *testing.T) {
 	originalBuilder := buildFactoryService
@@ -385,615 +802,111 @@ func TestRun_WithMockWorkersInvalidJSONFailsBeforeServiceStart(t *testing.T) {
 	}
 }
 
-type gatedResponseStreamWriter struct {
-	mu                   sync.Mutex
-	blocked              bool
-	buf                  strings.Builder
-	blockedWriteAttempts atomic.Int64
-}
-
-func (w *gatedResponseStreamWriter) block() {
-	w.mu.Lock()
-	w.blocked = true
-	w.mu.Unlock()
-}
-
-func (w *gatedResponseStreamWriter) release() {
-	w.mu.Lock()
-	w.blocked = false
-	w.mu.Unlock()
-}
-
-func (w *gatedResponseStreamWriter) Write(p []byte) (int, error) {
-	for {
-		w.mu.Lock()
-		blocked := w.blocked
-		w.mu.Unlock()
-		if !blocked {
-			return w.buf.Write(p)
-		}
-		w.blockedWriteAttempts.Add(1)
-		time.Sleep(1 * time.Millisecond)
-	}
-}
-
-func (w *gatedResponseStreamWriter) String() string {
-	return w.buf.String()
-}
-
-func (w *gatedResponseStreamWriter) blockedWriteAttemptsCount() int64 {
-	if w == nil {
-		return 0
-	}
-	return w.blockedWriteAttempts.Load()
-}
-
-func floodResponseStreamProgress(sink responseStreamEventSink, count int) {
-	for i := 0; i < count; i++ {
-		sink.onStreamSegment(responsestream.ReadResult{
-			Events: []responsestream.Event{
-				{
-					Sequence:   int64(i + 1),
-					Kind:       responsestream.EventKindProgressFragment,
-					Type:       responsestream.EventTypeProgress,
-					DispatchID: "dispatch-1",
-					Payload:    "working",
-				},
-			},
-		})
-	}
-}
-
-var responseStreamBacklogSuccessResult = apisurface.FactoryInvocationResult{
-	Status: factoryapi.InvocationTerminalStatusCompleted,
-	PrimaryResult: []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
-	},
-}
-
-func TestResponseStreamProgressWriter_EnqueueDoesNotBlockWhenOutputSlow(t *testing.T) {
-	t.Parallel()
-
-	output := &gatedResponseStreamWriter{}
-	output.block()
-	writer := newResponseStreamProgressWriter(output)
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for i := 0; i < defaultResponseStreamProgressQueueCapacity+8; i++ {
-			writer.enqueue([]byte("line"))
-		}
+func TestRun_WithSkipPermissionsPassesInvocationOverrideToService(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
 	}()
 
-	select {
-	case <-done:
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("enqueue blocked while terminal output was slow")
-	}
-
-	if got := writer.droppedProgressLines(); got == 0 {
-		t.Fatalf("dropped lines = 0, want backlog drops when queue is full")
-	}
-
-	output.release()
-	writer.stopAndDrain()
-}
-
-func TestHumanResponseStreamRenderer_RendersOrderedProgressAndSeparatesPrimaryResult(t *testing.T) {
-	t.Parallel()
-
-	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Events: []responsestream.Event{
-			{
-				Sequence:   1,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "planning",
+	var capturedConfig *service.FactoryServiceConfig
+	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		capturedConfig = cfg
+		return stubFactoryService{
+			run: func(context.Context) error {
+				return nil
 			},
-			{
-				Sequence:   2,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "reviewing",
+		}, nil
+	}
+
+	override := true
+	err := Run(context.Background(), RunConfig{
+		InvocationSkipPermissionsOverride: &override,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if capturedConfig == nil || capturedConfig.InvocationSkipPermissionsOverride == nil {
+		t.Fatal("expected invocation skip-permissions override to be passed to service")
+	}
+	if !*capturedConfig.InvocationSkipPermissionsOverride {
+		t.Fatal("expected invocation skip-permissions override to be true")
+	}
+}
+
+func TestRun_WithoutSkipPermissionsOmitsInvocationOverrideFromService(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	var capturedConfig *service.FactoryServiceConfig
+	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		capturedConfig = cfg
+		return stubFactoryService{
+			run: func(context.Context) error {
+				return nil
 			},
-		},
-	})
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Events: []responsestream.Event{
-			{
-				Sequence:   3,
-				Kind:       responsestream.EventKindResponseFragment,
-				Type:       responsestream.EventTypeTextDelta,
-				DispatchID: "dispatch-1",
-				Payload:    "goal completed",
+		}, nil
+	}
+
+	err := Run(context.Background(), RunConfig{})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if capturedConfig == nil {
+		t.Fatal("expected factory service config to be captured")
+	}
+	if capturedConfig.InvocationSkipPermissionsOverride != nil {
+		t.Fatalf("invocation skip-permissions override = %#v, want nil when flag omitted", capturedConfig.InvocationSkipPermissionsOverride)
+	}
+}
+
+func TestRun_WithSkipPermissionsDoesNotMutatePersistedFactoryWorkerConfig(t *testing.T) {
+	originalBuilder := buildFactoryService
+	defer func() {
+		buildFactoryService = originalBuilder
+	}()
+
+	dir := t.TempDir()
+	factoryJSON := filepath.Join(dir, "factory.json")
+	writeFile(t, factoryJSON, `{
+  "factory": {
+    "workers": [
+      {
+        "name": "agent",
+        "type": "MODEL_WORKER",
+        "modelProvider": "CLAUDE",
+        "skipPermissions": false
+      }
+    ]
+  }
+}`)
+
+	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
+		return stubFactoryService{
+			run: func(context.Context) error {
+				return nil
 			},
-		},
+		}, nil
+	}
+
+	override := true
+	err := Run(context.Background(), RunConfig{
+		Dir:                               dir,
+		InvocationSkipPermissionsOverride: &override,
 	})
-
-	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		Status: factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
-		},
-	}); err != nil {
-		t.Fatalf("writeFinalInvocationResult: %v", err)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
 	}
 
-	got := output.String()
-	wantProgress := []string{
-		"[you:progress] planning",
-		"[you:progress] reviewing",
+	got, err := os.ReadFile(factoryJSON)
+	if err != nil {
+		t.Fatalf("read factory.json: %v", err)
 	}
-	for _, line := range wantProgress {
-		if !strings.Contains(got, line) {
-			t.Fatalf("output missing progress line %q:\n%s", line, got)
-		}
+	if !strings.Contains(string(got), `"skipPermissions": false`) {
+		t.Fatalf("factory.json = %s, want persisted skipPermissions:false unchanged", string(got))
 	}
-	planningIdx := strings.Index(got, wantProgress[0])
-	reviewingIdx := strings.Index(got, wantProgress[1])
-	if planningIdx < 0 || reviewingIdx < 0 || planningIdx > reviewingIdx {
-		t.Fatalf("progress lines out of order:\n%s", got)
+	if strings.Contains(string(got), `"skipPermissions": true`) {
+		t.Fatalf("factory.json = %s, want skipPermissions not persisted as true", string(got))
 	}
-	if strings.Contains(got, "[you:progress] goal completed") {
-		t.Fatalf("response fragment leaked into progress output:\n%s", got)
-	}
-	if !strings.Contains(got, responseStreamPrimaryResultHeader) {
-		t.Fatalf("output missing primary-result header:\n%s", got)
-	}
-	if !strings.HasSuffix(got, "goal completed") {
-		t.Fatalf("output = %q, want suffix primary result", got)
-	}
-}
-
-func TestHumanResponseStreamRenderer_SkipsDuplicateSequencesAndBoundsPayload(t *testing.T) {
-	t.Parallel()
-
-	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	longPayload := strings.Repeat("x", maxHumanProgressLineBytes+32)
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Events: []responsestream.Event{
-			{
-				Sequence:   1,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    longPayload,
-			},
-			{
-				Sequence:   1,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "duplicate",
-			},
-		},
-	})
-
-	renderer.stopProgressRendering()
-	got := output.String()
-	if strings.Count(got, "[you:progress]") != 1 {
-		t.Fatalf("expected one progress line, got:\n%s", got)
-	}
-	if !strings.Contains(got, "...") {
-		t.Fatalf("expected bounded payload suffix, got:\n%s", got)
-	}
-	if strings.Contains(got, "duplicate") {
-		t.Fatalf("duplicate sequence was rendered:\n%s", got)
-	}
-}
-
-func TestHumanResponseStreamRenderer_SurfacesCompactionNotice(t *testing.T) {
-	t.Parallel()
-
-	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Compaction: &responsestream.CompactionSummary{
-			Reason:               responsestream.CompactionReasonTruncated,
-			DroppedSequenceCount: 3,
-		},
-	})
-
-	renderer.stopProgressRendering()
-	got := output.String()
-	if !strings.Contains(got, "[you:progress] stream truncated (3 earlier events omitted)") {
-		t.Fatalf("compaction notice = %q", got)
-	}
-}
-
-func TestHumanResponseStreamRenderer_NoHeaderWithoutProgress(t *testing.T) {
-	t.Parallel()
-
-	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
-		},
-		Status: factoryapi.InvocationTerminalStatusCompleted,
-	}); err != nil {
-		t.Fatalf("writeFinalInvocationResult: %v", err)
-	}
-	if got := output.String(); got != "goal completed" {
-		t.Fatalf("output = %q, want plain primary result", got)
-	}
-}
-
-func TestHumanResponseStreamRenderer_WritesInvocationOutcomeForBlockedFailure(t *testing.T) {
-	t.Parallel()
-
-	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		RequestID: "req-blocked",
-		TraceID:   "trace-blocked",
-		Status:    factoryapi.InvocationTerminalStatusFailed,
-		ErrorCode: "INVOCATION_BLOCKED",
-		Message:   `goal invocation blocked while work "Review plan" is in state goal:blocked`,
-		SessionID: "session-1",
-		WorkID:    "work-review-plan",
-		WorkName:  "Review plan",
-		WorkState: "goal:blocked",
-	}); err != nil {
-		t.Fatalf("writeFinalInvocationResult: %v", err)
-	}
-
-	got := output.String()
-	for _, want := range []string{
-		responseStreamInvocationOutcomeHeader,
-		"status: FAILED",
-		"error: INVOCATION_BLOCKED",
-		`message: goal invocation blocked while work "Review plan" is in state goal:blocked`,
-		"session: session-1",
-		"workId: work-review-plan",
-		"workName: Review plan",
-		"workState: goal:blocked",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("output missing %q:\n%s", want, got)
-		}
-	}
-	if strings.Contains(got, responseStreamPrimaryResultHeader) {
-		t.Fatalf("failure output must not use primary-result header:\n%s", got)
-	}
-}
-
-func TestHumanResponseStreamRenderer_WritesInvocationOutcomeAfterProgress(t *testing.T) {
-	t.Parallel()
-
-	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Events: []responsestream.Event{
-			{
-				Sequence:   1,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "waiting for review",
-			},
-		},
-	})
-	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		Status:    factoryapi.InvocationTerminalStatusTimedOut,
-		ErrorCode: "INVOCATION_TIMED_OUT",
-		Message:   "invocation timed out while waiting for primary result",
-		SessionID: "session-1",
-	}); err != nil {
-		t.Fatalf("writeFinalInvocationResult: %v", err)
-	}
-
-	got := output.String()
-	if !strings.Contains(got, "[you:progress] waiting for review") {
-		t.Fatalf("output missing progress:\n%s", got)
-	}
-	if !strings.Contains(got, responseStreamInvocationOutcomeHeader) {
-		t.Fatalf("output missing outcome header:\n%s", got)
-	}
-	if !strings.Contains(got, "status: TIMED_OUT") || !strings.Contains(got, "error: INVOCATION_TIMED_OUT") {
-		t.Fatalf("output missing timed-out outcome:\n%s", got)
-	}
-}
-
-func TestHumanResponseStreamRenderer_WritesUnresolvedPrimaryResultOutcome(t *testing.T) {
-	t.Parallel()
-
-	var output strings.Builder
-	renderer := newHumanResponseStreamRenderer(&output)
-	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		Status:    factoryapi.InvocationTerminalStatusFailed,
-		ErrorCode: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
-		Message:   "primary result could not be resolved",
-	}); err != nil {
-		t.Fatalf("writeFinalInvocationResult: %v", err)
-	}
-
-	got := output.String()
-	if !strings.Contains(got, "error: INVOCATION_PRIMARY_RESULT_UNRESOLVED") {
-		t.Fatalf("output = %q, want unresolved-primary-result outcome", got)
-	}
-}
-
-func TestJSONResponseStreamRenderer_EmitsPrimaryResultRecordForFailedOutcome(t *testing.T) {
-	t.Parallel()
-
-	var output strings.Builder
-	renderer := newJSONResponseStreamRenderer(&output)
-	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		RequestID: "req-interrupted",
-		TraceID:   "trace-interrupted",
-		Status:    factoryapi.InvocationTerminalStatusFailed,
-		ErrorCode: "INVOCATION_INTERRUPTED",
-		Message:   "dispatch was interrupted before primary result resolved",
-		SessionID: "session-1",
-		WorkID:    "work-1",
-		WorkState: "goal:review",
-	}); err != nil {
-		t.Fatalf("writeFinalInvocationResult: %v", err)
-	}
-
-	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
-	if len(lines) != 1 {
-		t.Fatalf("expected 1 NDJSON line, got %d:\n%s", len(lines), output.String())
-	}
-
-	var finalRecord responseStreamJSONPrimaryResultRecord
-	if err := json.Unmarshal([]byte(lines[0]), &finalRecord); err != nil {
-		t.Fatalf("unmarshal primary result line: %v", err)
-	}
-	if finalRecord.RecordType != responseStreamJSONRecordPrimaryResult {
-		t.Fatalf("record type = %q", finalRecord.RecordType)
-	}
-	if finalRecord.Invocation.Status != factoryapi.InvocationTerminalStatusFailed {
-		t.Fatalf("status = %q, want FAILED", finalRecord.Invocation.Status)
-	}
-	if finalRecord.Invocation.ErrorCode == nil || *finalRecord.Invocation.ErrorCode != "INVOCATION_INTERRUPTED" {
-		t.Fatalf("errorCode = %#v, want INVOCATION_INTERRUPTED", finalRecord.Invocation.ErrorCode)
-	}
-	if finalRecord.Invocation.PrimaryResult != nil {
-		t.Fatalf("primaryResult = %#v, want nil on failure", finalRecord.Invocation.PrimaryResult)
-	}
-}
-
-func TestJSONResponseStreamRenderer_EmitsOrderedProgressAndPrimaryResultRecords(t *testing.T) {
-	t.Parallel()
-
-	var output strings.Builder
-	renderer := newJSONResponseStreamRenderer(&output)
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Events: []responsestream.Event{
-			{
-				Sequence:   1,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "planning",
-			},
-			{
-				Sequence:   2,
-				Kind:       responsestream.EventKindProgressFragment,
-				Type:       responsestream.EventTypeProgress,
-				DispatchID: "dispatch-1",
-				Payload:    "reviewing",
-			},
-		},
-	})
-	renderer.onStreamSegment(responsestream.ReadResult{
-		Events: []responsestream.Event{
-			{
-				Sequence:   3,
-				Kind:       responsestream.EventKindResponseFragment,
-				Type:       responsestream.EventTypeTextDelta,
-				DispatchID: "dispatch-1",
-				Payload:    "goal completed",
-			},
-		},
-	})
-	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		RequestID: "req-1",
-		TraceID:   "trace-1",
-		Status:    factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
-		},
-	}); err != nil {
-		t.Fatalf("writeFinalInvocationResult: %v", err)
-	}
-
-	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("expected 3 NDJSON lines, got %d:\n%s", len(lines), output.String())
-	}
-
-	var progress1 responseStreamJSONProgressRecord
-	if err := json.Unmarshal([]byte(lines[0]), &progress1); err != nil {
-		t.Fatalf("unmarshal progress line 1: %v", err)
-	}
-	if progress1.RecordType != responseStreamJSONRecordProgress || progress1.Payload != "planning" {
-		t.Fatalf("progress line 1 = %#v", progress1)
-	}
-
-	var progress2 responseStreamJSONProgressRecord
-	if err := json.Unmarshal([]byte(lines[1]), &progress2); err != nil {
-		t.Fatalf("unmarshal progress line 2: %v", err)
-	}
-	if progress2.RecordType != responseStreamJSONRecordProgress || progress2.Payload != "reviewing" {
-		t.Fatalf("progress line 2 = %#v", progress2)
-	}
-
-	var finalRecord responseStreamJSONPrimaryResultRecord
-	if err := json.Unmarshal([]byte(lines[2]), &finalRecord); err != nil {
-		t.Fatalf("unmarshal primary result line: %v", err)
-	}
-	if finalRecord.RecordType != responseStreamJSONRecordPrimaryResult {
-		t.Fatalf("final record type = %q", finalRecord.RecordType)
-	}
-	if finalRecord.Invocation.RequestId != "req-1" {
-		t.Fatalf("invocation = %#v", finalRecord.Invocation)
-	}
-}
-
-func TestJSONResponseStreamRenderer_SurfacesCompactionAndStreamGapRecords(t *testing.T) {
-	t.Parallel()
-
-	var output strings.Builder
-	renderer := newJSONResponseStreamRenderer(&output)
-	renderer.onStreamSegment(responsestream.ReadResult{
-		BehindRetainedWindow: true,
-		Compaction: &responsestream.CompactionSummary{
-			Reason:               responsestream.CompactionReasonTruncated,
-			DroppedSequenceCount: 3,
-		},
-	})
-
-	renderer.stopProgressRendering()
-	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
-	if len(lines) != 2 {
-		t.Fatalf("expected 2 NDJSON lines, got %d:\n%s", len(lines), output.String())
-	}
-
-	var gap responseStreamJSONStreamGapRecord
-	if err := json.Unmarshal([]byte(lines[0]), &gap); err != nil {
-		t.Fatalf("unmarshal stream gap: %v", err)
-	}
-	if gap.RecordType != responseStreamJSONRecordStreamGap || gap.Reason != "behind_retained_window" {
-		t.Fatalf("gap = %#v", gap)
-	}
-
-	var compaction responseStreamJSONCompactionRecord
-	if err := json.Unmarshal([]byte(lines[1]), &compaction); err != nil {
-		t.Fatalf("unmarshal compaction: %v", err)
-	}
-	if compaction.RecordType != responseStreamJSONRecordCompaction || compaction.DroppedSequenceCount != 3 {
-		t.Fatalf("compaction = %#v", compaction)
-	}
-}
-
-func TestHumanResponseStreamRenderer_SurfacesTerminalOutputBacklog(t *testing.T) {
-	t.Parallel()
-
-	output := &gatedResponseStreamWriter{}
-	output.block()
-	renderer := newHumanResponseStreamRenderer(output)
-	floodResponseStreamProgress(renderer, defaultResponseStreamProgressQueueCapacity+4)
-
-	output.release()
-	if err := renderer.writeFinalInvocationResult(responseStreamBacklogSuccessResult); err != nil {
-		t.Fatalf("writeFinalInvocationResult: %v", err)
-	}
-
-	got := output.String()
-	backlogIdx := strings.Index(got, "[you:progress] terminal output backlog")
-	primaryIdx := strings.Index(got, responseStreamPrimaryResultHeader)
-	if backlogIdx < 0 || primaryIdx < 0 || backlogIdx > primaryIdx {
-		t.Fatalf("want backlog before primary result:\n%s", got)
-	}
-}
-
-func TestJSONResponseStreamRenderer_SurfacesTerminalOutputBacklogRecord(t *testing.T) {
-	t.Parallel()
-
-	output := &gatedResponseStreamWriter{}
-	output.block()
-	renderer := newJSONResponseStreamRenderer(output)
-	floodResponseStreamProgress(renderer, defaultResponseStreamProgressQueueCapacity+4)
-
-	output.release()
-	if err := renderer.writeFinalInvocationResult(responseStreamBacklogSuccessResult); err != nil {
-		t.Fatalf("writeFinalInvocationResult: %v", err)
-	}
-
-	got := output.String()
-	backlogIdx := strings.Index(got, `"reason":"terminal_output_backlog"`)
-	primaryIdx := strings.Index(got, `"recordType":"primary_result"`)
-	if backlogIdx < 0 || !strings.Contains(got, `"recordType":"stream_gap"`) || primaryIdx < 0 || backlogIdx > primaryIdx {
-		t.Fatalf("want backlog record before primary_result:\n%s", got)
-	}
-}
-
-func TestJSONResponseStreamRenderer_EmitsOnlyPrimaryResultWithoutProgress(t *testing.T) {
-	t.Parallel()
-
-	var output strings.Builder
-	renderer := newJSONResponseStreamRenderer(&output)
-	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		Status: factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
-		},
-	}); err != nil {
-		t.Fatalf("writeFinalInvocationResult: %v", err)
-	}
-
-	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
-	if len(lines) != 1 {
-		t.Fatalf("expected 1 NDJSON line, got %d:\n%s", len(lines), output.String())
-	}
-	if !strings.Contains(lines[0], `"recordType":"primary_result"`) {
-		t.Fatalf("output = %q", lines[0])
-	}
-}
-
-func TestResponseStreamAttachment_SubscribesWhenDispatchAppears(t *testing.T) {
-	t.Parallel()
-
-	attachable := newRecordingResponseStreamAttachable()
-	attachable.ensureDispatch("dispatch-1")
-	sink := &countingResponseStreamSink{}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	attachment := startResponseStreamAttachment(ctx, attachable, factorysessions.DefaultSessionID, sink)
-	if attachment == nil {
-		t.Fatal("expected attachment")
-	}
-	defer attachment.stop()
-
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		if len(attachable.subscribeCalls) > 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if len(attachable.subscribeCalls) == 0 {
-		t.Fatal("expected internal response-stream subscription")
-	}
-
-	attachable.stream("dispatch-1").Append(responsestream.Event{
-		Kind:    responsestream.EventKindProgressFragment,
-		Type:    responsestream.EventTypeProgress,
-		Payload: "working",
-	})
-
-	for time.Now().Before(deadline) {
-		if sink.segments() > 0 {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if sink.segments() == 0 {
-		t.Fatal("expected stream segment delivery after subscription")
-	}
-	if got := attachable.subscribeCalls[0].dispatchID; got != "dispatch-1" {
-		t.Fatalf("dispatchID = %q, want dispatch-1", got)
-	}
-}
-
-type countingResponseStreamSink struct {
-	segmentCount int
-}
-
-func (s *countingResponseStreamSink) onStreamSegment(factorysessions.SessionResponseStreamReadResult) {
-	s.segmentCount++
-}
-
-func (s *countingResponseStreamSink) segments() int {
-	return s.segmentCount
 }

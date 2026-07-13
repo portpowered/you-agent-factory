@@ -110,7 +110,6 @@ mode.
 
 ## Where to author responses
 
-- Review workstation prompt: `factory/workstations/review/AGENTS.md`
 - Packaged `@you/goal` authored prompts: `pkg/config/builtingoal/prompts/`
 - Checker or review-style prompts in other packaged goal factories should use
   this envelope shape and the decision vocabulary that matches their routing

@@ -50,9 +50,11 @@ endif
 GO_TEST_TIMEOUT ?= 300s
 GO_COVERAGE_TIMEOUT ?= 10m
 GO_COVERAGE_MIN ?= 78.3
+BACKEND_SIZE_ROOT ?= .
+PACKAGE_MAINT_ROOT ?= .
 PACKAGE_FILE_COUNT_ROOT ?= .
 PACKAGE_BOUNDARY_ROOT ?= .
-LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check model-facade-check deadcode
+LINT_TARGETS ?= ui-lint ui-deadcode vet backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check logging-boundary-check model-facade-check deadcode
 
 define run_verification_step
 	@printf '%s\n' "==> $(2) [make $(1)]"
@@ -72,7 +74,7 @@ define run_timed_step
 	exit $$status
 endef
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check model-facade-check readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy init dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke contracts-validate docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check logging-boundary-check model-facade-check readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy init dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install clean
 
 default:
 	$(MAKE) generate-api
@@ -101,7 +103,6 @@ generate-go-client-api:
 
 generate-ui-api:
 	cd ui && node ./scripts/generate-openapi-types.mjs ../api/openapi.yaml src/api/generated/openapi.ts
-	cd ui && $(UI_EXEC) biome format --write src/api/generated/openapi.ts
 
 generate-wire:
 	$(GO) generate ./cmd/factory/compose/...
@@ -120,8 +121,11 @@ api-smoke:
 	$(GO) test ./pkg/api -run TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional/runtime_api -run TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned -count=1 -timeout $(GO_TEST_TIMEOUT)
 
+contracts-validate:
+	$(GO) run ./cmd/contractsvalidate -root .
+
 docs-reference-check:
-	$(GO) run ../markdown-linter/cmd/markdown-linter docs/README.md docs/reference
+	$(GO) run ./cmd/markdown-linter docs/README.md docs/reference
 
 docs-reference-smoke:
 	$(MAKE) docs-reference-check
@@ -228,10 +232,10 @@ lint:
 	$(MAKE) $(LINT_TARGETS)
 
 backend-size:
-	$(GO) run ./cmd/backendsizecheck
+	$(GO) run ./cmd/backendsizecheck -root $(BACKEND_SIZE_ROOT)
 
 pkg-maint:
-	$(GO) run ./cmd/pkgmaintcheck ./pkg
+	$(GO) run ./cmd/pkgmaintcheck -root $(PACKAGE_MAINT_ROOT)
 
 pkg-file-count:
 	$(GO) run ./cmd/pkgfilecountcheck -root $(PACKAGE_FILE_COUNT_ROOT)
@@ -241,6 +245,9 @@ pkg-boundary:
 
 durable-runtime-construction-check:
 	$(GO) run ./cmd/durableruntimeconstructioncheck -root .
+
+logging-boundary-check:
+	$(GO) run ./cmd/loggingboundarycheck -root .
 
 model-facade-check:
 	$(GO) run ./cmd/modelfacadecheck

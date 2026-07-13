@@ -1,5 +1,12 @@
 import type { DashboardSnapshot } from "../../../../api/dashboard";
 import type { FactoryEvent } from "../../../../api/events";
+import {
+  compareEventToTimelinePosition,
+  createMaterializedWorkOutcomeState,
+  type MaterializedWorkOutcomeState,
+  reduceMaterializedWorkOutcomeEvents,
+} from "../../../work-outcome/public/materializer";
+import type { StreamDerivedCacheIdentity } from "../../lib/stream-derived-cache-identity";
 import type { FactoryTimelineProjection } from "./buildSnapshot";
 import { projectSnapshot } from "./projectSnapshot";
 import {
@@ -10,21 +17,62 @@ import {
 
 export type FactoryTimelineMode = "current" | "fixed";
 
-export interface FactoryTimelineState {
+export interface FactoryTimelineEntryState {
   currentReplayCheckpoint?: FactoryTimelineCheckpoint;
   events: FactoryEvent[];
+  identity: StreamDerivedCacheIdentity;
   latestTick: number;
+  materializedWorkOutcomeState: MaterializedWorkOutcomeState;
   mode: FactoryTimelineMode;
   receivedEventIDs: string[];
   selectedTick: number;
   worldViewCache: Record<number, WorldState>;
+}
+
+export interface FactoryTimelineState {
+  activeEntryKey: string | null;
+  currentReplayCheckpoint?: FactoryTimelineCheckpoint;
+  entriesByKey: Record<string, FactoryTimelineEntryState>;
+  events: FactoryEvent[];
+  latestTick: number;
+  materializedWorkOutcomeState: MaterializedWorkOutcomeState;
+  mode: FactoryTimelineMode;
+  receivedEventIDs: string[];
+  selectedTick: number;
+  worldViewCache: Record<number, WorldState>;
+  activateEntry: (identity: StreamDerivedCacheIdentity) => void;
   appendEvent: (event: FactoryEvent) => void;
+  appendEventForEntry: (
+    identity: StreamDerivedCacheIdentity,
+    event: FactoryEvent,
+  ) => void;
   appendEvents: (events: FactoryEvent[]) => void;
+  appendEventsForEntry: (
+    identity: StreamDerivedCacheIdentity,
+    events: FactoryEvent[],
+  ) => void;
+  entryForIdentity: (
+    identity: StreamDerivedCacheIdentity,
+  ) => FactoryTimelineEntryState | undefined;
   replaceEvents: (events: FactoryEvent[]) => void;
+  replaceEventsForEntry: (
+    identity: StreamDerivedCacheIdentity,
+    events: FactoryEvent[],
+  ) => void;
   reset: () => void;
+  resetEntry: (identity: StreamDerivedCacheIdentity) => void;
   restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => void;
+  restoreCheckpointForEntry: (
+    identity: StreamDerivedCacheIdentity,
+    checkpoint: FactoryTimelineCheckpoint,
+  ) => void;
   selectTick: (tick: number) => void;
+  selectTickForEntry: (
+    identity: StreamDerivedCacheIdentity,
+    tick: number,
+  ) => void;
   setCurrentMode: () => void;
+  setCurrentModeForEntry: (identity: StreamDerivedCacheIdentity) => void;
 }
 
 export interface FactoryTimelineSyncIdentity {
@@ -37,6 +85,7 @@ export interface FactoryTimelineSyncIdentity {
 export interface FactoryTimelineCheckpoint {
   afterEventId?: string;
   afterSequence?: number;
+  materializedWorkOutcomeState: MaterializedWorkOutcomeState;
   replayState: ReplayWorldState;
   selectedTick: number;
   syncIdentity?: FactoryTimelineSyncIdentity;
@@ -90,6 +139,7 @@ export function emptyTimelineState(): Pick<
   | "currentReplayCheckpoint"
   | "events"
   | "latestTick"
+  | "materializedWorkOutcomeState"
   | "mode"
   | "receivedEventIDs"
   | "selectedTick"
@@ -99,6 +149,7 @@ export function emptyTimelineState(): Pick<
     currentReplayCheckpoint: undefined,
     events: [],
     latestTick: 0,
+    materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
     mode: "current",
     receivedEventIDs: [],
     selectedTick: 0,
@@ -124,6 +175,7 @@ function latestAppliedEvent(
 function checkpointFromProjection(
   events: FactoryEvent[],
   selectedTick: number,
+  materializedWorkOutcomeState: MaterializedWorkOutcomeState,
   projection: FactoryTimelineProjection,
 ): TimelineCheckpointProjection {
   const latestEvent = latestAppliedEvent(events, selectedTick);
@@ -132,6 +184,7 @@ function checkpointFromProjection(
       afterEventId: latestEvent?.id,
       afterSequence:
         latestEvent?.context.sessionSequence ?? latestEvent?.context.sequence,
+      materializedWorkOutcomeState,
       replayState: projection.replayState,
       selectedTick,
     },
@@ -153,21 +206,25 @@ export function cacheWithSnapshot(
 function projectCurrentTick(
   events: FactoryEvent[],
   selectedTick: number,
+  materializedWorkOutcomeState: MaterializedWorkOutcomeState,
   deps: TimelineStoreStateDeps,
   checkpoint?: FactoryTimelineCheckpoint,
+  acceptedTail?: FactoryEvent[],
 ): TimelineCheckpointProjection {
   const usableCheckpoint =
     checkpoint && checkpoint.selectedTick <= selectedTick
       ? checkpoint
       : undefined;
   const projectionEvents = usableCheckpoint
-    ? events.filter(
+    ? (acceptedTail ??
+      events.filter(
         (event) => event.context.tick > usableCheckpoint.selectedTick,
-      )
+      ))
     : events;
   return checkpointFromProjection(
     events,
     selectedTick,
+    materializedWorkOutcomeState,
     deps.buildFactoryTimelineProjection(
       projectionEvents,
       selectedTick,
@@ -182,6 +239,7 @@ export function appendTimelineEvents(
     | "events"
     | "currentReplayCheckpoint"
     | "latestTick"
+    | "materializedWorkOutcomeState"
     | "mode"
     | "receivedEventIDs"
     | "selectedTick"
@@ -194,95 +252,92 @@ export function appendTimelineEvents(
   | "events"
   | "currentReplayCheckpoint"
   | "latestTick"
+  | "materializedWorkOutcomeState"
   | "mode"
   | "receivedEventIDs"
   | "selectedTick"
   | "worldViewCache"
 > {
   const receivedEventIDs = new Set(current.receivedEventIDs);
-  const nextEvents = incomingEvents.filter(
-    (event) => !receivedEventIDs.has(event.id),
-  );
-
-  if (nextEvents.length === 0) {
-    return {
-      events: current.events,
-      currentReplayCheckpoint: current.currentReplayCheckpoint,
-      latestTick: current.latestTick,
-      mode: current.mode,
-      receivedEventIDs: current.receivedEventIDs,
-      selectedTick: current.selectedTick,
-      worldViewCache: current.worldViewCache,
-    };
+  const unorderedAcceptedEvents: FactoryEvent[] = [];
+  for (const event of deps.orderedEvents(incomingEvents)) {
+    if (
+      receivedEventIDs.has(event.id) ||
+      (current.materializedWorkOutcomeState.cursor &&
+        compareEventToTimelinePosition(
+          event,
+          current.materializedWorkOutcomeState.cursor,
+        ) <= 0)
+    ) {
+      continue;
+    }
+    receivedEventIDs.add(event.id);
+    unorderedAcceptedEvents.push(event);
   }
 
-  const events = deps.orderedEvents([...current.events, ...nextEvents]);
-  const latestTick = nextEvents.reduce(
+  if (unorderedAcceptedEvents.length === 0) {
+    return current;
+  }
+
+  const acceptedEventIDs = new Set(
+    unorderedAcceptedEvents.map((event) => event.id),
+  );
+  const events = deps.orderedEvents([
+    ...current.events,
+    ...unorderedAcceptedEvents,
+  ]);
+  const acceptedTail = events.filter((event) => acceptedEventIDs.has(event.id));
+  const latestTick = acceptedTail.reduce(
     (maxTick, event) => Math.max(maxTick, event.context.tick),
     current.latestTick,
   );
   const selectedTick =
     current.mode === "current" ? latestTick : current.selectedTick;
-  const currentProjection =
-    current.mode === "current"
-      ? projectCurrentTick(
-          events,
-          selectedTick,
-          deps,
-          current.currentReplayCheckpoint,
-        )
-      : current.currentReplayCheckpoint;
+  const materializedWorkOutcomeState = reduceMaterializedWorkOutcomeEvents(
+    current.materializedWorkOutcomeState,
+    acceptedTail,
+  );
+  const currentProjection = projectCurrentTick(
+    events,
+    latestTick,
+    materializedWorkOutcomeState,
+    deps,
+    current.currentReplayCheckpoint,
+    acceptedTail,
+  );
+  const selectedWorldViewCache = cacheWithSnapshot(
+    events,
+    current.worldViewCache,
+    selectedTick,
+    deps,
+  );
 
   return {
     events,
-    currentReplayCheckpoint:
-      currentProjection && "checkpoint" in currentProjection
-        ? currentProjection.checkpoint
-        : currentProjection,
+    currentReplayCheckpoint: currentProjection.checkpoint,
     latestTick,
+    materializedWorkOutcomeState,
     mode: current.mode,
     receivedEventIDs: [
       ...current.receivedEventIDs,
-      ...nextEvents.map((event) => event.id),
+      ...acceptedTail.map((event) => event.id),
     ],
     selectedTick,
     worldViewCache:
-      current.mode === "current" &&
-      currentProjection &&
-      "worldState" in currentProjection
+      current.mode === "current"
         ? { [selectedTick]: currentProjection.worldState }
-        : cacheWithSnapshot(events, {}, selectedTick, deps),
+        : {
+            ...selectedWorldViewCache,
+            [latestTick]: currentProjection.worldState,
+          },
   };
 }
 
 export function replaceTimelineEvents(
   events: FactoryEvent[],
   deps: TimelineStoreStateDeps,
-): Pick<
-  FactoryTimelineState,
-  | "currentReplayCheckpoint"
-  | "events"
-  | "latestTick"
-  | "mode"
-  | "receivedEventIDs"
-  | "selectedTick"
-  | "worldViewCache"
-> {
-  const ordered = deps.orderedEvents(events);
-  const latestTick = Math.max(0, ...ordered.map((event) => event.context.tick));
-  const currentProjection = projectCurrentTick(ordered, latestTick, deps);
-
-  return {
-    currentReplayCheckpoint: currentProjection.checkpoint,
-    events: ordered,
-    latestTick,
-    mode: "current",
-    receivedEventIDs: ordered.map((event) => event.id),
-    selectedTick: latestTick,
-    worldViewCache: {
-      [latestTick]: currentProjection.worldState,
-    },
-  };
+): ReturnType<typeof emptyTimelineState> {
+  return appendTimelineEvents(emptyTimelineState(), events, deps);
 }
 
 export function restoreTimelineCheckpoint(
@@ -292,6 +347,7 @@ export function restoreTimelineCheckpoint(
   | "currentReplayCheckpoint"
   | "events"
   | "latestTick"
+  | "materializedWorkOutcomeState"
   | "mode"
   | "receivedEventIDs"
   | "selectedTick"
@@ -302,6 +358,7 @@ export function restoreTimelineCheckpoint(
     currentReplayCheckpoint: checkpoint,
     events: [],
     latestTick: checkpoint.selectedTick,
+    materializedWorkOutcomeState: checkpoint.materializedWorkOutcomeState,
     mode: "current",
     receivedEventIDs: [],
     selectedTick: checkpoint.selectedTick,
@@ -359,6 +416,8 @@ export function setTimelineCurrentMode(
   const currentProjection = projectCurrentTick(
     current.events,
     current.latestTick,
+    current.currentReplayCheckpoint?.materializedWorkOutcomeState ??
+      createMaterializedWorkOutcomeState(),
     deps,
     currentCheckpoint,
   );

@@ -1,0 +1,12 @@
+type: object
+additionalProperties: false
+description: Published plan update payload.
+properties:
+  steps:
+    type: array
+    description: Ordered plan steps when emitting a plan snapshot.
+    items:
+      $ref: ./FactoryResponseEventPlanStep.yaml
+  summary:
+    type: string
+    description: Optional plan summary text.

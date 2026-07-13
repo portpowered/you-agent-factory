@@ -46,6 +46,8 @@ func generatedFactoryMisCasedEnumTestCases() []generatedFactoryMisCasedEnumTestC
 	cases := generatedFactoryMisCasedWorkTypeEnumTestCases()
 	cases = append(cases, generatedFactoryMisCasedWorkerEnumTestCases()...)
 	cases = append(cases, generatedFactoryMisCasedWorkstationEnumTestCases()...)
+	cases = append(cases, generatedFactoryMisCasedOrchestratorEnumTestCases()...)
+	cases = append(cases, generatedFactoryMisCasedResourceEnumTestCases()...)
 	return cases
 }
 
@@ -155,6 +157,45 @@ func generatedFactoryMisCasedWorkerEnumTestCases() []generatedFactoryMisCasedEnu
 					"name":"execute-story",
 					"worker":"executor",
 					"type":"MODEL_WORKSTATION",
+					"inputs":[{"workType":"story","state":"init"}],
+					"outputs":[{"workType":"story","state":"complete"}]
+				}]
+			}`,
+		},
+	}
+}
+
+func generatedFactoryMisCasedOrchestratorEnumTestCases() []generatedFactoryMisCasedEnumTestCase {
+	return []generatedFactoryMisCasedEnumTestCase{
+		{
+			name:      "orchestrator kind",
+			fieldPath: "orchestrator.kind",
+			value:     "javascript",
+			payload: `{
+				"name":"miscased-orchestrator-factory",
+				"orchestrator":{
+					"kind":"javascript",
+					"javascript":{"sourceRef":"factory/workflows/review.js"}
+				}
+			}`,
+		},
+	}
+}
+
+func generatedFactoryMisCasedResourceEnumTestCases() []generatedFactoryMisCasedEnumTestCase {
+	return []generatedFactoryMisCasedEnumTestCase{
+		{
+			name:      "resource type",
+			fieldPath: "resources[0].type",
+			value:     "model",
+			payload: `{
+				"name":"miscased-resource-factory",
+				"workTypes":[{"name":"story","states":[{"name":"init","type":"INITIAL"},{"name":"complete","type":"TERMINAL"}]}],
+				"resources":[{"name":"slot","type":"model","capacity":1}],
+				"workers":[{"name":"executor"}],
+				"workstations":[{
+					"name":"execute-story",
+					"worker":"executor",
 					"inputs":[{"workType":"story","state":"init"}],
 					"outputs":[{"workType":"story","state":"complete"}]
 				}]

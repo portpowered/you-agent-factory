@@ -1,8 +1,10 @@
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach } from "vitest";
 import type { DashboardSnapshot } from "../../../api/dashboard/types";
 import { dashboardSemanticSnapshotFixtures } from "../../../components/dashboard/fixtures";
 import { installDashboardBrowserTestShims } from "../../../components/dashboard/test-browser-shims";
+import { createMaterializedWorkOutcomeState } from "../../work-outcome/public/materializer";
 import { DashboardScreen } from "./dashboard-screen";
 
 const VIEWPORT_HEIGHT = 768;
@@ -11,9 +13,10 @@ const dashboardSnapshotState = vi.hoisted(() => ({
   value: {
     error: null as Error | null,
     isInitialLoading: false,
-    preflightRecovery: null as
-      | { reasonCode: string; requestedSessionId: string }
-      | null,
+    preflightRecovery: null as {
+      reasonCode: string;
+      requestedSessionId: string;
+    } | null,
     preflightStatus: "success" as const,
     snapshot: null as DashboardSnapshot | null,
     streamState: {
@@ -38,6 +41,11 @@ vi.mock("../../header/public", () => ({
 
 vi.mock("../hooks/useDashboardSnapshot", () => ({
   useDashboardSnapshot: vi.fn(() => dashboardSnapshotState.value),
+}));
+
+vi.mock("../session/dashboard-session-provider", () => ({
+  DashboardSessionProvider: ({ children }: { children: ReactNode }) => children,
+  useDashboardSession: () => ({ rawSessionID: "session-test" }),
 }));
 
 vi.mock("../../bento/hooks/use-dashboard-bento-snapshot", () => ({
@@ -81,13 +89,10 @@ vi.mock("../../bento/hooks/use-dashboard-bento-snapshot", () => ({
         terminalWorkDetail: null,
         undoSelection: vi.fn(),
       },
+      materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
       selectedSnapshot: snapshot,
       selectedTimelineTick: snapshot.tick_count,
       snapshot,
-      timelineEvents: [],
-      worldViewCache: {
-        [snapshot.tick_count]: snapshot,
-      },
     };
   }),
 }));

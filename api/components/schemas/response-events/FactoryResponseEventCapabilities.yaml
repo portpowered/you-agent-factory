@@ -1,0 +1,52 @@
+type: object
+additionalProperties: false
+description: >-
+  Declares which response-event features a provider session supports. Adapters
+  publish capability flags so consumers can interpret fidelity and phase
+  availability without depending on provider-native schemas.
+required:
+  - nativeStreaming
+  - messageDeltas
+  - messageSnapshots
+  - reasoningSummaries
+  - toolLifecycle
+  - toolOutputDeltas
+  - fileChanges
+  - plans
+  - usage
+  - stableItemIds
+  - providerReconnect
+properties:
+  nativeStreaming:
+    type: boolean
+    description: Provider session exposes native streaming observation.
+  messageDeltas:
+    type: boolean
+    description: Provider session can emit incremental message deltas.
+  messageSnapshots:
+    type: boolean
+    description: Provider session can emit message snapshots.
+  reasoningSummaries:
+    type: boolean
+    description: Provider session can emit reasoning summaries or deltas.
+  toolLifecycle:
+    type: boolean
+    description: Provider session can emit tool lifecycle metadata.
+  toolOutputDeltas:
+    type: boolean
+    description: Provider session can emit incremental tool output deltas.
+  fileChanges:
+    type: boolean
+    description: Provider session can emit observed file changes.
+  plans:
+    type: boolean
+    description: Provider session can emit plan updates.
+  usage:
+    type: boolean
+    description: Provider session can emit usage accounting.
+  stableItemIds:
+    type: boolean
+    description: Provider session assigns stable item identifiers across events.
+  providerReconnect:
+    type: boolean
+    description: Provider session supports reconnect after stream interruption.

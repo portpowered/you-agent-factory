@@ -208,10 +208,12 @@ func defaultBuildInvocationBootstrap(
 	return bootstrap, nil
 }
 
-type sessionResponseStreamInvocationRunner interface {
+type sessionResponseEventInvocationRunner interface {
 	sessionInvocationRunner
-	sessionResponseStreamAttachable
+	sessionResponseEventAttachable
 }
+
+var _ sessionResponseEventInvocationRunner = (*service.InvocationBootstrap)(nil)
 
 func resolveFactoryInvocationRequest(cfg RunConfig) (*factoryapi.InvocationRequest, bool, error) {
 	if strings.TrimSpace(cfg.WorkFile) != "" {
@@ -321,13 +323,10 @@ func runFactoryInvocation(
 	ctx context.Context,
 	cfg RunConfig,
 	request factoryapi.InvocationRequest,
-	logger *zap.Logger,
-	mockWorkersConfig *factoryconfig.MockWorkersConfig,
+	invoker sessionInvocationRunner,
 ) error {
-	svcCfg := buildInvocationRunServiceConfig(cfg, logger, mockWorkersConfig)
-	invoker, err := buildInvocationBootstrap(ctx, svcCfg)
-	if err != nil {
-		return err
+	if invoker == nil {
+		return fmt.Errorf("run factory invocation: runner is required")
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
@@ -344,26 +343,14 @@ func runFactoryInvocation(
 		return err
 	}
 
-	var streamAttachment *responseStreamAttachment
-	var streamRenderer responseStreamRenderer
-	if isResponseStreamOutputMode(cfg.InvocationOutputMode) {
-		streamRenderer = newResponseStreamRenderer(cfg.Output, cfg.JSONOutput)
-		if streamInvoker, ok := invoker.(sessionResponseStreamInvocationRunner); ok {
-			streamAttachment = startResponseStreamAttachment(
-				ctx,
-				streamInvoker,
-				factorysessions.DefaultSessionID,
-				streamRenderer,
-			)
-		}
+	streamRenderer, stopStreamAttachment := startInvocationResponseStream(ctx, cfg, invoker)
+	if streamRenderer != nil {
+		defer streamRenderer.stopProgressRendering()
 	}
 
 	result, err := invoker.InvokeFactorySession(runCtx, factorysessions.DefaultSessionID, request)
-	if streamAttachment != nil {
-		streamAttachment.stop()
-	}
-	if streamRenderer != nil {
-		streamRenderer.stopProgressRendering()
+	if stopStreamAttachment != nil {
+		stopStreamAttachment()
 	}
 	if releaseErr := releaseInvocationSession(runCtx, invoker, factorysessions.DefaultSessionID); releaseErr != nil && err == nil {
 		err = releaseErr
@@ -380,6 +367,39 @@ func runFactoryInvocation(
 		return writeInvocationFailure(cfg, result, streamRenderer)
 	}
 	return writeInvocationSuccess(cfg, result, streamRenderer)
+}
+
+func startInvocationResponseStream(
+	ctx context.Context,
+	cfg RunConfig,
+	invoker sessionInvocationRunner,
+) (responseStreamRenderer, func()) {
+	if !isResponseStreamOutputMode(cfg.InvocationOutputMode) {
+		return nil, nil
+	}
+	if cfg.JSONOutput {
+		renderer := newJSONResponseStreamRenderer(cfg.Output)
+		streamInvoker, ok := invoker.(sessionResponseEventInvocationRunner)
+		if !ok {
+			return renderer, nil
+		}
+		attachment := startResponseEventAttachment(ctx, streamInvoker, factorysessions.DefaultSessionID, renderer)
+		if attachment == nil {
+			return renderer, nil
+		}
+		return renderer, attachment.stop
+	}
+
+	renderer := newHumanResponseStreamRenderer(cfg.Output)
+	streamInvoker, ok := invoker.(sessionResponseEventInvocationRunner)
+	if !ok {
+		return renderer, nil
+	}
+	attachment := startResponseEventAttachment(ctx, streamInvoker, factorysessions.DefaultSessionID, renderer)
+	if attachment == nil {
+		return renderer, nil
+	}
+	return renderer, attachment.stop
 }
 
 func buildInvocationRunServiceConfig(

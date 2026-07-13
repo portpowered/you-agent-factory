@@ -1,0 +1,17 @@
+type: object
+additionalProperties: false
+description: Incremental message content delta for one content block.
+required:
+  - contentBlockIndex
+  - contentBlockKind
+properties:
+  contentBlockIndex:
+    type: integer
+    format: int32
+    minimum: 0
+    description: Zero-based index of the content block receiving the delta.
+  contentBlockKind:
+    $ref: ../FactoryResponseEventContentBlockKind.yaml
+  textDelta:
+    type: string
+    description: Incremental text appended to the targeted content block.

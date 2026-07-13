@@ -1,6 +1,8 @@
 package logging
 
 import (
+	"io"
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -49,4 +51,17 @@ func BuildLogger(verbose, debug bool) (*zap.Logger, error) {
 	cfg := zap.NewProductionConfig()
 	cfg.Level = zap.NewAtomicLevelAt(zapcore.WarnLevel)
 	return cfg.Build()
+}
+
+// BuildTerminalMutedLogger returns a warn-level zap logger that discards all
+// terminal output. Normal CLI mode uses this so structured records stay off
+// stdout/stderr while BuildRuntimeLogger can still tee into rolling file sinks.
+func BuildTerminalMutedLogger() (*zap.Logger, error) {
+	cfg := zap.NewProductionConfig()
+	core := zapcore.NewCore(
+		zapcore.NewJSONEncoder(cfg.EncoderConfig),
+		zapcore.AddSync(io.Discard),
+		zapcore.WarnLevel,
+	)
+	return zap.New(core), nil
 }

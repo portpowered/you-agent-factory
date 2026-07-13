@@ -1,0 +1,10 @@
+{
+  "formatVersion": "1.0.0",
+  "itemId": "example.widget.create",
+  "state": "deprecated",
+  "since": "1.0.0",
+  "deprecated": "2.0.0",
+  "successor": {
+    "canonicalEnglish": "Use the replacement."
+  }
+}

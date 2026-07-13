@@ -1,4 +1,5 @@
 import {
+  emptyMaterializedWorkOutcomeState,
   initialEditableFactoryDefinitionVersion,
   resolvedDefaultFactorySessionID,
   timelineCheckpointDBVersion,
@@ -42,6 +43,7 @@ export function checkpointStorageKey(identity) {
   return [
     identity.backendScopeID,
     identity.factorySessionID,
+    identity.logicalSessionKeyID,
     identity.streamGenerationID,
   ].join("::");
 }
@@ -205,6 +207,8 @@ export async function seedTimelineCheckpoint(page, identity, cursor) {
         checkpoint: {
           afterEventId: cursor.afterEventId,
           afterSequence: cursor.afterSequence,
+          materializedWorkOutcomeState:
+            emptyMaterializedWorkOutcomeState(cursor),
           replayState,
           selectedTick: cursor.selectedTick,
         },

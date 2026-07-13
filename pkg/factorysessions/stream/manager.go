@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream/compat"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
@@ -152,8 +153,36 @@ func (m *Manager) inferenceProgressPublisher(
 		})
 		event := mapInferenceProgressFragment(fragment)
 		stored := publisher.Publish(event)
+		if err := publishCanonicalResponseEvents(session, stored); err != nil {
+			m.host.ObserveResponseStreamDegraded(
+				session,
+				normalizedSessionID,
+				dispatchID,
+				"CANONICAL_EVENT_PUBLISH_FAILED",
+				logger,
+				err,
+			)
+		}
 		m.host.ObserveResponseStreamPublished(session, normalizedSessionID, stored)
 	}
+}
+
+func publishCanonicalResponseEvents(session *factorysessions.LiveSession, fragment responsestream.Event) error {
+	if session == nil || session.ResponseEvents == nil {
+		return fmt.Errorf("session response-event store is unavailable")
+	}
+	events, err := compat.MapFragment(compat.Context{
+		FactorySessionID: factorysessions.CanonicalFactorySessionID(session),
+	}, fragment)
+	if err != nil {
+		return fmt.Errorf("map canonical response event: %w", err)
+	}
+	for _, event := range events {
+		if _, err := session.ResponseEvents.Publish(event); err != nil {
+			return fmt.Errorf("publish canonical response event: %w", err)
+		}
+	}
+	return nil
 }
 
 func normalizeSessionID(sessionID string) string {

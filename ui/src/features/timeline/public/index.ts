@@ -1,24 +1,31 @@
+export {
+  normalizeStreamDerivedCacheIdentity,
+  type StreamDerivedCacheIdentity,
+  streamDerivedCacheKeyPrefix,
+} from "../lib/stream-derived-cache-identity";
+export {
+  factoryTimelineEntryKey,
+  type FactoryTimelineEntryKey,
+} from "../state/entries/factoryTimelineEntry";
 export { readFactoryTimelineDebugOptions } from "../state/factoryTimelineDebug";
 export {
   type FactoryTimelineCheckpoint,
+  type FactoryTimelineEntryState,
   type FactoryTimelineSyncIdentity,
   useFactoryTimelineStore,
 } from "../state/factoryTimelineStore";
 export {
   clearStoredTimelineCheckpointsForFactorySessionID,
-  clearTimelineCheckpointsForSession,
   clearTimelineCheckpoint,
+  clearTimelineCheckpointsForSession,
   deleteTimelineCheckpoint,
   findStoredCheckpointEnvelopeByFactorySessionID,
+  type PersistedTimelineCheckpointPeek,
   peekPersistedTimelineCheckpoint,
-  type TimelineCheckpointStreamIdentity,
-  purgeLegacyTimelineCheckpoints,
   persistTimelineCheckpoint,
+  purgeLegacyTimelineCheckpoints,
   readTimelineCheckpoint,
+  type TimelineCheckpointStreamIdentity,
 } from "../state/timelineCheckpointPersistence";
+export { deletePersistedTimelineCheckpoint } from "../state/checkpoint-persistence/deletePersistedTimelineCheckpoint";
 export { reconnectCursorFromCheckpoint } from "../state/timelineCheckpointReconnect";
-export {
-  normalizeStreamDerivedCacheIdentity,
-  streamDerivedCacheKeyPrefix,
-  type StreamDerivedCacheIdentity,
-} from "../lib/stream-derived-cache-identity";

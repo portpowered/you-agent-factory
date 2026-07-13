@@ -10,7 +10,6 @@ import {
   resetTimelineForInitialStreamLoad,
 } from "./App.session-stream.test-helpers";
 import type { FactorySessionSummary } from "./api/factory-sessions/api";
-import { DEFAULT_FACTORY_SESSION_ID } from "./api/session-routing";
 import { semanticWorkflowDashboardSnapshot } from "./components/dashboard/test-fixtures";
 import { useDashboardBentoStore } from "./features/bento/state/dashboardBentoStore";
 import { useDashboardSessionStore } from "./features/dashboard/state/dashboardSessionStore";
@@ -18,6 +17,7 @@ import { useDashboardStreamStore } from "./features/dashboard/state/dashboardStr
 import { sessionStreamToggleLabel } from "./features/header/lib/dashboard-session-tabs-utils";
 import { getHeaderControlsMessages } from "./features/header/messages/header-controls";
 import { useFactoryTimelineStore } from "./features/timeline/state/factoryTimelineStore";
+import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./testing/app-shell-session-preflight-test-utils";
 import {
   MockEventSource,
   registerAppDashboardTestLifecycle,
@@ -25,14 +25,13 @@ import {
   renderAppWithDashboardShell,
   settleAppShellDashboardEffects,
 } from "./testing/app-shell-test-utils";
-import { createQuietCheckpointReloadFixture } from "./testing/quiet-checkpoint-reload-test-utils";
-import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./testing/app-shell-session-preflight-test-utils";
 import { selectedTickTimelineEvents } from "./testing/app-shell-timeline-test-utils";
+import { createQuietCheckpointReloadFixture } from "./testing/quiet-checkpoint-reload-test-utils";
 
 const rootFactorySession: FactorySessionSummary = {
   factoryDir: "/workspace/root",
   folderPath: "/workspace/root",
-  id: DEFAULT_FACTORY_SESSION_ID,
+  id: APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID,
   isDefault: true,
   project: "root",
   target: {
@@ -91,7 +90,7 @@ describe("App dashboard session stream loading", () => {
     await settleAppShellDashboardEffects();
   });
 
-  it.fails("renders a restored tick-zero checkpoint after preflight and a quiet stream open", async () => {
+  it("renders a restored tick-zero checkpoint after preflight and a quiet stream open", async () => {
     const messages = getHeaderControlsMessages("en");
     const fixture = createQuietCheckpointReloadFixture(0);
     await fixture.installCheckpoint();
@@ -119,6 +118,8 @@ describe("App dashboard session stream loading", () => {
       preflightCompleted: true,
       streamOpened: false,
     });
+    expect(stream.url).toContain("after_event_id=quiet-checkpoint-event-0");
+    expect(stream.url).toContain("after_sequence=0");
 
     act(() => {
       fixture.openStream(stream);

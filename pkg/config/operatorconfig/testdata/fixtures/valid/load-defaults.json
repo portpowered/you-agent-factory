@@ -1,0 +1,6 @@
+{
+  "defaults": {
+    "workerModelProvider": "claude",
+    "workerModel": "claude-sonnet"
+  }
+}

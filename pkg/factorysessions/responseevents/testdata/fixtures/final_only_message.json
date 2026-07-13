@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "agent-factory.response-event.v1",
+  "eventId": "evt-final-only-message-001",
+  "sequence": 46,
+  "recordedAt": "2026-07-13T12:00:04Z",
+  "factorySessionId": "session-fixture-001",
+  "runId": "run-fixture-001",
+  "kind": "MESSAGE",
+  "phase": "COMPLETED",
+  "provenance": {
+    "provider": "example-provider",
+    "nativeEventType": "message.final",
+    "delivery": "NATIVE_FINAL",
+    "representation": "SNAPSHOT",
+    "fidelity": "FINAL_ONLY"
+  },
+  "payload": {
+    "role": "assistant",
+    "contentBlocks": [
+      {
+        "kind": "TEXT",
+        "text": "Final answer delivered without intermediate streaming."
+      }
+    ]
+  },
+  "dispatchId": "dispatch-001",
+  "turnId": "turn-001",
+  "itemId": "item-msg-final-001"
+}

@@ -43,10 +43,23 @@ function StatusPanelProbe({
 }
 
 vi.mock("../../bento/public", () => ({
-  DashboardBento: ({ locale }: { locale?: string }) => {
+  DashboardBento: ({
+    locale,
+    workOutcomeStream,
+  }: {
+    locale?: string;
+    workOutcomeStream?: {
+      identity: { streamGenerationID: string } | null;
+      status: "loading" | "ready";
+    };
+  }) => {
     const { locale: resolvedLocale } = useAppLocale(locale);
     return (
-      <section data-testid="dashboard-bento-probe">
+      <section
+        data-stream-generation={workOutcomeStream?.identity?.streamGenerationID}
+        data-stream-status={workOutcomeStream?.status}
+        data-testid="dashboard-bento-probe"
+      >
         Dashboard bento {resolvedLocale}
       </section>
     );
@@ -78,6 +91,11 @@ vi.mock("../hooks/useDashboardSnapshot", () => ({
     ({ refreshToken = 0 }: { refreshToken?: number } = {}) =>
       dashboardSnapshotResolver?.(refreshToken) ?? dashboardSnapshotState,
   ),
+}));
+
+vi.mock("../session/dashboard-session-provider", () => ({
+  DashboardSessionProvider: ({ children }: { children: ReactNode }) => children,
+  useDashboardSession: () => ({ rawSessionID: "session-test" }),
 }));
 
 function expectDashboardShellContract() {
@@ -267,6 +285,12 @@ describe("DashboardScreen content states", () => {
         message: "Factory event stream connected.",
         status: "live",
       },
+      workOutcomeStreamIdentity: {
+        backendScopeID: "backend-a",
+        factorySessionID: "session-a",
+        logicalSessionKeyID: "logical-a",
+        streamGenerationID: "generation-a",
+      },
     };
 
     render(
@@ -279,6 +303,30 @@ describe("DashboardScreen content states", () => {
     expect(screen.getByText("Dashboard header zh-CN")).toBeTruthy();
     expect(screen.getByText("Dashboard bento zh-CN")).toBeTruthy();
     expect(screen.getByText("Dashboard export dialog zh-CN")).toBeTruthy();
+    expect(screen.getByTestId("dashboard-bento-probe").dataset).toMatchObject({
+      streamGeneration: "generation-a",
+      streamStatus: "ready",
+    });
+  });
+
+  it("keeps the work outcome card in hydration mode while preflight is pending", () => {
+    dashboardSnapshotState = {
+      error: null,
+      isInitialLoading: false,
+      preflightRecovery: null,
+      preflightStatus: "loading",
+      snapshot: {} as never,
+      streamState: {
+        message: "Validating retained history.",
+        status: "connecting",
+      },
+    };
+
+    render(<DashboardScreen />);
+
+    expect(screen.getByTestId("dashboard-bento-probe").dataset).toMatchObject({
+      streamStatus: "loading",
+    });
   });
 
   it("does not introduce a nested vertical scroll owner on the success path", () => {
@@ -443,7 +491,9 @@ describe("DashboardScreen recovery states", () => {
       screen.getByRole("heading", { name: "Session recovery required" }),
     ).toBeTruthy();
     expect(
-      screen.getByText(/could not resolve the live session for "session-review"/i),
+      screen.getByText(
+        /could not resolve the live session for "session-review"/i,
+      ),
     ).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Retry clean replay" }),

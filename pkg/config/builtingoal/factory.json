@@ -22,7 +22,6 @@
     {
       "name": "goal-executor",
       "type": "AGENT_WORKER",
-      "body": "Executor worker for @you/goal.",
       "stopToken": "<COMPLETE>"
     }
   ],

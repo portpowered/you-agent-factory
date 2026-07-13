@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	configcli "github.com/portpowered/infinite-you/pkg/cli/config"
+	configinitcmd "github.com/portpowered/infinite-you/pkg/cli/configinit"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/cli/default"
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
 	factorycli "github.com/portpowered/infinite-you/pkg/cli/factory"
@@ -22,7 +23,9 @@ import (
 	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
+	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
+	"github.com/portpowered/infinite-you/pkg/cli/terminalpolicy"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
@@ -52,8 +55,8 @@ var deleteSession = sessioncli.Delete
 var queryFactory = factorycli.Query
 var listFactories = factorycli.List
 var validateFactory = factorycli.Validate
-var saveFactoryFromFile = factorycli.SaveFromFile
-var saveFactoryCurrent = factorycli.SaveCurrent
+var createFactoryFromFile = factorycli.CreateFromFile
+var replaceFactoryCurrent = factorycli.ReplaceCurrent
 var updateFactoryFromFile = factorycli.UpdateFromFile
 var deleteFactory = factorycli.Delete
 var listModels = modelscli.List
@@ -78,7 +81,23 @@ type cliOperatorDefaultsOptions struct {
 	defaultWorkerModel         string
 }
 
+// RootCommandOptions supplies process-owned values used while executing a
+// command. Zero values preserve the legacy process environment behavior.
+type RootCommandOptions struct {
+	HomeDir    func() (string, error)
+	LookupEnv  func(string) (string, bool)
+	Startup    startupcli.Handler
+	RunFactory func(context.Context, runcli.RunConfig) error
+}
+
 func NewRootCommand() *cobra.Command {
+	return NewRootCommandWithOptions(RootCommandOptions{})
+}
+
+// NewRootCommandWithOptions constructs the command tree with explicit process
+// inputs so callers can execute independent command instances deterministically.
+func NewRootCommandWithOptions(options RootCommandOptions) *cobra.Command {
+	options = normalizeRootCommandOptions(options)
 	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
 	diagnostics := &cliDiagnosticsOptions{}
 	operatorDefaults := &cliOperatorDefaultsOptions{}
@@ -90,17 +109,18 @@ func NewRootCommand() *cobra.Command {
 			"What:\n" +
 			"CPN-based workflow factory CLI for running factories, submitting work, and inspecting live sessions.\n\n" +
 			"How to use:\n" +
-			"Running " + cliBinaryName + " with no args starts the out-of-the-box continuous factory and local dashboard (http://localhost:7437/dashboard/ui).\n" +
-			"Use " + cliBinaryName + " run --dir factory for explicit runs. See " + cliBinaryName + " <cmd> --help for subcommand details.\n\n" +
+			"Run " + cliBinaryName + " run --work ./docs/examples/startup-work.json to start the current Factory with explicit Work and the local dashboard (http://localhost:7437/dashboard/ui).\n" +
+			"Use " + cliBinaryName + " run --dir factory --work ./docs/examples/startup-work.json for an explicit Factory directory. See " + cliBinaryName + " <cmd> --help for subcommand details.\n\n" +
 			"Agents:\n" +
 			"Start with " + cliBinaryName + " docs agents for orientation, " + cliBinaryName + " submit or " + cliBinaryName + " submit batch to enqueue work, and " + cliBinaryName + " session list to confirm a live factory.\n" +
 			"Run " + cliBinaryName + " docs for all packaged reference topics. Use --verbose or --debug for stderr diagnostics; full policy in " + cliBinaryName + " docs.",
-		Example: "  # Start the default Codex-backed factory in the current project.\n" +
-			"  " + cliBinaryName + "\n\n" +
+		Example: "  # Start the default Codex-backed Factory with explicit Work.\n" +
+			"  " + cliBinaryName + " run --work ./docs/examples/startup-work.json\n\n" +
 			"  # Agent orientation and command matrix.\n" +
 			"  " + cliBinaryName + " docs agents",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runFactory(cmd, defaultcmd.OOTBRunConfig(), nil, globals, operatorDefaults, diagnostics.verboseEnabled(), diagnostics.debug)
+			policy := diagnostics.resolvePolicy(false)
+			return runFactoryWithOptions(cmd, defaultcmd.OOTBRunConfig(), nil, globals, operatorDefaults, policy, options, true)
 		},
 	}
 	root.PersistentFlags().BoolVarP(&diagnostics.verbose, "verbose", "v", false, "emit concise command diagnostics to stderr")
@@ -124,13 +144,19 @@ func NewRootCommand() *cobra.Command {
 	)
 
 	root.AddCommand(
-		newConfigCommand(diagnostics),
 		newDocsCommand(diagnostics),
+		configinitcmd.NewSystemConfigCommand(cliBinaryName, configinitcmd.CommandGlobals{
+			JSON:    func() bool { return globals.json },
+			HomeDir: options.HomeDir,
+		}, configinitcmd.CommandDiagnostics{
+			Writer:  diagnostics.writer,
+			Verbose: diagnostics.verboseEnabled,
+		}),
 		newFactoryCommand(globals, diagnostics),
 		newInitCommand(globals, diagnostics),
-		newMCPCommand(),
-		newModelsCommand(globals, diagnostics),
-		newRunCommand(globals, diagnostics, operatorDefaults),
+		newMCPCommand(options),
+		newModelsCommand(globals, diagnostics, operatorDefaults, options),
+		newRunCommand(globals, diagnostics, operatorDefaults, options),
 		newSubmitCommand(globals, diagnostics),
 		newSessionCommand(globals, diagnostics),
 		newWorkCommand(globals, diagnostics),
@@ -138,6 +164,21 @@ func NewRootCommand() *cobra.Command {
 	)
 
 	return root
+}
+
+func normalizeRootCommandOptions(options RootCommandOptions) RootCommandOptions {
+	if options.HomeDir == nil {
+		options.HomeDir = os.UserHomeDir
+	}
+	if options.LookupEnv == nil {
+		options.LookupEnv = os.LookupEnv
+	}
+	if options.RunFactory == nil {
+		options.RunFactory = func(ctx context.Context, cfg runcli.RunConfig) error {
+			return runCLI(ctx, cfg)
+		}
+	}
+	return options
 }
 
 type cliDiagnosticsOptions struct {
@@ -160,270 +201,35 @@ func registerDeprecatedPortFlag(cmd *cobra.Command) {
 	_ = cmd.Flags().MarkHidden("port")
 }
 
+func (opts *cliDiagnosticsOptions) resolvePolicy(quiet bool) terminalpolicy.Policy {
+	return terminalpolicy.Resolve(terminalpolicy.Options{
+		Quiet:   quiet,
+		Verbose: opts.verbose,
+		Debug:   opts.debug,
+	})
+}
+
 func (opts *cliDiagnosticsOptions) verboseEnabled() bool {
-	return opts.verbose || opts.debug
+	return opts.resolvePolicy(false).VerboseEnabled()
 }
 
 func (opts *cliDiagnosticsOptions) writer(cmd *cobra.Command) io.Writer {
-	if !opts.verboseEnabled() {
-		return nil
-	}
-	return cmd.ErrOrStderr()
+	return opts.resolvePolicy(false).DiagnosticsWriter(cmd.ErrOrStderr())
 }
 
-func newFactoryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	factoryCmd := &cobra.Command{
-		Use:   "factory",
-		Short: "Inspect and manage factory definitions",
-		Long: "Inspect live factory runtime state and manage persisted named factories.\n\n" +
-			"Subcommands:\n" +
-			"  query    show the current active factory from a running service\n" +
-			"  list     list persisted named factories under a factory root\n" +
-			"  validate validate a factory.json payload or factory directory\n" +
-			"  save     create a named factory from factory.json or persist the live current factory\n" +
-			"  update   replace an existing named factory from factory.json\n" +
-			"  delete   remove an unused named factory from disk\n\n" +
-			"Use query against a running service. Use list, save, update, and delete for on-disk " +
-			"named factories under --dir (default factory/). Live save with no name argument uses " +
-			"global --server and --session like query.",
-		Example: "  # Show the active factory from the running service.\n" +
-			"  " + cliBinaryName + " factory query\n\n" +
-			"  # Validate a factory config before saving it.\n" +
-			"  " + cliBinaryName + " factory validate ./factory.json\n\n" +
-			"  # List persisted named factories and which one is current.\n" +
-			"  " + cliBinaryName + " factory list\n\n" +
-			"  # Save a new named factory from a config file.\n" +
-			"  " + cliBinaryName + " factory save staging --from ./factory.json --set-current\n\n" +
-			"  # Replace an existing named factory definition.\n" +
-			"  " + cliBinaryName + " factory update staging --from ./factory.json\n\n" +
-			"  # Delete an unused named factory.\n" +
-			"  " + cliBinaryName + " factory delete staging\n\n" +
-			"  # Persist the live current factory back to durable storage.\n" +
-			"  " + cliBinaryName + " factory save",
-	}
-	factoryCmd.AddCommand(
-		newFactoryQueryCommand(globals, diagnostics),
-		newFactoryListCommand(globals, diagnostics),
-		newFactoryValidateCommand(globals, diagnostics),
-		newFactorySaveCommand(globals, diagnostics),
-		newFactoryUpdateFromFileCommand(globals, diagnostics),
-		newFactoryDeleteCommand(globals, diagnostics),
-	)
-	return factoryCmd
-}
-
-func newFactoryDeleteCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
-	cfg := factorycli.DeleteConfig{Dir: defaultcmd.FactoryDir}
-
-	cmd := &cobra.Command{
-		Use:   "delete <name>",
-		Short: "Delete a persisted named factory",
-		Long: "Delete a persisted named factory from disk.\n\n" +
-			"The command removes the named factory directory under the selected factory root " +
-			"after validation. It refuses to delete the factory currently selected by " +
-			".current-factory; switch the current pointer to another factory first.",
-		Example: "  # Delete an unused named factory.\n" +
-			"  " + cliBinaryName + " factory delete staging\n\n" +
-			"  # Delete from a custom factory root.\n" +
-			"  " + cliBinaryName + " factory delete staging --dir my-factory",
-		Args:         cobra.ExactArgs(1),
-		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Name = args[0]
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			return deleteFactory(cfg)
-		},
-	}
-
-	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
-	return cmd
-}
-
-func newFactoryUpdateFromFileCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
-	cfg := factorycli.UpdateFromFileConfig{Dir: defaultcmd.FactoryDir}
-
-	cmd := &cobra.Command{
-		Use:   "update <name>",
-		Short: "Update an existing named factory from a config file",
-		Long: "Replace an existing named factory from an existing factory.json file.\n\n" +
-			"The command validates the payload, atomically replaces the named factory layout under " +
-			"the selected factory root, and leaves .current-factory unchanged when it already " +
-			"points at the updated name.",
-		Example: "  # Replace an existing named factory from a config file.\n" +
-			"  " + cliBinaryName + " factory update staging --from ./factory.json\n\n" +
-			"  # Emit structured confirmation for scripting.\n" +
-			"  " + cliBinaryName + " --json factory update staging --from ./factory.json",
-		Args:         cobra.ExactArgs(1),
-		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Name = args[0]
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			return updateFactoryFromFile(cfg)
-		},
-	}
-
-	cmd.Flags().StringVar(&cfg.From, "from", "", "path to an existing factory.json payload (required)")
-	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
-	_ = cmd.MarkFlagRequired("from")
-	return cmd
-}
-
-func newFactorySaveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	fileCfg := factorycli.SaveFromFileConfig{Dir: defaultcmd.FactoryDir}
-	liveCfg := factorycli.SaveCurrentConfig{Server: globals.server}
-
-	cmd := &cobra.Command{
-		Use:   "save [name]",
-		Short: "Save a named factory from disk or persist the live current factory",
-		Long: "Save factory definitions from disk or persist the live current factory from a running service.\n\n" +
-			"With a name argument, the command validates a factory.json payload and materializes a new " +
-			"named factory layout under the selected factory root. Without a name, the command reads the " +
-			"session current factory from the running service and persists it with PUT.",
-		Example: "  # Save a new named factory from a config file.\n" +
-			"  " + cliBinaryName + " factory save staging --from ./factory.json\n\n" +
-			"  # Save and select the new factory as current.\n" +
-			"  " + cliBinaryName + " factory save staging --from ./factory.json --set-current\n\n" +
-			"  # Persist the live current factory from the running service.\n" +
-			"  " + cliBinaryName + " factory save\n\n" +
-			"  # Persist the live current factory for one session as JSON.\n" +
-			"  " + cliBinaryName + " --json factory save --session session-beta",
-		Args:         cobra.MaximumNArgs(1),
-		SilenceUsage: true,
-		PreRunE:      rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 0 {
-				liveCfg.Server = globals.server
-				liveCfg.JSON = globals.json
-				liveCfg.Output = cmd.OutOrStdout()
-				liveCfg.Diagnostics = diagnostics.writer(cmd)
-				liveCfg.Verbose = diagnostics.verboseEnabled()
-				return saveFactoryCurrent(liveCfg)
-			}
-			fileCfg.Name = args[0]
-			fileCfg.JSON = globals.json
-			fileCfg.Output = cmd.OutOrStdout()
-			return saveFactoryFromFile(fileCfg)
-		},
-	}
-
-	cmd.Flags().StringVar(&fileCfg.From, "from", "", "path to an existing factory.json payload (required with <name>)")
-	cmd.Flags().StringVar(&fileCfg.Dir, "dir", fileCfg.Dir, "factory root directory containing named factories")
-	cmd.Flags().BoolVar(&fileCfg.SetCurrent, "set-current", false, "update .current-factory to the saved name")
-	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().StringVar(&liveCfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
-	return cmd
-}
-
-func newFactoryListCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
-	cfg := factorycli.ListConfig{Dir: defaultcmd.FactoryDir}
-
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List persisted named factories",
-		Long: "List persisted named factories stored under a factory root.\n\n" +
-			"By default the command lists project-local named factories from ./factory and writes a " +
-			"human-readable table with each factory name, on-disk directory, and whether it is selected " +
-			"by .current-factory. Global built-ins and customer-edited shared factories live under " +
-			"~/.you-agent-factory/you-agent-factories and are listed only when you point --dir there explicitly. " +
-			"The command lists exactly one root at a time and never merges project-local and global entries. " +
-			"Use global --json for scripting output.",
-		Example: "  # List named factories under the default factory root.\n" +
-			"  " + cliBinaryName + " factory list\n\n" +
-			"  # List global built-ins and shared factories.\n" +
-			"  " + cliBinaryName + " factory list --dir ~/.you-agent-factory/you-agent-factories\n\n" +
-			"  # List factories from a custom root as JSON.\n" +
-			"  " + cliBinaryName + " --json factory list --dir my-factory",
-		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			return listFactories(cfg)
-		},
-	}
-
-	cmd.Flags().StringVar(&cfg.Dir, "dir", cfg.Dir, "factory root directory containing named factories")
-	return cmd
-}
-
-func newFactoryValidateCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions) *cobra.Command {
-	cfg := factorycli.ValidateConfig{}
-
-	cmd := &cobra.Command{
-		Use:   "validate <factory-path>",
-		Short: "Validate a factory config without persisting it",
-		Long: "Validate a factory.json payload or factory directory through the shared " +
-			"validate-only factory contract used by POST /factory-validations.\n\n" +
-			"Human output lists authored worker and workstation runtime taxonomy values and " +
-			"prints blocking validation targets with inference, agent, script, or poller terminology " +
-			"when worker/workstation pairings are incompatible.",
-		Example: "  # Validate a single-file factory config.\n" +
-			"  " + cliBinaryName + " factory validate ./factory.json\n\n" +
-			"  # Validate a split-layout factory directory.\n" +
-			"  " + cliBinaryName + " factory validate ./factory\n\n" +
-			"  # Emit structured validation output for automation.\n" +
-			"  " + cliBinaryName + " --json factory validate ./factory.json",
-		Args:         cobra.ExactArgs(1),
-		SilenceUsage: true,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Path = args[0]
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			return validateFactory(cfg)
-		},
-	}
-
-	return cmd
-}
-
-func newFactoryQueryCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := factorycli.QueryConfig{Server: globals.server}
-
-	cmd := &cobra.Command{
-		Use:   "query",
-		Short: "Show the current active factory",
-		Long: "Show the current active factory from a running you-agent-factory service.\n\n" +
-			"By default the command writes a human-readable table with the current factory name and " +
-			"runtime-identifying fields. Use global --json for the API-shaped current-factory payload, and " +
-			"use global --server to target the same factory API base URI as work list and submit. Run " +
-			cliBinaryName + " session list to discover live session ids when routing other commands with --session.",
-		Example: "  # Show the current factory from the default local service.\n" +
-			"  " + cliBinaryName + " factory query\n\n" +
-			"  # Emit API-shaped JSON for automation from the default local service.\n" +
-			"  " + cliBinaryName + " --json factory query\n\n" +
-			"  # Query a factory API on a non-default host or port.\n" +
-			"  " + cliBinaryName + " --server http://localhost:9090 --json factory query",
-		SilenceUsage: true,
-		PreRunE:      rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Server = globals.server
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return queryFactory(cfg)
-		},
-	}
-
-	registerDeprecatedPortFlag(cmd)
-	return cmd
-}
-
-func newModelsCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newModelsCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions) *cobra.Command {
 	modelsCmd := &cobra.Command{
 		Use:   "models",
 		Short: "Inspect discovered models from a running service",
 		Long: "Inspect discovered models from a running infinite-you service.\n\n" +
 			"Use list to discover model identifiers, inspect to view one model's readiness and capabilities, " +
-			"invoke to call a discovered model directly through the same /models contract exposed by the API, " +
+			"invoke to call a discovered model directly through the shared in-process bootstrap, " +
 			"and pull to populate the managed local-model cache for supported local assets.",
 	}
 	modelsCmd.AddCommand(
 		newModelsListCommand(globals, diagnostics),
 		newModelsInspectCommand(globals, diagnostics),
-		newModelsInvokeCommand(globals, diagnostics),
+		newModelsInvokeCommand(globals, diagnostics, operatorDefaults, rootOptions),
 		newModelsPullCommand(globals, diagnostics),
 	)
 	return modelsCmd
@@ -471,7 +277,7 @@ func newModelsInspectCommand(globals *cliGlobalOptions, diagnostics *cliDiagnost
 	return cmd
 }
 
-func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions) *cobra.Command {
 	cfg := modelscli.InvokeConfig{Server: globals.server, Operation: "TTS"}
 	cmd := &cobra.Command{
 		Use:     "invoke <model-name>",
@@ -479,9 +285,25 @@ func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 		Args:    cobra.ExactArgs(1),
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			policy := diagnostics.resolvePolicy(false)
+			logger, err := policy.BuildLogger(logging.BuildLogger)
+			if err != nil {
+				return err
+			}
+			homeDir, err := rootOptions.HomeDir()
+			if err != nil {
+				return fmt.Errorf("resolve process home directory: %w", err)
+			}
+			resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults, rootOptions, homeDir)
+			if err != nil {
+				return err
+			}
 			cfg.Server = globals.server
 			cfg.ModelName = args[0]
 			cfg.JSON = globals.json
+			cfg.HomeDir = homeDir
+			cfg.OperatorDefaults = resolvedOperatorDefaults
+			cfg.Logger = logger
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
@@ -518,8 +340,11 @@ func newModelsPullCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostics
 	return cmd
 }
 
-func newMCPCommand() *cobra.Command {
-	return mcpcli.NewCommand()
+func newMCPCommand(options RootCommandOptions) *cobra.Command {
+	if options.Startup == nil {
+		return mcpcli.NewCommand()
+	}
+	return mcpcli.NewCommandWithStartup(options.Startup)
 }
 
 func newDocsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
@@ -555,71 +380,6 @@ func newDocsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	}
 
 	return docsCmd
-}
-
-func newConfigCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	configCmd := &cobra.Command{
-		Use:   "config",
-		Short: "Inspect and transform factory configuration",
-	}
-	configCmd.AddCommand(
-		newConfigExpandCommand(diagnostics),
-		newConfigFlattenCommand(diagnostics),
-	)
-	return configCmd
-}
-
-func newConfigFlattenCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := configcli.FactoryConfigFlattenConfig{}
-
-	cmd := &cobra.Command{
-		Use:   "flatten <factory-path>",
-		Short: "Write canonical single-file factory config",
-		Long: "Write canonical single-file factory config.\n\n" +
-			"The path may be a factory directory containing factory.json or a standalone factory.json file. " +
-			"The command writes camelCase canonical JSON to stdout.",
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Path = args[0]
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return flattenFactoryConfig(cfg)
-		},
-	}
-
-	return cmd
-}
-
-func newConfigExpandCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := configcli.FactoryConfigExpandConfig{}
-
-	cmd := &cobra.Command{
-		Use:   "expand <factory.json>",
-		Short: "Write split factory config layout",
-		Long: "Write split factory config layout.\n\n" +
-			"The path may be a standalone factory.json file or a factory directory containing factory.json. " +
-			"The command writes canonical factory.json plus workers and workstations directories beside the input file.",
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Path = args[0]
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return expandFactoryConfig(cfg)
-		},
-	}
-
-	return cmd
-}
-
-// Execute runs the root command.
-func Execute() {
-	if err := NewRootCommand().Execute(); err != nil {
-		os.Exit(1)
-	}
 }
 
 func newInitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
@@ -670,22 +430,28 @@ func newInitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOption
 	return cmd
 }
 
-func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, verbose, debug bool) error {
-	logger, err := logging.BuildLogger(verbose, debug)
+func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions RootCommandOptions, defaultInvocation bool) error {
+	logger, err := policy.BuildLogger(logging.BuildLogger)
 	if err != nil {
 		return err
 	}
 	cfg.Logger = logger
-	cfg.Verbose = verbose || debug
+	cfg.Verbose = policy.VerboseEnabled()
+	cfg.TerminalPolicy = policy
 
 	if err := resolveRunBindFromServer(cmd, globals.server, &cfg); err != nil {
 		return err
 	}
-	if err := resolveRunFactorySelection(cmd, &cfg); err != nil {
+	homeDir, err := rootOptions.HomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve process home directory: %w", err)
+	}
+	cfg.HomeDir = homeDir
+	if err := resolveRunFactorySelection(cmd, &cfg, homeDir); err != nil {
 		return err
 	}
 
-	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults)
+	resolvedOperatorDefaults, err := resolveOperatorDefaults(cmd, operatorDefaults, rootOptions, homeDir)
 	if err != nil {
 		return err
 	}
@@ -697,18 +463,21 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 	cleanInvocation, textInvocation := runInvocationModes(cmd, cfg)
 	cfg.CleanInvocation = cleanInvocation
 	cfg.JSON = globals.json
-	cfg.SuppressDashboardRendering = cfg.SuppressDashboardRendering || cleanInvocation || textInvocation
+	runPolicy := resolveEffectiveRunPolicy(cmd, cfg, policy)
+	cfg.TerminalPolicy = runPolicy
+	cfg.Verbose = runPolicy.VerboseEnabled()
+	cfg.SuppressDashboardRendering = runPolicy.Mode() == terminalpolicy.ModeQuiet
+	humanTerminal := runPolicy.HumanTerminalWriter(cmd.OutOrStdout())
 	if cleanInvocation || textInvocation {
 		cfg.Output = cmd.OutOrStdout()
 	} else if strings.TrimSpace(cfg.FactoryConfigPath) != "" {
 		cfg.Output = cmd.OutOrStdout()
-		cfg.StartupOutput = cmd.OutOrStdout()
+		cfg.StartupOutput = humanTerminal
 	} else {
-		cfg.StartupOutput = cmd.OutOrStdout()
+		cfg.StartupOutput = humanTerminal
 	}
-	cfg.Diagnostics = cmd.ErrOrStderr()
+	cfg.Diagnostics = runPolicy.DiagnosticsWriter(cmd.ErrOrStderr())
 	cfg.JSONOutput = globals.json
-
 	ctx, cancel := context.WithCancel(cmd.Context())
 	defer cancel()
 
@@ -724,7 +493,38 @@ func runFactory(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, g
 		}
 	}()
 
-	return runCLI(ctx, cfg)
+	if rootOptions.Startup == nil {
+		return rootOptions.RunFactory(ctx, cfg)
+	}
+	return delegateRunStartup(ctx, cfg, defaultInvocation, rootOptions)
+}
+
+func delegateRunStartup(ctx context.Context, cfg runcli.RunConfig, defaultInvocation bool, options RootCommandOptions) error {
+	invocationOnly := cfg.CleanInvocation || cfg.InvocationPositionalText != nil || cfg.InvocationStdinText != nil || cfg.InvocationNormalizedArguments != nil
+	request := startupcli.Request{
+		Kind: startupcli.KindRun,
+		Run: startupcli.RunIntent{
+			DefaultInvocation:     defaultInvocation,
+			Continuous:            cfg.Continuously,
+			APIEnabled:            cfg.Port > 0 && !invocationOnly,
+			DashboardEnabled:      cfg.Port > 0 && !cfg.SuppressDashboardRendering && !invocationOnly,
+			WorkerSidecarsEnabled: true,
+		},
+		RunConfig: &cfg,
+	}
+	return options.Startup(ctx, request)
+}
+
+func resolveEffectiveRunPolicy(cmd *cobra.Command, cfg runcli.RunConfig, basePolicy terminalpolicy.Policy) terminalpolicy.Policy {
+	cleanInvocation, textInvocation := runInvocationModes(cmd, cfg)
+	if cfg.SuppressDashboardRendering || cleanInvocation || textInvocation {
+		return terminalpolicy.Resolve(terminalpolicy.Options{
+			Quiet:   true,
+			Verbose: basePolicy.VerboseEnabled(),
+			Debug:   basePolicy.DebugEnabled(),
+		})
+	}
+	return basePolicy
 }
 
 func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocation bool, textInvocation bool) {
@@ -740,12 +540,11 @@ func runInvocationModes(cmd *cobra.Command, cfg runcli.RunConfig) (cleanInvocati
 	return cleanInvocation, textInvocation
 }
 
-func resolveOperatorDefaults(cmd *cobra.Command, operatorDefaults *cliOperatorDefaultsOptions) (operatorconfig.ResolvedDefaults, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return operatorconfig.ResolvedDefaults{}, fmt.Errorf("resolve operator home directory: %w", err)
-	}
-	return operatorconfig.ResolveFromHome(homeDir, operatorconfig.FlagOverrides{
+func resolveOperatorDefaults(cmd *cobra.Command, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions, homeDir string) (operatorconfig.ResolvedDefaults, error) {
+	environment := operatorconfig.Defaults{}
+	environment.WorkerModelProvider, _ = rootOptions.LookupEnv(operatorconfig.EnvDefaultWorkerModelProvider)
+	environment.WorkerModel, _ = rootOptions.LookupEnv(operatorconfig.EnvDefaultWorkerModel)
+	return operatorconfig.ResolveFromHomeWithEnvironment(homeDir, environment, operatorconfig.FlagOverrides{
 		WorkerModelProvider: persistentFlagValueIfChanged(cmd, "default-worker-model-provider", operatorDefaults.defaultWorkerModelProvider),
 		WorkerModel:         persistentFlagValueIfChanged(cmd, "default-worker-model", operatorDefaults.defaultWorkerModel),
 	})
@@ -773,7 +572,7 @@ func resolveRunBindFromServer(cmd *cobra.Command, server string, cfg *runcli.Run
 	return nil
 }
 
-func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig) error {
+func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig, homeDir string) error {
 	factoryChanged := cmd.Flags().Changed("factory")
 	dirChanged := cmd.Flags().Changed("dir")
 	namedChanged := cmd.Flags().Changed("named")
@@ -784,7 +583,7 @@ func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig) error
 		case dirChanged:
 			return fmt.Errorf("--named cannot be used with --dir")
 		}
-		return resolveRunNamedFactorySelection(cfg)
+		return resolveRunNamedFactorySelection(cfg, homeDir)
 	}
 	if factoryChanged && dirChanged {
 		return fmt.Errorf("--factory cannot be used with --dir")
@@ -801,7 +600,7 @@ func resolveRunFactorySelection(cmd *cobra.Command, cfg *runcli.RunConfig) error
 	return nil
 }
 
-func resolveRunNamedFactorySelection(cfg *runcli.RunConfig) error {
+func resolveRunNamedFactorySelection(cfg *runcli.RunConfig, homeDir string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("resolve current working directory for --named: %w", err)
@@ -810,13 +609,13 @@ func resolveRunNamedFactorySelection(cfg *runcli.RunConfig) error {
 	if err != nil {
 		return fmt.Errorf("resolve project named-factory root: %w", err)
 	}
-	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
+	globalRoot, err := factoryconfig.GlobalNamedFactoryRootForHome(homeDir)
 	if err != nil {
 		return fmt.Errorf("resolve global named-factory root: %w", err)
 	}
 	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, cfg.NamedFactoryName)
 	if err != nil {
-		return err
+		return factoryconfig.MaybeFormatBlockingFactoryLoadOperatorErrorForNamedFactory(err, projectRoot, globalRoot, cfg.NamedFactoryName)
 	}
 	cfg.Dir = resolution.FactoryDir
 	cfg.NamedFactoryResolution = resolution

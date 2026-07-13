@@ -1,0 +1,8 @@
+{
+  "mockWorkers": [
+    {
+      "id": "bad",
+      "runType": "maybe"
+    }
+  ]
+}

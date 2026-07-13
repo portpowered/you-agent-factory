@@ -6,6 +6,9 @@ import { useDashboardStreamStore } from "../state/dashboardStreamStore";
 
 export function useDashboardWorldView() {
   const eventCount = useFactoryTimelineStore((state) => state.events.length);
+  const hasRestoredCheckpoint = useFactoryTimelineStore(
+    (state) => state.currentReplayCheckpoint != null,
+  );
   const selectedTick = useFactoryTimelineStore((state) => state.selectedTick);
   const snapshot = useFactoryTimelineStore(
     (state) => state.worldViewCache[state.selectedTick],
@@ -17,11 +20,18 @@ export function useDashboardWorldView() {
     () =>
       deriveDashboardWorldViewShellState({
         eventCount,
+        hasRestoredCheckpoint,
         rawSessionID,
         selectedTick,
         streamState,
       }),
-    [eventCount, rawSessionID, selectedTick, streamState],
+    [
+      eventCount,
+      hasRestoredCheckpoint,
+      rawSessionID,
+      selectedTick,
+      streamState,
+    ],
   );
 
   return useMemo(

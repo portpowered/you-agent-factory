@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"go.uber.org/zap"
@@ -435,6 +436,43 @@ func TestGenerateDefaultLiveRunRecordPath_UsesRecordingsHierarchyAndSessionTempl
 	}
 }
 
+func TestBuildApplicationSequentialHomesControlDefaultRecordingPath(t *testing.T) {
+	ambientHome := t.TempDir()
+	setUserHomeForTest(t, ambientHome)
+
+	for _, homeDir := range []string{t.TempDir(), t.TempDir()} {
+		var gotRecordPath string
+		var gotSystemHome string
+		var gotLogDir string
+		var gotMetricsDir string
+		application, err := BuildApplication(context.Background(), RunConfig{
+			Dir: t.TempDir(), HomeDir: homeDir, Port: 0, SuppressDashboardRendering: true,
+		}, func(_ context.Context, cfg *service.FactoryServiceConfig) (RuntimeRunner, error) {
+			gotRecordPath = cfg.RecordPath
+			gotSystemHome = cfg.SystemConfigHomeDir
+			gotLogDir = cfg.RuntimeLogDir
+			gotMetricsDir = cfg.RuntimeMetricsDir
+			return stubFactoryService{run: func(context.Context) error { return nil }}, nil
+		})
+		if err != nil {
+			t.Fatalf("BuildApplication(home %q) error = %v", homeDir, err)
+		}
+		wantRoot := defaultpaths.RecordingsRoot(homeDir)
+		if !strings.HasPrefix(filepath.Clean(gotRecordPath), filepath.Clean(wantRoot)+string(os.PathSeparator)) {
+			t.Fatalf("record path = %q, want below supplied home root %q", gotRecordPath, wantRoot)
+		}
+		if strings.HasPrefix(filepath.Clean(gotRecordPath), filepath.Clean(defaultpaths.RecordingsRoot(ambientHome))) {
+			t.Fatalf("record path = %q, unexpectedly used ambient home %q", gotRecordPath, ambientHome)
+		}
+		if gotSystemHome != homeDir || gotLogDir != defaultpaths.RuntimeLogsRoot(homeDir) || gotMetricsDir != defaultpaths.RuntimeMetricsRoot(homeDir) {
+			t.Fatalf("service home paths = home %q logs %q metrics %q; want roots below %q", gotSystemHome, gotLogDir, gotMetricsDir, homeDir)
+		}
+		if err := application.Run(context.Background()); err != nil {
+			t.Fatalf("Application.Run(home %q) error = %v", homeDir, err)
+		}
+	}
+}
+
 func TestGenerateDefaultLiveRunRecordPath_UsesUniqueSuffixes(t *testing.T) {
 	originalTime := defaultLiveRunRecordTime
 	originalUUID := defaultLiveRunRecordUUID
@@ -785,4 +823,114 @@ func assertGeneratedWorkContentPartsFromResponse(
 func withRunOutput(cfg RunConfig, output *bytes.Buffer) RunConfig {
 	cfg.Output = output
 	return cfg
+}
+
+func TestSetBuildFactoryService_RegistersBuilder(t *testing.T) {
+	original := buildFactoryService
+	t.Cleanup(func() {
+		buildFactoryService = original
+	})
+
+	builderErr := errors.New("registered builder")
+	SetBuildFactoryService(func(
+		_ context.Context,
+		_ *service.FactoryServiceConfig,
+	) (factoryServiceRunner, error) {
+		return nil, builderErr
+	})
+
+	_, err := buildFactoryService(context.Background(), &service.FactoryServiceConfig{})
+	if !errors.Is(err, builderErr) {
+		t.Fatalf("buildFactoryService err = %v, want %v", err, builderErr)
+	}
+}
+
+func TestSetBuildFactoryService_NilRestoresDefault(t *testing.T) {
+	original := buildFactoryService
+	t.Cleanup(func() {
+		buildFactoryService = original
+	})
+
+	customErr := errors.New("custom builder")
+	SetBuildFactoryService(func(
+		_ context.Context,
+		_ *service.FactoryServiceConfig,
+	) (factoryServiceRunner, error) {
+		return nil, customErr
+	})
+	SetBuildFactoryService(nil)
+
+	secondErr := errors.New("second builder")
+	SetBuildFactoryService(func(
+		_ context.Context,
+		_ *service.FactoryServiceConfig,
+	) (factoryServiceRunner, error) {
+		return nil, secondErr
+	})
+
+	_, err := buildFactoryService(context.Background(), &service.FactoryServiceConfig{})
+	if !errors.Is(err, secondErr) {
+		t.Fatalf("buildFactoryService err = %v, want %v", err, secondErr)
+	}
+}
+
+func TestFactoryServiceBuilderFromService_AdaptsConcreteBuilder(t *testing.T) {
+	original := buildFactoryService
+	t.Cleanup(func() {
+		buildFactoryService = original
+	})
+
+	builderErr := errors.New("adapted builder")
+	SetBuildFactoryService(FactoryServiceBuilderFromService(func(
+		_ context.Context,
+		_ *service.FactoryServiceConfig,
+	) (*service.FactoryService, error) {
+		return nil, builderErr
+	}))
+
+	_, err := buildFactoryService(context.Background(), &service.FactoryServiceConfig{})
+	if !errors.Is(err, builderErr) {
+		t.Fatalf("buildFactoryService err = %v, want %v", err, builderErr)
+	}
+}
+
+func TestBuildFactoryService_DefaultMatchesServiceBuilder(t *testing.T) {
+	original := buildFactoryService
+	t.Cleanup(func() {
+		buildFactoryService = original
+	})
+	buildFactoryService = defaultBuildFactoryService
+
+	_, err := buildFactoryService(context.Background(), nil)
+	_, defaultErr := service.BuildFactoryService(context.Background(), nil)
+	if (err == nil) != (defaultErr == nil) {
+		t.Fatalf("default builder error presence = %v, service.BuildFactoryService = %v", err, defaultErr)
+	}
+	if err != nil && defaultErr != nil && err.Error() != defaultErr.Error() {
+		t.Fatalf("default builder err = %q, service.BuildFactoryService err = %q", err, defaultErr)
+	}
+}
+
+func TestRuntimeLogDiagnosticsForRunnerMapsRuntimeHostMetadata(t *testing.T) {
+	t.Parallel()
+
+	want := runtimehost.RuntimeLogDiagnostics{
+		Path: "/logs/runtime.jsonl", RootDir: "/logs", StartTimeUTC: time.Unix(10, 0).UTC(),
+		MetricsPath: "/metrics/runtime.jsonl", MetricsRootDir: "/metrics", MetricsStartTimeUTC: time.Unix(20, 0).UTC(),
+	}
+	got := runtimeLogDiagnosticsForRunner(runtimeHostDiagnosticsRunner{diagnostics: want})
+	if got.Path != want.Path || got.RootDir != want.RootDir || !got.StartTimeUTC.Equal(want.StartTimeUTC) ||
+		got.MetricsPath != want.MetricsPath || got.MetricsRootDir != want.MetricsRootDir || !got.MetricsStartTimeUTC.Equal(want.MetricsStartTimeUTC) {
+		t.Fatalf("runtimeLogDiagnosticsForRunner() = %+v, want %+v", got, want)
+	}
+}
+
+type runtimeHostDiagnosticsRunner struct {
+	diagnostics runtimehost.RuntimeLogDiagnostics
+}
+
+func (runtimeHostDiagnosticsRunner) Run(context.Context) error { return nil }
+
+func (r runtimeHostDiagnosticsRunner) RuntimeLogDiagnostics() runtimehost.RuntimeLogDiagnostics {
+	return r.diagnostics
 }

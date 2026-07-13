@@ -309,6 +309,51 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/response-events:
+    get:
+      tags:
+        - Runtime
+      operationId: getFactoryResponseEventsBySessionId
+      summary: Stream ephemeral response events for one Factory Session
+      description: >-
+        Streams ephemeral FactoryResponseEvent observation records for the
+        explicitly selected Factory Session. These records are outside
+        canonical FactoryEvent replay and never derive canonical Factory state.
+        The connection first sends retained matching records in ascending
+        response sequence and then continues with live matching records. Each
+        SSE id is the decimal FactoryResponseEvent.sequence so reconnect clients
+        can acknowledge it with after_sequence. Omitting after_sequence starts
+        at the beginning of retained history. When a cursor predates retained
+        history, the first emitted record is STREAM_GAP and describes the lost
+        range rather than silently skipping it. An unknown session_id returns a
+        typed 404 and never falls back to the current or default session.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/ResponseEventAfterSequence'
+        - $ref: '#/components/parameters/ResponseEventDispatchID'
+        - $ref: '#/components/parameters/ResponseEventKind'
+      responses:
+        '200':
+          description: >-
+            Retained catch-up followed by live Factory Response Event records
+            for the explicitly targeted session.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: >-
+                  Server-Sent Events where each data record is serialized JSON
+                  matching FactoryResponseEvent and each id is its decimal
+                  response sequence.
+              x-event-schema: '#/components/schemas/FactoryResponseEvent'
+        '400':
+          $ref: '#/components/responses/ResponseEventBadRequest'
+        '404':
+          $ref: '#/components/responses/ResponseEventSessionNotFound'
+        '410':
+          $ref: '#/components/responses/ResponseEventStreamExpired'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/sync-preflight:
     get:
       tags:
@@ -1446,6 +1491,12 @@ components:
       $ref: './components/parameters/AfterEventId.yaml'
     AfterSequence:
       $ref: './components/parameters/AfterSequence.yaml'
+    ResponseEventAfterSequence:
+      $ref: './components/parameters/ResponseEventAfterSequence.yaml'
+    ResponseEventDispatchID:
+      $ref: './components/parameters/ResponseEventDispatchID.yaml'
+    ResponseEventKind:
+      $ref: './components/parameters/ResponseEventKind.yaml'
     BackendScopeId:
       $ref: './components/parameters/BackendScopeId.yaml'
     LogicalSessionKeyId:
@@ -1473,6 +1524,12 @@ components:
       $ref: './components/responses/FactorySessionLifecycleControlConflict.yaml'
     InternalError:
       $ref: './components/responses/InternalError.yaml'
+    ResponseEventBadRequest:
+      $ref: './components/responses/ResponseEventBadRequest.yaml'
+    ResponseEventSessionNotFound:
+      $ref: './components/responses/ResponseEventSessionNotFound.yaml'
+    ResponseEventStreamExpired:
+      $ref: './components/responses/ResponseEventStreamExpired.yaml'
   schemas:
     SubmitWorkRequest:
       $ref: './components/schemas/api/SubmitWorkRequest.yaml'
@@ -1980,6 +2037,72 @@ components:
       $ref: './components/schemas/events/AgentRunTranscriptEntry.yaml'
     WallClock:
       $ref: './components/schemas/events/WallClock.yaml'
+
+    # ==== Public factory response-event schemas =======
+    FactoryResponseEvent:
+      $ref: './components/schemas/response-events/FactoryResponseEvent.yaml'
+    FactoryResponseEventKind:
+      $ref: './components/schemas/response-events/FactoryResponseEventKind.yaml'
+    FactoryResponseEventPhase:
+      $ref: './components/schemas/response-events/FactoryResponseEventPhase.yaml'
+    FactoryResponseEventProvenance:
+      $ref: './components/schemas/response-events/FactoryResponseEventProvenance.yaml'
+    FactoryResponseEventProvenanceDelivery:
+      $ref: './components/schemas/response-events/FactoryResponseEventProvenanceDelivery.yaml'
+    FactoryResponseEventProvenanceRepresentation:
+      $ref: './components/schemas/response-events/FactoryResponseEventProvenanceRepresentation.yaml'
+    FactoryResponseEventProvenanceFidelity:
+      $ref: './components/schemas/response-events/FactoryResponseEventProvenanceFidelity.yaml'
+    FactoryResponseEventCapabilities:
+      $ref: './components/schemas/response-events/FactoryResponseEventCapabilities.yaml'
+    FactoryResponseEventPayload:
+      $ref: './components/schemas/response-events/FactoryResponseEventPayload.yaml'
+    FactoryResponseEventContentBlock:
+      $ref: './components/schemas/response-events/FactoryResponseEventContentBlock.yaml'
+    FactoryResponseEventContentBlockKind:
+      $ref: './components/schemas/response-events/FactoryResponseEventContentBlockKind.yaml'
+    FactoryResponseEventTextContentBlock:
+      $ref: './components/schemas/response-events/content-blocks/FactoryResponseEventTextContentBlock.yaml'
+    FactoryResponseEventReasoningSummaryContentBlock:
+      $ref: './components/schemas/response-events/content-blocks/FactoryResponseEventReasoningSummaryContentBlock.yaml'
+    FactoryResponseEventToolRequestContentBlock:
+      $ref: './components/schemas/response-events/content-blocks/FactoryResponseEventToolRequestContentBlock.yaml'
+    FactoryResponseEventImageRefContentBlock:
+      $ref: './components/schemas/response-events/content-blocks/FactoryResponseEventImageRefContentBlock.yaml'
+    FactoryResponseEventResourceRefContentBlock:
+      $ref: './components/schemas/response-events/content-blocks/FactoryResponseEventResourceRefContentBlock.yaml'
+    FactoryResponseEventStructuredOutputContentBlock:
+      $ref: './components/schemas/response-events/content-blocks/FactoryResponseEventStructuredOutputContentBlock.yaml'
+    FactoryResponseEventSessionPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventSessionPayload.yaml'
+    FactoryResponseEventRunPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventRunPayload.yaml'
+    FactoryResponseEventTurnPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventTurnPayload.yaml'
+    FactoryResponseEventMessagePayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventMessagePayload.yaml'
+    FactoryResponseEventMessageDeltaPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventMessageDeltaPayload.yaml'
+    FactoryResponseEventReasoningPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventReasoningPayload.yaml'
+    FactoryResponseEventToolPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventToolPayload.yaml'
+    FactoryResponseEventToolDeltaPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventToolDeltaPayload.yaml'
+    FactoryResponseEventFileChangePayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventFileChangePayload.yaml'
+    FactoryResponseEventPlanPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventPlanPayload.yaml'
+    FactoryResponseEventPlanStep:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventPlanStep.yaml'
+    FactoryResponseEventProgressPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventProgressPayload.yaml'
+    FactoryResponseEventUsagePayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventUsagePayload.yaml'
+    FactoryResponseEventErrorPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventErrorPayload.yaml'
+    FactoryResponseEventStreamGapPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventStreamGapPayload.yaml'
 
     # ==== Raw data schemas for a factor =======
     FactorySaveMode:

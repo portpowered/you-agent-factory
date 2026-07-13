@@ -1,0 +1,18 @@
+description: Response-event cursor or filter parameters were invalid.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'
+    examples:
+      invalidCursor:
+        summary: The response-event reconnect cursor is invalid.
+        value:
+          message: after_sequence must be a non-negative integer.
+          family: BAD_REQUEST
+          code: INVALID_RESPONSE_EVENT_CURSOR
+      invalidFilter:
+        summary: A response-event filter is invalid.
+        value:
+          message: kind must contain only public FactoryResponseEventKind values.
+          family: BAD_REQUEST
+          code: INVALID_RESPONSE_EVENT_FILTER

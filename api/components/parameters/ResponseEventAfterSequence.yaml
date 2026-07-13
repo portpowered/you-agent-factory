@@ -1,0 +1,13 @@
+name: after_sequence
+in: query
+required: false
+description: >-
+  Last acknowledged FactoryResponseEvent.sequence. The stream sends only
+  retained response events with a greater sequence before continuing with live
+  events. Omit this cursor to start at the beginning of retained response-event
+  history. If the cursor predates retained history, the first emitted event is
+  a STREAM_GAP record describing the loss instead of silently skipping it.
+schema:
+  type: integer
+  format: int64
+  minimum: 0

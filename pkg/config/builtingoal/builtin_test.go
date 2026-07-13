@@ -22,8 +22,11 @@ func TestBuiltInGoalFactoryJSON_AssemblesFromAuthoredPromptFiles(t *testing.T) {
 
 	assertAuthoredRolePromptsNonEmpty(t)
 	assertWorkerBodiesMatchAuthoredPrompts(t, cfg)
+	assertWorkersWithoutAuthoredPromptsHaveEmptyBodies(t, cfg)
 	assertWorkstationBodiesMatchAuthoredPrompts(t, cfg)
+	assertFactoryJSONWorkersHaveNoInlineBodies(t)
 	assertFactoryJSONWorkstationsHaveNoInlineBodies(t)
+	assertFactoryJSONDoesNotEmbedAuthoredPromptContent(t)
 }
 
 func assertAuthoredRolePromptsNonEmpty(t *testing.T) {
@@ -58,6 +61,50 @@ func assertWorkerBodiesMatchAuthoredPrompts(t *testing.T, cfg *interfaces.Factor
 	want := strings.TrimSpace(builtingoal.AuthoredRolePrompts["executor"])
 	if got := workerBodies["goal-executor"]; got != want {
 		t.Fatalf("goal-executor body does not match authored executor prompt")
+	}
+}
+
+func assertWorkersWithoutAuthoredPromptsHaveEmptyBodies(t *testing.T, cfg *interfaces.FactoryConfig) {
+	t.Helper()
+	authoredWorkers := map[string]struct{}{"goal-executor": {}}
+	for _, worker := range cfg.Workers {
+		if _, ok := authoredWorkers[worker.Name]; ok {
+			continue
+		}
+		if strings.TrimSpace(worker.Body) != "" {
+			t.Fatalf("worker %q body = %q, want empty body derived only from workstation prompt files", worker.Name, worker.Body)
+		}
+	}
+}
+
+func assertFactoryJSONWorkersHaveNoInlineBodies(t *testing.T) {
+	t.Helper()
+	var raw map[string]any
+	if err := json.Unmarshal(builtingoal.FactoryJSON(), &raw); err != nil {
+		t.Fatalf("unmarshal authored factory.json: %v", err)
+	}
+	workers, ok := raw["workers"].([]any)
+	if !ok {
+		t.Fatal("authored factory.json workers must be an array")
+	}
+	for _, entry := range workers {
+		worker, ok := entry.(map[string]any)
+		if !ok {
+			t.Fatal("authored worker entry must be an object")
+		}
+		if _, hasBody := worker["body"]; hasBody {
+			t.Fatalf("authored worker %q must not inline prompt body in factory.json", worker["name"])
+		}
+	}
+}
+
+func assertFactoryJSONDoesNotEmbedAuthoredPromptContent(t *testing.T) {
+	t.Helper()
+	raw := string(builtingoal.FactoryJSON())
+	for _, marker := range []string{"bounded plan", "bounded execution result", "reviewable disposition", "bounded final summary"} {
+		if strings.Contains(raw, marker) {
+			t.Fatalf("authored factory.json must not embed prompt content %q; edit pkg/config/builtingoal/prompts instead", marker)
+		}
 	}
 }
 

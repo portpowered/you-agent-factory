@@ -13,15 +13,15 @@ import (
 
 func TestEditedMaterializedPackagedGoalFactoryChangesNextLoad(t *testing.T) {
 	factoryDir := materializePackagedGoalFactory(t, t.TempDir())
-	initialWorker := loadPackagedGoalWorker(t, factoryDir)
+	initialWorker := loadPackagedGoalWorker(t, factoryDir, "goal-executor")
 	if initialWorker.Body == "" {
-		t.Fatal("expected initial materialized goal worker body")
+		t.Fatal("expected initial materialized goal-executor worker body from authored prompt source")
 	}
 
-	editedBody := "You are the customer-edited @you/goal built-in.\n"
+	editedBody := "You are the customer-edited @you/goal built-in executor.\n"
 	editMaterializedWorkerBody(t, factoryDir, "goal-executor", editedBody)
 
-	editedWorker := loadPackagedGoalWorker(t, factoryDir)
+	editedWorker := loadPackagedGoalWorker(t, factoryDir, "goal-executor")
 	if editedWorker.Body != strings.TrimSpace(editedBody) {
 		t.Fatalf("edited worker body = %q, want %q", editedWorker.Body, strings.TrimSpace(editedBody))
 	}
@@ -77,12 +77,12 @@ func loadPackagedGoalRuntimeConfig(t *testing.T, factoryDir string) *factoryconf
 	return loaded
 }
 
-func loadPackagedGoalWorker(t *testing.T, factoryDir string) *interfaces.WorkerConfig {
+func loadPackagedGoalWorker(t *testing.T, factoryDir, workerName string) *interfaces.WorkerConfig {
 	t.Helper()
 	loaded := loadPackagedGoalRuntimeConfig(t, factoryDir)
-	worker, ok := loaded.Worker("goal-executor")
+	worker, ok := loaded.Worker(workerName)
 	if !ok {
-		t.Fatal("expected materialized goal-executor worker")
+		t.Fatalf("expected materialized %s worker", workerName)
 	}
 	return worker
 }

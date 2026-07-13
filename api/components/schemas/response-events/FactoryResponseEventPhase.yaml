@@ -1,0 +1,25 @@
+type: string
+description: >-
+  Lifecycle position of one FactoryResponseEvent within its kind. Allowed
+  phase/kind combinations are validated before publication.
+x-enum-varnames:
+  - FactoryResponseEventPhaseStarted
+  - FactoryResponseEventPhaseDelta
+  - FactoryResponseEventPhaseUpdated
+  - FactoryResponseEventPhaseCompleted
+  - FactoryResponseEventPhaseFailed
+  - FactoryResponseEventPhaseCanceled
+enum:
+  - STARTED
+  - DELTA
+  - UPDATED
+  - COMPLETED
+  - FAILED
+  - CANCELED
+x-enum-descriptions:
+  - The scoped entity or stream segment started.
+  - Incremental content arrived for a streaming kind.
+  - A notification-style payload was updated.
+  - The scoped entity or stream segment completed successfully.
+  - The scoped entity or stream segment failed.
+  - The scoped entity or stream segment was canceled.

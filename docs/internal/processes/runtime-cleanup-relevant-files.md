@@ -19,11 +19,60 @@ delegation to the target owner or part of an active removal lane.
 | Dynamic workflow runtime behavior | `pkg/orchestrators/javascript/*`, with durable lifecycle and resume behavior in `pkg/factorysessionexecution` | Put JavaScript source resolution, validation, policy, runtime execution, result shaping, checkpoints, and resume state in the JavaScript orchestrator packages. Route durable start, resume, lifecycle/control, artifact, result, and persisted execution through Factory Session execution owners. |
 | Factory Session state | `pkg/factorysessions` for live session state and read models; `pkg/factorysessionexecution` for durable execution state | A Factory Session owns runtime identity, event history, lifecycle/control state, current work, Current Factory, runtime instances, stream identity, and session projections. `FactoryService` may locate or route to sessions, but must not become the state owner. |
 | Model operations | `pkg/modelhost` for process-wide runtime lifecycle and leases; `pkg/models/service` for model API service behavior; `pkg/localmodels` for catalog compatibility projection | Keep readiness, supervised process lifecycle, capacity, leases, diagnostics, invocation gating, and host-owned execution in the model owner. Construct the model API service once from explicit model-scoped dependencies at application composition, then inject that same instance into transports and compatibility hosts. Transport handlers should call model service or API-surface adapters instead of embedding model runtime policy. |
-| Worker and provider execution | `pkg/workers` and `pkg/hostedworkers` | Put provider adapters, script/agent/inference executors, mock workers, process runners, sidecars, hosted-worker integration, and worker execution diagnostics in the worker owner. Shared single-attempt provider invocation and canonical result mapping belong in `pkg/workers/providerexecution`; callers retain retry and durable lifecycle policy. Session or service code should inject callbacks and observers rather than owning provider behavior. |
-| Invocation and work input | `pkg/invocations` and `pkg/workcontent` | Put argument normalization, text/stdin resolution, interpolation, primary-result policy, inference envelopes, return-policy resolution, and payload conversion in shared invocation/work-content owners. CLI and API code should adapt requests into those shared contracts. |
-| Work query behavior | `pkg/workquery` | Put shared filtering, state-type validation, query semantics, and reusable work-selection policy in the work-query owner before adapting to CLI, API, or UI callers. |
-| Platform infrastructure | Narrow platform owners such as `pkg/config`, `pkg/config/defaultpaths`, `pkg/logging`, `pkg/sessionpersistence`, and targeted diagnostics packages | Put default paths, config loading, persistence, metrics, logging, runtime artifact roots, and diagnostics in the package that owns that platform resource. Do not add platform catch-all behavior to `FactoryService`. |
-| Process startup and dependency construction | `cmd/factory`, target `pkg/root`, target `pkg/inject`, and `pkg/initializer` | Keep `cmd/factory` thin, put process-mode selection in `pkg/root`, build explicit dependency graphs in `pkg/inject`, and start transports or sidecars from already-built services in `pkg/initializer`. Stateful collaborators such as durable Factory Session execution must be constructed once per graph with the graph's normalized roots, clock, and runtime dependencies, then injected into compatibility facades rather than reconstructed there. |
+| Worker and provider execution | `pkg/workers` and `pkg/hostedworkers` | Put provider adapters, script/agent/inference executors, mock workers, process runners, sidecars, hosted-worker integration, and worker execution diagnostics in the worker owner. Shared single-attempt provider invocation and canonical result mapping belong in `pkg/workers/providerexecution`; callers retain retry and durable lifecycle policy. Production creates the default provider per worker with worker-specific permissions, logging, progress publication, and command-runner options, so application graphs should own the runtime builder/factory that creates those providers rather than publishing a fabricated process-wide provider executor. Session or service code should inject callbacks and observers rather than owning provider behavior. |
+| Work domain | target `pkg/work` | Put Work content, query/selection, graph/lineage, pure invocation input and return policy, materialization, and cron/time-work concepts in the collapsed Work owner. Until Batch 006 moves a slice, use its registered migration root and do not create a parallel implementation. |
+| Platform infrastructure | target `pkg/platform` | Put logging, replay/artifact infrastructure, metrics, cursor storage, and non-domain clocks in the collapsed platform owner. Until Batch 006 moves a slice, use its registered narrow migration root; never put domain policy in platform code. |
+| Transport boundaries | target `pkg/transports` | Put HTTP, CLI, MCP, generated transport contracts/clients, and boundary mapping at the process edge. Until Batch 006 moves a slice, use its registered migration root; transport adapters must not own domain policy. |
+| Process startup and dependency construction | `cmd/factory`, target `pkg/root`, target `pkg/wire`, and `pkg/initializer` | Keep `cmd/factory` thin, normalize process input and select mode in `pkg/root`, expose one concrete graph constructor in `pkg/wire`, and execute startup/shutdown lifecycle for already-built transports and sidecars in `pkg/initializer`. Construction-phase callback bundles are test harnesses, not a public composition API. During migration, concrete graph assembly may reuse `composebridge.BuildCore`, but it must do so once inside `pkg/wire`, copy caller-owned config before normalization, project only narrow domain contracts into the graph, and retain cleanup ownership for the startup bundle rather than exposing `runtimehost.Host` or the bridge core. Stateful collaborators such as durable Factory Session execution must be constructed once per graph with the graph's normalized roots, clock, and runtime dependencies, then injected into compatibility facades rather than reconstructed there. A fallible graph phase should retain any closeable construction resource so `pkg/wire` can unwind acquired resources once, in reverse order, before returning a later phase failure. Initializer should record only successfully started collaborators, stop them in reverse order on partial failure or shutdown, and make graph close part of the same idempotent shutdown result. |
+
+Production command runners must remain blocking without taking lifecycle ownership
+back from `pkg/initializer`. The entrypoint should construct and start the graph
+through `pkg/root`, then let the returned application wait for its selected
+graph-owned transport and perform the same idempotent reverse-order shutdown.
+Map default/service run policies to initializer's API lifecycle plan and explicit
+local batch policies to its CLI lifecycle plan before constructing the run
+application; runtime mode alone must not silently select the foreground edge.
+Transport startup must receive the graph's already-composed API surface, and
+startup diagnostics should be copied into immutable graph metadata rather than
+recovered later through `runtimehost.Host` or `FactoryService`.
+
+A graph-owned transport is only the foreground API, CLI, or MCP edge. It must
+not start the runtime loop, worker scheduler, filesystem watcher, metrics
+observer, dashboard renderer, or another sidecar behind its `Run` callback.
+`pkg/wire` should construct those inert lifecycle handles explicitly, and
+`pkg/initializer` should start runtime, worker/watcher, and dashboard handles
+before the selected transport, then stop them in the exact reverse order. A
+production-graph test should delegate through the real handles and observe this
+sequence so fake-only initializer coverage cannot hide an empty sidecar graph.
+Mode-specific lifecycle planning must validate every required handle, including
+typed-nil interface values, before activation. Optional handles should be
+omitted from the plan, and graph handles that are not selected for the mode must
+receive no start, wait, or stop calls. The selected foreground transport must be
+joinable so initializer can validate complete lifecycle ownership before any
+component starts.
+
+One initializer run derives a single child context for every selected lifecycle.
+It observes every started lifecycle that supports `Wait`, not only the foreground
+transport; any terminal exit cancels that shared context before reverse-order
+stops begin. `Stop` remains responsible for joining component-owned work, and
+initializer also drains every lifecycle wait before returning. Cancellation and
+deadline exits are normal shutdown outcomes. When multiple components return
+non-cancellation failures, report them in declared lifecycle-plan order rather
+than arrival order so goroutine scheduling cannot change terminal precedence.
+
+The production `you mcp serve` branch follows the same ownership path even
+though it does not activate run sidecars. Resolve the selected fixture-backed
+or runtime-backed durable execution service before startup, retain that exact
+instance in `wire.Graph`, construct the MCP stdio lifecycle from the request's
+explicit reader and writer, and let `pkg/initializer` start, wait for, stop, and
+close that graph. Do not return a separately composed MCP application from the
+process graph builder.
+
+Factory Session selectors at that graph-owned transport boundary must round-trip
+the canonical ID returned by list responses. Registry aliases such as
+`~default` remain valid compatibility selectors, but production startup tests
+should pass a listed canonical ID back through a session-scoped API operation so
+the public identifier cannot drift from runtime-host routing.
 
 When a change spans rows, place the durable state or policy in its owner and
 adapt outward. For example, a new session read that exposes JavaScript
@@ -44,6 +93,17 @@ there. The rationale should state:
 If that rationale is missing, the change should land in an existing target owner
 or be limited to a migration/removal lane that deletes, aliases, or delegates
 old behavior toward the documented owner.
+
+For an existing migration-only root, also verify its target owner, Batch 006-008
+work item, and deletion gate against the register in
+`docs/architecture/architecture.md`. The exception is temporary permission to
+finish the named move, not ownership rationale for new product behavior.
+
+`make pkg-boundary` also enforces the composition-root import direction:
+`pkg/wire` may import the domain owners it composes, while only `pkg/root`,
+`pkg/initializer`, and `pkg/wire` itself may import `pkg/wire`. Domain and
+transport packages should own narrow contracts that startup injects instead of
+depending outward on the application graph.
 
 ## Vocabulary Guardrails
 
@@ -79,6 +139,13 @@ Session, Work, Work Request, Provider Session, event, or target-owner wording.
 Documentation-only runtime-cleanup changes should also run `git diff --check`
 and `make typecheck`. Add `make docs-reference-smoke` only when packaged
 `docs/reference/` content or `you docs` routing changes.
+
+New production composition packages such as `pkg/wire`, `pkg/root`, and
+`pkg/initializer` are subject to the non-baselined per-package Go coverage
+minimum. Exercise their observable construction, lifecycle, failure, and
+shutdown behavior and run `make test-backend-verification`; do not add a new
+package to the temporary coverage baseline merely because production adoption
+made it visible to the merged coverage profile.
 
 When changing durable Factory Session execution construction, run
 `make durable-runtime-construction-check`. The guard permits direct

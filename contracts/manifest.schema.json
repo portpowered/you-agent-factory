@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/manifest.schema.json",
+  "title": "You contract package manifest",
+  "description": "Family-neutral package, source, export, and artifact integrity metadata for a published contract bundle.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "packageId",
+    "packageVersion",
+    "sourceCommit",
+    "familyFormatVersions",
+    "exports"
+  ],
+  "properties": {
+    "formatVersion": {
+      "description": "The explicitly supported version of this manifest format.",
+      "const": "1.0.0"
+    },
+    "packageId": {
+      "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+    },
+    "packageVersion": {
+      "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json#/$defs/version"
+    },
+    "sourceCommit": {
+      "description": "The lowercase full-length Git SHA-1 or SHA-256 commit identifying the package source.",
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "familyFormatVersions": {
+      "description": "Supported contract-family format versions keyed by stable, family-neutral identifiers.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+      },
+      "additionalProperties": {
+        "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json#/$defs/version"
+      }
+    },
+    "exports": {
+      "description": "Published artifacts keyed by stable export identifiers. Object keys make duplicate export IDs structurally unrepresentable.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/export"
+      }
+    }
+  },
+  "$defs": {
+    "export": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "family",
+        "artifactHash",
+        "documentation",
+        "lifecycle"
+      ],
+      "properties": {
+        "path": {
+          "description": "Stable repository-relative artifact path with no empty, current-directory, or parent-directory segments.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(?:/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
+        },
+        "family": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "artifactHash": {
+          "description": "Lowercase hexadecimal SHA-256 of the exported artifact.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "documentation": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        }
+      }
+    }
+  }
+}

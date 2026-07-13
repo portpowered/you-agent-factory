@@ -182,7 +182,7 @@ func TestJavaScriptRuntimeService_AgentRunLiveChild_TimeoutInterruptsProviderInf
 			ChildExecutorMode: fse.ChildExecutorModeLive,
 		},
 		RequestedPolicy: map[string]any{
-			"maxRunDurationMs": 200,
+			"maxRunDurationMs": (2 * time.Second).Milliseconds(),
 		},
 	})
 	if err != nil {

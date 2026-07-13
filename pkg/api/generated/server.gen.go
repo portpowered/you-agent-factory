@@ -5,6 +5,7 @@ package generated
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -53,6 +54,7 @@ const (
 const (
 	ErrorFamilyBadRequest          ErrorFamily = "BAD_REQUEST"
 	ErrorFamilyConflict            ErrorFamily = "CONFLICT"
+	ErrorFamilyGone                ErrorFamily = "GONE"
 	ErrorFamilyInternalServerError ErrorFamily = "INTERNAL_SERVER_ERROR"
 	ErrorFamilyNotFound            ErrorFamily = "NOT_FOUND"
 )
@@ -68,8 +70,12 @@ const (
 	ErrorResponseCodeINTERNALERROR                              ErrorResponseCode = "INTERNAL_ERROR"
 	ErrorResponseCodeINVALIDFACTORY                             ErrorResponseCode = "INVALID_FACTORY"
 	ErrorResponseCodeINVALIDFACTORYNAME                         ErrorResponseCode = "INVALID_FACTORY_NAME"
+	ErrorResponseCodeINVALIDRESPONSEEVENTCURSOR                 ErrorResponseCode = "INVALID_RESPONSE_EVENT_CURSOR"
+	ErrorResponseCodeINVALIDRESPONSEEVENTFILTER                 ErrorResponseCode = "INVALID_RESPONSE_EVENT_FILTER"
 	ErrorResponseCodeMOVEWORKREQUESTALREADYAPPLIED              ErrorResponseCode = "MOVE_WORK_REQUEST_ALREADY_APPLIED"
 	ErrorResponseCodeNOTFOUND                                   ErrorResponseCode = "NOT_FOUND"
+	ErrorResponseCodeRESPONSEEVENTSESSIONNOTFOUND               ErrorResponseCode = "RESPONSE_EVENT_SESSION_NOT_FOUND"
+	ErrorResponseCodeRESPONSEEVENTSTREAMEXPIRED                 ErrorResponseCode = "RESPONSE_EVENT_STREAM_EXPIRED"
 	ErrorResponseCodeSTALEFACTORYVERSION                        ErrorResponseCode = "STALE_FACTORY_VERSION"
 )
 
@@ -243,6 +249,71 @@ const (
 	INLINEWORKFLOW FactoryPreviewRequestSourceKind = "INLINE_WORKFLOW"
 	WORKFLOWFILE   FactoryPreviewRequestSourceKind = "WORKFLOW_FILE"
 	WORKFLOWNAME   FactoryPreviewRequestSourceKind = "WORKFLOW_NAME"
+)
+
+// Defines values for FactoryResponseEventSchemaVersion.
+const (
+	AgentFactoryResponseEventV1 FactoryResponseEventSchemaVersion = "agent-factory.response-event.v1"
+)
+
+// Defines values for FactoryResponseEventContentBlockKind.
+const (
+	FactoryResponseEventContentBlockKindImageRef         FactoryResponseEventContentBlockKind = "IMAGE_REF"
+	FactoryResponseEventContentBlockKindReasoningSummary FactoryResponseEventContentBlockKind = "REASONING_SUMMARY"
+	FactoryResponseEventContentBlockKindResourceRef      FactoryResponseEventContentBlockKind = "RESOURCE_REF"
+	FactoryResponseEventContentBlockKindStructuredOutput FactoryResponseEventContentBlockKind = "STRUCTURED_OUTPUT"
+	FactoryResponseEventContentBlockKindText             FactoryResponseEventContentBlockKind = "TEXT"
+	FactoryResponseEventContentBlockKindToolRequest      FactoryResponseEventContentBlockKind = "TOOL_REQUEST"
+)
+
+// Defines values for FactoryResponseEventKind.
+const (
+	FactoryResponseEventKindError      FactoryResponseEventKind = "ERROR"
+	FactoryResponseEventKindFileChange FactoryResponseEventKind = "FILE_CHANGE"
+	FactoryResponseEventKindMessage    FactoryResponseEventKind = "MESSAGE"
+	FactoryResponseEventKindPlan       FactoryResponseEventKind = "PLAN"
+	FactoryResponseEventKindProgress   FactoryResponseEventKind = "PROGRESS"
+	FactoryResponseEventKindReasoning  FactoryResponseEventKind = "REASONING"
+	FactoryResponseEventKindRun        FactoryResponseEventKind = "RUN"
+	FactoryResponseEventKindSession    FactoryResponseEventKind = "SESSION"
+	FactoryResponseEventKindStreamGap  FactoryResponseEventKind = "STREAM_GAP"
+	FactoryResponseEventKindTool       FactoryResponseEventKind = "TOOL"
+	FactoryResponseEventKindTurn       FactoryResponseEventKind = "TURN"
+	FactoryResponseEventKindUsage      FactoryResponseEventKind = "USAGE"
+)
+
+// Defines values for FactoryResponseEventPhase.
+const (
+	FactoryResponseEventPhaseCanceled  FactoryResponseEventPhase = "CANCELED"
+	FactoryResponseEventPhaseCompleted FactoryResponseEventPhase = "COMPLETED"
+	FactoryResponseEventPhaseDelta     FactoryResponseEventPhase = "DELTA"
+	FactoryResponseEventPhaseFailed    FactoryResponseEventPhase = "FAILED"
+	FactoryResponseEventPhaseStarted   FactoryResponseEventPhase = "STARTED"
+	FactoryResponseEventPhaseUpdated   FactoryResponseEventPhase = "UPDATED"
+)
+
+// Defines values for FactoryResponseEventProvenanceDelivery.
+const (
+	FactoryResponseEventProvenanceDeliveryNativeFinal  FactoryResponseEventProvenanceDelivery = "NATIVE_FINAL"
+	FactoryResponseEventProvenanceDeliveryNativeStream FactoryResponseEventProvenanceDelivery = "NATIVE_STREAM"
+	FactoryResponseEventProvenanceDeliveryReplay       FactoryResponseEventProvenanceDelivery = "REPLAY"
+	FactoryResponseEventProvenanceDeliverySynthesized  FactoryResponseEventProvenanceDelivery = "SYNTHESIZED"
+)
+
+// Defines values for FactoryResponseEventProvenanceFidelity.
+const (
+	FactoryResponseEventProvenanceFidelityFinalOnly     FactoryResponseEventProvenanceFidelity = "FINAL_ONLY"
+	FactoryResponseEventProvenanceFidelityLifecycleOnly FactoryResponseEventProvenanceFidelity = "LIFECYCLE_ONLY"
+	FactoryResponseEventProvenanceFidelityLossless      FactoryResponseEventProvenanceFidelity = "LOSSLESS"
+	FactoryResponseEventProvenanceFidelityLossy         FactoryResponseEventProvenanceFidelity = "LOSSY"
+	FactoryResponseEventProvenanceFidelityNormalized    FactoryResponseEventProvenanceFidelity = "NORMALIZED"
+)
+
+// Defines values for FactoryResponseEventProvenanceRepresentation.
+const (
+	FactoryResponseEventProvenanceRepresentationDelta        FactoryResponseEventProvenanceRepresentation = "DELTA"
+	FactoryResponseEventProvenanceRepresentationNotification FactoryResponseEventProvenanceRepresentation = "NOTIFICATION"
+	FactoryResponseEventProvenanceRepresentationSnapshot     FactoryResponseEventProvenanceRepresentation = "SNAPSHOT"
 )
 
 // Defines values for FactorySaveMode.
@@ -1870,6 +1941,368 @@ type FactoryPreviewResult struct {
 
 	// Valid True when source resolution, validation, policy, and artifact-root checks pass for Factory preview.
 	Valid bool `json:"valid"`
+}
+
+// FactoryResponseEvent Provider-neutral envelope for transient agent activity observed during one Factory Session run. Unlike canonical factory events, these records are ephemeral observation records and must not derive canonical work state after replay.
+type FactoryResponseEvent struct {
+	// DispatchId Optional dispatch correlation identifier.
+	DispatchId *string `json:"dispatchId,omitempty"`
+
+	// EventId Stable identifier for this response event within the session stream.
+	EventId string `json:"eventId"`
+
+	// FactorySessionId Factory Session identity that owns this response-event stream.
+	FactorySessionId string `json:"factorySessionId"`
+
+	// ItemId Optional stable item correlation identifier.
+	ItemId *string `json:"itemId,omitempty"`
+
+	// Kind Semantic category of one FactoryResponseEvent. Response events are ephemeral observation records and must not derive canonical factory replay state.
+	Kind FactoryResponseEventKind `json:"kind"`
+
+	// ParentItemId Optional parent item correlation identifier.
+	ParentItemId *string `json:"parentItemId,omitempty"`
+
+	// Payload Public typed payload union for FactoryResponseEvent. Variants align with envelope kind and phase semantics from the Story 01 vocabulary. MESSAGE and TOOL kinds use distinct snapshot and delta payload shapes; consumers select the variant using envelope kind and phase together with structural decoding.
+	Payload FactoryResponseEventPayload `json:"payload"`
+
+	// Phase Lifecycle position of one FactoryResponseEvent within its kind. Allowed phase/kind combinations are validated before publication.
+	Phase FactoryResponseEventPhase `json:"phase"`
+
+	// Provenance Provider-neutral fidelity metadata for one response event. Exposes diagnostic identity without promoting provider-native schemas into the public vocabulary.
+	Provenance FactoryResponseEventProvenance `json:"provenance"`
+
+	// ProviderSessionRef Optional provider session reference for diagnostics.
+	ProviderSessionRef *string `json:"providerSessionRef,omitempty"`
+
+	// RecordedAt Wall-clock timestamp when the response event was recorded.
+	RecordedAt time.Time `json:"recordedAt"`
+
+	// RunId Run identity within the Factory Session that produced this event.
+	RunId string `json:"runId"`
+
+	// SchemaVersion Version of the FactoryResponseEvent envelope schema.
+	SchemaVersion FactoryResponseEventSchemaVersion `json:"schemaVersion"`
+
+	// Sequence Monotonic session-scoped cursor for published events. Sequence zero is reserved for synthetic out-of-band read markers such as retention gaps; those markers do not consume or reuse a published sequence.
+	Sequence int64 `json:"sequence"`
+
+	// TurnId Optional turn correlation identifier.
+	TurnId *string `json:"turnId,omitempty"`
+}
+
+// FactoryResponseEventSchemaVersion Version of the FactoryResponseEvent envelope schema.
+type FactoryResponseEventSchemaVersion string
+
+// FactoryResponseEventCapabilities Declares which response-event features a provider session supports. Adapters publish capability flags so consumers can interpret fidelity and phase availability without depending on provider-native schemas.
+type FactoryResponseEventCapabilities struct {
+	// FileChanges Provider session can emit observed file changes.
+	FileChanges bool `json:"fileChanges"`
+
+	// MessageDeltas Provider session can emit incremental message deltas.
+	MessageDeltas bool `json:"messageDeltas"`
+
+	// MessageSnapshots Provider session can emit message snapshots.
+	MessageSnapshots bool `json:"messageSnapshots"`
+
+	// NativeStreaming Provider session exposes native streaming observation.
+	NativeStreaming bool `json:"nativeStreaming"`
+
+	// Plans Provider session can emit plan updates.
+	Plans bool `json:"plans"`
+
+	// ProviderReconnect Provider session supports reconnect after stream interruption.
+	ProviderReconnect bool `json:"providerReconnect"`
+
+	// ReasoningSummaries Provider session can emit reasoning summaries or deltas.
+	ReasoningSummaries bool `json:"reasoningSummaries"`
+
+	// StableItemIds Provider session assigns stable item identifiers across events.
+	StableItemIds bool `json:"stableItemIds"`
+
+	// ToolLifecycle Provider session can emit tool lifecycle metadata.
+	ToolLifecycle bool `json:"toolLifecycle"`
+
+	// ToolOutputDeltas Provider session can emit incremental tool output deltas.
+	ToolOutputDeltas bool `json:"toolOutputDeltas"`
+
+	// Usage Provider session can emit usage accounting.
+	Usage bool `json:"usage"`
+}
+
+// FactoryResponseEventContentBlock One typed slice of assistant-visible message content. Discriminated by the content block kind field.
+type FactoryResponseEventContentBlock struct {
+	union json.RawMessage
+}
+
+// FactoryResponseEventContentBlockKind Identifies one provider-neutral message content block kind.
+type FactoryResponseEventContentBlockKind string
+
+// FactoryResponseEventErrorPayload Provider-neutral error payload with optional retry metadata.
+type FactoryResponseEventErrorPayload struct {
+	// Code Stable provider-neutral error code.
+	Code string `json:"code"`
+
+	// Message Human-readable error message.
+	Message string `json:"message"`
+
+	// RetryAfterSeconds Suggested retry delay in seconds when retryable.
+	RetryAfterSeconds *int64 `json:"retryAfterSeconds,omitempty"`
+
+	// RetryAttempt Retry attempt count when applicable.
+	RetryAttempt *int32 `json:"retryAttempt,omitempty"`
+
+	// Retryable Whether the error may be retried.
+	Retryable *bool `json:"retryable,omitempty"`
+}
+
+// FactoryResponseEventFileChangePayload Observed file mutation payload.
+type FactoryResponseEventFileChangePayload struct {
+	// Operation Observed file operation such as create, update, or delete.
+	Operation string `json:"operation"`
+
+	// Path Observed file path relative to the workspace or artifact root.
+	Path string `json:"path"`
+
+	// Summary Optional human-readable summary of the mutation.
+	Summary *string `json:"summary,omitempty"`
+}
+
+// FactoryResponseEventImageRefContentBlock Image reference content block.
+type FactoryResponseEventImageRefContentBlock struct {
+	// ImageRef Reference to an image artifact or URL.
+	ImageRef string                               `json:"imageRef"`
+	Kind     FactoryResponseEventContentBlockKind `json:"kind"`
+}
+
+// FactoryResponseEventKind Semantic category of one FactoryResponseEvent. Response events are ephemeral observation records and must not derive canonical factory replay state.
+type FactoryResponseEventKind string
+
+// FactoryResponseEventMessageDeltaPayload Incremental message content delta for one content block.
+type FactoryResponseEventMessageDeltaPayload struct {
+	// ContentBlockIndex Zero-based index of the content block receiving the delta.
+	ContentBlockIndex int32 `json:"contentBlockIndex"`
+
+	// ContentBlockKind Identifies one provider-neutral message content block kind.
+	ContentBlockKind FactoryResponseEventContentBlockKind `json:"contentBlockKind"`
+
+	// TextDelta Incremental text appended to the targeted content block.
+	TextDelta *string `json:"textDelta,omitempty"`
+}
+
+// FactoryResponseEventMessagePayload Message snapshot payload with typed content blocks.
+type FactoryResponseEventMessagePayload struct {
+	// ContentBlocks Ordered typed content blocks for the message snapshot.
+	ContentBlocks []FactoryResponseEventContentBlock `json:"contentBlocks"`
+
+	// Role Message role such as assistant or user.
+	Role string `json:"role"`
+}
+
+// FactoryResponseEventPayload Public typed payload union for FactoryResponseEvent. Variants align with envelope kind and phase semantics from the Story 01 vocabulary. MESSAGE and TOOL kinds use distinct snapshot and delta payload shapes; consumers select the variant using envelope kind and phase together with structural decoding.
+type FactoryResponseEventPayload struct {
+	union json.RawMessage
+}
+
+// FactoryResponseEventPhase Lifecycle position of one FactoryResponseEvent within its kind. Allowed phase/kind combinations are validated before publication.
+type FactoryResponseEventPhase string
+
+// FactoryResponseEventPlanPayload Published plan update payload.
+type FactoryResponseEventPlanPayload struct {
+	// Steps Ordered plan steps when emitting a plan snapshot.
+	Steps *[]FactoryResponseEventPlanStep `json:"steps,omitempty"`
+
+	// Summary Optional plan summary text.
+	Summary *string `json:"summary,omitempty"`
+}
+
+// FactoryResponseEventPlanStep One step in a published plan snapshot.
+type FactoryResponseEventPlanStep struct {
+	// Description Human-readable step description.
+	Description string `json:"description"`
+
+	// Id Stable plan step identifier.
+	Id string `json:"id"`
+
+	// Status Plan step status when applicable.
+	Status *string `json:"status,omitempty"`
+}
+
+// FactoryResponseEventProgressPayload Coarse progress notification payload.
+type FactoryResponseEventProgressPayload struct {
+	// Label Short progress label for UI or CLI consumers.
+	Label string `json:"label"`
+
+	// Message Optional longer progress message.
+	Message *string `json:"message,omitempty"`
+
+	// PercentComplete Optional completion percentage when known.
+	PercentComplete *float64 `json:"percentComplete,omitempty"`
+}
+
+// FactoryResponseEventProvenance Provider-neutral fidelity metadata for one response event. Exposes diagnostic identity without promoting provider-native schemas into the public vocabulary.
+type FactoryResponseEventProvenance struct {
+	// Delivery How the response event entered the Factory vocabulary.
+	Delivery FactoryResponseEventProvenanceDelivery `json:"delivery"`
+
+	// Fidelity How closely the public payload preserves provider detail.
+	Fidelity FactoryResponseEventProvenanceFidelity `json:"fidelity"`
+
+	// NativeEventSubtype Optional provider-native event subtype label retained for diagnostics only.
+	NativeEventSubtype *string `json:"nativeEventSubtype,omitempty"`
+
+	// NativeEventType Provider-native event type label retained for diagnostics only.
+	NativeEventType string `json:"nativeEventType"`
+
+	// Provider Provider identifier for the originating adapter session.
+	Provider string `json:"provider"`
+
+	// Representation Shape fidelity model used for the public payload.
+	Representation FactoryResponseEventProvenanceRepresentation `json:"representation"`
+}
+
+// FactoryResponseEventProvenanceDelivery How the response event entered the Factory vocabulary.
+type FactoryResponseEventProvenanceDelivery string
+
+// FactoryResponseEventProvenanceFidelity How closely the public payload preserves provider detail.
+type FactoryResponseEventProvenanceFidelity string
+
+// FactoryResponseEventProvenanceRepresentation Shape fidelity model used for the public payload.
+type FactoryResponseEventProvenanceRepresentation string
+
+// FactoryResponseEventReasoningPayload Reasoning summary snapshot or delta payload.
+type FactoryResponseEventReasoningPayload struct {
+	// Summary Full reasoning summary text when emitting a snapshot.
+	Summary *string `json:"summary,omitempty"`
+
+	// SummaryDelta Incremental reasoning summary text when emitting a delta.
+	SummaryDelta *string `json:"summaryDelta,omitempty"`
+}
+
+// FactoryResponseEventReasoningSummaryContentBlock Reasoning summary text content block.
+type FactoryResponseEventReasoningSummaryContentBlock struct {
+	Kind FactoryResponseEventContentBlockKind `json:"kind"`
+
+	// Text Reasoning summary text.
+	Text string `json:"text"`
+}
+
+// FactoryResponseEventResourceRefContentBlock Factory resource reference content block.
+type FactoryResponseEventResourceRefContentBlock struct {
+	Kind FactoryResponseEventContentBlockKind `json:"kind"`
+
+	// ResourceRef Reference to a factory resource or artifact.
+	ResourceRef string `json:"resourceRef"`
+}
+
+// FactoryResponseEventRunPayload Run-scoped lifecycle metadata payload.
+type FactoryResponseEventRunPayload struct {
+	// Status Run lifecycle status when applicable.
+	Status *string `json:"status,omitempty"`
+}
+
+// FactoryResponseEventSessionPayload Session-scoped lifecycle and capability metadata payload.
+type FactoryResponseEventSessionPayload struct {
+	// Capabilities Declares which response-event features a provider session supports. Adapters publish capability flags so consumers can interpret fidelity and phase availability without depending on provider-native schemas.
+	Capabilities *FactoryResponseEventCapabilities `json:"capabilities,omitempty"`
+
+	// Status Session lifecycle status when applicable.
+	Status *string `json:"status,omitempty"`
+}
+
+// FactoryResponseEventStreamGapPayload Discontinuity marker in the retained response-event stream.
+type FactoryResponseEventStreamGapPayload struct {
+	// FirstAvailableSequence Sequence of the first retained event available to this subscription, or the next sequence that can be published when no retained event matches.
+	FirstAvailableSequence int64 `json:"firstAvailableSequence"`
+
+	// FromSequence Lowest unavailable published sequence greater than the reader's cursor.
+	FromSequence int64 `json:"fromSequence"`
+
+	// Reason Optional reason for the stream gap such as retention_window.
+	Reason *string `json:"reason,omitempty"`
+
+	// ToSequence Highest unavailable published sequence in the reader's catch-up window.
+	ToSequence int64 `json:"toSequence"`
+}
+
+// FactoryResponseEventStructuredOutputContentBlock Structured JSON output content block.
+type FactoryResponseEventStructuredOutputContentBlock struct {
+	Kind FactoryResponseEventContentBlockKind `json:"kind"`
+
+	// StructuredOutput Structured JSON output value.
+	StructuredOutput map[string]interface{} `json:"structuredOutput"`
+}
+
+// FactoryResponseEventTextContentBlock Inline text content block.
+type FactoryResponseEventTextContentBlock struct {
+	Kind FactoryResponseEventContentBlockKind `json:"kind"`
+
+	// Text Inline text content.
+	Text string `json:"text"`
+}
+
+// FactoryResponseEventToolDeltaPayload Incremental tool output delta payload.
+type FactoryResponseEventToolDeltaPayload struct {
+	// OutputDelta Incremental tool output text.
+	OutputDelta string `json:"outputDelta"`
+
+	// ToolCallId Stable tool call identifier receiving output.
+	ToolCallId string `json:"toolCallId"`
+}
+
+// FactoryResponseEventToolPayload Tool lifecycle metadata with bounded argument and result summaries.
+type FactoryResponseEventToolPayload struct {
+	// ArgumentsSummary Bounded summary of tool arguments. Not a raw provider protocol payload.
+	ArgumentsSummary *map[string]interface{} `json:"argumentsSummary,omitempty"`
+
+	// ResultSummary Bounded summary of tool results. Not a raw provider protocol payload.
+	ResultSummary *map[string]interface{} `json:"resultSummary,omitempty"`
+
+	// Status Tool lifecycle status when applicable.
+	Status *string `json:"status,omitempty"`
+
+	// ToolCallId Stable tool call identifier within the run.
+	ToolCallId string `json:"toolCallId"`
+
+	// ToolName Declared tool name for the invocation.
+	ToolName string `json:"toolName"`
+}
+
+// FactoryResponseEventToolRequestContentBlock Tool invocation request content block with bounded argument summary.
+type FactoryResponseEventToolRequestContentBlock struct {
+	// ArgumentsSummary Bounded summary of tool arguments. Not a raw provider protocol payload.
+	ArgumentsSummary *map[string]interface{}              `json:"argumentsSummary,omitempty"`
+	Kind             FactoryResponseEventContentBlockKind `json:"kind"`
+
+	// ToolCallId Stable tool call identifier within the message.
+	ToolCallId string `json:"toolCallId"`
+
+	// ToolName Declared tool name for the invocation request.
+	ToolName string `json:"toolName"`
+}
+
+// FactoryResponseEventTurnPayload Turn-scoped lifecycle metadata payload.
+type FactoryResponseEventTurnPayload struct {
+	// Status Turn lifecycle status when applicable.
+	Status *string `json:"status,omitempty"`
+
+	// TurnIndex Zero-based turn index within the run when applicable.
+	TurnIndex *int32 `json:"turnIndex,omitempty"`
+}
+
+// FactoryResponseEventUsagePayload Token or model usage accounting payload.
+type FactoryResponseEventUsagePayload struct {
+	// InputTokens Reported input token count when available.
+	InputTokens *int64 `json:"inputTokens,omitempty"`
+
+	// Model Model identifier associated with the usage report.
+	Model *string `json:"model,omitempty"`
+
+	// OutputTokens Reported output token count when available.
+	OutputTokens *int64 `json:"outputTokens,omitempty"`
+
+	// TotalTokens Reported total token count when available.
+	TotalTokens *int64 `json:"totalTokens,omitempty"`
 }
 
 // FactorySaveMode Explicit save mode for session-scoped factory submission. Omitted mode on PUT /factory-sessions/{session_id}/factory defaults to REPLACE_CURRENT.
@@ -5783,6 +6216,15 @@ type MaxResults = int
 // NextToken defines model for NextToken.
 type NextToken = string
 
+// ResponseEventAfterSequence defines model for ResponseEventAfterSequence.
+type ResponseEventAfterSequence = int64
+
+// ResponseEventDispatchID defines model for ResponseEventDispatchID.
+type ResponseEventDispatchID = string
+
+// ResponseEventKind defines model for ResponseEventKind.
+type ResponseEventKind = []FactoryResponseEventKind
+
 // SessionID defines model for SessionID.
 type SessionID = string
 
@@ -5836,6 +6278,15 @@ type MoveWorkConflict = ErrorResponse
 // NotFound defines model for NotFound.
 type NotFound = ErrorResponse
 
+// ResponseEventBadRequest defines model for ResponseEventBadRequest.
+type ResponseEventBadRequest = ErrorResponse
+
+// ResponseEventSessionNotFound defines model for ResponseEventSessionNotFound.
+type ResponseEventSessionNotFound = ErrorResponse
+
+// ResponseEventStreamExpired defines model for ResponseEventStreamExpired.
+type ResponseEventStreamExpired = ErrorResponse
+
 // SaveCurrentFactoryBadRequest defines model for SaveCurrentFactoryBadRequest.
 type SaveCurrentFactoryBadRequest = ErrorResponse
 
@@ -5873,6 +6324,18 @@ type GetEventsBySessionIdParams struct {
 
 	// AfterSequence Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present.
 	AfterSequence *AfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
+}
+
+// GetFactoryResponseEventsBySessionIdParams defines parameters for GetFactoryResponseEventsBySessionId.
+type GetFactoryResponseEventsBySessionIdParams struct {
+	// AfterSequence Last acknowledged FactoryResponseEvent.sequence. The stream sends only retained response events with a greater sequence before continuing with live events. Omit this cursor to start at the beginning of retained response-event history. If the cursor predates retained history, the first emitted event is a STREAM_GAP record describing the loss instead of silently skipping it.
+	AfterSequence *ResponseEventAfterSequence `form:"after_sequence,omitempty" json:"after_sequence,omitempty"`
+
+	// DispatchId Return only FactoryResponseEvent records associated with this exact dispatch identifier. Invalid or empty identifiers return the typed bad-request response.
+	DispatchId *ResponseEventDispatchID `form:"dispatch_id,omitempty" json:"dispatch_id,omitempty"`
+
+	// Kind Return FactoryResponseEvent records matching any requested public kind. The parameter may be repeated, for example kind=MESSAGE&kind=TOOL. Invalid or empty kind values return the typed bad-request response.
+	Kind *ResponseEventKind `form:"kind,omitempty" json:"kind,omitempty"`
 }
 
 // GetFactorySessionResultsParams defines parameters for GetFactorySessionResults.
@@ -6956,6 +7419,589 @@ func (t *FactoryEvent_Payload) UnmarshalJSON(b []byte) error {
 	return err
 }
 
+// AsFactoryResponseEventTextContentBlock returns the union data inside the FactoryResponseEventContentBlock as a FactoryResponseEventTextContentBlock
+func (t FactoryResponseEventContentBlock) AsFactoryResponseEventTextContentBlock() (FactoryResponseEventTextContentBlock, error) {
+	var body FactoryResponseEventTextContentBlock
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventTextContentBlock overwrites any union data inside the FactoryResponseEventContentBlock as the provided FactoryResponseEventTextContentBlock
+func (t *FactoryResponseEventContentBlock) FromFactoryResponseEventTextContentBlock(v FactoryResponseEventTextContentBlock) error {
+	v.Kind = "TEXT"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventTextContentBlock performs a merge with any union data inside the FactoryResponseEventContentBlock, using the provided FactoryResponseEventTextContentBlock
+func (t *FactoryResponseEventContentBlock) MergeFactoryResponseEventTextContentBlock(v FactoryResponseEventTextContentBlock) error {
+	v.Kind = "TEXT"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventReasoningSummaryContentBlock returns the union data inside the FactoryResponseEventContentBlock as a FactoryResponseEventReasoningSummaryContentBlock
+func (t FactoryResponseEventContentBlock) AsFactoryResponseEventReasoningSummaryContentBlock() (FactoryResponseEventReasoningSummaryContentBlock, error) {
+	var body FactoryResponseEventReasoningSummaryContentBlock
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventReasoningSummaryContentBlock overwrites any union data inside the FactoryResponseEventContentBlock as the provided FactoryResponseEventReasoningSummaryContentBlock
+func (t *FactoryResponseEventContentBlock) FromFactoryResponseEventReasoningSummaryContentBlock(v FactoryResponseEventReasoningSummaryContentBlock) error {
+	v.Kind = "REASONING_SUMMARY"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventReasoningSummaryContentBlock performs a merge with any union data inside the FactoryResponseEventContentBlock, using the provided FactoryResponseEventReasoningSummaryContentBlock
+func (t *FactoryResponseEventContentBlock) MergeFactoryResponseEventReasoningSummaryContentBlock(v FactoryResponseEventReasoningSummaryContentBlock) error {
+	v.Kind = "REASONING_SUMMARY"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventToolRequestContentBlock returns the union data inside the FactoryResponseEventContentBlock as a FactoryResponseEventToolRequestContentBlock
+func (t FactoryResponseEventContentBlock) AsFactoryResponseEventToolRequestContentBlock() (FactoryResponseEventToolRequestContentBlock, error) {
+	var body FactoryResponseEventToolRequestContentBlock
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventToolRequestContentBlock overwrites any union data inside the FactoryResponseEventContentBlock as the provided FactoryResponseEventToolRequestContentBlock
+func (t *FactoryResponseEventContentBlock) FromFactoryResponseEventToolRequestContentBlock(v FactoryResponseEventToolRequestContentBlock) error {
+	v.Kind = "TOOL_REQUEST"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventToolRequestContentBlock performs a merge with any union data inside the FactoryResponseEventContentBlock, using the provided FactoryResponseEventToolRequestContentBlock
+func (t *FactoryResponseEventContentBlock) MergeFactoryResponseEventToolRequestContentBlock(v FactoryResponseEventToolRequestContentBlock) error {
+	v.Kind = "TOOL_REQUEST"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventImageRefContentBlock returns the union data inside the FactoryResponseEventContentBlock as a FactoryResponseEventImageRefContentBlock
+func (t FactoryResponseEventContentBlock) AsFactoryResponseEventImageRefContentBlock() (FactoryResponseEventImageRefContentBlock, error) {
+	var body FactoryResponseEventImageRefContentBlock
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventImageRefContentBlock overwrites any union data inside the FactoryResponseEventContentBlock as the provided FactoryResponseEventImageRefContentBlock
+func (t *FactoryResponseEventContentBlock) FromFactoryResponseEventImageRefContentBlock(v FactoryResponseEventImageRefContentBlock) error {
+	v.Kind = "IMAGE_REF"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventImageRefContentBlock performs a merge with any union data inside the FactoryResponseEventContentBlock, using the provided FactoryResponseEventImageRefContentBlock
+func (t *FactoryResponseEventContentBlock) MergeFactoryResponseEventImageRefContentBlock(v FactoryResponseEventImageRefContentBlock) error {
+	v.Kind = "IMAGE_REF"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventResourceRefContentBlock returns the union data inside the FactoryResponseEventContentBlock as a FactoryResponseEventResourceRefContentBlock
+func (t FactoryResponseEventContentBlock) AsFactoryResponseEventResourceRefContentBlock() (FactoryResponseEventResourceRefContentBlock, error) {
+	var body FactoryResponseEventResourceRefContentBlock
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventResourceRefContentBlock overwrites any union data inside the FactoryResponseEventContentBlock as the provided FactoryResponseEventResourceRefContentBlock
+func (t *FactoryResponseEventContentBlock) FromFactoryResponseEventResourceRefContentBlock(v FactoryResponseEventResourceRefContentBlock) error {
+	v.Kind = "RESOURCE_REF"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventResourceRefContentBlock performs a merge with any union data inside the FactoryResponseEventContentBlock, using the provided FactoryResponseEventResourceRefContentBlock
+func (t *FactoryResponseEventContentBlock) MergeFactoryResponseEventResourceRefContentBlock(v FactoryResponseEventResourceRefContentBlock) error {
+	v.Kind = "RESOURCE_REF"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventStructuredOutputContentBlock returns the union data inside the FactoryResponseEventContentBlock as a FactoryResponseEventStructuredOutputContentBlock
+func (t FactoryResponseEventContentBlock) AsFactoryResponseEventStructuredOutputContentBlock() (FactoryResponseEventStructuredOutputContentBlock, error) {
+	var body FactoryResponseEventStructuredOutputContentBlock
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventStructuredOutputContentBlock overwrites any union data inside the FactoryResponseEventContentBlock as the provided FactoryResponseEventStructuredOutputContentBlock
+func (t *FactoryResponseEventContentBlock) FromFactoryResponseEventStructuredOutputContentBlock(v FactoryResponseEventStructuredOutputContentBlock) error {
+	v.Kind = "STRUCTURED_OUTPUT"
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventStructuredOutputContentBlock performs a merge with any union data inside the FactoryResponseEventContentBlock, using the provided FactoryResponseEventStructuredOutputContentBlock
+func (t *FactoryResponseEventContentBlock) MergeFactoryResponseEventStructuredOutputContentBlock(v FactoryResponseEventStructuredOutputContentBlock) error {
+	v.Kind = "STRUCTURED_OUTPUT"
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t FactoryResponseEventContentBlock) Discriminator() (string, error) {
+	var discriminator struct {
+		Discriminator string `json:"kind"`
+	}
+	err := json.Unmarshal(t.union, &discriminator)
+	return discriminator.Discriminator, err
+}
+
+func (t FactoryResponseEventContentBlock) ValueByDiscriminator() (interface{}, error) {
+	discriminator, err := t.Discriminator()
+	if err != nil {
+		return nil, err
+	}
+	switch discriminator {
+	case "IMAGE_REF":
+		return t.AsFactoryResponseEventImageRefContentBlock()
+	case "REASONING_SUMMARY":
+		return t.AsFactoryResponseEventReasoningSummaryContentBlock()
+	case "RESOURCE_REF":
+		return t.AsFactoryResponseEventResourceRefContentBlock()
+	case "STRUCTURED_OUTPUT":
+		return t.AsFactoryResponseEventStructuredOutputContentBlock()
+	case "TEXT":
+		return t.AsFactoryResponseEventTextContentBlock()
+	case "TOOL_REQUEST":
+		return t.AsFactoryResponseEventToolRequestContentBlock()
+	default:
+		return nil, errors.New("unknown discriminator value: " + discriminator)
+	}
+}
+
+func (t FactoryResponseEventContentBlock) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *FactoryResponseEventContentBlock) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsFactoryResponseEventSessionPayload returns the union data inside the FactoryResponseEventPayload as a FactoryResponseEventSessionPayload
+func (t FactoryResponseEventPayload) AsFactoryResponseEventSessionPayload() (FactoryResponseEventSessionPayload, error) {
+	var body FactoryResponseEventSessionPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventSessionPayload overwrites any union data inside the FactoryResponseEventPayload as the provided FactoryResponseEventSessionPayload
+func (t *FactoryResponseEventPayload) FromFactoryResponseEventSessionPayload(v FactoryResponseEventSessionPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventSessionPayload performs a merge with any union data inside the FactoryResponseEventPayload, using the provided FactoryResponseEventSessionPayload
+func (t *FactoryResponseEventPayload) MergeFactoryResponseEventSessionPayload(v FactoryResponseEventSessionPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventRunPayload returns the union data inside the FactoryResponseEventPayload as a FactoryResponseEventRunPayload
+func (t FactoryResponseEventPayload) AsFactoryResponseEventRunPayload() (FactoryResponseEventRunPayload, error) {
+	var body FactoryResponseEventRunPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventRunPayload overwrites any union data inside the FactoryResponseEventPayload as the provided FactoryResponseEventRunPayload
+func (t *FactoryResponseEventPayload) FromFactoryResponseEventRunPayload(v FactoryResponseEventRunPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventRunPayload performs a merge with any union data inside the FactoryResponseEventPayload, using the provided FactoryResponseEventRunPayload
+func (t *FactoryResponseEventPayload) MergeFactoryResponseEventRunPayload(v FactoryResponseEventRunPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventTurnPayload returns the union data inside the FactoryResponseEventPayload as a FactoryResponseEventTurnPayload
+func (t FactoryResponseEventPayload) AsFactoryResponseEventTurnPayload() (FactoryResponseEventTurnPayload, error) {
+	var body FactoryResponseEventTurnPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventTurnPayload overwrites any union data inside the FactoryResponseEventPayload as the provided FactoryResponseEventTurnPayload
+func (t *FactoryResponseEventPayload) FromFactoryResponseEventTurnPayload(v FactoryResponseEventTurnPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventTurnPayload performs a merge with any union data inside the FactoryResponseEventPayload, using the provided FactoryResponseEventTurnPayload
+func (t *FactoryResponseEventPayload) MergeFactoryResponseEventTurnPayload(v FactoryResponseEventTurnPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventMessagePayload returns the union data inside the FactoryResponseEventPayload as a FactoryResponseEventMessagePayload
+func (t FactoryResponseEventPayload) AsFactoryResponseEventMessagePayload() (FactoryResponseEventMessagePayload, error) {
+	var body FactoryResponseEventMessagePayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventMessagePayload overwrites any union data inside the FactoryResponseEventPayload as the provided FactoryResponseEventMessagePayload
+func (t *FactoryResponseEventPayload) FromFactoryResponseEventMessagePayload(v FactoryResponseEventMessagePayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventMessagePayload performs a merge with any union data inside the FactoryResponseEventPayload, using the provided FactoryResponseEventMessagePayload
+func (t *FactoryResponseEventPayload) MergeFactoryResponseEventMessagePayload(v FactoryResponseEventMessagePayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventMessageDeltaPayload returns the union data inside the FactoryResponseEventPayload as a FactoryResponseEventMessageDeltaPayload
+func (t FactoryResponseEventPayload) AsFactoryResponseEventMessageDeltaPayload() (FactoryResponseEventMessageDeltaPayload, error) {
+	var body FactoryResponseEventMessageDeltaPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventMessageDeltaPayload overwrites any union data inside the FactoryResponseEventPayload as the provided FactoryResponseEventMessageDeltaPayload
+func (t *FactoryResponseEventPayload) FromFactoryResponseEventMessageDeltaPayload(v FactoryResponseEventMessageDeltaPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventMessageDeltaPayload performs a merge with any union data inside the FactoryResponseEventPayload, using the provided FactoryResponseEventMessageDeltaPayload
+func (t *FactoryResponseEventPayload) MergeFactoryResponseEventMessageDeltaPayload(v FactoryResponseEventMessageDeltaPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventReasoningPayload returns the union data inside the FactoryResponseEventPayload as a FactoryResponseEventReasoningPayload
+func (t FactoryResponseEventPayload) AsFactoryResponseEventReasoningPayload() (FactoryResponseEventReasoningPayload, error) {
+	var body FactoryResponseEventReasoningPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventReasoningPayload overwrites any union data inside the FactoryResponseEventPayload as the provided FactoryResponseEventReasoningPayload
+func (t *FactoryResponseEventPayload) FromFactoryResponseEventReasoningPayload(v FactoryResponseEventReasoningPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventReasoningPayload performs a merge with any union data inside the FactoryResponseEventPayload, using the provided FactoryResponseEventReasoningPayload
+func (t *FactoryResponseEventPayload) MergeFactoryResponseEventReasoningPayload(v FactoryResponseEventReasoningPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventToolPayload returns the union data inside the FactoryResponseEventPayload as a FactoryResponseEventToolPayload
+func (t FactoryResponseEventPayload) AsFactoryResponseEventToolPayload() (FactoryResponseEventToolPayload, error) {
+	var body FactoryResponseEventToolPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventToolPayload overwrites any union data inside the FactoryResponseEventPayload as the provided FactoryResponseEventToolPayload
+func (t *FactoryResponseEventPayload) FromFactoryResponseEventToolPayload(v FactoryResponseEventToolPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventToolPayload performs a merge with any union data inside the FactoryResponseEventPayload, using the provided FactoryResponseEventToolPayload
+func (t *FactoryResponseEventPayload) MergeFactoryResponseEventToolPayload(v FactoryResponseEventToolPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventToolDeltaPayload returns the union data inside the FactoryResponseEventPayload as a FactoryResponseEventToolDeltaPayload
+func (t FactoryResponseEventPayload) AsFactoryResponseEventToolDeltaPayload() (FactoryResponseEventToolDeltaPayload, error) {
+	var body FactoryResponseEventToolDeltaPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventToolDeltaPayload overwrites any union data inside the FactoryResponseEventPayload as the provided FactoryResponseEventToolDeltaPayload
+func (t *FactoryResponseEventPayload) FromFactoryResponseEventToolDeltaPayload(v FactoryResponseEventToolDeltaPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventToolDeltaPayload performs a merge with any union data inside the FactoryResponseEventPayload, using the provided FactoryResponseEventToolDeltaPayload
+func (t *FactoryResponseEventPayload) MergeFactoryResponseEventToolDeltaPayload(v FactoryResponseEventToolDeltaPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventFileChangePayload returns the union data inside the FactoryResponseEventPayload as a FactoryResponseEventFileChangePayload
+func (t FactoryResponseEventPayload) AsFactoryResponseEventFileChangePayload() (FactoryResponseEventFileChangePayload, error) {
+	var body FactoryResponseEventFileChangePayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventFileChangePayload overwrites any union data inside the FactoryResponseEventPayload as the provided FactoryResponseEventFileChangePayload
+func (t *FactoryResponseEventPayload) FromFactoryResponseEventFileChangePayload(v FactoryResponseEventFileChangePayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventFileChangePayload performs a merge with any union data inside the FactoryResponseEventPayload, using the provided FactoryResponseEventFileChangePayload
+func (t *FactoryResponseEventPayload) MergeFactoryResponseEventFileChangePayload(v FactoryResponseEventFileChangePayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventPlanPayload returns the union data inside the FactoryResponseEventPayload as a FactoryResponseEventPlanPayload
+func (t FactoryResponseEventPayload) AsFactoryResponseEventPlanPayload() (FactoryResponseEventPlanPayload, error) {
+	var body FactoryResponseEventPlanPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventPlanPayload overwrites any union data inside the FactoryResponseEventPayload as the provided FactoryResponseEventPlanPayload
+func (t *FactoryResponseEventPayload) FromFactoryResponseEventPlanPayload(v FactoryResponseEventPlanPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventPlanPayload performs a merge with any union data inside the FactoryResponseEventPayload, using the provided FactoryResponseEventPlanPayload
+func (t *FactoryResponseEventPayload) MergeFactoryResponseEventPlanPayload(v FactoryResponseEventPlanPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventProgressPayload returns the union data inside the FactoryResponseEventPayload as a FactoryResponseEventProgressPayload
+func (t FactoryResponseEventPayload) AsFactoryResponseEventProgressPayload() (FactoryResponseEventProgressPayload, error) {
+	var body FactoryResponseEventProgressPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventProgressPayload overwrites any union data inside the FactoryResponseEventPayload as the provided FactoryResponseEventProgressPayload
+func (t *FactoryResponseEventPayload) FromFactoryResponseEventProgressPayload(v FactoryResponseEventProgressPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventProgressPayload performs a merge with any union data inside the FactoryResponseEventPayload, using the provided FactoryResponseEventProgressPayload
+func (t *FactoryResponseEventPayload) MergeFactoryResponseEventProgressPayload(v FactoryResponseEventProgressPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventUsagePayload returns the union data inside the FactoryResponseEventPayload as a FactoryResponseEventUsagePayload
+func (t FactoryResponseEventPayload) AsFactoryResponseEventUsagePayload() (FactoryResponseEventUsagePayload, error) {
+	var body FactoryResponseEventUsagePayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventUsagePayload overwrites any union data inside the FactoryResponseEventPayload as the provided FactoryResponseEventUsagePayload
+func (t *FactoryResponseEventPayload) FromFactoryResponseEventUsagePayload(v FactoryResponseEventUsagePayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventUsagePayload performs a merge with any union data inside the FactoryResponseEventPayload, using the provided FactoryResponseEventUsagePayload
+func (t *FactoryResponseEventPayload) MergeFactoryResponseEventUsagePayload(v FactoryResponseEventUsagePayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventErrorPayload returns the union data inside the FactoryResponseEventPayload as a FactoryResponseEventErrorPayload
+func (t FactoryResponseEventPayload) AsFactoryResponseEventErrorPayload() (FactoryResponseEventErrorPayload, error) {
+	var body FactoryResponseEventErrorPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventErrorPayload overwrites any union data inside the FactoryResponseEventPayload as the provided FactoryResponseEventErrorPayload
+func (t *FactoryResponseEventPayload) FromFactoryResponseEventErrorPayload(v FactoryResponseEventErrorPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventErrorPayload performs a merge with any union data inside the FactoryResponseEventPayload, using the provided FactoryResponseEventErrorPayload
+func (t *FactoryResponseEventPayload) MergeFactoryResponseEventErrorPayload(v FactoryResponseEventErrorPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventStreamGapPayload returns the union data inside the FactoryResponseEventPayload as a FactoryResponseEventStreamGapPayload
+func (t FactoryResponseEventPayload) AsFactoryResponseEventStreamGapPayload() (FactoryResponseEventStreamGapPayload, error) {
+	var body FactoryResponseEventStreamGapPayload
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventStreamGapPayload overwrites any union data inside the FactoryResponseEventPayload as the provided FactoryResponseEventStreamGapPayload
+func (t *FactoryResponseEventPayload) FromFactoryResponseEventStreamGapPayload(v FactoryResponseEventStreamGapPayload) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventStreamGapPayload performs a merge with any union data inside the FactoryResponseEventPayload, using the provided FactoryResponseEventStreamGapPayload
+func (t *FactoryResponseEventPayload) MergeFactoryResponseEventStreamGapPayload(v FactoryResponseEventStreamGapPayload) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t FactoryResponseEventPayload) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *FactoryResponseEventPayload) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
 // AsFactorySession returns the union data inside the FactorySessionGetResponse as a FactorySession
 func (t FactorySessionGetResponse) AsFactorySession() (FactorySession, error) {
 	var body FactorySession
@@ -7431,6 +8477,9 @@ type ServerInterface interface {
 	// Pause one Factory Session
 	// (POST /factory-sessions/{session_id}/pause)
 	PauseFactorySession(w http.ResponseWriter, r *http.Request, sessionId SessionID)
+	// Stream ephemeral response events for one Factory Session
+	// (GET /factory-sessions/{session_id}/response-events)
+	GetFactoryResponseEventsBySessionId(w http.ResponseWriter, r *http.Request, sessionId SessionID, params GetFactoryResponseEventsBySessionIdParams)
 	// Get one live factory session result
 	// (GET /factory-sessions/{session_id}/result)
 	GetFactorySessionResult(w http.ResponseWriter, r *http.Request, sessionId SessionID)
@@ -8113,6 +9162,58 @@ func (siw *ServerInterfaceWrapper) PauseFactorySession(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.PauseFactorySession(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetFactoryResponseEventsBySessionId operation middleware
+func (siw *ServerInterfaceWrapper) GetFactoryResponseEventsBySessionId(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "session_id" -------------
+	var sessionId SessionID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "session_id", mux.Vars(r)["session_id"], &sessionId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "session_id", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetFactoryResponseEventsBySessionIdParams
+
+	// ------------- Optional query parameter "after_sequence" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "after_sequence", r.URL.Query(), &params.AfterSequence)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "after_sequence", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "dispatch_id" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "dispatch_id", r.URL.Query(), &params.DispatchId)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "dispatch_id", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "kind" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "kind", r.URL.Query(), &params.Kind)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetFactoryResponseEventsBySessionId(w, r, sessionId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -8948,6 +10049,8 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/partial-result", wrapper.GetFactorySessionPartialResult).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/pause", wrapper.PauseFactorySession).Methods("POST")
+
+	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/response-events", wrapper.GetFactoryResponseEventsBySessionId).Methods("GET")
 
 	r.HandleFunc(options.BaseURL+"/factory-sessions/{session_id}/result", wrapper.GetFactorySessionResult).Methods("GET")
 

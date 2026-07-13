@@ -1,7 +1,9 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -10,8 +12,82 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
+
+func TestScriptWrapProvider_CursorDiagnosticsUseInjectedDispatchLogger(t *testing.T) {
+	var injectedOutput bytes.Buffer
+	var unrelatedOutput bytes.Buffer
+	encoderConfig := zap.NewProductionEncoderConfig()
+	newCore := func(output *bytes.Buffer) zapcore.Core {
+		return zapcore.NewCore(zapcore.NewJSONEncoder(encoderConfig), zapcore.AddSync(output), zapcore.DebugLevel)
+	}
+	unrelatedUndo := zap.ReplaceGlobals(zap.New(newCore(&unrelatedOutput)))
+	t.Cleanup(unrelatedUndo)
+
+	base := zap.New(newCore(&injectedOutput)).With(
+		zap.String("runtime_instance_id", "runtime-cursor-1"),
+		zap.String("session_id", "factory-session-cursor-1"),
+	)
+	request := interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCursor), Model: "cursor-model", WorkerType: "agent",
+		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-cursor-1", WorkerType: "agent", WorkstationName: "implementation"},
+	}
+
+	for _, tc := range []struct {
+		name      string
+		result    CommandResult
+		wantError bool
+		wantID    string
+	}{
+		{name: "success", result: CommandResult{Stdout: []byte(`{"type":"result","subtype":"success","is_error":false,"result":"done","session_id":"cursor-success-session"}` + "\n")}, wantID: "cursor-success-session"},
+		{name: "failure", result: CommandResult{ExitCode: 1, Stderr: []byte("private cursor failure output"), Stdout: []byte(`{"type":"result","subtype":"timeout","is_error":true,"result":"Request timed out","session_id":"cursor-failure-session"}` + "\n")}, wantError: true, wantID: "cursor-failure-session"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			injectedOutput.Reset()
+			unrelatedOutput.Reset()
+			provider := NewScriptWrapProvider(WithProviderLogger(logging.NewZapLogger(base, false)), WithProviderCommandRunner(&recordingProviderExec{result: tc.result}))
+			_, err := provider.Infer(context.Background(), request)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("Infer error = %v, wantError %v", err, tc.wantError)
+			}
+			if unrelatedOutput.Len() != 0 {
+				t.Fatalf("Cursor diagnostics leaked to unrelated global sink: %s", unrelatedOutput.String())
+			}
+			record := cursorTerminalLogRecord(t, injectedOutput.String(), tc.wantError)
+			for key, want := range map[string]any{"runtime_instance_id": "runtime-cursor-1", "session_id": "factory-session-cursor-1", "dispatch_id": "dispatch-cursor-1", "provider": "cursor", "provider_session_id": tc.wantID} {
+				if record[key] != want {
+					t.Fatalf("%s = %#v, want %#v; record = %#v", key, record[key], want, record)
+				}
+			}
+			if strings.Contains(injectedOutput.String(), "private cursor failure output") {
+				t.Fatalf("Cursor diagnostics leaked command output: %s", injectedOutput.String())
+			}
+		})
+	}
+}
+
+func cursorTerminalLogRecord(t *testing.T, logs string, failure bool) map[string]any {
+	t.Helper()
+	wantMessage := "inferencer: request completed"
+	if failure {
+		wantMessage = "provider failure normalized"
+	}
+	for _, line := range strings.Split(strings.TrimSpace(logs), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("decode Cursor diagnostic: %v", err)
+		}
+		if record["msg"] == wantMessage {
+			return record
+		}
+	}
+	t.Fatalf("terminal Cursor diagnostic %q absent: %s", wantMessage, logs)
+	return nil
+}
 
 func TestScriptWrapProvider_Infer_CursorErrorFlaggedSuccessPublishesOnlyCanonicalFailure(t *testing.T) {
 	scriptDir := t.TempDir()

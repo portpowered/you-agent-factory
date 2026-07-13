@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   browserScenarioTimeoutMs,
   buildTimeoutMs,
+  emptyMaterializedWorkOutcomeState,
   expectNoBrowserErrors,
   initialEditableFactoryDefinitionVersion,
   openBrowserPage,
@@ -46,6 +47,7 @@ function checkpointStorageKey(identity) {
   return [
     identity.backendScopeID,
     identity.factorySessionID,
+    identity.logicalSessionKeyID,
     identity.streamGenerationID,
   ].join("::");
 }
@@ -159,6 +161,8 @@ async function seedTimelineCheckpoint(page, identity, cursor) {
         checkpoint: {
           afterEventId: cursor.afterEventId,
           afterSequence: cursor.afterSequence,
+          materializedWorkOutcomeState:
+            emptyMaterializedWorkOutcomeState(cursor),
           replayState: emptyReplayWorldState(cursor.selectedTick),
           selectedTick: cursor.selectedTick,
         },
