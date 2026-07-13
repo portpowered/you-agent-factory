@@ -186,7 +186,7 @@ func TestValidate_AllowsSameWorkStateIDAcrossDifferentWorkTypes(t *testing.T) {
 func TestValidateBlockingLoad_AllowsLegacyExampleFactoryWithoutEntityIDs(t *testing.T) {
 	t.Parallel()
 
-	path := filepath.Join("..", "..", "..", "examples", "basic", "factory", interfaces.FactoryConfigFile)
+	path := filepath.Join("..", "..", "..", "..", "examples", "basic", "factory", interfaces.FactoryConfigFile)
 	payload, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("ReadFile(%s): %v", path, err)
