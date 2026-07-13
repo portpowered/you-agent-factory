@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"

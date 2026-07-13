@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 )
 
 // NormalizeStartRequest resolves CLI flags, positional values, and stdin into the

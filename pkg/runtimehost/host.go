@@ -30,15 +30,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
-	sessioninvocation "github.com/portpowered/infinite-you/pkg/factorysessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
@@ -108,7 +108,7 @@ type hostRunState struct {
 // concerns: file watcher, dashboard, API server. It owns the full lifecycle
 // so that CLI and other entry points remain thin wrappers.
 //
-// Extracted domains are composed explicitly: pkg/factorysessions owns the live
+// Extracted domains are composed explicitly: pkg/factory/sessions owns the live
 // session registry, pkg/models/local owns managed model runtime wiring, and
 // pkg/workers/hosted owns hosted poller supervision invoked from poller_watcher.
 // pkg/workers/service owns poller and cron supervision invoked from poller_watcher.
@@ -351,7 +351,7 @@ type Config struct {
 	// without running the full save orchestration pipeline.
 	FactorySave FactorySaveSaver
 	// SessionGateway, when non-nil, replaces the default
-	// factorysessions/service gateway collaborator. Tests use this to assert
+	// factory/sessions/service gateway collaborator. Tests use this to assert
 	// OpenFactorySession delegates without running the full open pipeline.
 	SessionGateway SessionGateway
 	// ModelAPI, when non-nil, replaces the default pkg/models/service collaborator.

@@ -8,7 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 // buildTestTopology creates a minimal topology with one work type for testing.

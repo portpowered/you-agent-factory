@@ -128,7 +128,7 @@ Scoped active-surface verification (2026-06-11 UTC):
 ```bash
 rg -n "workflow-previews|WorkflowPreview|pkg/workflow" \
   api/openapi-main.yaml api/components pkg/api pkg/apisurface pkg/cli pkg/mcp \
-  pkg/factorysessionexecution pkg/factorysessions pkg/orchestrators/javascript ui/src
+  pkg/factorysessionexecution pkg/factory/sessions pkg/orchestrators/javascript ui/src
 ```
 
 Remaining hits are **only** generated compatibility aliases
@@ -147,7 +147,7 @@ Focused verification:
 ```bash
 make generate-api
 go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface \
-  ./pkg/apisurface/factorysession ./pkg/factorysessionexecution ./pkg/factorysessions \
+  ./pkg/apisurface/factorysession ./pkg/factorysessionexecution ./pkg/factory/sessions \
   ./pkg/mcp/workflow ./pkg/cli/workflow
 npm --prefix ui run typecheck
 ```
@@ -170,7 +170,7 @@ Scoped residual import verification (2026-06-11 UTC):
 
 ```bash
 rg -n "github.com/portpowered/infinite-you/pkg/workflow(preview|source|validation|policy|result)" \
-  pkg/api pkg/apisurface pkg/cli pkg/mcp pkg/factorysessionexecution pkg/factorysessions \
+  pkg/api pkg/apisurface pkg/cli pkg/mcp pkg/factorysessionexecution pkg/factory/sessions \
   --glob '!**/generated/**'
 rg -n "/workflow-previews|WorkflowPreview" \
   api/openapi-main.yaml api/components pkg/api pkg/apisurface pkg/cli pkg/mcp ui/src \
@@ -457,12 +457,12 @@ packages as the primary preview or JavaScript orchestration owner.
 Focused verification passes:
 
 - `make generate-api` (generated artifacts synchronized)
-- `go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface ./pkg/apisurface/factorysession ./pkg/factorysessionexecution ./pkg/factorysessions ./pkg/mcp/workflow ./pkg/cli/workflow`
+- `go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface ./pkg/apisurface/factorysession ./pkg/factorysessionexecution ./pkg/factory/sessions ./pkg/mcp/workflow ./pkg/cli/workflow`
 - `go test ./pkg/factory/projections/projectiontests ./pkg/factory/events ./pkg/factory/validation`
 - `npm --prefix ui run typecheck`
 - Scoped `rg` verification over `api/openapi-main.yaml`, `api/components`, `pkg/api`,
   `pkg/apisurface`, `pkg/cli`, `pkg/mcp`, `pkg/factorysessionexecution`,
-  `pkg/factorysessions`, `pkg/orchestrators/javascript`, and `ui/src` reports only
+  `pkg/factory/sessions`, `pkg/orchestrators/javascript`, and `ui/src` reports only
   generated compatibility aliases, deprecated OpenAPI compatibility routes/schemas,
   and explicit obsolete/compatibility tests or UI wrappers.
 

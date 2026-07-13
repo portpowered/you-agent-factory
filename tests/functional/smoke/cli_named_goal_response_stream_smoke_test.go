@@ -13,7 +13,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 )
 
 const namedGoalResponseStreamJSONRecordInvocation = "invocation_result"

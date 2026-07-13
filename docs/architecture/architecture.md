@@ -155,11 +155,10 @@ for new placement decisions.
 | Dependency construction and app graph assembly | target `pkg/wire` | Construct one concrete, typed dependency graph and return construction failures before startup; do not select process mode or start long-lived components. |
 | Initializer lifecycle | `pkg/initializer` | Start, stop, cancel, join, and unwind API, CLI, MCP, sidecars, and other already-built process adapters without lazily constructing core services or rebuilding runtime state. |
 | Transport boundaries | target `pkg/transports` | Own HTTP, CLI, MCP, generated transport contracts and clients, and boundary mapping. Translate into injected application/domain services; do not own domain policy or canonical runtime state. |
-| Factory Session live state | `pkg/factorysessions` | Own live session registries, runtime identity, session projections, stream identity, and read models for the customer-facing Factory Session. |
-| Durable Factory Session execution | `pkg/factorysessionexecution` | Own durable start, resume, lifecycle/control, result, dispatch, artifact, event, and persisted execution behavior. |
+| Factory Session state and lifecycle | `pkg/factory/sessions`, with durable execution in `pkg/factory/sessions/execution` | Own live session registries, runtime identity, lifecycle gateways, event and response-stream access, projections, durable start and resume, controls, results, dispatches, artifacts, and persisted execution behavior for the customer-facing Factory Session. |
 | Dynamic workflow / JavaScript orchestration | `pkg/orchestrators/javascript/*` | Put source resolution, validation, policy, preview preparation, runtime execution, result shaping, and checkpoints under the JavaScript orchestrator packages. |
 | Factory runtime loop and projections | `pkg/factory` | Own event-first runtime behavior, subsystem coordination, emitted Factory events, replay, and world-state projections. |
-| Internal Petri implementation | `pkg/petri` | Keep tokens, places, transitions, markings, and guard mechanics internal; do not promote them as the primary public resource model. |
+| Internal Petri implementation | `pkg/orchestrators/petri` | Keep tokens, places, transitions, markings, and guard mechanics internal; do not promote them as the primary public resource model. |
 | Workers and providers | `pkg/workers` and `pkg/workers/hosted` | Put worker execution, provider adapters, mock workers, process runners, sidecars, and hosted-worker integrations in the worker owner. |
 | Models and managed runtimes | `pkg/models/host` | Put process-wide model runtime lifecycle, readiness, supervised servers, leases, capacity, and diagnostics in the model host; keep API/CLI adapters in `pkg/models/service`. |
 | Work domain | target `pkg/work` | Own Work and Work Request content, query/selection, graph/lineage, pure invocation input and return policy, materialization, and cron/time-work concepts. Exclude Factory Session orchestration, worker/provider execution, and generic platform clocks. |
@@ -209,7 +208,7 @@ or part of an active removal lane.
 
 | Migration-era surface | Temporary role | Target owner or sunset expectation |
 | --- | --- | --- |
-| Broad `pkg/service` runtime composition files, including `factory.go`, `factory_build.go`, `runtime_sessions.go`, `model_catalog.go`, and `factory_editable_definition.go` | Compatibility shell for existing API, CLI, session, model, save, and runtime construction entrypoints. | Move durable behavior to the narrow owner: Factory Session state to `pkg/factorysessions`, durable execution to `pkg/factorysessionexecution`, model behavior to `pkg/models/host` and `pkg/models/service`, Work behavior to target `pkg/work`, factory definition behavior to `pkg/factorydefinition/service`, and startup graph construction to target `pkg/wire`. Leave `pkg/service` as thin routing until Batch 007 convergence and Batch 008 deletion gates are complete. |
+| Broad `pkg/service` runtime composition files, including `factory.go`, `factory_build.go`, `runtime_sessions.go`, `model_catalog.go`, and `factory_editable_definition.go` | Compatibility shell for existing API, CLI, session, model, save, and runtime construction entrypoints. | Keep converged Factory Session state and durable execution in `pkg/factory/sessions`, factory definition behavior in `pkg/factory/definition`, model behavior in `pkg/models/host` and `pkg/models/service`, Work behavior in target `pkg/work`, and startup graph construction in target `pkg/wire`. Leave `pkg/service` as thin routing until the Batch 007 convergence and Batch 008 deletion gates are complete. |
 | `pkg/runtimehost` | Transitional wrapper around the service-backed runtime host shape. | Replace host ownership with explicit Factory Session, runtime loop, and initializer dependencies. Sunset the package once transports and session APIs no longer need a runtime-host facade around `FactoryService` compatibility. |
 | `pkg/composebridge` | Bridge that lets `pkg/initializer` reuse service-owned runtime bundle construction during the migration. | Move dependency graph assembly to target `pkg/wire` and keep lifecycle execution in `pkg/initializer`. Delete the bridge under Batch 008 when initializer paths consume the explicit graph without reaching through service composition internals. |
 | Host-object dependency-injection adapters such as service-local `factoryDefinitionHost`, `factorySaveHost`, and `sessionGatewayHost` structs, plus cmd-owned Wire providers under `cmd/factory/compose` | Adapter objects that satisfy narrower service interfaces while the old coordinator still carries many collaborators. | Prefer explicit constructor inputs and graph assembly in target `pkg/wire`, with domain packages owning their own host interfaces only at the boundary they actually consume. Delete each adapter when the target owner accepts explicit collaborators or the old coordinator no longer fronts that behavior. |
@@ -283,7 +282,7 @@ aligned with live control operations.
 
 ### Canonical Factory Session recording ownership
 
-`pkg/factorysessionexecution` is the sole production owner for recording and
+`pkg/factory/sessions/execution` is the sole production owner for recording and
 persisting canonical Factory Session events. Orchestrators report runtime facts
 and explicitly typed orchestration records to that owner; they do not append a
 parallel public history, persist canonical events directly, or mutate canonical
@@ -297,13 +296,13 @@ JavaScript checkpoints remain tagged JavaScript runtime records with their
 checkpoint and resume semantics. Petri marking and transition records remain
 internal Petri records. The Petri runtime reports final output mutations through
 `factory.WithPetriMutationRecorder` only after transition routing has determined
-their marking semantics; `pkg/factorysessionexecution` persists those records
+their marking semantics; `pkg/factory/sessions/execution` persists those records
 before the runtime accepts the completed tick. Either record may cause a separate canonical event when
 it independently represents a public Factory Session fact, but neither is
 retyped merely to make orchestration histories look alike.
 
 `make durable-runtime-construction-check` enforces this boundary. It rejects
-canonical event construction outside `pkg/factorysessionexecution` and direct
+canonical event construction outside `pkg/factory/sessions/execution` and direct
 JavaScript-orchestrator imports of session persistence, with diagnostics that
 direct the caller back to the Factory Session recorder. Tests and typed
 orchestration-record definitions remain permitted.

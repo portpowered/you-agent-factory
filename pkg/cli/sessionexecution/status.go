@@ -10,12 +10,12 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 )
 
 // StatusConfig holds CLI inputs for one durable Factory Session status read.
 type StatusConfig struct {
-	SessionID          string
+	SessionID string
 	ExecutionBackendConfig
 	JSON               bool
 	Output             io.Writer

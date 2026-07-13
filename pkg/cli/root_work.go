@@ -11,7 +11,7 @@ import (
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
 	workflowcli "github.com/portpowered/infinite-you/pkg/cli/workflow"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/spf13/cobra"
 )

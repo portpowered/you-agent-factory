@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 )
 

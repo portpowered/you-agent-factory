@@ -9,14 +9,14 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 )
 
 // ResultConfig holds CLI inputs for one durable Factory Session result read.
 type ResultConfig struct {
-	SessionID          string
-	Mode               string
-	IncludeArtifacts   bool
+	SessionID        string
+	Mode             string
+	IncludeArtifacts bool
 	ExecutionBackendConfig
 	JSON               bool
 	Output             io.Writer

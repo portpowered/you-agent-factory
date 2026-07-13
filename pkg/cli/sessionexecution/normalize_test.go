@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/cli/sessionexecution"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 

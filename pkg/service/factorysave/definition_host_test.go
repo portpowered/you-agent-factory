@@ -7,8 +7,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
-	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 )
 
 var testDefinitionService = factorydefinition.New(stubDefinitionHost{})
@@ -105,34 +105,43 @@ func prepareEditableFactoryPersistView(
 }
 
 type saveDefinitionHostAdapter struct {
-	saveHost Host
+	saveHost definitionSaveHost
 	rootDir  string
 }
 
-func saveReplaceCurrentThroughDefinition(
-	rootDir string,
-	saveHost Host,
-	ctx context.Context,
-	sessionID string,
-	request factoryapi.Factory,
-) (factoryapi.Factory, error) {
-	return factorydefinition.New(saveDefinitionHostAdapter{
-		saveHost: saveHost,
-		rootDir:  rootDir,
-	}).SaveReplaceCurrentForSession(ctx, sessionID, request)
+type definitionSaveHost interface {
+	RequireSession(sessionID string) (*factorysessions.LiveSession, error)
+	SessionRuntimeConfig(sessionID string) (*factoryconfig.LoadedFactoryConfig, error)
+	GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error)
+	WithActivationLock(fn func() error) error
+	RequireIdleRuntimeForSession(ctx context.Context, sessionID string) error
+	ActivateSessionEditableFactory(
+		ctx context.Context,
+		session *factorysessions.LiveSession,
+		sessionID string,
+		sessionRootDir string,
+		factoryDir string,
+		name factoryapi.FactoryName,
+		runtimeName string,
+	) error
+	ReplaceFactoryLayoutAtDir(
+		targetDir string,
+		prepared *factoryconfig.PreparedFactoryLayoutPayload,
+	) (*factoryconfig.FactorySplitLayoutReplaceResult, error)
 }
 
-func saveUpsertNamedThroughDefinition(
+func saveFactoryThroughDefinition(
 	rootDir string,
-	saveHost Host,
+	saveHost definitionSaveHost,
 	ctx context.Context,
 	sessionID string,
+	mode factoryapi.FactorySaveMode,
 	request factoryapi.Factory,
 ) (factoryapi.Factory, error) {
 	return factorydefinition.New(saveDefinitionHostAdapter{
 		saveHost: saveHost,
 		rootDir:  rootDir,
-	}).SaveUpsertNamedAndActivateForSession(ctx, sessionID, request)
+	}).Save(ctx, sessionID, mode, request)
 }
 
 func (h saveDefinitionHostAdapter) PersistRootDir() string { return h.rootDir }
@@ -156,7 +165,7 @@ func (h saveDefinitionHostAdapter) SessionRuntimeConfig(sessionID string) (*fact
 }
 
 func (h saveDefinitionHostAdapter) SessionFactoryPersistRoot(session *factorysessions.LiveSession) string {
-	return SessionFactoryPersistRoot(h.rootDir, session)
+	return factorydefinition.SessionFactoryPersistRoot(h.rootDir, session)
 }
 
 func (h saveDefinitionHostAdapter) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {

@@ -1,6 +1,6 @@
 package runtimehost
 
-import sessioninvocation "github.com/portpowered/infinite-you/pkg/factorysessions/invocation"
+import sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 
 // InvocationMetric records one emitted runtime counter together with its
 // low-cardinality dimensions.

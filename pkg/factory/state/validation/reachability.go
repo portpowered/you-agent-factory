@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 // ReachabilityValidator checks that every INITIAL place can reach at least one

@@ -2,7 +2,7 @@ package workstationconfig
 
 import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 const DefaultMaxRetries = 3
