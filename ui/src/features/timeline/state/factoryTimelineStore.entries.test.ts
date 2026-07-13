@@ -75,8 +75,12 @@ describe("factory timeline stream entries", () => {
     expect(entryB?.currentReplayCheckpoint?.afterEventId).toBe("event-b");
     expect(entryA?.worldViewCache[4]).toBeUndefined();
     expect(entryB?.worldViewCache[1]).toBeUndefined();
-    expect(entryA?.materializedWorkOutcomeState.cursor).toBeNull();
-    expect(entryB?.materializedWorkOutcomeState.cursor).toBeNull();
+    expect(entryA?.materializedWorkOutcomeState.cursor?.eventID).toBe(
+      "event-a",
+    );
+    expect(entryB?.materializedWorkOutcomeState.cursor?.eventID).toBe(
+      "event-b",
+    );
     expect(entryA?.materializedWorkOutcomeState).not.toBe(
       entryB?.materializedWorkOutcomeState,
     );

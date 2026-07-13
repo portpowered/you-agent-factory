@@ -2,7 +2,11 @@ import type { DashboardSnapshot } from "../../../../api/dashboard";
 import type { FactoryEvent } from "../../../../api/events";
 import type { FactoryTimelineProjection } from "./buildSnapshot";
 import type { StreamDerivedCacheIdentity } from "../../lib/stream-derived-cache-identity";
-import type { MaterializedWorkOutcomeState } from "../../../work-outcome/public/materializer";
+import {
+  createMaterializedWorkOutcomeState,
+  type MaterializedWorkOutcomeState,
+  reduceMaterializedWorkOutcomeEvents,
+} from "../../../work-outcome/public/materializer";
 import { projectSnapshot } from "./projectSnapshot";
 import {
   emptyWorldRuntime,
@@ -133,6 +137,7 @@ export function emptyTimelineState(): Pick<
   | "currentReplayCheckpoint"
   | "events"
   | "latestTick"
+  | "materializedWorkOutcomeState"
   | "mode"
   | "receivedEventIDs"
   | "selectedTick"
@@ -142,6 +147,7 @@ export function emptyTimelineState(): Pick<
     currentReplayCheckpoint: undefined,
     events: [],
     latestTick: 0,
+    materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
     mode: "current",
     receivedEventIDs: [],
     selectedTick: 0,
@@ -198,15 +204,17 @@ function projectCurrentTick(
   selectedTick: number,
   deps: TimelineStoreStateDeps,
   checkpoint?: FactoryTimelineCheckpoint,
+  acceptedTail?: FactoryEvent[],
 ): TimelineCheckpointProjection {
   const usableCheckpoint =
     checkpoint && checkpoint.selectedTick <= selectedTick
       ? checkpoint
       : undefined;
   const projectionEvents = usableCheckpoint
-    ? events.filter(
+    ? (acceptedTail ??
+      events.filter(
         (event) => event.context.tick > usableCheckpoint.selectedTick,
-      )
+      ))
     : events;
   return checkpointFromProjection(
     events,
@@ -225,6 +233,7 @@ export function appendTimelineEvents(
     | "events"
     | "currentReplayCheckpoint"
     | "latestTick"
+    | "materializedWorkOutcomeState"
     | "mode"
     | "receivedEventIDs"
     | "selectedTick"
@@ -237,64 +246,76 @@ export function appendTimelineEvents(
   | "events"
   | "currentReplayCheckpoint"
   | "latestTick"
+  | "materializedWorkOutcomeState"
   | "mode"
   | "receivedEventIDs"
   | "selectedTick"
   | "worldViewCache"
 > {
   const receivedEventIDs = new Set(current.receivedEventIDs);
-  const nextEvents = incomingEvents.filter(
-    (event) => !receivedEventIDs.has(event.id),
-  );
-
-  if (nextEvents.length === 0) {
-    return {
-      events: current.events,
-      currentReplayCheckpoint: current.currentReplayCheckpoint,
-      latestTick: current.latestTick,
-      mode: current.mode,
-      receivedEventIDs: current.receivedEventIDs,
-      selectedTick: current.selectedTick,
-      worldViewCache: current.worldViewCache,
-    };
+  const unorderedAcceptedEvents: FactoryEvent[] = [];
+  for (const event of incomingEvents) {
+    if (receivedEventIDs.has(event.id)) {
+      continue;
+    }
+    receivedEventIDs.add(event.id);
+    unorderedAcceptedEvents.push(event);
   }
 
-  const events = deps.orderedEvents([...current.events, ...nextEvents]);
-  const latestTick = nextEvents.reduce(
+  if (unorderedAcceptedEvents.length === 0) {
+    return current;
+  }
+
+  const acceptedEventIDs = new Set(
+    unorderedAcceptedEvents.map((event) => event.id),
+  );
+  const events = deps.orderedEvents([
+    ...current.events,
+    ...unorderedAcceptedEvents,
+  ]);
+  const acceptedTail = events.filter((event) => acceptedEventIDs.has(event.id));
+  const latestTick = acceptedTail.reduce(
     (maxTick, event) => Math.max(maxTick, event.context.tick),
     current.latestTick,
   );
   const selectedTick =
     current.mode === "current" ? latestTick : current.selectedTick;
-  const currentProjection =
-    current.mode === "current"
-      ? projectCurrentTick(
-          events,
-          selectedTick,
-          deps,
-          current.currentReplayCheckpoint,
-        )
-      : current.currentReplayCheckpoint;
+  const currentProjection = projectCurrentTick(
+    events,
+    latestTick,
+    deps,
+    current.currentReplayCheckpoint,
+    acceptedTail,
+  );
+  const materializedWorkOutcomeState = reduceMaterializedWorkOutcomeEvents(
+    current.materializedWorkOutcomeState,
+    acceptedTail,
+  );
+  const selectedWorldViewCache = cacheWithSnapshot(
+    events,
+    current.worldViewCache,
+    selectedTick,
+    deps,
+  );
 
   return {
     events,
-    currentReplayCheckpoint:
-      currentProjection && "checkpoint" in currentProjection
-        ? currentProjection.checkpoint
-        : currentProjection,
+    currentReplayCheckpoint: currentProjection.checkpoint,
     latestTick,
+    materializedWorkOutcomeState,
     mode: current.mode,
     receivedEventIDs: [
       ...current.receivedEventIDs,
-      ...nextEvents.map((event) => event.id),
+      ...acceptedTail.map((event) => event.id),
     ],
     selectedTick,
     worldViewCache:
-      current.mode === "current" &&
-      currentProjection &&
-      "worldState" in currentProjection
+      current.mode === "current"
         ? { [selectedTick]: currentProjection.worldState }
-        : cacheWithSnapshot(events, {}, selectedTick, deps),
+        : {
+            ...selectedWorldViewCache,
+            [latestTick]: currentProjection.worldState,
+          },
   };
 }
 

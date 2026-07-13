@@ -75,14 +75,7 @@ describe("timeline storeState helpers", () => {
 
     const next = appendTimelineEvents(current, [], deps);
 
-    expect(next).toEqual({
-      events: current.events,
-      latestTick: current.latestTick,
-      mode: current.mode,
-      receivedEventIDs: current.receivedEventIDs,
-      selectedTick: current.selectedTick,
-      worldViewCache: current.worldViewCache,
-    });
+    expect(next).toBe(current);
   });
 
   it("returns current state when all appended events are duplicates", () => {
@@ -98,14 +91,7 @@ describe("timeline storeState helpers", () => {
 
     const next = appendTimelineEvents(current, [event], deps);
 
-    expect(next).toEqual({
-      events: current.events,
-      latestTick: current.latestTick,
-      mode: current.mode,
-      receivedEventIDs: current.receivedEventIDs,
-      selectedTick: current.selectedTick,
-      worldViewCache: current.worldViewCache,
-    });
+    expect(next).toBe(current);
   });
 
   it("keeps selected tick in fixed mode when appending events", () => {

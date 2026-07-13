@@ -1,5 +1,4 @@
 import type { StreamDerivedCacheIdentity } from "../../lib/stream-derived-cache-identity";
-import { createMaterializedWorkOutcomeState } from "../../../work-outcome/public/materializer";
 import {
   emptyTimelineState,
   type FactoryTimelineEntryState,
@@ -27,14 +26,20 @@ export function createFactoryTimelineEntry(
   return {
     ...emptyTimelineState(),
     identity: { ...identity },
-    materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
   };
 }
 
 export function withEntryTimelineState(
   entry: FactoryTimelineEntryState,
-  timeline: ReturnType<typeof emptyTimelineState>,
+  timeline: Omit<
+    ReturnType<typeof emptyTimelineState>,
+    "materializedWorkOutcomeState"
+  > &
+    Partial<Pick<FactoryTimelineEntryState, "materializedWorkOutcomeState">>,
 ): FactoryTimelineEntryState {
+  if (timeline === entry) {
+    return entry;
+  }
   return {
     ...entry,
     ...timeline,

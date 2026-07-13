@@ -5,7 +5,6 @@ import {
   normalizeStreamDerivedCacheIdentity,
   type StreamDerivedCacheIdentity,
 } from "../lib/stream-derived-cache-identity";
-import { createMaterializedWorkOutcomeState } from "../../work-outcome/public/materializer";
 import {
   buildFactoryTimelineProjection as buildProjectedTimelineProjection,
   buildFactoryTimelineSnapshot as buildProjectedTimelineSnapshot,
@@ -14,7 +13,7 @@ import {
 export { resolveConfiguredWorkTypeName } from "./timeline/projectTopology";
 
 import {
-  advanceWorldStateFromCheckpoint,
+  advanceWorldStateFromAcceptedTail,
   reconstructWorldState,
 } from "./timeline/replayWorldState";
 import { orderedEvents } from "./timeline/shared";
@@ -65,8 +64,8 @@ const timelineStoreStateDeps: TimelineStoreStateDeps = {
       selectedTick,
       checkpoint
         ? (nextEvents, nextSelectedTick) =>
-            advanceWorldStateFromCheckpoint(
-              checkpoint.replayState,
+            advanceWorldStateFromAcceptedTail(
+              structuredClone(checkpoint.replayState),
               nextEvents,
               nextSelectedTick,
             )
@@ -98,9 +97,16 @@ function entryStateForMutation(
   const normalized = exactIdentity(identity);
   const key = factoryTimelineEntryKey(normalized);
   const existing = state.entriesByKey[key];
+  const identityIsUnchanged =
+    existing?.identity.backendScopeID === normalized.backendScopeID &&
+    existing.identity.factorySessionID === normalized.factorySessionID &&
+    existing.identity.logicalSessionKeyID === normalized.logicalSessionKeyID &&
+    existing.identity.streamGenerationID === normalized.streamGenerationID;
   return {
     entry: existing
-      ? { ...existing, identity: normalized }
+      ? identityIsUnchanged
+        ? existing
+        : { ...existing, identity: normalized }
       : createFactoryTimelineEntry(normalized),
     key,
   };
@@ -301,7 +307,6 @@ function activeEntryActions(set: TimelineStoreSet) {
         activeEntryKey: null,
         ...emptyTimelineState(),
         entriesByKey: {},
-        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
       });
     },
     restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => {
@@ -349,7 +354,6 @@ export const useFactoryTimelineStore = create<FactoryTimelineState>(
     activeEntryKey: null,
     ...initialTimelineState,
     entriesByKey: {},
-    materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
     ...activeEntryActions(set),
     ...exactEntryActions(set, get),
   }),
