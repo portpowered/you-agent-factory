@@ -13,6 +13,7 @@ import {
   type IndexedDBLike,
   indexedDBRequestToPromise,
   openCheckpointDatabase,
+  writeCheckpointDatabaseRecord,
 } from "./checkpoint-persistence/indexedDBCheckpointRequests";
 import {
   buildPersistedCheckpoint,
@@ -63,23 +64,6 @@ function matchesStoredCheckpointFactorySessionID(
     return storedFactorySessionID === requestedSessionID;
   }
   return normalizeFactorySessionUUID(envelope.sessionID) === requestedSessionID;
-}
-
-async function writeIndexedCheckpoint(
-  indexedDB: IndexedDBLike,
-  envelope: TimelineCheckpointEnvelope,
-): Promise<void> {
-  const database = await openCheckpointDatabase(indexedDB);
-  try {
-    const transaction = database.transaction(
-      CHECKPOINT_STORE_NAME,
-      "readwrite",
-    );
-    const store = transaction.objectStore(CHECKPOINT_STORE_NAME);
-    await indexedDBRequestToPromise(store.put(envelope));
-  } finally {
-    database.close();
-  }
 }
 
 async function readIndexedCheckpoint(
@@ -414,7 +398,7 @@ export async function persistTimelineCheckpoint(
   } satisfies TimelineCheckpointEnvelope;
 
   try {
-    await writeIndexedCheckpoint(indexedDB, envelope);
+    await writeCheckpointDatabaseRecord(indexedDB, envelope);
   } catch {
     // Preserve any previously committed checkpoint when its replacement fails.
   }

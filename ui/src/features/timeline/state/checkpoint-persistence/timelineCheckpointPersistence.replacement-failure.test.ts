@@ -79,6 +79,7 @@ describe("timeline checkpoint replacement failure", () => {
     expect(records.size).toBe(0);
 
     controls.succeed("put");
+    controls.completeTransaction();
     await firstWrite;
     expect(controls.pendingOperations()).not.toContain("delete");
     expect([...records.values()][0]?.checkpoint).toMatchObject({
@@ -134,6 +135,7 @@ describe("timeline checkpoint replacement failure", () => {
     controls.succeed("open");
     await flushPromiseContinuations();
     controls.succeed("put");
+    controls.completeTransaction();
     await write;
     const stored = [...records.entries()][0];
     if (!stored) {

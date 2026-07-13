@@ -6,6 +6,27 @@ const CHECKPOINT_DB_NAME = "agentFactoryTimelineCheckpoints";
 const CHECKPOINT_DB_VERSION = 3;
 const CHECKPOINT_STORE_NAME = "checkpoints";
 
+export async function writeCheckpointDatabaseRecord(
+  indexedDB: IndexedDBLike,
+  value: unknown,
+): Promise<void> {
+  const database = await openCheckpointDatabase(indexedDB);
+  try {
+    const transaction = database.transaction(
+      CHECKPOINT_STORE_NAME,
+      "readwrite",
+    );
+    await Promise.all([
+      indexedDBRequestToPromise(
+        transaction.objectStore(CHECKPOINT_STORE_NAME).put(value),
+      ),
+      indexedDBTransactionToPromise(transaction),
+    ]);
+  } finally {
+    database.close();
+  }
+}
+
 export function openCheckpointDatabase(
   indexedDB: IndexedDBLike,
 ): Promise<IDBDatabase> {
@@ -61,5 +82,23 @@ export function indexedDBRequestToPromise<T>(
       return;
     }
     signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+export function indexedDBTransactionToPromise(
+  transaction: IDBTransaction,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = () =>
+      reject(
+        transaction.error ??
+          new Error("timeline checkpoint IndexedDB transaction aborted"),
+      );
+    transaction.onerror = () =>
+      reject(
+        transaction.error ??
+          new Error("timeline checkpoint IndexedDB transaction failed"),
+      );
   });
 }
