@@ -995,15 +995,12 @@ func assertGeneratedFactoryResponseEventRoundTrip(t *testing.T, event factoryapi
 
 	var roundTripped factoryapi.FactoryResponseEvent
 	decodeRoundTripJSON(t, encoded, &roundTripped, "round-tripped response-event "+event.EventId)
-	if roundTripped.Kind != event.Kind || roundTripped.Phase != event.Phase {
-		t.Fatalf(
-			"round-tripped response-event %s kind/phase = %s/%s, want %s/%s",
-			event.EventId,
-			roundTripped.Kind,
-			roundTripped.Phase,
-			event.Kind,
-			event.Phase,
-		)
+	roundTrippedJSON, err := json.Marshal(roundTripped)
+	if err != nil {
+		t.Fatalf("marshal round-tripped FactoryResponseEvent %s: %v", event.EventId, err)
+	}
+	if !bytes.Equal(encoded, roundTrippedJSON) {
+		t.Fatalf("generated FactoryResponseEvent round trip changed wire bytes:\nbefore=%s\nafter=%s", encoded, roundTrippedJSON)
 	}
 	assertGeneratedFactoryResponseEventPayloadDecodes(t, roundTripped)
 }

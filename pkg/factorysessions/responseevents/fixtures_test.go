@@ -77,6 +77,35 @@ func TestFixtureRoundTrip_MarshalIsDeterministic(t *testing.T) {
 	}
 }
 
+func TestFixtures_CoverPopulatedAndOmittedOptionalFields(t *testing.T) {
+	t.Parallel()
+
+	populated := loadFixtureEvent(t, "message_snapshot")
+	for field, value := range map[string]string{
+		"dispatchId":         populated.DispatchID,
+		"turnId":             populated.TurnID,
+		"itemId":             populated.ItemID,
+		"parentItemId":       populated.ParentItemID,
+		"providerSessionRef": populated.ProviderSessionRef,
+		"nativeEventSubtype": populated.Provenance.NativeEventSubtype,
+	} {
+		if value == "" {
+			t.Fatalf("message_snapshot optional field %s must be populated", field)
+		}
+	}
+
+	omitted := loadFixtureEvent(t, "stream_gap")
+	encoded, err := json.Marshal(omitted)
+	if err != nil {
+		t.Fatalf("json.Marshal(stream_gap) error = %v", err)
+	}
+	for _, field := range []string{"dispatchId", "turnId", "itemId", "parentItemId", "providerSessionRef", "nativeEventSubtype"} {
+		if bytes.Contains(encoded, []byte(`"`+field+`"`)) {
+			t.Fatalf("stream_gap optional field %s must be omitted: %s", field, encoded)
+		}
+	}
+}
+
 func TestFixtures_ContainNoProviderNativeProtocolFields(t *testing.T) {
 	t.Parallel()
 
