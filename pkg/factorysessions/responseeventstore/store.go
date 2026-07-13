@@ -22,6 +22,7 @@ type SessionResponseEventStore struct {
 	nextSequence     int64
 	events           []responseevents.FactoryResponseEvent
 	eventSizes       []int
+	droppedSequences []sequenceSpan
 	limits           RetentionLimits
 	retainedBytes    int
 	closed           bool
@@ -101,7 +102,9 @@ func (s *SessionResponseEventStore) SetRetentionLimits(limits RetentionLimits) e
 	s.mu.Lock()
 	s.limits = limits
 	s.enforceRetentionLocked()
+	subscribers := s.subscribersSnapshotLocked()
 	s.mu.Unlock()
+	notifyStoreSubscribers(subscribers)
 	return nil
 }
 
@@ -240,6 +243,7 @@ func (s *SessionResponseEventStore) enforceRetentionLocked() {
 			return
 		}
 		s.retainedBytes -= s.eventSizes[index]
+		s.droppedSequences = addDroppedSequence(s.droppedSequences, s.events[index].Sequence)
 		copy(s.events[index:], s.events[index+1:])
 		s.events = s.events[:len(s.events)-1]
 		copy(s.eventSizes[index:], s.eventSizes[index+1:])

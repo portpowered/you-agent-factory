@@ -3,9 +3,12 @@ package responseeventstore
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 )
+
+const retentionGapReason = "retention_window"
 
 const (
 	defaultMaxRetainedEvents = 10_000
@@ -35,6 +38,56 @@ func DefaultRetentionLimits() RetentionLimits {
 type RetentionAccounting struct {
 	EventCount int
 	TotalBytes int
+}
+
+// sequenceSpan is an inclusive range of unavailable published sequences.
+// Spans stay disjoint and ordered. Their count is bounded by the retained
+// records that separate them, so exact stale-cursor reporting does not create
+// another unbounded per-session event history.
+type sequenceSpan struct {
+	from int64
+	to   int64
+}
+
+func addDroppedSequence(spans []sequenceSpan, sequence int64) []sequenceSpan {
+	index := sort.Search(len(spans), func(index int) bool {
+		return spans[index].to >= sequence-1
+	})
+	if index == len(spans) {
+		return append(spans, sequenceSpan{from: sequence, to: sequence})
+	}
+	if sequence < spans[index].from-1 {
+		spans = append(spans, sequenceSpan{})
+		copy(spans[index+1:], spans[index:])
+		spans[index] = sequenceSpan{from: sequence, to: sequence}
+		return spans
+	}
+	if sequence < spans[index].from {
+		spans[index].from = sequence
+	}
+	if sequence > spans[index].to {
+		spans[index].to = sequence
+	}
+	if index+1 < len(spans) && spans[index].to+1 >= spans[index+1].from {
+		spans[index].to = spans[index+1].to
+		copy(spans[index+1:], spans[index+2:])
+		spans = spans[:len(spans)-1]
+	}
+	return spans
+}
+
+func droppedBoundsAfter(spans []sequenceSpan, afterSequence int64) (int64, int64, bool) {
+	index := sort.Search(len(spans), func(index int) bool {
+		return spans[index].to > afterSequence
+	})
+	if index == len(spans) {
+		return 0, 0, false
+	}
+	from := spans[index].from
+	if from <= afterSequence {
+		from = afterSequence + 1
+	}
+	return from, spans[len(spans)-1].to, true
 }
 
 // SerializedEventSize returns the production byte-accounting size for an
