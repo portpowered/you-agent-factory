@@ -112,3 +112,15 @@ func TestValidateInitNewFactoryNestedDir_RejectsPopulatedNestedDirectory(t *test
 		t.Fatalf("ValidationReasonFromError = (%q, %q, %v), want conflict on folderPath", reason, field, ok)
 	}
 }
+
+func TestNewSessionResponseEventStoreAlias(t *testing.T) {
+	t.Parallel()
+
+	store := NewSessionResponseEventStore("session-alias")
+	if store == nil {
+		t.Fatal("NewSessionResponseEventStore returned nil")
+	}
+	if got := store.FactorySessionID(); got != "session-alias" {
+		t.Fatalf("FactorySessionID() = %q, want session-alias", got)
+	}
+}
