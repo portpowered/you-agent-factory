@@ -2,6 +2,7 @@ package responseeventstore
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
@@ -44,6 +45,24 @@ func (s *storeSubscriber) close() {
 	})
 }
 
+// SubscribeOption configures one response-event store subscription.
+type SubscribeOption func(*subscribeConfig)
+
+type subscribeConfig struct {
+	dispatchID          string
+	hasDispatchFilter   bool
+}
+
+// WithDispatchFilter limits delivery to events whose dispatchId matches the
+// supplied identity. An empty dispatch ID is rejected.
+func WithDispatchFilter(dispatchID string) SubscribeOption {
+	trimmed := strings.TrimSpace(dispatchID)
+	return func(config *subscribeConfig) {
+		config.dispatchID = trimmed
+		config.hasDispatchFilter = true
+	}
+}
+
 // Subscription is a catch-up-then-live cursor over one session response-event store.
 type Subscription struct {
 	store        *SessionResponseEventStore
@@ -52,14 +71,27 @@ type Subscription struct {
 
 	mu            sync.Mutex
 	afterSequence int64
+	dispatchID    string
 }
 
 // Subscribe registers one consumer starting after the supplied sequence. The
 // subscriber can call Next to drain retained events with sequence greater than
 // afterSequence, then continue receiving live publishes in ascending order.
-func (s *SessionResponseEventStore) Subscribe(afterSequence int64) (*Subscription, error) {
+// Optional dispatch filters omit non-matching events while preserving each
+// delivered event's global session sequence and eventId.
+func (s *SessionResponseEventStore) Subscribe(afterSequence int64, opts ...SubscribeOption) (*Subscription, error) {
 	if s == nil {
 		return nil, ErrStoreClosed
+	}
+
+	var config subscribeConfig
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&config)
+		}
+	}
+	if config.hasDispatchFilter && config.dispatchID == "" {
+		return nil, errInvalidDispatchFilter
 	}
 
 	subscriber := newStoreSubscriber()
@@ -77,7 +109,17 @@ func (s *SessionResponseEventStore) Subscribe(afterSequence int64) (*Subscriptio
 		subscriber:    subscriber,
 		subscriberID:  subscriberID,
 		afterSequence: afterSequence,
+		dispatchID:    config.dispatchID,
 	}, nil
+}
+
+// DispatchFilter returns the dispatch identity limiting this subscription, or
+// empty when the subscription is unfiltered.
+func (s *Subscription) DispatchFilter() string {
+	if s == nil {
+		return ""
+	}
+	return s.dispatchID
 }
 
 // SubscriberCount reports active subscription registrations on the store.
@@ -131,9 +173,10 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 	for {
 		s.mu.Lock()
 		afterSequence := s.afterSequence
+		dispatchID := s.dispatchID
 		s.mu.Unlock()
 
-		events, closed := s.store.readForSubscriber(afterSequence)
+		events, closed := s.store.readForSubscriber(afterSequence, dispatchID)
 		if closed {
 			return nil, ErrSubscriptionClosed
 		}
@@ -158,29 +201,37 @@ func (s *Subscription) advance(events []responseevents.FactoryResponseEvent) {
 	s.afterSequence = events[len(events)-1].Sequence
 }
 
-func (s *SessionResponseEventStore) readForSubscriber(afterSequence int64) ([]responseevents.FactoryResponseEvent, bool) {
+func (s *SessionResponseEventStore) readForSubscriber(afterSequence int64, dispatchID string) ([]responseevents.FactoryResponseEvent, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if s.closed {
 		return nil, true
 	}
-	return s.eventsAfterLocked(afterSequence), false
+	return s.eventsAfterLocked(afterSequence, dispatchID), false
 }
 
-func (s *SessionResponseEventStore) eventsAfterLocked(afterSequence int64) []responseevents.FactoryResponseEvent {
+func (s *SessionResponseEventStore) eventsAfterLocked(afterSequence int64, dispatchID string) []responseevents.FactoryResponseEvent {
 	if len(s.events) == 0 {
 		return nil
 	}
 	out := make([]responseevents.FactoryResponseEvent, 0)
 	for _, event := range s.events {
-		if event.Sequence > afterSequence {
-			out = append(out, cloneEvent(event))
+		if event.Sequence <= afterSequence {
+			continue
 		}
+		if dispatchID != "" && !dispatchMatches(event.DispatchID, dispatchID) {
+			continue
+		}
+		out = append(out, cloneEvent(event))
 	}
 	if len(out) == 0 {
 		return nil
 	}
 	return out
+}
+
+func dispatchMatches(eventDispatchID, filterDispatchID string) bool {
+	return strings.TrimSpace(eventDispatchID) == strings.TrimSpace(filterDispatchID)
 }
 
 func (s *SessionResponseEventStore) detachSubscriber(id int64) {

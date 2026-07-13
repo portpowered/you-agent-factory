@@ -178,7 +178,9 @@ primary-result behavior.
   `factorysessions.SessionResponseEventStore` aliases in `types.go`; it is
   session-runtime-local state separate from canonical `FactoryEvent` history.
   `SessionResponseEventStore.Subscribe(afterSequence)` delivers retained events
-  after the cursor, then continues live via `Subscription.Next`; mirror
+  after the cursor, then continues live via `Subscription.Next`; optional
+  `WithDispatchFilter(dispatchID)` omits non-matching events while preserving
+  each delivered event's global session sequence and eventId. Mirror
   `responsestream.Subscription` patterns when extending close/complete behavior.
   Package docs in
   `responseevents/doc.go` record resolved v1 transport, retention, and CLI JSON
