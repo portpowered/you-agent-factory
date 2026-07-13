@@ -319,24 +319,25 @@ func (r *referenceResolver) resolveReference(value any, referringDocument string
 	if len(diagnostics) != 0 {
 		return nil, diagnostics
 	}
-	return preserveReferencedResourceBase(resolved, selected, resolvedBaseURI, targetDocument, fragment), nil
+	return preserveReferencedResourceBase(resolved, selected, resolvedBaseURI, referringDocument, targetDocument, fragment), nil
 }
 
-func preserveReferencedResourceBase(resolved, authored any, baseURI *url.URL, document, fragment string) any {
+func preserveReferencedResourceBase(resolved, authored any, baseURI *url.URL, referringDocument, document, fragment string) any {
 	authoredObject, ok := authored.(map[string]any)
 	if !ok {
 		return resolved
 	}
 	identifier, ok := authoredObject["$id"].(string)
-	if !ok || identifier == "" {
-		return resolved
-	}
-	parsedIdentifier, err := url.Parse(identifier)
-	if err != nil || parsedIdentifier.IsAbs() {
-		return resolved
-	}
-	resolvedObject, ok := resolved.(map[string]any)
-	if !ok || resolvedObject["$id"] != identifier {
+	if ok && identifier != "" {
+		parsedIdentifier, err := url.Parse(identifier)
+		if err != nil || parsedIdentifier.IsAbs() {
+			return resolved
+		}
+		resolvedObject, resolvedIsObject := resolved.(map[string]any)
+		if !resolvedIsObject || resolvedObject["$id"] != identifier {
+			return resolved
+		}
+	} else if referringDocument == document || !containsOuterBaseDependentResource(authoredObject) {
 		return resolved
 	}
 
@@ -348,6 +349,31 @@ func preserveReferencedResourceBase(resolved, authored any, baseURI *url.URL, do
 		"$id":   relocationBase.String(),
 		"allOf": []any{resolved},
 	}
+}
+
+func containsOuterBaseDependentResource(value any) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		if identifier, ok := typed["$id"].(string); ok && identifier != "" {
+			parsed, err := url.Parse(identifier)
+			if err != nil || parsed.IsAbs() {
+				return false
+			}
+			return true
+		}
+		for _, child := range typed {
+			if containsOuterBaseDependentResource(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if containsOuterBaseDependentResource(child) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func fragmentSegments(fragment string) []string {

@@ -234,6 +234,71 @@ func TestJoinPreservesRelativeResourceIDWhenInliningAcrossBases(t *testing.T) {
 	}
 }
 
+func TestJoinPreservesRetrievalBaseForNestedRelativeResourceID(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "contracts/roots/root.json", `{
+  "$schema":"https://json-schema.org/draft/2020-12/schema",
+  "$id":"https://schemas.example.test/roots/root.json",
+  "type":"object",
+  "required":["container"],
+  "properties":{"container":{"$ref":"../components/container.json"}}
+}`)
+	writeFile(t, root, "contracts/components/container.json", `{
+  "type":"object",
+  "required":["first","second"],
+  "$defs":{"item":{"$id":"item.json","type":"string","minLength":2}},
+  "properties":{
+    "first":{"$ref":"#/$defs/item"},
+    "second":{"$ref":"#/$defs/item"}
+  }
+}`)
+
+	documents, diagnostics := contractjoiner.Join(contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          []string{"contracts/roots/root.json"},
+		Components:     []string{"contracts/components/container.json"},
+	})
+	if len(diagnostics) != 0 {
+		t.Fatalf("Join() diagnostics = %+v, want none", diagnostics)
+	}
+	joined := documents[0].Value
+	if got := countResourceID(joined, "item.json"); got != 1 {
+		t.Fatalf("joined nested relative resource count = %d, want 1", got)
+	}
+	referenceCount := 0
+	walkJSON(joined, func(value map[string]any) {
+		reference, ok := value["$ref"]
+		if !ok {
+			return
+		}
+		referenceCount++
+		if reference != "https://schemas.example.test/components/item.json" {
+			t.Fatalf("joined nested resource reference = %v, want canonical embedded resource URI", reference)
+		}
+	})
+	if referenceCount != 2 {
+		t.Fatalf("joined nested resource reference count = %d, want 2", referenceCount)
+	}
+
+	schema := compileJoinedSchema(t, joined)
+	for _, test := range []struct {
+		name  string
+		value any
+		valid bool
+	}{
+		{name: "both uses pass", value: map[string]any{"container": map[string]any{"first": "aa", "second": "bb"}}, valid: true},
+		{name: "first use fails", value: map[string]any{"container": map[string]any{"first": "a", "second": "bb"}}, valid: false},
+		{name: "second use fails", value: map[string]any{"container": map[string]any{"first": "aa", "second": 2}}, valid: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			err := schema.Validate(test.value)
+			if (err == nil) != test.valid {
+				t.Fatalf("Validate(%v) error = %v, want valid %t", test.value, err, test.valid)
+			}
+		})
+	}
+}
+
 func TestJoinDistinguishesRelativeResourceIDsUnderDifferentBases(t *testing.T) {
 	root := t.TempDir()
 	paths := []string{
