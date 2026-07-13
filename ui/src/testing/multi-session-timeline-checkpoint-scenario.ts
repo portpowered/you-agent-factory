@@ -35,6 +35,66 @@ function createSessionFixture({
   const replayState = emptyReplayWorldState(selectedTick);
   replayState.runtime.session.dispatched_count = eventCount;
   replayState.runtime.session.has_data = true;
+  const materializedWorkOutcomeState = createMaterializedWorkOutcomeState();
+  materializedWorkOutcomeState.accumulator = {
+    activeDispatchesByID: {
+      [`dispatch-${label.toLowerCase()}`]: {
+        inputWorkIDs: [`work-${label.toLowerCase()}`],
+        systemOnly: false,
+      },
+    },
+    appliedEventCount: eventCount + 10,
+    completedAcceptedCount: eventCount,
+    completedDispatchCount: eventCount + 1,
+    failedWorkItemsByID: {
+      [`failed-${label.toLowerCase()}`]: {
+        displayName: `Failed ${label}`,
+        id: `failed-${label.toLowerCase()}`,
+        traceID: `trace-failed-${label.toLowerCase()}`,
+        workTypeID: `type-${label.toLowerCase()}`,
+      },
+    },
+    initialPlaceIDs: [`type-${label.toLowerCase()}:queued`],
+    workItemsByID: {
+      [`work-${label.toLowerCase()}`]: {
+        displayName: `Work ${label}`,
+        id: `work-${label.toLowerCase()}`,
+        placeID: `type-${label.toLowerCase()}:queued`,
+        traceID: `trace-${label.toLowerCase()}`,
+        workTypeID: `type-${label.toLowerCase()}`,
+      },
+    },
+  };
+  materializedWorkOutcomeState.counts = {
+    completed: eventCount,
+    dispatched: eventCount + 2,
+    failed: 1,
+    inFlight: 1,
+    queued: eventCount + 1,
+  };
+  materializedWorkOutcomeState.cursor = {
+    eventID: afterEventId,
+    eventTime: streamGenerationID,
+    sequence: afterSequence,
+    tick: selectedTick,
+  };
+  materializedWorkOutcomeState.failedByWorkType = {
+    [`type-${label.toLowerCase()}`]: 1,
+  };
+  materializedWorkOutcomeState.failedWorkLabels = [`Failed ${label}`];
+  materializedWorkOutcomeState.samples = [
+    {
+      completedCount: eventCount,
+      dispatchedCount: eventCount + 2,
+      failedByWorkType: { [`type-${label.toLowerCase()}`]: 1 },
+      failedCount: 1,
+      failedWorkLabels: [`Failed ${label}`],
+      inFlightCount: 1,
+      observedAt: selectedTick * 1_000,
+      queuedCount: eventCount + 1,
+      tick: selectedTick,
+    },
+  ];
 
   const streamIdentity = {
     backendScopeID,
@@ -47,7 +107,7 @@ function createSessionFixture({
     checkpoint: {
       afterEventId,
       afterSequence,
-      materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
+      materializedWorkOutcomeState,
       replayState,
       selectedTick,
       syncIdentity: {

@@ -146,10 +146,10 @@ function checkpointFixture(): FactoryTimelineCheckpoint {
     replayState,
     selectedTick: 7,
     syncIdentity: {
-      backendScopeId: "backend-a",
+      backendScopeId: "backend-scope-a",
       factorySessionId: RESOLVED_SESSION_UUID,
-      logicalSessionKeyId: "logical-a",
-      streamGenerationId: "stream-a",
+      logicalSessionKeyId: "logical-default",
+      streamGenerationId: "2026-06-26T00:00:00Z",
     },
   };
 }
@@ -195,10 +195,10 @@ describe("timeline checkpoint persistence", () => {
     );
     expect(restored?.replayState.textBlobsByID.long.length).toBeLessThan(600);
     expect(restored?.syncIdentity).toEqual({
-      backendScopeId: "backend-a",
+      backendScopeId: "backend-scope-a",
       factorySessionId: RESOLVED_SESSION_UUID,
-      logicalSessionKeyId: "logical-a",
-      streamGenerationId: "stream-a",
+      logicalSessionKeyId: "logical-default",
+      streamGenerationId: "2026-06-26T00:00:00Z",
     });
   });
 });
@@ -439,7 +439,19 @@ describe("timeline checkpoint guard migration", () => {
       storageKey: affectedStorageKey,
       streamIdentity: { ...expectedIdentity, ...mismatch },
     });
-    await persistTimelineCheckpoint(indexedDB, checkpoint, unaffectedIdentity);
+    await persistTimelineCheckpoint(
+      indexedDB,
+      {
+        ...checkpoint,
+        syncIdentity: {
+          backendScopeId: unaffectedIdentity.backendScopeID,
+          factorySessionId: unaffectedIdentity.factorySessionID,
+          logicalSessionKeyId: unaffectedIdentity.logicalSessionKeyID,
+          streamGenerationId: unaffectedIdentity.streamGenerationID,
+        },
+      },
+      unaffectedIdentity,
+    );
 
     const restored = await readTimelineCheckpoint(indexedDB, expectedIdentity);
 
