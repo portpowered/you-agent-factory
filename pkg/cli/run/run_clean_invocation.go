@@ -415,6 +415,8 @@ type humanResponseStreamRenderer struct {
 	mu                   sync.Mutex
 	output               io.Writer
 	progress             *responseStreamProgressWriter
+	finalOnce            sync.Once
+	finalErr             error
 	lastSequence         map[string]int64
 	lastResponseSequence int64
 	progressLines        int
@@ -458,6 +460,15 @@ func (r *humanResponseStreamRenderer) writeFinalInvocationResult(
 	if r == nil {
 		return fmt.Errorf("response-stream renderer is nil")
 	}
+	r.finalOnce.Do(func() {
+		r.finalErr = r.writeFinalInvocationResultOnce(result)
+	})
+	return r.finalErr
+}
+
+func (r *humanResponseStreamRenderer) writeFinalInvocationResultOnce(
+	result apisurface.FactoryInvocationResult,
+) error {
 	r.stopProgressRendering()
 	r.progress.acquireOutputExclusive()
 	defer r.progress.releaseOutputExclusive()

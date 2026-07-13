@@ -7,15 +7,112 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"unicode/utf8"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
+
+func TestHumanResponseStreamRenderer_CanonicalMessagesDoNotDuplicatePrimaryResult(t *testing.T) {
+	t.Parallel()
+
+	messageEvents := []responseevents.FactoryResponseEvent{
+		humanResponseEvent(responseevents.KindMessage, responseevents.PhaseDelta, responseevents.MessageDeltaPayload{
+			ContentBlockIndex: 0, ContentBlockKind: responseevents.ContentBlockText, TextDelta: "final ",
+		}),
+		humanResponseEvent(responseevents.KindMessage, responseevents.PhaseCompleted, responseevents.MessagePayload{
+			Role: "assistant", ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: "final answer"}},
+		}),
+	}
+	result := apisurface.FactoryInvocationResult{
+		Status: factoryapi.InvocationTerminalStatusCompleted,
+		PrimaryResult: []interfaces.WorkContentPart{
+			{Type: interfaces.WorkContentPartTypeText, Text: "final answer"},
+		},
+	}
+
+	t.Run("suppressed messages preserve plain output", func(t *testing.T) {
+		var output strings.Builder
+		renderer := newHumanResponseStreamRenderer(&output)
+		renderer.onResponseEvents(messageEvents)
+		if err := renderer.writeFinalInvocationResult(result); err != nil {
+			t.Fatalf("writeFinalInvocationResult: %v", err)
+		}
+		if got := output.String(); got != "final answer" {
+			t.Fatalf("output = %q, want unchanged primary result", got)
+		}
+	})
+
+	t.Run("progress precedes one authoritative answer", func(t *testing.T) {
+		var output strings.Builder
+		renderer := newHumanResponseStreamRenderer(&output)
+		events := append(messageEvents, humanResponseEvent(
+			responseevents.KindProgress,
+			responseevents.PhaseUpdated,
+			responseevents.ProgressPayload{Label: "checking result"},
+		))
+		renderer.onResponseEvents(events)
+		if err := renderer.writeFinalInvocationResult(result); err != nil {
+			t.Fatalf("writeFinalInvocationResult: %v", err)
+		}
+		want := "progress: checking result\n\n--- primary result ---\nfinal answer"
+		if got := output.String(); got != want || strings.Count(got, "final answer") != 1 {
+			t.Fatalf("output = %q, want %q with one answer", got, want)
+		}
+	})
+}
+
+func TestHumanResponseStreamRenderer_TerminalBlockIsWrittenOnce(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		result apisurface.FactoryInvocationResult
+		want   string
+	}{
+		{
+			name: "success",
+			result: apisurface.FactoryInvocationResult{Status: factoryapi.InvocationTerminalStatusCompleted,
+				PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "answer"}}},
+			want: "answer",
+		},
+		{
+			name:   "failure",
+			result: apisurface.FactoryInvocationResult{Status: factoryapi.InvocationTerminalStatusFailed, ErrorCode: "FAILED_SAFE"},
+			want:   "--- invocation outcome ---\nstatus: FAILED\nerror: FAILED_SAFE\n",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var output strings.Builder
+			renderer := newHumanResponseStreamRenderer(&output)
+			var wg sync.WaitGroup
+			errs := make(chan error, 8)
+			for range 8 {
+				wg.Add(1)
+				go func() { defer wg.Done(); errs <- renderer.writeFinalInvocationResult(tc.result) }()
+			}
+			wg.Wait()
+			close(errs)
+			for err := range errs {
+				if err != nil {
+					t.Fatalf("writeFinalInvocationResult: %v", err)
+				}
+			}
+			if got := output.String(); got != tc.want {
+				t.Fatalf("output = %q, want one terminal block %q", got, tc.want)
+			}
+		})
+	}
+}
 
 func TestHumanResponseStreamRenderer_CanonicalToolLifecycleGolden(t *testing.T) {
 	t.Parallel()
