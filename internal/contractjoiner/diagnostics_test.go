@@ -97,6 +97,46 @@ func TestJoinDiagnosticsUseTotalOrderIndependentOfInputOrder(t *testing.T) {
 	}
 }
 
+func TestJoinRejectsDistinctResourcesWithTheSameResolvedIDDeterministically(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root, "roots/root.json", `{
+  "$id":"https://schemas.example.test/root.json",
+  "properties":{
+    "a":{"$ref":"../components/a.json"},
+    "b":{"$ref":"../components/b.json"}
+  }
+}`)
+	writeFile(t, root, "components/a.json", `{"$id":"https://schemas.example.test/item.json","type":"string"}`)
+	writeFile(t, root, "components/b.json", `{"$id":"https://schemas.example.test/item.json","type":"integer"}`)
+	input := contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          []string{"roots/root.json"},
+		Components:     []string{"components/a.json", "components/b.json"},
+	}
+
+	documents, forward := contractjoiner.Join(input)
+	shuffledDocuments, shuffled := contractjoiner.Join(contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          input.Roots,
+		Components:     reversed(input.Components),
+	})
+	if documents != nil || shuffledDocuments != nil {
+		t.Fatalf("Join() returned partial documents: forward=%+v shuffled=%+v", documents, shuffledDocuments)
+	}
+	if !reflect.DeepEqual(forward, shuffled) {
+		t.Fatalf("input order changed collision diagnostics:\nforward: %+v\nshuffled: %+v", forward, shuffled)
+	}
+	want := []contractvalidator.Diagnostic{{
+		Code:     "reference.resource_collision",
+		Path:     "/$id",
+		Message:  `stable resource URI "https://schemas.example.test/item.json" is declared by multiple authored resources`,
+		Document: "components/b.json",
+	}}
+	if !reflect.DeepEqual(forward, want) {
+		t.Fatalf("Join() diagnostics = %+v, want %+v", forward, want)
+	}
+}
+
 func TestJoinRejectsAuthoredInputsInsideGeneratedOutput(t *testing.T) {
 	root := t.TempDir()
 	generated := "packages/api/generated/joined/contract.json"

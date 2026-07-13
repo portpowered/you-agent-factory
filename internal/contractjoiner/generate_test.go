@@ -99,6 +99,38 @@ func TestGenerateUnsupportedReferenceKeywordPreservesPreviousCompleteSet(t *test
 	}
 }
 
+func TestGenerateResourceCollisionPreservesPreviousCompleteSet(t *testing.T) {
+	root := t.TempDir()
+	writeGenerationFixture(t, root, "contracts/root.json", `{"$id":"root","type":"object"}`)
+	if diagnostics := contractjoiner.Generate(contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          []string{"contracts/root.json"},
+	}); len(diagnostics) != 0 {
+		t.Fatalf("initial Generate() diagnostics = %#v, want none", diagnostics)
+	}
+	before := generatedTree(t, root)
+
+	writeGenerationFixture(t, root, "contracts/collision.json", `{
+  "properties":{
+    "a":{"$ref":"a.json"},
+    "b":{"$ref":"b.json"}
+  }
+}`)
+	writeGenerationFixture(t, root, "contracts/a.json", `{"$id":"https://schemas.example.test/item.json","type":"string"}`)
+	writeGenerationFixture(t, root, "contracts/b.json", `{"$id":"https://schemas.example.test/item.json","type":"integer"}`)
+	diagnostics := contractjoiner.Generate(contractjoiner.Input{
+		RepositoryRoot: root,
+		Roots:          []string{"contracts/collision.json"},
+		Components:     []string{"contracts/a.json", "contracts/b.json"},
+	})
+	if len(diagnostics) != 1 || diagnostics[0].Code != "reference.resource_collision" || diagnostics[0].Document != "contracts/b.json" || diagnostics[0].Path != "/$id" {
+		t.Fatalf("Generate(resource collision) diagnostics = %#v, want stable resource-collision diagnostic", diagnostics)
+	}
+	if after := generatedTree(t, root); !equalByteTrees(before, after) {
+		t.Fatalf("resource-collision generation changed prior output:\nbefore=%q\nafter=%q", before, after)
+	}
+}
+
 func TestGenerateRequiresAtLeastOneRootWithoutChangingPreviousOutput(t *testing.T) {
 	root := t.TempDir()
 	writeGenerationFixture(t, root, "packages/api/generated/joined/existing.json", `{"existing":true}`)
