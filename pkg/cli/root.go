@@ -23,6 +23,7 @@ import (
 	modelscli "github.com/portpowered/infinite-you/pkg/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	sessioncli "github.com/portpowered/infinite-you/pkg/cli/session"
+	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
 	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/cli/terminalpolicy"
 	workcli "github.com/portpowered/infinite-you/pkg/cli/work"
@@ -84,6 +85,7 @@ type cliOperatorDefaultsOptions struct {
 type RootCommandOptions struct {
 	HomeDir   func() (string, error)
 	LookupEnv func(string) (string, bool)
+	Startup   startupcli.Handler
 }
 
 func NewRootCommand() *cobra.Command {
@@ -116,7 +118,7 @@ func NewRootCommandWithOptions(options RootCommandOptions) *cobra.Command {
 			"  " + cliBinaryName + " docs agents",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			policy := diagnostics.resolvePolicy(false)
-			return runFactoryWithOptions(cmd, defaultcmd.OOTBRunConfig(), nil, globals, operatorDefaults, policy, options)
+			return runFactoryWithOptions(cmd, defaultcmd.OOTBRunConfig(), nil, globals, operatorDefaults, policy, options, true)
 		},
 	}
 	root.PersistentFlags().BoolVarP(&diagnostics.verbose, "verbose", "v", false, "emit concise command diagnostics to stderr")
@@ -149,7 +151,7 @@ func NewRootCommandWithOptions(options RootCommandOptions) *cobra.Command {
 		}),
 		newFactoryCommand(globals, diagnostics),
 		newInitCommand(globals, diagnostics),
-		newMCPCommand(),
+		newMCPCommand(options),
 		newModelsCommand(globals, diagnostics, operatorDefaults, options),
 		newRunCommand(globals, diagnostics, operatorDefaults, options),
 		newSubmitCommand(globals, diagnostics),
@@ -325,8 +327,11 @@ func newModelsPullCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostics
 	return cmd
 }
 
-func newMCPCommand() *cobra.Command {
-	return mcpcli.NewCommand()
+func newMCPCommand(options RootCommandOptions) *cobra.Command {
+	if options.Startup == nil {
+		return mcpcli.NewCommand()
+	}
+	return mcpcli.NewCommandWithStartup(options.Startup)
 }
 
 func newDocsCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
@@ -419,7 +424,7 @@ func newInitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOption
 	return cmd
 }
 
-func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions RootCommandOptions) error {
+func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs []string, globals *cliGlobalOptions, operatorDefaults *cliOperatorDefaultsOptions, policy terminalpolicy.Policy, rootOptions RootCommandOptions, defaultInvocation bool) error {
 	logger, err := policy.BuildLogger()
 	if err != nil {
 		return err
@@ -478,7 +483,29 @@ func runFactoryWithOptions(cmd *cobra.Command, cfg runcli.RunConfig, promptArgs 
 		}
 	}()
 
-	return runCLI(ctx, cfg)
+	if rootOptions.Startup == nil {
+		return runCLI(ctx, cfg)
+	}
+	return delegateRunStartup(ctx, cfg, defaultInvocation, rootOptions.Startup)
+}
+
+func delegateRunStartup(ctx context.Context, cfg runcli.RunConfig, defaultInvocation bool, startup startupcli.Handler) error {
+	request := startupcli.Request{
+		Kind: startupcli.KindRun,
+		Run: startupcli.RunIntent{
+			DefaultInvocation:     defaultInvocation,
+			Continuous:            cfg.Continuously,
+			APIEnabled:            cfg.Port > 0,
+			DashboardEnabled:      cfg.Port > 0 && !cfg.SuppressDashboardRendering,
+			WorkerSidecarsEnabled: true,
+		},
+		Construct: func(context.Context) (startupcli.Lifecycle, error) {
+			return startupcli.LifecycleFunc(func(runCtx context.Context) error {
+				return runCLI(runCtx, cfg)
+			}), nil
+		},
+	}
+	return startup(ctx, request)
 }
 
 func resolveEffectiveRunPolicy(cmd *cobra.Command, cfg runcli.RunConfig, basePolicy terminalpolicy.Policy) terminalpolicy.Policy {

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
@@ -126,6 +127,10 @@ func resolveFixtureCatalogPath(explicit string) (string, error) {
 
 // NewServeCommand constructs `you mcp serve`.
 func NewServeCommand() *cobra.Command {
+	return newServeCommand(nil)
+}
+
+func newServeCommand(startup startupcli.Handler) *cobra.Command {
 	var fixtureCatalogPath string
 	var runtimeBacked bool
 	var projectRoot string
@@ -151,10 +156,21 @@ func NewServeCommand() *cobra.Command {
 			if runtimeBacked && strings.TrimSpace(fixtureCatalogPath) != "" {
 				return fmt.Errorf("cannot combine --runtime with --fixture-catalog")
 			}
-			return RunServe(cmd.Context(), ServeConfig{
+			cfg := ServeConfig{
 				FixtureCatalogPath: fixtureCatalogPath,
 				RuntimeBacked:      runtimeBacked,
 				ProjectRoot:        projectRoot,
+			}
+			if startup == nil {
+				return RunServe(cmd.Context(), cfg)
+			}
+			return startup(cmd.Context(), startupcli.Request{
+				Kind: startupcli.KindMCPServe,
+				Construct: func(context.Context) (startupcli.Lifecycle, error) {
+					return startupcli.LifecycleFunc(func(runCtx context.Context) error {
+						return RunServe(runCtx, cfg)
+					}), nil
+				},
 			})
 		},
 	}
@@ -181,10 +197,16 @@ func NewServeCommand() *cobra.Command {
 
 // NewCommand constructs the `you mcp` command group.
 func NewCommand() *cobra.Command {
+	return NewCommandWithStartup(nil)
+}
+
+// NewCommandWithStartup constructs the MCP command group with process startup
+// delegated to the supplied root handler.
+func NewCommandWithStartup(startup startupcli.Handler) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "mcp",
 		Short: "Model Context Protocol servers for Factory Session tools",
 	}
-	cmd.AddCommand(NewServeCommand())
+	cmd.AddCommand(newServeCommand(startup))
 	return cmd
 }

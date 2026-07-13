@@ -48,7 +48,7 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 		return writeRunCommandHelp(cmd, &resolvedConfig)
 	}
 	basePolicy := diagnostics.resolvePolicy(resolvedConfig.SuppressDashboardRendering)
-	err = runFactoryWithOptions(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy, rootOptions)
+	err = runFactoryWithOptions(cmd, resolvedConfig, promptArgs, globals, operatorDefaults, basePolicy, rootOptions, false)
 	if err != nil {
 		err = factoryconfig.MaybeFormatBlockingFactoryLoadOperatorError(err, resolvedConfig.Dir)
 		errorWriter := resolveEffectiveRunPolicy(cmd, resolvedConfig, basePolicy).HumanTerminalWriter(cmd.ErrOrStderr())
