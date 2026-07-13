@@ -27,6 +27,9 @@ func (a *NegotiatedAdapter) ParseFinal(ctx context.Context, input adapter.FinalP
 	if a.decision.Mode == ModeFinalOnly {
 		return parseFinalOnly(ctx, input)
 	}
+	if a.requireStructured && unsupportedStructuredProcessRejection(input.CommandResult, input.CommandError) {
+		return adapter.FinalParseResult{}, terminalErrorForType(interfaces.WorkFailureTypePermanentBadRequest)
+	}
 	parsed, err := parseStructuredFinal(input.CommandResult.Stdout)
 	if err != nil {
 		return adapter.FinalParseResult{}, err
@@ -37,6 +40,12 @@ func (a *NegotiatedAdapter) ParseFinal(ctx context.Context, input adapter.FinalP
 	return adapter.FinalParseResult{Response: interfaces.InferenceResponse{
 		Content: parsed.content, ProviderSession: providerSession(parsed.sessionID),
 	}}, nil
+}
+
+func unsupportedStructuredProcessRejection(result workerprocess.CommandResult, commandErr error) bool {
+	return commandErr == nil && result.ExitCode != 0 && len(bytes.TrimSpace(result.Stdout)) == 0 &&
+		len(result.Stderr) > 0 && len(result.Stderr) <= maxUnsupportedRejectionBytes &&
+		positiveUnsupportedFormatSignal(strings.ToLower(strings.Join(strings.Fields(string(result.Stderr)), " ")))
 }
 
 type parsedStructuredFinal struct {

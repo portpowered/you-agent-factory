@@ -27,7 +27,7 @@ func TestResolverCachesNegotiationAndDeclaresSelectedCapabilities(t *testing.T) 
 		t.Fatalf("decisions = %#v and %#v", first, second)
 	}
 	capabilities := first.Capabilities()
-	if !capabilities.NativeStreaming || !capabilities.MessageDeltas || !capabilities.MessageSnapshots || !capabilities.ToolLifecycle || !capabilities.StableItemIDs || capabilities.FinalOnly {
+	if !capabilities.NativeStreaming || capabilities.MessageDeltas || !capabilities.MessageSnapshots || capabilities.ReasoningSummaries || capabilities.ToolLifecycle || !capabilities.StableItemIDs || capabilities.FinalOnly {
 		t.Fatalf("structured capabilities = %#v", capabilities)
 	}
 }

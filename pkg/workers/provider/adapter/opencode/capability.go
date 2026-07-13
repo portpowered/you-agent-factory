@@ -50,12 +50,9 @@ type Decision struct {
 func (d Decision) Capabilities() adapter.Capabilities {
 	if d.Mode == ModeStructured {
 		return adapter.Capabilities{
-			NativeStreaming:    true,
-			MessageDeltas:      true,
-			MessageSnapshots:   true,
-			ReasoningSummaries: true,
-			ToolLifecycle:      true,
-			StableItemIDs:      true,
+			NativeStreaming:  true,
+			MessageSnapshots: true,
+			StableItemIDs:    true,
 		}
 	}
 	return adapter.Capabilities{MessageSnapshots: true, FinalOnly: true}

@@ -259,6 +259,35 @@ func assertTerminalParity(t *testing.T, fallback, direct *adapter.FailureFacts, 
 	}
 }
 
+func TestRequiredStructuredOutputRejectsUnsupportedModeWithoutFallback(t *testing.T) {
+	t.Parallel()
+	resolver := newResolver(t, &fakeIdentifier{installation: installation()}, &fakeDiscoverer{
+		decision: opencode.Decision{Version: "1.2.3", Mode: opencode.ModeStructured},
+	})
+	decision := resolve(t, resolver)
+	providerAdapter, err := opencode.NewNegotiatedAdapterForRequest(decision, resolver, interfaces.ProviderInferenceRequest{
+		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{interfaces.RunnerOptionalCapabilityStructuredOutput},
+	})
+	if err != nil {
+		t.Fatalf("NewNegotiatedAdapterForRequest() error = %v", err)
+	}
+	rejection := []byte("unknown option: --format")
+	runner := &sequenceStreamingRunner{attempts: []streamingAttempt{{
+		result: workerprocess.CommandResult{Stderr: rejection, ExitCode: 2},
+	}}}
+
+	result, executeErr := executeOpenCode(t, providerAdapter, runner)
+	if executeErr == nil || result.Failure == nil || result.Failure.Type != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("result = %#v, error = %v; want permanent bad request", result, executeErr)
+	}
+	if len(runner.requests) != 1 || len(result.CapabilityUpdates) != 0 {
+		t.Fatalf("required structured execution fell back: requests=%d updates=%#v", len(runner.requests), result.CapabilityUpdates)
+	}
+	if cached := resolve(t, resolver); cached.Mode != opencode.ModeStructured {
+		t.Fatalf("required structured rejection changed cache: %#v", cached)
+	}
+}
+
 func TestFallbackAttemptNeverRecurses(t *testing.T) {
 	t.Parallel()
 	resolver := newResolver(t, &fakeIdentifier{installation: installation()}, &fakeDiscoverer{

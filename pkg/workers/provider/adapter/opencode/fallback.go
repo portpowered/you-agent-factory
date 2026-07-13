@@ -20,6 +20,9 @@ func (a *NegotiatedAdapter) PlanFallback(ctx context.Context, input adapter.Fall
 	if err := ctx.Err(); err != nil || a.decision.Mode != ModeStructured || a.resolver == nil {
 		return adapter.FallbackPlan{}, false, err
 	}
+	if a.requireStructured {
+		return adapter.FallbackPlan{}, false, nil
+	}
 	if !safeUnsupportedStructuredRejection(input) {
 		return adapter.FallbackPlan{}, false, nil
 	}

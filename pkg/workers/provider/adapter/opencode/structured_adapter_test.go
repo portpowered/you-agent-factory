@@ -31,10 +31,7 @@ func TestStructuredAdapterSharedConformance(t *testing.T) {
 		},
 		ContentAndTools: openCodeObservations(
 			`{"type":"step_start","sessionID":"session-42"}`,
-			`{"type":"text","sessionID":"session-42","part":{"id":"message-7","text":"Hello "}}`,
-			`{"type":"text","sessionID":"session-42","part":{"id":"message-7","text":"world"}}`,
 			`{"type":"text","sessionID":"session-42","part":{"id":"message-7","text":"Hello world","time":{"end":1}}}`,
-			`{"type":"tool_use","sessionID":"session-42","part":{"id":"tool-item-9","callID":"call-9","tool":"weather","state":{"status":"running"}}}`,
 			`{"type":"tool_use","sessionID":"session-42","part":{"id":"tool-item-9","callID":"call-9","tool":"weather","state":{"status":"completed"}}}`,
 		),
 		RetryableFailure: openCodeObservations(
@@ -52,9 +49,10 @@ func TestStructuredAdapterSharedConformance(t *testing.T) {
 		},
 		FinalResult: workerprocess.CommandResult{Stdout: []byte(`{"type":"text","sessionID":"session-42","part":{"id":"message-7","text":"Hello world","time":{"end":1}}}`)},
 		Expected: testkit.FullStreamExpected{
+			Capabilities:    adapter.Capabilities{NativeStreaming: true, MessageSnapshots: true, StableItemIDs: true},
 			ProviderSession: session, ProviderRef: "session-42", MessageItemID: "message-7",
 			ToolItemID: "tool-item-9", ToolCallID: "call-9",
-			MessageDeltas: []string{"Hello ", "world"}, FinalContent: "Hello world",
+			FinalContent: "Hello world",
 		},
 		ForbiddenDiagnostic: []string{privatePrompt, privateSecret},
 	})
@@ -96,9 +94,9 @@ func TestStructuredAdapterExecutesNegotiatedJSONModeAndEmitsCanonicalLifecycle(t
 	if runner.request.Command != "/resolved/opencode" || !reflect.DeepEqual(runner.request.Args, wantArgs) {
 		t.Fatalf("command = %q %#v, want resolved structured command %#v", runner.request.Command, runner.request.Args, wantArgs)
 	}
-	if !result.Capabilities.NativeStreaming || !result.Capabilities.MessageDeltas ||
-		!result.Capabilities.MessageSnapshots || !result.Capabilities.ToolLifecycle || result.Capabilities.FinalOnly {
-		t.Fatalf("capabilities = %#v", result.Capabilities)
+	wantCapabilities := adapter.Capabilities{NativeStreaming: true, MessageSnapshots: true, StableItemIDs: true}
+	if result.Capabilities != wantCapabilities {
+		t.Fatalf("capabilities = %#v, want %#v", result.Capabilities, wantCapabilities)
 	}
 	if result.Response.Content != "Hello world" || result.Response.ProviderSession == nil ||
 		result.Response.ProviderSession.ID != "ses_open_42" {
@@ -336,9 +334,7 @@ func assertStructuredDrafts(t *testing.T, drafts []responseevents.Draft) {
 		phase responseevents.Phase
 	}{
 		{responseevents.KindRun, responseevents.PhaseStarted},
-		{responseevents.KindMessage, responseevents.PhaseDelta},
 		{responseevents.KindMessage, responseevents.PhaseCompleted},
-		{responseevents.KindTool, responseevents.PhaseStarted},
 		{responseevents.KindTool, responseevents.PhaseCompleted},
 		{responseevents.KindUsage, responseevents.PhaseUpdated},
 		{responseevents.KindRun, responseevents.PhaseCompleted},
@@ -352,11 +348,11 @@ func assertStructuredDrafts(t *testing.T, drafts []responseevents.Draft) {
 	if drafts[1].ItemID != "part_text_1" || drafts[1].ParentItemID != "msg_1" || drafts[1].ProviderSessionRef != "ses_open_42" {
 		t.Fatalf("message correlation = %#v", drafts[1])
 	}
-	if drafts[3].ItemID != "part_tool_1" || drafts[3].ParentItemID != "msg_1" {
-		t.Fatalf("tool correlation = %#v", drafts[3])
+	if drafts[2].ItemID != "part_tool_1" || drafts[2].ParentItemID != "msg_1" {
+		t.Fatalf("tool correlation = %#v", drafts[2])
 	}
-	if strings.Contains(string(drafts[3].Payload), "PRIVATE.md") || strings.Contains(string(drafts[4].Payload), "private result") {
-		t.Fatalf("tool payload exposed native input or output: %s / %s", drafts[3].Payload, drafts[4].Payload)
+	if strings.Contains(string(drafts[2].Payload), "PRIVATE.md") || strings.Contains(string(drafts[2].Payload), "private result") {
+		t.Fatalf("tool payload exposed native input or output: %s", drafts[2].Payload)
 	}
 }
 

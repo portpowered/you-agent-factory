@@ -95,7 +95,6 @@ func TestScriptWrapProvider_OpenCodeProductionProgressRunnerUsesCanonicalAdapter
 	if len(rawPublished) != 0 {
 		t.Fatalf("legacy publisher received raw OpenCode output: %#v", rawPublished)
 	}
-	assertPublishedOpenCodeDraft(t, canonicalPublished, responseevents.KindMessage, responseevents.PhaseDelta)
 	assertPublishedOpenCodeDraft(t, canonicalPublished, responseevents.KindMessage, responseevents.PhaseCompleted)
 }
 
@@ -136,6 +135,85 @@ func TestScriptWrapProvider_OpenCodePublishesSafeProductionFallback(t *testing.T
 	}
 	if strings.Contains(degraded.Payload, rejection) || strings.Contains(degraded.Payload, privatePrompt) {
 		t.Fatalf("degradation exposed private input: %#v", degraded)
+	}
+}
+
+func TestScriptWrapProvider_OpenCodeRejectsUnsupportedRequiredCapabilitiesBeforeExecution(t *testing.T) {
+	for _, capability := range []interfaces.RunnerOptionalCapability{
+		interfaces.RunnerOptionalCapabilityImageInput,
+		interfaces.RunnerOptionalCapabilityWorktree,
+	} {
+		t.Run(string(capability), func(t *testing.T) {
+			runner := &recordingProviderExec{result: CommandResult{Stdout: []byte("must not execute")}}
+			provider := NewScriptWrapProvider(
+				WithProviderCommandRunner(runner),
+				WithOpenCodeCapabilityResolver(openCodeResolverForTest(t, opencodeadapter.ModeStructured)),
+			)
+
+			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: "private prompt",
+				RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{capability},
+			})
+			assertOpenCodePermanentBadRequest(t, err)
+			if runner.calls != 0 {
+				t.Fatalf("runner calls = %d, want 0", runner.calls)
+			}
+		})
+	}
+}
+
+func TestScriptWrapProvider_OpenCodeRejectsRequiredStructuredOutputWhenKnownFinalOnly(t *testing.T) {
+	runner := &recordingProviderExec{result: CommandResult{Stdout: []byte("must not execute")}}
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(runner),
+		WithOpenCodeCapabilityResolver(openCodeResolverForTest(t, opencodeadapter.ModeFinalOnly)),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) { published = append(published, fragment) }),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: "private prompt",
+		Dispatch:                     interfaces.WorkDispatch{DispatchID: "dispatch-required-final-only"},
+		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{interfaces.RunnerOptionalCapabilityStructuredOutput},
+	})
+	assertOpenCodePermanentBadRequest(t, err)
+	if runner.calls != 0 {
+		t.Fatalf("runner calls = %d, want 0", runner.calls)
+	}
+	if len(published) < 2 || published[0].Metadata["selected_mode"] != "final_only" || published[len(published)-1].Kind != FailedFragmentKind {
+		t.Fatalf("published capability and failure = %#v", published)
+	}
+}
+
+func TestScriptWrapProvider_OpenCodeRequiredStructuredOutputProhibitsStaleFallback(t *testing.T) {
+	resolver := openCodeResolverForTest(t, opencodeadapter.ModeStructured)
+	runner := &sequenceProviderRunner{results: []CommandResult{{
+		Stderr: []byte("unknown option '--format'"), ExitCode: 2,
+	}}}
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(runner),
+		WithOpenCodeCapabilityResolver(resolver),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: "private prompt",
+		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{interfaces.RunnerOptionalCapabilityStructuredOutput},
+	})
+	assertOpenCodePermanentBadRequest(t, err)
+	if len(runner.requests) != 1 || !reflect.DeepEqual(runner.requests[0].Args, []string{"run", "--format", "json", "private prompt"}) {
+		t.Fatalf("runner requests = %#v, want one structured attempt", runner.requests)
+	}
+	decision, resolveErr := resolver.Resolve(context.Background(), string(interfaces.ModelProviderOpenCode))
+	if resolveErr != nil || decision.Mode != opencodeadapter.ModeStructured {
+		t.Fatalf("cached decision = %#v, %v; required stream must not downgrade", decision, resolveErr)
+	}
+}
+
+func assertOpenCodePermanentBadRequest(t *testing.T, err error) {
+	t.Helper()
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) || providerErr.Type != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("error = %T %v, want permanent bad request", err, err)
 	}
 }
 

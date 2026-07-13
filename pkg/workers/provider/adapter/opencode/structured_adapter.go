@@ -23,8 +23,9 @@ type StructuredAdapter struct {
 // NegotiatedAdapter executes exactly the protocol selected for one cached
 // OpenCode installation decision.
 type NegotiatedAdapter struct {
-	decision Decision
-	resolver *Resolver
+	decision          Decision
+	resolver          *Resolver
+	requireStructured bool
 }
 
 // NewStructuredAdapter binds structured execution to one negotiated decision.
@@ -45,13 +46,37 @@ func NewStructuredAdapter(decision Decision) (*StructuredAdapter, error) {
 // NewNegotiatedAdapter binds execution to a cached structured or final-only
 // decision. A resolver enables safe stale-capability downgrade.
 func NewNegotiatedAdapter(decision Decision, resolver *Resolver) (*NegotiatedAdapter, error) {
+	return newNegotiatedAdapter(decision, resolver, false)
+}
+
+// NewNegotiatedAdapterForRequest binds the selected protocol to one request's
+// required-capability contract. In particular, a required structured stream
+// may not silently downgrade to final-only execution.
+func NewNegotiatedAdapterForRequest(
+	decision Decision,
+	resolver *Resolver,
+	request interfaces.ProviderInferenceRequest,
+) (*NegotiatedAdapter, error) {
+	return newNegotiatedAdapter(decision, resolver, requiresStructuredOutput(request))
+}
+
+func newNegotiatedAdapter(decision Decision, resolver *Resolver, requireStructured bool) (*NegotiatedAdapter, error) {
 	if decision.Mode != ModeStructured && decision.Mode != ModeFinalOnly {
 		return nil, errors.New("opencode adapter requires a negotiated capability decision")
 	}
 	if strings.TrimSpace(decision.Installation.Executable) == "" {
 		return nil, errors.New("opencode adapter requires a resolved executable")
 	}
-	return &NegotiatedAdapter{decision: decision, resolver: resolver}, nil
+	return &NegotiatedAdapter{decision: decision, resolver: resolver, requireStructured: requireStructured}, nil
+}
+
+func requiresStructuredOutput(request interfaces.ProviderInferenceRequest) bool {
+	for _, capability := range request.RequiredOptionalCapabilities {
+		if capability == interfaces.RunnerOptionalCapabilityStructuredOutput {
+			return true
+		}
+	}
+	return false
 }
 
 func (*NegotiatedAdapter) Identity() adapter.Identity {

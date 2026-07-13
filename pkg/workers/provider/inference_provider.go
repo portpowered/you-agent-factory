@@ -183,6 +183,9 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	logger.Info("inferencer: request starting",
 		providerLogFields(req, "model", req.Model)...)
 	if strings.EqualFold(strings.TrimSpace(req.ModelProvider), string(interfaces.ModelProviderOpenCode)) {
+		if err := validateOpenCodeOptionalCapabilities(req); err != nil {
+			return interfaces.InferenceResponse{}, p.openCodeRequestValidationError(req, err)
+		}
 		return p.executeNegotiatedOpenCode(ctx, req, logger)
 	}
 
@@ -274,7 +277,11 @@ func (p *ScriptWrapProvider) executeNegotiatedOpenCode(
 	if err != nil {
 		return interfaces.InferenceResponse{}, p.openCodeResolutionError(req, err)
 	}
-	negotiated, err := opencodeadapter.NewNegotiatedAdapter(decision, p.openCodeResolver)
+	p.publishOpenCodeCapability(req.Dispatch.DispatchID, decision.Capabilities(), nil)
+	if err := validateOpenCodeNegotiatedCapabilities(req, decision); err != nil {
+		return interfaces.InferenceResponse{}, p.openCodeRequestValidationError(req, err)
+	}
+	negotiated, err := opencodeadapter.NewNegotiatedAdapterForRequest(decision, p.openCodeResolver, req)
 	if err != nil {
 		return interfaces.InferenceResponse{}, p.openCodeResolutionError(req, err)
 	}
@@ -282,8 +289,6 @@ func (p *ScriptWrapProvider) executeNegotiatedOpenCode(
 	if err != nil {
 		return interfaces.InferenceResponse{}, p.openCodeResolutionError(req, err)
 	}
-	p.publishOpenCodeCapability(req.Dispatch.DispatchID, decision.Capabilities(), nil)
-
 	started := time.Now()
 	result, executeErr := provideradapter.Execute(ctx, registry, p.openCodeAdapterRunner(), provideradapter.ExecuteInput{
 		Provider: negotiated.Identity(),
@@ -315,6 +320,30 @@ func (p *ScriptWrapProvider) executeNegotiatedOpenCode(
 		appendProviderSessionLogFields(providerLogFields(req, "output_len", len(response.Content)), response.ProviderSession)...)
 	p.publishOpenCodeCompleted(req.Dispatch.DispatchID, response.ProviderSession, len(result.Drafts) > 0)
 	return response, nil
+}
+
+func validateOpenCodeNegotiatedCapabilities(req interfaces.ProviderInferenceRequest, decision opencodeadapter.Decision) error {
+	if decision.Mode == opencodeadapter.ModeStructured {
+		return nil
+	}
+	for _, capability := range req.RequiredOptionalCapabilities {
+		if capability == interfaces.RunnerOptionalCapabilityStructuredOutput {
+			return errors.New("structured output is required but is not supported by the installed opencode runner")
+		}
+	}
+	return nil
+}
+
+func (p *ScriptWrapProvider) openCodeRequestValidationError(req interfaces.ProviderInferenceRequest, err error) *ProviderError {
+	providerErr := newProviderErrorWithDiagnostics(
+		interfaces.WorkFailureTypePermanentBadRequest,
+		err.Error(),
+		err,
+		nil,
+		workDiagnosticsForInferenceRequest(req),
+	)
+	p.publishFailureFragment(req.Dispatch.DispatchID, nil, providerErr)
+	return providerErr
 }
 
 func (p *ScriptWrapProvider) openCodeResolutionError(req interfaces.ProviderInferenceRequest, err error) *ProviderError {
