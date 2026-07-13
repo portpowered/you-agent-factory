@@ -2,8 +2,12 @@ package run
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -11,6 +15,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
@@ -286,6 +291,157 @@ type responseStreamEventSink interface {
 	onStreamSegment(factorysessions.SessionResponseStreamReadResult)
 }
 
+// onResponseEvents consumes validated, session-ordered FactoryResponseEvent
+// values. Rendering policy is selected only from canonical kind, phase, and
+// typed payload fields; provider-native names and raw payload fallbacks are not
+// presentation inputs.
+func (r *humanResponseStreamRenderer) onResponseEvents(events []responseevents.FactoryResponseEvent) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, event := range events {
+		if event.Sequence > 0 && event.Sequence <= r.lastResponseSequence {
+			continue
+		}
+		if event.Sequence > 0 {
+			r.lastResponseSequence = event.Sequence
+		}
+		r.renderResponseEventLocked(event)
+	}
+}
+
+func (r *humanResponseStreamRenderer) renderResponseEventLocked(event responseevents.FactoryResponseEvent) {
+	if line, ok := formatHumanResponseEvent(event); ok {
+		r.writeProgressLineLocked(line)
+	}
+}
+
+func formatHumanResponseEvent(event responseevents.FactoryResponseEvent) (string, bool) {
+	if err := responseevents.ValidateEvent(event); err != nil {
+		return "", false
+	}
+
+	var line string
+	var ok bool
+	switch event.Kind {
+	case responseevents.KindReasoning:
+		line, ok = formatHumanReasoningEvent(event)
+	case responseevents.KindError:
+		line, ok = formatHumanRetryEvent(event)
+	case responseevents.KindProgress:
+		line, ok = formatHumanProgressEvent(event)
+	case responseevents.KindStreamGap:
+		line, ok = formatHumanStreamGapEvent(event)
+	default:
+		return "", false
+	}
+	if !ok {
+		return "", false
+	}
+	line = boundedHumanProgressPayload(line)
+	return line, line != ""
+}
+
+func formatHumanReasoningEvent(event responseevents.FactoryResponseEvent) (string, bool) {
+	var payload responseevents.ReasoningPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return "", false
+	}
+	switch event.Phase {
+	case responseevents.PhaseStarted:
+		return "reasoning: started", true
+	case responseevents.PhaseDelta:
+		if summary := normalizeHumanProgressField(payload.SummaryDelta); summary != "" {
+			return "reasoning: " + summary, true
+		}
+	case responseevents.PhaseCompleted:
+		if summary := normalizeHumanProgressField(payload.Summary); summary != "" {
+			return "reasoning: " + summary, true
+		}
+		return "reasoning: completed", true
+	}
+	return "", false
+}
+
+func formatHumanRetryEvent(event responseevents.FactoryResponseEvent) (string, bool) {
+	if event.Phase != responseevents.PhaseUpdated {
+		return "", false
+	}
+	var payload responseevents.ErrorPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil || !humanRetryStatus(payload) {
+		return "", false
+	}
+	code := normalizeHumanProgressField(payload.Code)
+	if code == "" {
+		return "", false
+	}
+	parts := []string{"retry: code=" + code}
+	if payload.RetryAttempt != nil {
+		parts = append(parts, "attempt="+strconv.Itoa(*payload.RetryAttempt))
+	}
+	if payload.RetryAfterSeconds != nil {
+		parts = append(parts, "retry-in="+strconv.FormatInt(*payload.RetryAfterSeconds, 10)+"s")
+	}
+	return strings.Join(parts, " "), true
+}
+
+func humanRetryStatus(payload responseevents.ErrorPayload) bool {
+	if payload.Retryable || payload.RetryAfterSeconds != nil || payload.RetryAttempt != nil {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(payload.Code)) {
+	case "rate_limited", "throttled", "too_many_requests":
+		return true
+	default:
+		return false
+	}
+}
+
+func formatHumanProgressEvent(event responseevents.FactoryResponseEvent) (string, bool) {
+	if event.Phase != responseevents.PhaseUpdated {
+		return "", false
+	}
+	var payload responseevents.ProgressPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return "", false
+	}
+	label := normalizeHumanProgressField(payload.Label)
+	if label == "" {
+		return "", false
+	}
+	line := "progress: " + label
+	if message := normalizeHumanProgressField(payload.Message); message != "" {
+		line += " — " + message
+	}
+	if payload.PercentComplete != nil && !math.IsNaN(*payload.PercentComplete) &&
+		!math.IsInf(*payload.PercentComplete, 0) && *payload.PercentComplete >= 0 && *payload.PercentComplete <= 100 {
+		line += " (" + strconv.FormatFloat(*payload.PercentComplete, 'f', -1, 64) + "%)"
+	}
+	return line, true
+}
+
+func formatHumanStreamGapEvent(event responseevents.FactoryResponseEvent) (string, bool) {
+	if event.Phase != responseevents.PhaseUpdated {
+		return "", false
+	}
+	var payload responseevents.StreamGapPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return "", false
+	}
+	line := fmt.Sprintf(
+		"stream gap: sequences %d-%d unavailable",
+		payload.FromSequence,
+		payload.ToSequence,
+	)
+	if reason := normalizeHumanProgressField(payload.Reason); reason != "" {
+		line += " (reason=" + reason + ")"
+	}
+	return line, true
+}
+
 type responseStreamAttachment struct {
 	cancel    context.CancelFunc
 	done      chan struct{}
@@ -419,15 +575,15 @@ const (
 // terminal stdout writes so a slow or blocked consumer does not stall provider
 // dispatch or invocation completion indefinitely.
 type responseStreamProgressWriter struct {
-	mu             sync.Mutex
-	outputMu       sync.Mutex
-	output         io.Writer
-	queue          chan []byte
-	wg             sync.WaitGroup
-	closed         bool
-	drainTimedOut  bool
-	droppedLines   int
-	pendingNotice  []byte
+	mu            sync.Mutex
+	outputMu      sync.Mutex
+	output        io.Writer
+	queue         chan []byte
+	wg            sync.WaitGroup
+	closed        bool
+	drainTimedOut bool
+	droppedLines  int
+	pendingNotice []byte
 }
 
 func newResponseStreamProgressWriter(output io.Writer) *responseStreamProgressWriter {

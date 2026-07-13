@@ -3,6 +3,8 @@ package run
 import (
 	"context"
 	"errors"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -10,7 +12,66 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
+
+func TestHumanResponseStreamRenderer_CanonicalOutputIsUTF8SafeAndBounded(t *testing.T) {
+	t.Parallel()
+
+	event := humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseCompleted, responseevents.ReasoningPayload{
+		Summary: strings.Repeat("界", maxHumanProgressLineBytes),
+	})
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{event})
+	renderer.stopProgressRendering()
+
+	got := strings.TrimSuffix(output.String(), "\n")
+	if !utf8.ValidString(got) {
+		t.Fatalf("output is not valid UTF-8: %q", got)
+	}
+	if len([]byte(got)) > maxHumanProgressLineBytes {
+		t.Fatalf("output is %d bytes, want at most %d", len([]byte(got)), maxHumanProgressLineBytes)
+	}
+	if !strings.HasSuffix(got, "...") {
+		t.Fatalf("output = %q, want stable omission marker", got)
+	}
+}
+
+func TestHumanResponseStreamRenderer_CanonicalEventsPreserveSessionOrderAndSkipDuplicateSequences(t *testing.T) {
+	t.Parallel()
+
+	first := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "first"})
+	first.Sequence = 1
+	duplicate := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "duplicate"})
+	duplicate.Sequence = 1
+	second := humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "second"})
+	second.Sequence = 2
+
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{first, duplicate, second})
+	renderer.stopProgressRendering()
+	if got, want := output.String(), "progress: first\nprogress: second\n"; got != want {
+		t.Fatalf("output = %q, want ordered unique output %q", got, want)
+	}
+}
+
+func TestHumanResponseStreamRenderer_LegacyUnknownProgressDoesNotFallbackToPayload(t *testing.T) {
+	t.Parallel()
+
+	const canary = "RAW_UNKNOWN_PROVIDER_EVENT"
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	renderer.onStreamSegment(responsestream.ReadResult{Events: []responsestream.Event{{
+		Sequence: 1, Kind: responsestream.EventKindProgressFragment,
+		Type: responsestream.EventTypeUnknown, Payload: canary,
+	}}})
+	renderer.stopProgressRendering()
+	if got := output.String(); got != "" {
+		t.Fatalf("unknown legacy event leaked through payload fallback: %q", got)
+	}
+}
 
 func TestRun_BootstrapErrorSkipsServiceStart(t *testing.T) {
 	originalBuilder := buildFactoryService
@@ -484,4 +545,3 @@ func TestRun_WithSkipPermissionsDoesNotMutatePersistedFactoryWorkerConfig(t *tes
 		t.Fatalf("factory.json = %s, want skipPermissions not persisted as true", string(got))
 	}
 }
-

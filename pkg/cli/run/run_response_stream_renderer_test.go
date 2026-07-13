@@ -6,6 +6,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 )
+
 type gatedResponseStreamWriter struct {
 	mu                   sync.Mutex
 	blocked              bool
@@ -180,6 +182,145 @@ func TestHumanResponseStreamRenderer_RendersOrderedProgressAndSeparatesPrimaryRe
 	}
 	if !strings.HasSuffix(got, "goal completed") {
 		t.Fatalf("output = %q, want suffix primary result", got)
+	}
+}
+
+func TestHumanResponseStreamRenderer_CanonicalNonToolGolden(t *testing.T) {
+	t.Parallel()
+
+	attempt := 3
+	delay := int64(12)
+	percent := 42.5
+	tests := []struct {
+		name  string
+		event responseevents.FactoryResponseEvent
+		want  string
+	}{
+		{
+			name:  "reasoning started",
+			event: humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseStarted, responseevents.ReasoningPayload{}),
+			want:  "reasoning: started\n",
+		},
+		{
+			name: "reasoning delta normalized",
+			event: humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseDelta, responseevents.ReasoningPayload{
+				SummaryDelta: "compare\noptions\x1b[31m safely",
+			}),
+			want: "reasoning: compare options [31m safely\n",
+		},
+		{
+			name: "reasoning completed summary",
+			event: humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseCompleted, responseevents.ReasoningPayload{
+				Summary: "selected stable approach",
+			}),
+			want: "reasoning: selected stable approach\n",
+		},
+		{
+			name:  "reasoning completed absent summary",
+			event: humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseCompleted, responseevents.ReasoningPayload{}),
+			want:  "reasoning: completed\n",
+		},
+		{
+			name: "retry without optional fields",
+			event: humanResponseEvent(responseevents.KindError, responseevents.PhaseUpdated, responseevents.ErrorPayload{
+				Code: "provider_busy", Message: "unsafe provider detail", Retryable: true,
+			}),
+			want: "retry: code=provider_busy\n",
+		},
+		{
+			name: "retry with attempt and delay",
+			event: humanResponseEvent(responseevents.KindError, responseevents.PhaseUpdated, responseevents.ErrorPayload{
+				Code: "rate_limited", Message: "unsafe provider detail", Retryable: true,
+				RetryAttempt: &attempt, RetryAfterSeconds: &delay,
+			}),
+			want: "retry: code=rate_limited attempt=3 retry-in=12s\n",
+		},
+		{
+			name: "throttle code",
+			event: humanResponseEvent(responseevents.KindError, responseevents.PhaseUpdated, responseevents.ErrorPayload{
+				Code: "throttled", Message: "unsafe provider detail",
+			}),
+			want: "retry: code=throttled\n",
+		},
+		{
+			name: "progress label only",
+			event: humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{
+				Label: "planning",
+			}),
+			want: "progress: planning\n",
+		},
+		{
+			name: "progress full",
+			event: humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{
+				Label: "review", Message: "checking\r\nresults", PercentComplete: &percent,
+			}),
+			want: "progress: review — checking results (42.5%)\n",
+		},
+		{
+			name: "canonical stream gap",
+			event: humanResponseEvent(responseevents.KindStreamGap, responseevents.PhaseUpdated, responseevents.StreamGapPayload{
+				FromSequence: 8, ToSequence: 14, Reason: "retention\nwindow",
+			}),
+			want: "stream gap: sequences 8-14 unavailable (reason=retention window)\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var output strings.Builder
+			renderer := newHumanResponseStreamRenderer(&output)
+			renderer.onResponseEvents([]responseevents.FactoryResponseEvent{tc.event})
+			renderer.stopProgressRendering()
+			if got := output.String(); got != tc.want {
+				t.Fatalf("output = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestHumanResponseStreamRenderer_CanonicalEventsSuppressUnsafeAndUnsupportedData(t *testing.T) {
+	t.Parallel()
+
+	const canary = "SECRET_PROVIDER_PAYLOAD_7f8a"
+	events := []responseevents.FactoryResponseEvent{
+		humanResponseEvent(responseevents.KindMessage, responseevents.PhaseDelta, responseevents.MessageDeltaPayload{
+			ContentBlockIndex: 0, ContentBlockKind: responseevents.ContentBlockText, TextDelta: canary,
+		}),
+		humanResponseEvent(responseevents.KindUsage, responseevents.PhaseUpdated, responseevents.UsagePayload{
+			InputTokens: 123, OutputTokens: 456,
+		}),
+		humanResponseEvent(responseevents.KindError, responseevents.PhaseFailed, responseevents.ErrorPayload{
+			Code: "provider_failed", Message: canary,
+		}),
+		humanResponseEvent(responseevents.KindProgress, responseevents.PhaseCompleted, map[string]string{
+			"label": canary,
+		}),
+		humanResponseEvent(responseevents.Kind("PROVIDER_NATIVE"), responseevents.PhaseUpdated, map[string]string{
+			"raw": canary,
+		}),
+	}
+
+	var output strings.Builder
+	renderer := newHumanResponseStreamRenderer(&output)
+	renderer.onResponseEvents(events)
+	renderer.stopProgressRendering()
+	if got := output.String(); got != "" {
+		t.Fatalf("unsupported or invalid events leaked into human output: %q", got)
+	}
+}
+
+func humanResponseEvent(
+	kind responseevents.Kind,
+	phase responseevents.Phase,
+	payload any,
+) responseevents.FactoryResponseEvent {
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return responseevents.FactoryResponseEvent{
+		Kind: kind, Phase: phase, Payload: encoded,
 	}
 }
 

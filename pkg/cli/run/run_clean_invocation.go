@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
+	responsestreamcompat "github.com/portpowered/infinite-you/pkg/factorysessions/responsestream/compat"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/petri"
 	"io"
@@ -19,6 +20,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 func emitCleanInvocationOutcome(ctx context.Context, cfg RunConfig, runner factoryServiceRunner, runErr error, startedAt time.Time) error {
@@ -409,13 +412,14 @@ func newResponseStreamRenderer(output io.Writer, jsonMode bool) responseStreamRe
 // progress to stdout and keeps the final invocation primary result visually
 // separate from transient progress output.
 type humanResponseStreamRenderer struct {
-	mu              sync.Mutex
-	output          io.Writer
-	progress        *responseStreamProgressWriter
-	lastSequence    map[string]int64
-	progressLines   int
-	progressSeen    bool
-	backlogNotified bool
+	mu                   sync.Mutex
+	output               io.Writer
+	progress             *responseStreamProgressWriter
+	lastSequence         map[string]int64
+	lastResponseSequence int64
+	progressLines        int
+	progressSeen         bool
+	backlogNotified      bool
 }
 
 func newHumanResponseStreamRenderer(output io.Writer) *humanResponseStreamRenderer {
@@ -552,19 +556,18 @@ func (r *humanResponseStreamRenderer) renderEventLocked(event responsestream.Eve
 	switch event.Kind {
 	case responsestream.EventKindCompactionSignal:
 		return
-	case responsestream.EventKindStreamCompleted, responsestream.EventKindStreamFailed:
-		return
-	case responsestream.EventKindResponseFragment:
-		return
 	case responsestream.EventKindProgressFragment:
 		if !humanProgressRenderableEvent(event) {
 			return
 		}
-		payload := boundedHumanProgressPayload(event.Payload)
-		if payload == "" {
-			return
-		}
-		r.writeProgressLineLocked(payload)
+	}
+
+	events, err := responsestreamcompat.MapFragment(responsestreamcompat.Context{}, event)
+	if err != nil {
+		return
+	}
+	for _, mapped := range events {
+		r.renderResponseEventLocked(mapped)
 	}
 }
 
@@ -573,8 +576,7 @@ func humanProgressRenderableType(eventType responsestream.EventType) bool {
 	case responsestream.EventTypeStarted,
 		responsestream.EventTypeProgress,
 		responsestream.EventTypeFailed,
-		responsestream.EventTypeCanceled,
-		responsestream.EventTypeUnknown:
+		responsestream.EventTypeCanceled:
 		return true
 	default:
 		return false
@@ -650,15 +652,37 @@ func humanInternalProgressPayload(payload string) bool {
 }
 
 func boundedHumanProgressPayload(payload string) string {
-	trimmed := strings.TrimSpace(payload)
+	trimmed := normalizeHumanProgressField(payload)
 	if trimmed == "" {
 		return ""
 	}
-	if maxHumanProgressLineBytes <= 0 || len([]byte(trimmed)) <= maxHumanProgressLineBytes {
+	if maxHumanProgressLineBytes <= 0 || len(trimmed) <= maxHumanProgressLineBytes {
 		return trimmed
 	}
-	bytes := []byte(trimmed)
-	return strings.TrimSpace(string(bytes[:maxHumanProgressLineBytes])) + "..."
+	const omissionMarker = "..."
+	budget := maxHumanProgressLineBytes - len(omissionMarker)
+	if budget <= 0 {
+		return omissionMarker
+	}
+	end := 0
+	for end < len(trimmed) {
+		_, size := utf8.DecodeRuneInString(trimmed[end:])
+		if end+size > budget {
+			break
+		}
+		end += size
+	}
+	return strings.TrimSpace(trimmed[:end]) + omissionMarker
+}
+
+func normalizeHumanProgressField(value string) string {
+	normalized := strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || unicode.In(r, unicode.Cf) {
+			return ' '
+		}
+		return r
+	}, value)
+	return strings.Join(strings.Fields(normalized), " ")
 }
 
 func formatCompactionNotice(summary responsestream.CompactionSummary) string {
