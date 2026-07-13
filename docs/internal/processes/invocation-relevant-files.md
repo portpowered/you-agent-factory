@@ -7,8 +7,11 @@ primary-result behavior.
   interpolation, return-policy selection, and stable policy errors used by CLI,
   API, workers, and Factory Session orchestration. It consumes domain-owned
   values and has no generated transport or live-session dependency.
-- `pkg/invocations/` temporarily contains inference and permission helpers
-  awaiting their narrow-owner migrations.
+- `pkg/workers/inference/` owns provider-neutral inference operation binding,
+  request-envelope construction, and ordered output shaping shared by direct
+  model invocation and Factory Session worker execution.
+- `pkg/workers/skippermissions/` owns provider-backed worker capability and
+  invocation-override policy for skip-permissions.
 - `pkg/factorysessions/invocation/session_owner.go` owns live-session request normalization,
   interpolation validation, default-handling Work submission, lifecycle
   sequencing, and delegation into the owner-local event-derived result waiter.
@@ -159,14 +162,14 @@ primary-result behavior.
   `RunConfig.InvocationSkipPermissionsOverride`, and forwarded through
   `buildRunServiceConfig` into `service.FactoryServiceConfig` as an ephemeral
   invocation override that must not mutate persisted worker `skipPermissions`.
-  `pkg/invocations/skippermissions.EffectiveSkipPermissions` resolves persisted worker config plus
+  `pkg/workers/skippermissions.EffectiveSkipPermissions` resolves persisted worker config plus
   `FactoryServiceConfig.InvocationSkipPermissionsOverride` when building
   provider-backed worker CLI args in `pkg/service/factory_build.go` and
   `pkg/runtimehost/build_workers.go`. `skippermissions.ValidateInvocationSkipPermissionsWorkers`
   and `ValidateInvocationSkipPermissionsForWorker` fail closed before worker
   construction when `--skip-permissions` is set but an agent worker uses an
   unsupported CLI provider or local managed model path. S14 regression evidence
-  lives in `pkg/invocations/skippermissions/skip_permissions_test.go`,
+  lives in `pkg/workers/skippermissions/skip_permissions_test.go`,
   `pkg/workers/provider/provider_behavior_test.go`, and
   `pkg/service/factory_test_helpers_test.go` alongside the story-level
   propagation and fail-closed service tests. `RunConfig.JSONOutput`
@@ -279,7 +282,7 @@ primary-result behavior.
   transport-specific empty-stdin errors. When `Stdin` is overridden away from
   `os.Stdin` (cobra `SetIn`, tests, or programmatic callers), treat it as piped
   input even if the process-level `os.Stdin` is still a TTY.
-- `pkg/invocations/inference.go` resolves inference-run operation bindings,
+- `pkg/workers/inference/inference.go` resolves inference-run operation bindings,
   maps direct invocation request bindings, builds the provider-neutral inference
   request envelope, and shapes inference responses into ordered canonical
   `WorkContentPart` output shared by direct model invocation and factory-session
@@ -289,7 +292,7 @@ primary-result behavior.
   loading model, unsupported operation, timeout, and runtime failure cases
   shared by direct model invocation and HTTP handlers.
 - `pkg/workers/executor/model_operation_bindings.go` delegates inference binding
-  resolution to `pkg/invocations`.
+  resolution to `pkg/workers/inference`.
 - `pkg/cli/root_run_args.go` owns the `you run` manual flag split that preserves
   known run and inherited flags while leaving unknown `--factory-arg` tokens
   intact for signature-backed parsing; keep factory-argument normalization

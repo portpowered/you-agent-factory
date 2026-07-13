@@ -1,3 +1,5 @@
+// Package skippermissions owns worker capability and invocation-override policy
+// for provider-backed agent execution.
 package skippermissions
 
 import (

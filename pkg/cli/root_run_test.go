@@ -221,8 +221,9 @@ func TestRunCommand_FactoryPromptRejectsAmbiguousPositionalAndStdin(t *testing.T
 	root := NewRootCommand()
 	root.SetIn(strings.NewReader("Fix from stdin\n"))
 	root.SetOut(io.Discard)
-	root.SetErr(io.Discard)
-	root.SetArgs([]string{"run", "--factory", factoryPath, "Fix from args", "-"})
+	var stderr bytes.Buffer
+	root.SetErr(&stderr)
+	root.SetArgs([]string{"run", "--factory", factoryPath, "--quiet", "Fix from args", "-"})
 
 	err := root.Execute()
 	if err == nil {
@@ -231,6 +232,11 @@ func TestRunCommand_FactoryPromptRejectsAmbiguousPositionalAndStdin(t *testing.T
 	for _, want := range []string{"INVOCATION_INPUT_SOURCE_CONFLICT", "positional_text", "stdin_text"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Fatalf("error = %q, want %q", err.Error(), want)
+		}
+	}
+	for _, want := range []string{"INVOCATION_INPUT_SOURCE_CONFLICT", "positional_text", "stdin_text"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("stderr = %q, want %q", stderr.String(), want)
 		}
 	}
 	if runCalled {

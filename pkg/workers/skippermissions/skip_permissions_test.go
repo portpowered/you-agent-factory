@@ -48,10 +48,10 @@ func TestEffectiveSkipPermissions(t *testing.T) {
 			want:               false,
 		},
 		{
-			name:               "PersistedTrueWinsWithoutOverride",
-			persisted:          true,
-			workerType:         interfaces.WorkerTypeAgent,
-			want:               true,
+			name:       "PersistedTrueWinsWithoutOverride",
+			persisted:  true,
+			workerType: interfaces.WorkerTypeAgent,
+			want:       true,
 		},
 		{
 			name:               "PersistedTrueWinsWithOverrideFalse",

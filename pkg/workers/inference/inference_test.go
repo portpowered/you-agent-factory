@@ -1,4 +1,4 @@
-package invocations
+package inference
 
 import (
 	"encoding/json"
