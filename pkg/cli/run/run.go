@@ -148,10 +148,6 @@ type factoryServiceRunner interface {
 // RuntimeRunner is the local in-process runtime seam used by CLI startup.
 type RuntimeRunner = factoryServiceRunner
 
-type runtimeLogDiagnosticsProvider interface {
-	RuntimeLogDiagnostics() service.RuntimeLogDiagnostics
-}
-
 type engineStateSnapshotProvider interface {
 	GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 }
@@ -846,14 +842,6 @@ func DashboardURL(host string, port int) string {
 	}
 	authority := net.JoinHostPort(host, strconv.Itoa(port))
 	return "http://" + authority + "/dashboard/ui"
-}
-
-func runtimeLogDiagnosticsForRunner(runner factoryServiceRunner) service.RuntimeLogDiagnostics {
-	provider, ok := runner.(runtimeLogDiagnosticsProvider)
-	if !ok {
-		return service.RuntimeLogDiagnostics{}
-	}
-	return provider.RuntimeLogDiagnostics()
 }
 
 func emitStartupMessages(cfg RunConfig, runtimeLog service.RuntimeLogDiagnostics) bool {

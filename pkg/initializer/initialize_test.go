@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config"
@@ -12,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
@@ -343,4 +346,158 @@ func (application *recordingProcessApplication) Run(ctx context.Context) error {
 	application.calls++
 	application.ctx = ctx
 	return application.err
+}
+
+func TestApplicationRunStartsWaitsAndShutsDownInReverse(t *testing.T) {
+	t.Parallel()
+
+	fixture := newApplicationFixture()
+	application, err := initializer.NewApplication(initializer.ModeCLI, fixture.graph)
+	if err != nil {
+		t.Fatalf("NewApplication() error = %v", err)
+	}
+	if len(fixture.starts) != 0 {
+		t.Fatalf("construction starts = %v, want none", fixture.starts)
+	}
+	if application.Graph() != fixture.graph {
+		t.Fatal("application did not retain the constructed graph identity")
+	}
+	runDone := make(chan error, 1)
+	go func() { runDone <- application.Run(context.Background()) }()
+	close(fixture.cli.done)
+	if err := <-runDone; err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+	if got, want := fixture.starts, []string{"runtime", "workers", "dashboard", "cli"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("start order = %v, want %v", got, want)
+	}
+	if got, want := fixture.stops, []string{"cli", "dashboard", "workers", "runtime"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("stop order = %v, want %v", got, want)
+	}
+	if fixture.graph.closes != 1 {
+		t.Fatalf("graph closes = %d, want one", fixture.graph.closes)
+	}
+	if err := application.Shutdown(context.Background()); err != nil || fixture.graph.closes != 1 {
+		t.Fatalf("repeated Shutdown() = %v, closes %d", err, fixture.graph.closes)
+	}
+}
+
+func TestApplicationStartFailureUnwindsActivatedEdges(t *testing.T) {
+	t.Parallel()
+
+	fixture := newApplicationFixture()
+	cause := errors.New("listener unavailable")
+	fixture.cli.startErr = cause
+	application, err := initializer.Start(context.Background(), initializer.ModeCLI, fixture.graph)
+	if application != nil || !errors.Is(err, cause) {
+		t.Fatalf("Start() = (%v, %v), want nil application wrapping cause", application, err)
+	}
+	if got, want := fixture.stops, []string{"dashboard", "workers", "runtime"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("unwind order = %v, want %v", got, want)
+	}
+	if fixture.graph.closes != 1 {
+		t.Fatalf("graph closes = %d, want one", fixture.graph.closes)
+	}
+}
+
+func TestApplicationDiagnosticsAndValidation(t *testing.T) {
+	t.Parallel()
+
+	var nilApplication *initializer.Application
+	if nilApplication.Graph() != nil {
+		t.Fatal("nil application returned a graph")
+	}
+	if got := nilApplication.RuntimeLogDiagnostics(); got.Path != "" {
+		t.Fatalf("nil diagnostics = %+v, want zero value", got)
+	}
+	if _, err := initializer.NewApplication(initializer.ModeCLI, nil); err == nil {
+		t.Fatal("NewApplication(nil graph) succeeded")
+	}
+	fixture := newApplicationFixture()
+	fixture.graph.diagnostics.Path = "runtime.log"
+	application, err := initializer.NewApplication(initializer.Mode("invalid"), fixture.graph)
+	if application != nil || err == nil || !strings.Contains(err.Error(), "not supported") {
+		t.Fatalf("NewApplication(invalid mode) = (%v, %v)", application, err)
+	}
+	application, err = initializer.NewApplication(initializer.ModeMCP, fixture.graph)
+	if err != nil {
+		t.Fatalf("NewApplication(MCP) error = %v", err)
+	}
+	if got := application.RuntimeLogDiagnostics(); got.Path != "runtime.log" {
+		t.Fatalf("RuntimeLogDiagnostics() = %+v, want graph metadata", got)
+	}
+	if err := application.Run(context.Background()); err == nil || !strings.Contains(err.Error(), "not waitable") {
+		t.Fatalf("Run(non-waitable MCP) error = %v", err)
+	}
+	if err := application.Shutdown(nil); err != nil {
+		t.Fatalf("Shutdown(nil context) error = %v", err)
+	}
+}
+
+type applicationFixture struct {
+	graph  *applicationGraph
+	starts []string
+	stops  []string
+	cli    *waitableApplicationLifecycle
+}
+
+func newApplicationFixture() *applicationFixture {
+	fixture := &applicationFixture{}
+	lifecycle := func(name string) *applicationLifecycle {
+		return &applicationLifecycle{name: name, starts: &fixture.starts, stops: &fixture.stops}
+	}
+	fixture.cli = &waitableApplicationLifecycle{applicationLifecycle: lifecycle("cli"), done: make(chan struct{})}
+	fixture.graph = &applicationGraph{lifecycles: initializer.ApplicationLifecycles{
+		API: lifecycle("api"), CLI: fixture.cli, MCP: lifecycle("mcp"),
+		Runtime: lifecycle("runtime"), Workers: lifecycle("workers"), Dashboard: lifecycle("dashboard"),
+	}}
+	return fixture
+}
+
+type applicationGraph struct {
+	lifecycles  initializer.ApplicationLifecycles
+	diagnostics runtimehost.RuntimeLogDiagnostics
+	closes      int
+}
+
+func (g *applicationGraph) Close() error {
+	g.closes++
+	return nil
+}
+
+func (g *applicationGraph) Lifecycles() initializer.ApplicationLifecycles { return g.lifecycles }
+
+func (g *applicationGraph) RuntimeLogMetadata() runtimehost.RuntimeLogDiagnostics {
+	return g.diagnostics
+}
+
+type applicationLifecycle struct {
+	name     string
+	starts   *[]string
+	stops    *[]string
+	startErr error
+}
+
+type waitableApplicationLifecycle struct {
+	*applicationLifecycle
+	done chan struct{}
+}
+
+func (l *applicationLifecycle) Start(context.Context) error {
+	*l.starts = append(*l.starts, l.name)
+	return l.startErr
+}
+
+func (l *applicationLifecycle) Stop(context.Context) error {
+	*l.stops = append(*l.stops, l.name)
+	return nil
+}
+
+func (l *waitableApplicationLifecycle) Wait(ctx context.Context) error {
+	select {
+	case <-l.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }

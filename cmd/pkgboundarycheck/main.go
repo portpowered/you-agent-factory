@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"io"
@@ -16,6 +17,13 @@ import (
 const defaultScanRoot = "pkg"
 const batch001MigrationShimMarker = "Batch 001 compatibility shim"
 const javascriptOrchestratorImportPrefix = "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/"
+const applicationGraphImportPath = "github.com/portpowered/infinite-you/pkg/wire"
+
+var approvedApplicationGraphImporters = []string{
+	"pkg/initializer",
+	"pkg/root",
+	"pkg/wire",
+}
 
 const (
 	generatedCodeExceptionScopeRoot    = "root"
@@ -117,8 +125,9 @@ type config struct {
 }
 
 type scanResult struct {
-	rootPackageFindings   []rootPackageFinding
-	migrationShimFindings []migrationShimFinding
+	rootPackageFindings            []rootPackageFinding
+	migrationShimFindings          []migrationShimFinding
+	applicationGraphImportFindings []applicationGraphImportFinding
 }
 
 type rootPackageFinding struct {
@@ -129,6 +138,11 @@ type migrationShimFinding struct {
 	packagePath     string
 	marker          string
 	canonicalTarget string
+}
+
+type applicationGraphImportFinding struct {
+	packagePath string
+	filePath    string
 }
 
 func main() {
@@ -164,7 +178,9 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	if err != nil {
 		return err
 	}
-	blockingViolationCount := len(findings.rootPackageFindings) + len(findings.migrationShimFindings)
+	blockingViolationCount := len(findings.rootPackageFindings) +
+		len(findings.migrationShimFindings) +
+		len(findings.applicationGraphImportFindings)
 	if blockingViolationCount == 0 {
 		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (no blocking package-boundary violations)")
 		writeGeneratedCodeExceptionSummary(stdout, policy)
@@ -177,6 +193,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 		fmt.Fprintln(stderr, "  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.")
 	}
 	writeMigrationShimBlockingFindings(stderr, findings.migrationShimFindings)
+	writeApplicationGraphImportFindings(stderr, findings.applicationGraphImportFindings)
 	writeGeneratedCodeExceptionSummary(stderr, policy)
 	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", blockingViolationCount)
 }
@@ -226,6 +243,11 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		result.rootPackageFindings = append(result.rootPackageFindings, rootPackageFinding{packagePath: packagePath})
 	}
 
+	result.applicationGraphImportFindings, err = scanApplicationGraphImports(repoRoot, scanRoot, cfg.packageRoot)
+	if err != nil {
+		return scanResult{}, err
+	}
+
 	slices.SortFunc(result.rootPackageFindings, func(left, right rootPackageFinding) int {
 		return strings.Compare(left.packagePath, right.packagePath)
 	})
@@ -233,6 +255,75 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		return strings.Compare(left.packagePath, right.packagePath)
 	})
 	return result, nil
+}
+
+func scanApplicationGraphImports(repoRoot string, scanRoot string, packageRoot string) ([]applicationGraphImportFinding, error) {
+	var findings []applicationGraphImportFinding
+	err := filepath.WalkDir(scanRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
+			return nil
+		}
+
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read package import file %s: %w", filepath.ToSlash(path), err)
+		}
+		if !strings.Contains(string(content), applicationGraphImportPath) {
+			return nil
+		}
+
+		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
+		if err != nil {
+			return fmt.Errorf("parse package imports %s: %w", filepath.ToSlash(path), err)
+		}
+		if !importsApplicationGraph(parsedFile) {
+			return nil
+		}
+
+		packageDirectory, err := filepath.Rel(repoRoot, filepath.Dir(path))
+		if err != nil {
+			return fmt.Errorf("resolve importing package for %s: %w", filepath.ToSlash(path), err)
+		}
+		packagePath := filepath.ToSlash(packageDirectory)
+		if isApprovedApplicationGraphImporter(packagePath) {
+			return nil
+		}
+
+		filePath, err := filepath.Rel(repoRoot, path)
+		if err != nil {
+			return fmt.Errorf("resolve importing file %s: %w", filepath.ToSlash(path), err)
+		}
+		findings = append(findings, applicationGraphImportFinding{
+			packagePath: packagePath,
+			filePath:    filepath.ToSlash(filePath),
+		})
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("scan %s application graph imports: %w", filepath.ToSlash(packageRoot), err)
+	}
+
+	slices.SortFunc(findings, func(left, right applicationGraphImportFinding) int {
+		return strings.Compare(left.filePath, right.filePath)
+	})
+	return findings, nil
+}
+
+func importsApplicationGraph(parsedFile *ast.File) bool {
+	return slices.ContainsFunc(parsedFile.Imports, func(importSpec *ast.ImportSpec) bool {
+		importPath, err := strconv.Unquote(importSpec.Path.Value)
+		return err == nil && (importPath == applicationGraphImportPath ||
+			strings.HasPrefix(importPath, applicationGraphImportPath+"/"))
+	})
+}
+
+func isApprovedApplicationGraphImporter(packagePath string) bool {
+	return slices.ContainsFunc(approvedApplicationGraphImporters, func(approvedPath string) bool {
+		return packagePath == approvedPath || strings.HasPrefix(packagePath, approvedPath+"/")
+	})
 }
 
 func validatePolicy(policy boundaryPolicy) error {
@@ -412,5 +503,13 @@ func writeMigrationShimBlockingFindings(writer io.Writer, findings []migrationSh
 		fmt.Fprintf(writer, "  marker: %s\n", finding.marker)
 		fmt.Fprintf(writer, "  canonical target: %s\n", canonicalTarget)
 		fmt.Fprintln(writer, "  remediation: import the canonical owner directly and do not recreate Batch 001 root compatibility shims.")
+	}
+}
+
+func writeApplicationGraphImportFindings(writer io.Writer, findings []applicationGraphImportFinding) {
+	for _, finding := range findings {
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited application composition import: %s (%s)\n", finding.packagePath, finding.filePath)
+		fmt.Fprintln(writer, "  reason: pkg/wire is the outward application composition root and must not be imported by domain or transport packages.")
+		fmt.Fprintln(writer, "  remediation: depend on a narrow domain-owned contract and inject the collaborator through pkg/root or pkg/initializer.")
 	}
 }
