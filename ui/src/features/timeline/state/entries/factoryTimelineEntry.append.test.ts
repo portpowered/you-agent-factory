@@ -9,7 +9,7 @@ import {
 
 const identity: StreamDerivedCacheIdentity = {
   backendScopeID: "backend-a",
-  factorySessionID: "session-a-uuid",
+  factorySessionID: "99999999-9999-4999-8999-999999999999",
   logicalSessionKeyID: "logical-session-a",
   streamGenerationID: "generation-1",
 };

@@ -31,7 +31,13 @@ describe("useDashboardCheckpointPreflight exact deletion cancellation", () => {
   });
 
   it("preserves persisted and runtime state when deletion is superseded", async () => {
-    const sessionID = "session-delete-race";
+    const sessionID = "44444444-4444-4444-8444-444444444444";
+    const streamIdentity = {
+      backendScopeID: "backend-delete-race",
+      factorySessionID: sessionID,
+      logicalSessionKeyID: "logical-delete-race",
+      streamGenerationID: "generation-delete-race",
+    };
     const persistedRecord = {
       checkpoint: {
         materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
@@ -39,13 +45,8 @@ describe("useDashboardCheckpointPreflight exact deletion cancellation", () => {
         selectedTick: 11,
       },
       schemaVersion: 4,
-      storageKey: `checkpoint-${sessionID}`,
-      streamIdentity: {
-        backendScopeID: `backend-${sessionID}`,
-        factorySessionID: sessionID,
-        logicalSessionKeyID: `logical-${sessionID}`,
-        streamGenerationID: `generation-${sessionID}`,
-      },
+      storageKey: Object.values(streamIdentity).join("::"),
+      streamIdentity,
     };
     const { controls, indexedDB, records } =
       createControlledIndexedDBTestDouble<typeof persistedRecord>();

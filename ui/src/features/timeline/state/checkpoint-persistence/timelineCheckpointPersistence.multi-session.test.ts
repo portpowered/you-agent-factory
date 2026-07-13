@@ -7,6 +7,7 @@ import {
   clearTimelineCheckpointsForSession,
   peekPersistedTimelineCheckpoint,
   persistTimelineCheckpoint,
+  readTimelineCheckpoint,
 } from "../timelineCheckpointPersistence";
 
 const checkpointInsertionOrders = [
@@ -40,6 +41,9 @@ function expectCheckpointToMatchScenario(
   expect(checkpoint?.replayState.runtime.session.dispatched_count).toBe(
     session.eventCount,
   );
+  expect(checkpoint?.materializedWorkOutcomeState).toEqual(
+    session.checkpoint.materializedWorkOutcomeState,
+  );
 }
 
 describe("multi-session timeline checkpoint identity regression", () => {
@@ -69,6 +73,29 @@ describe("multi-session timeline checkpoint identity regression", () => {
     await expect(
       peekPersistedTimelineCheckpoint(indexedDB, DEFAULT_FACTORY_SESSION_ID),
     ).resolves.toBe(null);
+  });
+
+  it("does not restore the previous generation's materialized cursor or outcome history", async () => {
+    const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
+    const { A, B } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
+    const replacementGeneration = {
+      ...A.streamIdentity,
+      streamGenerationID: "2026-07-11T10:00:00Z",
+    };
+    await persistTimelineCheckpoint(indexedDB, A.checkpoint, A.streamIdentity);
+    await persistTimelineCheckpoint(indexedDB, B.checkpoint, B.streamIdentity);
+
+    await expect(
+      readTimelineCheckpoint(indexedDB, replacementGeneration),
+    ).resolves.toBeNull();
+    expectCheckpointToMatchScenario(
+      await readTimelineCheckpoint(indexedDB, A.streamIdentity),
+      A,
+    );
+    expectCheckpointToMatchScenario(
+      await readTimelineCheckpoint(indexedDB, B.streamIdentity),
+      B,
+    );
   });
 
   it.each(
