@@ -130,10 +130,12 @@ func TestBuildProcessGraphAppliesRootPolicyBeforeConstructionAndLifecycle(t *tes
 				MockWorkersEnabled: true, SuppressDashboardRendering: !test.wantDashboard,
 			}
 			var built *service.FactoryServiceConfig
+			var builtMode initializer.Mode
 			graph, err := buildProcessGraph(context.Background(), startupcli.Request{
 				Kind: startupcli.KindRun, RunConfig: &cfg,
-			}, test.policy, func(_ context.Context, cfg *service.FactoryServiceConfig) (runcli.RuntimeRunner, error) {
+			}, test.policy, func(_ context.Context, cfg *service.FactoryServiceConfig, mode initializer.Mode) (runcli.RuntimeRunner, error) {
 				built = cfg
+				builtMode = mode
 				return processRunnerFunc(func(context.Context) error { return nil }), nil
 			})
 			if err != nil {
@@ -144,6 +146,13 @@ func TestBuildProcessGraphAppliesRootPolicyBeforeConstructionAndLifecycle(t *tes
 			}
 			if got := built.SimpleDashboardRenderer != nil; got != test.wantDashboard {
 				t.Fatalf("dashboard renderer enabled = %t, want %t", got, test.wantDashboard)
+			}
+			wantApplicationMode := initializer.ModeCLI
+			if test.policy.Mode == initializer.ProcessModeAPIService {
+				wantApplicationMode = initializer.ModeAPI
+			}
+			if builtMode != wantApplicationMode {
+				t.Fatalf("initializer application mode = %q, want %q", builtMode, wantApplicationMode)
 			}
 			if graph.Policy != test.policy {
 				t.Fatalf("graph policy = %+v, want %+v", graph.Policy, test.policy)
