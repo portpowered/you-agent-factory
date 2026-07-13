@@ -9,6 +9,7 @@ import {
 } from "../../../dashboard/lib/session-persistence/diagnostics";
 import { emptyReplayWorldState } from "../timeline/replayWorldStateSupport";
 import type { FactoryTimelineCheckpoint } from "../timeline/storeState";
+import { createMaterializedWorkOutcomeState } from "../../../work-outcome/public/materializer";
 import {
   clearTimelineCheckpointsForSession,
   persistTimelineCheckpoint,
@@ -43,6 +44,7 @@ function checkpoint(
   return {
     afterEventId,
     afterSequence,
+    materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
     replayState: emptyReplayWorldState(selectedTick),
     selectedTick,
   };

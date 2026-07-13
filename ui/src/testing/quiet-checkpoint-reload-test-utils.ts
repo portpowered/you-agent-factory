@@ -4,6 +4,7 @@ import { vi } from "vitest";
 import { useFactoryTimelineStore } from "../features/timeline/state/factoryTimelineStore";
 import { emptyReplayWorldState } from "../features/timeline/state/timeline/replayWorldStateSupport";
 import type { FactoryTimelineCheckpoint } from "../features/timeline/state/timeline/storeState";
+import { createMaterializedWorkOutcomeState } from "../features/work-outcome/public/materializer";
 import {
   persistTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
@@ -137,6 +138,7 @@ export function createQuietCheckpointReloadFixture(
   const checkpoint: FactoryTimelineCheckpoint = {
     afterEventId: `quiet-checkpoint-event-${tick}`,
     afterSequence: tick,
+    materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
     replayState,
     selectedTick: tick,
     syncIdentity: {

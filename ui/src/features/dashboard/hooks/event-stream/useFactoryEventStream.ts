@@ -109,7 +109,9 @@ function reconnectCursorFromEvent(
   };
 }
 
-function clearReconnectTimeout(reconnectTimeoutRef: { current: number | null }) {
+function clearReconnectTimeout(reconnectTimeoutRef: {
+  current: number | null;
+}) {
   if (reconnectTimeoutRef.current != null) {
     window.clearTimeout(reconnectTimeoutRef.current);
     reconnectTimeoutRef.current = null;
@@ -232,7 +234,9 @@ function useDashboardStreamConnection({
             streamSessionID,
             reconnect,
           );
-          if (validationAttempt !== refs.reconnectValidationAttemptRef.current) {
+          if (
+            validationAttempt !== refs.reconnectValidationAttemptRef.current
+          ) {
             return;
           }
           if (!validation.ok) {
@@ -362,7 +366,17 @@ export function useFactoryEventStream({
   validateReconnectCursor = validateFactoryEventReconnectCursor,
 }: UseFactoryEventStreamOptions) {
   const queryClient = useQueryClient();
-  const resetTimeline = useFactoryTimelineStore((state) => state.reset);
+  const resetAllTimelines = useFactoryTimelineStore((state) => state.reset);
+  const resetTimelineEntry = useFactoryTimelineStore(
+    (state) => state.resetEntry,
+  );
+  const resetTimeline = useCallback(() => {
+    if (streamIdentity) {
+      resetTimelineEntry(streamIdentity);
+      return;
+    }
+    resetAllTimelines();
+  }, [resetAllTimelines, resetTimelineEntry, streamIdentity]);
   const setStreamState = useDashboardStreamStore(
     (state) => state.setStreamState,
   );
