@@ -188,6 +188,11 @@ export function createControlledIndexedDBTestDouble<
     },
   };
 
+  const createIndexedDBContext = () =>
+    ({
+      open: () => controlledRequest("open", () => database),
+    }) as unknown as IDBFactory;
+
   return {
     controls: {
       abortTransaction: transactionControls.abort,
@@ -199,9 +204,8 @@ export function createControlledIndexedDBTestDouble<
       pendingTransactionCount: () => pendingTransactions.length,
       succeed: requestControls.succeed,
     },
-    indexedDB: {
-      open: () => controlledRequest("open", () => database),
-    } as unknown as IDBFactory,
+    createIndexedDBContext,
+    indexedDB: createIndexedDBContext(),
     records,
   };
 }
