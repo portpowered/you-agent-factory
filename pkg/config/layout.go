@@ -14,8 +14,7 @@ import (
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/config/builtingoal"
-	"github.com/portpowered/infinite-you/pkg/config/builtinsubagent"
+	factorypackages "github.com/portpowered/infinite-you/pkg/factory/packages"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -873,11 +872,17 @@ func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {
 	_ = os.RemoveAll(trashDir)
 }
 
-var builtInNamedFactoryCatalog = map[string][]byte{
-	"@you/fusion":    BuiltInFusionFactoryJSON,
-	"@you/goal":      BuiltInGoalFactoryJSON,
-	"@you/subagent":  BuiltInSubagentFactoryJSON,
-	"@you/tts":       BuiltInTTSFactoryJSON,
+var builtInNamedFactoryCatalog = builtInNamedFactoryPayloads()
+
+func builtInNamedFactoryPayloads() map[string][]byte {
+	payloads := make(map[string][]byte, len(factorypackages.Names()))
+	for _, name := range factorypackages.Names() {
+		definition, ok := factorypackages.Lookup(name)
+		if ok {
+			payloads[name] = definition.JSON
+		}
+	}
+	return payloads
 }
 
 // ResolveNamedFactoryDirAcrossRoots returns the runnable factory directory for
@@ -1101,260 +1106,21 @@ func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool,
 	return factoryDir, true, nil
 }
 
-var BuiltInGoalFactoryJSON = builtingoal.BuiltInGoalFactoryJSON
+var BuiltInGoalFactoryJSON = mustBuiltInFactoryJSON("@you/goal")
 
 // BuiltInSubagentFactoryJSON is the canonical runnable @you/subagent packaged factory payload.
-var BuiltInSubagentFactoryJSON = builtinsubagent.BuiltInSubagentFactoryJSON
+var BuiltInSubagentFactoryJSON = mustBuiltInFactoryJSON("@you/subagent")
 
-// BuiltInFusionFactoryJSON is the canonical runnable @you/fusion packaged factory payload.
-var BuiltInFusionFactoryJSON = []byte(`{
-  "name": "@you/fusion",
-  "id": "builtin-fusion",
-  "invocationSignature": {
-    "parameters": [
-      {
-        "name": "input",
-        "description": "Text request to run through the two-stage fusion flow.",
-        "required": true,
-        "bindings": [
-          {"kind": "POSITIONAL", "position": 1},
-          {"kind": "STDIN"}
-        ]
-      },
-      {
-        "name": "output",
-        "description": "Optional output-path hint for file-oriented callers.",
-        "externalName": "output",
-        "aliases": ["o"],
-        "typeHint": "FILE_PATH",
-        "bindings": [
-          {"kind": "NAMED"}
-        ]
-      },
-      {
-        "name": "firstProvider",
-        "description": "Optional provider override for the first fusion pass.",
-        "externalName": "first-provider",
-        "aliases": ["p1"],
-        "bindings": [
-          {"kind": "NAMED"}
-        ]
-      },
-      {
-        "name": "secondProvider",
-        "description": "Optional provider override for the second fusion pass.",
-        "externalName": "second-provider",
-        "aliases": ["p2"],
-        "bindings": [
-          {"kind": "NAMED"}
-        ]
-      },
-      {
-        "name": "firstModel",
-        "description": "Optional model override for the first fusion pass.",
-        "externalName": "first-model",
-        "aliases": ["m1"],
-        "bindings": [
-          {"kind": "NAMED"}
-        ]
-      },
-      {
-        "name": "secondModel",
-        "description": "Optional model override for the second fusion pass.",
-        "externalName": "second-model",
-        "aliases": ["m2"],
-        "bindings": [
-          {"kind": "NAMED"}
-        ]
-      },
-      {
-        "name": "firstEffort",
-        "description": "Reasoning effort hint for the first fusion pass.",
-        "externalName": "first-effort",
-        "aliases": ["e1"],
-        "choices": ["low", "medium", "high"],
-        "defaultValue": "medium",
-        "bindings": [
-          {"kind": "NAMED"}
-        ]
-      },
-      {
-        "name": "secondEffort",
-        "description": "Reasoning effort hint for the second fusion pass.",
-        "externalName": "second-effort",
-        "aliases": ["e2"],
-        "choices": ["low", "medium", "high"],
-        "defaultValue": "medium",
-        "bindings": [
-          {"kind": "NAMED"}
-        ]
-      }
-    ],
-    "outputContract": {
-      "mode": "FILE",
-      "pathParameter": "output",
-      "contentType": "text/markdown",
-      "fileExtension": ".md",
-      "description": "When output is supplied, callers can treat the refined answer as file-oriented markdown content."
-    },
-    "examples": [
-      {
-        "name": "positional-input-with-provider-overrides",
-        "argv": [
-          "Draft a release summary",
-          "--first-provider=CLAUDE",
-          "--second-provider=CODEX",
-          "--output",
-          "fusion-summary.md"
-        ]
-      },
-      {
-        "name": "stdin-input-with-model-overrides",
-        "argv": [
-          "--first-model",
-          "claude-sonnet-4-20250514",
-          "--second-model",
-          "gpt-5"
-        ],
-        "stdin": "Draft a release summary"
-      }
-    ]
-  },
-  "workTypes": [
-    {
-      "name": "task",
-      "handlingBehavior": ["DEFAULT"],
-      "states": [
-        {"name": "init", "type": "INITIAL"},
-        {"name": "draft", "type": "PROCESSING"},
-        {"name": "complete", "type": "TERMINAL"},
-        {"name": "failed", "type": "FAILED"}
-      ]
-    }
-  ],
-  "resources": [],
-  "workers": [
-    {
-      "name": "fusion-drafter",
-      "type": "AGENT_WORKER",
-      "modelProvider": "${firstProvider}",
-      "model": "${firstModel}",
-      "body": "First-stage drafter for @you/fusion.\nReasoning effort: ${firstEffort}"
-    },
-    {
-      "name": "fusion-refiner",
-      "type": "AGENT_WORKER",
-      "modelProvider": "${secondProvider}",
-      "model": "${secondModel}",
-      "body": "Second-stage refiner for @you/fusion.\nReasoning effort: ${secondEffort}"
-    }
-  ],
-  "workstations": [
-    {
-      "name": "draft-fusion",
-      "type": "AGENT_RUN",
-      "worker": "fusion-drafter",
-      "inputs": [
-        {"workType": "task", "state": "init"}
-      ],
-      "outputs": [
-        {"workType": "task", "state": "draft"}
-      ],
-      "onFailure": [
-        {"workType": "task", "state": "failed"}
-      ],
-      "body": "Create a strong first draft for the request.\n\nRequest:\n${input}"
-    },
-    {
-      "name": "refine-fusion",
-      "type": "AGENT_RUN",
-      "worker": "fusion-refiner",
-      "inputs": [
-        {"workType": "task", "state": "draft"}
-      ],
-      "outputs": [
-        {"workType": "task", "state": "complete"}
-      ],
-      "onFailure": [
-        {"workType": "task", "state": "failed"}
-      ],
-      "body": "Refine the current draft into the final response for the same request.\n\nOriginal request:\n${input}"
-    }
-  ]
-}`)
+// BuiltInFusionFactoryJSON is retained for callers migrating to the factory packages owner.
+var BuiltInFusionFactoryJSON = mustBuiltInFactoryJSON("@you/fusion")
 
-// BuiltInTTSFactoryJSON is the canonical runnable @you/tts packaged factory payload.
-var BuiltInTTSFactoryJSON = []byte(`{
-  "name": "@you/tts",
-  "id": "builtin-tts",
-  "workTypes": [
-    {
-      "name": "task",
-      "handlingBehavior": ["DEFAULT"],
-      "states": [
-        {"name": "init", "type": "INITIAL"},
-        {"name": "complete", "type": "TERMINAL"},
-        {"name": "failed", "type": "FAILED"}
-      ]
-    }
-  ],
-  "resources": [
-    {
-      "name": "omnivoice-cache",
-      "type": "MODEL",
-      "capacity": 1,
-      "model": "OMNIVOICE_Q4_K_M",
-      "backend": "LLAMACPP",
-      "loadPolicy": "ON_DEMAND"
-    }
-  ],
-  "workers": [
-    {
-      "name": "tts-executor",
-      "type": "MODEL_WORKER",
-      "model": "OMNIVOICE_Q4_K_M",
-      "modelProvider": "CODEX",
-      "modelLocality": "LOCAL",
-      "command": "omnivoice-llamacpp",
-      "resources": [
-        {"name": "omnivoice-cache", "capacity": 1}
-      ],
-      "operations": [
-        {
-          "name": "TTS",
-          "inputs": [
-            {"name": "text", "contentTypes": ["TEXT"], "required": true}
-          ],
-          "outputs": [
-            {"name": "audio", "contentTypes": ["AUDIO"]}
-          ]
-        }
-      ],
-      "body": "You are the @you/tts built-in factory worker."
-    }
-  ],
-  "workstations": [
-    {
-      "name": "execute-tts",
-      "type": "MODEL_INVOKE",
-      "worker": "tts-executor",
-      "operation": "TTS",
-      "operationBindings": [
-        {
-          "slot": "text",
-          "selector": {"type": "TEXT"}
-        }
-      ],
-      "inputs": [
-        {"workType": "task", "state": "init"}
-      ],
-      "outputs": [
-        {"workType": "task", "state": "complete"}
-      ],
-      "onFailure": [
-        {"workType": "task", "state": "failed"}
-      ],
-      "body": "Convert the requested text into speech for {{ .WorkID }}."
-    }
-  ]
-}`)
+// BuiltInTTSFactoryJSON is retained for callers migrating to the factory packages owner.
+var BuiltInTTSFactoryJSON = mustBuiltInFactoryJSON("@you/tts")
+
+func mustBuiltInFactoryJSON(name string) []byte {
+	definition, ok := factorypackages.Lookup(name)
+	if !ok {
+		panic("missing packaged factory definition: " + name)
+	}
+	return definition.JSON
+}

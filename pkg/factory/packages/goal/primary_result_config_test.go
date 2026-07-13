@@ -10,7 +10,7 @@ import (
 )
 
 func TestBuiltInFactoryJSON_ExposesExplicitGoalSummaryInvocationReturn(t *testing.T) {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}

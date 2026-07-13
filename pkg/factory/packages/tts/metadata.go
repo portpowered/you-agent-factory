@@ -5,9 +5,14 @@ import (
 	"fmt"
 	"strings"
 
+	builtintts "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/tts"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 )
+
+// BuiltInFactoryJSON is the canonical runnable @you/tts definition owned by
+// the factory packages family.
+var BuiltInFactoryJSON = builtintts.BuiltInFactoryJSON
 
 const defaultAudioContentType = "audio/wav"
 

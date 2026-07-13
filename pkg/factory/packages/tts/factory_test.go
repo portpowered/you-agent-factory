@@ -8,7 +8,7 @@ import (
 )
 
 func TestBuiltInFactoryJSON_LoadsRunnablePackagedTTSFactory(t *testing.T) {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInTTSFactoryJSON)
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("ParseFactoryConfig: %v", err)
 	}

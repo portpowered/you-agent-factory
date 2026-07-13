@@ -19,7 +19,7 @@ import (
 )
 
 func TestBuiltInFactoryJSON_LoadsRunnablePackagedFusionFactory(t *testing.T) {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInFusionFactoryJSON)
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
@@ -75,11 +75,11 @@ func TestMaterializedPackagedFusionFactory_PreservesInvocationSignatureAndInterp
 }
 
 func TestMaterializedPackagedFusionFactory_EditAndRereadRetainsInvocationSignature(t *testing.T) {
-	original, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInFusionFactoryJSON)
+	original, err := factoryconfig.FactoryConfigFromOpenAPIJSON(BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
-	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInFusionFactoryJSON)
+	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestMaterializedPackagedFusionFactory_EditAndRereadRetainsInvocationSignatu
 }
 
 func TestBuiltInFusionFactory_NormalizesMixedPositionalAndNamedArgumentsThroughSharedPath(t *testing.T) {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInFusionFactoryJSON)
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}

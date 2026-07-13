@@ -25,9 +25,9 @@ const MalformedEnvelopeFailureOutcome = interfaces.OutcomeFailed
 //     WorkResultFromDecisionEnvelopeJSONOrFailed; callers that prefer explicit Go errors
 //     can use WorkResultFromDecisionEnvelopeJSON and FailedWorkResultFromDecisionEnvelopeError.
 type DecisionEnvelope struct {
-	Decision           string                     `json:"decision"`
-	Feedback           string                     `json:"feedback"`
-	Output             string                     `json:"output,omitempty"`
+	Decision           string                       `json:"decision"`
+	Feedback           string                       `json:"feedback"`
+	Output             string                       `json:"output,omitempty"`
 	RecordedOutputWork []interfaces.FactoryWorkItem `json:"recorded_output_work,omitempty"`
 }
 

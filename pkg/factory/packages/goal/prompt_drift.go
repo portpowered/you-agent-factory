@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/builtingoal"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 

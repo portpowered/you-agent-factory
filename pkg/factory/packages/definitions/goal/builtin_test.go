@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/builtingoal"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -115,7 +115,7 @@ func assertFactoryJSONDoesNotEmbedAuthoredPromptContent(t *testing.T) {
 	raw := string(builtingoal.FactoryJSON())
 	for _, marker := range []string{"bounded plan", "bounded execution result", "reviewable disposition", "bounded final summary"} {
 		if strings.Contains(raw, marker) {
-			t.Fatalf("authored factory.json must not embed prompt content %q; edit pkg/config/builtingoal/prompts instead", marker)
+			t.Fatalf("authored factory.json must not embed prompt content %q; edit pkg/factory/packages/definitions/goal/prompts instead", marker)
 		}
 	}
 }

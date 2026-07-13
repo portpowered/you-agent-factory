@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/builtingoal"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -147,7 +147,7 @@ var packagedGoalBoundedWorkerRolePromptExpectations = []struct {
 }
 
 func TestMaterializedPackagedGoalFactory_AuthorBoundedSummarizerPrompt(t *testing.T) {
-	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestMaterializedPackagedGoalFactory_AuthorBoundedSummarizerPrompt(t *testin
 }
 
 func TestMaterializedPackagedGoalFactory_AuthorBoundedWorkerRolePrompts(t *testing.T) {
-	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestMaterializedPackagedGoalFactory_SplitRolePromptRegressionFailsWhenPromp
 	for _, source := range PackagedGoalRolePromptSources {
 		source := source
 		t.Run(source.Role, func(t *testing.T) {
-			factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+			factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, BuiltInFactoryJSON)
 			if err != nil {
 				t.Fatalf("PersistNamedFactory: %v", err)
 			}
@@ -319,7 +319,7 @@ func TestMaterializedPackagedGoalFactory_SplitRolePromptRegressionFailsWhenPromp
 		}
 		source := source
 		t.Run(source.Role, func(t *testing.T) {
-			factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+			factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, BuiltInFactoryJSON)
 			if err != nil {
 				t.Fatalf("PersistNamedFactory: %v", err)
 			}
@@ -357,7 +357,7 @@ func TestMaterializedPackagedGoalFactory_SplitRolePromptRegressionFailsWhenPromp
 func materializeAndLoadPackagedGoalFactory(t *testing.T) (string, *factoryconfig.LoadedFactoryConfig) {
 	t.Helper()
 
-	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}

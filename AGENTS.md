@@ -105,7 +105,7 @@ the standards.
 - `pkg/service/` coordinates backend service behavior across sessions,
   runtime construction, model catalog, replay, ingestion, and factory save or
   validation flows.
-- `pkg/workers/`, `pkg/hostedworkers/`, and `pkg/packagedfactories/` contain
+- `pkg/workers/`, `pkg/hostedworkers/`, and `pkg/factory/packages/` contain
   worker execution, provider integration, mock workers, worktrees, hosted
   workers, and packaged factory support.
 - `pkg/orchestrators/javascript/preview`, `pkg/orchestrators/javascript/policy`,

@@ -303,9 +303,10 @@ primary-result behavior.
 - `internal/releasesmoke/harness.go` isolates spawned `you run` smoke processes from
   the developer's real `HOME` so `tests/release` stays hermetic through
   `make test`.
--   `pkg/config/layout.go` owns the built-in `@you/goal` and `@you/tts` factory JSON
-  (`BuiltInGoalFactoryJSON`, `BuiltInTTSFactoryJSON`) registered from
-  `builtInNamedFactoryCatalog` in `pkg/config/layout.go`. Packaged `@you/goal`
+- `pkg/factory/packages/catalog.go` owns packaged factory lookup and metadata;
+  payload sources live under `pkg/factory/packages/definitions/`, while
+  `pkg/config/layout.go` consumes the catalog for legacy aliases and on-disk
+  materialization. Packaged `@you/goal`
   routes review mode from `check-goal` (`plain` -> `goal:review`, `structured` ->
   `goal:structured-review`) so plain classifier and structured envelope lanes are
   both reachable without competing logical advances from `goal:check`. The built-in
@@ -325,14 +326,15 @@ primary-result behavior.
   directory so customer edits survive later `you run --named` reuse.
   `@you/fusion` factory JSON (`BuiltInFusionFactoryJSON`) is also registered from
   `builtInNamedFactoryCatalog`.
-- `pkg/config/builtinsubagent/` owns the authored `@you/subagent` one-pass factory
+- `pkg/factory/packages/definitions/subagent/` owns the authored `@you/subagent` one-pass factory
   scaffold (`factory.json`, prompt files) assembled into `BuiltInSubagentFactoryJSON`
-  exported from `pkg/config/layout.go`. The topology uses exactly one `AGENT_WORKER`
+  and registered by `pkg/factory/packages/catalog.go`; `pkg/config/layout.go` retains
+  only compatibility aliases and materialization behavior. The topology uses exactly one `AGENT_WORKER`
   with explicit `agentTools.policy` and one `AGENT_RUN` workstation that interpolates
   `${input}` from the invocation signature into the workstation prompt body.
   `@you/subagent` is registered in `builtInNamedFactoryCatalog` so first named
   resolution materializes the split-layout factory under the global named-factory root.
-- `pkg/packagedfactories/subagent/` owns packaged subagent factory metadata constants,
+- `pkg/factory/packages/subagent/` owns packaged subagent factory metadata constants,
   topology validation coverage, materialization/edit-safe identity tests, response
   shaping helpers for terminal `task:complete` work content, and primary-result
   selection tests for the one-pass built-in factory JSON.
@@ -354,7 +356,7 @@ primary-result behavior.
   invocation and signature-aware help. Factory materialization, examples, and
   edit-after-materialize behavior belong in
   `docs/reference/authoring-factories.md`.
-- `pkg/packagedfactories/goal/` owns packaged goal factory metadata constants and
+- `pkg/factory/packages/goal/` owns packaged goal factory metadata constants and
   config-load regression coverage for the authored `invocationReturn` policy that
   selects terminal `goal:complete` work content as the primary result.
   `summary.go` shapes terminal `execute-goal` work content from worker output so
@@ -363,7 +365,7 @@ primary-result behavior.
   and must preserve carried summary content. `primary_result_test.go` covers both
   successful EXPLICIT selection and unresolved failure when `goal:complete` is
   absent from terminal work in scope.
-- `pkg/packagedfactories/goal/decision_envelope.go` owns the canonical
+- `pkg/factory/packages/goal/decision_envelope.go` owns the canonical
   reviewer/checker JSON envelope and its mapping onto `interfaces.WorkResult`.
   Goal routing envelopes with authored `classificationRoutes` map parsed
   `decision` labels onto `SelectedClassificationLabel` while preserving
@@ -386,7 +388,7 @@ primary-result behavior.
   `WorkResult` fields. The same file also proves malformed JSON and unknown
   decisions route to `goal:failed` with actionable failure text instead of
   misrouting to complete, rework, or escalation states.
-- `pkg/packagedfactories/goal/factory_test.go` proves `goal:execute` schedules
+- `pkg/factory/packages/goal/factory_test.go` proves `goal:execute` schedules
   the `check-goal` review-mode classifier in the mapped runtime net.
 - `tests/functional/runtime_api/api_packaged_goal_invocation_test.go` proves the
   materialized built-in goal topology dispatches `review-goal` when
@@ -459,7 +461,7 @@ primary-result behavior.
   invocation stdout that suppresses operator chatter, and named-goal batch
   stdout that stays primary-result-only. Reuse helpers from
   `cli_factory_prompt_run_smoke_test.go` when extending these regressions.
-- `pkg/packagedfactories/tts/` owns packaged TTS invocation metadata shaping
+- `pkg/factory/packages/tts/` owns packaged TTS invocation metadata shaping
   helpers used when `INFERENCE_RUN` (or legacy `MODEL_INVOKE`) work completes on the `execute-tts` workstation.
   `metadata.go` derives the `backend` metadata field from the loaded on-disk
   worker model so customer edits to materialized `factory.json` affect the next
@@ -482,13 +484,13 @@ primary-result behavior.
   belong in `docs/reference/authoring-factories.md`. Prefer `INFERENCE_WORKER` /
   `INFERENCE_RUN` terminology in retained guidance while documenting
   `MODEL_WORKER` / `MODEL_INVOKE` as migration aliases.
-- `pkg/packagedfactories/tts/observability.go` classifies packaged TTS loading,
+- `pkg/factory/packages/tts/observability.go` classifies packaged TTS loading,
   model-not-ready, and generation-failure outcomes and defines stable invocation
   error codes plus packaged-factory metric names.
 - `pkg/cli/run/packaged_tts_invocation.go` logs named-factory resolution context at
   the CLI boundary without recording packaged-factory metrics or logging submitted
   text or generated artifact bodies.
-- `pkg/packagedfactories/goal/` owns packaged `@you/goal` factory metadata
+- `pkg/factory/packages/goal/` owns packaged `@you/goal` factory metadata
   constants (`PackagedFactoryName`, `PackagedInvokeWorkstationName`).
 - `pkg/cli/run/run_invocation_test.go` proves `@you/goal` CLI invocation input
   sources resolve through `invocations.ResolveTextInput`, reach the shared

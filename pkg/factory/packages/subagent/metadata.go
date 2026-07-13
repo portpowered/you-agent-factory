@@ -3,8 +3,13 @@ package subagent
 import (
 	"strings"
 
+	builtinsubagent "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/subagent"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
+
+// BuiltInFactoryJSON is the canonical runnable @you/subagent definition owned
+// by the factory packages family.
+var BuiltInFactoryJSON = builtinsubagent.BuiltInSubagentFactoryJSON
 
 const (
 	// PackagedFactoryName is the canonical named factory identifier for @you/subagent.

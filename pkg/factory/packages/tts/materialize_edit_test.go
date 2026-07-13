@@ -38,7 +38,7 @@ const sampleAudioWorkerOutput = `[{"type":"AUDIO","file":"/tmp/speech.wav","cont
 
 func materializePackagedTTSFactory(t *testing.T, globalRoot string) string {
 	t.Helper()
-	factoryDir, err := factoryconfig.PersistNamedFactory(globalRoot, "@you/tts", factoryconfig.BuiltInTTSFactoryJSON)
+	factoryDir, err := factoryconfig.PersistNamedFactory(globalRoot, "@you/tts", BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}

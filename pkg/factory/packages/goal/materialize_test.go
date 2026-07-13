@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/builtingoal"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -77,7 +77,7 @@ func TestMaterializePackagedGoalFactory_DeterministicFreshMaterialization(t *tes
 
 func materializePackagedGoalFactory(t *testing.T, globalRoot string) string {
 	t.Helper()
-	factoryDir, err := factoryconfig.PersistNamedFactory(globalRoot, PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	factoryDir, err := factoryconfig.PersistNamedFactory(globalRoot, PackagedFactoryName, BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}

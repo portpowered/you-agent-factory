@@ -71,7 +71,7 @@ func TestResolveNamedFactoryAcrossRoots_MaterializesBuiltInSubagentIntoGlobalRoo
 
 func materializePackagedSubagentFactory(t *testing.T, globalRoot string) string {
 	t.Helper()
-	factoryDir, err := factoryconfig.PersistNamedFactory(globalRoot, PackagedFactoryName, factoryconfig.BuiltInSubagentFactoryJSON)
+	factoryDir, err := factoryconfig.PersistNamedFactory(globalRoot, PackagedFactoryName, BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}

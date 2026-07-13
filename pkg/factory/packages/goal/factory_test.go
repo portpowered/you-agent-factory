@@ -57,7 +57,7 @@ var packagedGoalWorkstationPublicTypes = map[string]string{
 }
 
 func TestBuiltInFactoryJSON_LoadsRunnablePackagedGoalFactory(t *testing.T) {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("ParseFactoryConfig: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestBuiltInFactoryJSON_LoadsRunnablePackagedGoalFactory(t *testing.T) {
 }
 
 func TestBuiltInGoalFactory_ExecuteStateSchedulesCheckReviewModeClassifier(t *testing.T) {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestBuiltInGoalFactory_ExecuteStateSchedulesCheckReviewModeClassifier(t *te
 }
 
 func TestBuiltInGoalFactoryJSON_ExposesCurrentPublicPrimitiveVocabulary(t *testing.T) {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("ParseFactoryConfig: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestBuiltInGoalFactoryJSON_ExposesCurrentPublicPrimitiveVocabulary(t *testi
 }
 
 func TestMaterializedPackagedGoalFactory_ExposesCanonicalWorkTypeAndLifecycleStates(t *testing.T) {
-	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestMaterializedPackagedGoalFactory_ExposesCanonicalWorkTypeAndLifecycleSta
 }
 
 func TestMaterializedPackagedGoalFactory_ExposesCurrentPublicPrimitiveVocabulary(t *testing.T) {
-	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	factoryDir, err := factoryconfig.PersistNamedFactory(t.TempDir(), PackagedFactoryName, BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}

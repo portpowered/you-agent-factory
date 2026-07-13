@@ -8,9 +8,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/subagent"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
 	"github.com/portpowered/infinite-you/pkg/petri"
 )
 
