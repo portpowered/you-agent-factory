@@ -26,9 +26,7 @@ import {
 } from "../features/current-factory-definition/hooks/useCurrentFactoryDefinition";
 import { resetSelectionHistoryStore } from "../features/current-selection/base/public";
 import { useDashboardSessionStore } from "../features/dashboard/state/dashboardSessionStore";
-import {
-  useDashboardStreamStore,
-} from "../features/dashboard/state/dashboardStreamStore";
+import { useDashboardStreamStore } from "../features/dashboard/state/dashboardStreamStore";
 import { useExportDialogStore } from "../features/export/state/exportDialogStore";
 import type { FactoryPngImportValue } from "../features/import/lib/factory-png-import";
 import { useFactoryTimelineStore } from "../features/timeline/state/factoryTimelineStore";
@@ -38,14 +36,14 @@ import {
   type RenderAppFetchOverride,
 } from "./app-shell-fetch-test-utils";
 import {
+  buildAppShellStreamIdentity,
+  handleFactorySessionPreflightRequest,
+} from "./app-shell-session-preflight-test-utils";
+import {
   defaultFactorySessionSummary,
   fetchRequestPath,
   MockEventSource,
 } from "./app-shell-session-stream-test-utils";
-import {
-  buildAppShellStreamIdentity,
-  handleFactorySessionPreflightRequest,
-} from "./app-shell-session-preflight-test-utils";
 import { buildDashboardTestGraphLayout } from "./app-shell-test-graph-layout";
 import {
   seedTimelineSnapshot,
@@ -60,11 +58,11 @@ import {
 
 export {
   chainRenderAppFetchMock,
+  type FetchMock,
   fetchCallPaths,
   jsonResponse,
   lastFetchCallBody,
   nonPromptTemplateFetchPaths,
-  type FetchMock,
   type RenderAppFetchOverride,
 } from "./app-shell-fetch-test-utils";
 
@@ -246,7 +244,9 @@ export function renderApp({
   traceFixtures = {},
   workstationRequestsByDispatchID = {},
 }: RenderAppOptions): RenderAppResult {
-  const availableFactorySessions = factorySessions ?? [defaultFactorySessionSummary];
+  const availableFactorySessions = factorySessions ?? [
+    defaultFactorySessionSummary,
+  ];
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: {
@@ -259,13 +259,19 @@ export function renderApp({
   if (seedCurrentFactoryDocument) {
     const resolvedSessionID = sessionID ?? DEFAULT_FACTORY_SESSION_ID;
     const sessionSummary =
-      availableFactorySessions.find((session) => session.id === resolvedSessionID) ??
-      availableFactorySessions[0];
+      availableFactorySessions.find(
+        (session) => session.id === resolvedSessionID,
+      ) ?? availableFactorySessions[0];
     if (!sessionSummary) {
-      throw new Error("expected at least one factory session summary for app-shell seeding");
+      throw new Error(
+        "expected at least one factory session summary for app-shell seeding",
+      );
     }
     const currentFactoryDocument = sessionFactoryDocumentFromSnapshot(snapshot);
-    const streamIdentity = buildAppShellStreamIdentity(sessionSummary, snapshot);
+    const streamIdentity = buildAppShellStreamIdentity(
+      sessionSummary,
+      snapshot,
+    );
 
     queryClient.setQueryData(
       currentFactoryDocumentQueryKey(resolvedSessionID, streamIdentity),
