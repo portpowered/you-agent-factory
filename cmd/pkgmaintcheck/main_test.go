@@ -208,6 +208,36 @@ func TestRunHonorsRuleScopedIgnoreDirectives(t *testing.T) {
 	}
 }
 
+func TestRunDoesNotSuppressPunctuationAdjacentDirectiveLookalikes(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoFile(t, repoRoot, "pkg/service/lookalike.go", strings.Join([]string{
+		"// pkgmaintcheck:ignore-file-lines: punctuation is not part of the directive grammar.",
+		"package service",
+		"",
+		"// pkgmaintcheck:ignore-function-lines: punctuation is not part of the directive grammar.",
+		"// pkgmaintcheck:ignore-cyclomatic-complexity: punctuation is not part of the directive grammar.",
+		"func Branchy(value int) int {",
+		"\tif value > 0 {",
+		"\t\treturn 1",
+		"\t}",
+		"\treturn 0",
+		"}",
+	}, "\n"))
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, fileLineLimit: 8, functionLineLimit: 4, cyclomaticLimit: 1}, &bytes.Buffer{}, stderr)
+	if err == nil || err.Error() != "[agent-factory:pkg-maint] found 3 maintainability violation(s)" {
+		t.Fatalf("run() error = %v, want all three maintainability violations", err)
+	}
+	for _, want := range []string{"rule=file-lines", "rule=function-lines", "rule=cyclomatic-complexity"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
+		}
+	}
+}
+
 func TestRunRejectsStalePackageRegistration(t *testing.T) {
 	t.Parallel()
 

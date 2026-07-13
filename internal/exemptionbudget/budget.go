@@ -30,6 +30,21 @@ var supportedRules = []string{
 	RulePackageComplexity,
 }
 
+const minimumRemovalReasonLength = 20
+
+var removalActionWords = []string{
+	"delete",
+	"extract",
+	"migrate",
+	"move",
+	"reduce",
+	"refactor",
+	"remove",
+	"replace",
+	"simplify",
+	"split",
+}
+
 type Baseline struct {
 	Version int     `json:"version"`
 	Entries []Entry `json:"entries"`
@@ -85,7 +100,7 @@ func FormatDifference(difference Difference) string {
 	identity := fmt.Sprintf("rule=%s target=%s", difference.Rule, difference.Target)
 	switch difference.Kind {
 	case DifferenceUnregistered:
-		return fmt.Sprintf("exemption budget %s is unregistered; add a sorted %s entry with a non-empty owner and removalReason", identity, BaselinePath)
+		return fmt.Sprintf("exemption budget %s is unregistered; add a sorted %s entry with a non-empty owner and actionable removalReason", identity, BaselinePath)
 	case DifferenceStale:
 		return fmt.Sprintf("exemption budget %s is stale; remove its %s entry or restore the directive", identity, BaselinePath)
 	case DifferenceDuplicate:
@@ -134,6 +149,9 @@ func Validate(baseline Baseline) error {
 		if strings.TrimSpace(entry.RemovalReason) == "" {
 			return fmt.Errorf("exemption baseline entry %s has empty removalReason; describe the concrete refactor or threshold-removal condition", identity)
 		}
+		if !actionableRemovalReason(entry.RemovalReason) {
+			return fmt.Errorf("exemption baseline entry %s has non-actionable removalReason; use at least %d characters and name a concrete removal action (%s)", identity, minimumRemovalReasonLength, strings.Join(removalActionWords, ", "))
+		}
 		if index == 0 {
 			continue
 		}
@@ -146,6 +164,19 @@ func Validate(baseline Baseline) error {
 		}
 	}
 	return nil
+}
+
+func actionableRemovalReason(reason string) bool {
+	trimmed := strings.TrimSpace(reason)
+	if len([]rune(trimmed)) < minimumRemovalReasonLength {
+		return false
+	}
+	words := strings.FieldsFunc(strings.ToLower(trimmed), func(character rune) bool {
+		return character < 'a' || character > 'z'
+	})
+	return slices.ContainsFunc(words, func(word string) bool {
+		return slices.Contains(removalActionWords, word)
+	})
 }
 
 func Compare(directives []Directive, baseline Baseline) []Difference {

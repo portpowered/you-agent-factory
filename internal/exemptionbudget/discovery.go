@@ -157,20 +157,40 @@ func includedRule(rule string, scope Scope) bool {
 func appendCommentDirectives(result []Directive, groups []*ast.CommentGroup, rule, target string) []Directive {
 	for _, group := range groups {
 		for _, comment := range group.List {
-			text := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(comment.Text, "//"), "/*"))
-			index := strings.Index(text, rule)
-			if index < 0 || !directiveBoundary(text, index+len(rule)) {
+			reason, ok := MatchDirective(comment.Text, rule)
+			if !ok {
 				continue
 			}
-			reason := strings.TrimSpace(strings.TrimSuffix(text[index+len(rule):], "*/"))
 			result = append(result, Directive{Rule: rule, Target: target, Reason: reason})
 		}
 	}
 	return result
 }
 
-func directiveBoundary(text string, index int) bool {
-	return index == len(text) || text[index] == ' ' || text[index] == '\t'
+// MatchDirective is the single recognition grammar used by exemption discovery
+// and the focused scanners. A directive token must end the comment or be
+// followed by horizontal whitespace; punctuation-adjacent lookalikes are not
+// exemptions.
+func MatchDirective(commentText, rule string) (string, bool) {
+	if rule == "" {
+		return "", false
+	}
+	text := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(commentText, "//"), "/*"))
+	searchFrom := 0
+	for searchFrom <= len(text)-len(rule) {
+		relativeIndex := strings.Index(text[searchFrom:], rule)
+		if relativeIndex < 0 {
+			return "", false
+		}
+		index := searchFrom + relativeIndex
+		afterRule := index + len(rule)
+		if afterRule == len(text) || text[afterRule] == ' ' || text[afterRule] == '\t' {
+			reason := strings.TrimSpace(strings.TrimSuffix(text[afterRule:], "*/"))
+			return reason, true
+		}
+		searchFrom = afterRule
+	}
+	return "", false
 }
 
 func functionName(function *ast.FuncDecl) string {

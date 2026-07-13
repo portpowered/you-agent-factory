@@ -257,7 +257,7 @@ func countLines(source []byte) int {
 func hasIgnoreDirective(groups []*ast.CommentGroup, directive string) bool {
 	for _, group := range groups {
 		for _, comment := range group.List {
-			if strings.Contains(comment.Text, directive) {
+			if _, ok := exemptionbudget.MatchDirective(comment.Text, directive); ok {
 				return true
 			}
 		}

@@ -208,12 +208,39 @@ func TestRunRejectsAllUnregisteredDirectivesInDeterministicOrder(t *testing.T) {
 		t.Fatalf("run() error = %v, want two budget violations", err)
 	}
 	want := strings.Join([]string{
-		"exemption budget rule=backendsizecheck:ignore-file target=pkg/zeta/z.go is unregistered; add a sorted backend-exemption-budget.json entry with a non-empty owner and removalReason",
-		"exemption budget rule=backendsizecheck:ignore-function target=cmd/alpha/main.go#main is unregistered; add a sorted backend-exemption-budget.json entry with a non-empty owner and removalReason",
+		"exemption budget rule=backendsizecheck:ignore-file target=pkg/zeta/z.go is unregistered; add a sorted backend-exemption-budget.json entry with a non-empty owner and actionable removalReason",
+		"exemption budget rule=backendsizecheck:ignore-function target=cmd/alpha/main.go#main is unregistered; add a sorted backend-exemption-budget.json entry with a non-empty owner and actionable removalReason",
 		"",
 	}, "\n")
 	if got := stderr.String(); got != want {
 		t.Fatalf("run() stderr = %q, want deterministic diagnostics %q", got, want)
+	}
+}
+
+func TestRunDoesNotSuppressPunctuationAdjacentDirectiveLookalikes(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoFile(t, repoRoot, "pkg/service/lookalike.go", strings.Join([]string{
+		"// backendsizecheck:ignore-file: punctuation is not part of the directive grammar.",
+		"package service",
+		"",
+		"// backendsizecheck:ignore-function: punctuation is not part of the directive grammar.",
+		"func Oversized() {",
+		"\tprintln(\"one\")",
+		"\tprintln(\"two\")",
+		"}",
+	}, "\n"))
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, fileLineLimit: 5, funcLineLimit: 3}, &bytes.Buffer{}, stderr)
+	if err == nil || err.Error() != "[agent-factory:backend-size] found 2 size violation(s)" {
+		t.Fatalf("run() error = %v, want file and function violations", err)
+	}
+	for _, want := range []string{"file pkg/service/lookalike.go", "function Oversized in pkg/service/lookalike.go"} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
+		}
 	}
 }
 
@@ -230,6 +257,22 @@ func TestRunRejectsInvalidRegistrationMetadata(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "rule=backendsizecheck:ignore-file") ||
 		!strings.Contains(err.Error(), "target=pkg/service/ignored.go") || !strings.Contains(err.Error(), "set a non-empty owner") {
 		t.Fatalf("run() error = %v, want rule, target, and owner remediation", err)
+	}
+}
+
+func TestRunRejectsNonActionableRemovalReason(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoFile(t, repoRoot, "pkg/service/ignored.go", "// backendsizecheck:ignore-file split this file.\npackage service\n")
+	writeExemptionBaseline(t, repoRoot, exemptionbudget.Entry{
+		Rule: exemptionbudget.RuleBackendFile, Target: "pkg/service/ignored.go", Owner: "service-maintainers", RemovalReason: "x",
+	})
+
+	err := run(config{root: repoRoot, fileLineLimit: 100, funcLineLimit: 100}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "rule=backendsizecheck:ignore-file") ||
+		!strings.Contains(err.Error(), "target=pkg/service/ignored.go") || !strings.Contains(err.Error(), "non-actionable removalReason") {
+		t.Fatalf("run() error = %v, want rule, target, and actionable-removal remediation", err)
 	}
 }
 

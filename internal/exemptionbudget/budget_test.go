@@ -36,6 +36,7 @@ func TestParseRequiresAccountableSortedEntries(t *testing.T) {
 	}{
 		{name: "blank owner", replace: `"backend-maintainers"`, with: `" "`, want: "rule=backendsizecheck:ignore-file target=pkg/service/factory.go has empty owner"},
 		{name: "blank removal reason", replace: `"Split transport wiring from runtime construction."`, with: `""`, want: "rule=backendsizecheck:ignore-file target=pkg/service/factory.go has empty removalReason"},
+		{name: "non-actionable removal reason", replace: `"Split transport wiring from runtime construction."`, with: `"This exemption stays."`, want: "rule=backendsizecheck:ignore-file target=pkg/service/factory.go has non-actionable removalReason"},
 		{name: "unknown rule", replace: `backendsizecheck:ignore-file`, with: `pkgboundarycheck:ignore-root`, want: "rule=pkgboundarycheck:ignore-root target=pkg/service/factory.go has unsupported rule"},
 		{name: "unknown field", replace: `"owner":`, with: `"ticket": "ABC-1", "owner":`, want: "unknown field"},
 	}
@@ -54,7 +55,7 @@ func TestParseRequiresAccountableSortedEntries(t *testing.T) {
 func TestValidateRejectsDuplicateAndUnsortedEntries(t *testing.T) {
 	t.Parallel()
 
-	entry := Entry{Rule: RuleBackendFile, Target: "pkg/z.go", Owner: "backend-maintainers", RemovalReason: "Split the file."}
+	entry := Entry{Rule: RuleBackendFile, Target: "pkg/z.go", Owner: "backend-maintainers", RemovalReason: "Split the file by responsibility."}
 	if err := Validate(Baseline{Version: Version, Entries: []Entry{entry, entry}}); err == nil || !strings.Contains(err.Error(), "is duplicated") {
 		t.Fatalf("Validate() duplicate error = %v", err)
 	}

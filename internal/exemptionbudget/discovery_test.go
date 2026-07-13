@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 )
 
@@ -86,11 +85,6 @@ func TestRepositoryBaselineAccountsForEveryActiveDirective(t *testing.T) {
 	}
 	if differences := Compare(directives, baseline); len(differences) != 0 {
 		t.Fatalf("repository exemption differences = %#v, want none", differences)
-	}
-	for _, entry := range baseline.Entries {
-		if !strings.HasPrefix(entry.RemovalReason, "Refactor the target to satisfy the ") {
-			t.Fatalf("entry %s/%s removalReason = %q, want actionable threshold-removal guidance", entry.Rule, entry.Target, entry.RemovalReason)
-		}
 	}
 }
 
