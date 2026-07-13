@@ -1979,7 +1979,7 @@ type FactoryResponseEvent struct {
 	// SchemaVersion Version of the FactoryResponseEvent envelope schema.
 	SchemaVersion FactoryResponseEventSchemaVersion `json:"schemaVersion"`
 
-	// Sequence Monotonic session-scoped cursor for reconnect and ordering.
+	// Sequence Monotonic session-scoped cursor for published events. Sequence zero is reserved for synthetic out-of-band read markers such as retention gaps; those markers do not consume or reuse a published sequence.
 	Sequence int64 `json:"sequence"`
 
 	// TurnId Optional turn correlation identifier.
@@ -2207,13 +2207,13 @@ type FactoryResponseEventSessionPayload struct {
 
 // FactoryResponseEventStreamGapPayload Discontinuity marker in the retained response-event stream.
 type FactoryResponseEventStreamGapPayload struct {
-	// FromSequence Last retained sequence before the gap.
+	// FromSequence Lowest unavailable published sequence greater than the reader's cursor.
 	FromSequence int64 `json:"fromSequence"`
 
 	// Reason Optional reason for the stream gap such as retention_window.
 	Reason *string `json:"reason,omitempty"`
 
-	// ToSequence First available sequence after the gap.
+	// ToSequence Highest unavailable published sequence in the reader's catch-up window.
 	ToSequence int64 `json:"toSequence"`
 }
 

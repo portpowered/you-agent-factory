@@ -181,6 +181,7 @@ function checkpointStorageKey(
   return [
     DEFAULT_BACKEND_SCOPE_ID,
     factorySessionID,
+    DEFAULT_LOGICAL_SESSION_KEY_ID,
     DEFAULT_STREAM_GENERATION_ID,
   ].join("::");
 }

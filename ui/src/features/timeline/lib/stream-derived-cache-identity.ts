@@ -36,10 +36,11 @@ export function normalizeStreamDerivedCacheIdentity(
 
 export function streamDerivedCacheKeyPrefix(
   identity: StreamDerivedCacheIdentity,
-): readonly [string, string, string] {
+): readonly [string, string, string, string] {
   return [
     identity.backendScopeID,
     identity.factorySessionID,
+    identity.logicalSessionKeyID,
     identity.streamGenerationID,
   ];
 }

@@ -34,6 +34,7 @@ export type DashboardCheckpointPreflightResolution =
   | {
       checkpoint: FactoryTimelineCheckpoint | null;
       clearRequestedSessionCheckpoint: boolean;
+      checkpointToDelete: PersistedTimelineCheckpointPeek | null;
       kind: "resume";
       reconnectCursor?: FactoryEventReconnectCursor;
       requestedSessionId: string;
@@ -42,6 +43,7 @@ export type DashboardCheckpointPreflightResolution =
     }
   | {
       clearRequestedSessionCheckpoint: true;
+      checkpointToDelete: PersistedTimelineCheckpointPeek | null;
       kind: "remap";
       requestedSessionId: string;
       resolvedSessionId: string;
@@ -49,12 +51,14 @@ export type DashboardCheckpointPreflightResolution =
     }
   | {
       clearRequestedSessionCheckpoint: true;
+      checkpointToDelete: PersistedTimelineCheckpointPeek | null;
       kind: "recovery";
       reasonCode: string;
       requestedSessionId: string;
     }
   | {
       clearRequestedSessionCheckpoint: true;
+      checkpointToDelete: null;
       error: Error;
       kind: "error";
       requestedSessionId: string;
@@ -70,6 +74,7 @@ function errorOutcome(
       : "The dashboard could not validate the selected session.";
   return {
     clearRequestedSessionCheckpoint: true,
+    checkpointToDelete: null,
     error: new Error(message),
     kind: "error",
     requestedSessionId,
@@ -158,6 +163,7 @@ async function resolveResponse({
   if (resolution.kind === "non-recoverable") {
     return {
       clearRequestedSessionCheckpoint: true,
+      checkpointToDelete: stored,
       kind: "recovery",
       reasonCode: resolution.recovery.reasonCode,
       requestedSessionId: resolution.recovery.requestedSessionId,
@@ -180,6 +186,7 @@ async function resolveResponse({
   ) {
     return {
       clearRequestedSessionCheckpoint: true,
+      checkpointToDelete: stored,
       kind: "remap",
       requestedSessionId: resolution.requestedSessionId,
       resolvedSessionId: resolution.resolvedSessionId,
@@ -201,6 +208,7 @@ async function resolveResponse({
   return {
     checkpoint,
     clearRequestedSessionCheckpoint,
+    checkpointToDelete: clearRequestedSessionCheckpoint ? stored : null,
     kind: "resume",
     reconnectCursor: clearRequestedSessionCheckpoint
       ? undefined
