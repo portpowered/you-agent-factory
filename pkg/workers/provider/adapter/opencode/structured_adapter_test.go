@@ -181,7 +181,10 @@ func TestStructuredFinalUsesSnapshotWithoutDuplicatingPrecedingDeltas(t *testing
 }
 
 func TestOpenCodeAuthoritativeFinalResultsPreserveContentBeyondPublicationLimit(t *testing.T) {
-	content := strings.Repeat("x", 300*1024) + "complete-tail"
+	// Cross both the 256 KiB event publication limit and the structured
+	// decoder's 1 MiB observation-record limit. Authoritative parsing must not
+	// inherit either limit.
+	content := strings.Repeat("x", 2*1024*1024) + "complete-tail"
 	tests := []struct {
 		name            string
 		providerAdapter adapter.Adapter

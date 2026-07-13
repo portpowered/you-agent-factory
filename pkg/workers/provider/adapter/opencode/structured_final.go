@@ -59,7 +59,7 @@ func parseStructuredFinal(stdout []byte) (parsedStructuredFinal, error) {
 	var snapshots strings.Builder
 	seenSnapshotParts := make(map[string]struct{})
 	hasSnapshot := false
-	for _, raw := range splitStructuredLines(stdout) {
+	for _, raw := range splitAuthoritativeStructuredLines(stdout) {
 		record, err := decodeStructuredRecord(raw)
 		if err != nil || record.Type == "" {
 			continue
@@ -101,11 +101,23 @@ func parseStructuredFinal(stdout []byte) (parsedStructuredFinal, error) {
 }
 
 func splitStructuredLines(stdout []byte) [][]byte {
+	return splitNonEmptyStructuredLines(stdout, maxStructuredRecordBytes)
+}
+
+// splitAuthoritativeStructuredLines deliberately has no publication-oriented
+// record limit. OpenCode emits each completed text part as one JSON line, so
+// the final response parser must preserve valid results larger than the
+// incremental decoder's bounded observation record.
+func splitAuthoritativeStructuredLines(stdout []byte) [][]byte {
+	return splitNonEmptyStructuredLines(stdout, 0)
+}
+
+func splitNonEmptyStructuredLines(stdout []byte, maximumBytes int) [][]byte {
 	normalized := bytes.ReplaceAll(stdout, []byte("\r\n"), []byte("\n"))
 	lines := bytes.Split(normalized, []byte("\n"))
 	result := make([][]byte, 0, len(lines))
 	for _, line := range lines {
-		if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 && len(trimmed) <= maxStructuredRecordBytes {
+		if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 && (maximumBytes == 0 || len(trimmed) <= maximumBytes) {
 			result = append(result, trimmed)
 		}
 	}
