@@ -196,9 +196,33 @@ primary-result behavior.
   consumers through `pkg/service/runtime_sessions.go`, but is not a CLI human
   presentation fallback.
   Provider-neutral `FactoryResponseEvent` vocabulary lives in
-  `pkg/factory/sessions/responseevents` (distinct from internal
-  `pkg/factory/sessions/responsestream` fragment kinds). Legacy fragment
-  compatibility mapping lives in `pkg/factory/sessions/responsestream/compat`
+  `pkg/factorysessions/responseevents` (distinct from internal
+  `pkg/factorysessions/responsestream` fragment kinds).
+
+  Provider-native structured response adapters live in provider-owned
+  subpackages under `pkg/workers/provider/` and implement the neutral lifecycle
+  in `pkg/workers/provider/adapter`. Keep each decoder invocation-local and
+  stateful, return only canonical `responseevents.Draft` values plus bounded
+  diagnostics, and leave event ID, sequence, recorded time, and Factory Session
+  publication to the session owner. Adapter `BuildCommand` selects structured
+  output only for the response-adapter execution path; the established
+  final-only provider command path must remain unchanged until its caller
+  explicitly opts into response streaming. Both command paths must use
+  `pkg/workers/provider/commandenv` so provider variables retain the established
+  non-interactive Git/editor safeguards, and the production mode-selection
+  boundary must preserve provider input validation before starting either
+  runner. Native JSONL fixture tests should
+  fragment reads and flush an unterminated final record so command selection,
+  decoder buffering, and final-result parsing are proven independently.
+  Provider retry and compaction records should publish only bounded typed facts
+  with static safe messages; adapters may classify those facts but must not
+  sleep, rerun commands, choose backoff, or expose raw provider payloads.
+  Preserve optional provider attribution only from an explicit native field on
+  the supported record, and omit malformed or absent attribution instead of
+  inferring it from neighboring stream activity.
+
+  Legacy fragment
+  compatibility mapping lives in `pkg/factorysessions/responsestream/compat`
   (`MapFragment` over `responsestream.Event` with session/run `Context`); keep
   the mapper pure, table-tested, and free of CLI/HTTP/provider imports while
   later transport lanes adopt mapped canonical events. Response fragments map to
@@ -532,6 +556,14 @@ primary-result behavior.
   instead of submitted input text or raw audio payload bytes.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
+- Production provider mode selection lives at the `pkg/workers/provider`
+  execution boundary: a configured Factory Session response-stream publisher
+  selects a registered structured adapter, while final-only invocations retain
+  the established provider behavior. Provider-native `responseevents.Draft`
+  values must be published directly by `pkg/factorysessions/stream` so the
+  session store assigns event ID, sequence, recorded time, and Factory Session
+  identity without flattening stable message or tool identity through the
+  legacy fragment compatibility mapper.
 - `docs/reference/run.md` is the customer-facing owner for packaged `@you/goal`
   invocation behavior. Operator-visible blocked, needs-human, paused,
   interrupted, failed, timed-out, and unresolved-primary-result outcomes plus
@@ -549,4 +581,4 @@ primary-result behavior.
   authored fields when the current factory payload also declares that parameter
   in `invocationSignature`, or live session pages will fall back to legacy UI
   flows even when backend runtime validation already accepts the factory.
-- Managed-runtime invocation readiness gating and direct invocation policy live in `pkg/models/service/invoke.go`; the canonical service consumes neutral `pkg/modelhost.Host.InspectReadiness` snapshots, projects public readiness through `pkg/apisurface/managed_runtime_invocation.go`, and owns invocation failure classification and readiness logs. `FactoryService` and `runtimehost.Host` only compose or forward the model collaborator. Factory worker execution routes through `pkg/modelhost/execution.go` (`LeaseExecution.WrapRunner`) when a process-wide host is configured, otherwise `pkg/localmodels/runtime.go` manager fallback. Supervised leases pass `lease.Endpoint` into `localmodels.LoadRequest.ServingEndpoint` for host-owned HTTP execution. Process-wide local-runtime ownership and lease boundaries belong in `pkg/modelhost`; keep `pkg/localmodels` as the managed-runtime catalog compatibility projection layer. Model host operator diagnostics for load/lease/unload/crash paths live in `pkg/modelhost/diagnostics.go`; managed-runtime pull logs and metrics live only in `pkg/models/service/pull.go`. See `docs/architecture/model-host.md`. Focused modelhost lease coverage for INFERENCE_WORKER/INFERENCE_RUN lives in `pkg/service/inference_modelhost_test.go`.
+- Managed-runtime invocation readiness gating and direct invocation policy live in `pkg/models/service/invoke.go`; the canonical service consumes neutral `pkg/models/host.Host.InspectReadiness` snapshots, projects public readiness through `pkg/apisurface/managed_runtime_invocation.go`, and owns invocation failure classification and readiness logs. `pkg/wire/production.go` supplies the active-runtime reader, process model host, assets, logger, clock, metrics, invocation executor builder, and runner identity directly; `FactoryService` and `runtimehost.Host` only retain compatibility forwarding/composition seams and are never passed into the model family. Factory worker execution routes through `pkg/models/host/execution.go` (`LeaseExecution.WrapRunner`) when a process-wide host is configured, otherwise `pkg/models/local/runtime.go` manager fallback. Supervised leases pass `lease.Endpoint` into `localmodels.LoadRequest.ServingEndpoint` for host-owned HTTP execution. Process-wide local-runtime ownership and lease boundaries belong in `pkg/models/host`; keep `pkg/models/local` as the managed-runtime catalog compatibility projection layer. Model host operator diagnostics for load/lease/unload/crash paths live in `pkg/models/host/diagnostics.go`; managed-runtime pull logs and metrics live only in `pkg/models/service/pull.go`. See `docs/architecture/model-host.md`. Focused modelhost lease coverage for INFERENCE_WORKER/INFERENCE_RUN lives in `pkg/service/inference_modelhost_test.go`.

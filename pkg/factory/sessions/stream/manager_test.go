@@ -2,10 +2,12 @@ package stream_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/stream"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -153,6 +155,44 @@ func TestManager_PublishesCanonicalResponseEventsToSessionStore(t *testing.T) {
 	}
 	if events[0].DispatchID != "dispatch-1" {
 		t.Fatalf("dispatchId = %q, want dispatch-1", events[0].DispatchID)
+	}
+}
+
+func TestManager_PublishesProviderCanonicalDraftWithoutLegacyRemapping(t *testing.T) {
+	t.Parallel()
+
+	session := factorysessions.NewLiveSession(
+		"sess-native-draft", "/factory", "/workspace", "/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory",
+	)
+	host := &streamTestHost{session: session}
+	publisher := stream.NewManager(host).InferenceProgressPublisherFactory(nil)(session.ID)
+	payload, err := json.Marshal(responseevents.MessageDeltaPayload{
+		ContentBlockIndex: 2, ContentBlockKind: responseevents.ContentBlockText, TextDelta: "native delta",
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	publisher(workerprovider.CanonicalDraftFragment("dispatch-native", responseevents.Draft{
+		RunID: "dispatch-native", DispatchID: "dispatch-native", ItemID: "claude-message-7",
+		Kind: responseevents.KindMessage, Phase: responseevents.PhaseDelta,
+		Provenance: responseevents.Provenance{
+			Provider: "claude", NativeEventType: "content_block_delta",
+			Delivery: responseevents.DeliveryNativeStream, Representation: responseevents.RepresentationDelta,
+			Fidelity: responseevents.FidelityLossless,
+		},
+		Payload: payload,
+	}))
+
+	events := session.ResponseEvents.Events()
+	if len(events) != 1 || events[0].ItemID != "claude-message-7" || events[0].Provenance.Delivery != responseevents.DeliveryNativeStream {
+		t.Fatalf("canonical events = %#v, want unchanged provider-native identity and provenance", events)
+	}
+	if events[0].Sequence != 1 || events[0].EventID == "" || events[0].RecordedAt.IsZero() {
+		t.Fatalf("publication metadata = %#v, want session-owned identity, sequence, and time", events[0])
+	}
+	if host.published != 0 {
+		t.Fatalf("legacy response-stream publications = %d, want no lossy remapping", host.published)
 	}
 }
 

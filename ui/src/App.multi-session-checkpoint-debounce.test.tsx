@@ -20,6 +20,10 @@ import {
   renderAppWithDashboardShell,
 } from "./testing/app-shell-test-utils";
 import {
+  createControlledIndexedDBTestDouble,
+  flushPromiseContinuations,
+} from "./testing/controlled-indexeddb-test-utils";
+import {
   MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO,
   type MultiSessionTimelineCheckpointFixture,
 } from "./testing/multi-session-timeline-checkpoint-scenario";
@@ -27,6 +31,32 @@ import { createTimelineCheckpointIndexedDBTestDouble } from "./testing/timeline-
 
 const CHECKPOINT_DEBOUNCE_MS = 750;
 const { A, B } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
+
+interface StoredCheckpointEnvelope {
+  checkpoint?: MultiSessionTimelineCheckpointFixture["checkpoint"];
+  schemaVersion?: number;
+  storageKey?: string;
+  streamIdentity?: MultiSessionTimelineCheckpointFixture["streamIdentity"];
+}
+
+function previousCheckpointFor(
+  fixture: MultiSessionTimelineCheckpointFixture,
+): MultiSessionTimelineCheckpointFixture {
+  const previous = structuredClone(fixture);
+  previous.checkpoint.afterEventId = `session-${fixture.label.toLowerCase()}-event-previous`;
+  previous.checkpoint.afterSequence -= 1;
+  previous.checkpoint.selectedTick -= 1;
+  previous.checkpoint.replayState.tick_count -= 1;
+  if (previous.checkpoint.materializedWorkOutcomeState.cursor) {
+    previous.checkpoint.materializedWorkOutcomeState.cursor.eventID =
+      previous.checkpoint.afterEventId;
+    previous.checkpoint.materializedWorkOutcomeState.cursor.sequence =
+      previous.checkpoint.afterSequence;
+    previous.checkpoint.materializedWorkOutcomeState.cursor.tick =
+      previous.checkpoint.selectedTick;
+  }
+  return previous;
+}
 
 const factorySessions: FactorySessionSummary[] = [
   sessionSummary(A, "alpha"),
@@ -140,6 +170,72 @@ async function advanceCheckpointTimer(milliseconds: number): Promise<void> {
   });
 }
 
+async function settleCheckpointPersistence(): Promise<void> {
+  await act(async () => {
+    for (let turn = 0; turn < 8; turn += 1) {
+      await Promise.resolve();
+    }
+  });
+}
+
+async function advanceControlledWrite(
+  fixture: ReturnType<
+    typeof createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>
+  >,
+  openOrdinal = 0,
+): Promise<void> {
+  fixture.controls.succeed("open", openOrdinal);
+  await flushPromiseContinuations();
+  fixture.controls.succeed("get");
+  await flushPromiseContinuations();
+  await flushPromiseContinuations();
+  fixture.controls.succeed("open", openOrdinal);
+  await flushPromiseContinuations();
+  fixture.controls.succeed("put");
+  fixture.controls.completeTransaction();
+  for (let turn = 0; turn < 4; turn += 1) {
+    await flushPromiseContinuations();
+  }
+}
+
+async function advanceQueuedControlledWrite(
+  fixture: ReturnType<
+    typeof createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>
+  >,
+): Promise<void> {
+  fixture.controls.succeed("open");
+  await flushPromiseContinuations();
+  fixture.controls.succeed("put");
+  fixture.controls.completeTransaction();
+  for (let turn = 0; turn < 4; turn += 1) {
+    await flushPromiseContinuations();
+  }
+}
+
+async function renderSessionA(options: { writeError?: Error } = {}) {
+  const checkpointDatabase =
+    createTimelineCheckpointIndexedDBTestDouble(options);
+  const { indexedDB } = checkpointDatabase;
+  vi.stubGlobal("indexedDB", indexedDB);
+  useDashboardSessionStore.setState({
+    pausedSessionIDs: [],
+    selectedSessionID: A.streamIdentity.factorySessionID,
+  });
+  const view = await renderAppWithDashboardShell({
+    factorySessions,
+    fetchOverride: multiSessionPreflightFetch(),
+    seedTimelineFromSnapshot: false,
+    snapshot: snapshotFor(A),
+  });
+  await waitFor(() => {
+    expect(requireEventStream(MockEventSource.instances).url).toBe(
+      expectedStreamURL(A),
+    );
+  });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  return { ...checkpointDatabase, ...view };
+}
+
 describe("App multi-session checkpoint debounce regression", () => {
   registerAppDashboardTestLifecycle();
 
@@ -147,50 +243,21 @@ describe("App multi-session checkpoint debounce regression", () => {
     vi.useRealTimers();
   });
 
-  async function renderSessionA(): Promise<IDBFactory> {
-    const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
-    vi.stubGlobal("indexedDB", indexedDB);
-    useDashboardSessionStore.setState({
-      pausedSessionIDs: [],
-      selectedSessionID: A.streamIdentity.factorySessionID,
-    });
-    await renderAppWithDashboardShell({
-      factorySessions,
-      fetchOverride: multiSessionPreflightFetch(),
-      seedTimelineFromSnapshot: false,
-      snapshot: snapshotFor(A),
-    });
-    await waitFor(() => {
-      expect(requireEventStream(MockEventSource.instances).url).toBe(
-        expectedStreamURL(A),
-      );
-    });
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-    return indexedDB;
-  }
+  it("flushes each stream's latest checkpoint during rapid A to B to A switching", async () => {
+    const { indexedDB } = await renderSessionA();
 
-  it.fails("retains checkpoints that become due after A to B to A switching just before 750 ms", async () => {
-    const indexedDB = await renderSessionA();
-
+    await scheduleCheckpoint(previousCheckpointFor(A));
     await scheduleCheckpoint(A);
     await advanceCheckpointTimer(CHECKPOINT_DEBOUNCE_MS - 1);
     await selectSession("beta", B);
+
+    await expect(
+      readTimelineCheckpoint(indexedDB, A.streamIdentity),
+    ).resolves.toEqual(A.checkpoint);
+
     await scheduleCheckpoint(B);
     await selectSession("alpha", A);
-    await advanceCheckpointTimer(1);
 
-    const aAtOriginalDueBoundary = await readTimelineCheckpoint(
-      indexedDB,
-      A.streamIdentity,
-    );
-
-    await scheduleCheckpoint(A);
-    await advanceCheckpointTimer(CHECKPOINT_DEBOUNCE_MS);
-    await selectSession("beta", B);
-    await scheduleCheckpoint(B);
-    await advanceCheckpointTimer(CHECKPOINT_DEBOUNCE_MS);
-
-    expect.soft(aAtOriginalDueBoundary).toEqual(A.checkpoint);
     await expect(
       readTimelineCheckpoint(indexedDB, A.streamIdentity),
     ).resolves.toEqual(A.checkpoint);
@@ -200,7 +267,7 @@ describe("App multi-session checkpoint debounce regression", () => {
   });
 
   it("keeps A durable when switching A to B to A after its 750 ms boundary", async () => {
-    const indexedDB = await renderSessionA();
+    const { indexedDB } = await renderSessionA();
 
     await scheduleCheckpoint(A);
     await advanceCheckpointTimer(CHECKPOINT_DEBOUNCE_MS);
@@ -225,5 +292,177 @@ describe("App multi-session checkpoint debounce regression", () => {
     await expect(
       readTimelineCheckpoint(indexedDB, B.streamIdentity),
     ).resolves.toEqual(B.checkpoint);
+  });
+});
+
+describe("App checkpoint lifecycle handoff", () => {
+  registerAppDashboardTestLifecycle();
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("flushes the latest pending checkpoint on unmount", async () => {
+    const { indexedDB, unmount, writeAttempts } = await renderSessionA();
+
+    await scheduleCheckpoint(previousCheckpointFor(A));
+    await scheduleCheckpoint(A);
+    unmount();
+    await settleCheckpointPersistence();
+
+    await expect(
+      readTimelineCheckpoint(indexedDB, A.streamIdentity),
+    ).resolves.toEqual(A.checkpoint);
+    expect(writeAttempts()).toBe(1);
+  });
+
+  it("flushes on pagehide without blocking navigation or repeating the handoff", async () => {
+    const { indexedDB, writeAttempts } = await renderSessionA();
+    await scheduleCheckpoint(A);
+    const pageHide = new Event("pagehide", { cancelable: true });
+
+    expect(window.dispatchEvent(pageHide)).toBe(true);
+    expect(pageHide.defaultPrevented).toBe(false);
+    window.dispatchEvent(new Event("pagehide"));
+    await advanceCheckpointTimer(CHECKPOINT_DEBOUNCE_MS);
+
+    await expect(
+      readTimelineCheckpoint(indexedDB, A.streamIdentity),
+    ).resolves.toEqual(A.checkpoint);
+    expect(writeAttempts()).toBe(1);
+  });
+
+  it("flushes only when visibility changes to hidden", async () => {
+    const { indexedDB, writeAttempts } = await renderSessionA();
+    await scheduleCheckpoint(A);
+    const visibilityState = vi.spyOn(document, "visibilityState", "get");
+
+    visibilityState.mockReturnValue("visible");
+    document.dispatchEvent(new Event("visibilitychange"));
+    visibilityState.mockReturnValue("prerender");
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(writeAttempts()).toBe(0);
+
+    visibilityState.mockReturnValue("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
+    document.dispatchEvent(new Event("visibilitychange"));
+    await settleCheckpointPersistence();
+
+    await expect(
+      readTimelineCheckpoint(indexedDB, A.streamIdentity),
+    ).resolves.toEqual(A.checkpoint);
+    expect(writeAttempts()).toBe(1);
+  });
+});
+
+describe("App checkpoint lifecycle safety", () => {
+  registerAppDashboardTestLifecycle();
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("installs lifecycle listeners once and removes them on unmount", async () => {
+    const addWindowListener = vi.spyOn(window, "addEventListener");
+    const removeWindowListener = vi.spyOn(window, "removeEventListener");
+    const addDocumentListener = vi.spyOn(document, "addEventListener");
+    const removeDocumentListener = vi.spyOn(document, "removeEventListener");
+    const { unmount } = await renderSessionA();
+
+    expect(
+      addWindowListener.mock.calls.filter(([type]) => type === "pagehide"),
+    ).toHaveLength(1);
+    expect(
+      addDocumentListener.mock.calls.filter(
+        ([type]) => type === "visibilitychange",
+      ),
+    ).toHaveLength(1);
+
+    unmount();
+
+    expect(
+      removeWindowListener.mock.calls.filter(([type]) => type === "pagehide"),
+    ).toHaveLength(1);
+    expect(
+      removeDocumentListener.mock.calls.filter(
+        ([type]) => type === "visibilitychange",
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("contains a lifecycle-time persistence rejection", async () => {
+    const { indexedDB, writeAttempts } = await renderSessionA({
+      writeError: new Error("storage refused"),
+    });
+    await scheduleCheckpoint(A);
+    const pageHide = new Event("pagehide", { cancelable: true });
+
+    expect(window.dispatchEvent(pageHide)).toBe(true);
+    await settleCheckpointPersistence();
+
+    await expect(
+      readTimelineCheckpoint(indexedDB, A.streamIdentity),
+    ).resolves.toBeNull();
+    expect(pageHide.defaultPrevented).toBe(false);
+    expect(writeAttempts()).toBe(1);
+  });
+
+  it("keeps newer same-stream state authoritative while A and B lifecycle writes overlap", async () => {
+    const { indexedDB: preflightIndexedDB, unmount } = await renderSessionA();
+    const controlled =
+      createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
+    vi.stubGlobal("indexedDB", controlled.indexedDB);
+
+    await scheduleCheckpoint(previousCheckpointFor(A));
+    window.dispatchEvent(new Event("pagehide"));
+    await flushPromiseContinuations();
+    await scheduleCheckpoint(A);
+    await advanceCheckpointTimer(CHECKPOINT_DEBOUNCE_MS);
+
+    vi.stubGlobal("indexedDB", preflightIndexedDB);
+    await selectSession("beta", B);
+    vi.stubGlobal("indexedDB", controlled.indexedDB);
+    await scheduleCheckpoint(B);
+    window.dispatchEvent(new Event("pagehide"));
+    await flushPromiseContinuations();
+
+    expect(controlled.controls.pendingOperations()).toEqual(["open", "open"]);
+
+    // B owns an independent identity lane and may finish before the older A
+    // lifecycle write even though A was admitted first.
+    await advanceControlledWrite(controlled, 1);
+    await advanceControlledWrite(controlled);
+    expect(controlled.controls.pendingOperations()).toEqual(["open"]);
+    await advanceQueuedControlledWrite(controlled);
+
+    const stored = [...controlled.records.values()];
+    expect(stored).toHaveLength(2);
+    expect(
+      stored.find(
+        ({ streamIdentity }) =>
+          streamIdentity?.factorySessionID ===
+          A.streamIdentity.factorySessionID,
+      ),
+    ).toEqual({
+      checkpoint: A.checkpoint,
+      schemaVersion: expect.any(Number),
+      storageKey: expect.any(String),
+      streamIdentity: A.streamIdentity,
+    });
+    expect(
+      stored.find(
+        ({ streamIdentity }) =>
+          streamIdentity?.factorySessionID ===
+          B.streamIdentity.factorySessionID,
+      ),
+    ).toEqual({
+      checkpoint: B.checkpoint,
+      schemaVersion: expect.any(Number),
+      storageKey: expect.any(String),
+      streamIdentity: B.streamIdentity,
+    });
+
+    unmount();
+    expect(controlled.controls.pendingOperations()).toEqual([]);
   });
 });

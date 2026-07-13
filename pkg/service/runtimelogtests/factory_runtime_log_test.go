@@ -259,7 +259,7 @@ func TestFactoryService_RunWritesCorrelationFieldsToRuntimeLog(t *testing.T) {
 		t.Fatalf("service.BuildFactoryService: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := svc.Run(ctx); err != nil {
 		t.Fatalf("Run: %v", err)

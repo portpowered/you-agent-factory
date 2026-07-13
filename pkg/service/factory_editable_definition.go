@@ -12,12 +12,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
@@ -376,7 +376,7 @@ func NewFactorySessionsRegistry() *factorysessions.Registry {
 	return factorysessions.NewRegistry()
 }
 
-// LocalModelDomain wires pkg/localmodels runtime dependencies constructed at
+// LocalModelDomain wires pkg/models/local runtime dependencies constructed at
 // service build time and copied onto each factoryRuntimeBundle.
 type LocalModelDomain = factoryservice.LocalModelDomain
 

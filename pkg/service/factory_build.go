@@ -28,24 +28,25 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recording"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations/skippermissions"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	providerstructured "github.com/portpowered/infinite-you/pkg/workers/provider/structured"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
@@ -980,7 +981,10 @@ func providerRunnerOptions(
 		workerprovider.WithProviderLogger(logger),
 	}
 	if inferenceProgressPublisher != nil {
-		opts = append(opts, workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher))
+		opts = append(opts,
+			workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher),
+			workerprovider.WithResponseStreamExecutor(providerstructured.NewExecutor()),
+		)
 	}
 	if providerCommandRunner != nil {
 		opts = append(opts, workerprovider.WithProviderCommandRunner(providerCommandRunner))

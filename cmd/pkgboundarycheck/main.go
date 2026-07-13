@@ -16,9 +16,23 @@ import (
 
 const defaultScanRoot = "pkg"
 const batch001MigrationShimMarker = "Batch 001 compatibility shim"
-const moduleImportPrefix = "github.com/portpowered/infinite-you/"
 const javascriptOrchestratorImportPrefix = "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/"
 const applicationGraphImportPath = "github.com/portpowered/infinite-you/pkg/wire"
+const repositoryImportPrefix = "github.com/portpowered/infinite-you/"
+
+var factoryRetiredPackageRoots = []retiredPackageRoot{
+	{packagePath: "pkg/packagedfactories", canonicalOwner: "pkg/factory/packages"},
+	{packagePath: "pkg/factorydefinition", canonicalOwner: "pkg/factory/definition"},
+	{packagePath: "pkg/factorysessionexecution", canonicalOwner: "pkg/factory/sessions/execution"},
+	{packagePath: "pkg/factorysessions", canonicalOwner: "pkg/factory/sessions"},
+	{packagePath: "pkg/petri", canonicalOwner: "pkg/orchestrators/petri"},
+}
+
+var retiredPackageRoots = append([]retiredPackageRoot{
+	{packagePath: "pkg/hostedworkers", canonicalOwner: "pkg/workers/hosted"},
+	{packagePath: "pkg/localmodels", canonicalOwner: "pkg/models/local or pkg/models/assets"},
+	{packagePath: "pkg/modelhost", canonicalOwner: "pkg/models/host"},
+}, factoryRetiredPackageRoots...)
 
 var approvedApplicationGraphImporters = []string{
 	"pkg/initializer",
@@ -55,20 +69,12 @@ type generatedCodeException struct {
 	scope       string
 }
 
-type retiredPackageOwner struct {
-	packagePath    string
-	canonicalOwner string
-}
-
 var approvedProductPackageFamilies = []string{
 	"pkg/config",
 	"pkg/factory",
-	"pkg/hostedworkers",
 	"pkg/initializer",
 	"pkg/interfaces",
 	"pkg/internal",
-	"pkg/localmodels",
-	"pkg/modelhost",
 	"pkg/models",
 	"pkg/orchestrators",
 	"pkg/platform",
@@ -78,14 +84,6 @@ var approvedProductPackageFamilies = []string{
 	"pkg/wire",
 	"pkg/work",
 	"pkg/workers",
-}
-
-var retiredPackageOwners = []retiredPackageOwner{
-	{packagePath: "pkg/packagedfactories", canonicalOwner: "pkg/factory/packages"},
-	{packagePath: "pkg/factorydefinition", canonicalOwner: "pkg/factory/definition"},
-	{packagePath: "pkg/factorysessionexecution", canonicalOwner: "pkg/factory/sessions/execution"},
-	{packagePath: "pkg/factorysessions", canonicalOwner: "pkg/factory/sessions"},
-	{packagePath: "pkg/petri", canonicalOwner: "pkg/orchestrators/petri"},
 }
 
 const (
@@ -141,20 +139,23 @@ type scanResult struct {
 	applicationGraphImportFindings []applicationGraphImportFinding
 }
 
-type rootPackageFinding struct {
-	packagePath string
+type retiredPackageRoot struct {
+	packagePath    string
+	canonicalOwner string
 }
 
 type retiredPackageRootFinding struct {
-	packagePath    string
-	canonicalOwner string
+	retiredPackageRoot
 }
 
 type retiredPackageImportFinding struct {
-	packagePath    string
-	filePath       string
-	importPath     string
-	canonicalOwner string
+	retiredPackageRoot
+	importPath string
+	filePath   string
+}
+
+type rootPackageFinding struct {
+	packagePath string
 }
 
 type migrationShimFinding struct {
@@ -255,11 +256,8 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		}
 
 		packagePath := filepath.ToSlash(filepath.Join(cfg.packageRoot, entry.Name()))
-		if owner, retired := retiredOwnerForPackagePath(packagePath); retired {
-			result.retiredPackageRootFindings = append(result.retiredPackageRootFindings, retiredPackageRootFinding{
-				packagePath:    packagePath,
-				canonicalOwner: owner.canonicalOwner,
-			})
+		if retiredRoot, found := findRetiredPackageRoot(packagePath); found {
+			result.retiredPackageRootFindings = append(result.retiredPackageRootFindings, retiredPackageRootFinding{retiredRoot})
 			continue
 		}
 		migrationShimFinding, found, err := detectMigrationShimFinding(repoRoot, packagePath)
@@ -292,10 +290,22 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	slices.SortFunc(result.migrationShimFindings, func(left, right migrationShimFinding) int {
 		return strings.Compare(left.packagePath, right.packagePath)
 	})
-	slices.SortFunc(result.retiredPackageRootFindings, func(left, right retiredPackageRootFinding) int {
-		return strings.Compare(left.packagePath, right.packagePath)
+	slices.SortFunc(result.retiredPackageImportFindings, func(left, right retiredPackageImportFinding) int {
+		if comparison := strings.Compare(left.filePath, right.filePath); comparison != 0 {
+			return comparison
+		}
+		return strings.Compare(left.importPath, right.importPath)
 	})
 	return result, nil
+}
+
+func findRetiredPackageRoot(packagePath string) (retiredPackageRoot, bool) {
+	for _, retiredRoot := range retiredPackageRoots {
+		if packagePath == retiredRoot.packagePath {
+			return retiredRoot, true
+		}
+	}
+	return retiredPackageRoot{}, false
 }
 
 func scanRetiredPackageImports(repoRoot string, scanRoot string, packageRoot string) ([]retiredPackageImportFinding, error) {
@@ -310,11 +320,15 @@ func scanRetiredPackageImports(repoRoot string, scanRoot string, packageRoot str
 
 		content, err := os.ReadFile(path)
 		if err != nil {
-			return fmt.Errorf("read retired package import file %s: %w", filepath.ToSlash(path), err)
+			return fmt.Errorf("read package import file %s: %w", filepath.ToSlash(path), err)
 		}
 		parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
 		if err != nil {
 			return fmt.Errorf("parse package imports %s: %w", filepath.ToSlash(path), err)
+		}
+		filePath, err := filepath.Rel(repoRoot, path)
+		if err != nil {
+			return fmt.Errorf("resolve importing file %s: %w", filepath.ToSlash(path), err)
 		}
 
 		for _, importSpec := range parsedFile.Imports {
@@ -322,54 +336,24 @@ func scanRetiredPackageImports(repoRoot string, scanRoot string, packageRoot str
 			if err != nil {
 				continue
 			}
-			owner, retired := retiredOwnerForImportPath(importPath)
-			if !retired {
-				continue
+			packagePath := strings.TrimPrefix(importPath, repositoryImportPrefix)
+			for _, retiredRoot := range retiredPackageRoots {
+				if packagePath != retiredRoot.packagePath && !strings.HasPrefix(packagePath, retiredRoot.packagePath+"/") {
+					continue
+				}
+				findings = append(findings, retiredPackageImportFinding{
+					retiredPackageRoot: retiredRoot,
+					importPath:         importPath,
+					filePath:           filepath.ToSlash(filePath),
+				})
 			}
-			packageDirectory, err := filepath.Rel(repoRoot, filepath.Dir(path))
-			if err != nil {
-				return fmt.Errorf("resolve importing package for %s: %w", filepath.ToSlash(path), err)
-			}
-			filePath, err := filepath.Rel(repoRoot, path)
-			if err != nil {
-				return fmt.Errorf("resolve importing file %s: %w", filepath.ToSlash(path), err)
-			}
-			findings = append(findings, retiredPackageImportFinding{
-				packagePath:    filepath.ToSlash(packageDirectory),
-				filePath:       filepath.ToSlash(filePath),
-				importPath:     importPath,
-				canonicalOwner: owner.canonicalOwner,
-			})
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("scan %s retired package imports: %w", filepath.ToSlash(packageRoot), err)
 	}
-
-	slices.SortFunc(findings, func(left, right retiredPackageImportFinding) int {
-		if byFile := strings.Compare(left.filePath, right.filePath); byFile != 0 {
-			return byFile
-		}
-		return strings.Compare(left.importPath, right.importPath)
-	})
 	return findings, nil
-}
-
-func retiredOwnerForImportPath(importPath string) (retiredPackageOwner, bool) {
-	if !strings.HasPrefix(importPath, moduleImportPrefix) {
-		return retiredPackageOwner{}, false
-	}
-	return retiredOwnerForPackagePath(strings.TrimPrefix(importPath, moduleImportPrefix))
-}
-
-func retiredOwnerForPackagePath(packagePath string) (retiredPackageOwner, bool) {
-	for _, owner := range retiredPackageOwners {
-		if packagePath == owner.packagePath || strings.HasPrefix(packagePath, owner.packagePath+"/") {
-			return owner, true
-		}
-	}
-	return retiredPackageOwner{}, false
 }
 
 func scanApplicationGraphImports(repoRoot string, scanRoot string, packageRoot string) ([]applicationGraphImportFinding, error) {
@@ -596,6 +580,22 @@ func writeGeneratedCodeExceptionSummary(writer io.Writer, policy boundaryPolicy)
 	fmt.Fprintf(writer, "[agent-factory:pkg-boundary] active generated-code exceptions: %s\n", strings.Join(exceptions, ", "))
 }
 
+func writeRetiredPackageRootFindings(writer io.Writer, findings []retiredPackageRootFinding) {
+	for _, finding := range findings {
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited retired package root: %s\n", finding.packagePath)
+		fmt.Fprintf(writer, "  canonical owner: %s\n", finding.canonicalOwner)
+		fmt.Fprintf(writer, "  remediation: move the code to %s and delete the retired root.\n", finding.canonicalOwner)
+	}
+}
+
+func writeRetiredPackageImportFindings(writer io.Writer, findings []retiredPackageImportFinding) {
+	for _, finding := range findings {
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited retired package import: %s (%s)\n", finding.importPath, finding.filePath)
+		fmt.Fprintf(writer, "  canonical owner: %s\n", finding.canonicalOwner)
+		fmt.Fprintf(writer, "  remediation: import %s directly; do not recreate or depend on %s.\n", finding.canonicalOwner, finding.packagePath)
+	}
+}
+
 func generatedCodeExceptionDescriptions(policy boundaryPolicy) []string {
 	descriptions := make([]string, 0, len(policy.generatedCodeExceptions))
 	for _, exception := range policy.generatedCodeExceptions {
@@ -618,22 +618,6 @@ func writeMigrationShimBlockingFindings(writer io.Writer, findings []migrationSh
 		fmt.Fprintf(writer, "  marker: %s\n", finding.marker)
 		fmt.Fprintf(writer, "  canonical target: %s\n", canonicalTarget)
 		fmt.Fprintln(writer, "  remediation: import the canonical owner directly and do not recreate Batch 001 root compatibility shims.")
-	}
-}
-
-func writeRetiredPackageRootFindings(writer io.Writer, findings []retiredPackageRootFinding) {
-	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] retired package root recreated: %s\n", finding.packagePath)
-		fmt.Fprintf(writer, "  canonical owner: %s\n", finding.canonicalOwner)
-		fmt.Fprintf(writer, "  remediation: move the package under %s and do not recreate the retired root.\n", finding.canonicalOwner)
-	}
-}
-
-func writeRetiredPackageImportFindings(writer io.Writer, findings []retiredPackageImportFinding) {
-	for _, finding := range findings {
-		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] retired package import: %s (%s) imports %s\n", finding.packagePath, finding.filePath, finding.importPath)
-		fmt.Fprintf(writer, "  canonical owner: %s\n", finding.canonicalOwner)
-		fmt.Fprintf(writer, "  remediation: import %s directly.\n", finding.canonicalOwner)
 	}
 }
 

@@ -58,6 +58,16 @@ type InferenceProgressFragment struct {
 	ProviderSessionRef *interfaces.ProviderSessionMetadata
 	ExternalEventType  string
 	Metadata           map[string]string
+	CanonicalDraft     any
+}
+
+// CanonicalDraftFragment carries one provider-native canonical response draft
+// to the session-owned publisher without flattening it into a legacy fragment.
+func CanonicalDraftFragment(dispatchID string, draft any) InferenceProgressFragment {
+	return InferenceProgressFragment{
+		DispatchID:     strings.TrimSpace(dispatchID),
+		CanonicalDraft: draft,
+	}
 }
 
 // InferenceProgressPublisher receives provider progress fragments for one live
