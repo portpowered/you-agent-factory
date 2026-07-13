@@ -267,44 +267,48 @@ describe.sequential("shared IndexedDB dashboard browser contexts", () => {
         tick: 13,
         value: 5,
       });
-      const server = await startFactoryApiServer({
-        apiPort: preview.apiPort,
-        currentFactory: defaultFactoryDefinition,
-        currentFactoryBySessionID: {
-          [alphaSessionID]: defaultFactoryDefinition,
-          [betaSessionID]: defaultFactoryDefinition,
-        },
-        eventLines: [
-          tailEvent({ eventID: "default-ready-1", sequence: 1, tick: 1 }),
-        ],
-        eventLinesBySessionID: {
-          [alphaSessionID]: [
-            tailEvent({
-              eventID: alphaCheckpoint.afterEventId,
-              sequence: alphaCheckpoint.afterSequence,
-              tick: alphaCheckpoint.selectedTick,
-            }),
-            tailEvent({ eventID: "alpha-live-18", sequence: 18, tick: 21 }),
-          ],
-          [betaSessionID]: [
-            tailEvent({
-              eventID: betaCheckpoint.afterEventId,
-              sequence: betaCheckpoint.afterSequence,
-              tick: betaCheckpoint.selectedTick,
-            }),
-            tailEvent({ eventID: "beta-live-30", sequence: 30, tick: 22 }),
-          ],
-        },
-        pauseBeforeTick: 20,
-        sessions: [alphaSession, betaSession],
-      });
-      const browserPage = await openBrowserPage({
-        artifactLabel: "shared-indexeddb-two-session-tabs",
-      });
-      const tabTwo = await browserPage.context.newPage();
-      const tabTwoErrors = installBoundedPageErrors(tabTwo);
+      let browserPage = null;
+      let server = null;
+      let tabTwo = null;
 
       try {
+        server = await startFactoryApiServer({
+          apiPort: preview.apiPort,
+          currentFactory: defaultFactoryDefinition,
+          currentFactoryBySessionID: {
+            [alphaSessionID]: defaultFactoryDefinition,
+            [betaSessionID]: defaultFactoryDefinition,
+          },
+          eventLines: [
+            tailEvent({ eventID: "default-ready-1", sequence: 1, tick: 1 }),
+          ],
+          eventLinesBySessionID: {
+            [alphaSessionID]: [
+              tailEvent({
+                eventID: alphaCheckpoint.afterEventId,
+                sequence: alphaCheckpoint.afterSequence,
+                tick: alphaCheckpoint.selectedTick,
+              }),
+              tailEvent({ eventID: "alpha-live-18", sequence: 18, tick: 21 }),
+            ],
+            [betaSessionID]: [
+              tailEvent({
+                eventID: betaCheckpoint.afterEventId,
+                sequence: betaCheckpoint.afterSequence,
+                tick: betaCheckpoint.selectedTick,
+              }),
+              tailEvent({ eventID: "beta-live-30", sequence: 30, tick: 22 }),
+            ],
+          },
+          pauseBeforeTick: 20,
+          sessions: [alphaSession, betaSession],
+        });
+        browserPage = await openBrowserPage({
+          artifactLabel: "shared-indexeddb-two-session-tabs",
+          artifactMode: "bounded",
+        });
+        tabTwo = await browserPage.context.newPage();
+        const tabTwoErrors = installBoundedPageErrors(tabTwo);
         const alphaNetwork = await installNetworkCapture(browserPage.page);
         const betaNetwork = await installNetworkCapture(tabTwo);
         await Promise.all([
@@ -435,16 +439,18 @@ describe.sequential("shared IndexedDB dashboard browser contexts", () => {
             betaSessionID,
           ),
         ).toHaveLength(1);
+        expect(browserPage.pageErrors).toEqual([]);
+        expect(browserPage.consoleErrors).toEqual([]);
         expect(tabTwoErrors).toEqual([]);
       } finally {
-        if (!browserPage.page.isClosed()) {
+        if (browserPage?.page && !browserPage.page.isClosed()) {
           await clearTimelineCheckpoints(browserPage.page).catch(() => {});
         }
-        if (!tabTwo.isClosed()) {
-          await tabTwo.close();
-        }
-        await browserPage.close();
-        await server.stop();
+        await Promise.allSettled([
+          tabTwo && !tabTwo.isClosed() ? tabTwo.close() : Promise.resolve(),
+          browserPage?.close() ?? Promise.resolve(),
+        ]);
+        await server?.stop();
       }
     },
     browserScenarioTimeoutMs,
