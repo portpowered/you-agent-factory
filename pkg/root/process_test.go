@@ -70,13 +70,13 @@ func TestProductionRunGraphCompletesConstructionBeforeInitializerFailure(t *test
 
 	initializerErr := errors.New("initializer failed after construction")
 	initializer := &recordingInitializer{err: initializerErr}
-	code := Run(Input{
+	err := ExecuteWithDependencies(Input{
 		Args: []string{"you", "run", "--dir", dir, "--quiet", "--no-record"},
-		Env:  rootTestEnvironment(),
+		Env:  homeEnvironment(t.TempDir()),
 	}, Dependencies{GraphBuilder: productionGraphBuilder{}, Initializer: initializer})
 
-	if code != ExitFailure {
-		t.Fatalf("exit code = %d, want %d", code, ExitFailure)
+	if !errors.Is(err, initializerErr) {
+		t.Fatalf("ExecuteWithDependencies() error = %v, want initializer failure", err)
 	}
 	if initializer.calls != 1 {
 		t.Fatalf("initializer calls = %d, want 1 after completed production construction", initializer.calls)
