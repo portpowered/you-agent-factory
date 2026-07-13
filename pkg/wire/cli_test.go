@@ -60,7 +60,7 @@ func TestBuildCLIRunnerConstructsInertGraphApplication(t *testing.T) {
 	}
 }
 
-func TestBuildCLIRunnerRunsGraphOwnedSurfaceAndCanonicalSessionID(t *testing.T) {
+func TestBuildApplicationRunnerAPIModeRunsGraphOwnedSurfaceAndCanonicalSessionID(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -82,9 +82,9 @@ func TestBuildCLIRunnerRunsGraphOwnedSurfaceAndCanonicalSessionID(t *testing.T) 
 			return ctx.Err()
 		},
 	}
-	runner, err := BuildCLIRunner(context.Background(), cfg)
+	runner, err := buildApplicationRunner(context.Background(), cfg, initializer.ModeAPI)
 	if err != nil {
-		t.Fatalf("BuildCLIRunner() error = %v", err)
+		t.Fatalf("buildApplicationRunner(API) error = %v", err)
 	}
 	application := runner.(*initializer.Application)
 	graph := application.Graph().(*Graph)

@@ -1,0 +1,170 @@
+{
+  "$defs": {
+    "descriptionDocumentation": {
+      "additionalProperties": false,
+      "description": "The required description translation. The .description suffix makes its ID structurally distinct from the title ID.",
+      "properties": {
+        "canonicalEnglish": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "allOf": [
+            {
+              "description": "Stable lowercase documentation identity independent of translated text and source location.",
+              "type": "string"
+            },
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*[.]description$"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "canonicalEnglish"
+      ],
+      "type": "object"
+    },
+    "documentationIdBase": {
+      "description": "Stable lowercase documentation identity independent of translated text and source location.",
+      "type": "string"
+    },
+    "itemId": {
+      "description": "Stable lowercase item identity. Dot, underscore, and hyphen separators are allowed; display names and source locations are not encoded.",
+      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+      "type": "string"
+    },
+    "titleDocumentation": {
+      "additionalProperties": false,
+      "description": "The required title translation. The .title suffix makes its ID structurally distinct from the description ID.",
+      "properties": {
+        "canonicalEnglish": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "id": {
+          "allOf": [
+            {
+              "description": "Stable lowercase documentation identity independent of translated text and source location.",
+              "type": "string"
+            },
+            {
+              "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*[.]title$"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "canonicalEnglish"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Family-neutral identity, canonical English documentation, examples, visibility, and source integrity metadata for one contract item.",
+  "properties": {
+    "documentation": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "additionalProperties": false,
+          "description": "The required description translation. The .description suffix makes its ID structurally distinct from the title ID.",
+          "properties": {
+            "canonicalEnglish": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "id": {
+              "allOf": [
+                {
+                  "description": "Stable lowercase documentation identity independent of translated text and source location.",
+                  "type": "string"
+                },
+                {
+                  "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*[.]description$"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "canonicalEnglish"
+          ],
+          "type": "object"
+        },
+        "title": {
+          "additionalProperties": false,
+          "description": "The required title translation. The .title suffix makes its ID structurally distinct from the description ID.",
+          "properties": {
+            "canonicalEnglish": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "id": {
+              "allOf": [
+                {
+                  "description": "Stable lowercase documentation identity independent of translated text and source location.",
+                  "type": "string"
+                },
+                {
+                  "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*[.]title$"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "canonicalEnglish"
+          ],
+          "type": "object"
+        }
+      },
+      "required": [
+        "title",
+        "description"
+      ],
+      "type": "object"
+    },
+    "examples": {
+      "description": "Representative values in any JSON shape.",
+      "items": true,
+      "minItems": 1,
+      "type": "array"
+    },
+    "formatVersion": {
+      "const": "1.0.0",
+      "description": "The explicitly supported version of this documentation metadata format."
+    },
+    "itemId": {
+      "description": "Stable lowercase item identity. Dot, underscore, and hyphen separators are allowed; display names and source locations are not encoded.",
+      "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$",
+      "type": "string"
+    },
+    "sourceHash": {
+      "description": "Lowercase hexadecimal SHA-256 of the source from which this metadata was produced.",
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "visibility": {
+      "description": "Whether the documented contract item is customer-facing or repository-internal.",
+      "enum": [
+        "public",
+        "internal"
+      ]
+    }
+  },
+  "required": [
+    "formatVersion",
+    "itemId",
+    "documentation",
+    "examples",
+    "visibility",
+    "sourceHash"
+  ],
+  "title": "You contract documentation metadata",
+  "type": "object"
+}

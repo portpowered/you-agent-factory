@@ -549,17 +549,26 @@ function createIndexedDBTestDouble() {
     createObjectStore: () => {},
     deleteObjectStore: () => {},
     objectStoreNames: { contains: () => true },
-    transaction: () => ({
-      objectStore: () => ({
-        delete: (key: string) =>
-          indexedDBRequest(undefined, () => records.delete(key)),
-        get: (key: string) => indexedDBRequest(records.get(key)),
-        put: (value: { storageKey: string }) =>
-          indexedDBRequest(value.storageKey, () =>
-            records.set(value.storageKey, value),
-          ),
-      }),
-    }),
+    transaction: () => {
+      const transaction = {
+        oncomplete: null,
+        objectStore: () => ({
+          delete: (key: string) =>
+            indexedDBRequest(undefined, () => records.delete(key)),
+          get: (key: string) => indexedDBRequest(records.get(key)),
+          put: (value: { storageKey: string }) =>
+            indexedDBRequest(
+              value.storageKey,
+              () => records.set(value.storageKey, value),
+              () =>
+                (
+                  transaction.oncomplete as ((event: Event) => void) | null
+                )?.({} as Event),
+            ),
+        }),
+      };
+      return transaction;
+    },
   };
 
   return {
@@ -569,7 +578,11 @@ function createIndexedDBTestDouble() {
   };
 }
 
-function indexedDBRequest<T>(result: T, beforeSuccess?: () => void) {
+function indexedDBRequest<T>(
+  result: T,
+  beforeSuccess?: () => void,
+  afterSuccess?: () => void,
+) {
   const request = {
     error: null,
     onblocked: null,
@@ -581,6 +594,7 @@ function indexedDBRequest<T>(result: T, beforeSuccess?: () => void) {
   queueMicrotask(() => {
     beforeSuccess?.();
     request.onsuccess?.({} as Event);
+    afterSuccess?.();
   });
   return request;
 }

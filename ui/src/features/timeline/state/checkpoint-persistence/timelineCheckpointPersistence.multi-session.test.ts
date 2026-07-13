@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
 import { MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO } from "../../../../testing/multi-session-timeline-checkpoint-scenario";
 import { createTimelineCheckpointIndexedDBTestDouble } from "../../../../testing/timeline-checkpoint-indexeddb-test-utils";
+import { streamDerivedCheckpointStorageKey } from "../../lib/stream-derived-cache-identity";
 import type { FactoryTimelineCheckpoint } from "../timeline/storeState";
 import {
   clearTimelineCheckpointsForSession,
@@ -31,6 +32,32 @@ async function persistScenarioInOrder(
   }
 }
 
+async function seedCrossKeyIdentityMismatch(
+  indexedDB: IDBFactory,
+  records: Map<string, { storageKey?: string }>,
+  options: { includeLegacySessionID?: boolean } = {},
+): Promise<{ invalidStorageKey: string; validStorageKey: string }> {
+  const { A, B } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
+  const invalidStorageKey = streamDerivedCheckpointStorageKey(A.streamIdentity);
+  const validStorageKey = streamDerivedCheckpointStorageKey(B.streamIdentity);
+  await persistTimelineCheckpoint(indexedDB, B.checkpoint, B.streamIdentity);
+  const validEnvelope = records.get(validStorageKey);
+  if (!validEnvelope) {
+    throw new Error("expected persisted session B checkpoint fixture");
+  }
+
+  records.clear();
+  records.set(invalidStorageKey, {
+    ...validEnvelope,
+    ...(options.includeLegacySessionID
+      ? { sessionID: A.streamIdentity.factorySessionID }
+      : {}),
+    storageKey: invalidStorageKey,
+  });
+  records.set(validStorageKey, validEnvelope);
+  return { invalidStorageKey, validStorageKey };
+}
+
 function expectCheckpointToMatchScenario(
   checkpoint: FactoryTimelineCheckpoint | null | undefined,
   session: (typeof MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO)["A" | "B" | "C"],
@@ -47,6 +74,32 @@ function expectCheckpointToMatchScenario(
 }
 
 describe("multi-session timeline checkpoint identity regression", () => {
+  it("preflight deletes a key-mismatched envelope without deleting the valid derived-key checkpoint", async () => {
+    const { indexedDB, records } =
+      createTimelineCheckpointIndexedDBTestDouble();
+    const { B } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
+    const { invalidStorageKey, validStorageKey } =
+      await seedCrossKeyIdentityMismatch(indexedDB, records);
+
+    await expect(
+      peekPersistedTimelineCheckpoint(
+        indexedDB,
+        B.streamIdentity.factorySessionID,
+      ),
+    ).resolves.toBe(null);
+    expect(records.has(invalidStorageKey)).toBe(false);
+    expect(records.has(validStorageKey)).toBe(true);
+    expectCheckpointToMatchScenario(
+      (
+        await peekPersistedTimelineCheckpoint(
+          indexedDB,
+          B.streamIdentity.factorySessionID,
+        )
+      )?.checkpoint,
+      B,
+    );
+  });
+
   it.each(
     checkpointInsertionOrders,
   )("does not choose an arbitrary concrete checkpoint for ~default after %s then %s insertion", async (...order) => {
@@ -117,6 +170,35 @@ describe("multi-session timeline checkpoint identity regression", () => {
       )?.checkpoint,
       A,
     );
+    expectCheckpointToMatchScenario(
+      (
+        await peekPersistedTimelineCheckpoint(
+          indexedDB,
+          B.streamIdentity.factorySessionID,
+        )
+      )?.checkpoint,
+      B,
+    );
+  });
+});
+
+describe("multi-session timeline checkpoint targeted invalidation", () => {
+  it("session cleanup deletes a key-mismatched envelope without deleting the valid derived-key checkpoint", async () => {
+    const { indexedDB, records } =
+      createTimelineCheckpointIndexedDBTestDouble();
+    const { A, B } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
+    const { invalidStorageKey, validStorageKey } =
+      await seedCrossKeyIdentityMismatch(indexedDB, records, {
+        includeLegacySessionID: true,
+      });
+
+    await clearTimelineCheckpointsForSession(
+      indexedDB,
+      A.streamIdentity.factorySessionID,
+    );
+
+    expect(records.has(invalidStorageKey)).toBe(false);
+    expect(records.has(validStorageKey)).toBe(true);
     expectCheckpointToMatchScenario(
       (
         await peekPersistedTimelineCheckpoint(

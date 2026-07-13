@@ -1,0 +1,125 @@
+package contractstaging
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+
+	"github.com/portpowered/infinite-you/internal/contractjoiner"
+)
+
+const stagingDirectory = "packages/api/generated"
+
+// Drift describes every difference between canonical joined output and package
+// staging. Paths are repository-relative and sorted within each category.
+type Drift struct {
+	Stale      []string
+	Missing    []string
+	Unexpected []string
+}
+
+type stagedFile struct {
+	payload []byte
+	regular bool
+}
+
+// Empty reports whether package staging exactly matches canonical joined output.
+func (drift Drift) Empty() bool {
+	return len(drift.Stale) == 0 && len(drift.Missing) == 0 && len(drift.Unexpected) == 0
+}
+
+// Check computes expected artifacts in memory, then compares their path set and
+// bytes with package staging without changing either authored or staged files.
+func Check(repositoryRoot string) (Drift, error) {
+	expected, err := expectedArtifacts(repositoryRoot)
+	if err != nil {
+		return Drift{}, err
+	}
+	actual, err := stagedArtifacts(repositoryRoot)
+	if err != nil {
+		return Drift{}, err
+	}
+
+	drift := Drift{}
+	for path, expectedPayload := range expected {
+		actualFile, exists := actual[path]
+		if !exists {
+			drift.Missing = append(drift.Missing, path)
+			continue
+		}
+		if !actualFile.regular || !bytes.Equal(actualFile.payload, expectedPayload) {
+			drift.Stale = append(drift.Stale, path)
+		}
+		delete(actual, path)
+	}
+	for path := range actual {
+		drift.Unexpected = append(drift.Unexpected, path)
+	}
+	sort.Strings(drift.Stale)
+	sort.Strings(drift.Missing)
+	sort.Strings(drift.Unexpected)
+	return drift, nil
+}
+
+func expectedArtifacts(repositoryRoot string) (map[string][]byte, error) {
+	documents, diagnostics := contractjoiner.Join(JoinInput(repositoryRoot))
+	if len(diagnostics) != 0 {
+		payload, err := json.Marshal(diagnostics)
+		if err != nil {
+			return nil, fmt.Errorf("encode join diagnostics: %w", err)
+		}
+		return nil, fmt.Errorf("join canonical contracts: %s", payload)
+	}
+
+	expected := make(map[string][]byte, len(documents))
+	for _, document := range documents {
+		payload, err := contractjoiner.MarshalCanonicalJSON(document.Value)
+		if err != nil {
+			return nil, fmt.Errorf("serialize joined contract %s: %w", document.Path, err)
+		}
+		path := filepath.ToSlash(filepath.Join(joinedOutputDirectory, document.Path))
+		expected[path] = payload
+	}
+	return expected, nil
+}
+
+func stagedArtifacts(repositoryRoot string) (map[string]stagedFile, error) {
+	root, err := filepath.Abs(repositoryRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve repository root: %w", err)
+	}
+	base := filepath.Join(root, filepath.FromSlash(stagingDirectory))
+	actual := make(map[string]stagedFile)
+	err = filepath.WalkDir(base, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			if path == base && os.IsNotExist(walkErr) {
+				return filepath.SkipDir
+			}
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if !entry.Type().IsRegular() {
+			actual[filepath.ToSlash(relative)] = stagedFile{}
+			return nil
+		}
+		payload, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		actual[filepath.ToSlash(relative)] = stagedFile{payload: payload, regular: true}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("read package staging: %w", err)
+	}
+	return actual, nil
+}
