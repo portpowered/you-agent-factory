@@ -381,6 +381,46 @@ func TestMarkdown_AuthoringFactoriesReturnsRawAuthoredMarkdown(t *testing.T) {
 	}
 }
 
+func TestMarkdown_RunDocumentsSupportedRunShapes(t *testing.T) {
+	t.Parallel()
+
+	got, err := Markdown("run")
+	if err != nil {
+		t.Fatalf("Markdown(run) error = %v", err)
+	}
+
+	for _, want := range []string{
+		"# Run",
+		"## Run the current Factory",
+		"you run --work ./docs/examples/startup-work.json",
+		"you run --dir ./factory --work ./docs/examples/startup-work.json",
+		`you run --factory ./factory.json "Review the release notes"`,
+		`you run --named team-review "Review the release notes"`,
+		"you run --dir ./factory --continuously --work ./batches/release.json",
+		"you run --dir ./factory --with-mock-workers --work ./docs/examples/startup-work.json",
+		`you run --named team-review --output response-stream "Review the release notes"`,
+		"configured primary result",
+		"you docs batch-inputs",
+		"you docs javascript-workflows",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Markdown(run) missing %q:\n%s", want, got)
+		}
+	}
+	for _, forbidden := range []string{
+		"you run --workflow",
+		"you factory save",
+		"you docs packaged-fusion",
+		"you docs packaged-goal",
+		"you docs packaged-tts",
+		"\n```bash\nyou\n```",
+	} {
+		if strings.Contains(got, forbidden) {
+			t.Fatalf("Markdown(run) contains retired or incomplete invocation %q:\n%s", forbidden, got)
+		}
+	}
+}
+
 func TestMarkdown_ConfigDocumentsOperatorDefaults(t *testing.T) {
 	t.Parallel()
 

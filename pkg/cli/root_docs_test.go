@@ -2,13 +2,72 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"strings"
 	"testing"
 
 	docscli "github.com/portpowered/infinite-you/pkg/cli/docs"
 	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 )
+
+func TestRunDocumentation_RepresentativeExamplesReachCurrentCLIBoundary(t *testing.T) {
+	doc, err := docscli.Markdown("run")
+	if err != nil {
+		t.Fatalf("Markdown(run) error = %v", err)
+	}
+	for _, command := range []string{
+		"you run --work ./docs/examples/startup-work.json",
+		`you run --factory ./factory.json "Review the release notes"`,
+		"you run --dir ./factory --work ./docs/examples/startup-work.json",
+	} {
+		if !strings.Contains(doc, command) {
+			t.Fatalf("packaged run guide missing executable example %q", command)
+		}
+	}
+
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var runs []runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		runs = append(runs, cfg)
+		return nil
+	}
+
+	executeDocumentedRunExample(t, []string{"run", "--work", "./docs/examples/startup-work.json"})
+	factoryPath := writePortableFactoryWithDefaultHandling(t, t.TempDir())
+	executeDocumentedRunExample(t, []string{"run", "--factory", factoryPath, "Review the release notes"})
+	executeDocumentedRunExample(t, []string{"run", "--dir", "./factory", "--work", "./docs/examples/startup-work.json"})
+
+	if len(runs) != 3 {
+		t.Fatalf("documented examples reaching run boundary = %d, want 3", len(runs))
+	}
+	if got := runs[0].WorkFile; got != "./docs/examples/startup-work.json" {
+		t.Fatalf("default run WorkFile = %q, want explicit documented Work", got)
+	}
+	if runs[1].InvocationPositionalText == nil || *runs[1].InvocationPositionalText != "Review the release notes" {
+		t.Fatalf("factory invocation input = %#v, want documented positional text", runs[1].InvocationPositionalText)
+	}
+	if got := runs[2].WorkFile; got != "./docs/examples/startup-work.json" {
+		t.Fatalf("directory batch WorkFile = %q, want explicit documented Work", got)
+	}
+}
+
+func executeDocumentedRunExample(t *testing.T, args []string) {
+	t.Helper()
+	root := NewRootCommand()
+	root.SetIn(strings.NewReader(""))
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute %q: %v", strings.Join(args, " "), err)
+	}
+}
 
 func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 	var stdout bytes.Buffer
