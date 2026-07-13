@@ -20,10 +20,10 @@ delegation to the target owner or part of an active removal lane.
 | Factory Session state | `pkg/factorysessions` for live session state and read models; `pkg/factorysessionexecution` for durable execution state | A Factory Session owns runtime identity, event history, lifecycle/control state, current work, Current Factory, runtime instances, stream identity, and session projections. `FactoryService` may locate or route to sessions, but must not become the state owner. |
 | Model operations | `pkg/modelhost` for process-wide runtime lifecycle and leases; `pkg/models/service` for model API service behavior; `pkg/localmodels` for catalog compatibility projection | Keep readiness, supervised process lifecycle, capacity, leases, diagnostics, invocation gating, and host-owned execution in the model owner. Construct the model API service once from explicit model-scoped dependencies at application composition, then inject that same instance into transports and compatibility hosts. Transport handlers should call model service or API-surface adapters instead of embedding model runtime policy. |
 | Worker and provider execution | `pkg/workers` and `pkg/hostedworkers` | Put provider adapters, script/agent/inference executors, mock workers, process runners, sidecars, hosted-worker integration, and worker execution diagnostics in the worker owner. Shared single-attempt provider invocation and canonical result mapping belong in `pkg/workers/providerexecution`; callers retain retry and durable lifecycle policy. Session or service code should inject callbacks and observers rather than owning provider behavior. |
-| Invocation and work input | `pkg/invocations` and `pkg/workcontent` | Put argument normalization, text/stdin resolution, interpolation, primary-result policy, inference envelopes, return-policy resolution, and payload conversion in shared invocation/work-content owners. CLI and API code should adapt requests into those shared contracts. |
-| Work query behavior | `pkg/workquery` | Put shared filtering, state-type validation, query semantics, and reusable work-selection policy in the work-query owner before adapting to CLI, API, or UI callers. |
-| Platform infrastructure | Narrow platform owners such as `pkg/config`, `pkg/config/defaultpaths`, `pkg/logging`, `pkg/sessionpersistence`, and targeted diagnostics packages | Put default paths, config loading, persistence, metrics, logging, runtime artifact roots, and diagnostics in the package that owns that platform resource. Do not add platform catch-all behavior to `FactoryService`. |
-| Process startup and dependency construction | `cmd/factory`, target `pkg/root`, target `pkg/inject`, and `pkg/initializer` | Keep `cmd/factory` thin, put process-mode selection in `pkg/root`, build explicit dependency graphs in `pkg/inject`, and start transports or sidecars from already-built services in `pkg/initializer`. Stateful collaborators such as durable Factory Session execution must be constructed once per graph with the graph's normalized roots, clock, and runtime dependencies, then injected into compatibility facades rather than reconstructed there. |
+| Work domain | target `pkg/work` | Put Work content, query/selection, graph/lineage, pure invocation input and return policy, materialization, and cron/time-work concepts in the collapsed Work owner. Until Batch 006 moves a slice, use its registered migration root and do not create a parallel implementation. |
+| Platform infrastructure | target `pkg/platform` | Put logging, replay/artifact infrastructure, metrics, cursor storage, and non-domain clocks in the collapsed platform owner. Until Batch 006 moves a slice, use its registered narrow migration root; never put domain policy in platform code. |
+| Transport boundaries | target `pkg/transports` | Put HTTP, CLI, MCP, generated transport contracts/clients, and boundary mapping at the process edge. Until Batch 006 moves a slice, use its registered migration root; transport adapters must not own domain policy. |
+| Process startup and dependency construction | `cmd/factory`, target `pkg/root`, target `pkg/wire`, and `pkg/initializer` | Keep `cmd/factory` thin, normalize process input and select mode in `pkg/root`, construct one explicit typed dependency graph in `pkg/wire`, and execute startup/shutdown lifecycle for already-built transports and sidecars in `pkg/initializer`. Stateful collaborators such as durable Factory Session execution must be constructed once per graph with the graph's normalized roots, clock, and runtime dependencies, then injected into compatibility facades rather than reconstructed there. |
 
 When a change spans rows, place the durable state or policy in its owner and
 adapt outward. For example, a new session read that exposes JavaScript
@@ -44,6 +44,11 @@ there. The rationale should state:
 If that rationale is missing, the change should land in an existing target owner
 or be limited to a migration/removal lane that deletes, aliases, or delegates
 old behavior toward the documented owner.
+
+For an existing migration-only root, also verify its target owner, Batch 006-008
+work item, and deletion gate against the register in
+`docs/architecture/architecture.md`. The exception is temporary permission to
+finish the named move, not ownership rationale for new product behavior.
 
 ## Vocabulary Guardrails
 
