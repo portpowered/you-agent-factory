@@ -3,6 +3,7 @@ package run
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
@@ -286,6 +289,74 @@ type responseStreamEventSink interface {
 	onStreamSegment(factorysessions.SessionResponseStreamReadResult)
 }
 
+type sessionResponseEventAttachable interface {
+	SubscribeSessionResponseEventsFromLatest(sessionID string) (*responseeventstore.Subscription, error)
+}
+
+type responseEventSink interface {
+	onResponseEvents([]responseevents.FactoryResponseEvent)
+}
+
+type responseEventAttachment struct {
+	cancel       context.CancelFunc
+	done         chan struct{}
+	subscription *responseeventstore.Subscription
+	sink         responseEventSink
+}
+
+func startResponseEventAttachment(
+	ctx context.Context,
+	attachable sessionResponseEventAttachable,
+	sessionID string,
+	sink responseEventSink,
+) *responseEventAttachment {
+	if attachable == nil || sink == nil {
+		return nil
+	}
+	subscription, err := attachable.SubscribeSessionResponseEventsFromLatest(sessionID)
+	if err != nil {
+		return nil
+	}
+	attachCtx, cancel := context.WithCancel(ctx)
+	attachment := &responseEventAttachment{
+		cancel:       cancel,
+		done:         make(chan struct{}),
+		subscription: subscription,
+		sink:         sink,
+	}
+	go func() {
+		defer close(attachment.done)
+		consumeResponseEventSubscription(attachCtx, subscription, sink)
+	}()
+	return attachment
+}
+
+func (a *responseEventAttachment) stop() {
+	if a == nil {
+		return
+	}
+	a.cancel()
+	<-a.done
+	if events, err := a.subscription.Drain(); err == nil && len(events) > 0 {
+		a.sink.onResponseEvents(events)
+	}
+	a.subscription.Detach()
+}
+
+func consumeResponseEventSubscription(
+	ctx context.Context,
+	subscription *responseeventstore.Subscription,
+	sink responseEventSink,
+) {
+	for {
+		events, err := subscription.Next(ctx)
+		if err != nil {
+			return
+		}
+		sink.onResponseEvents(events)
+	}
+}
+
 type responseStreamAttachment struct {
 	cancel    context.CancelFunc
 	done      chan struct{}
@@ -419,15 +490,14 @@ const (
 // terminal stdout writes so a slow or blocked consumer does not stall provider
 // dispatch or invocation completion indefinitely.
 type responseStreamProgressWriter struct {
-	mu             sync.Mutex
-	outputMu       sync.Mutex
-	output         io.Writer
-	queue          chan []byte
-	wg             sync.WaitGroup
-	closed         bool
-	drainTimedOut  bool
-	droppedLines   int
-	pendingNotice  []byte
+	mu            sync.Mutex
+	outputMu      sync.Mutex
+	output        io.Writer
+	queue         chan []byte
+	wg            sync.WaitGroup
+	closed        bool
+	drainTimedOut bool
+	droppedLines  int
 }
 
 func newResponseStreamProgressWriter(output io.Writer) *responseStreamProgressWriter {
@@ -464,35 +534,6 @@ func (w *responseStreamProgressWriter) enqueue(payload []byte) bool {
 		w.droppedLines++
 		w.mu.Unlock()
 		return false
-	}
-}
-
-func (w *responseStreamProgressWriter) enqueueNotice(payload []byte) {
-	if w == nil {
-		return
-	}
-	line := appendPayloadLine(payload)
-
-	w.mu.Lock()
-	if w.closed {
-		w.pendingNotice = line
-		w.mu.Unlock()
-		return
-	}
-	w.mu.Unlock()
-
-	select {
-	case w.queue <- line:
-		return
-	default:
-	}
-
-	select {
-	case w.queue <- line:
-	default:
-		w.mu.Lock()
-		w.pendingNotice = line
-		w.mu.Unlock()
 	}
 }
 
@@ -581,11 +622,7 @@ func (w *responseStreamProgressWriter) run() {
 		if !w.writeOutputLine(line) {
 			return
 		}
-		if !w.flushPendingNoticeLocked() {
-			return
-		}
 	}
-	w.flushPendingNoticeLocked()
 }
 
 func (w *responseStreamProgressWriter) writeOutputLine(line []byte) bool {
@@ -598,19 +635,110 @@ func (w *responseStreamProgressWriter) writeOutputLine(line []byte) bool {
 	return !w.drainAbandoned()
 }
 
-func (w *responseStreamProgressWriter) flushPendingNoticeLocked() bool {
+// canonicalResponseStreamWriter owns every JSON response-stream stdout write.
+// Its in-memory queue is intentionally lossless: canonical response events may
+// outpace a slow consumer, but they must remain ordered ahead of the terminal
+// invocation result instead of inheriting the human progress drop policy.
+type canonicalResponseStreamWriter struct {
+	mu       sync.Mutex
+	ready    *sync.Cond
+	output   io.Writer
+	pending  [][]byte
+	head     int
+	closed   bool
+	writeErr error
+	wg       sync.WaitGroup
+}
+
+func newCanonicalResponseStreamWriter(output io.Writer) *canonicalResponseStreamWriter {
+	if output == nil {
+		panic("canonical response stream writer output is nil")
+	}
+	writer := &canonicalResponseStreamWriter{output: output}
+	writer.ready = sync.NewCond(&writer.mu)
+	writer.wg.Add(1)
+	go writer.run()
+	return writer
+}
+
+func (w *canonicalResponseStreamWriter) enqueue(payload []byte) error {
+	if w == nil {
+		return fmt.Errorf("canonical response stream writer is nil")
+	}
+	line := appendPayloadLine(payload)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.writeErr != nil {
+		return w.writeErr
+	}
+	if w.closed {
+		return fmt.Errorf("canonical response stream writer is closed")
+	}
+	w.pending = append(w.pending, line)
+	w.ready.Signal()
+	return nil
+}
+
+func (w *canonicalResponseStreamWriter) closeAndDrain() error {
+	if w == nil {
+		return nil
+	}
+	w.mu.Lock()
+	if !w.closed {
+		w.closed = true
+		w.ready.Broadcast()
+	}
+	w.mu.Unlock()
+	w.wg.Wait()
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.writeErr
+}
+
+func (w *canonicalResponseStreamWriter) run() {
+	defer w.wg.Done()
 	for {
-		w.mu.Lock()
-		notice := w.pendingNotice
-		w.pendingNotice = nil
-		w.mu.Unlock()
-		if notice == nil {
-			return true
+		line, ok := w.next()
+		if !ok {
+			return
 		}
-		if !w.writeOutputLine(notice) {
-			return false
+		written, err := w.output.Write(line)
+		if err == nil && written != len(line) {
+			err = io.ErrShortWrite
+		}
+		if err != nil {
+			w.fail(err)
+			return
 		}
 	}
+}
+
+func (w *canonicalResponseStreamWriter) next() ([]byte, bool) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for w.head == len(w.pending) && !w.closed {
+		w.ready.Wait()
+	}
+	if w.head == len(w.pending) {
+		return nil, false
+	}
+	line := w.pending[w.head]
+	w.head++
+	if w.head == len(w.pending) {
+		w.pending = nil
+		w.head = 0
+	}
+	return line, true
+}
+
+func (w *canonicalResponseStreamWriter) fail(err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.writeErr = err
+	w.closed = true
+	w.pending = nil
+	w.head = 0
+	w.ready.Broadcast()
 }
 
 func appendPayloadLine(payload []byte) []byte {

@@ -13,12 +13,12 @@ import (
 )
 
 type streamTestHost struct {
-	session       *factorysessions.LiveSession
-	streams       *factorysessions.SessionResponseStreamSet
-	published     int
-	compactions   int
-	degraded      int
-	checkpoint    *factorysessions.JavaScriptCheckpointStore
+	session     *factorysessions.LiveSession
+	streams     *factorysessions.SessionResponseStreamSet
+	published   int
+	compactions int
+	degraded    int
+	checkpoint  *factorysessions.JavaScriptCheckpointStore
 }
 
 func (h *streamTestHost) RequireSession(_ string) (*factorysessions.LiveSession, error) {
@@ -123,6 +123,36 @@ func TestManager_SubscribeAndPublishInferenceProgress(t *testing.T) {
 	}
 	if host.published != 2 {
 		t.Fatalf("published observations = %d, want 2", host.published)
+	}
+}
+
+func TestManager_PublishesCanonicalResponseEventsToSessionStore(t *testing.T) {
+	t.Parallel()
+
+	session := factorysessions.NewLiveSession(
+		"sess-canonical",
+		"/factory",
+		"/workspace",
+		"/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault},
+		nil,
+		false,
+		"factory",
+	)
+	host := &streamTestHost{session: session}
+	manager := stream.NewManager(host)
+	publisher := manager.InferenceProgressPublisherFactory(nil)(session.ID)
+	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "alpha"))
+
+	events := session.ResponseEvents.Events()
+	if len(events) != 1 {
+		t.Fatalf("canonical event count = %d, want 1", len(events))
+	}
+	if events[0].FactorySessionID != factorysessions.CanonicalFactorySessionID(session) {
+		t.Fatalf("factorySessionId = %q, want %q", events[0].FactorySessionID, factorysessions.CanonicalFactorySessionID(session))
+	}
+	if events[0].DispatchID != "dispatch-1" {
+		t.Fatalf("dispatchId = %q, want dispatch-1", events[0].DispatchID)
 	}
 }
 

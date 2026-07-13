@@ -239,6 +239,17 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 
 		select {
 		case <-ctx.Done():
+			// A publish and cancellation can become ready together. Re-read the
+			// retained store before honoring cancellation so callers can use
+			// cancellation as a deterministic terminal drain boundary.
+			result, closed = s.store.readForSubscriber(afterSequence, dispatchID)
+			if closed {
+				return nil, ErrSubscriptionClosed
+			}
+			if len(result.events) > 0 {
+				s.advance(result.nextSequence)
+				return result.events, nil
+			}
 			return nil, ctx.Err()
 		case <-s.subscriber.done:
 			s.mu.Lock()
@@ -253,6 +264,32 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 		case <-s.subscriber.wake:
 		}
 	}
+}
+
+// Drain returns all events currently retained after the subscription cursor
+// without waiting for another publish. It is intended for terminal handoffs
+// that have already stopped their live consumer.
+func (s *Subscription) Drain() ([]responseevents.FactoryResponseEvent, error) {
+	if s == nil || s.store == nil || s.subscriber == nil {
+		return nil, ErrSubscriptionClosed
+	}
+	s.mu.Lock()
+	detached := s.detached
+	afterSequence := s.afterSequence
+	dispatchID := s.dispatchID
+	s.mu.Unlock()
+	if detached {
+		return nil, ErrSubscriptionClosed
+	}
+
+	result, closed := s.store.readForSubscriber(afterSequence, dispatchID)
+	if closed {
+		return nil, ErrSubscriptionClosed
+	}
+	if len(result.events) > 0 {
+		s.advance(result.nextSequence)
+	}
+	return result.events, nil
 }
 
 func (s *Subscription) advance(sequence int64) {

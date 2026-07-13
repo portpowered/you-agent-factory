@@ -1265,6 +1265,22 @@ func (fs *FactoryService) SessionResponseStreamDispatchIDs(sessionID string) ([]
 	return fs.requireSessionGateway().SessionResponseStreamDispatchIDs(sessionID)
 }
 
+// SubscribeSessionResponseEventsFromLatest attaches to canonical response
+// events published after the call begins. This keeps one-shot CLI invocations
+// from replaying observation records left by earlier work in the live session.
+func (fs *FactoryService) SubscribeSessionResponseEventsFromLatest(
+	sessionID string,
+) (*responseeventstore.Subscription, error) {
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if session.ResponseEvents == nil {
+		return nil, fmt.Errorf("factory session %q response-event stream is unavailable", sessionID)
+	}
+	return session.ResponseEvents.Subscribe(session.ResponseEvents.LatestSequence())
+}
+
 func (fs *FactoryService) newSessionResponseStreamInstance() *factorysessions.SessionResponseStream {
 	if fs != nil && fs.newSessionResponseStream != nil {
 		return fs.newSessionResponseStream()
