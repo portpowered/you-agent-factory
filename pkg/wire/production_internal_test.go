@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
@@ -23,6 +24,7 @@ func TestProductionGraphSidecarsStartAndStopThroughInitializer(t *testing.T) {
 	dir := t.TempDir()
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 	transportStarted := make(chan struct{})
+	var dashboardRenders int
 	graph, err := Build(context.Background(), Inputs{
 		Config: &runtimehost.Config{
 			Dir: dir, SystemConfigHomeDir: t.TempDir(), RuntimeMode: interfaces.RuntimeModeService,
@@ -36,7 +38,7 @@ func TestProductionGraphSidecarsStartAndStopThroughInitializer(t *testing.T) {
 				<-ctx.Done()
 				return ctx.Err()
 			},
-			SimpleDashboardRenderer: func(runtimehost.SimpleDashboardRenderInput) {},
+			SimpleDashboardRenderer: func(runtimehost.SimpleDashboardRenderInput) { dashboardRenders++ },
 		},
 		MCPInput: strings.NewReader(""), MCPOutput: &bytes.Buffer{},
 	})
@@ -69,6 +71,95 @@ func TestProductionGraphSidecarsStartAndStopThroughInitializer(t *testing.T) {
 	}
 	if got, want := recorder.stopped(), []string{"cli", "dashboard", "workers", "runtime"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("production stop order = %v, want %v", got, want)
+	}
+	if dashboardRenders != 1 {
+		t.Fatalf("dashboard render count = %d, want one final render", dashboardRenders)
+	}
+}
+
+func TestProductionCLIModePreservesTransportFailureAfterDashboardShutdown(t *testing.T) {
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	var dashboardRenders int
+	graph, err := Build(context.Background(), Inputs{
+		Config: &runtimehost.Config{
+			Dir: dir, SystemConfigHomeDir: t.TempDir(), RuntimeMode: interfaces.RuntimeModeService,
+			Port: 43175, Logger: zap.NewNop(), Clock: productionInternalClock{},
+			DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
+			RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+			RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+			SkipBuiltInRunnerPrerequisiteValidation: true,
+			SimpleDashboardRenderer:                 func(runtimehost.SimpleDashboardRenderInput) { dashboardRenders++ },
+		},
+		MCPInput: strings.NewReader(""), MCPOutput: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	transportErr := errors.New("CLI runner failed")
+	cli := newRunnerLifecycle(func(context.Context) error { return transportErr })
+	graph.Transports.CLI = cli
+	application, err := initializer.NewApplication(initializer.ModeCLI, graph)
+	if err != nil {
+		t.Fatalf("NewApplication() error = %v", err)
+	}
+	if application.Graph() != graph || graph.Transports.CLI != cli {
+		t.Fatal("CLI mode replaced the supplied graph or CLI lifecycle")
+	}
+	if err := application.Run(context.Background()); !errors.Is(err, transportErr) {
+		t.Fatalf("Application.Run() error = %v, want CLI runner failure", err)
+	}
+	if dashboardRenders != 1 {
+		t.Fatalf("dashboard render count = %d, want one final render after CLI failure", dashboardRenders)
+	}
+}
+
+func TestProductionDashboardDisabledOmitsEveryDashboardLifecycleEffect(t *testing.T) {
+	var runtime runtimehost.ApplicationRuntime
+	sidecars, err := buildProductionSidecars(
+		&runtimehost.Config{SimpleDashboardRenderer: nil},
+		nil,
+		&runtime,
+	)
+	if err != nil {
+		t.Fatalf("buildProductionSidecars() error = %v", err)
+	}
+	if sidecars.Dashboard != nil {
+		t.Fatalf("dashboard lifecycle = %T, want nil when rendering is disabled", sidecars.Dashboard)
+	}
+}
+
+func TestDashboardLifecycleJoinsPeriodicLoopBeforeFinalRender(t *testing.T) {
+	ticker := &joiningDashboardTicker{ticks: make(chan time.Time), stopped: make(chan struct{})}
+	finalRendered := make(chan struct{}, 1)
+	sidecar, err := initializerdashboard.NewDashboardSidecar(initializerdashboard.DashboardSidecarConfig{
+		Reader: dashboardReaderFunc(func(context.Context, time.Time) (initializerdashboard.DashboardRenderInput, error) {
+			select {
+			case <-ticker.stopped:
+				return initializerdashboard.DashboardRenderInput{}, nil
+			default:
+				return initializerdashboard.DashboardRenderInput{}, errors.New("final render preceded dashboard join")
+			}
+		}),
+		Renderer: dashboardRendererFunc(func(initializerdashboard.DashboardRenderInput) {
+			finalRendered <- struct{}{}
+		}),
+		Timing: dashboardTiming{ticker: ticker},
+	})
+	if err != nil {
+		t.Fatalf("NewDashboardSidecar() error = %v", err)
+	}
+	lifecycle := newDashboardLifecycle(sidecar)
+	if err := lifecycle.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	if err := lifecycle.Stop(context.Background()); err != nil {
+		t.Fatalf("Stop() error = %v", err)
+	}
+	select {
+	case <-finalRendered:
+	default:
+		t.Fatal("dashboard lifecycle did not render after joining its periodic loop")
 	}
 }
 
@@ -263,3 +354,40 @@ func canceledProductionContext() context.Context {
 type productionInternalClock struct{}
 
 func (productionInternalClock) Now() time.Time { return time.Unix(0, 0).UTC() }
+
+type dashboardReaderFunc func(context.Context, time.Time) (initializerdashboard.DashboardRenderInput, error)
+
+func (fn dashboardReaderFunc) ReadDashboard(
+	ctx context.Context,
+	now time.Time,
+) (initializerdashboard.DashboardRenderInput, error) {
+	return fn(ctx, now)
+}
+
+type dashboardRendererFunc func(initializerdashboard.DashboardRenderInput)
+
+func (fn dashboardRendererFunc) RenderDashboard(input initializerdashboard.DashboardRenderInput) {
+	fn(input)
+}
+
+type dashboardTiming struct {
+	ticker initializerdashboard.DashboardTicker
+}
+
+func (dashboardTiming) Now() time.Time { return time.Unix(0, 0).UTC() }
+
+func (timing dashboardTiming) NewTicker(time.Duration) initializerdashboard.DashboardTicker {
+	return timing.ticker
+}
+
+type joiningDashboardTicker struct {
+	ticks   chan time.Time
+	stopped chan struct{}
+	once    sync.Once
+}
+
+func (ticker *joiningDashboardTicker) C() <-chan time.Time { return ticker.ticks }
+
+func (ticker *joiningDashboardTicker) Stop() {
+	ticker.once.Do(func() { close(ticker.stopped) })
+}
