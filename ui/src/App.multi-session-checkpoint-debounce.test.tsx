@@ -28,6 +28,25 @@ import { createTimelineCheckpointIndexedDBTestDouble } from "./testing/timeline-
 const CHECKPOINT_DEBOUNCE_MS = 750;
 const { A, B } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
 
+function previousCheckpointFor(
+  fixture: MultiSessionTimelineCheckpointFixture,
+): MultiSessionTimelineCheckpointFixture {
+  const previous = structuredClone(fixture);
+  previous.checkpoint.afterEventId = `session-${fixture.label.toLowerCase()}-event-previous`;
+  previous.checkpoint.afterSequence -= 1;
+  previous.checkpoint.selectedTick -= 1;
+  previous.checkpoint.replayState.tick_count -= 1;
+  if (previous.checkpoint.materializedWorkOutcomeState.cursor) {
+    previous.checkpoint.materializedWorkOutcomeState.cursor.eventID =
+      previous.checkpoint.afterEventId;
+    previous.checkpoint.materializedWorkOutcomeState.cursor.sequence =
+      previous.checkpoint.afterSequence;
+    previous.checkpoint.materializedWorkOutcomeState.cursor.tick =
+      previous.checkpoint.selectedTick;
+  }
+  return previous;
+}
+
 const factorySessions: FactorySessionSummary[] = [
   sessionSummary(A, "alpha"),
   sessionSummary(B, "beta"),
@@ -169,28 +188,21 @@ describe("App multi-session checkpoint debounce regression", () => {
     return indexedDB;
   }
 
-  it.fails("retains checkpoints that become due after A to B to A switching just before 750 ms", async () => {
+  it("flushes each stream's latest checkpoint during rapid A to B to A switching", async () => {
     const indexedDB = await renderSessionA();
 
+    await scheduleCheckpoint(previousCheckpointFor(A));
     await scheduleCheckpoint(A);
     await advanceCheckpointTimer(CHECKPOINT_DEBOUNCE_MS - 1);
     await selectSession("beta", B);
+
+    await expect(
+      readTimelineCheckpoint(indexedDB, A.streamIdentity),
+    ).resolves.toEqual(A.checkpoint);
+
     await scheduleCheckpoint(B);
     await selectSession("alpha", A);
-    await advanceCheckpointTimer(1);
 
-    const aAtOriginalDueBoundary = await readTimelineCheckpoint(
-      indexedDB,
-      A.streamIdentity,
-    );
-
-    await scheduleCheckpoint(A);
-    await advanceCheckpointTimer(CHECKPOINT_DEBOUNCE_MS);
-    await selectSession("beta", B);
-    await scheduleCheckpoint(B);
-    await advanceCheckpointTimer(CHECKPOINT_DEBOUNCE_MS);
-
-    expect.soft(aAtOriginalDueBoundary).toEqual(A.checkpoint);
     await expect(
       readTimelineCheckpoint(indexedDB, A.streamIdentity),
     ).resolves.toEqual(A.checkpoint);
