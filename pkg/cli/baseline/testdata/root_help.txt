@@ -4,8 +4,8 @@ What:
 CPN-based workflow factory CLI for running factories, submitting work, and inspecting live sessions.
 
 How to use:
-Running you with no args starts the out-of-the-box continuous factory and local dashboard (http://localhost:7437/dashboard/ui).
-Use you run --dir factory for explicit runs. See you <cmd> --help for subcommand details.
+Run you run --work ./docs/examples/startup-work.json to start the current Factory with explicit Work and the local dashboard (http://localhost:7437/dashboard/ui).
+Use you run --dir factory --work ./docs/examples/startup-work.json for an explicit Factory directory. See you <cmd> --help for subcommand details.
 
 Agents:
 Start with you docs agents for orientation, you submit or you submit batch to enqueue work, and you session list to confirm a live factory.
@@ -16,8 +16,8 @@ Usage:
   you [command]
 
 Examples:
-  # Start the default Codex-backed factory in the current project.
-  you
+  # Start the default Codex-backed Factory with explicit Work.
+  you run --work ./docs/examples/startup-work.json
 
   # Agent orientation and command matrix.
   you docs agents

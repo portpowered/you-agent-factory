@@ -91,13 +91,13 @@ func NewRootCommand() *cobra.Command {
 			"What:\n" +
 			"CPN-based workflow factory CLI for running factories, submitting work, and inspecting live sessions.\n\n" +
 			"How to use:\n" +
-			"Running " + cliBinaryName + " with no args starts the out-of-the-box continuous factory and local dashboard (http://localhost:7437/dashboard/ui).\n" +
-			"Use " + cliBinaryName + " run --dir factory for explicit runs. See " + cliBinaryName + " <cmd> --help for subcommand details.\n\n" +
+			"Run " + cliBinaryName + " run --work ./docs/examples/startup-work.json to start the current Factory with explicit Work and the local dashboard (http://localhost:7437/dashboard/ui).\n" +
+			"Use " + cliBinaryName + " run --dir factory --work ./docs/examples/startup-work.json for an explicit Factory directory. See " + cliBinaryName + " <cmd> --help for subcommand details.\n\n" +
 			"Agents:\n" +
 			"Start with " + cliBinaryName + " docs agents for orientation, " + cliBinaryName + " submit or " + cliBinaryName + " submit batch to enqueue work, and " + cliBinaryName + " session list to confirm a live factory.\n" +
 			"Run " + cliBinaryName + " docs for all packaged reference topics. Use --verbose or --debug for stderr diagnostics; full policy in " + cliBinaryName + " docs.",
-		Example: "  # Start the default Codex-backed factory in the current project.\n" +
-			"  " + cliBinaryName + "\n\n" +
+		Example: "  # Start the default Codex-backed Factory with explicit Work.\n" +
+			"  " + cliBinaryName + " run --work ./docs/examples/startup-work.json\n\n" +
 			"  # Agent orientation and command matrix.\n" +
 			"  " + cliBinaryName + " docs agents",
 		RunE: func(cmd *cobra.Command, args []string) error {

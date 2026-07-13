@@ -192,7 +192,7 @@ you use this proof for closeout review.
 | Need | Use |
 |------|-----|
 | Validate JavaScript source before durable execution | [Canonical JavaScript Factory Session Path](#canonical-javascript-factory-session-path) and `you docs orchestrators` |
-| Recover a stopped `@you/goal` run through existing session and work controls | [Stopped goal inspect and recovery](#stopped-goal-inspect-and-recovery) and `you docs packaged-goal` |
+| Recover a stopped `@you/goal` run through existing session and work controls | [Stopped goal inspect and recovery](#stopped-goal-inspect-and-recovery) and `you docs run` |
 | Confirm anything is listening before `you submit` or `POST /factory-sessions/{session_id}/work` | [Session list](#session-list) |
 | Read the active factory name and directory on a live host | [Factory query](#factory-query) |
 | Inspect lifecycle phase, engine activity, and token buckets | [Session status API](#session-status-api) |
@@ -244,8 +244,9 @@ yet — start or attach a factory before submitting work.
 ### Unreachable host
 
 **Connection refused** or **endpoint not reachable** means nothing is listening on
-the configured host and port. Start the factory with `you`, `you run --continuously`,
-or `you run --dir <factory>` before retrying.
+the configured host and port. Start the Factory with explicit Work, such as
+`you run --continuously --work ./docs/examples/startup-work.json`, before
+retrying.
 
 ### Discover session ids
 
@@ -305,8 +306,8 @@ surfaces.
 | Needs-human `Work` | The human input, approval, or artifact review required for that work item. | Existing human-input, approval, or repair step in the current workflow |
 | Interrupted `Dispatch` or session | Interruption status and latest dispatch or result summary. | Existing dispatch retry, work repair, or session workflow controls |
 
-For the `@you/goal` packaged-factory examples and invocation-specific failure
-codes, use `you docs packaged-goal`.
+For named-Factory inputs and output modes, use `you docs run`. The inspection
+and recovery controls remain on this page.
 
 ## Session pause and resume
 

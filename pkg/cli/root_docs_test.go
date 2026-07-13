@@ -542,7 +542,7 @@ func TestRootCommand_HelpDocumentsConciseOrientation(t *testing.T) {
 		"What:",
 		"How to use:",
 		"Agents:",
-		"Running you with no args starts the out-of-the-box continuous factory",
+		"you run --work ./docs/examples/startup-work.json",
 		"http://localhost:7437/dashboard/ui",
 		"you docs agents",
 		"you submit batch",
@@ -582,6 +582,45 @@ func TestRootCommand_HelpDocumentsConciseOrientation(t *testing.T) {
 		}
 		if len(lines) > section.limit {
 			t.Fatalf("root Long section %q has %d prose lines, want <= %d:\n%s", section.name, len(lines), section.limit, strings.Join(lines, "\n"))
+		}
+	}
+}
+
+func TestRunCommand_HelpUsesCanonicalDocsAndCompleteInputs(t *testing.T) {
+	var stdout bytes.Buffer
+	root := NewRootCommand()
+	root.SetOut(&stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"run", "--help"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute run --help: %v", err)
+	}
+
+	got := stdout.String()
+	for _, want := range []string{
+		"you run --work ./docs/examples/startup-work.json",
+		"you run --dir factory --work ./docs/examples/startup-work.json",
+		`you run --named @you/tts --output primary "Read the release summary."`,
+		"you docs authoring-factories",
+		"you docs run",
+		"you docs sessions",
+		"you docs models",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("run help missing %q:\n%s", want, got)
+		}
+	}
+	for _, retired := range []string{
+		"run you with no arguments",
+		"\n  you\n",
+		"you docs packaged-fusion",
+		"you docs packaged-goal",
+		"you docs packaged-tts",
+		"you run --named @you/tts\n",
+	} {
+		if strings.Contains(got, retired) {
+			t.Fatalf("run help contains retired or incomplete guidance %q:\n%s", retired, got)
 		}
 	}
 }

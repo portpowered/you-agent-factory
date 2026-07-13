@@ -643,14 +643,14 @@ func TestRunCommand_ContinuouslyFlag(t *testing.T) {
 	if runCmd.Long == "" {
 		t.Fatal("expected run command long help text")
 	}
-	if !strings.Contains(runCmd.Long, "run you with no arguments") {
-		t.Fatal("expected run command long help text to point users to no-arg default flow")
+	if !strings.Contains(runCmd.Long, "you run --work ./docs/examples/startup-work.json") {
+		t.Fatal("expected run command long help text to provide explicit default Work")
 	}
 	if !strings.Contains(runCmd.Long, "factory/inputs/task/default") {
 		t.Fatal("expected run command long help text to mention default task input path")
 	}
-	if !strings.Contains(runCmd.Example, "factory/inputs/task/default") {
-		t.Fatal("expected run command examples to mention default task input path")
+	if !strings.Contains(runCmd.Example, "run --work ./docs/examples/startup-work.json") {
+		t.Fatal("expected run command examples to provide explicit default Work")
 	}
 }
 

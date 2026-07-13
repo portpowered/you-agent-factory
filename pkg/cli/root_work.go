@@ -147,7 +147,7 @@ func registerRunCommandFlags(cmd *cobra.Command, cfg *runcli.RunConfig, invocati
 
 func runCommandLongHelp() string {
 	return "Load workflow and run the factory engine.\n\n" +
-		"For the quickest local setup, run " + cliBinaryName + " with no arguments. " +
+		"For the quickest local setup, run " + cliBinaryName + " run --work ./docs/examples/startup-work.json. " +
 		"That default flow bootstraps ./factory, watches factory/inputs/task/default, " +
 		"keeps the runtime alive, and reports the first available dashboard URL, preferring http://localhost:7437/dashboard/ui. " +
 		"Default execution uses batch mode and exits after idle completion. " +
@@ -164,8 +164,8 @@ func runCommandLongHelp() string {
 		"Supported run factory selectors are --dir, --named, and --factory; dynamic workflow source selection stays under " + cliBinaryName + " workflow. " +
 		"Selected factories can define custom invocation arguments; run " + cliBinaryName + " run --named <factory> --help or " + cliBinaryName + " run --factory <factory.json> --help to inspect signature-backed usage while keeping existing run-level flags available. " +
 		"In factory invocation mode, provide either trailing positional text or piped stdin text; supplying both is rejected with INVOCATION_INPUT_SOURCE_CONFLICT. " +
-		"Packaged @you/fusion, @you/goal, and @you/tts invocation details live in " + cliBinaryName + " docs packaged-fusion, " + cliBinaryName + " docs packaged-goal, and " + cliBinaryName + " docs packaged-tts. " +
-		"Full invocation input and return-policy details live in " + cliBinaryName + " docs config and " + cliBinaryName + " docs sessions. " +
+		"Named-Factory selection and materialization live in " + cliBinaryName + " docs authoring-factories; invocation inputs and output modes live in " + cliBinaryName + " docs run and " + cliBinaryName + " docs sessions. " +
+		"Model readiness, direct TTS invocation, and audio or JSON result choices live in " + cliBinaryName + " docs models. " +
 		"Supported one-shot factory invocations use primary-result-only stdout by default; use --output response-stream to render live internal session response-stream progress while the CLI owns the runtime; unsupported run shapes fall back to primary-result-only output or return INVOCATION_OUTPUT_UNSUPPORTED. " +
 		"Runtime logs are structured JSON rolling files grouped by UTC start date under the selected log root. " +
 		"Runtime metrics are a separate structured JSONL operational channel with their own rolling files and do not replace runtime logs. " +
@@ -173,14 +173,12 @@ func runCommandLongHelp() string {
 }
 
 func runCommandExamples() string {
-	return "  # Start the out-of-the-box continuous factory.\n" +
-		"  " + cliBinaryName + "\n\n" +
-		"  # Submit a Markdown task to the default scaffold.\n" +
-		"  printf \"Fix the lint issues\\n\" > factory/inputs/task/default/fix-lint.md\n\n" +
+	return "  # Start the current Factory with explicit Work.\n" +
+		"  " + cliBinaryName + " run --work ./docs/examples/startup-work.json\n\n" +
 		"  # Run an existing factory once in explicit batch mode.\n" +
-		"  " + cliBinaryName + " run --dir factory\n\n" +
+		"  " + cliBinaryName + " run --dir factory --work ./docs/examples/startup-work.json\n\n" +
 		"  # Run a persisted named factory from any working directory.\n" +
-		"  " + cliBinaryName + " run --named @you/tts\n\n" +
+		"  " + cliBinaryName + " run --named @you/tts --output primary \"Read the release summary.\"\n\n" +
 		"  # Run a portable factory.json with a one-shot prompt (see handlingBehavior DEFAULT).\n" +
 		"  " + cliBinaryName + " run --factory ./factory.json \"Fix the lint issues\"\n\n" +
 		"  # Pipe invocation input via stdin (default primary-result stdout).\n" +

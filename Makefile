@@ -120,7 +120,7 @@ api-smoke:
 	$(GO) test ./tests/functional/runtime_api -run TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 docs-reference-check:
-	$(GO) run ../markdown-linter/cmd/markdown-linter docs/README.md docs/reference
+	$(GO) run ./cmd/markdown-linter docs/README.md docs/reference
 
 docs-reference-smoke:
 	$(MAKE) docs-reference-check
