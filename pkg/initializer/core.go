@@ -116,10 +116,13 @@ func (a *Application) shutdown(ctx context.Context) error {
 }
 
 func lifecyclesForMode(mode Mode, graph *wire.Graph) ([]namedLifecycle, error) {
-	sidecars := []namedLifecycle{
-		{name: "runtime sidecar", lifecycle: graph.Sidecars.Runtime},
-		{name: "workers sidecar", lifecycle: graph.Sidecars.Workers},
-		{name: "dashboard sidecar", lifecycle: graph.Sidecars.Dashboard},
+	var sidecars []namedLifecycle
+	if graph.Sidecars.Runtime != nil || graph.Sidecars.Workers != nil || graph.Sidecars.Dashboard != nil {
+		sidecars = []namedLifecycle{
+			{name: "runtime sidecar", lifecycle: graph.Sidecars.Runtime},
+			{name: "workers sidecar", lifecycle: graph.Sidecars.Workers},
+			{name: "dashboard sidecar", lifecycle: graph.Sidecars.Dashboard},
+		}
 	}
 	switch mode {
 	case ModeAPI:

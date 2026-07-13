@@ -7,11 +7,13 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	factorysessionsservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	modelservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -35,9 +37,9 @@ type RuntimeInputs struct {
 	Clock            factory.Clock
 }
 
-// RuntimeDependencies are the constructed process-scoped infrastructure
-// dependencies retained by an application graph.
-type RuntimeDependencies struct {
+// phasedRuntimeDependencies are retained only by the internal construction
+// failure harness.
+type phasedRuntimeDependencies struct {
 	RuntimeInputs
 	Persistence runtimepersist.Store
 }
@@ -58,19 +60,19 @@ type SidecarLifecycles struct {
 	Dashboard Lifecycle
 }
 
-// ModelWorkerServices contains the model and worker/provider collaborators
+// phasedModelWorkerServices contains the model and worker/provider collaborators
 // created in one dependency-ordered construction phase. WorkerProvider is the
 // runtime builder that creates worker-specific provider runners; production
 // does not have one process-wide provider executor.
-type ModelWorkerServices struct {
+type phasedModelWorkerServices struct {
 	Models         *modelservice.Service
 	Workers        *workersservice.Service
 	WorkerProvider *runtimebuild.Service
 }
 
-// FactorySessionServices contains the session collaborators created after
+// phasedFactorySessionServices contains the session collaborators created after
 // persistence, model, and worker/provider construction succeeds.
-type FactorySessionServices struct {
+type phasedFactorySessionServices struct {
 	FactoryDefinition *factorydefinition.Service
 	FactorySessions   *factorysessionsservice.Service
 	DurableExecution  factorysessionexecution.Service
@@ -79,17 +81,18 @@ type FactorySessionServices struct {
 // TransportDependencies is the typed set of domain collaborators injected
 // into API, CLI, and MCP adapters.
 type TransportDependencies struct {
-	Models            *modelservice.Service
-	FactoryDefinition *factorydefinition.Service
-	FactorySessions   *factorysessionsservice.Service
+	API               apisurface.SessionAPISurface
+	Models            apisurface.ModelAPI
+	FactoryDefinition apisurface.FactorySaveAPI
+	FactorySessions   apisurface.SessionAPI
 	DurableExecution  factorysessionexecution.Service
 }
 
-// SidecarDependencies explicitly names the graph-owned collaborators available
+// phasedSidecarDependencies explicitly names the graph-owned collaborators available
 // when sidecar lifecycle handles are constructed.
-type SidecarDependencies struct {
+type phasedSidecarDependencies struct {
 	Config           *factoryconfig.LoadedFactoryConfig
-	Runtime          RuntimeDependencies
+	Runtime          phasedRuntimeDependencies
 	Models           *modelservice.Service
 	Workers          *workersservice.Service
 	WorkerProvider   *runtimebuild.Service
@@ -97,45 +100,70 @@ type SidecarDependencies struct {
 	DurableExecution factorysessionexecution.Service
 }
 
-// Constructed is the typed result of one graph-construction phase. Resource is
+// constructed is the typed result of one graph-construction phase. Resource is
 // retained by a successful graph or closed if a later phase fails.
-type Constructed[T any] struct {
+type constructed[T any] struct {
 	Value    T
 	Resource io.Closer
 }
 
-// Builders explicitly names each fallible construction phase. Builders must
+// phasedBuilders explicitly names each fallible construction phase. phasedBuilders must
 // construct collaborators without starting their runtime lifecycle.
-type Builders struct {
-	Persistence     func(context.Context, RuntimeInputs) (Constructed[runtimepersist.Store], error)
-	ModelWorkers    func(context.Context, RuntimeDependencies) (Constructed[ModelWorkerServices], error)
+type phasedBuilders struct {
+	Persistence     func(context.Context, RuntimeInputs) (constructed[runtimepersist.Store], error)
+	ModelWorkers    func(context.Context, phasedRuntimeDependencies) (constructed[phasedModelWorkerServices], error)
 	FactorySessions func(
 		context.Context,
-		RuntimeDependencies,
-		ModelWorkerServices,
-	) (Constructed[FactorySessionServices], error)
-	Transports func(context.Context, TransportDependencies) (Constructed[TransportLifecycles], error)
-	Sidecars   func(context.Context, SidecarDependencies) (Constructed[SidecarLifecycles], error)
+		phasedRuntimeDependencies,
+		phasedModelWorkerServices,
+	) (constructed[phasedFactorySessionServices], error)
+	Transports func(context.Context, phasedTransportDependencies) (constructed[TransportLifecycles], error)
+	Sidecars   func(context.Context, phasedSidecarDependencies) (constructed[SidecarLifecycles], error)
 }
 
-// Inputs explicitly names every startup value and construction phase assembled
-// by Build. It is not a host facade or service locator.
-type Inputs struct {
+// phasedInputs names the injected phases used only by the internal failure
+// harness. The public Build API does not expose these callbacks.
+type phasedInputs struct {
 	Config  *factoryconfig.LoadedFactoryConfig
 	Runtime RuntimeInputs
-	Build   Builders
+	Build   phasedBuilders
+}
+
+// phasedGraph is the internal observable result used by the construction
+// failure harness. It is deliberately not part of the production API.
+type phasedGraph struct {
+	Config            *factoryconfig.LoadedFactoryConfig
+	Runtime           phasedRuntimeDependencies
+	Models            *modelservice.Service
+	Workers           *workersservice.Service
+	WorkerProvider    *runtimebuild.Service
+	FactoryDefinition *factorydefinition.Service
+	FactorySessions   *factorysessionsservice.Service
+	DurableExecution  factorysessionexecution.Service
+	Transport         phasedTransportDependencies
+	Transports        TransportLifecycles
+	Sidecars          SidecarLifecycles
+	resources         *resourceSet
+}
+
+func (g *phasedGraph) Close() error {
+	if g == nil || g.resources == nil {
+		return nil
+	}
+	return g.resources.Close()
 }
 
 // Graph is the immutable-after-build process application graph. All fields are
 // eagerly assigned by Build and return stable collaborator identity.
 type Graph struct {
 	Config            *factoryconfig.LoadedFactoryConfig
-	Runtime           RuntimeDependencies
-	Models            *modelservice.Service
+	Runtime           RuntimeInputs
+	Models            apisurface.ModelAPI
 	Workers           *workersservice.Service
 	WorkerProvider    *runtimebuild.Service
-	FactoryDefinition *factorydefinition.Service
-	FactorySessions   *factorysessionsservice.Service
+	SessionRegistry   *factorysessions.Registry
+	FactoryDefinition apisurface.FactorySaveAPI
+	FactorySessions   apisurface.SessionAPI
 	DurableExecution  factorysessionexecution.Service
 	Transport         TransportDependencies
 	Transports        TransportLifecycles
@@ -152,7 +180,7 @@ func (g *Graph) Close() error {
 	return g.resources.Close()
 }
 
-func validateInputs(inputs Inputs) error {
+func validatePhasedInputs(inputs phasedInputs) error {
 	required := []struct {
 		name    string
 		missing bool

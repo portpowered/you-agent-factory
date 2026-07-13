@@ -1,4 +1,4 @@
-package wire_test
+package wire
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/wire"
 )
 
 var errWrongDependency = errors.New("builder received the wrong dependency instance")
@@ -19,19 +18,19 @@ func TestBuildRejectsMissingAndInvalidInputsWithDependencyContext(t *testing.T) 
 
 	tests := []struct {
 		name       string
-		modify     func(*wire.Inputs)
+		modify     func(*phasedInputs)
 		wantDetail string
 	}{
-		{name: "config", modify: func(inputs *wire.Inputs) { inputs.Config = nil }, wantDetail: "config is required"},
-		{name: "factory root", modify: func(inputs *wire.Inputs) { inputs.Runtime.FactoryRootDir = " " }, wantDetail: "runtime.factoryRootDir is required"},
-		{name: "execution base", modify: func(inputs *wire.Inputs) { inputs.Runtime.ExecutionBaseDir = " " }, wantDetail: "runtime.executionBaseDir is required"},
-		{name: "logger", modify: func(inputs *wire.Inputs) { inputs.Runtime.Logger = nil }, wantDetail: "runtime.logger is required"},
-		{name: "clock", modify: func(inputs *wire.Inputs) { inputs.Runtime.Clock = nil }, wantDetail: "runtime.clock is required"},
-		{name: "persistence builder", modify: func(inputs *wire.Inputs) { inputs.Build.Persistence = nil }, wantDetail: "builders.persistence is required"},
-		{name: "model builder", modify: func(inputs *wire.Inputs) { inputs.Build.ModelWorkers = nil }, wantDetail: "builders.modelWorkers is required"},
-		{name: "session builder", modify: func(inputs *wire.Inputs) { inputs.Build.FactorySessions = nil }, wantDetail: "builders.factorySessions is required"},
-		{name: "transport builder", modify: func(inputs *wire.Inputs) { inputs.Build.Transports = nil }, wantDetail: "builders.transports is required"},
-		{name: "sidecar builder", modify: func(inputs *wire.Inputs) { inputs.Build.Sidecars = nil }, wantDetail: "builders.sidecars is required"},
+		{name: "config", modify: func(inputs *phasedInputs) { inputs.Config = nil }, wantDetail: "config is required"},
+		{name: "factory root", modify: func(inputs *phasedInputs) { inputs.Runtime.FactoryRootDir = " " }, wantDetail: "runtime.factoryRootDir is required"},
+		{name: "execution base", modify: func(inputs *phasedInputs) { inputs.Runtime.ExecutionBaseDir = " " }, wantDetail: "runtime.executionBaseDir is required"},
+		{name: "logger", modify: func(inputs *phasedInputs) { inputs.Runtime.Logger = nil }, wantDetail: "runtime.logger is required"},
+		{name: "clock", modify: func(inputs *phasedInputs) { inputs.Runtime.Clock = nil }, wantDetail: "runtime.clock is required"},
+		{name: "persistence builder", modify: func(inputs *phasedInputs) { inputs.Build.Persistence = nil }, wantDetail: "builders.persistence is required"},
+		{name: "model builder", modify: func(inputs *phasedInputs) { inputs.Build.ModelWorkers = nil }, wantDetail: "builders.modelWorkers is required"},
+		{name: "session builder", modify: func(inputs *phasedInputs) { inputs.Build.FactorySessions = nil }, wantDetail: "builders.factorySessions is required"},
+		{name: "transport builder", modify: func(inputs *phasedInputs) { inputs.Build.Transports = nil }, wantDetail: "builders.transports is required"},
+		{name: "sidecar builder", modify: func(inputs *phasedInputs) { inputs.Build.Sidecars = nil }, wantDetail: "builders.sidecars is required"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -39,12 +38,12 @@ func TestBuildRejectsMissingAndInvalidInputsWithDependencyContext(t *testing.T) 
 			fixture := validFixture(t)
 			test.modify(&fixture.inputs)
 
-			graph, err := wire.Build(context.Background(), fixture.inputs)
+			graph, err := buildPhasedGraph(context.Background(), fixture.inputs)
 			if graph != nil {
-				t.Fatal("Build() graph is non-nil")
+				t.Fatal("buildPhasedGraph() graph is non-nil")
 			}
 			if err == nil || !strings.Contains(err.Error(), "build application graph: validate inputs: "+test.wantDetail) {
-				t.Fatalf("Build() error = %v, want validation detail %q", err, test.wantDetail)
+				t.Fatalf("buildPhasedGraph() error = %v, want validation detail %q", err, test.wantDetail)
 			}
 			assertNoLifecycleCalls(t, fixture)
 		})
@@ -56,9 +55,9 @@ func TestBuildPreservesCanceledContextCause(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	graph, err := wire.Build(ctx, validFixture(t).inputs)
+	graph, err := buildPhasedGraph(ctx, validFixture(t).inputs)
 	if graph != nil || !errors.Is(err, context.Canceled) {
-		t.Fatalf("Build() = (%v, %v), want nil graph wrapping context.Canceled", graph, err)
+		t.Fatalf("buildPhasedGraph() = (%v, %v), want nil graph wrapping context.Canceled", graph, err)
 	}
 }
 
@@ -83,12 +82,12 @@ func TestBuildReportsConstructionPhaseAndNeverStartsLifecycle(t *testing.T) {
 			cause := fmt.Errorf("%s unavailable", test.name)
 			test.fail(fixture, cause)
 
-			graph, err := wire.Build(context.Background(), fixture.inputs)
+			graph, err := buildPhasedGraph(context.Background(), fixture.inputs)
 			if graph != nil {
-				t.Fatal("Build() graph is non-nil")
+				t.Fatal("buildPhasedGraph() graph is non-nil")
 			}
 			if !errors.Is(err, cause) || !strings.Contains(err.Error(), test.wantPhase) {
-				t.Fatalf("Build() error = %v, want phase %q wrapping cause", err, test.wantPhase)
+				t.Fatalf("buildPhasedGraph() error = %v, want phase %q wrapping cause", err, test.wantPhase)
 			}
 			assertNoLifecycleCalls(t, fixture)
 		})
@@ -99,15 +98,15 @@ func TestBuildRejectsIncompleteConstructedCollaborator(t *testing.T) {
 	t.Parallel()
 
 	fixture := validFixture(t)
-	fixture.inputs.Build.ModelWorkers = func(context.Context, wire.RuntimeDependencies) (wire.Constructed[wire.ModelWorkerServices], error) {
+	fixture.inputs.Build.ModelWorkers = func(context.Context, phasedRuntimeDependencies) (constructed[phasedModelWorkerServices], error) {
 		services := fixture.modelWorkers
 		services.WorkerProvider = nil
-		return wire.Constructed[wire.ModelWorkerServices]{Value: services}, nil
+		return constructed[phasedModelWorkerServices]{Value: services}, nil
 	}
 
-	graph, err := wire.Build(context.Background(), fixture.inputs)
+	graph, err := buildPhasedGraph(context.Background(), fixture.inputs)
 	if graph != nil || err == nil || !strings.Contains(err.Error(), "construct model and worker/provider services: worker/provider runtime builder is required") {
-		t.Fatalf("Build() = (%v, %v), want missing provider construction error", graph, err)
+		t.Fatalf("buildPhasedGraph() = (%v, %v), want missing provider construction error", graph, err)
 	}
 	assertNoLifecycleCalls(t, fixture)
 }
@@ -116,18 +115,18 @@ func TestBuildRejectsTypedNilConstructedCollaborator(t *testing.T) {
 	t.Parallel()
 
 	fixture := validFixture(t)
-	fixture.inputs.Build.Transports = func(context.Context, wire.TransportDependencies) (wire.Constructed[wire.TransportLifecycles], error) {
+	fixture.inputs.Build.Transports = func(context.Context, phasedTransportDependencies) (constructed[TransportLifecycles], error) {
 		var api *recordingLifecycle
-		return wire.Constructed[wire.TransportLifecycles]{Value: wire.TransportLifecycles{
+		return constructed[TransportLifecycles]{Value: TransportLifecycles{
 			API: api,
 			CLI: fixture.transports.CLI,
 			MCP: fixture.transports.MCP,
 		}}, nil
 	}
 
-	graph, err := wire.Build(context.Background(), fixture.inputs)
+	graph, err := buildPhasedGraph(context.Background(), fixture.inputs)
 	if graph != nil || err == nil || !strings.Contains(err.Error(), "construct transport dependencies: API transport lifecycle is required") {
-		t.Fatalf("Build() = (%v, %v), want typed-nil transport construction error", graph, err)
+		t.Fatalf("buildPhasedGraph() = (%v, %v), want typed-nil transport construction error", graph, err)
 	}
 	assertNoLifecycleCalls(t, fixture)
 }
@@ -139,18 +138,18 @@ func TestBuildFailureClosesAcquiredResourcesOnceInReverseOrder(t *testing.T) {
 	var closeOrder []string
 	persistenceResource := &recordingCloser{name: "persistence", order: &closeOrder}
 	modelResource := &recordingCloser{name: "models", order: &closeOrder}
-	fixture.inputs.Build.Persistence = func(context.Context, wire.RuntimeInputs) (wire.Constructed[runtimepersist.Store], error) {
-		return wire.Constructed[runtimepersist.Store]{Value: fixture.persistence, Resource: persistenceResource}, nil
+	fixture.inputs.Build.Persistence = func(context.Context, RuntimeInputs) (constructed[runtimepersist.Store], error) {
+		return constructed[runtimepersist.Store]{Value: fixture.persistence, Resource: persistenceResource}, nil
 	}
-	fixture.inputs.Build.ModelWorkers = func(context.Context, wire.RuntimeDependencies) (wire.Constructed[wire.ModelWorkerServices], error) {
-		return wire.Constructed[wire.ModelWorkerServices]{Value: fixture.modelWorkers, Resource: modelResource}, nil
+	fixture.inputs.Build.ModelWorkers = func(context.Context, phasedRuntimeDependencies) (constructed[phasedModelWorkerServices], error) {
+		return constructed[phasedModelWorkerServices]{Value: fixture.modelWorkers, Resource: modelResource}, nil
 	}
 	cause := errors.New("durable execution unavailable")
 	failFactorySessions(fixture, cause)
 
-	graph, err := wire.Build(context.Background(), fixture.inputs)
+	graph, err := buildPhasedGraph(context.Background(), fixture.inputs)
 	if graph != nil || !errors.Is(err, cause) {
-		t.Fatalf("Build() = (%v, %v), want nil graph wrapping construction cause", graph, err)
+		t.Fatalf("buildPhasedGraph() = (%v, %v), want nil graph wrapping construction cause", graph, err)
 	}
 	if got, want := strings.Join(closeOrder, ","), "models,persistence"; got != want {
 		t.Fatalf("close order = %q, want %q", got, want)
@@ -167,15 +166,15 @@ func TestBuildFailureRetainsConstructionAndCleanupCauses(t *testing.T) {
 	fixture := validFixture(t)
 	cleanupCause := errors.New("persistence close failed")
 	resource := &recordingCloser{err: cleanupCause}
-	fixture.inputs.Build.Persistence = func(context.Context, wire.RuntimeInputs) (wire.Constructed[runtimepersist.Store], error) {
-		return wire.Constructed[runtimepersist.Store]{Value: fixture.persistence, Resource: resource}, nil
+	fixture.inputs.Build.Persistence = func(context.Context, RuntimeInputs) (constructed[runtimepersist.Store], error) {
+		return constructed[runtimepersist.Store]{Value: fixture.persistence, Resource: resource}, nil
 	}
 	constructionCause := errors.New("model provider unavailable")
 	failModelWorkers(fixture, constructionCause)
 
-	graph, err := wire.Build(context.Background(), fixture.inputs)
+	graph, err := buildPhasedGraph(context.Background(), fixture.inputs)
 	if graph != nil || !errors.Is(err, constructionCause) || !errors.Is(err, cleanupCause) {
-		t.Fatalf("Build() = (%v, %v), want both construction and cleanup causes", graph, err)
+		t.Fatalf("buildPhasedGraph() = (%v, %v), want both construction and cleanup causes", graph, err)
 	}
 	if resource.closes != 1 || !strings.Contains(err.Error(), "cleanup after construction failure") || !strings.Contains(err.Error(), "close persistence resource") {
 		t.Fatalf("cleanup result = closes %d, error %v", resource.closes, err)
@@ -188,12 +187,12 @@ func TestGraphCloseReleasesConstructionResourcesIdempotently(t *testing.T) {
 
 	fixture := validFixture(t)
 	resource := &recordingCloser{}
-	fixture.inputs.Build.Persistence = func(context.Context, wire.RuntimeInputs) (wire.Constructed[runtimepersist.Store], error) {
-		return wire.Constructed[runtimepersist.Store]{Value: fixture.persistence, Resource: resource}, nil
+	fixture.inputs.Build.Persistence = func(context.Context, RuntimeInputs) (constructed[runtimepersist.Store], error) {
+		return constructed[runtimepersist.Store]{Value: fixture.persistence, Resource: resource}, nil
 	}
-	graph, err := wire.Build(context.Background(), fixture.inputs)
+	graph, err := buildPhasedGraph(context.Background(), fixture.inputs)
 	if err != nil {
-		t.Fatalf("Build() error = %v", err)
+		t.Fatalf("buildPhasedGraph() error = %v", err)
 	}
 	if err := graph.Close(); err != nil {
 		t.Fatalf("Graph.Close() error = %v", err)
@@ -208,32 +207,32 @@ func TestGraphCloseReleasesConstructionResourcesIdempotently(t *testing.T) {
 }
 
 func failPersistence(fixture *buildFixture, cause error) {
-	fixture.inputs.Build.Persistence = func(context.Context, wire.RuntimeInputs) (wire.Constructed[runtimepersist.Store], error) {
-		return wire.Constructed[runtimepersist.Store]{}, cause
+	fixture.inputs.Build.Persistence = func(context.Context, RuntimeInputs) (constructed[runtimepersist.Store], error) {
+		return constructed[runtimepersist.Store]{}, cause
 	}
 }
 
 func failModelWorkers(fixture *buildFixture, cause error) {
-	fixture.inputs.Build.ModelWorkers = func(context.Context, wire.RuntimeDependencies) (wire.Constructed[wire.ModelWorkerServices], error) {
-		return wire.Constructed[wire.ModelWorkerServices]{}, cause
+	fixture.inputs.Build.ModelWorkers = func(context.Context, phasedRuntimeDependencies) (constructed[phasedModelWorkerServices], error) {
+		return constructed[phasedModelWorkerServices]{}, cause
 	}
 }
 
 func failFactorySessions(fixture *buildFixture, cause error) {
-	fixture.inputs.Build.FactorySessions = func(context.Context, wire.RuntimeDependencies, wire.ModelWorkerServices) (wire.Constructed[wire.FactorySessionServices], error) {
-		return wire.Constructed[wire.FactorySessionServices]{}, cause
+	fixture.inputs.Build.FactorySessions = func(context.Context, phasedRuntimeDependencies, phasedModelWorkerServices) (constructed[phasedFactorySessionServices], error) {
+		return constructed[phasedFactorySessionServices]{}, cause
 	}
 }
 
 func failTransports(fixture *buildFixture, cause error) {
-	fixture.inputs.Build.Transports = func(context.Context, wire.TransportDependencies) (wire.Constructed[wire.TransportLifecycles], error) {
-		return wire.Constructed[wire.TransportLifecycles]{}, cause
+	fixture.inputs.Build.Transports = func(context.Context, phasedTransportDependencies) (constructed[TransportLifecycles], error) {
+		return constructed[TransportLifecycles]{}, cause
 	}
 }
 
 func failSidecars(fixture *buildFixture, cause error) {
-	fixture.inputs.Build.Sidecars = func(context.Context, wire.SidecarDependencies) (wire.Constructed[wire.SidecarLifecycles], error) {
-		return wire.Constructed[wire.SidecarLifecycles]{}, cause
+	fixture.inputs.Build.Sidecars = func(context.Context, phasedSidecarDependencies) (constructed[SidecarLifecycles], error) {
+		return constructed[SidecarLifecycles]{}, cause
 	}
 }
 

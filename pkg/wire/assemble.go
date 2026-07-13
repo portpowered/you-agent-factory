@@ -4,9 +4,13 @@ import (
 	"errors"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	factorysessionsservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
+	modelservice "github.com/portpowered/infinite-you/pkg/models/service"
 )
 
-func validateModelWorkers(services ModelWorkerServices) error {
+func validateModelWorkers(services phasedModelWorkerServices) error {
 	switch {
 	case services.Models == nil:
 		return errors.New("models is required")
@@ -19,7 +23,7 @@ func validateModelWorkers(services ModelWorkerServices) error {
 	}
 }
 
-func validateFactorySessions(services FactorySessionServices) error {
+func validateFactorySessions(services phasedFactorySessionServices) error {
 	switch {
 	case services.FactoryDefinition == nil:
 		return errors.New("factory definition is required")
@@ -58,8 +62,15 @@ func validateSidecars(sidecars SidecarLifecycles) error {
 	}
 }
 
-func newTransportDependencies(models ModelWorkerServices, sessions FactorySessionServices) TransportDependencies {
-	return TransportDependencies{
+type phasedTransportDependencies struct {
+	Models            *modelservice.Service
+	FactoryDefinition *factorydefinition.Service
+	FactorySessions   *factorysessionsservice.Service
+	DurableExecution  factorysessionexecution.Service
+}
+
+func newTransportDependencies(models phasedModelWorkerServices, sessions phasedFactorySessionServices) phasedTransportDependencies {
+	return phasedTransportDependencies{
 		Models:            models.Models,
 		FactoryDefinition: sessions.FactoryDefinition,
 		FactorySessions:   sessions.FactorySessions,
@@ -69,11 +80,11 @@ func newTransportDependencies(models ModelWorkerServices, sessions FactorySessio
 
 func newSidecarDependencies(
 	config *factoryconfig.LoadedFactoryConfig,
-	runtime RuntimeDependencies,
-	models ModelWorkerServices,
-	sessions FactorySessionServices,
-) SidecarDependencies {
-	return SidecarDependencies{
+	runtime phasedRuntimeDependencies,
+	models phasedModelWorkerServices,
+	sessions phasedFactorySessionServices,
+) phasedSidecarDependencies {
+	return phasedSidecarDependencies{
 		Config:           config,
 		Runtime:          runtime,
 		Models:           models.Models,
@@ -84,17 +95,17 @@ func newSidecarDependencies(
 	}
 }
 
-func newGraph(
+func newPhasedGraph(
 	config *factoryconfig.LoadedFactoryConfig,
-	runtime RuntimeDependencies,
-	models ModelWorkerServices,
-	sessions FactorySessionServices,
-	transportDeps TransportDependencies,
+	runtime phasedRuntimeDependencies,
+	models phasedModelWorkerServices,
+	sessions phasedFactorySessionServices,
+	transportDeps phasedTransportDependencies,
 	transports TransportLifecycles,
 	sidecars SidecarLifecycles,
 	resources *resourceSet,
-) *Graph {
-	return &Graph{
+) *phasedGraph {
+	return &phasedGraph{
 		Config:            config,
 		Runtime:           runtime,
 		Models:            models.Models,

@@ -30,16 +30,17 @@ type resourceSet struct {
 	closeErr  error
 }
 
-// Build validates and constructs one application graph without activating any
-// transport, runtime, scheduler, poller, or dashboard lifecycle.
-func Build(ctx context.Context, inputs Inputs) (*Graph, error) {
+// buildPhasedGraph retains the dependency-ordered failure harness used to prove
+// construction cleanup. Production callers use Build, whose phases are owned
+// entirely by this package.
+func buildPhasedGraph(ctx context.Context, inputs phasedInputs) (*phasedGraph, error) {
 	if ctx == nil {
 		return nil, fmt.Errorf("build application graph: context is required")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, fmt.Errorf("build application graph: %w", err)
 	}
-	if err := validateInputs(inputs); err != nil {
+	if err := validatePhasedInputs(inputs); err != nil {
 		return nil, fmt.Errorf("build application graph: %w", err)
 	}
 
@@ -48,13 +49,13 @@ func Build(ctx context.Context, inputs Inputs) (*Graph, error) {
 	if err != nil {
 		return nil, failBuild(resources, err)
 	}
-	modelWorkers, err := construct(ctx, modelWorkersPhase, resources, func(ctx context.Context) (Constructed[ModelWorkerServices], error) {
+	modelWorkers, err := construct(ctx, modelWorkersPhase, resources, func(ctx context.Context) (constructed[phasedModelWorkerServices], error) {
 		return inputs.Build.ModelWorkers(ctx, runtime)
 	}, validateModelWorkers)
 	if err != nil {
 		return nil, failBuild(resources, err)
 	}
-	sessions, err := construct(ctx, factorySessionPhase, resources, func(ctx context.Context) (Constructed[FactorySessionServices], error) {
+	sessions, err := construct(ctx, factorySessionPhase, resources, func(ctx context.Context) (constructed[phasedFactorySessionServices], error) {
 		return inputs.Build.FactorySessions(ctx, runtime, modelWorkers)
 	}, validateFactorySessions)
 	if err != nil {
@@ -63,8 +64,8 @@ func Build(ctx context.Context, inputs Inputs) (*Graph, error) {
 	return buildEdges(ctx, inputs, runtime, modelWorkers, sessions, resources)
 }
 
-func buildRuntime(ctx context.Context, inputs RuntimeInputs, builders Builders, resources *resourceSet) (RuntimeDependencies, error) {
-	persistence, err := construct(ctx, persistencePhase, resources, func(ctx context.Context) (Constructed[runtimepersist.Store], error) {
+func buildRuntime(ctx context.Context, inputs RuntimeInputs, builders phasedBuilders, resources *resourceSet) (phasedRuntimeDependencies, error) {
+	persistence, err := construct(ctx, persistencePhase, resources, func(ctx context.Context) (constructed[runtimepersist.Store], error) {
 		return builders.Persistence(ctx, inputs)
 	}, func(store runtimepersist.Store) error {
 		if isNil(store) {
@@ -73,40 +74,40 @@ func buildRuntime(ctx context.Context, inputs RuntimeInputs, builders Builders, 
 		return nil
 	})
 	if err != nil {
-		return RuntimeDependencies{}, err
+		return phasedRuntimeDependencies{}, err
 	}
-	return RuntimeDependencies{RuntimeInputs: inputs, Persistence: persistence}, nil
+	return phasedRuntimeDependencies{RuntimeInputs: inputs, Persistence: persistence}, nil
 }
 
 func buildEdges(
 	ctx context.Context,
-	inputs Inputs,
-	runtime RuntimeDependencies,
-	modelWorkers ModelWorkerServices,
-	sessions FactorySessionServices,
+	inputs phasedInputs,
+	runtime phasedRuntimeDependencies,
+	modelWorkers phasedModelWorkerServices,
+	sessions phasedFactorySessionServices,
 	resources *resourceSet,
-) (*Graph, error) {
+) (*phasedGraph, error) {
 	transportDeps := newTransportDependencies(modelWorkers, sessions)
-	transports, err := construct(ctx, transportPhase, resources, func(ctx context.Context) (Constructed[TransportLifecycles], error) {
+	transports, err := construct(ctx, transportPhase, resources, func(ctx context.Context) (constructed[TransportLifecycles], error) {
 		return inputs.Build.Transports(ctx, transportDeps)
 	}, validateTransports)
 	if err != nil {
 		return nil, failBuild(resources, err)
 	}
-	sidecars, err := construct(ctx, sidecarPhase, resources, func(ctx context.Context) (Constructed[SidecarLifecycles], error) {
+	sidecars, err := construct(ctx, sidecarPhase, resources, func(ctx context.Context) (constructed[SidecarLifecycles], error) {
 		return inputs.Build.Sidecars(ctx, newSidecarDependencies(inputs.Config, runtime, modelWorkers, sessions))
 	}, validateSidecars)
 	if err != nil {
 		return nil, failBuild(resources, err)
 	}
-	return newGraph(inputs.Config, runtime, modelWorkers, sessions, transportDeps, transports, sidecars, resources), nil
+	return newPhasedGraph(inputs.Config, runtime, modelWorkers, sessions, transportDeps, transports, sidecars, resources), nil
 }
 
 func construct[T any](
 	ctx context.Context,
 	phase string,
 	resources *resourceSet,
-	builder func(context.Context) (Constructed[T], error),
+	builder func(context.Context) (constructed[T], error),
 	validate func(T) error,
 ) (T, error) {
 	var zero T

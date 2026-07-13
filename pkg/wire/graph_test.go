@@ -1,4 +1,4 @@
-package wire_test
+package wire
 
 import (
 	"context"
@@ -14,7 +14,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	"github.com/portpowered/infinite-you/pkg/wire"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 )
@@ -23,12 +22,12 @@ func TestBuildReturnsCompleteGraphWithSharedCollaboratorIdentity(t *testing.T) {
 	t.Parallel()
 
 	fixture := validFixture(t)
-	graph, err := wire.Build(context.Background(), fixture.inputs)
+	graph, err := buildPhasedGraph(context.Background(), fixture.inputs)
 	if err != nil {
-		t.Fatalf("Build() error = %v", err)
+		t.Fatalf("buildPhasedGraph() error = %v", err)
 	}
 	if graph == nil {
-		t.Fatal("Build() graph is nil")
+		t.Fatal("buildPhasedGraph() graph is nil")
 	}
 
 	assertRuntimeIdentity(t, graph, fixture)
@@ -40,14 +39,14 @@ func TestBuildReturnsCompleteGraphWithSharedCollaboratorIdentity(t *testing.T) {
 	}
 }
 
-func assertRuntimeIdentity(t *testing.T, graph *wire.Graph, fixture *buildFixture) {
+func assertRuntimeIdentity(t *testing.T, graph *phasedGraph, fixture *buildFixture) {
 	t.Helper()
 	if graph.Config != fixture.inputs.Config || graph.Runtime.Logger != fixture.inputs.Runtime.Logger || graph.Runtime.Clock != fixture.inputs.Runtime.Clock || graph.Runtime.Persistence != fixture.persistence {
 		t.Fatal("graph did not retain config and runtime dependency identity")
 	}
 }
 
-func assertDomainServiceIdentity(t *testing.T, graph *wire.Graph, fixture *buildFixture) {
+func assertDomainServiceIdentity(t *testing.T, graph *phasedGraph, fixture *buildFixture) {
 	t.Helper()
 	if graph.Models != fixture.modelWorkers.Models || graph.Workers != fixture.modelWorkers.Workers || graph.WorkerProvider != fixture.modelWorkers.WorkerProvider {
 		t.Fatal("graph did not retain model and worker/provider service identity")
@@ -57,14 +56,14 @@ func assertDomainServiceIdentity(t *testing.T, graph *wire.Graph, fixture *build
 	}
 }
 
-func assertTransportIdentity(t *testing.T, graph *wire.Graph) {
+func assertTransportIdentity(t *testing.T, graph *phasedGraph) {
 	t.Helper()
 	if graph.Transport.Models != graph.Models || graph.Transport.FactoryDefinition != graph.FactoryDefinition || graph.Transport.FactorySessions != graph.FactorySessions || graph.Transport.DurableExecution != graph.DurableExecution {
 		t.Fatal("transport dependencies do not share graph-owned service identity")
 	}
 }
 
-func assertLifecycleIdentity(t *testing.T, graph *wire.Graph, fixture *buildFixture) {
+func assertLifecycleIdentity(t *testing.T, graph *phasedGraph, fixture *buildFixture) {
 	t.Helper()
 	if graph.Transports != fixture.transports || graph.Sidecars != fixture.sidecars {
 		t.Fatal("graph did not retain lifecycle collaborator identity")
@@ -75,21 +74,21 @@ func TestBuildDoesNotActivateLifecycleCollaborators(t *testing.T) {
 	t.Parallel()
 
 	fixture := validFixture(t)
-	_, err := wire.Build(context.Background(), fixture.inputs)
+	_, err := buildPhasedGraph(context.Background(), fixture.inputs)
 	if err != nil {
-		t.Fatalf("Build() error = %v", err)
+		t.Fatalf("buildPhasedGraph() error = %v", err)
 	}
 
 	assertNoLifecycleCalls(t, fixture)
 }
 
 type buildFixture struct {
-	inputs       wire.Inputs
+	inputs       phasedInputs
 	persistence  runtimepersist.Store
-	modelWorkers wire.ModelWorkerServices
-	sessions     wire.FactorySessionServices
-	transports   wire.TransportLifecycles
-	sidecars     wire.SidecarLifecycles
+	modelWorkers phasedModelWorkerServices
+	sessions     phasedFactorySessionServices
+	transports   TransportLifecycles
+	sidecars     SidecarLifecycles
 	buildCount   [5]int
 }
 
@@ -106,18 +105,18 @@ func validFixture(t *testing.T) *buildFixture {
 	}
 	fixture := &buildFixture{
 		persistence: &memoryStore{},
-		modelWorkers: wire.ModelWorkerServices{
+		modelWorkers: phasedModelWorkerServices{
 			Models:         &modelservice.Service{},
 			Workers:        workersservice.New(workersservice.Config{}),
 			WorkerProvider: runtimebuild.New(runtimebuild.Config{}, fixedClock{}, zap.NewNop(), nil),
 		},
-		sessions: wire.FactorySessionServices{
+		sessions: phasedFactorySessionServices{
 			FactoryDefinition: &factorydefinition.Service{},
 			FactorySessions:   &factorysessionsservice.Service{},
 			DurableExecution:  durable,
 		},
-		transports: wire.TransportLifecycles{API: &recordingLifecycle{}, CLI: &recordingLifecycle{}, MCP: &recordingLifecycle{}},
-		sidecars: wire.SidecarLifecycles{
+		transports: TransportLifecycles{API: &recordingLifecycle{}, CLI: &recordingLifecycle{}, MCP: &recordingLifecycle{}},
+		sidecars: SidecarLifecycles{
 			Runtime:   &recordingLifecycle{},
 			Workers:   &recordingLifecycle{},
 			Dashboard: &recordingLifecycle{},
@@ -127,47 +126,47 @@ func validFixture(t *testing.T) *buildFixture {
 	return fixture
 }
 
-func validInputs(loaded *factoryconfig.LoadedFactoryConfig, fixture *buildFixture) wire.Inputs {
-	return wire.Inputs{
+func validInputs(loaded *factoryconfig.LoadedFactoryConfig, fixture *buildFixture) phasedInputs {
+	return phasedInputs{
 		Config: loaded,
-		Runtime: wire.RuntimeInputs{
+		Runtime: RuntimeInputs{
 			FactoryRootDir:   "/factory",
 			ExecutionBaseDir: "/factory",
 			Logger:           zap.NewNop(),
 			Clock:            fixedClock{now: time.Date(2026, time.July, 12, 12, 0, 0, 0, time.UTC)},
 		},
-		Build: wire.Builders{
-			Persistence: func(context.Context, wire.RuntimeInputs) (wire.Constructed[runtimepersist.Store], error) {
+		Build: phasedBuilders{
+			Persistence: func(context.Context, RuntimeInputs) (constructed[runtimepersist.Store], error) {
 				fixture.buildCount[0]++
-				return wire.Constructed[runtimepersist.Store]{Value: fixture.persistence}, nil
+				return constructed[runtimepersist.Store]{Value: fixture.persistence}, nil
 			},
-			ModelWorkers: func(_ context.Context, runtime wire.RuntimeDependencies) (wire.Constructed[wire.ModelWorkerServices], error) {
+			ModelWorkers: func(_ context.Context, runtime phasedRuntimeDependencies) (constructed[phasedModelWorkerServices], error) {
 				fixture.buildCount[1]++
 				if runtime.Persistence != fixture.persistence {
-					return wire.Constructed[wire.ModelWorkerServices]{}, errWrongDependency
+					return constructed[phasedModelWorkerServices]{}, errWrongDependency
 				}
-				return wire.Constructed[wire.ModelWorkerServices]{Value: fixture.modelWorkers}, nil
+				return constructed[phasedModelWorkerServices]{Value: fixture.modelWorkers}, nil
 			},
-			FactorySessions: func(_ context.Context, _ wire.RuntimeDependencies, models wire.ModelWorkerServices) (wire.Constructed[wire.FactorySessionServices], error) {
+			FactorySessions: func(_ context.Context, _ phasedRuntimeDependencies, models phasedModelWorkerServices) (constructed[phasedFactorySessionServices], error) {
 				fixture.buildCount[2]++
 				if models != fixture.modelWorkers {
-					return wire.Constructed[wire.FactorySessionServices]{}, errWrongDependency
+					return constructed[phasedFactorySessionServices]{}, errWrongDependency
 				}
-				return wire.Constructed[wire.FactorySessionServices]{Value: fixture.sessions}, nil
+				return constructed[phasedFactorySessionServices]{Value: fixture.sessions}, nil
 			},
-			Transports: func(_ context.Context, deps wire.TransportDependencies) (wire.Constructed[wire.TransportLifecycles], error) {
+			Transports: func(_ context.Context, deps phasedTransportDependencies) (constructed[TransportLifecycles], error) {
 				fixture.buildCount[3]++
 				if deps.Models != fixture.modelWorkers.Models || deps.FactorySessions != fixture.sessions.FactorySessions {
-					return wire.Constructed[wire.TransportLifecycles]{}, errWrongDependency
+					return constructed[TransportLifecycles]{}, errWrongDependency
 				}
-				return wire.Constructed[wire.TransportLifecycles]{Value: fixture.transports}, nil
+				return constructed[TransportLifecycles]{Value: fixture.transports}, nil
 			},
-			Sidecars: func(_ context.Context, deps wire.SidecarDependencies) (wire.Constructed[wire.SidecarLifecycles], error) {
+			Sidecars: func(_ context.Context, deps phasedSidecarDependencies) (constructed[SidecarLifecycles], error) {
 				fixture.buildCount[4]++
 				if deps.Runtime.Persistence != fixture.persistence || deps.WorkerProvider != fixture.modelWorkers.WorkerProvider || deps.DurableExecution != fixture.sessions.DurableExecution {
-					return wire.Constructed[wire.SidecarLifecycles]{}, errWrongDependency
+					return constructed[SidecarLifecycles]{}, errWrongDependency
 				}
-				return wire.Constructed[wire.SidecarLifecycles]{Value: fixture.sidecars}, nil
+				return constructed[SidecarLifecycles]{Value: fixture.sidecars}, nil
 			},
 		},
 	}

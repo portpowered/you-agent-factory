@@ -9,65 +9,24 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/composebridge"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/mcp/server"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
-	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 )
 
-// ProductionInputs contains normalized process configuration and the stdio
-// edges required to construct every currently supported transport. BuildProduction
+// Inputs contains normalized process configuration and the stdio edges
+// required to construct every currently supported transport. Build
 // copies Config before normalization so graph construction does not mutate the
 // caller's configuration object.
-type ProductionInputs struct {
+type Inputs struct {
 	Config    *runtimehost.Config
 	MCPInput  io.Reader
 	MCPOutput io.Writer
 }
 
-// ProductionTransportDependencies contains the narrow domain contracts shared
-// by the concrete API, CLI, and MCP transport adapters.
-type ProductionTransportDependencies struct {
-	API               apisurface.SessionAPISurface
-	Sessions          apisurface.SessionAPI
-	Models            apisurface.ModelAPI
-	FactoryDefinition apisurface.FactorySaveAPI
-	DurableExecution  factorysessionexecution.Service
-}
-
-// ProductionGraph is the eagerly constructed production application graph.
-// It intentionally exposes neither runtimehost.Host nor a service locator.
-type ProductionGraph struct {
-	Config            *factoryconfig.LoadedFactoryConfig
-	Runtime           RuntimeInputs
-	Models            apisurface.ModelAPI
-	Workers           *workersservice.Service
-	WorkerProvider    *runtimebuild.Service
-	SessionRegistry   *factorysessions.Registry
-	FactorySessions   apisurface.SessionAPI
-	FactoryDefinition apisurface.FactorySaveAPI
-	DurableExecution  factorysessionexecution.Service
-	Transport         ProductionTransportDependencies
-	Transports        TransportLifecycles
-	resources         *resourceSet
-}
-
-// Close releases construction-owned runtime artifacts. Activated transports
-// must be stopped before Close is called.
-func (g *ProductionGraph) Close() error {
-	if g == nil || g.resources == nil {
-		return nil
-	}
-	return g.resources.Close()
-}
-
-// BuildProduction eagerly constructs the real runtime core, domain services,
+// Build eagerly constructs the real runtime core, domain services,
 // and transport lifecycle handles without starting listeners or goroutines.
-func BuildProduction(ctx context.Context, inputs ProductionInputs) (*ProductionGraph, error) {
+func Build(ctx context.Context, inputs Inputs) (*Graph, error) {
 	if err := validateProductionInputs(ctx, inputs); err != nil {
 		return nil, fmt.Errorf("build production application graph: %w", err)
 	}
@@ -91,7 +50,7 @@ func BuildProduction(ctx context.Context, inputs ProductionInputs) (*ProductionG
 	return graph, nil
 }
 
-func validateProductionInputs(ctx context.Context, inputs ProductionInputs) error {
+func validateProductionInputs(ctx context.Context, inputs Inputs) error {
 	switch {
 	case ctx == nil:
 		return errors.New("context is required")
@@ -115,9 +74,9 @@ func validateProductionInputs(ctx context.Context, inputs ProductionInputs) erro
 func assembleProductionGraph(
 	core *runtimehost.Core,
 	cfg *runtimehost.Config,
-	inputs ProductionInputs,
+	inputs Inputs,
 	resources *resourceSet,
-) (*ProductionGraph, error) {
+) (*Graph, error) {
 	if core == nil || core.StartupBundle() == nil {
 		return nil, errors.New("construct runtime core: startup runtime bundle is required")
 	}
@@ -155,14 +114,14 @@ func assembleProductionGraph(
 	if runtimeInputs.ExecutionBaseDir == "" {
 		runtimeInputs.ExecutionBaseDir = core.FactoryRootDir()
 	}
-	transport := ProductionTransportDependencies{
+	transport := TransportDependencies{
 		API:               apiSurface,
-		Sessions:          sessions,
 		Models:            models,
 		FactoryDefinition: definition,
+		FactorySessions:   sessions,
 		DurableExecution:  core.DurableExecution(),
 	}
-	return &ProductionGraph{
+	return &Graph{
 		Config:            bundle.RuntimeCfg,
 		Runtime:           runtimeInputs,
 		Models:            models,

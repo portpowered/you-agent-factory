@@ -18,7 +18,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestBuildProductionConstructsRealGraphOnceWithoutStartingLifecycle(t *testing.T) {
+func TestBuildConstructsRealGraphOnceWithoutStartingLifecycle(t *testing.T) {
 	t.Parallel()
 
 	factoryDir := t.TempDir()
@@ -43,36 +43,36 @@ func TestBuildProductionConstructsRealGraphOnceWithoutStartingLifecycle(t *testi
 	}
 	var mcpOutput bytes.Buffer
 
-	graph, err := wire.BuildProduction(context.Background(), wire.ProductionInputs{
+	graph, err := wire.Build(context.Background(), wire.Inputs{
 		Config:    config,
 		MCPInput:  strings.NewReader(""),
 		MCPOutput: &mcpOutput,
 	})
 	if err != nil {
-		t.Fatalf("BuildProduction() error = %v", err)
+		t.Fatalf("Build() error = %v", err)
 	}
-	assertCompleteProductionGraph(t, graph, config, clock)
+	assertCompleteGraph(t, graph, config, clock)
 	assertProductionConstructionIsInert(t, apiStarts, dashboardRenders, &mcpOutput)
 	if config.Dir != factoryDir {
-		t.Fatalf("BuildProduction() mutated caller config dir to %q", config.Dir)
+		t.Fatalf("Build() mutated caller config dir to %q", config.Dir)
 	}
 	if err := graph.Close(); err != nil {
-		t.Fatalf("ProductionGraph.Close() error = %v", err)
+		t.Fatalf("Graph.Close() error = %v", err)
 	}
 	if err := graph.Close(); err != nil {
-		t.Fatalf("second ProductionGraph.Close() error = %v", err)
+		t.Fatalf("second Graph.Close() error = %v", err)
 	}
 }
 
-func assertCompleteProductionGraph(
+func assertCompleteGraph(
 	t *testing.T,
-	graph *wire.ProductionGraph,
+	graph *wire.Graph,
 	config *runtimehost.Config,
 	clock productionClock,
 ) {
 	t.Helper()
 	if graph == nil || graph.Config == nil {
-		t.Fatal("BuildProduction() returned an incomplete graph")
+		t.Fatal("Build() returned an incomplete graph")
 	}
 	if graph.Runtime.Logger != config.Logger || graph.Runtime.Clock != clock {
 		t.Fatal("production graph did not retain explicit logger and clock identity")
@@ -81,7 +81,7 @@ func assertCompleteProductionGraph(
 	assertProductionTransportIdentity(t, graph)
 }
 
-func assertProductionDomainServices(t *testing.T, graph *wire.ProductionGraph) {
+func assertProductionDomainServices(t *testing.T, graph *wire.Graph) {
 	t.Helper()
 	if graph.Models == nil || graph.Workers == nil || graph.WorkerProvider == nil || graph.SessionRegistry == nil {
 		t.Fatal("production graph omitted a model, worker, provider, or Factory Session collaborator")
@@ -94,9 +94,9 @@ func assertProductionDomainServices(t *testing.T, graph *wire.ProductionGraph) {
 	}
 }
 
-func assertProductionTransportIdentity(t *testing.T, graph *wire.ProductionGraph) {
+func assertProductionTransportIdentity(t *testing.T, graph *wire.Graph) {
 	t.Helper()
-	if graph.Transport.Models != graph.Models || graph.Transport.Sessions != graph.FactorySessions || graph.Transport.FactoryDefinition != graph.FactoryDefinition || graph.Transport.DurableExecution != graph.DurableExecution {
+	if graph.Transport.Models != graph.Models || graph.Transport.FactorySessions != graph.FactorySessions || graph.Transport.FactoryDefinition != graph.FactoryDefinition || graph.Transport.DurableExecution != graph.DurableExecution {
 		t.Fatal("production transport dependencies do not share graph-owned collaborator identity")
 	}
 }
@@ -113,11 +113,11 @@ func assertProductionConstructionIsInert(
 	}
 }
 
-func TestBuildProductionReportsConcreteCoreFailureBeforeLifecycleStart(t *testing.T) {
+func TestBuildReportsConcreteCoreFailureBeforeLifecycleStart(t *testing.T) {
 	t.Parallel()
 
 	var output bytes.Buffer
-	graph, err := wire.BuildProduction(context.Background(), wire.ProductionInputs{
+	graph, err := wire.Build(context.Background(), wire.Inputs{
 		Config: &runtimehost.Config{
 			Dir:                      filepath.Join(t.TempDir(), "missing"),
 			Logger:                   zap.NewNop(),
@@ -129,24 +129,24 @@ func TestBuildProductionReportsConcreteCoreFailureBeforeLifecycleStart(t *testin
 		MCPOutput: &output,
 	})
 	if graph != nil {
-		t.Fatal("BuildProduction() returned a graph for a missing factory")
+		t.Fatal("Build() returned a graph for a missing factory")
 	}
 	if err == nil || !strings.Contains(err.Error(), "construct runtime core") {
-		t.Fatalf("BuildProduction() error = %v, want concrete runtime-core phase", err)
+		t.Fatalf("Build() error = %v, want concrete runtime-core phase", err)
 	}
 	if output.Len() != 0 {
 		t.Fatal("MCP transport started after graph construction failed")
 	}
 }
 
-func TestBuildProductionPreservesCanceledContext(t *testing.T) {
+func TestBuildPreservesCanceledContext(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	graph, err := wire.BuildProduction(ctx, wire.ProductionInputs{})
+	graph, err := wire.Build(ctx, wire.Inputs{})
 	if graph != nil || !errors.Is(err, context.Canceled) {
-		t.Fatalf("BuildProduction() = (%v, %v), want nil graph wrapping context.Canceled", graph, err)
+		t.Fatalf("Build() = (%v, %v), want nil graph wrapping context.Canceled", graph, err)
 	}
 }
 
