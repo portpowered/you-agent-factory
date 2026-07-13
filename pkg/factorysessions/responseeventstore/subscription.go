@@ -203,17 +203,15 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 	if s == nil || s.store == nil || s.subscriber == nil {
 		return nil, ErrSubscriptionClosed
 	}
-	s.mu.Lock()
-	detached := s.detached
-	s.mu.Unlock()
-	if detached {
-		return nil, ErrSubscriptionClosed
-	}
 	for {
 		s.mu.Lock()
+		detached := s.detached
 		afterSequence := s.afterSequence
 		dispatchID := s.dispatchID
 		s.mu.Unlock()
+		if detached {
+			return nil, ErrSubscriptionClosed
+		}
 
 		events, closed := s.store.readForSubscriber(afterSequence, dispatchID)
 		if closed {
@@ -228,6 +226,12 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-s.subscriber.done:
+			s.mu.Lock()
+			detached = s.detached
+			s.mu.Unlock()
+			if detached {
+				return nil, ErrSubscriptionClosed
+			}
 			// Complete/Close may close done while a retained event is already
 			// available; re-read before honoring completion.
 			continue

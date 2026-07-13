@@ -332,8 +332,10 @@ func TestSessionResponseEventStore_CompleteWhileWaitingNextDrainsPublishedEvent(
 	defer subscription.Detach()
 
 	waiting := make(chan struct{})
+	done := make(chan struct{})
 	go func() {
 		close(waiting)
+		defer close(done)
 		events, err := subscription.Next(context.Background())
 		if err != nil {
 			t.Errorf("Next: %v", err)
@@ -364,16 +366,60 @@ func TestSessionResponseEventStore_CompleteWhileWaitingNextDrainsPublishedEvent(
 	}
 	store.Complete()
 
-	deadline := time.After(2 * time.Second)
-	for {
-		select {
-		case <-deadline:
-			t.Fatal("timed out waiting for subscriber to drain published event after complete")
-		default:
-			if store.SubscriberCount() == 0 {
-				return
-			}
-			time.Sleep(10 * time.Millisecond)
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for subscriber to drain published event after complete")
+	}
+}
+
+func TestSessionResponseEventStore_DetachWhileWaitingNextReturnsPromptly(t *testing.T) {
+	t.Parallel()
+
+	store := responseeventstore.NewSessionResponseEventStore("session-abc")
+	subscription, err := store.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+
+	waiting := make(chan struct{})
+	closed := make(chan error, 1)
+	go func() {
+		close(waiting)
+		_, err := subscription.Next(context.Background())
+		closed <- err
+	}()
+
+	select {
+	case <-waiting:
+	case <-time.After(time.Second):
+		t.Fatal("subscriber did not start waiting")
+	}
+
+	time.Sleep(20 * time.Millisecond)
+
+	start := time.Now()
+	subscription.Detach()
+
+	select {
+	case err := <-closed:
+		if !errors.Is(err, responseeventstore.ErrSubscriptionClosed) {
+			t.Fatalf("Next after detach while waiting error = %v, want ErrSubscriptionClosed", err)
 		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Next did not return promptly after Detach while waiting")
+	}
+	if elapsed := time.Since(start); elapsed > 200*time.Millisecond {
+		t.Fatalf("Next took %v to return after Detach, want prompt return", elapsed)
+	}
+
+	if _, err := store.Publish(samplePublishInput()); err != nil {
+		t.Fatalf("publish after detach: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	if _, err := subscription.Next(ctx); !errors.Is(err, responseeventstore.ErrSubscriptionClosed) {
+		t.Fatalf("Next after post-detach publish error = %v, want ErrSubscriptionClosed", err)
 	}
 }
