@@ -20,6 +20,10 @@ import {
   renderAppWithDashboardShell,
 } from "./testing/app-shell-test-utils";
 import {
+  createControlledIndexedDBTestDouble,
+  flushPromiseContinuations,
+} from "./testing/controlled-indexeddb-test-utils";
+import {
   MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO,
   type MultiSessionTimelineCheckpointFixture,
 } from "./testing/multi-session-timeline-checkpoint-scenario";
@@ -27,6 +31,13 @@ import { createTimelineCheckpointIndexedDBTestDouble } from "./testing/timeline-
 
 const CHECKPOINT_DEBOUNCE_MS = 750;
 const { A, B } = MULTI_SESSION_TIMELINE_CHECKPOINT_SCENARIO;
+
+interface StoredCheckpointEnvelope {
+  checkpoint?: MultiSessionTimelineCheckpointFixture["checkpoint"];
+  schemaVersion?: number;
+  storageKey?: string;
+  streamIdentity?: MultiSessionTimelineCheckpointFixture["streamIdentity"];
+}
 
 function previousCheckpointFor(
   fixture: MultiSessionTimelineCheckpointFixture,
@@ -165,6 +176,40 @@ async function settleCheckpointPersistence(): Promise<void> {
       await Promise.resolve();
     }
   });
+}
+
+async function advanceControlledWrite(
+  fixture: ReturnType<
+    typeof createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>
+  >,
+  openOrdinal = 0,
+): Promise<void> {
+  fixture.controls.succeed("open", openOrdinal);
+  await flushPromiseContinuations();
+  fixture.controls.succeed("get");
+  await flushPromiseContinuations();
+  await flushPromiseContinuations();
+  fixture.controls.succeed("open", openOrdinal);
+  await flushPromiseContinuations();
+  fixture.controls.succeed("put");
+  fixture.controls.completeTransaction();
+  for (let turn = 0; turn < 4; turn += 1) {
+    await flushPromiseContinuations();
+  }
+}
+
+async function advanceQueuedControlledWrite(
+  fixture: ReturnType<
+    typeof createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>
+  >,
+): Promise<void> {
+  fixture.controls.succeed("open");
+  await flushPromiseContinuations();
+  fixture.controls.succeed("put");
+  fixture.controls.completeTransaction();
+  for (let turn = 0; turn < 4; turn += 1) {
+    await flushPromiseContinuations();
+  }
 }
 
 async function renderSessionA(options: { writeError?: Error } = {}) {
@@ -360,5 +405,64 @@ describe("App checkpoint lifecycle safety", () => {
     ).resolves.toBeNull();
     expect(pageHide.defaultPrevented).toBe(false);
     expect(writeAttempts()).toBe(1);
+  });
+
+  it("keeps newer same-stream state authoritative while A and B lifecycle writes overlap", async () => {
+    const { indexedDB: preflightIndexedDB, unmount } = await renderSessionA();
+    const controlled =
+      createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
+    vi.stubGlobal("indexedDB", controlled.indexedDB);
+
+    await scheduleCheckpoint(previousCheckpointFor(A));
+    window.dispatchEvent(new Event("pagehide"));
+    await flushPromiseContinuations();
+    await scheduleCheckpoint(A);
+    await advanceCheckpointTimer(CHECKPOINT_DEBOUNCE_MS);
+
+    vi.stubGlobal("indexedDB", preflightIndexedDB);
+    await selectSession("beta", B);
+    vi.stubGlobal("indexedDB", controlled.indexedDB);
+    await scheduleCheckpoint(B);
+    window.dispatchEvent(new Event("pagehide"));
+    await flushPromiseContinuations();
+
+    expect(controlled.controls.pendingOperations()).toEqual(["open", "open"]);
+
+    // B owns an independent identity lane and may finish before the older A
+    // lifecycle write even though A was admitted first.
+    await advanceControlledWrite(controlled, 1);
+    await advanceControlledWrite(controlled);
+    expect(controlled.controls.pendingOperations()).toEqual(["open"]);
+    await advanceQueuedControlledWrite(controlled);
+
+    const stored = [...controlled.records.values()];
+    expect(stored).toHaveLength(2);
+    expect(
+      stored.find(
+        ({ streamIdentity }) =>
+          streamIdentity?.factorySessionID ===
+          A.streamIdentity.factorySessionID,
+      ),
+    ).toEqual({
+      checkpoint: A.checkpoint,
+      schemaVersion: expect.any(Number),
+      storageKey: expect.any(String),
+      streamIdentity: A.streamIdentity,
+    });
+    expect(
+      stored.find(
+        ({ streamIdentity }) =>
+          streamIdentity?.factorySessionID ===
+          B.streamIdentity.factorySessionID,
+      ),
+    ).toEqual({
+      checkpoint: B.checkpoint,
+      schemaVersion: expect.any(Number),
+      storageKey: expect.any(String),
+      streamIdentity: B.streamIdentity,
+    });
+
+    unmount();
+    expect(controlled.controls.pendingOperations()).toEqual([]);
   });
 });
