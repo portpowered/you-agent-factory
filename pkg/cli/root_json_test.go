@@ -125,14 +125,14 @@ func TestFactoryQueryCommand_GlobalJSONMapsToConfig(t *testing.T) {
 	}
 }
 
-func TestFactorySaveLiveCommand_GlobalJSONMapsToConfig(t *testing.T) {
-	originalSaveFactoryCurrent := saveFactoryCurrent
+func TestFactoryReplaceCurrentCommand_GlobalJSONMapsToConfig(t *testing.T) {
+	originalReplaceFactoryCurrent := replaceFactoryCurrent
 	defer func() {
-		saveFactoryCurrent = originalSaveFactoryCurrent
+		replaceFactoryCurrent = originalReplaceFactoryCurrent
 	}()
 
-	var got factorycli.SaveCurrentConfig
-	saveFactoryCurrent = func(cfg factorycli.SaveCurrentConfig) error {
+	var got factorycli.ReplaceCurrentConfig
+	replaceFactoryCurrent = func(cfg factorycli.ReplaceCurrentConfig) error {
 		got = cfg
 		return nil
 	}
@@ -140,13 +140,13 @@ func TestFactorySaveLiveCommand_GlobalJSONMapsToConfig(t *testing.T) {
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
-	root.SetArgs([]string{"--json", "factory", "save"})
+	root.SetArgs([]string{"--json", "factory", "replace-current"})
 
 	if err := root.Execute(); err != nil {
-		t.Fatalf("execute factory save with global --json: %v", err)
+		t.Fatalf("execute factory replace-current with global --json: %v", err)
 	}
 	if !got.JSON {
-		t.Fatal("expected global --json to map to SaveCurrentConfig.JSON")
+		t.Fatal("expected global --json to map to ReplaceCurrentConfig.JSON")
 	}
 }
 

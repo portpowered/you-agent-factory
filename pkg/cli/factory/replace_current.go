@@ -21,10 +21,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
 )
 
-const saveCurrentRequestTimeout = queryCurrentRequestTimeout
+const replaceCurrentRequestTimeout = queryCurrentRequestTimeout
 
-// SaveCurrentConfig holds parameters for persisting the live current factory.
-type SaveCurrentConfig struct {
+var replaceCurrentOwningLabels = replaceCurrentLabels{
+	logLabel:     "factory replace-current",
+	failureLabel: "replace current factory",
+}
+
+type replaceCurrentLabels struct {
+	logLabel     string
+	failureLabel string
+}
+
+// ReplaceCurrentConfig holds parameters for persisting the live current factory.
+type ReplaceCurrentConfig struct {
 	Server      string
 	SessionID   string
 	JSON        bool
@@ -33,37 +43,44 @@ type SaveCurrentConfig struct {
 	Diagnostics io.Writer
 }
 
-// SaveCurrent reads the session current factory and persists it with PUT.
-func SaveCurrent(cfg SaveCurrentConfig) error {
+// ReplaceCurrent reads the session current factory and persists it with PUT.
+func ReplaceCurrent(cfg ReplaceCurrentConfig) error {
 	if cfg.Output == nil {
 		cfg.Output = os.Stdout
 	}
 
-	saved, err := saveCurrentFactory(saveCurrentOptions{
+	saved, err := replaceCurrentFactory(replaceCurrentOptions{
 		Server:      cfg.Server,
 		SessionID:   cfg.SessionID,
 		Verbose:     cfg.Verbose,
 		Diagnostics: cfg.Diagnostics,
+		labels:      replaceCurrentOwningLabels,
 	})
 	if err != nil {
-		return renderSaveCurrentError(err)
+		return renderReplaceCurrentError(err)
 	}
 
 	if cfg.JSON {
 		return json.NewEncoder(cfg.Output).Encode(saved)
 	}
 
-	return renderSaveCurrentSuccess(saved, cfg.SessionID, cfg.Output)
+	return renderReplaceCurrentSuccess(saved, cfg.SessionID, cfg.Output)
 }
 
-type saveCurrentOptions struct {
+type replaceCurrentOptions struct {
 	Server      string
 	SessionID   string
 	Verbose     bool
 	Diagnostics io.Writer
+	labels      replaceCurrentLabels
 }
 
-func saveCurrentFactory(cfg saveCurrentOptions) (factoryapi.Factory, error) {
+func replaceCurrentFactory(cfg replaceCurrentOptions) (factoryapi.Factory, error) {
+	labels := cfg.labels
+	if labels.logLabel == "" {
+		labels = replaceCurrentOwningLabels
+	}
+
 	current, err := queryCurrent(queryCurrentOptions{
 		Server:      cfg.Server,
 		SessionID:   cfg.SessionID,
@@ -81,12 +98,13 @@ func saveCurrentFactory(cfg saveCurrentOptions) (factoryapi.Factory, error) {
 	}
 	endpoint, err := url.Parse(endpointURL)
 	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("parse factory save endpoint: %w", err)
+		return factoryapi.Factory{}, fmt.Errorf("parse %s endpoint: %w", labels.logLabel, err)
 	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"factory save request endpointPath=%s endpoint=%s server=%s session=%s factoryName=%q",
+		"%s request endpointPath=%s endpoint=%s server=%s session=%s factoryName=%q",
+		labels.logLabel,
 		endpoint.Path,
 		endpoint.String(),
 		cfg.Server,
@@ -94,13 +112,13 @@ func saveCurrentFactory(cfg saveCurrentOptions) (factoryapi.Factory, error) {
 		current.Name,
 	)
 
-	requestBody := buildSaveFactoryForSessionRequest(current)
+	requestBody := buildReplaceCurrentFactoryRequest(current)
 	payload, err := json.Marshal(requestBody)
 	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("encode save factory for session payload: %w", err)
+		return factoryapi.Factory{}, fmt.Errorf("encode %s payload: %w", labels.failureLabel, err)
 	}
 
-	client := &http.Client{Timeout: saveCurrentRequestTimeout}
+	client := &http.Client{Timeout: replaceCurrentRequestTimeout}
 	started := time.Now()
 	var saved factoryapi.Factory
 	resp, err := clihttp.PutJSON(
@@ -113,7 +131,7 @@ func saveCurrentFactory(cfg saveCurrentOptions) (factoryapi.Factory, error) {
 			Diagnostics:  cfg.Diagnostics,
 			Verbose:      cfg.Verbose,
 			EndpointPath: endpoint.Path,
-			LogLabel:     "factory save",
+			LogLabel:     labels.logLabel,
 		},
 	)
 	if err != nil {
@@ -124,10 +142,10 @@ func saveCurrentFactory(cfg saveCurrentOptions) (factoryapi.Factory, error) {
 	if resp.StatusCode != http.StatusOK {
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return factoryapi.Factory{}, fmt.Errorf("read save current factory response: %w", err)
+			return factoryapi.Factory{}, fmt.Errorf("read %s response: %w", labels.failureLabel, err)
 		}
-		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "factory save response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds(), len(body))
-		return factoryapi.Factory{}, saveCurrentError(resp.StatusCode, body)
+		clidiag.Printf(cfg.Diagnostics, cfg.Verbose, "%s response endpointPath=%s status=%d durationMillis=%d responseBytes=%d", labels.logLabel, endpoint.Path, resp.StatusCode, time.Since(started).Milliseconds(), len(body))
+		return factoryapi.Factory{}, replaceCurrentHTTPError(labels.failureLabel, resp.StatusCode, body)
 	}
 
 	responseBytes, err := currentFactoryResponseBytes(saved)
@@ -137,7 +155,8 @@ func saveCurrentFactory(cfg saveCurrentOptions) (factoryapi.Factory, error) {
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
-		"factory save response endpointPath=%s status=%d durationMillis=%d responseBytes=%d factoryName=%q",
+		"%s response endpointPath=%s status=%d durationMillis=%d responseBytes=%d factoryName=%q",
+		labels.logLabel,
 		endpoint.Path,
 		resp.StatusCode,
 		time.Since(started).Milliseconds(),
@@ -147,34 +166,34 @@ func saveCurrentFactory(cfg saveCurrentOptions) (factoryapi.Factory, error) {
 	return saved, nil
 }
 
-func renderSaveCurrentSuccess(saved factoryapi.Factory, sessionID string, output io.Writer) error {
+func renderReplaceCurrentSuccess(saved factoryapi.Factory, sessionID string, output io.Writer) error {
 	_, err := fmt.Fprintf(
 		output,
-		"Saved factory %s\nSession: %s\n",
+		"Replaced current factory %s\nSession: %s\n",
 		saved.Name,
 		clidiag.SessionLabel(sessionID),
 	)
 	return err
 }
 
-func renderSaveCurrentError(err error) error {
+func renderReplaceCurrentError(err error) error {
 	if errors.Is(err, ErrCurrentFactoryNotFound) {
 		return fmt.Errorf("running service has no active current factory; start a factory or activate a named factory: %w", err)
 	}
 	return err
 }
 
-func saveCurrentError(statusCode int, body []byte) error {
+func replaceCurrentHTTPError(failureLabel string, statusCode int, body []byte) error {
 	var errResp factoryapi.ErrorResponse
 	if json.Unmarshal(body, &errResp) != nil || errResp.Message == "" {
-		return unexpectedSaveCurrentStatusError(statusCode, body)
+		return unexpectedReplaceCurrentHTTPError(failureLabel, statusCode, body)
 	}
-	return fmt.Errorf("save current factory failed (%d): %s", statusCode, errResp.Message)
+	return fmt.Errorf("%s failed (%d): %s", failureLabel, statusCode, errResp.Message)
 }
 
-func buildSaveFactoryForSessionRequest(current factoryapi.Factory) factoryapi.SaveFactoryForSessionRequest {
+func buildReplaceCurrentFactoryRequest(current factoryapi.Factory) factoryapi.SaveFactoryForSessionRequest {
 	factoryPayload := current
-	factoryPayload.Version = advanceFactoryVersionForSave(current.Version)
+	factoryPayload.Version = advanceFactoryVersionForReplace(current.Version)
 	mode := factoryapi.FactorySaveModeReplaceCurrent
 	return factoryapi.SaveFactoryForSessionRequest{
 		Factory: factoryPayload,
@@ -182,7 +201,7 @@ func buildSaveFactoryForSessionRequest(current factoryapi.Factory) factoryapi.Sa
 	}
 }
 
-func advanceFactoryVersionForSave(current *factoryapi.HybridLogicalTimestamp) *factoryapi.HybridLogicalTimestamp {
+func advanceFactoryVersionForReplace(current *factoryapi.HybridLogicalTimestamp) *factoryapi.HybridLogicalTimestamp {
 	if current == nil {
 		return nil
 	}
@@ -192,13 +211,13 @@ func advanceFactoryVersionForSave(current *factoryapi.HybridLogicalTimestamp) *f
 	return &advanced
 }
 
-func unexpectedSaveCurrentStatusError(statusCode int, body []byte) error {
+func unexpectedReplaceCurrentHTTPError(failureLabel string, statusCode int, body []byte) error {
 	preview := strings.TrimSpace(string(body))
 	if preview == "" {
-		return fmt.Errorf("save current factory failed (%d)", statusCode)
+		return fmt.Errorf("%s failed (%d)", failureLabel, statusCode)
 	}
 	if len(preview) > queryCurrentErrorBodyPreviewLimit {
 		preview = preview[:queryCurrentErrorBodyPreviewLimit] + "..."
 	}
-	return fmt.Errorf("save current factory failed (%d): %s", statusCode, preview)
+	return fmt.Errorf("%s failed (%d): %s", failureLabel, statusCode, preview)
 }

@@ -264,7 +264,7 @@ Persist reusable factories under a named-factory root when you want to run them
 without locating `factory.json` manually:
 
 ```bash
-you factory save my-team-review --from ./factory.json
+you factory create my-team-review --from ./factory.json
 ```
 
 By default persisted project factories live under `./factory`, and

@@ -7,10 +7,11 @@ you factory config	config	you factory
 you factory config expand	expand <factory.json>	you factory config
 you factory config flatten	flatten <factory-path>	you factory config
 you factory config validate	validate <factory-path>	you factory config
+you factory create	create <name>	you factory
 you factory delete	delete <name>	you factory
 you factory list	list	you factory
 you factory query	query	you factory
-you factory save	save [name]	you factory
+you factory replace-current	replace-current	you factory
 you factory update	update <name>	you factory
 you init	init	you
 you mcp	mcp	you

@@ -20,7 +20,7 @@ import (
 type persistFromFileMode int
 
 const (
-	persistFromFileModeSave persistFromFileMode = iota
+	persistFromFileModeCreate persistFromFileMode = iota
 	persistFromFileModeUpdate
 )
 
@@ -71,7 +71,7 @@ func persistFromFile(cfg persistFromFileConfig) (persistFromFileResult, error) {
 		return persistFromFileResult{}, factoryconfig.MaybeFormatBlockingFactoryLoadOperatorError(err, factoryPath)
 	}
 
-	if cfg.Mode == persistFromFileModeSave && cfg.SetCurrent {
+	if cfg.Mode == persistFromFileModeCreate && cfg.SetCurrent {
 		if err := configpersist.WriteCurrentFactoryPointer(cfg.Dir, name); err != nil {
 			return persistFromFileResult{}, err
 		}
@@ -85,7 +85,7 @@ func persistFromFile(cfg persistFromFileConfig) (persistFromFileResult, error) {
 
 func persistFromFileNamedFactory(cfg persistFromFileConfig, name string, payload []byte) (string, error) {
 	switch cfg.Mode {
-	case persistFromFileModeSave:
+	case persistFromFileModeCreate:
 		return configpersist.PersistNamedFactory(cfg.Dir, name, payload)
 	case persistFromFileModeUpdate:
 		return configpersist.ReplaceNamedFactory(cfg.Dir, name, payload)
@@ -131,7 +131,7 @@ func persistFromFileValidationTargetsError(targets []factoryvalidation.Target) e
 }
 
 func renderPersistFromFileError(mode persistFromFileMode, err error) error {
-	if mode == persistFromFileModeSave && errors.Is(err, configpersist.ErrNamedFactoryAlreadyExists) {
+	if mode == persistFromFileModeCreate && errors.Is(err, configpersist.ErrNamedFactoryAlreadyExists) {
 		return fmt.Errorf("factory already exists: %w", err)
 	}
 	if mode == persistFromFileModeUpdate && errors.Is(err, os.ErrNotExist) {

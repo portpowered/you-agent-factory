@@ -4,11 +4,6 @@
       "surface": "run_flag",
       "name": "workflow",
       "rationale": "Remove you run --workflow; workflow selection uses dedicated workflow commands."
-    },
-    {
-      "surface": "command",
-      "command_path": "you factory save",
-      "rationale": "Remove you factory save from the production CLI."
     }
   ],
   "planned_moves": []
