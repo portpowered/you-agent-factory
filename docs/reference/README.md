@@ -24,12 +24,12 @@ concept owners below when you need the complete customer-facing contract.
 | Topic | Packaged scope | Canonical or broader customer guide |
 |-------|----------------|--------------------------------------|
 | `authoring-factories` | Practical factory authoring workflow, runnable examples, and cross-links to run-mode guides | [Author factories](authoring-factories.md) |
+| `run` | Supported local, one-shot, batch, continuous, and mock-worker run shapes | [Run](run.md) |
 | `config` | `factory.json` topology, split layout, and portability | [Config](config.md) and [Author factories](authoring-factories.md) |
 | `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |
 | `record-replay` | Default recording, `--record`, `--replay`, and `--no-record` | [Record and replay](record-replay.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
 | `sessions` | Session list, session show, pause and resume, factory query, status API, dashboard, and run modes | [Sessions](sessions.md) |
-| `mcp-hosts` | Dynamic workflow MCP host setup, `you mcp serve`, transport assumptions, and host examples | [MCP host setup](mcp-hosts.md) |
 | `orchestrators` | Factory orchestrator identity, FactorySession runtime nouns, dispatch/artifact/event aliases | [Orchestrators](orchestrators.md) |
 | `javascript-workflows` | Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, host boundaries, and runnable examples | [JavaScript workflows](javascript-workflows.md) |
 | `mcp` | Canonical `you mcp serve` install path, preview tool catalog, and scope boundaries | [MCP install path](mcp.md) |
@@ -37,9 +37,6 @@ concept owners below when you need the complete customer-facing contract.
 | `workers` | Worker quick reference | [Workers](workers.md) |
 | `resources` | Bounded-concurrency quick reference | [Resources](resources.md) and [Config](config.md) |
 | `models` | Model discovery, invocation, and contract quick reference | [Models and model operations](models.md) |
-| `packaged-fusion` | Packaged `@you/fusion` invocation, signature-aware help, materialization, and editability | [Packaged Fusion](packaged-fusion.md) |
-| `packaged-goal` | Packaged `@you/goal` batch invocation, stdout primary result, materialization, and headless operator-interaction scope | [Packaged Goal](packaged-goal.md) |
-| `packaged-tts` | Packaged `@you/tts` invocation, materialization, metadata result, and editability | [Packaged TTS](packaged-tts.md) |
 | `batch-inputs` | Batch-request quick reference | [Batch inputs](batch-inputs.md) |
 | `templates` | Template authoring guide | [Templates](templates.md) |
 

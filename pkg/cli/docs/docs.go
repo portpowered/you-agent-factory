@@ -18,6 +18,7 @@ type Topic string
 const (
 	TopicAgents              Topic = "agents"
 	TopicAuthoringFactories  Topic = "authoring-factories"
+	TopicRun                 Topic = "run"
 	TopicConfig              Topic = "config"
 	TopicMockWorkers         Topic = "mock-workers"
 	TopicRecordReplay        Topic = "record-replay"
@@ -29,13 +30,9 @@ const (
 	TopicWorkers             Topic = "workers"
 	TopicResources           Topic = "resources"
 	TopicModels              Topic = "models"
-	TopicMCPHosts            Topic = "mcp-hosts"
 	TopicOrchestrators       Topic = "orchestrators"
 	TopicJavaScriptWorkflows Topic = "javascript-workflows"
 	TopicMCP                 Topic = "mcp"
-	TopicPackagedFusion      Topic = "packaged-fusion"
-	TopicPackagedGoal        Topic = "packaged-goal"
-	TopicPackagedTTS         Topic = "packaged-tts"
 	TopicBatchInputs         Topic = "batch-inputs"
 	TopicTemplates           Topic = "templates"
 )
@@ -48,6 +45,7 @@ const (
 const (
 	referenceAgentsPath              = "agents.md"
 	referenceAuthoringFactoriesPath  = "authoring-factories.md"
+	referenceRunPath                 = "run.md"
 	referenceConfigPath              = "config.md"
 	referenceMockWorkersPath         = "mock-workers.md"
 	referenceRecordReplayPath        = "record-replay.md"
@@ -59,13 +57,9 @@ const (
 	referenceWorkersPath             = "workers.md"
 	referenceResourcesPath           = "resources.md"
 	referenceModelsPath              = "models.md"
-	referenceMCPHostsPath            = "mcp-hosts.md"
 	referenceOrchestratorsPath       = "orchestrators.md"
 	referenceJavaScriptWorkflowsPath = "javascript-workflows.md"
 	referenceMCPPath                 = "mcp.md"
-	referencePackagedFusionPath      = "packaged-fusion.md"
-	referencePackagedGoalPath        = "packaged-goal.md"
-	referencePackagedTTSPath         = "packaged-tts.md"
 	referenceBatchInputsPath         = "batch-inputs.md"
 	referenceTemplatesPath           = "templates.md"
 )
@@ -81,6 +75,7 @@ type topicDocument struct {
 var topicDocuments = []topicDocument{
 	{topic: TopicAgents, description: "Agent orientation: read order, work submission, command matrix, planner vs executor, and topic router.", path: referenceAgentsPath, displayOrder: 5},
 	{topic: TopicAuthoringFactories, description: "Practical factory authoring workflow, runnable examples, mock workers, and replay.", path: referenceAuthoringFactoriesPath, displayOrder: 10},
+	{topic: TopicRun, description: "Supported local, one-shot, batch, continuous, and mock-worker run shapes.", path: referenceRunPath, displayOrder: 15},
 	{topic: TopicConfig, description: "factory.json topology, operator model defaults, work types, states, workers, workstations, resources, and portability.", path: referenceConfigPath, displayOrder: 20},
 	{topic: TopicMockWorkers, description: "Mock-worker runs, JSON selection contract, and deterministic accept, reject, and script outcomes.", path: referenceMockWorkersPath, displayOrder: 25},
 	{topic: TopicRecordReplay, description: "Record and replay run modes, artifact paths, sensitivity, and incompatible flag combinations.", path: referenceRecordReplayPath, displayOrder: 26},
@@ -88,7 +83,6 @@ var topicDocuments = []topicDocument{
 	{topic: TopicRelationships, description: "Batch DEPENDS_ON and PARENT_CHILD relations, runtime SPAWNED_BY lineage, and parent-aware guard linkage.", path: referenceRelationshipsPath, displayOrder: 28},
 	{topic: TopicWork, description: "Submitted work: session-scoped work routes, tags, batch cross-links, and submission contracts.", path: referenceWorkPath, displayOrder: 30},
 	{topic: TopicSessions, description: "Live factory sessions: session list, session show, pause and resume, factory query, status API, dashboard URL, and run modes.", path: referenceSessionsPath, displayOrder: 35},
-	{topic: TopicMCPHosts, description: "Dynamic workflow MCP host setup: you mcp serve, stdio transport, tool catalog, and practical host examples.", path: referenceMCPHostsPath, displayOrder: 36},
 	{topic: TopicOrchestrators, description: "Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases.", path: referenceOrchestratorsPath, displayOrder: 37},
 	{topic: TopicJavaScriptWorkflows, description: "Supported JavaScript authoring, equivalent CLI/API/MCP execution, worker presets, capability boundaries, and runnable examples.", path: referenceJavaScriptWorkflowsPath, displayOrder: 38},
 	{topic: TopicMCP, description: "Canonical you mcp serve install path, preview tool catalog, scope boundaries, and automation-backed checks.", path: referenceMCPPath, displayOrder: 39},
@@ -96,9 +90,6 @@ var topicDocuments = []topicDocument{
 	{topic: TopicWorkers, description: "Worker types, model providers, script workers, and worker configuration.", path: referenceWorkersPath, displayOrder: 50},
 	{topic: TopicResources, description: "Resource capacity, bounded concurrency, and workstation resource requirements.", path: referenceResourcesPath, displayOrder: 60},
 	{topic: TopicModels, description: "Local and hosted model setup for workers and CLI model commands.", path: referenceModelsPath, displayOrder: 70},
-	{topic: TopicPackagedFusion, description: "Packaged @you/fusion invocation, signature-aware help, materialization path, and editability.", path: referencePackagedFusionPath, displayOrder: 71},
-	{topic: TopicPackagedGoal, description: "Packaged @you/goal batch invocation, stdout primary result, materialization path, and headless operator-interaction scope.", path: referencePackagedGoalPath, displayOrder: 72},
-	{topic: TopicPackagedTTS, description: "Packaged @you/tts invocation, materialization path, metadata result, and on-disk editability.", path: referencePackagedTTSPath, displayOrder: 73},
 	{topic: TopicBatchInputs, description: "Batch input files, request shape, dependencies, and validation.", path: referenceBatchInputsPath, displayOrder: 80, aliases: []Topic{TopicBatchWorkAlias}},
 	{topic: TopicTemplates, description: "Prompt template variables, context fields, and Go template behavior.", path: referenceTemplatesPath, displayOrder: 90},
 }

@@ -31,6 +31,7 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 		"Packaged reference topics:",
 		"`agents` - Agent orientation: read order, work submission, command matrix, planner vs executor, and topic router",
 		"`authoring-factories` - Practical factory authoring workflow",
+		"`run` - Supported local, one-shot, batch, continuous, and mock-worker run shapes",
 		"`config` - factory.json topology, operator model defaults, work types, states, workers, workstations, resources, and portability",
 		"`mock-workers` - Mock-worker runs",
 		"`record-replay` - Record and replay run modes",
@@ -43,6 +44,7 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 		"`batch-inputs` - Batch input files",
 		"`you docs agents`",
 		"`you docs authoring-factories`",
+		"`you docs run`",
 		"`you docs config`",
 		"`you docs mock-workers`",
 		"`you docs record-replay`",
@@ -61,9 +63,18 @@ func TestDocsCommand_NoTopicPrintsDocsIndex(t *testing.T) {
 	for _, unwanted := range []string{
 		"Usage:",
 		"Available Commands:",
+		"`mcp-hosts` -",
+		"`packaged-fusion` -",
+		"`packaged-goal` -",
+		"`packaged-tts` -",
 	} {
 		if strings.Contains(got, unwanted) {
 			t.Fatalf("docs index should not fall back to Cobra help marker %q:\n%s", unwanted, got)
+		}
+	}
+	for _, topic := range []string{"run", "config", "models", "mcp", "javascript-workflows"} {
+		if count := strings.Count(got, "- `"+topic+"` -"); count != 1 {
+			t.Fatalf("docs index lists canonical topic %q %d times, want exactly once:\n%s", topic, count, got)
 		}
 	}
 }
@@ -154,6 +165,66 @@ func TestDocsCommand_BatchAndRelationshipTopicsUseOpenAPICamelCaseFieldNames(t *
 	}
 }
 
+func TestDocsCommand_CanonicalOperatorTopicsResolve(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		topic   string
+		heading string
+	}{
+		{topic: "run", heading: "# Run"},
+		{topic: "config", heading: "# Config"},
+		{topic: "models", heading: "# Models And Model Operations"},
+		{topic: "mcp", heading: "# MCP Install Path For Factory Preview Tools"},
+		{topic: "javascript-workflows", heading: "# JavaScript Workflow Authoring"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.topic, func(t *testing.T) {
+			t.Parallel()
+
+			var stdout bytes.Buffer
+			root := NewRootCommand()
+			root.SetOut(&stdout)
+			root.SetErr(io.Discard)
+			root.SetArgs([]string{"docs", tc.topic})
+
+			if err := root.Execute(); err != nil {
+				t.Fatalf("execute docs %s: %v", tc.topic, err)
+			}
+			if got := stdout.String(); !strings.Contains(got, tc.heading) {
+				t.Fatalf("docs %s missing heading %q:\n%s", tc.topic, tc.heading, got)
+			}
+		})
+	}
+}
+
+func TestDocsCommand_RetiredTopicsAreUnsupportedWithoutAliases(t *testing.T) {
+	t.Parallel()
+
+	for _, topic := range []string{"packaged-fusion", "packaged-goal", "packaged-tts", "mcp-hosts"} {
+		topic := topic
+		t.Run(topic, func(t *testing.T) {
+			t.Parallel()
+
+			var stdout bytes.Buffer
+			root := NewRootCommand()
+			root.SetOut(&stdout)
+			root.SetErr(io.Discard)
+			root.SetArgs([]string{"docs", topic})
+
+			err := root.Execute()
+			if err == nil || !strings.Contains(err.Error(), `unsupported docs topic "`+topic+`"`) {
+				t.Fatalf("execute docs %s error = %v, want unsupported-topic error", topic, err)
+			}
+			if got := stdout.String(); got != "" {
+				t.Fatalf("unsupported docs topic %s wrote stdout %q", topic, got)
+			}
+		})
+	}
+}
+
 func TestDocsCommand_UnsupportedTopicReturnsCanonicalTopicError(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -166,7 +237,7 @@ func TestDocsCommand_UnsupportedTopicReturnsCanonicalTopicError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected unsupported docs topic to fail")
 	}
-	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, config, mock-workers, record-replay, guards, relationships, work, sessions, mcp-hosts, orchestrators, javascript-workflows, mcp, workstations, workers, resources, models, packaged-fusion, packaged-goal, packaged-tts, batch-inputs, templates)` {
+	if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, run, config, mock-workers, record-replay, guards, relationships, work, sessions, orchestrators, javascript-workflows, mcp, workstations, workers, resources, models, batch-inputs, templates)` {
 		t.Fatalf("unexpected docs error %q", got)
 	}
 	if got := stdout.String(); got != "" {
