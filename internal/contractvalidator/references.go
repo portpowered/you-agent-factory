@@ -45,6 +45,48 @@ func LoadAndResolve(repositoryRoot, document string, authoredDocuments []string)
 	return resolved, diagnostics
 }
 
+// ValidateAuthoredPaths rejects authored inputs that escape the repository or
+// resolve into a generated directory. Missing paths remain the responsibility
+// of the loader so roots and referenced components retain their specific read
+// diagnostics.
+func ValidateAuthoredPaths(repositoryRoot string, documents []string, generatedDirectory string) []Diagnostic {
+	root, err := canonicalRoot(repositoryRoot)
+	if err != nil {
+		return []Diagnostic{newDiagnostic("reference.root", rootPath, "repository root could not be resolved", "repository")}
+	}
+	generated := filepath.Join(root, filepath.FromSlash(normalizeRepositoryPath(generatedDirectory)))
+	canonicalGenerated := generated
+	if resolved, resolveErr := filepath.EvalSymlinks(generated); resolveErr == nil {
+		canonicalGenerated = resolved
+	}
+	var diagnostics []Diagnostic
+	for _, document := range documents {
+		document = normalizeRepositoryPath(document)
+		candidate := filepath.Join(root, filepath.FromSlash(document))
+		if !containedBy(root, candidate) {
+			diagnostics = append(diagnostics, newDiagnostic("join.input.escape", rootPath, "authored input escapes the repository root", document))
+			continue
+		}
+		if containedBy(generated, candidate) {
+			diagnostics = append(diagnostics, newDiagnostic("join.input.generated", rootPath, "authored input is inside generated joined output", document))
+			continue
+		}
+		canonical, resolveErr := filepath.EvalSymlinks(candidate)
+		if resolveErr != nil {
+			continue
+		}
+		if !containedBy(root, canonical) {
+			diagnostics = append(diagnostics, newDiagnostic("join.input.escape", rootPath, "authored input resolves outside the repository root", document))
+			continue
+		}
+		if containedBy(canonicalGenerated, canonical) {
+			diagnostics = append(diagnostics, newDiagnostic("join.input.generated", rootPath, "authored input resolves inside generated joined output", document))
+		}
+	}
+	sortDiagnostics(diagnostics)
+	return diagnostics
+}
+
 func resolveReferences(repositoryRoot, document string, value any) (any, []loadedDocument, []Diagnostic) {
 	return resolveReferencesWithin(repositoryRoot, document, value, nil)
 }
