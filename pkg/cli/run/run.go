@@ -381,9 +381,9 @@ type Application struct {
 	logger            *zap.Logger
 	runner            RuntimeRunner
 	invocationRequest *factoryapi.InvocationRequest
+	invocationRunner  sessionInvocationRunner
 	invocationMode    bool
 	recordPath        resolvedRunRecordPath
-	mockWorkersConfig *factoryconfig.MockWorkersConfig
 	reservedAPIServer *reservedAPIServerListener
 	dashboardReady    <-chan struct{}
 }
@@ -429,10 +429,18 @@ func BuildApplication(ctx context.Context, cfg RunConfig, builder FactoryService
 	emitVerboseStartupDiagnostics(cfg, recordPath, requestedPort)
 
 	if invocationMode {
+		svcCfg := buildInvocationRunServiceConfig(cfg, logger, mockWorkersConfig)
+		invoker, err := buildInvocationBootstrap(ctx, svcCfg)
+		if err != nil {
+			return nil, fmt.Errorf("construct factory invocation bootstrap: %w", err)
+		}
+		if invoker == nil {
+			return nil, fmt.Errorf("construct factory invocation bootstrap: builder returned nil runner")
+		}
 		return &Application{
 			cfg: cfg, logger: logger, invocationRequest: invocationRequest,
-			invocationMode: true, recordPath: recordPath,
-			mockWorkersConfig: mockWorkersConfig, reservedAPIServer: reservedAPIServer,
+			invocationRunner: invoker, invocationMode: true, recordPath: recordPath,
+			reservedAPIServer: reservedAPIServer,
 		}, nil
 	}
 
@@ -474,8 +482,7 @@ func (application *Application) Run(ctx context.Context) error {
 	}
 	if application.invocationMode {
 		return runFactoryInvocation(
-			ctx, application.cfg, *application.invocationRequest,
-			application.logger, application.mockWorkersConfig,
+			ctx, application.cfg, *application.invocationRequest, application.invocationRunner,
 		)
 	}
 

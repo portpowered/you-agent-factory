@@ -4,7 +4,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"testing"
+
+	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
+	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
 )
 
 func TestExecuteWithDependencies_SelectsStartupModesAndSidecars(t *testing.T) {
@@ -112,6 +116,30 @@ func TestExecuteWithDependencies_ConstructionFailureShortCircuitsStartup(t *test
 	}
 	if initializer.calls != 0 {
 		t.Fatalf("initializer calls = %d, want 0 after construction failure", initializer.calls)
+	}
+}
+
+func TestExecuteStartup_ProductionInvocationConstructionFailurePreventsInitializer(t *testing.T) {
+	text := "Plan the sprint"
+	runConfig := runcli.RunConfig{
+		Dir:                      t.TempDir(),
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+		DisableDefaultRecording:  true,
+	}
+	initializer := &recordingInitializer{}
+
+	err := executeStartup(context.Background(), startupcli.Request{
+		Kind: startupcli.KindRun, RunConfig: &runConfig,
+	}, Dependencies{GraphBuilder: productionGraphBuilder{}, Initializer: initializer})
+	if err == nil {
+		t.Fatal("executeStartup() error = nil, want invocation bootstrap construction failure")
+	}
+	if !strings.Contains(err.Error(), "construct factory invocation bootstrap") {
+		t.Fatalf("executeStartup() error = %v, want actionable invocation construction context", err)
+	}
+	if initializer.calls != 0 {
+		t.Fatalf("initializer calls = %d, want 0 after invocation construction failure", initializer.calls)
 	}
 }
 
