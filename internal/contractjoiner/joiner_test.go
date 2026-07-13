@@ -1,6 +1,8 @@
 package contractjoiner_test
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,6 +11,58 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/contractjoiner"
 )
+
+func TestCanonicalJoinedJSONMatchesGoldenAcrossRepeatedAndShuffledInputs(t *testing.T) {
+	input := contractjoiner.Input{
+		RepositoryRoot: ".",
+		Roots: []string{
+			"testdata/canonical/roots/standalone.json",
+			"testdata/canonical/roots/catalog.json",
+		},
+		Components: []string{
+			"testdata/canonical/components/scalar.json",
+			"testdata/canonical/components/shared.json",
+		},
+	}
+
+	first := joinAndMarshal(t, input)
+	second := joinAndMarshal(t, input)
+	shuffled := joinAndMarshal(t, contractjoiner.Input{
+		RepositoryRoot: input.RepositoryRoot,
+		Roots:          reversed(input.Roots),
+		Components:     reversed(input.Components),
+	})
+	if !reflect.DeepEqual(first, second) {
+		t.Fatal("repeated generation produced different paths or bytes")
+	}
+	if !reflect.DeepEqual(first, shuffled) {
+		t.Fatal("shuffled inputs produced different paths or bytes")
+	}
+	if got, want := serializedDocumentPaths(first), []string{
+		"testdata/canonical/roots/catalog.json",
+		"testdata/canonical/roots/standalone.json",
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("canonical document paths = %v, want %v", got, want)
+	}
+	for index, document := range first {
+		if sha256.Sum256(document.JSON) != sha256.Sum256(second[index].JSON) {
+			t.Fatalf("repeated generation digest differs for %s", document.Path)
+		}
+	}
+
+	golden, err := os.ReadFile("testdata/canonical/golden/catalog.json")
+	if err != nil {
+		t.Fatalf("read golden file: %v", err)
+	}
+	if got := first[0].JSON; !bytes.Equal(got, golden) {
+		t.Fatalf("canonical catalog differs from golden:\ngot:\n%s\nwant:\n%s", got, golden)
+	}
+}
+
+type serializedDocument struct {
+	Path string
+	JSON []byte
+}
 
 func TestJoinBuildsPortableDocumentsFromNestedSharedComponents(t *testing.T) {
 	root := t.TempDir()
@@ -178,6 +232,39 @@ func documentJSON(t *testing.T, documents []contractjoiner.Document) map[string]
 			t.Fatalf("marshal %s: %v", document.Path, err)
 		}
 		result[document.Path] = value
+	}
+	return result
+}
+
+func joinAndMarshal(t *testing.T, input contractjoiner.Input) []serializedDocument {
+	t.Helper()
+	documents, diagnostics := contractjoiner.Join(input)
+	if len(diagnostics) != 0 {
+		t.Fatalf("Join() diagnostics = %+v, want none", diagnostics)
+	}
+	result := make([]serializedDocument, 0, len(documents))
+	for _, document := range documents {
+		contents, err := contractjoiner.MarshalCanonicalJSON(document.Value)
+		if err != nil {
+			t.Fatalf("MarshalCanonicalJSON(%s): %v", document.Path, err)
+		}
+		result = append(result, serializedDocument{Path: document.Path, JSON: contents})
+	}
+	return result
+}
+
+func serializedDocumentPaths(documents []serializedDocument) []string {
+	paths := make([]string, len(documents))
+	for index, document := range documents {
+		paths[index] = document.Path
+	}
+	return paths
+}
+
+func reversed(values []string) []string {
+	result := append([]string(nil), values...)
+	for left, right := 0, len(result)-1; left < right; left, right = left+1, right-1 {
+		result[left], result[right] = result[right], result[left]
 	}
 	return result
 }
