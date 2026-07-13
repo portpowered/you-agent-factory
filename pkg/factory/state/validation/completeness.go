@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 // CompletenessValidator checks that every arc on every transition references

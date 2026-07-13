@@ -10,7 +10,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"gopkg.in/yaml.v3"
 )
 
@@ -474,7 +474,7 @@ func assertFactoryResponseEventContentBlockDiscriminator(t *testing.T, schemas m
 
 func loadRepresentativeResponseEventFixture(t *testing.T, name string) map[string]any {
 	t.Helper()
-	path := filepath.FromSlash("../../factorysessions/responseevents/testdata/fixtures/" + name + ".json")
+	path := filepath.FromSlash("../../factory/sessions/responseevents/testdata/fixtures/" + name + ".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read representative response-event fixture %s: %v", name, err)
@@ -941,7 +941,7 @@ func assertGeneratedFactoryResponseEventPayloadDecodes(t *testing.T, event facto
 
 func readRepresentativeResponseEventFixtureBytes(t *testing.T, name string) []byte {
 	t.Helper()
-	path := filepath.FromSlash("../../factorysessions/responseevents/testdata/fixtures/" + name + ".json")
+	path := filepath.FromSlash("../../factory/sessions/responseevents/testdata/fixtures/" + name + ".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read representative response-event fixture %s: %v", name, err)

@@ -30,22 +30,22 @@ var canonicalEventOwnerCalls = map[string]struct{}{
 }
 
 var javascriptLiveChildRoots = []string{
-	"pkg/factorysessionexecution/livechild/",
+	"pkg/factory/sessions/execution/livechild/",
 	"pkg/orchestrators/javascript/",
 }
 
 var approvedRuntimeConstructorFiles = map[string]struct{}{
-	"pkg/factorysessionexecution/service.go":             {},
-	"pkg/factorysessionexecution/testharness/harness.go": {},
+	"pkg/factory/sessions/execution/service.go":             {},
+	"pkg/factory/sessions/execution/testharness/harness.go": {},
 }
 
 var approvedPersistenceCompositionFiles = map[string]struct{}{
 	"pkg/api/servertests/server_durable_session_execution_test.go": {},
 	"pkg/cli/mcp/serve_runtime_resume_smoke_test.go":               {},
 	"pkg/cli/session/smoke/resume_smoke_test.go":                   {},
-	"pkg/factorysessionexecution/service.go":                       {},
-	"pkg/factorysessionexecution/runtimepersist/store.go":          {},
-	"pkg/factorysessionexecution/testharness/harness.go":           {},
+	"pkg/factory/sessions/execution/service.go":                    {},
+	"pkg/factory/sessions/execution/runtimepersist/store.go":       {},
+	"pkg/factory/sessions/execution/testharness/harness.go":        {},
 	"pkg/mcp/factorysession/execution_test.go":                     {},
 }
 
@@ -132,9 +132,9 @@ func scan(root string) ([]string, error) {
 			case *ast.CallExpr:
 				name := calledName(value.Fun)
 				if _, canonicalOwnerCall := canonicalEventOwnerCalls[name]; canonicalOwnerCall &&
-					!strings.HasPrefix(relative, "pkg/factorysessionexecution/") {
+					!strings.HasPrefix(relative, "pkg/factory/sessions/execution/") {
 					appendFinding(&findings, fileSet, value.Pos(), relative, name,
-						"route canonical Factory Events through the pkg/factorysessionexecution recorder and persistence owner")
+						"route canonical Factory Events through the pkg/factory/sessions/execution recorder and persistence owner")
 				}
 				if name == providerInferenceName && isJavaScriptLiveChildFile(relative) {
 					appendFinding(&findings, fileSet, value.Pos(), relative, name,

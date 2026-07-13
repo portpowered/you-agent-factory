@@ -3,7 +3,7 @@ package factorysession
 import (
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 )
 
 // CLIStartInput carries CLI-resolved durable Factory Session execution fields

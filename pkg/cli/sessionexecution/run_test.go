@@ -13,8 +13,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionexecution"
-	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
+	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
 )
 
 func TestRunSync_SuccessFixtureHumanOutput(t *testing.T) {
@@ -551,4 +551,3 @@ func TestRunSync_UsesSharedServicePrimaryResultProjection(t *testing.T) {
 		t.Fatalf("CLI output diverged from shared SyncStartResponseToAPI projection")
 	}
 }
-

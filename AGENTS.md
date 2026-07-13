@@ -92,21 +92,20 @@ the standards.
 - `pkg/factory/` contains the core runtime engine, event history, projections,
   requests, validation, scheduling, subsystems, runtime support, and workstation
   config plumbing.
-- `pkg/factorysessions/` and `pkg/factorysessionexecution/` contain
-  session-level projection/read models and durable/live session execution
-  contracts.
+- `pkg/factory/sessions/` contains live and durable session state, projections,
+  lifecycle gateways, response streams, and execution contracts.
 - `pkg/interfaces/` contains shared domain interfaces and public-ish runtime
   types used across subsystems.
 - `pkg/invocations/`, `pkg/workcontent/`, `pkg/workquery/`, and
   `pkg/materialize/` contain shared work and invocation helpers.
 - `pkg/models/local/` contains managed model runtime catalog, readiness,
   lifecycle, source resolution, cache, pull, and invocation support.
-- `pkg/petri/` contains internal Petri-net primitives.
+- `pkg/orchestrators/petri/` contains internal Petri-net primitives.
 - `pkg/service/` coordinates backend service behavior across sessions,
   runtime construction, model catalog, replay, ingestion, and factory save or
   validation flows.
 - `pkg/workers/` contains worker execution, provider integration, mock workers,
-  worktrees, and hosted workers; `pkg/packagedfactories/` contains packaged
+  worktrees, and hosted workers; `pkg/factory/packages/` contains packaged
   factory support.
 - `pkg/orchestrators/javascript/preview`, `pkg/orchestrators/javascript/policy`,
   `pkg/orchestrators/javascript/result`, `pkg/orchestrators/javascript/source`,

@@ -25,7 +25,7 @@ var approvedTransitionExhaustionSites = map[string]map[string]struct{}{
 	filepath.Clean("factory/subsystems/circuitbreaker.go"): {
 		"Execute": {},
 	},
-	filepath.Clean("petri/transition.go"): {
+	filepath.Clean("orchestrators/petri/transition.go"): {
 		"": {},
 	},
 }
@@ -204,7 +204,7 @@ func selectorUsesIdent(decl ast.Decl, target *ast.Ident) bool {
 func transitionImportAliases(file *ast.File) map[string]struct{} {
 	aliases := map[string]struct{}{}
 	for _, imp := range file.Imports {
-		if imp.Path == nil || imp.Path.Value != `"github.com/portpowered/infinite-you/pkg/petri"` {
+		if imp.Path == nil || imp.Path.Value != `"github.com/portpowered/infinite-you/pkg/orchestrators/petri"` {
 			continue
 		}
 		name := "petri"

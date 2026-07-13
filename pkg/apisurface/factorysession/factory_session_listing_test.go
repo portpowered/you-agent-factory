@@ -6,7 +6,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 
@@ -178,11 +178,11 @@ func durableListSummaryFromFixture(summary map[string]any) factorysessionexecuti
 
 func sessionActionsFromFixture(actions map[string]any) factorysessionexecution.SessionActionAvailability {
 	return factorysessionexecution.SessionActionAvailability{
-		CanPause:         boolValue(actions, "canPause"),
-		CanResume:        boolValue(actions, "canResume"),
-		CanCancel:        boolValue(actions, "canCancel"),
-		CanTerminate:     boolValue(actions, "canTerminate"),
-		CanApprove:       boolValue(actions, "canApprove"),
+		CanPause:             boolValue(actions, "canPause"),
+		CanResume:            boolValue(actions, "canResume"),
+		CanCancel:            boolValue(actions, "canCancel"),
+		CanTerminate:         boolValue(actions, "canTerminate"),
+		CanApprove:           boolValue(actions, "canApprove"),
 		CanRetryDispatch:     boolValue(actions, "canRetryDispatch"),
 		CanInterruptDispatch: boolValue(actions, "canInterruptDispatch"),
 	}

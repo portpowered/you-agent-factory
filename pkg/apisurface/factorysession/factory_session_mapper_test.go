@@ -11,7 +11,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 )
 
 func TestDurableSessionMapperRoundTrip_AllFixtureResponses(t *testing.T) {

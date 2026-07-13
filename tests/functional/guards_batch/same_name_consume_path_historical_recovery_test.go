@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -53,9 +53,9 @@ func evaluateHistoricalManualRepairPreconditions(
 	projectionTaskToComplete := hasNamedWorkItemAtPlace(projectionView, "task:to-complete", cellName)
 
 	return historicalManualRepairPreconditions{
-		IdeaCompletePresent:    hasNamedTokenInPlace(runtimeSnap.Marking, "idea:complete", cellName),
-		TaskToCompletePresent:  runtimeTaskToComplete,
-		IdeaToCompleteAbsent:   !runtimeIdeaToComplete,
+		IdeaCompletePresent:   hasNamedTokenInPlace(runtimeSnap.Marking, "idea:complete", cellName),
+		TaskToCompletePresent: runtimeTaskToComplete,
+		IdeaToCompleteAbsent:  !runtimeIdeaToComplete,
 		ProjectionMatchesQueue: runtimeIdeaToComplete == projectionIdeaToComplete &&
 			runtimeTaskToComplete == projectionTaskToComplete,
 	}

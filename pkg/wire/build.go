@@ -7,7 +7,7 @@ import (
 	"io"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 )
 
 const (

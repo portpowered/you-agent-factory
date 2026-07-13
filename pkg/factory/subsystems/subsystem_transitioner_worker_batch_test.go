@@ -10,7 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchCreatesGeneratedWork(t *testing.T) {
@@ -441,4 +441,3 @@ func TestTransitioner_MalformedWorkerEmittedFactoryRequestBatchFailsDispatch(t *
 		t.Fatalf("generated batches = %#v, want none", result.GeneratedBatches)
 	}
 }
-

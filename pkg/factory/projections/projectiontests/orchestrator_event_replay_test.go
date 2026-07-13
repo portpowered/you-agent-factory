@@ -9,7 +9,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
@@ -60,9 +60,9 @@ func TestReconstructFactoryWorldState_SessionResultUpdatedMatchesSessionResultPr
 		Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC,
 	}
 	input := workflowresult.SessionResultInput{
-		SessionID:    sessionID,
-		Status:       factoryapi.FactorySessionStatusFINISHED,
-		PrimaryValue: workflowresult.TypedValue{JSON: primaryJSON},
+		SessionID:      sessionID,
+		Status:         factoryapi.FactorySessionStatusFINISHED,
+		PrimaryValue:   workflowresult.TypedValue{JSON: primaryJSON},
 		ResultArtifact: &resultArtifact,
 		Artifacts: []interfaces.FactorySessionArtifactState{{
 			ID:         "artifact-result-1",
