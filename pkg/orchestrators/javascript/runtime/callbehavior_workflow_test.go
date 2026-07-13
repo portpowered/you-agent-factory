@@ -54,7 +54,16 @@ return { label: "returned", mechanism: "return", count: 1 };
 func TestCallBehavior_WorkflowCheckpointInventoryMatchesExecution(t *testing.T) {
 	record := callBehaviorRecord(t, "workflow.checkpoint")
 	assertCallBehaviorRecordDoesNotExposeHostContext(t, record)
+	assertWorkflowCheckpointInventoryRecord(t, record)
 
+	t.Run("emits checkpoint record with label and state", func(t *testing.T) {
+		assertWorkflowCheckpointEmitsLabelAndState(t)
+	})
+	testWorkflowCheckpointInventoryErrors(t, record)
+}
+
+func assertWorkflowCheckpointInventoryRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	if len(record.Parameters) != 1 || !record.Parameters[0].Required || record.Parameters[0].Type != "object" {
 		t.Fatalf("workflow.checkpoint parameters = %#v, want one required object", record.Parameters)
 	}
@@ -67,35 +76,44 @@ func TestCallBehavior_WorkflowCheckpointInventoryMatchesExecution(t *testing.T) 
 	if record.ResumeNotes == "" {
 		t.Fatal("workflow.checkpoint missing resume notes")
 	}
+}
 
-	t.Run("emits checkpoint record with label and state", func(t *testing.T) {
-		outcome := runInlineWorkflow(t, "workflow-checkpoint-success", `
+func assertWorkflowCheckpointEmitsLabelAndState(t *testing.T) {
+	t.Helper()
+	outcome := runInlineWorkflow(t, "workflow-checkpoint-success", `
 workflow.checkpoint({ label: "after-step", state: { step: 2, tag: "alpha" } });
 return { ok: true };
 `)
-		checkpoint := findCheckpointRecord(t, outcome.Records, "after-step")
-		if checkpoint.State["step"] != float64(2) || checkpoint.State["tag"] != "alpha" {
-			t.Fatalf("checkpoint state = %#v, want step=2 tag=alpha", checkpoint.State)
-		}
-	})
+	checkpoint := findCheckpointRecord(t, outcome.Records, "after-step")
+	if checkpoint.State["step"] != float64(2) || checkpoint.State["tag"] != "alpha" {
+		t.Fatalf("checkpoint state = %#v, want step=2 tag=alpha", checkpoint.State)
+	}
+}
 
+func testWorkflowCheckpointInventoryErrors(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	for _, errCase := range record.Errors {
 		t.Run(errCase.Condition, func(t *testing.T) {
-			source := checkpointErrorSource(errCase.Condition)
-			if source == "" {
-				t.Fatalf("missing inline source for inventory error condition %q", errCase.Condition)
-			}
-			outcome := runInlineWorkflowFailure(t, "workflow-checkpoint-"+errCase.Condition, source)
-			if outcome.Failure.Code != workflowruntime.CodeScriptError {
-				t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, workflowruntime.CodeScriptError)
-			}
-			if !strings.Contains(outcome.Failure.Message, errCase.Message) {
-				t.Fatalf("failure message = %q, want inventory message %q", outcome.Failure.Message, errCase.Message)
-			}
-			if hasCheckpointRecords(outcome.Records) {
-				t.Fatalf("records = %#v, want no checkpoint record after %q", outcome.Records, errCase.Condition)
-			}
+			assertWorkflowCheckpointInventoryError(t, errCase.Condition, errCase.Message)
 		})
+	}
+}
+
+func assertWorkflowCheckpointInventoryError(t *testing.T, condition, wantMessage string) {
+	t.Helper()
+	source := checkpointErrorSource(condition)
+	if source == "" {
+		t.Fatalf("missing inline source for inventory error condition %q", condition)
+	}
+	outcome := runInlineWorkflowFailure(t, "workflow-checkpoint-"+condition, source)
+	if outcome.Failure.Code != workflowruntime.CodeScriptError {
+		t.Fatalf("failure code = %q, want %q", outcome.Failure.Code, workflowruntime.CodeScriptError)
+	}
+	if !strings.Contains(outcome.Failure.Message, wantMessage) {
+		t.Fatalf("failure message = %q, want inventory message %q", outcome.Failure.Message, wantMessage)
+	}
+	if hasCheckpointRecords(outcome.Records) {
+		t.Fatalf("records = %#v, want no checkpoint record after %q", outcome.Records, condition)
 	}
 }
 

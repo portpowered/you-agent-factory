@@ -39,81 +39,106 @@ func TestProjectInstalledCallBehavior_RecordShapeIncludesCallBehaviorSubset(t *t
 	byPath := recordsByPath(callbehavior.ProjectInstalledCallBehavior())
 
 	t.Run("args value lifecycle", func(t *testing.T) {
-		record := byPath["args"]
-		if record.Kind != "value" || record.Mutability == "" || record.Lifecycle == "" {
-			t.Fatalf("args record = %#v, want value with mutability and lifecycle", record)
-		}
-		if record.Callable || len(record.Parameters) > 0 {
-			t.Fatalf("args record = %#v, want non-callable value", record)
-		}
+		assertArgsValueLifecycleRecord(t, byPath["args"])
 	})
-
 	t.Run("workflow namespace lifecycle", func(t *testing.T) {
-		record := byPath["workflow"]
-		if record.Kind != "namespace" || record.Lifecycle != "live-namespace" {
-			t.Fatalf("workflow record = %#v, want live namespace", record)
-		}
+		assertWorkflowNamespaceLifecycleRecord(t, byPath["workflow"])
 	})
-
 	t.Run("workflow.final callable", func(t *testing.T) {
-		record := byPath["workflow.final"]
-		if !record.Callable || record.Async || record.Return == nil {
-			t.Fatalf("workflow.final record = %#v, want sync callable with return behavior", record)
-		}
-		if record.Return.SyncType != "undefined" {
-			t.Fatalf("workflow.final return = %#v, want undefined sync return", record.Return)
-		}
-		if record.Determinism == "" {
-			t.Fatal("workflow.final missing determinism note")
-		}
+		assertWorkflowFinalCallableRecord(t, byPath["workflow.final"])
 	})
-
 	t.Run("workflow.checkpoint emits checkpoint", func(t *testing.T) {
-		record := byPath["workflow.checkpoint"]
-		if !slices.Contains(record.EmittedRecords, "checkpoint") {
-			t.Fatalf("workflow.checkpoint emittedRecords = %v, want checkpoint", record.EmittedRecords)
-		}
-		if len(record.Parameters) != 1 || !record.Parameters[0].Required {
-			t.Fatalf("workflow.checkpoint parameters = %#v, want one required object", record.Parameters)
-		}
+		assertWorkflowCheckpointCallableRecord(t, byPath["workflow.checkpoint"])
 	})
-
 	t.Run("workflow.resumeState resume notes", func(t *testing.T) {
-		record := byPath["workflow.resumeState"]
-		if record.ResumeNotes == "" {
-			t.Fatal("workflow.resumeState missing resume notes")
-		}
-		if len(record.Parameters) != 0 {
-			t.Fatalf("workflow.resumeState parameters = %#v, want zero parameters", record.Parameters)
-		}
+		assertWorkflowResumeStateCallableRecord(t, byPath["workflow.resumeState"])
 	})
-
 	t.Run("agent.run async promise", func(t *testing.T) {
-		record := byPath["agent.run"]
-		if !record.Callable || !record.Async || record.Return == nil || !record.Return.Async {
-			t.Fatalf("agent.run record = %#v, want async callable with promise return", record)
-		}
-		if !slices.Contains(record.EmittedRecords, "child_dispatch") {
-			t.Fatalf("agent.run emittedRecords = %v, want child_dispatch", record.EmittedRecords)
-		}
-		if len(record.PolicyChecks) == 0 {
-			t.Fatal("agent.run missing policy checks")
-		}
+		assertAgentRunAsyncPromiseRecord(t, byPath["agent.run"])
 	})
-
 	t.Run("parallel callback and promise", func(t *testing.T) {
-		record := byPath["parallel"]
-		if record.Callback == nil || record.Return == nil || !record.Return.Async {
-			t.Fatalf("parallel record = %#v, want callback shape and promise return", record)
-		}
+		assertParallelCallbackPromiseRecord(t, byPath["parallel"])
 	})
-
 	t.Run("pipeline callback stages", func(t *testing.T) {
-		record := byPath["pipeline"]
-		if record.Callback == nil || len(record.Parameters) < 2 {
-			t.Fatalf("pipeline record = %#v, want callback shape and ordered parameters", record)
-		}
+		assertPipelineCallbackStagesRecord(t, byPath["pipeline"])
 	})
+}
+
+func assertArgsValueLifecycleRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
+	if record.Kind != "value" || record.Mutability == "" || record.Lifecycle == "" {
+		t.Fatalf("args record = %#v, want value with mutability and lifecycle", record)
+	}
+	if record.Callable || len(record.Parameters) > 0 {
+		t.Fatalf("args record = %#v, want non-callable value", record)
+	}
+}
+
+func assertWorkflowNamespaceLifecycleRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
+	if record.Kind != "namespace" || record.Lifecycle != "live-namespace" {
+		t.Fatalf("workflow record = %#v, want live namespace", record)
+	}
+}
+
+func assertWorkflowFinalCallableRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
+	if !record.Callable || record.Async || record.Return == nil {
+		t.Fatalf("workflow.final record = %#v, want sync callable with return behavior", record)
+	}
+	if record.Return.SyncType != "undefined" {
+		t.Fatalf("workflow.final return = %#v, want undefined sync return", record.Return)
+	}
+	if record.Determinism == "" {
+		t.Fatal("workflow.final missing determinism note")
+	}
+}
+
+func assertWorkflowCheckpointCallableRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
+	if !slices.Contains(record.EmittedRecords, "checkpoint") {
+		t.Fatalf("workflow.checkpoint emittedRecords = %v, want checkpoint", record.EmittedRecords)
+	}
+	if len(record.Parameters) != 1 || !record.Parameters[0].Required {
+		t.Fatalf("workflow.checkpoint parameters = %#v, want one required object", record.Parameters)
+	}
+}
+
+func assertWorkflowResumeStateCallableRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
+	if record.ResumeNotes == "" {
+		t.Fatal("workflow.resumeState missing resume notes")
+	}
+	if len(record.Parameters) != 0 {
+		t.Fatalf("workflow.resumeState parameters = %#v, want zero parameters", record.Parameters)
+	}
+}
+
+func assertAgentRunAsyncPromiseRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
+	if !record.Callable || !record.Async || record.Return == nil || !record.Return.Async {
+		t.Fatalf("agent.run record = %#v, want async callable with promise return", record)
+	}
+	if !slices.Contains(record.EmittedRecords, "child_dispatch") {
+		t.Fatalf("agent.run emittedRecords = %v, want child_dispatch", record.EmittedRecords)
+	}
+	if len(record.PolicyChecks) == 0 {
+		t.Fatal("agent.run missing policy checks")
+	}
+}
+
+func assertParallelCallbackPromiseRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
+	if record.Callback == nil || record.Return == nil || !record.Return.Async {
+		t.Fatalf("parallel record = %#v, want callback shape and promise return", record)
+	}
+}
+
+func assertPipelineCallbackStagesRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
+	if record.Callback == nil || len(record.Parameters) < 2 {
+		t.Fatalf("pipeline record = %#v, want callback shape and ordered parameters", record)
+	}
 }
 
 func TestProjectInstalledCallBehavior_IDCandidatesAlignWithSymbolIdentity(t *testing.T) {

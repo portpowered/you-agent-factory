@@ -12,7 +12,17 @@ import (
 func TestCallBehavior_AgentRunInventoryMatchesExecution(t *testing.T) {
 	record := callBehaviorRecord(t, "agent.run")
 	assertCallBehaviorRecordDoesNotExposeHostContext(t, record)
+	assertAgentRunInventoryRecord(t, record)
 
+	t.Run("async promise resolves child-result shape and emits child_dispatch", func(t *testing.T) {
+		assertAgentRunAsyncPromiseResolvesChildResult(t)
+	})
+	testAgentRunInventoryErrors(t, record)
+	testAgentRunPolicyDenials(t, record)
+}
+
+func assertAgentRunInventoryRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	if len(record.Parameters) != 1 || !record.Parameters[0].Required || record.Parameters[0].Type != "object" {
 		t.Fatalf("agent.run parameters = %#v, want one required object", record.Parameters)
 	}
@@ -25,25 +35,29 @@ func TestCallBehavior_AgentRunInventoryMatchesExecution(t *testing.T) {
 	if len(record.PolicyChecks) == 0 {
 		t.Fatal("agent.run missing policy checks")
 	}
+}
 
-	t.Run("async promise resolves child-result shape and emits child_dispatch", func(t *testing.T) {
-		outcome := runFixtureWorkflow(t, "agent-run-fake-child", "agent-run-fake-child.workflow.js", workflowpolicy.DefaultEffectivePolicy())
-		if !hasChildDispatchRecords(outcome.Records) {
-			t.Fatalf("records = %#v, want child_dispatch records from inventory", outcome.Records)
-		}
-		projected := projectPrimaryJSON(t, "session-agent-run-fake-child", outcome.Value)
-		child, ok := projected["child"].(map[string]any)
-		if !ok {
-			t.Fatalf("projected child = %#v, want object child-result", projected["child"])
-		}
-		if child["status"] != workflowruntime.ChildDispatchStatusCompleted {
-			t.Fatalf("child status = %#v, want completed promise resolution", child["status"])
-		}
-		if child["dispatchId"] == "" || child["output"] == nil {
-			t.Fatalf("child result = %#v, want dispatchId and output from inventory promise type", child)
-		}
-	})
+func assertAgentRunAsyncPromiseResolvesChildResult(t *testing.T) {
+	t.Helper()
+	outcome := runFixtureWorkflow(t, "agent-run-fake-child", "agent-run-fake-child.workflow.js", workflowpolicy.DefaultEffectivePolicy())
+	if !hasChildDispatchRecords(outcome.Records) {
+		t.Fatalf("records = %#v, want child_dispatch records from inventory", outcome.Records)
+	}
+	projected := projectPrimaryJSON(t, "session-agent-run-fake-child", outcome.Value)
+	child, ok := projected["child"].(map[string]any)
+	if !ok {
+		t.Fatalf("projected child = %#v, want object child-result", projected["child"])
+	}
+	if child["status"] != workflowruntime.ChildDispatchStatusCompleted {
+		t.Fatalf("child status = %#v, want completed promise resolution", child["status"])
+	}
+	if child["dispatchId"] == "" || child["output"] == nil {
+		t.Fatalf("child result = %#v, want dispatchId and output from inventory promise type", child)
+	}
+}
 
+func testAgentRunInventoryErrors(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	for _, errCase := range record.Errors {
 		t.Run(errCase.Condition, func(t *testing.T) {
 			source := agentRunErrorSource(errCase.Condition)
@@ -55,26 +69,49 @@ func TestCallBehavior_AgentRunInventoryMatchesExecution(t *testing.T) {
 			assertNoChildDispatchRecords(t, outcome.Records)
 		})
 	}
+}
 
+func testAgentRunPolicyDenials(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	for _, policyCase := range agentRunPolicyCases(record.PolicyChecks) {
 		t.Run("policy-"+policyCase.name, func(t *testing.T) {
-			outcome := runFixtureWorkflowFailure(t, policyCase.fixture, policyCase.policy)
-			if !failureMessageMatchesInventory(outcome.Failure.Message, policyCase.wantMessage) {
-				t.Fatalf("failure message = %q, want inventory policy message %q", outcome.Failure.Message, policyCase.wantMessage)
-			}
-			if policyCase.deniedLabel != "" {
-				assertNoSuccessfulChildDispatchRecordsForLabel(t, outcome.Records, policyCase.deniedLabel)
-				return
-			}
-			assertNoSuccessfulChildDispatchRecords(t, outcome.Records)
+			assertAgentRunPolicyDenial(t, policyCase)
 		})
 	}
+}
+
+func assertAgentRunPolicyDenial(t *testing.T, policyCase agentRunPolicyCase) {
+	t.Helper()
+	outcome := runFixtureWorkflowFailure(t, policyCase.fixture, policyCase.policy)
+	if !failureMessageMatchesInventory(outcome.Failure.Message, policyCase.wantMessage) {
+		t.Fatalf("failure message = %q, want inventory policy message %q", outcome.Failure.Message, policyCase.wantMessage)
+	}
+	if policyCase.deniedLabel != "" {
+		assertNoSuccessfulChildDispatchRecordsForLabel(t, outcome.Records, policyCase.deniedLabel)
+		return
+	}
+	assertNoSuccessfulChildDispatchRecords(t, outcome.Records)
 }
 
 func TestCallBehavior_ParallelInventoryMatchesExecution(t *testing.T) {
 	record := callBehaviorRecord(t, "parallel")
 	assertCallBehaviorRecordDoesNotExposeHostContext(t, record)
+	assertParallelInventoryRecord(t, record)
 
+	t.Run("async promise resolves array and emits child_dispatch", func(t *testing.T) {
+		assertParallelAsyncPromiseResolvesArray(t)
+	})
+	testParallelInventoryErrors(t, record)
+	t.Run("policy-maxAgents", func(t *testing.T) {
+		assertParallelMaxAgentsPolicyDenial(t, record)
+	})
+	t.Run("policy-childRequest", func(t *testing.T) {
+		assertParallelChildRequestPolicyDenial(t)
+	})
+}
+
+func assertParallelInventoryRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	if record.Callback == nil || record.Callback.Role != "item" {
 		t.Fatalf("parallel callback = %#v, want item callback shape", record.Callback)
 	}
@@ -87,27 +124,31 @@ func TestCallBehavior_ParallelInventoryMatchesExecution(t *testing.T) {
 	if record.Determinism == "" {
 		t.Fatal("parallel missing determinism note")
 	}
+}
 
-	t.Run("async promise resolves array and emits child_dispatch", func(t *testing.T) {
-		policy := workflowpolicy.DefaultEffectivePolicy()
-		policy.MaxAgents = 8
-		outcome := runFixtureWorkflow(t, "parallel-fake-children", "parallel-fake-children.workflow.js", policy)
-		if !hasChildDispatchRecords(outcome.Records) {
-			t.Fatalf("records = %#v, want child_dispatch records", outcome.Records)
+func assertParallelAsyncPromiseResolvesArray(t *testing.T) {
+	t.Helper()
+	policy := workflowpolicy.DefaultEffectivePolicy()
+	policy.MaxAgents = 8
+	outcome := runFixtureWorkflow(t, "parallel-fake-children", "parallel-fake-children.workflow.js", policy)
+	if !hasChildDispatchRecords(outcome.Records) {
+		t.Fatalf("records = %#v, want child_dispatch records", outcome.Records)
+	}
+	projected := projectPrimaryJSON(t, "session-parallel-fake-children", outcome.Value)
+	results, ok := projected["results"].([]any)
+	if !ok || len(results) != 4 {
+		t.Fatalf("projected results = %#v, want 4 promise-resolved entries", projected["results"])
+	}
+	for i, entry := range results {
+		child, ok := entry.(map[string]any)
+		if !ok || child["status"] != workflowruntime.ChildDispatchStatusCompleted {
+			t.Fatalf("results[%d] = %#v, want completed child result", i, entry)
 		}
-		projected := projectPrimaryJSON(t, "session-parallel-fake-children", outcome.Value)
-		results, ok := projected["results"].([]any)
-		if !ok || len(results) != 4 {
-			t.Fatalf("projected results = %#v, want 4 promise-resolved entries", projected["results"])
-		}
-		for i, entry := range results {
-			child, ok := entry.(map[string]any)
-			if !ok || child["status"] != workflowruntime.ChildDispatchStatusCompleted {
-				t.Fatalf("results[%d] = %#v, want completed child result", i, entry)
-			}
-		}
-	})
+	}
+}
 
+func testParallelInventoryErrors(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	for _, errCase := range record.Errors {
 		t.Run(errCase.Condition, func(t *testing.T) {
 			source := parallelErrorSource(errCase.Condition)
@@ -119,41 +160,52 @@ func TestCallBehavior_ParallelInventoryMatchesExecution(t *testing.T) {
 			assertNoChildDispatchRecords(t, outcome.Records)
 		})
 	}
+}
 
-	t.Run("policy-maxAgents", func(t *testing.T) {
-		policy := workflowpolicy.DefaultEffectivePolicy()
-		policy.MaxAgents = 2
-		outcome := runFixtureWorkflowFailure(t, "parallel-max-agents-denied.workflow.js", policy)
-		check := policyCheckMessage(t, record.PolicyChecks, "maxAgents")
-		if !failureMessageMatchesInventory(outcome.Failure.Message, check) {
-			t.Fatalf("failure message = %q, want inventory policy message %q", outcome.Failure.Message, check)
-		}
-		assertNoChildDispatchRecords(t, outcome.Records)
-	})
+func assertParallelMaxAgentsPolicyDenial(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
+	policy := workflowpolicy.DefaultEffectivePolicy()
+	policy.MaxAgents = 2
+	outcome := runFixtureWorkflowFailure(t, "parallel-max-agents-denied.workflow.js", policy)
+	check := policyCheckMessage(t, record.PolicyChecks, "maxAgents")
+	if !failureMessageMatchesInventory(outcome.Failure.Message, check) {
+		t.Fatalf("failure message = %q, want inventory policy message %q", outcome.Failure.Message, check)
+	}
+	assertNoChildDispatchRecords(t, outcome.Records)
+}
 
-	t.Run("policy-childRequest", func(t *testing.T) {
-		policy := workflowpolicy.DefaultEffectivePolicy()
-		policy.MaxAgents = 4
-		policy.Concurrency = 2
-		policy.AllowedModels = []string{"gpt-allowed"}
-		outcome := runFixtureWorkflow(t, "parallel-policy-denied-item", "parallel-policy-denied-item.workflow.js", policy)
-		projected := projectPrimaryJSON(t, "session-parallel-policy-denied-item", outcome.Value)
-		results, ok := projected["results"].([]any)
-		if !ok || len(results) != 2 {
-			t.Fatalf("projected results = %#v, want 2 entries", projected["results"])
-		}
-		deniedChild, ok := results[1].(map[string]any)
-		if !ok || deniedChild["status"] != workflowruntime.ChildDispatchStatusFailed {
-			t.Fatalf("results[1] = %#v, want failed child per inventory policy denial", results[1])
-		}
-		assertNoSuccessfulChildDispatchRecordsForLabel(t, outcome.Records, "denied-child")
-	})
+func assertParallelChildRequestPolicyDenial(t *testing.T) {
+	t.Helper()
+	policy := workflowpolicy.DefaultEffectivePolicy()
+	policy.MaxAgents = 4
+	policy.Concurrency = 2
+	policy.AllowedModels = []string{"gpt-allowed"}
+	outcome := runFixtureWorkflow(t, "parallel-policy-denied-item", "parallel-policy-denied-item.workflow.js", policy)
+	projected := projectPrimaryJSON(t, "session-parallel-policy-denied-item", outcome.Value)
+	results, ok := projected["results"].([]any)
+	if !ok || len(results) != 2 {
+		t.Fatalf("projected results = %#v, want 2 entries", projected["results"])
+	}
+	deniedChild, ok := results[1].(map[string]any)
+	if !ok || deniedChild["status"] != workflowruntime.ChildDispatchStatusFailed {
+		t.Fatalf("results[1] = %#v, want failed child per inventory policy denial", results[1])
+	}
+	assertNoSuccessfulChildDispatchRecordsForLabel(t, outcome.Records, "denied-child")
 }
 
 func TestCallBehavior_PipelineInventoryMatchesExecution(t *testing.T) {
 	record := callBehaviorRecord(t, "pipeline")
 	assertCallBehaviorRecordDoesNotExposeHostContext(t, record)
+	assertPipelineInventoryRecord(t, record)
 
+	t.Run("async promise resolves pipeline-result-array and emits child_dispatch", func(t *testing.T) {
+		assertPipelineAsyncPromiseResolvesStages(t)
+	})
+	testPipelineInventoryErrors(t, record)
+}
+
+func assertPipelineInventoryRecord(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	if len(record.Parameters) != 3 {
 		t.Fatalf("pipeline parameters = %#v, want items, worker, optional next", record.Parameters)
 	}
@@ -166,31 +218,35 @@ func TestCallBehavior_PipelineInventoryMatchesExecution(t *testing.T) {
 	if record.Determinism == "" {
 		t.Fatal("pipeline missing determinism note")
 	}
+}
 
-	t.Run("async promise resolves pipeline-result-array and emits child_dispatch", func(t *testing.T) {
-		policy := workflowpolicy.DefaultEffectivePolicy()
-		policy.MaxAgents = 16
-		outcome := runFixtureWorkflow(t, "pipeline-staged-fake-children", "pipeline-staged-fake-children.workflow.js", policy)
-		if !hasChildDispatchRecords(outcome.Records) {
-			t.Fatalf("records = %#v, want child_dispatch records", outcome.Records)
+func assertPipelineAsyncPromiseResolvesStages(t *testing.T) {
+	t.Helper()
+	policy := workflowpolicy.DefaultEffectivePolicy()
+	policy.MaxAgents = 16
+	outcome := runFixtureWorkflow(t, "pipeline-staged-fake-children", "pipeline-staged-fake-children.workflow.js", policy)
+	if !hasChildDispatchRecords(outcome.Records) {
+		t.Fatalf("records = %#v, want child_dispatch records", outcome.Records)
+	}
+	projected := projectPrimaryJSON(t, "session-pipeline-staged-fake-children", outcome.Value)
+	results, ok := projected["results"].([]any)
+	if !ok || len(results) != 3 {
+		t.Fatalf("projected results = %#v, want 3 pipeline items", projected["results"])
+	}
+	for i, entry := range results {
+		item, ok := entry.(map[string]any)
+		if !ok || item["status"] != workflowruntime.ChildDispatchStatusCompleted {
+			t.Fatalf("results[%d] = %#v, want completed pipeline item", i, entry)
 		}
-		projected := projectPrimaryJSON(t, "session-pipeline-staged-fake-children", outcome.Value)
-		results, ok := projected["results"].([]any)
-		if !ok || len(results) != 3 {
-			t.Fatalf("projected results = %#v, want 3 pipeline items", projected["results"])
+		stages, ok := item["stages"].([]any)
+		if !ok || len(stages) != 2 {
+			t.Fatalf("results[%d].stages = %#v, want 2 ordered stages", i, item["stages"])
 		}
-		for i, entry := range results {
-			item, ok := entry.(map[string]any)
-			if !ok || item["status"] != workflowruntime.ChildDispatchStatusCompleted {
-				t.Fatalf("results[%d] = %#v, want completed pipeline item", i, entry)
-			}
-			stages, ok := item["stages"].([]any)
-			if !ok || len(stages) != 2 {
-				t.Fatalf("results[%d].stages = %#v, want 2 ordered stages", i, item["stages"])
-			}
-		}
-	})
+	}
+}
 
+func testPipelineInventoryErrors(t *testing.T, record callbehavior.CallBehaviorRecord) {
+	t.Helper()
 	for _, errCase := range record.Errors {
 		t.Run(errCase.Condition, func(t *testing.T) {
 			source := pipelineErrorSource(errCase.Condition)
