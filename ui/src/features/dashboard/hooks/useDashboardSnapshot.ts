@@ -70,6 +70,7 @@ export function useDashboardSnapshot({
   const activateTimelineEntry = useFactoryTimelineStore(
     (state) => state.activateEntry,
   );
+  const appendEvents = useFactoryTimelineStore((state) => state.appendEvents);
   const appendEventsForEntry = useFactoryTimelineStore(
     (state) => state.appendEventsForEntry,
   );
@@ -222,22 +223,29 @@ export function useDashboardSnapshot({
     syncIdentity: checkpointSyncIdentity,
   });
 
-  const handleStreamEvent = useCallback(
-    (event: FactoryEvent) => {
-      if (streamIdentity) {
-        appendEventsForEntry(streamIdentity, [event]);
-      }
-    },
-    [appendEventsForEntry, streamIdentity],
-  );
-
-  const handleStreamEvents = useCallback(
+  const appendStreamEvents = useCallback(
     (events: FactoryEvent[]) => {
       if (streamIdentity) {
         appendEventsForEntry(streamIdentity, events);
+        return;
+      }
+      if (debugOptions.disableTimelineCheckpoint) {
+        appendEvents(events);
       }
     },
-    [appendEventsForEntry, streamIdentity],
+    [
+      appendEvents,
+      appendEventsForEntry,
+      debugOptions.disableTimelineCheckpoint,
+      streamIdentity,
+    ],
+  );
+
+  const handleStreamEvent = useCallback(
+    (event: FactoryEvent) => {
+      appendStreamEvents([event]);
+    },
+    [appendStreamEvents],
   );
 
   useFactoryEventStream({
@@ -250,7 +258,7 @@ export function useDashboardSnapshot({
     initialReconnectCursor,
     locale,
     onEvent: handleStreamEvent,
-    onEvents: handleStreamEvents,
+    onEvents: appendStreamEvents,
     onInvalidReconnectCursor: handleInvalidReconnectCursor,
     refreshToken,
     sessionID: effectiveSessionID,

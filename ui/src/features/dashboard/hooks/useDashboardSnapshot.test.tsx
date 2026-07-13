@@ -194,6 +194,7 @@ describe("useDashboardSnapshot composer", () => {
 
   beforeEach(() => {
     replayHarness.install();
+    window.history.replaceState({}, "", "/");
     indexedDBRecords = installIndexedDBTestDouble();
     getFactorySessionSyncPreflightSpy = vi
       .spyOn(factorySessionsAPI, "getFactorySessionSyncPreflight")
@@ -225,6 +226,7 @@ describe("useDashboardSnapshot composer", () => {
   });
 
   afterEach(() => {
+    window.history.replaceState({}, "", "/");
     vi.unstubAllGlobals();
     getFactorySessionSyncPreflightSpy.mockRestore();
     replayHarness.reset();
@@ -431,6 +433,72 @@ describe("useDashboardSnapshot composer", () => {
     expect(
       window.localStorage.getItem(FACTORY_TIMELINE_DEBUG_STORAGE_KEY),
     ).toBeNull();
+  });
+
+  it("advances replay and materialized outcomes when checkpoint persistence is disabled", async () => {
+    window.history.replaceState(
+      {},
+      "",
+      "/?afDisableTimelineCheckpoint=1",
+    );
+    useFactoryTimelineStore.getState().reset();
+
+    const { result } = renderHook(() => useDashboardSnapshot(), {
+      wrapper: createWrapper(queryClient),
+    });
+
+    await waitFor(() => {
+      expect(replayHarness.getStreams()).toHaveLength(1);
+    });
+    expect(getFactorySessionSyncPreflightSpy).not.toHaveBeenCalled();
+
+    await act(async () => {
+      replayHarness.getStreams()[0]?.emit("message", {
+        context: {
+          eventTime: "2026-07-13T10:00:01Z",
+          sequence: 1,
+          tick: 1,
+        },
+        id: "disabled-checkpoint-work-request",
+        payload: {
+          source: "api",
+          type: "FACTORY_REQUEST_BATCH",
+          works: [
+            {
+              name: "Diagnostic timeline story",
+              traceId: "trace-disabled-checkpoint",
+              workId: "work-disabled-checkpoint",
+              workTypeName: "story",
+            },
+          ],
+        },
+        type: FACTORY_EVENT_TYPES.workRequest,
+      });
+      await new Promise<void>((resolve) => {
+        window.setTimeout(() => resolve(), 20);
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.snapshot?.tick_count).toBe(1);
+    });
+    expect(useFactoryTimelineStore.getState()).toMatchObject({
+      currentReplayCheckpoint: {
+        afterEventId: "disabled-checkpoint-work-request",
+        afterSequence: 1,
+        selectedTick: 1,
+      },
+      events: [{ id: "disabled-checkpoint-work-request" }],
+      latestTick: 1,
+      materializedWorkOutcomeState: {
+        accumulator: { appliedEventCount: 1 },
+        cursor: {
+          eventID: "disabled-checkpoint-work-request",
+          sequence: 1,
+          tick: 1,
+        },
+      },
+    });
   });
 
   it("hydrates a persisted checkpoint and opens the stream after its cursor", async () => {
