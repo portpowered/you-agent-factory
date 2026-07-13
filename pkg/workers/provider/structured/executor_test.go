@@ -131,6 +131,11 @@ func TestProductionProviderBoundarySelectsStructuredCodexOnlyForCapableRunner(t 
 	if !publishedDraft(published, responseevents.KindMessage, responseevents.PhaseCompleted, "message-codex-production") {
 		t.Fatalf("published fragments = %#v, want authoritative native message", published)
 	}
+	assertPublishedCodexErrorItem(t, published)
+}
+
+func assertPublishedCodexErrorItem(t *testing.T, published []workerprovider.InferenceProgressFragment) {
+	t.Helper()
 	errorDraft := publishedDraftByIdentity(published, responseevents.KindError, responseevents.PhaseUpdated, "error-codex-production")
 	if errorDraft == nil || errorDraft.Provenance.NativeEventType != "item.completed" {
 		t.Fatalf("published fragments = %#v, want non-terminal native error item", published)
