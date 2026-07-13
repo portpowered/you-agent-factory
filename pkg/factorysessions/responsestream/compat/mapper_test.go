@@ -2,7 +2,6 @@ package compat_test
 
 import (
 	"encoding/json"
-	"errors"
 	"reflect"
 	"testing"
 	"time"
@@ -644,23 +643,185 @@ func TestMapFragment_TerminalMappingIsDeterministic(t *testing.T) {
 	}
 }
 
-func TestMapFragment_UnsupportedKindsReturnTypedError(t *testing.T) {
+func TestMapFragment_CompactionSignalEmitsStreamGapUpdated(t *testing.T) {
 	t.Parallel()
 
-	unsupported := []responsestream.EventKind{
-		responsestream.EventKindCompactionSignal,
+	recordedAt := time.Date(2026, 7, 12, 21, 0, 0, 0, time.UTC)
+	fragment := responsestream.Event{
+		Sequence:   10,
+		RecordedAt: recordedAt,
+		Kind:       responsestream.EventKindCompactionSignal,
+		DispatchID: "dispatch-42",
+		Compaction: &responsestream.CompactionSummary{
+			Reason:                responsestream.CompactionReasonTruncated,
+			DroppedSequenceCount:  2,
+			FirstRetainedSequence: 3,
+			LastDroppedSequence:   2,
+		},
+		ProviderSessionRef: &interfaces.ProviderSessionMetadata{
+			Provider: string(interfaces.ModelProviderCursor),
+			Kind:     "session_id",
+			ID:       "cursor-session-123",
+		},
 	}
-	ctx := compat.Context{FactorySessionID: "session-1", RunID: "run-1"}
+	ctx := compat.Context{
+		FactorySessionID: "session-abc",
+		RunID:            "run-xyz",
+	}
 
-	for _, kind := range unsupported {
-		kind := kind
-		t.Run(string(kind), func(t *testing.T) {
+	events, err := compat.MapFragment(ctx, fragment)
+	if err != nil {
+		t.Fatalf("MapFragment() error = %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+
+	event := events[0]
+	if event.Kind != responseevents.KindStreamGap || event.Phase != responseevents.PhaseUpdated {
+		t.Fatalf("kind/phase = %q/%q, want STREAM_GAP/UPDATED", event.Kind, event.Phase)
+	}
+	if event.FactorySessionID != "session-abc" || event.RunID != "run-xyz" {
+		t.Fatalf("session/run = %q/%q, want session-abc/run-xyz", event.FactorySessionID, event.RunID)
+	}
+	if event.Sequence != 10 || !event.RecordedAt.Equal(recordedAt) {
+		t.Fatalf("sequence/recordedAt = %d/%v, want 10/%v", event.Sequence, event.RecordedAt, recordedAt)
+	}
+	if event.DispatchID != "dispatch-42" {
+		t.Fatalf("dispatchId = %q, want dispatch-42", event.DispatchID)
+	}
+	if event.ProviderSessionRef != "cursor-session-123" {
+		t.Fatalf("providerSessionRef = %q, want cursor-session-123", event.ProviderSessionRef)
+	}
+	if event.ItemID != "" {
+		t.Fatal("compaction gap must not synthesize itemId")
+	}
+
+	var payload responseevents.StreamGapPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		t.Fatalf("unmarshal stream gap payload: %v", err)
+	}
+	if payload.FromSequence != 1 || payload.ToSequence != 3 {
+		t.Fatalf("gap bounds = %d/%d, want 1/3", payload.FromSequence, payload.ToSequence)
+	}
+	if payload.Reason != "truncated" {
+		t.Fatalf("gap reason = %q, want truncated", payload.Reason)
+	}
+
+	if err := responseevents.ValidateEvent(event); err != nil {
+		t.Fatalf("ValidateEvent() error = %v", err)
+	}
+}
+
+func TestMapFragment_CompactionGapPayloadHandlesMissingBounds(t *testing.T) {
+	t.Parallel()
+
+	events, err := compat.MapFragment(compat.Context{
+		FactorySessionID: "session-1",
+		RunID:            "run-1",
+	}, responsestream.Event{
+		Kind: responsestream.EventKindCompactionSignal,
+		Compaction: &responsestream.CompactionSummary{
+			Reason:               responsestream.CompactionReasonCoalesced,
+			DroppedSequenceCount: 3,
+		},
+	})
+	if err != nil {
+		t.Fatalf("MapFragment() error = %v", err)
+	}
+
+	var payload responseevents.StreamGapPayload
+	if err := json.Unmarshal(events[0].Payload, &payload); err != nil {
+		t.Fatalf("unmarshal stream gap payload: %v", err)
+	}
+	if payload.FromSequence != 0 || payload.ToSequence != 0 {
+		t.Fatalf("gap bounds = %d/%d, want 0/0 when sequence bounds absent", payload.FromSequence, payload.ToSequence)
+	}
+	if payload.Reason != "coalesced" {
+		t.Fatalf("gap reason = %q, want coalesced", payload.Reason)
+	}
+}
+
+func TestMapFragment_CompactionProvenanceAlwaysLossy(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		fragment responsestream.Event
+	}{
+		{
+			name: "with compaction summary",
+			fragment: responsestream.Event{
+				Kind: responsestream.EventKindCompactionSignal,
+				Compaction: &responsestream.CompactionSummary{
+					Reason: responsestream.CompactionReasonAgeEvicted,
+				},
+			},
+		},
+		{
+			name: "without compaction summary",
+			fragment: responsestream.Event{
+				Kind: responsestream.EventKindCompactionSignal,
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := compat.MapFragment(ctx, responsestream.Event{Kind: kind})
-			if !errors.Is(err, compat.ErrUnsupportedFragmentKind) {
-				t.Fatalf("MapFragment() error = %v, want ErrUnsupportedFragmentKind", err)
+			events, err := compat.MapFragment(compat.Context{
+				FactorySessionID: "session-1",
+				RunID:            "run-1",
+			}, tc.fragment)
+			if err != nil {
+				t.Fatalf("MapFragment() error = %v", err)
+			}
+
+			prov := events[0].Provenance
+			if prov.Fidelity != responseevents.FidelityLossy {
+				t.Fatalf("fidelity = %q, want LOSSY", prov.Fidelity)
+			}
+			if prov.Delivery != responseevents.DeliverySynthesized {
+				t.Fatalf("delivery = %q, want SYNTHESIZED", prov.Delivery)
+			}
+			if prov.Representation != responseevents.RepresentationNotification {
+				t.Fatalf("representation = %q, want NOTIFICATION", prov.Representation)
 			}
 		})
+	}
+}
+
+func TestMapFragment_CompactionMappingIsDeterministic(t *testing.T) {
+	t.Parallel()
+
+	fragment := responsestream.Event{
+		Sequence:   13,
+		RecordedAt: time.Date(2026, 7, 12, 16, 0, 0, 0, time.UTC),
+		Kind:       responsestream.EventKindCompactionSignal,
+		DispatchID: "dispatch-deterministic",
+		Compaction: &responsestream.CompactionSummary{
+			Reason:                responsestream.CompactionReasonTruncated,
+			DroppedSequenceCount:  1,
+			FirstRetainedSequence: 4,
+			LastDroppedSequence:   3,
+		},
+		Metadata: map[string]string{
+			"runner_id": "codex",
+		},
+	}
+	ctx := compat.Context{FactorySessionID: "session-det", RunID: "run-det"}
+
+	first, err := compat.MapFragment(ctx, fragment)
+	if err != nil {
+		t.Fatalf("first MapFragment() error = %v", err)
+	}
+	second, err := compat.MapFragment(ctx, fragment)
+	if err != nil {
+		t.Fatalf("second MapFragment() error = %v", err)
+	}
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("mapping is not deterministic:\nfirst=%#v\nsecond=%#v", first, second)
 	}
 }

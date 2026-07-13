@@ -25,9 +25,9 @@ type Context struct {
 }
 
 // MapFragment converts one legacy response-stream event into canonical
-// FactoryResponseEvent values. Progress, response, and terminal stream markers
-// are supported in this lane; other kinds return ErrUnsupportedFragmentKind until
-// later stories land.
+// FactoryResponseEvent values. Progress, response, terminal stream markers, and
+// compaction signals are supported in this lane; other kinds return
+// ErrUnsupportedFragmentKind until later stories land.
 func MapFragment(ctx Context, fragment responsestream.Event) ([]responseevents.FactoryResponseEvent, error) {
 	switch fragment.Kind {
 	case responsestream.EventKindProgressFragment:
@@ -64,6 +64,15 @@ func MapFragment(ctx Context, fragment responsestream.Event) ([]responseevents.F
 		}
 		if err := responseevents.ValidateEvent(event); err != nil {
 			return nil, fmt.Errorf("mapped stream-failed event invalid: %w", err)
+		}
+		return []responseevents.FactoryResponseEvent{event}, nil
+	case responsestream.EventKindCompactionSignal:
+		event, err := mapCompactionFragment(ctx, fragment)
+		if err != nil {
+			return nil, err
+		}
+		if err := responseevents.ValidateEvent(event); err != nil {
+			return nil, fmt.Errorf("mapped compaction event invalid: %w", err)
 		}
 		return []responseevents.FactoryResponseEvent{event}, nil
 	default:
@@ -211,6 +220,80 @@ func terminalFragmentFidelity(fragment responsestream.Event) responseevents.Fide
 		return responseevents.FidelityLossy
 	}
 	return responseevents.FidelityNormalized
+}
+
+func mapCompactionFragment(ctx Context, fragment responsestream.Event) (responseevents.FactoryResponseEvent, error) {
+	payload, err := json.Marshal(streamGapPayloadFromCompaction(fragment.Compaction))
+	if err != nil {
+		return responseevents.FactoryResponseEvent{}, fmt.Errorf("marshal stream gap payload: %w", err)
+	}
+
+	return responseevents.FactoryResponseEvent{
+		SchemaVersion:    responseevents.SchemaVersionV1,
+		EventID:          synthesizedEventID(ctx, fragment),
+		Sequence:         fragment.Sequence,
+		RecordedAt:       fragment.RecordedAt,
+		FactorySessionID: strings.TrimSpace(ctx.FactorySessionID),
+		RunID:            strings.TrimSpace(ctx.RunID),
+		Kind:             responseevents.KindStreamGap,
+		Phase:            responseevents.PhaseUpdated,
+		Provenance: responseevents.Provenance{
+			Provider:        fragmentProvider(fragment),
+			NativeEventType: fragmentNativeEventType(fragment),
+			Delivery:        responseevents.DeliverySynthesized,
+			Representation:  responseevents.RepresentationNotification,
+			Fidelity:        compactionFragmentFidelity(),
+		},
+		Payload:            payload,
+		DispatchID:         strings.TrimSpace(fragment.DispatchID),
+		ProviderSessionRef: providerSessionRefString(fragment.ProviderSessionRef),
+	}, nil
+}
+
+func streamGapPayloadFromCompaction(summary *responsestream.CompactionSummary) responseevents.StreamGapPayload {
+	if summary == nil {
+		return responseevents.StreamGapPayload{Reason: "compaction"}
+	}
+
+	fromSequence := int64(0)
+	toSequence := int64(0)
+	if summary.LastDroppedSequence > 0 && summary.DroppedSequenceCount > 0 {
+		fromSequence = summary.LastDroppedSequence - int64(summary.DroppedSequenceCount) + 1
+		if fromSequence < 0 {
+			fromSequence = 0
+		}
+	}
+	if summary.FirstRetainedSequence > 0 {
+		toSequence = summary.FirstRetainedSequence
+	} else if summary.LastDroppedSequence > 0 {
+		toSequence = summary.LastDroppedSequence + 1
+	}
+
+	return responseevents.StreamGapPayload{
+		FromSequence: fromSequence,
+		ToSequence:   toSequence,
+		Reason:       compactionReasonString(summary.Reason),
+	}
+}
+
+func compactionReasonString(reason responsestream.CompactionReason) string {
+	switch reason {
+	case responsestream.CompactionReasonTruncated:
+		return "truncated"
+	case responsestream.CompactionReasonCoalesced:
+		return "coalesced"
+	case responsestream.CompactionReasonAgeEvicted:
+		return "age_evicted"
+	default:
+		if trimmed := strings.TrimSpace(string(reason)); trimmed != "" {
+			return strings.ToLower(trimmed)
+		}
+		return "compaction"
+	}
+}
+
+func compactionFragmentFidelity() responseevents.Fidelity {
+	return responseevents.FidelityLossy
 }
 
 func mapProgressFragment(ctx Context, fragment responsestream.Event) (responseevents.FactoryResponseEvent, error) {

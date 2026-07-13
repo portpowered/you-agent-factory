@@ -185,6 +185,9 @@ primary-result behavior.
   map to `RUN`/`COMPLETED` (`RunPayload.status` `completed`) or `ERROR`/`FAILED`
   (`ErrorPayload` with stable `stream_failed` / `stream_canceled` codes and
   fragment payload as message) without selecting invocation primary results.
+  Compaction signals map to `STREAM_GAP`/`UPDATED` with `StreamGapPayload`
+  (`fromSequence`/`toSequence` from `CompactionSummary` dropped bounds when
+  present, `reason` from compaction reason) and always `LOSSY` provenance.
   Package docs in `responseevents/doc.go` record resolved v1 transport, retention, and CLI JSON
   decisions without implementing transports; `responseevents/boundary_test.go`
   enforces isolation from CLI, HTTP, subprocess, and provider imports.
