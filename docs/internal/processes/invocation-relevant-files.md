@@ -216,42 +216,15 @@ primary-result behavior.
   selects terminal `goal:complete` work content as the primary result.
   `summary.go` shapes terminal `execute-goal` work content from worker output so
   EXPLICIT primary-result selection returns the final summary instead of
-  submitted goal input text; classifier `review-goal` output is a route label
-  and must preserve carried summary content. `primary_result_test.go` covers both
-  successful EXPLICIT selection and unresolved failure when `goal:complete` is
-  absent from terminal work in scope.
-- `pkg/packagedfactories/goal/decision_envelope.go` owns the canonical
-  reviewer/checker JSON envelope and its mapping onto `interfaces.WorkResult`.
-  Goal routing envelopes with authored `classificationRoutes` map parsed
-  `decision` labels onto `SelectedClassificationLabel` while preserving
-  `Feedback`, optional `Output`, and `RecordedOutputWork`.
-- `pkg/workers/executor/agent.go` routes `review` workstation agent output through
-  `goal.WorkResultFromDecisionEnvelopeJSONOrFailed` instead of stop-token parsing.
-  Workstations with `outcomeFormat: decision-envelope` and authored
-  `classificationRoutes` use `goal.WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed`.
-- `factory/docs/decision-envelope.md` is the packaged-authoring guide for the
-  reviewer/checker envelope shape, the standard outcome vocabulary, the
-  packaged-goal goal-routing decision vocabulary used when
-  `classificationRoutes` are present, and malformed-input behavior used by
-  `factory/workstations/review/AGENTS.md`.
+  submitted goal input text. `primary_result_test.go` covers both successful
+  EXPLICIT selection and unresolved failure when `goal:complete` is absent from
+  terminal work in scope.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged goal
-  invocation summary shaping on `execute-goal` workstations alongside packaged
-  TTS metadata shaping. `pkg/factory/subsystems/goalroutingtests/transitioner_goal_routing_test.go`
-  proves each authored `review-goal` classifier label routes to the expected goal place
-  through the mapped runtime net and proves structured `structured-review-goal`
-  envelopes route from parsed decision labels while preserving mapped
-  `WorkResult` fields. The same file also proves malformed JSON and unknown
-  decisions route to `goal:failed` with actionable failure text instead of
-  misrouting to complete, rework, or escalation states.
-- `pkg/packagedfactories/goal/factory_test.go` proves `goal:execute` schedules
-  the `check-goal` review-mode classifier in the mapped runtime net.
-- `tests/functional/runtime_api/api_packaged_goal_invocation_test.go` proves the
-  materialized built-in goal topology dispatches `review-goal` when
-  `check-goal` returns `plain` and `structured-review-goal` when `check-goal`
-  returns `structured`, using the real authored `goal-checker` contract rather
-  than mocked lane-label output. The same file proves repeated structured
-  `needs_changes` rework trips the structured loop-breaker instead of retrying
-  forever.
+  invocation summary shaping on the single `execute-goal` repeater alongside
+  packaged TTS metadata shaping.
+- `pkg/factory/subsystems/goalroutingtests/transitioner_goal_routing_test.go`
+  proves the assembled minimal topology repeats continue/reject outcomes through
+  `goal:init` and routes worker failure to `goal:failed` without live providers.
 - Behavioral proof for named goal batch invocation lives in
   `tests/functional/smoke/cli_named_goal_run_smoke_test.go` using the real
   `you run --named @you/goal` CLI path with `--with-mock-workers`, including a
@@ -261,7 +234,10 @@ primary-result behavior.
   `pkg/cli/run/run_invocation_test.go`
   (`TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer`), using
   the real shared bootstrap path with mock workers and a TCP probe port to
-  assert no factory API/dashboard listener is bound.
+  assert no factory API/dashboard listener is bound. The repository-edit fixture
+  in `TestRun_NamedGoalRepositoryEditReturnsFinalResponseAsPrimaryResult` runs
+  that same packaged path, edits a temporary repository, and asserts the final
+  agent response is returned as primary output after `<COMPLETE>` normalization.
 - No-server bootstrap CLI/API invocation-equivalence proof lives in
   `pkg/cli/run/run_invocation_test.go`
   (`TestRun_NoServerBootstrap_PositionalInputMatchesAPIContract`,

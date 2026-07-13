@@ -46,7 +46,7 @@ func TestShouldFormatInvocationSummary_MatchesPackagedInvokeWorkstation(t *testi
 }
 
 func TestSummaryContentFromWorkerOutput_StripsStopTokenAndReturnsTextSummary(t *testing.T) {
-	got, err := SummaryContentFromWorkerOutput("Final goal summary.\nCOMPLETE", "COMPLETE")
+	got, err := SummaryContentFromWorkerOutput("Final goal summary.\n<COMPLETE>", "<COMPLETE>")
 	if err != nil {
 		t.Fatalf("SummaryContentFromWorkerOutput: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestSummaryContentFromWorkerOutput_StripsStopTokenAndReturnsTextSummary(t *
 }
 
 func TestSummaryContentFromWorkerOutput_RejectsEmptySummary(t *testing.T) {
-	if _, err := SummaryContentFromWorkerOutput("   \nCOMPLETE", "COMPLETE"); err == nil {
+	if _, err := SummaryContentFromWorkerOutput("   \n<COMPLETE>", "<COMPLETE>"); err == nil {
 		t.Fatal("expected empty normalized summary to fail")
 	}
 }
