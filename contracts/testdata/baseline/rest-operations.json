@@ -781,6 +781,46 @@
       ]
     },
     {
+      "operationId": "getFactoryResponseEventsBySessionId",
+      "method": "GET",
+      "path": "/factory-sessions/{session_id}/response-events",
+      "hasSummary": true,
+      "hasDescription": true,
+      "requestMediaTypes": [],
+      "responses": [
+        {
+          "status": "200",
+          "mediaTypes": [
+            "text/event-stream"
+          ]
+        },
+        {
+          "status": "400",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "404",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "410",
+          "mediaTypes": [
+            "application/json"
+          ]
+        },
+        {
+          "status": "500",
+          "mediaTypes": [
+            "application/json"
+          ]
+        }
+      ]
+    },
+    {
       "operationId": "getFactorySessionResult",
       "method": "GET",
       "path": "/factory-sessions/{session_id}/result",
