@@ -23,6 +23,10 @@ import {
 } from "./materialized-work-outcome-state";
 
 export {
+  MATERIALIZED_WORK_OUTCOME_RETENTION,
+  retainMaterializedWorkOutcomeState,
+} from "./materialized-work-outcome-retention";
+export {
   createMaterializedWorkOutcomeState,
   MATERIALIZED_WORK_OUTCOME_VERSION,
   MAX_MATERIALIZED_WORK_OUTCOME_SAMPLES,

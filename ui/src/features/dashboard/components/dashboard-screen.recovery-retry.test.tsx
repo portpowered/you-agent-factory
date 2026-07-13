@@ -13,6 +13,7 @@ import {
   useFactoryTimelineStore,
 } from "../../timeline/public";
 import { emptyReplayWorldState } from "../../timeline/state/timeline/replayWorldStateSupport";
+import { createMaterializedWorkOutcomeState } from "../../work-outcome/public/materializer";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,
@@ -251,6 +252,7 @@ describe("DashboardScreen stale-cursor retry", () => {
       {
         afterEventId: "checkpoint-event-7",
         afterSequence: 7,
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
         replayState: emptyReplayWorldState(7),
         selectedTick: 7,
       },

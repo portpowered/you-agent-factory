@@ -1,6 +1,7 @@
 import {
   MATERIALIZED_WORK_OUTCOME_VERSION,
   type MaterializedWorkOutcomeState,
+  retainMaterializedWorkOutcomeState,
 } from "../../../work-outcome/public/materializer";
 import type { FactoryTimelineCheckpoint } from "../timeline/storeState";
 import type { ReplayWorldState } from "../timeline/types";
@@ -34,7 +35,7 @@ export function buildPersistedCheckpoint(
   return {
     afterEventId: checkpoint.afterEventId,
     afterSequence: checkpoint.afterSequence,
-    materializedWorkOutcomeState: structuredClone(
+    materializedWorkOutcomeState: retainMaterializedWorkOutcomeState(
       checkpoint.materializedWorkOutcomeState,
     ),
     replayState: compactReplayState(checkpoint.replayState),
@@ -46,14 +47,14 @@ export function buildPersistedCheckpoint(
 export function hydrateCheckpoint(
   checkpoint: PersistedTimelineCheckpoint,
 ): FactoryTimelineCheckpoint {
-  return {
+  return structuredClone({
     afterEventId: checkpoint.afterEventId,
     afterSequence: checkpoint.afterSequence,
     materializedWorkOutcomeState: checkpoint.materializedWorkOutcomeState,
     replayState: checkpoint.replayState,
     selectedTick: checkpoint.selectedTick,
     syncIdentity: checkpoint.syncIdentity,
-  };
+  });
 }
 
 function compactReplayState(state: ReplayWorldState): ReplayWorldState {

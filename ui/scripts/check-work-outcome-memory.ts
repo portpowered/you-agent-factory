@@ -4,7 +4,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import type { FactoryEvent } from "../src/api/events";
-import { buildWorkOutcomeTimelineSamplesFromEvents } from "../src/features/work-outcome/useWorkOutcomeChart";
+import { buildWorkOutcomeTimelineSamplesFromEvents } from "../src/features/work-outcome/hooks/useWorkOutcomeChart";
 
 type FixtureName =
   | "baseline"
