@@ -79,34 +79,22 @@ If the PR has merge conflicts, please tell the processor to fix the merge confli
 
 ### Step 7 - respond back
 
-Return one JSON decision envelope as your final output. See
-`factory/docs/decision-envelope.md` for the full shape, accepted decision
-values, routing-mode differences, and malformed-input behavior. This review
-workstation uses the standard outcome vocabulary below; packaged `@you/goal`
-structured review lanes use the goal-routing labels documented in the same
-file instead.
+End your final response with exactly one review routing marker:
 
-| Review outcome | `decision` value |
-| --- | --- |
-| PR is complete and merged | `ACCEPTED` |
-| More executor work is required | `CONTINUE` |
-| PR is not complete | `REJECTED` |
+- `<COMPLETE>` when the PR is complete, approved, and merged.
+- `<REJECTED>` when concrete executor work remains, required CI is still
+  running, or the change is otherwise not ready to approve.
 
-Put your review summary and acceptance-criteria checklist in `feedback`. Use
-optional `output` for a short final summary and optional `recorded_output_work`
-when you need to record work items that should advance with the decision.
-
-Example:
-
-```json
-{
-  "decision": "REJECTED",
-  "feedback": "BLOCKING: make test failed on pkg/foo. Acceptance criterion 2 is FAIL."
-}
-```
+Write the review summary and acceptance-criteria checklist before the marker.
+Do not return a JSON decision envelope. The runtime derives the review outcome
+from the worker's `<COMPLETE>` stop token; a response without that stop token
+follows the review rejection route. Do not use `<CONTINUE>` from this
+workstation because review rework belongs on the rejection route.
 
 If CI is still pending or in progress and you have no concrete independent
-review findings to report yet, respond with `{"decision":"REJECTED","feedback":"Waiting for required CI on the current PR head."}` without posting a new PR comment so the workflow waits silently instead of creating premature review noise.
+review findings to report yet, end with `<REJECTED>` without posting a new PR
+comment so the workflow waits silently instead of creating premature review
+noise.
 
   When starting local servers for verification:
   - Never use a shared default port such as 3000 without first checking whether it is already occupied.

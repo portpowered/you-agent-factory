@@ -352,7 +352,7 @@ func TestEvaluateAgentRunOutcome_StopTokenAndContinueSemantics(t *testing.T) {
 	if got := evaluateAgentRunOutcome("still working <CONTINUE>", worker); got != interfaces.OutcomeContinue {
 		t.Fatalf("continue outcome = %s, want CONTINUE", got)
 	}
-	if got := evaluateAgentRunOutcome("needs revision", worker); got != interfaces.OutcomeRejected {
+	if got := evaluateAgentRunOutcome("review cannot proceed <REJECTED>", worker); got != interfaces.OutcomeRejected {
 		t.Fatalf("rejected outcome = %s, want REJECTED", got)
 	}
 	if got := evaluateAgentRunOutcome("plain output", nil); got != interfaces.OutcomeAccepted {

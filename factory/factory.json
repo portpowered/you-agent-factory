@@ -768,7 +768,6 @@
         }
       ],
       "name": "review",
-      "outcomeFormat": "decision-envelope",
       "onFailure": [
         {
           "state": "failed",

@@ -318,15 +318,15 @@ primary-result behavior.
   Goal routing envelopes with authored `classificationRoutes` map parsed
   `decision` labels onto `SelectedClassificationLabel` while preserving
   `Feedback`, optional `Output`, and `RecordedOutputWork`.
-- `pkg/workers/executor/agent.go` routes `review` workstation agent output through
+- `pkg/workers/executor/agent.go` routes workstations with
+  `outcomeFormat: decision-envelope` through
   `goal.WorkResultFromDecisionEnvelopeJSONOrFailed` instead of stop-token parsing.
-  Workstations with `outcomeFormat: decision-envelope` and authored
+  Those workstations with authored
   `classificationRoutes` use `goal.WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed`.
 - `factory/docs/decision-envelope.md` is the packaged-authoring guide for the
   reviewer/checker envelope shape, the standard outcome vocabulary, the
   packaged-goal goal-routing decision vocabulary used when
-  `classificationRoutes` are present, and malformed-input behavior used by
-  `factory/workstations/review/AGENTS.md`.
+  `classificationRoutes` are present, and malformed-input behavior.
 - `pkg/factory/subsystems/subsystem_transitioner.go` applies packaged goal
   invocation summary shaping on `execute-goal` workstations alongside packaged
   TTS metadata shaping. `pkg/factory/subsystems/goalroutingtests/transitioner_goal_routing_test.go`
