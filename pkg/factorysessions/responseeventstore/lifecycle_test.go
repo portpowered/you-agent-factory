@@ -102,6 +102,33 @@ func TestSessionResponseEventStore_CompleteLateSubscribeCatchUp(t *testing.T) {
 	}
 }
 
+func TestSessionResponseEventStore_CompletedSubscriptionExpiresAfterRetentionWindow(t *testing.T) {
+	t.Parallel()
+
+	start := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	clock := &fixedClock{now: start}
+	store := responseeventstore.NewSessionResponseEventStoreWithClock("session-abc", clock)
+	if _, err := store.Publish(samplePublishInput()); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	store.Complete()
+
+	clock.now = start.Add(responseeventstore.CompletedStreamRetentionWindow - time.Nanosecond)
+	subscription, err := store.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe before retention expiry: %v", err)
+	}
+	subscription.Detach()
+
+	clock.now = start.Add(responseeventstore.CompletedStreamRetentionWindow)
+	if _, err := store.Subscribe(0); !errors.Is(err, responseeventstore.ErrStoreExpired) {
+		t.Fatalf("Subscribe at retention expiry error = %v, want ErrStoreExpired", err)
+	}
+	if events := store.Events(); len(events) != 1 {
+		t.Fatalf("retained snapshot after expiry has %d events, want 1", len(events))
+	}
+}
+
 func TestSessionResponseEventStore_CompleteLateSubscribeAtLatestDoesNotRegister(t *testing.T) {
 	t.Parallel()
 

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 )
 
 func TestSessionResponseEventStoreSubscription_CatchUpThenLiveInOrder(t *testing.T) {
@@ -80,6 +80,36 @@ func TestSessionResponseEventStoreSubscription_AfterSequenceSkipsEarlierEvents(t
 	}
 	if events[0].Sequence != 2 || events[1].Sequence != 3 {
 		t.Fatalf("sequences = [%d %d], want [2 3]", events[0].Sequence, events[1].Sequence)
+	}
+}
+
+func TestSessionResponseEventStoreSubscription_DrainReturnsRetainedEventsWithoutWaiting(t *testing.T) {
+	t.Parallel()
+
+	store := responseeventstore.NewSessionResponseEventStore("session-abc")
+	subscription, err := store.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer subscription.Detach()
+
+	published, err := store.Publish(samplePublishInput())
+	if err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	events, err := subscription.Drain()
+	if err != nil {
+		t.Fatalf("Drain: %v", err)
+	}
+	if len(events) != 1 || events[0].Sequence != published.Sequence {
+		t.Fatalf("events = %#v, want sequence %d", events, published.Sequence)
+	}
+	empty, err := subscription.Drain()
+	if err != nil {
+		t.Fatalf("Drain(empty): %v", err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("second drain = %#v, want no duplicate events", empty)
 	}
 }
 

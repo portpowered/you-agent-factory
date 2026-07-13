@@ -18,12 +18,15 @@ import {
   indexedDBRequestToPromise,
   openCheckpointDatabase,
 } from "./checkpoint-persistence/indexedDBCheckpointRequests";
+import {
+  buildPersistedCheckpoint,
+  CHECKPOINT_SCHEMA_VERSION_GUARDED,
+  hydrateCheckpoint,
+  isSupportedPersistedTimelineCheckpoint,
+  type PersistedTimelineCheckpoint,
+} from "./checkpoint-persistence/timelineCheckpointCodec";
 import type { FactoryTimelineCheckpoint } from "./timeline/storeState";
-import type { ReplayWorldState } from "./timeline/types";
-
-const CHECKPOINT_SCHEMA_VERSION_GUARDED = 3;
 const CHECKPOINT_STORE_NAME = "checkpoints";
-const MAX_COMPACT_TEXT_CHARS = 512;
 
 export type TimelineCheckpointStreamIdentity = StreamDerivedCacheIdentity;
 
@@ -54,14 +57,6 @@ function matchesStoredCheckpointFactorySessionID(
   return (
     requestedSessionID !== "" && storedFactorySessionID === requestedSessionID
   );
-}
-
-interface PersistedTimelineCheckpoint {
-  afterEventId?: string;
-  afterSequence?: number;
-  replayState: ReplayWorldState;
-  selectedTick: number;
-  syncIdentity?: FactoryTimelineCheckpoint["syncIdentity"];
 }
 
 async function writeIndexedCheckpoint(
@@ -165,7 +160,7 @@ export async function peekPersistedTimelineCheckpoint(
     if (
       !envelope ||
       envelope.schemaVersion !== CHECKPOINT_SCHEMA_VERSION_GUARDED ||
-      !envelope.checkpoint?.replayState
+      !isSupportedPersistedTimelineCheckpoint(envelope.checkpoint)
     ) {
       return null;
     }
@@ -236,55 +231,13 @@ export async function clearTimelineCheckpoint(
   await deleteIndexedCheckpoint(indexedDB, storageKey).catch(() => {});
 }
 
-function compactText(value: string): string {
-  if (value.length <= MAX_COMPACT_TEXT_CHARS) {
-    return value;
-  }
-  // hardcoded-ui-copy-exception: non-product-diagnostic
-  return `${value.slice(0, MAX_COMPACT_TEXT_CHARS)}\n\n[checkpoint truncated ${value.length - MAX_COMPACT_TEXT_CHARS} chars]`;
-}
-
-function compactReplayState(state: ReplayWorldState): ReplayWorldState {
-  const compacted = structuredClone(state);
-
-  for (const [textBlobID, value] of Object.entries(compacted.textBlobsByID)) {
-    compacted.textBlobsByID[textBlobID] = compactText(value);
-  }
-
-  return compacted;
-}
-
-function buildPersistedCheckpoint(
-  checkpoint: FactoryTimelineCheckpoint,
-): PersistedTimelineCheckpoint {
-  return {
-    afterEventId: checkpoint.afterEventId,
-    afterSequence: checkpoint.afterSequence,
-    replayState: compactReplayState(checkpoint.replayState),
-    selectedTick: checkpoint.selectedTick,
-    syncIdentity: checkpoint.syncIdentity,
-  };
-}
-
-function hydrateCheckpoint(
-  checkpoint: PersistedTimelineCheckpoint,
-): FactoryTimelineCheckpoint {
-  return {
-    afterEventId: checkpoint.afterEventId,
-    afterSequence: checkpoint.afterSequence,
-    replayState: checkpoint.replayState,
-    selectedTick: checkpoint.selectedTick,
-    syncIdentity: checkpoint.syncIdentity,
-  };
-}
-
 function parseStoredCheckpoint(
   envelope: TimelineCheckpointEnvelope,
   expectedIdentity: TimelineCheckpointStreamIdentity | null,
 ): FactoryTimelineCheckpoint | null {
   if (
     envelope.schemaVersion !== CHECKPOINT_SCHEMA_VERSION_GUARDED ||
-    !envelope.checkpoint?.replayState
+    !isSupportedPersistedTimelineCheckpoint(envelope.checkpoint)
   ) {
     return null;
   }

@@ -61,6 +61,8 @@ func errorFamilyForStatus(status int) factoryapi.ErrorFamily {
 		return factoryapi.ErrorFamilyConflict
 	case http.StatusNotFound:
 		return factoryapi.ErrorFamilyNotFound
+	case http.StatusGone:
+		return factoryapi.ErrorFamilyGone
 	default:
 		return factoryapi.ErrorFamilyInternalServerError
 	}

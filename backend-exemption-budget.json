@@ -57,12 +57,6 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/factory/validation/validation_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated orchestrator validation tests remain with validation_test until dedicated validation test seams split."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/factorysessionexecution/fake_service_runtime_test.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated JavaScript runtime execution tests remain together until dedicated execution test seams split."
@@ -906,12 +900,6 @@
       "target": "pkg/factory/projections/world_state.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: JavaScript world replay remains consolidated with world_state until dedicated projection seams split."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/factory/validation/validation_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated orchestrator validation tests remain with validation_test until dedicated validation test seams split."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",

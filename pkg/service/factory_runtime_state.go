@@ -32,18 +32,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// SubscribeSessionResponseEvents opens a session-ordered canonical response-event cursor.
-func (fs *FactoryService) SubscribeSessionResponseEvents(sessionID string, afterSequence int64) (*factorysessions.SessionResponseEventSubscription, error) {
-	session, err := fs.requireSession(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	if session.ResponseEvents == nil {
-		return nil, fmt.Errorf("factory session response event store is required: %s", sessionID)
-	}
-	return session.ResponseEvents.Subscribe(afterSequence)
-}
-
 const (
 	modelRequestEventIDPrefix      = "factory-event/model-request"
 	modelResponseEventIDPrefix     = "factory-event/model-response"

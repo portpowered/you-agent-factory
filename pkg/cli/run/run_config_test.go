@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
@@ -30,11 +31,10 @@ type canonicalResponseEventRunStub struct {
 	once       sync.Once
 }
 
-func (s *canonicalResponseEventRunStub) SubscribeSessionResponseEvents(
+func (s *canonicalResponseEventRunStub) SubscribeSessionResponseEventsFromLatest(
 	_ string,
-	afterSequence int64,
-) (*factorysessions.SessionResponseEventSubscription, error) {
-	subscription, err := s.store.Subscribe(afterSequence)
+) (*responseeventstore.Subscription, error) {
+	subscription, err := s.store.Subscribe(s.store.LatestSequence())
 	if err == nil {
 		s.once.Do(func() { close(s.subscribed) })
 	}
@@ -85,7 +85,9 @@ func TestRun_HumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
 				ContentBlockIndex: 0, ContentBlockKind: responseevents.ContentBlockText, TextDelta: answer,
 			}),
 			humanResponseEvent(responseevents.KindUsage, responseevents.PhaseUpdated, responseevents.UsagePayload{InputTokens: 99, Model: canary}),
-			humanResponseEvent(responseevents.KindStreamGap, responseevents.PhaseUpdated, responseevents.StreamGapPayload{FromSequence: 40, ToSequence: 44, Reason: "retention window"}),
+			humanResponseEvent(responseevents.KindStreamGap, responseevents.PhaseUpdated, responseevents.StreamGapPayload{
+				FromSequence: 40, ToSequence: 44, FirstAvailableSequence: 45, Reason: "retention window",
+			}),
 		}
 		for _, event := range events {
 			if _, err := store.Publish(event); err != nil {
@@ -122,6 +124,45 @@ func TestRun_HumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
 	if strings.Contains(output.String(), canary) || len(legacy.subscribeCalls) != 0 {
 		t.Fatalf("human output used unsafe legacy/provider data: %q", output.String())
 	}
+}
+
+func TestHumanResponseStreamRenderer_CanonicalNonToolGolden(t *testing.T) {
+	attempt, delay, percent := 3, int64(12), 42.5
+	tests := []struct {
+		name  string
+		event responseevents.FactoryResponseEvent
+		want  string
+	}{
+		{"reasoning started", humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseStarted, responseevents.ReasoningPayload{}), "reasoning: started\n"},
+		{"reasoning delta", humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseDelta, responseevents.ReasoningPayload{SummaryDelta: "compare\noptions"}), "reasoning: compare options\n"},
+		{"reasoning completed", humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseCompleted, responseevents.ReasoningPayload{Summary: "selected path"}), "reasoning: selected path\n"},
+		{"reasoning completed empty", humanResponseEvent(responseevents.KindReasoning, responseevents.PhaseCompleted, responseevents.ReasoningPayload{}), "reasoning: completed\n"},
+		{"retry minimal", humanResponseEvent(responseevents.KindError, responseevents.PhaseUpdated, responseevents.ErrorPayload{Code: "busy", Message: "hidden", Retryable: true}), "retry: code=busy\n"},
+		{"retry full", humanResponseEvent(responseevents.KindError, responseevents.PhaseUpdated, responseevents.ErrorPayload{Code: "rate_limited", Message: "hidden", RetryAttempt: &attempt, RetryAfterSeconds: &delay}), "retry: code=rate_limited attempt=3 retry-in=12s\n"},
+		{"throttle", humanResponseEvent(responseevents.KindError, responseevents.PhaseUpdated, responseevents.ErrorPayload{Code: "throttled", Message: "hidden"}), "retry: code=throttled\n"},
+		{"progress minimal", humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "planning"}), "progress: planning\n"},
+		{"progress full", humanResponseEvent(responseevents.KindProgress, responseevents.PhaseUpdated, responseevents.ProgressPayload{Label: "review", Message: "checking\r\nresults", PercentComplete: &percent}), "progress: review — checking results (42.5%)\n"},
+		{"stream gap", humanResponseEvent(responseevents.KindStreamGap, responseevents.PhaseUpdated, responseevents.StreamGapPayload{FromSequence: 8, ToSequence: 14, FirstAvailableSequence: 15, Reason: "retention\nwindow"}), "stream gap: sequences 8-14 unavailable (reason=retention window)\n"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var output strings.Builder
+			renderer := newHumanResponseStreamRenderer(&output)
+			renderer.onResponseEvents([]responseevents.FactoryResponseEvent{tc.event})
+			renderer.stopProgressRendering()
+			if got := output.String(); got != tc.want {
+				t.Fatalf("output = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func humanResponseEvent(kind responseevents.Kind, phase responseevents.Phase, payload any) responseevents.FactoryResponseEvent {
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		panic(err)
+	}
+	return responseevents.FactoryResponseEvent{Kind: kind, Phase: phase, Payload: encoded}
 }
 
 func TestHumanResponseStreamRenderer_CanonicalMessagesDoNotDuplicatePrimaryResult(t *testing.T) {

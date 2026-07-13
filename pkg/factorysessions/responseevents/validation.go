@@ -215,6 +215,12 @@ func validateStreamGapKindPayload(payload json.RawMessage) error {
 	if body.FromSequence < 0 || body.ToSequence < 0 {
 		return validationError("payload.fromSequence", "fromSequence and toSequence must be non-negative for StreamGapPayload")
 	}
+	if body.FromSequence > body.ToSequence {
+		return validationError("payload.toSequence", "toSequence must not precede fromSequence for StreamGapPayload")
+	}
+	if body.FirstAvailableSequence <= 0 {
+		return validationError("payload.firstAvailableSequence", "firstAvailableSequence must be positive for StreamGapPayload")
+	}
 	return nil
 }
 

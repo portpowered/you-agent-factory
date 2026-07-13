@@ -56,6 +56,7 @@ type InvokeConfig struct {
 	OutputPath       string
 	Server           string
 	FactoryDir       string
+	HomeDir          string
 	OperatorDefaults operatorconfig.ResolvedDefaults
 	Logger           *zap.Logger
 	JSON             bool
@@ -143,6 +144,7 @@ func Invoke(cfg InvokeConfig) error {
 			Operation:        operation,
 			Text:             text,
 			FactoryDir:       cfg.FactoryDir,
+			HomeDir:          cfg.HomeDir,
 			OperatorDefaults: cfg.OperatorDefaults,
 			Logger:           cfg.Logger,
 			Verbose:          cfg.Verbose,
@@ -165,6 +167,7 @@ func Invoke(cfg InvokeConfig) error {
 		Text:             text,
 		OutputPath:       outputPath,
 		FactoryDir:       cfg.FactoryDir,
+		HomeDir:          cfg.HomeDir,
 		OperatorDefaults: cfg.OperatorDefaults,
 		Logger:           cfg.Logger,
 		Verbose:          cfg.Verbose,
@@ -267,6 +270,7 @@ type invokeOptions struct {
 	Text             string
 	OutputPath       string
 	FactoryDir       string
+	HomeDir          string
 	OperatorDefaults operatorconfig.ResolvedDefaults
 	Logger           *zap.Logger
 	Verbose          bool

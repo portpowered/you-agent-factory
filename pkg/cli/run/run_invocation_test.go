@@ -20,6 +20,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
@@ -34,6 +36,60 @@ type stubInvocationService struct {
 	run    func(context.Context) error
 	invoke func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error)
 	close  func(context.Context, string) error
+}
+
+func TestBuildApplication_ConstructsInvocationBootstrapOnceBeforeInitializer(t *testing.T) {
+	preserveRunGlobals(t)
+
+	text := "Plan the sprint"
+	buildCalls := 0
+	lifecycleStarted := false
+	buildInvocationBootstrap = func(_ context.Context, _ *service.FactoryServiceConfig) (sessionInvocationRunner, error) {
+		buildCalls++
+		if lifecycleStarted {
+			t.Fatal("invocation bootstrap constructed after lifecycle start")
+		}
+		return stubInvocationService{
+			run: func(ctx context.Context) error {
+				lifecycleStarted = true
+				<-ctx.Done()
+				return nil
+			},
+			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+				return apisurface.FactoryInvocationResult{
+					Status: factoryapi.InvocationTerminalStatusCompleted,
+					PrimaryResult: []interfaces.WorkContentPart{{
+						Type: interfaces.WorkContentPartTypeText,
+						Text: "done",
+					}},
+				}, nil
+			},
+		}, nil
+	}
+
+	application, err := BuildApplication(context.Background(), RunConfig{
+		Dir:                      t.TempDir(),
+		InvocationPositionalText: &text,
+		StdinIsTTY:               func() bool { return true },
+		DisableDefaultRecording:  true,
+	}, nil)
+	if err != nil {
+		t.Fatalf("BuildApplication() error = %v", err)
+	}
+	if buildCalls != 1 || lifecycleStarted {
+		t.Fatalf("after construction: build calls = %d, lifecycle started = %t; want 1, false", buildCalls, lifecycleStarted)
+	}
+
+	err = initializer.RunProcess(context.Background(), &initializer.ProcessGraph{
+		Policy: initializer.ProcessPolicy{Mode: initializer.ProcessModeLocalRun, Sidecars: initializer.SidecarPolicy{WorkerScheduler: true}},
+		Run:    application,
+	})
+	if err != nil {
+		t.Fatalf("RunProcess() error = %v", err)
+	}
+	if buildCalls != 1 || !lifecycleStarted {
+		t.Fatalf("after initialization: build calls = %d, lifecycle started = %t; want 1, true", buildCalls, lifecycleStarted)
+	}
 }
 
 func (s stubInvocationService) Run(ctx context.Context) error {
@@ -1244,6 +1300,16 @@ func (c *capturingBootstrapRunner) CloseFactorySession(ctx context.Context, sess
 	return c.inner.CloseFactorySession(ctx, sessionID)
 }
 
+func (c *capturingBootstrapRunner) SubscribeSessionResponseEventsFromLatest(
+	sessionID string,
+) (*responseeventstore.Subscription, error) {
+	attachable, ok := c.inner.(sessionResponseEventAttachable)
+	if !ok {
+		return nil, fmt.Errorf("captured invocation bootstrap does not expose canonical response events")
+	}
+	return attachable.SubscribeSessionResponseEventsFromLatest(sessionID)
+}
+
 func cloneInvocationRequestForCapture(request factoryapi.InvocationRequest) *factoryapi.InvocationRequest {
 	data, err := json.Marshal(request)
 	if err != nil {
@@ -1286,18 +1352,18 @@ func namedGoalNoServerInvocationRunConfig(t *testing.T, goalText string) RunConf
 	}
 
 	return RunConfig{
-		Dir:                      resolution.FactoryDir,
-		NamedFactoryName:         goal.PackagedFactoryName,
-		NamedFactoryResolution:   resolution,
-		InvocationPositionalText: &goalText,
-		StdinIsTTY:               func() bool { return true },
+		Dir:                        resolution.FactoryDir,
+		NamedFactoryName:           goal.PackagedFactoryName,
+		NamedFactoryResolution:     resolution,
+		InvocationPositionalText:   &goalText,
+		StdinIsTTY:                 func() bool { return true },
 		SuppressDashboardRendering: true,
-		MockWorkersEnabled:       true,
-		MockWorkersConfigPath:    writePackagedGoalNoServerMockWorkersConfig(t),
-		DisableDefaultRecording:  true,
-		Port:                     reserveNoServerInvocationProbePort(t),
-		AutoPort:                 true,
-		Logger:                   zap.NewNop(),
+		MockWorkersEnabled:         true,
+		MockWorkersConfigPath:      writePackagedGoalNoServerMockWorkersConfig(t),
+		DisableDefaultRecording:    true,
+		Port:                       reserveNoServerInvocationProbePort(t),
+		AutoPort:                   true,
+		Logger:                     zap.NewNop(),
 	}
 }
 
@@ -1394,6 +1460,39 @@ func TestRun_NoServerBootstrap_SuccessJSONMatchesAPIProjection(t *testing.T) {
 		cfg.JSONOutput = true
 	})
 	assertCapturedResultMatchesCLIJSONOutput(t, capture, output)
+}
+
+func TestRun_NoServerBootstrap_ResponseStreamJSONEmitsCanonicalEvents(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test for canonical response events through real no-server bootstrap")
+	}
+
+	goalText := "no-server bootstrap canonical response-event prompt"
+	_, output := runNoServerBootstrapEquivalenceCase(t, goalText, func(cfg *RunConfig) {
+		cfg.JSONOutput = true
+		cfg.InvocationOutputMode = InvocationOutputResponseStream
+	})
+
+	lines := strings.Split(strings.TrimSpace(output.String()), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("NDJSON lines = %d, want at least one response event and one invocation result:\n%s", len(lines), output.String())
+	}
+	for index, line := range lines[:len(lines)-1] {
+		var record responseStreamJSONResponseEventRecord
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("decode response event line %d: %v", index, err)
+		}
+		if record.RecordType != responseStreamJSONRecordResponseEvent {
+			t.Fatalf("record type at line %d = %q, want %q", index, record.RecordType, responseStreamJSONRecordResponseEvent)
+		}
+	}
+	var finalRecord responseStreamJSONInvocationResultRecord
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &finalRecord); err != nil {
+		t.Fatalf("decode final invocation result: %v", err)
+	}
+	if finalRecord.RecordType != responseStreamJSONRecordInvocationResult {
+		t.Fatalf("final record type = %q, want %q", finalRecord.RecordType, responseStreamJSONRecordInvocationResult)
+	}
 }
 
 func TestRun_NoServerBootstrap_TextPrimaryResultFollowsInvocationReturn(t *testing.T) {

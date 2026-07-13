@@ -142,10 +142,6 @@ func BindResponseEventCompletion(
 // history and from service-coordinator state.
 type SessionResponseEventStore = responseeventstore.SessionResponseEventStore
 
-// SessionResponseEventSubscription is a session-ordered cursor over canonical
-// provider-neutral response events.
-type SessionResponseEventSubscription = responseeventstore.Subscription
-
 // NewSessionResponseEventStore allocates an empty response-event store owned
 // by one live Factory Session runtime.
 func NewSessionResponseEventStore(factorySessionID string) *SessionResponseEventStore {

@@ -4,11 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 )
 
 const retentionGapReason = "retention_window"
+
+// CompletedStreamRetentionWindow is how long a completed Factory Session's
+// retained response events remain available to new subscribers.
+const CompletedStreamRetentionWindow = 15 * time.Minute
 
 const (
 	defaultMaxRetainedEvents = 10_000

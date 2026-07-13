@@ -674,7 +674,7 @@ func TestMapFragment_CompactionSignalEmitsStreamGapUpdated(t *testing.T) {
 		providerSessionRef: "cursor-session-123",
 		wantEmptyItemID:    true,
 	})
-	assertStreamGapPayload(t, event.Payload, 1, 3, "truncated")
+	assertStreamGapPayload(t, event.Payload, 1, 2, 3, "truncated")
 
 	if err := responseevents.ValidateEvent(event); err != nil {
 		t.Fatalf("ValidateEvent() error = %v", err)
@@ -704,6 +704,9 @@ func TestMapFragment_CompactionGapPayloadHandlesMissingBounds(t *testing.T) {
 	}
 	if payload.FromSequence != 0 || payload.ToSequence != 0 {
 		t.Fatalf("gap bounds = %d/%d, want 0/0 when sequence bounds absent", payload.FromSequence, payload.ToSequence)
+	}
+	if payload.FirstAvailableSequence != 1 {
+		t.Fatalf("first available sequence = %d, want 1 when sequence bounds are absent", payload.FirstAvailableSequence)
 	}
 	if payload.Reason != "coalesced" {
 		t.Fatalf("gap reason = %q, want coalesced", payload.Reason)

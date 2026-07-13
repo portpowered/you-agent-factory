@@ -107,6 +107,9 @@ func (s *SessionResponseEventStore) Subscribe(afterSequence int64, opts ...Subsc
 	if s.closed {
 		return nil, ErrStoreClosed
 	}
+	if s.completed && !s.storeNowLocked().Before(s.completedAt.Add(CompletedStreamRetentionWindow)) {
+		return nil, ErrStoreExpired
+	}
 	if s.completed {
 		return &Subscription{
 			store:         s,
@@ -236,6 +239,17 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 
 		select {
 		case <-ctx.Done():
+			// A publish and cancellation can become ready together. Re-read the
+			// retained store before honoring cancellation so callers can use
+			// cancellation as a deterministic terminal drain boundary.
+			result, closed = s.store.readForSubscriber(afterSequence, dispatchID)
+			if closed {
+				return nil, ErrSubscriptionClosed
+			}
+			if len(result.events) > 0 {
+				s.advance(result.nextSequence)
+				return result.events, nil
+			}
 			return nil, ctx.Err()
 		case <-s.subscriber.done:
 			s.mu.Lock()
@@ -250,6 +264,32 @@ func (s *Subscription) Next(ctx context.Context) ([]responseevents.FactoryRespon
 		case <-s.subscriber.wake:
 		}
 	}
+}
+
+// Drain returns all events currently retained after the subscription cursor
+// without waiting for another publish. It is intended for terminal handoffs
+// that have already stopped their live consumer.
+func (s *Subscription) Drain() ([]responseevents.FactoryResponseEvent, error) {
+	if s == nil || s.store == nil || s.subscriber == nil {
+		return nil, ErrSubscriptionClosed
+	}
+	s.mu.Lock()
+	detached := s.detached
+	afterSequence := s.afterSequence
+	dispatchID := s.dispatchID
+	s.mu.Unlock()
+	if detached {
+		return nil, ErrSubscriptionClosed
+	}
+
+	result, closed := s.store.readForSubscriber(afterSequence, dispatchID)
+	if closed {
+		return nil, ErrSubscriptionClosed
+	}
+	if len(result.events) > 0 {
+		s.advance(result.nextSequence)
+	}
+	return result.events, nil
 }
 
 func (s *Subscription) advance(sequence int64) {
@@ -281,7 +321,8 @@ func (s *SessionResponseEventStore) readForSubscriber(afterSequence int64, dispa
 func (s *SessionResponseEventStore) eventsAfterLocked(afterSequence int64, dispatchID string) subscriberRead {
 	result := subscriberRead{nextSequence: afterSequence}
 	if from, to, ok := droppedBoundsAfter(s.droppedSequences, afterSequence); ok {
-		result.events = append(result.events, s.retentionGapEventLocked(from, to))
+		firstAvailable := s.firstAvailableSequenceLocked(afterSequence, dispatchID)
+		result.events = append(result.events, s.retentionGapEventLocked(from, to, firstAvailable))
 		result.nextSequence = to
 	}
 	for _, event := range s.events {
@@ -299,18 +340,28 @@ func (s *SessionResponseEventStore) eventsAfterLocked(afterSequence int64, dispa
 	return result
 }
 
+func (s *SessionResponseEventStore) firstAvailableSequenceLocked(afterSequence int64, dispatchID string) int64 {
+	for _, event := range s.events {
+		if event.Sequence > afterSequence && (dispatchID == "" || dispatchMatches(event.DispatchID, dispatchID)) {
+			return event.Sequence
+		}
+	}
+	return s.nextSequence + 1
+}
+
 // retentionGapEventLocked creates an out-of-band marker. Sequence zero is
 // reserved for this synthetic read result: the marker is never stored, never
 // participates in retention, and never consumes or impersonates a published
 // sequence. Its deterministic event ID identifies the same cursor-relative gap
 // consistently without entering the session's published identity space.
-func (s *SessionResponseEventStore) retentionGapEventLocked(from, to int64) responseevents.FactoryResponseEvent {
+func (s *SessionResponseEventStore) retentionGapEventLocked(from, to, firstAvailable int64) responseevents.FactoryResponseEvent {
 	payload, _ := json.Marshal(responseevents.StreamGapPayload{
-		FromSequence: from,
-		ToSequence:   to,
-		Reason:       retentionGapReason,
+		FromSequence:           from,
+		ToSequence:             to,
+		FirstAvailableSequence: firstAvailable,
+		Reason:                 retentionGapReason,
 	})
-	identity := fmt.Sprintf("%s:%d:%d:%s", s.factorySessionID, from, to, retentionGapReason)
+	identity := fmt.Sprintf("%s:%d:%d:%d:%s", s.factorySessionID, from, to, firstAvailable, retentionGapReason)
 	return responseevents.FactoryResponseEvent{
 		SchemaVersion:    responseevents.SchemaVersionV1,
 		EventID:          uuid.NewSHA1(uuid.NameSpaceOID, []byte(identity)).String(),
