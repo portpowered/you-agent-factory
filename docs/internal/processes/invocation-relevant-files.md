@@ -197,6 +197,11 @@ primary-result behavior.
   `pkg/factorysessions/responseeventstore` with
   `factorysessions.SessionResponseEventStore` aliases in `types.go`; it is
   session-runtime-local state separate from canonical `FactoryEvent` history.
+  `factorysessions.NewLiveSession` allocates one store using the canonical
+  Factory Session ID. Runtime composition binds canonical `SESSION_COMPLETED`
+  observation to `CompleteResponseEvents`, and live-session teardown closes the
+  store alongside legacy response streams; keep this lifecycle state on
+  `LiveSession`, not `FactoryService`.
   `SessionResponseEventStore.Subscribe(afterSequence)` delivers retained events
   after the cursor, then continues live via `Subscription.Next`; optional
   `WithDispatchFilter(dispatchID)` omits non-matching events while preserving

@@ -33,6 +33,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recording"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
@@ -122,6 +124,126 @@ func TestFactoryService_OpenFactorySession_RunsConcurrentIsolatedSessions(t *tes
 	}
 	assertSessionRemainsLive(t, harness.svc, betaSessionTwo, 200*time.Millisecond, "remaining beta runtime")
 	harness.waitIdle(t, defaultFactorySessionID, "default runtime after beta stop")
+}
+
+func TestFactoryService_LiveSessionsOwnIsolatedResponseEventStores(t *testing.T) {
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		defaultFactory: "alpha",
+		namedFactories: []string{"alpha", "beta"},
+	})
+	defer harness.stop(t)
+
+	betaSessionID := harness.openFactorySession(t, "beta")
+	defaultSession := harness.requireSession(t, defaultFactorySessionID)
+	betaSession := harness.requireSession(t, betaSessionID)
+	assertSessionsOwnIsolatedResponseEventStores(t, defaultSession, betaSession)
+
+	defaultHistory := liveSessionHandle(defaultSession).Bundle.EventHistory
+	betaHistory := liveSessionHandle(betaSession).Bundle.EventHistory
+	defaultHistoryCount := len(defaultHistory.Events())
+	betaHistoryCount := len(betaHistory.Events())
+	defaultEvent := publishSessionResponseEvent(t, defaultSession, "run-default")
+	betaEvent := publishSessionResponseEvent(t, betaSession, "run-beta")
+	assertPublishedResponseEventsAreSessionIsolated(t, defaultSession, betaSession, defaultEvent, betaEvent)
+	if len(defaultHistory.Events()) != defaultHistoryCount || len(betaHistory.Events()) != betaHistoryCount {
+		t.Fatal("response-event publication mutated canonical FactoryEvent history")
+	}
+
+	defaultHistory.RecordSessionCompleted(factoryevents.SessionLifecycleCompleteInput{
+		SessionID:        factorysessions.CanonicalFactorySessionID(defaultSession),
+		OrchestratorKind: factoryapi.PETRI,
+		Source:           "runtime",
+		FinalStatus:      factoryapi.FactorySessionDurableLifecycleStatusSucceeded,
+	}, time.Now().UTC())
+	assertResponseEventCompletionIsSessionIsolated(t, defaultSession, betaSession)
+
+	if err := harness.svc.stopFactorySession(betaSessionID); err != nil {
+		t.Fatalf("stop beta session: %v", err)
+	}
+	if _, err := betaSession.ResponseEvents.Subscribe(0); !errors.Is(err, responseeventstore.ErrStoreClosed) {
+		t.Fatalf("subscribe after session close error = %v, want ErrStoreClosed", err)
+	}
+}
+
+func assertSessionsOwnIsolatedResponseEventStores(
+	t *testing.T,
+	first *factorysessions.LiveSession,
+	second *factorysessions.LiveSession,
+) {
+	t.Helper()
+
+	if first.ResponseEvents == nil || second.ResponseEvents == nil {
+		t.Fatal("live sessions must own response-event stores")
+	}
+	if first.ResponseEvents == second.ResponseEvents {
+		t.Fatal("live sessions unexpectedly share one response-event store")
+	}
+}
+
+func publishSessionResponseEvent(
+	t *testing.T,
+	session *factorysessions.LiveSession,
+	runID string,
+) responseevents.FactoryResponseEvent {
+	t.Helper()
+
+	event, err := session.ResponseEvents.Publish(sessionResponseEventFixture(runID))
+	if err != nil {
+		t.Fatalf("publish response event for %s: %v", runID, err)
+	}
+	return event
+}
+
+func assertPublishedResponseEventsAreSessionIsolated(
+	t *testing.T,
+	first *factorysessions.LiveSession,
+	second *factorysessions.LiveSession,
+	firstEvent responseevents.FactoryResponseEvent,
+	secondEvent responseevents.FactoryResponseEvent,
+) {
+	t.Helper()
+
+	if firstEvent.Sequence != 1 || secondEvent.Sequence != 1 {
+		t.Fatalf("isolated sequences = (%d, %d), want (1, 1)", firstEvent.Sequence, secondEvent.Sequence)
+	}
+	if firstEvent.FactorySessionID != factorysessions.CanonicalFactorySessionID(first) ||
+		secondEvent.FactorySessionID != factorysessions.CanonicalFactorySessionID(second) {
+		t.Fatalf("response event session IDs = (%q, %q), want canonical live session IDs", firstEvent.FactorySessionID, secondEvent.FactorySessionID)
+	}
+	if len(first.ResponseEvents.Events()) != 1 || len(second.ResponseEvents.Events()) != 1 {
+		t.Fatal("published response events were not isolated by live session")
+	}
+}
+
+func assertResponseEventCompletionIsSessionIsolated(
+	t *testing.T,
+	completed *factorysessions.LiveSession,
+	active *factorysessions.LiveSession,
+) {
+	t.Helper()
+
+	if !completed.ResponseEvents.Completed() {
+		t.Fatal("canonical session completion did not complete the response-event store")
+	}
+	if active.ResponseEvents.Completed() {
+		t.Fatal("default session completion affected beta response-event store")
+	}
+}
+
+func sessionResponseEventFixture(runID string) responseevents.FactoryResponseEvent {
+	return responseevents.FactoryResponseEvent{
+		RunID: runID,
+		Kind:  responseevents.KindMessage,
+		Phase: responseevents.PhaseDelta,
+		Provenance: responseevents.Provenance{
+			Provider:        "integration-test",
+			NativeEventType: "message.delta",
+			Delivery:        responseevents.DeliveryNativeStream,
+			Representation:  responseevents.RepresentationDelta,
+			Fidelity:        responseevents.FidelityLossless,
+		},
+		Payload: json.RawMessage(`{"contentBlockIndex":0,"contentBlockKind":"TEXT","textDelta":"hello"}`),
+	}
 }
 
 func TestFactoryService_OpenFactorySessionFromFolder_KeepsSessionWorkingDirectoriesIsolatedAcrossRoots(t *testing.T) {

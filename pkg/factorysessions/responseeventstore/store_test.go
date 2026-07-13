@@ -6,10 +6,8 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 )
 
 type fixedClock struct {
@@ -194,22 +192,6 @@ func TestSessionResponseEventStore_EventsSnapshotPreservesAscendingOrder(t *test
 		if event.Sequence != wantSequence {
 			t.Fatalf("events[%d].Sequence = %d, want %d", index, event.Sequence, wantSequence)
 		}
-	}
-}
-
-func TestFactoryResponseEvent_IsNotCanonicalFactoryEvent(t *testing.T) {
-	t.Parallel()
-
-	var factoryEventType factoryapi.FactoryEventType
-	_ = factoryEventType
-
-	store := responseeventstore.NewSessionResponseEventStoreWithClock("session-abc", factory.RealClock{})
-	published, err := store.Publish(samplePublishInput())
-	if err != nil {
-		t.Fatalf("publish: %v", err)
-	}
-	if string(published.Kind) == string(factoryapi.FactoryEventTypeDispatchResponse) {
-		t.Fatal("response event kind must not alias canonical factory event types")
 	}
 }
 

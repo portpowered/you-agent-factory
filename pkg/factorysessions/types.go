@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
 )
@@ -61,6 +62,7 @@ type LiveSession struct {
 	Project                 string
 	Target                  TargetRef
 	RuntimeFactorySessionID string
+	ResponseEvents          *SessionResponseEventStore
 }
 
 // NewSessionID allocates a unique live session identifier.
@@ -96,9 +98,43 @@ func EnsureRuntimeFactorySessionID(session *LiveSession) {
 	if strings.TrimSpace(session.RuntimeFactorySessionID) != "" {
 		return
 	}
-	if session.IsDefault || session.ID == DefaultSessionID {
+	if session.ID == DefaultSessionID {
 		session.RuntimeFactorySessionID = NewSessionID()
 	}
+}
+
+// CompleteResponseEvents marks the session-owned response-event publication
+// scope complete while retaining its immutable events for catch-up readers.
+func (s *LiveSession) CompleteResponseEvents() {
+	if s == nil || s.ResponseEvents == nil {
+		return
+	}
+	s.ResponseEvents.Complete()
+}
+
+// CloseResponseEvents closes the response-event store owned by this live
+// session and detaches its active subscribers.
+func (s *LiveSession) CloseResponseEvents() {
+	if s == nil || s.ResponseEvents == nil {
+		return
+	}
+	s.ResponseEvents.Close()
+}
+
+// BindResponseEventCompletion completes the session-owned response-event store
+// when its canonical FactoryEvent history observes terminal session completion.
+func BindResponseEventCompletion(
+	session *LiveSession,
+	addRecorder func(func(factoryapi.FactoryEvent)),
+) {
+	if session == nil || addRecorder == nil {
+		return
+	}
+	addRecorder(func(event factoryapi.FactoryEvent) {
+		if event.Type == factoryapi.FactoryEventTypeSessionCompleted {
+			session.CompleteResponseEvents()
+		}
+	})
 }
 
 // SessionResponseEventStore retains immutable FactoryResponseEvent records for
