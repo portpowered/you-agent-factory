@@ -33,23 +33,18 @@
       "behavior": "REPEATER",
       "worker": "goal-executor",
       "inputs": [
-        {"workType": "goal", "state": "init"},
-        {"workType": "goal", "state": "execute"}
+        {"workType": "goal", "state": "init"}
       ],
       "outputs": [
-        {"workType": "goal", "state": "complete"},
         {"workType": "goal", "state": "complete"}
       ],
       "onContinue": [
-        {"workType": "goal", "state": "execute"},
-        {"workType": "goal", "state": "execute"}
+        {"workType": "goal", "state": "init"}
       ],
       "onRejection": [
-        {"workType": "goal", "state": "execute"},
-        {"workType": "goal", "state": "execute"}
+        {"workType": "goal", "state": "init"}
       ],
       "onFailure": [
-        {"workType": "goal", "state": "failed"},
         {"workType": "goal", "state": "failed"}
       ],
       "promptFile": "prompts/executor.md"

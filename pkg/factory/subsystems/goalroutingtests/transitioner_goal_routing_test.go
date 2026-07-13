@@ -1,14 +1,20 @@
 package subsystems_test
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
+	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 )
 
-func TestBuiltInGoalFactoryJSON_ExecuteRepeaterConsumesInitAndExecuteInputs(t *testing.T) {
+func TestBuiltInGoalFactoryJSON_ExecuteRepeaterConsumesLoopInput(t *testing.T) {
 	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
@@ -22,19 +28,161 @@ func TestBuiltInGoalFactoryJSON_ExecuteRepeaterConsumesInitAndExecuteInputs(t *t
 		t.Fatalf("execute workstation kind = %q, want %q", execute.Kind, interfaces.WorkstationKindRepeater)
 	}
 
-	wantInputStates := map[string]bool{"init": true, "execute": true}
-	gotInputStates := make(map[string]bool, len(execute.Inputs))
-	for _, input := range execute.Inputs {
-		if input.WorkTypeName != goal.PackagedGoalWorkTypeName {
-			t.Fatalf("input work type = %q, want %s", input.WorkTypeName, goal.PackagedGoalWorkTypeName)
-		}
-		gotInputStates[input.StateName] = true
+	if len(execute.Inputs) != 1 {
+		t.Fatalf("execute inputs = %#v, want one loop input", execute.Inputs)
 	}
-	for state := range wantInputStates {
-		if !gotInputStates[state] {
-			t.Fatalf("execute inputs = %#v, want loop entry states init and execute", execute.Inputs)
+	if input := execute.Inputs[0]; input.WorkTypeName != goal.PackagedGoalWorkTypeName || input.StateName != "init" {
+		t.Fatalf("execute input = %#v, want goal:init", input)
+	}
+}
+
+func TestTransitioner_BuiltInGoalRepeaterContinueAndRejectRepeat(t *testing.T) {
+	net, workstation, transition := builtInGoalRepeaterFixture(t)
+	now := time.Date(2026, time.July, 13, 12, 0, 0, 0, time.UTC)
+
+	for _, outcome := range []interfaces.WorkOutcome{
+		interfaces.OutcomeContinue,
+		interfaces.OutcomeRejected,
+	} {
+		t.Run(string(outcome), func(t *testing.T) {
+			result := executeBuiltInGoalRepeaterResult(t, net, workstation, transition, now, "goal:init", outcome)
+			assertSingleGoalMutationAtPlace(t, result, "goal:init")
+			assertTransitionConsumesPlace(t, transition, result.Mutations[0].NewToken.PlaceID)
+		})
+	}
+}
+
+func TestTransitioner_BuiltInGoalRepeaterFailureRoutesToFailed(t *testing.T) {
+	net, workstation, transition := builtInGoalRepeaterFixture(t)
+	now := time.Date(2026, time.July, 13, 12, 0, 0, 0, time.UTC)
+
+	result := executeBuiltInGoalRepeaterResult(t, net, workstation, transition, now, "goal:init", interfaces.OutcomeFailed)
+	assertSingleGoalMutationAtPlace(t, result, "goal:failed")
+}
+
+func builtInGoalRepeaterFixture(t *testing.T) (*state.Net, *interfaces.FactoryWorkstationConfig, *petri.Transition) {
+	t.Helper()
+
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
+	if err != nil {
+		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
+	}
+	net, err := (&factoryconfig.ConfigMapper{}).Map(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("ConfigMapper.Map: %v", err)
+	}
+	workstation, ok := findPackagedGoalWorkstation(cfg.Workstations, goal.PackagedExecuteWorkstationName)
+	if !ok {
+		t.Fatalf("missing workstation %q", goal.PackagedExecuteWorkstationName)
+	}
+	return net, &workstation, findTransitionByName(t, net, goal.PackagedExecuteWorkstationName)
+}
+
+func executeBuiltInGoalRepeaterResult(
+	t *testing.T,
+	net *state.Net,
+	workstation *interfaces.FactoryWorkstationConfig,
+	transition *petri.Transition,
+	now time.Time,
+	inputPlace string,
+	outcome interfaces.WorkOutcome,
+) *interfaces.TickResult {
+	t.Helper()
+
+	transitioner := subsystems.NewTransitioner(
+		net,
+		nil,
+		subsystems.WithTransitionerClock(func() time.Time { return now }),
+		subsystems.WithTransitionerRuntimeConfig(runtimefixtures.RuntimeWorkstationLookupFixture{
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{workstation.Name: workstation},
+		}),
+	)
+	result, err := transitioner.Execute(context.Background(), builtInGoalRepeaterSnapshot(now, transition.ID, inputPlace, outcome))
+	if err != nil {
+		t.Fatalf("Execute(%s): %v", outcome, err)
+	}
+	return result
+}
+
+func builtInGoalRepeaterSnapshot(
+	now time.Time,
+	transitionID string,
+	inputPlace string,
+	outcome interfaces.WorkOutcome,
+) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	dispatchID := "dispatch-" + string(outcome)
+	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
+		Dispatches: map[string]*interfaces.DispatchEntry{
+			dispatchID: {
+				DispatchID:      dispatchID,
+				TransitionID:    transitionID,
+				WorkstationName: goal.PackagedExecuteWorkstationName,
+				StartTime:       now.Add(-time.Second),
+				ConsumedTokens: []interfaces.Token{{
+					ID:        "goal-token",
+					PlaceID:   inputPlace,
+					CreatedAt: now.Add(-time.Hour),
+					EnteredAt: now.Add(-time.Hour),
+					Color: interfaces.TokenColor{
+						WorkID:     "goal-work",
+						WorkTypeID: goal.PackagedGoalWorkTypeName,
+						Payload:    []byte("finish the repository change"),
+					},
+					History: interfaces.TokenHistory{
+						TotalVisits:         map[string]int{},
+						ConsecutiveFailures: map[string]int{},
+						PlaceVisits:         map[string]int{},
+					},
+				}},
+			},
+		},
+		Results: []interfaces.WorkResult{{
+			DispatchID:   dispatchID,
+			TransitionID: transitionID,
+			Outcome:      outcome,
+			Output:       "agent pass output",
+			Feedback:     "another pass is required",
+			Error:        "agent failed",
+		}},
+	}
+}
+
+func assertSingleGoalMutationAtPlace(t *testing.T, result *interfaces.TickResult, wantPlace string) {
+	t.Helper()
+
+	if result == nil || len(result.Mutations) != 1 {
+		t.Fatalf("mutations = %#v, want one mutation to %s", result, wantPlace)
+	}
+	mutation := result.Mutations[0]
+	if mutation.ToPlace != wantPlace || mutation.NewToken.PlaceID != wantPlace {
+		t.Fatalf("mutation = %#v, want destination %s", mutation, wantPlace)
+	}
+	if mutation.NewToken.Color.WorkID != "goal-work" {
+		t.Fatalf("routed work ID = %q, want goal-work", mutation.NewToken.Color.WorkID)
+	}
+}
+
+func assertTransitionConsumesPlace(t *testing.T, transition *petri.Transition, placeID string) {
+	t.Helper()
+
+	for _, arc := range transition.InputArcs {
+		if arc.PlaceID == placeID {
+			return
 		}
 	}
+	t.Fatalf("transition %q does not consume routed place %q", transition.Name, placeID)
+}
+
+func findTransitionByName(t *testing.T, net *state.Net, name string) *petri.Transition {
+	t.Helper()
+
+	for _, transition := range net.Transitions {
+		if transition != nil && transition.Name == name {
+			return transition
+		}
+	}
+	t.Fatalf("missing transition %q", name)
+	return nil
 }
 
 func findPackagedGoalWorkstation(workstations []interfaces.FactoryWorkstationConfig, name string) (interfaces.FactoryWorkstationConfig, bool) {

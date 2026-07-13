@@ -200,44 +200,19 @@ func assertGoalRepeaterTopology(t *testing.T, workstations []interfaces.FactoryW
 		t.Fatalf("execute workstation worker = %q, want goal-executor", execute.WorkerTypeName)
 	}
 
-	wantInputStates := map[string]bool{"init": true, "execute": true}
-	gotInputStates := make(map[string]bool, len(execute.Inputs))
-	for _, input := range execute.Inputs {
-		if input.WorkTypeName != PackagedGoalWorkTypeName {
-			t.Fatalf("execute input work type = %q, want %s", input.WorkTypeName, PackagedGoalWorkTypeName)
-		}
-		gotInputStates[input.StateName] = true
-	}
-	for state := range wantInputStates {
-		if !gotInputStates[state] {
-			t.Fatalf("execute inputs = %#v, want loop entry states init and execute", execute.Inputs)
-		}
-	}
+	assertSingleGoalRoute(t, execute.Name, execute.Inputs, "init")
 
-	if len(execute.Outputs) != 2 {
-		t.Fatalf("execute outputs = %#v, want paired routes for init and execute inputs", execute.Outputs)
+	if len(execute.Outputs) != 1 {
+		t.Fatalf("execute outputs = %#v, want one completion route", execute.Outputs)
 	}
 	for _, route := range execute.Outputs {
 		if route.StateName != "complete" {
 			t.Fatalf("execute output state = %q, want complete", route.StateName)
 		}
 	}
-	if len(execute.OnContinue) != 2 || len(execute.OnRejection) != 2 || len(execute.OnFailure) != 2 {
-		t.Fatalf("execute repeater routes = continue %#v rejection %#v failure %#v, want paired goal routes",
-			execute.OnContinue, execute.OnRejection, execute.OnFailure)
-	}
-	for _, routes := range [][]interfaces.IOConfig{execute.OnContinue, execute.OnRejection} {
-		for _, route := range routes {
-			if route.StateName != PackagedExecuteStateName {
-				t.Fatalf("execute loop route state = %q, want %s", route.StateName, PackagedExecuteStateName)
-			}
-		}
-	}
-	for _, route := range execute.OnFailure {
-		if route.StateName != "failed" {
-			t.Fatalf("execute failure route state = %q, want failed", route.StateName)
-		}
-	}
+	assertSingleGoalRoute(t, execute.Name, execute.OnContinue, "init")
+	assertSingleGoalRoute(t, execute.Name, execute.OnRejection, "init")
+	assertSingleGoalRoute(t, execute.Name, execute.OnFailure, "failed")
 
 	executor, ok := indexWorkerConfigsByName(workers)["goal-executor"]
 	if !ok {
