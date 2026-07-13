@@ -1,6 +1,11 @@
-import { create } from "zustand";
+import { create, type StateCreator } from "zustand";
 
 import type { FactoryEvent } from "../../../api/events";
+import {
+  normalizeStreamDerivedCacheIdentity,
+  type StreamDerivedCacheIdentity,
+} from "../lib/stream-derived-cache-identity";
+import { createMaterializedWorkOutcomeState } from "../../work-outcome/public/materializer";
 import {
   buildFactoryTimelineProjection as buildProjectedTimelineProjection,
   buildFactoryTimelineSnapshot as buildProjectedTimelineSnapshot,
@@ -19,6 +24,7 @@ export type { WorldState } from "./timeline/types";
 import {
   appendTimelineEvents,
   emptyTimelineState,
+  type FactoryTimelineEntryState,
   type FactoryTimelineCheckpoint,
   type FactoryTimelineState,
   replaceTimelineEvents,
@@ -28,9 +34,15 @@ import {
   type TimelineStoreStateDeps,
 } from "./timeline/storeState";
 import type { WorldState } from "./timeline/types";
+import {
+  createFactoryTimelineEntry,
+  factoryTimelineEntryKey,
+  withEntryTimelineState,
+} from "./entries/factoryTimelineEntry";
 
 export type {
   FactoryTimelineCheckpoint,
+  FactoryTimelineEntryState,
   FactoryTimelineMode,
   FactoryTimelineSyncIdentity,
 } from "./timeline/storeState";
@@ -64,31 +76,281 @@ const timelineStoreStateDeps: TimelineStoreStateDeps = {
   orderedEvents,
 };
 
-export const useFactoryTimelineStore = create<FactoryTimelineState>((set) => ({
-  ...emptyTimelineState(),
-  appendEvent: (event) => {
-    set((current) =>
-      appendTimelineEvents(current, [event], timelineStoreStateDeps),
+function exactIdentity(
+  identity: StreamDerivedCacheIdentity,
+): StreamDerivedCacheIdentity {
+  const normalized = normalizeStreamDerivedCacheIdentity(identity);
+  if (!normalized) {
+    throw new Error(
+      "Timeline entries require backend scope, resolved Factory Session UUID, logical session metadata, and stream generation.",
     );
-  },
-  appendEvents: (events) => {
-    set((current) =>
-      appendTimelineEvents(current, events, timelineStoreStateDeps),
-    );
-  },
-  replaceEvents: (events) => {
-    set(replaceTimelineEvents(events, timelineStoreStateDeps));
-  },
-  reset: () => {
-    set(emptyTimelineState());
-  },
-  restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => {
-    set(restoreTimelineCheckpoint(checkpoint));
-  },
-  selectTick: (tick) => {
-    set((current) => selectTimelineTick(current, tick, timelineStoreStateDeps));
-  },
-  setCurrentMode: () => {
-    set((current) => setTimelineCurrentMode(current, timelineStoreStateDeps));
-  },
-}));
+  }
+  return normalized;
+}
+
+function entryStateForMutation(
+  state: FactoryTimelineState,
+  identity: StreamDerivedCacheIdentity,
+): {
+  entry: FactoryTimelineEntryState;
+  key: string;
+} {
+  const normalized = exactIdentity(identity);
+  const key = factoryTimelineEntryKey(normalized);
+  const existing = state.entriesByKey[key];
+  return {
+    entry: existing
+      ? { ...existing, identity: normalized }
+      : createFactoryTimelineEntry(normalized),
+    key,
+  };
+}
+
+function bindUnownedActiveState(
+  state: FactoryTimelineState,
+  entry: FactoryTimelineEntryState,
+): FactoryTimelineEntryState {
+  if (
+    state.activeEntryKey !== null ||
+    Object.keys(state.entriesByKey).length > 0
+  ) {
+    return entry;
+  }
+  return {
+    currentReplayCheckpoint: state.currentReplayCheckpoint,
+    events: state.events,
+    identity: entry.identity,
+    latestTick: state.latestTick,
+    materializedWorkOutcomeState: state.materializedWorkOutcomeState,
+    mode: state.mode,
+    receivedEventIDs: state.receivedEventIDs,
+    selectedTick: state.selectedTick,
+    worldViewCache: state.worldViewCache,
+  };
+}
+
+function entryMutation(
+  state: FactoryTimelineState,
+  identity: StreamDerivedCacheIdentity,
+  mutate: (entry: FactoryTimelineEntryState) => FactoryTimelineEntryState,
+): Partial<FactoryTimelineState> {
+  const { entry, key } = entryStateForMutation(state, identity);
+  const nextEntry = mutate(entry);
+  const registry = {
+    ...state.entriesByKey,
+    [key]: nextEntry,
+  };
+  return state.activeEntryKey === key
+    ? { ...nextEntry, entriesByKey: registry }
+    : { entriesByKey: registry };
+}
+
+function activeEntryMutation(
+  state: FactoryTimelineState,
+  mutate: (entry: FactoryTimelineEntryState) => FactoryTimelineEntryState,
+  mutateLegacy: () => Partial<FactoryTimelineState>,
+): Partial<FactoryTimelineState> {
+  const key = state.activeEntryKey;
+  const entry = key ? state.entriesByKey[key] : undefined;
+  if (!key || !entry) {
+    return mutateLegacy();
+  }
+  const nextEntry = mutate(entry);
+  return {
+    ...nextEntry,
+    entriesByKey: {
+      ...state.entriesByKey,
+      [key]: nextEntry,
+    },
+  };
+}
+
+const initialTimelineState = emptyTimelineState();
+
+type TimelineStoreInitializer = StateCreator<FactoryTimelineState>;
+type TimelineStoreSet = Parameters<TimelineStoreInitializer>[0];
+type TimelineStoreGet = Parameters<TimelineStoreInitializer>[1];
+
+function exactEntryActions(set: TimelineStoreSet, get: TimelineStoreGet) {
+  return {
+    activateEntry: (identity) => {
+      set((current) => {
+        const resolved = entryStateForMutation(current, identity);
+        const entry = bindUnownedActiveState(current, resolved.entry);
+        const { key } = resolved;
+        return {
+          ...entry,
+          activeEntryKey: key,
+          entriesByKey: {
+            ...current.entriesByKey,
+            [key]: entry,
+          },
+        };
+      });
+    },
+    appendEventForEntry: (identity, event) => {
+      set((current) =>
+        entryMutation(current, identity, (entry) =>
+          withEntryTimelineState(
+            entry,
+            appendTimelineEvents(entry, [event], timelineStoreStateDeps),
+          ),
+        ),
+      );
+    },
+    appendEventsForEntry: (identity, events) => {
+      set((current) =>
+        entryMutation(current, identity, (entry) =>
+          withEntryTimelineState(
+            entry,
+            appendTimelineEvents(entry, events, timelineStoreStateDeps),
+          ),
+        ),
+      );
+    },
+    entryForIdentity: (identity) => {
+      const normalized = exactIdentity(identity);
+      return get().entriesByKey[factoryTimelineEntryKey(normalized)];
+    },
+    replaceEventsForEntry: (identity, events) => {
+      set((current) =>
+        entryMutation(current, identity, (entry) =>
+          withEntryTimelineState(
+            entry,
+            replaceTimelineEvents(events, timelineStoreStateDeps),
+          ),
+        ),
+      );
+    },
+    resetEntry: (identity) => {
+      set((current) =>
+        entryMutation(current, identity, (entry) =>
+          createFactoryTimelineEntry(entry.identity),
+        ),
+      );
+    },
+    restoreCheckpointForEntry: (identity, checkpoint) => {
+      set((current) =>
+        entryMutation(current, identity, (entry) =>
+          withEntryTimelineState(entry, restoreTimelineCheckpoint(checkpoint)),
+        ),
+      );
+    },
+    selectTickForEntry: (identity, tick) => {
+      set((current) =>
+        entryMutation(current, identity, (entry) => ({
+          ...entry,
+          ...selectTimelineTick(entry, tick, timelineStoreStateDeps),
+        })),
+      );
+    },
+    setCurrentModeForEntry: (identity) => {
+      set((current) =>
+        entryMutation(current, identity, (entry) => ({
+          ...entry,
+          ...setTimelineCurrentMode(entry, timelineStoreStateDeps),
+        })),
+      );
+    },
+  } satisfies Partial<FactoryTimelineState>;
+}
+
+function activeEntryActions(set: TimelineStoreSet) {
+  return {
+    appendEvent: (event: FactoryEvent) => {
+      set((current) =>
+        activeEntryMutation(
+          current,
+          (entry) =>
+            withEntryTimelineState(
+              entry,
+              appendTimelineEvents(entry, [event], timelineStoreStateDeps),
+            ),
+          () => appendTimelineEvents(current, [event], timelineStoreStateDeps),
+        ),
+      );
+    },
+    appendEvents: (events: FactoryEvent[]) => {
+      set((current) =>
+        activeEntryMutation(
+          current,
+          (entry) =>
+            withEntryTimelineState(
+              entry,
+              appendTimelineEvents(entry, events, timelineStoreStateDeps),
+            ),
+          () => appendTimelineEvents(current, events, timelineStoreStateDeps),
+        ),
+      );
+    },
+    replaceEvents: (events: FactoryEvent[]) => {
+      set((current) =>
+        activeEntryMutation(
+          current,
+          (entry) =>
+            withEntryTimelineState(
+              entry,
+              replaceTimelineEvents(events, timelineStoreStateDeps),
+            ),
+          () => replaceTimelineEvents(events, timelineStoreStateDeps),
+        ),
+      );
+    },
+    reset: () => {
+      set({
+        activeEntryKey: null,
+        ...emptyTimelineState(),
+        entriesByKey: {},
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
+      });
+    },
+    restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => {
+      set((current) =>
+        activeEntryMutation(
+          current,
+          (entry) =>
+            withEntryTimelineState(
+              entry,
+              restoreTimelineCheckpoint(checkpoint),
+            ),
+          () => restoreTimelineCheckpoint(checkpoint),
+        ),
+      );
+    },
+    selectTick: (tick: number) => {
+      set((current) =>
+        activeEntryMutation(
+          current,
+          (entry) => ({
+            ...entry,
+            ...selectTimelineTick(entry, tick, timelineStoreStateDeps),
+          }),
+          () => selectTimelineTick(current, tick, timelineStoreStateDeps),
+        ),
+      );
+    },
+    setCurrentMode: () => {
+      set((current) =>
+        activeEntryMutation(
+          current,
+          (entry) => ({
+            ...entry,
+            ...setTimelineCurrentMode(entry, timelineStoreStateDeps),
+          }),
+          () => setTimelineCurrentMode(current, timelineStoreStateDeps),
+        ),
+      );
+    },
+  } satisfies Partial<FactoryTimelineState>;
+}
+
+export const useFactoryTimelineStore = create<FactoryTimelineState>(
+  (set, get) => ({
+    activeEntryKey: null,
+    ...initialTimelineState,
+    entriesByKey: {},
+    materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
+    ...activeEntryActions(set),
+    ...exactEntryActions(set, get),
+  }),
+);

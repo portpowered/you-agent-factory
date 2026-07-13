@@ -327,6 +327,7 @@ describe("useDashboardCheckpointPreflight superseded session races", () => {
     expect(race.result.current.persistedCheckpoint?.selectedTick).toBe(22);
     expect(race.restoreCheckpoint).toHaveBeenCalledTimes(1);
     expect(race.restoreCheckpoint).toHaveBeenCalledWith(
+      expect.objectContaining({ factorySessionID: SESSION_B }),
       expect.objectContaining({ selectedTick: 22 }),
     );
     expect(race.readCheckpointSpy).toHaveBeenCalledTimes(1);

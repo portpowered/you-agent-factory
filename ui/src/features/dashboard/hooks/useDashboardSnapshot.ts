@@ -67,15 +67,22 @@ export function useDashboardSnapshot({
   locale,
   refreshToken = 0,
 }: UseDashboardSnapshotOptions = {}) {
-  const appendEvents = useFactoryTimelineStore((state) => state.appendEvents);
+  const activateTimelineEntry = useFactoryTimelineStore(
+    (state) => state.activateEntry,
+  );
+  const appendEventsForEntry = useFactoryTimelineStore(
+    (state) => state.appendEventsForEntry,
+  );
   const currentReplayCheckpoint = useFactoryTimelineStore(
     (state) => state.currentReplayCheckpoint,
   );
   const eventCount = useFactoryTimelineStore((state) => state.events.length);
-  const restoreCheckpoint = useFactoryTimelineStore(
-    (state) => state.restoreCheckpoint,
+  const restoreCheckpointForEntry = useFactoryTimelineStore(
+    (state) => state.restoreCheckpointForEntry,
   );
-  const resetTimeline = useFactoryTimelineStore((state) => state.reset);
+  const resetTimelineEntry = useFactoryTimelineStore(
+    (state) => state.resetEntry,
+  );
   const { error, isInitialLoading, snapshot, streamState } =
     useDashboardWorldView();
   const { isPaused, rawSessionID } = useDashboardSession();
@@ -87,14 +94,10 @@ export function useDashboardSnapshot({
   const reconnectCursorInvalidatedRef = useRef(false);
   const [reconnectCursorRevision, setReconnectCursorRevision] = useState(0);
   const defaultRuntimeSessionIDRef = useRef<string | null>(null);
-  const lastPersistedCheckpointRef =
-    useRef<FactoryTimelineCheckpoint | null>(null);
+  const lastPersistedCheckpointRef = useRef<FactoryTimelineCheckpoint | null>(
+    null,
+  );
   const lastSessionIDRef = useRef<string | null>(null);
-  const queuedAppendRef =
-    useRef<(events: FactoryEvent[]) => void>(appendEvents);
-
-  queuedAppendRef.current = appendEvents;
-
   useDashboardSessionLifecycle({
     locale,
     refreshToken,
@@ -115,8 +118,14 @@ export function useDashboardSnapshot({
     checkpointsDisabled: debugOptions.disableTimelineCheckpoint,
     rawSessionID,
     refreshToken,
-    restoreCheckpoint,
+    restoreCheckpoint: restoreCheckpointForEntry,
   });
+
+  useEffect(() => {
+    if (streamIdentity) {
+      activateTimelineEntry(streamIdentity);
+    }
+  }, [activateTimelineEntry, streamIdentity]);
 
   const effectiveSessionID = resolvedSessionID ?? rawSessionID;
 
@@ -157,7 +166,12 @@ export function useDashboardSnapshot({
         ? undefined
         : (preflightReconnectCursor ??
           reconnectCursorFromCheckpoint(persistedCheckpoint)),
-    [persistedCheckpoint, preflightReconnectCursor, reconnectCursorRevision, refreshToken],
+    [
+      persistedCheckpoint,
+      preflightReconnectCursor,
+      reconnectCursorRevision,
+      refreshToken,
+    ],
   );
 
   const handleInvalidReconnectCursor = useCallback(() => {
@@ -174,9 +188,11 @@ export function useDashboardSnapshot({
         ),
       );
     }
-    resetTimeline();
+    if (streamIdentity) {
+      resetTimelineEntry(streamIdentity);
+    }
     void clearTimelineCheckpoint(window.indexedDB, streamIdentity);
-  }, [rawSessionID, resetTimeline, streamIdentity]);
+  }, [rawSessionID, resetTimelineEntry, streamIdentity]);
 
   const checkpointSyncIdentity = useMemo(() => {
     if (
@@ -206,13 +222,23 @@ export function useDashboardSnapshot({
     syncIdentity: checkpointSyncIdentity,
   });
 
-  const handleStreamEvent = useCallback((event: FactoryEvent) => {
-    queuedAppendRef.current([event]);
-  }, []);
+  const handleStreamEvent = useCallback(
+    (event: FactoryEvent) => {
+      if (streamIdentity) {
+        appendEventsForEntry(streamIdentity, [event]);
+      }
+    },
+    [appendEventsForEntry, streamIdentity],
+  );
 
-  const handleStreamEvents = useCallback((events: FactoryEvent[]) => {
-    queuedAppendRef.current(events);
-  }, []);
+  const handleStreamEvents = useCallback(
+    (events: FactoryEvent[]) => {
+      if (streamIdentity) {
+        appendEventsForEntry(streamIdentity, events);
+      }
+    },
+    [appendEventsForEntry, streamIdentity],
+  );
 
   useFactoryEventStream({
     enabled:
@@ -246,9 +272,7 @@ export function useDashboardSnapshot({
     () => ({
       error: preflightRecovery != null ? null : (preflightError ?? error),
       isInitialLoading:
-        preflightRecovery == null &&
-        preflightError == null &&
-        isInitialLoading,
+        preflightRecovery == null && preflightError == null && isInitialLoading,
       preflightRecovery,
       preflightStatus,
       snapshot: preflightRecovery ? null : snapshot,

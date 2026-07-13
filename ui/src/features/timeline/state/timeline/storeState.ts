@@ -1,6 +1,8 @@
 import type { DashboardSnapshot } from "../../../../api/dashboard";
 import type { FactoryEvent } from "../../../../api/events";
 import type { FactoryTimelineProjection } from "./buildSnapshot";
+import type { StreamDerivedCacheIdentity } from "../../lib/stream-derived-cache-identity";
+import type { MaterializedWorkOutcomeState } from "../../../work-outcome/public/materializer";
 import { projectSnapshot } from "./projectSnapshot";
 import {
   emptyWorldRuntime,
@@ -10,21 +12,62 @@ import {
 
 export type FactoryTimelineMode = "current" | "fixed";
 
-export interface FactoryTimelineState {
+export interface FactoryTimelineEntryState {
   currentReplayCheckpoint?: FactoryTimelineCheckpoint;
   events: FactoryEvent[];
+  identity: StreamDerivedCacheIdentity;
   latestTick: number;
+  materializedWorkOutcomeState: MaterializedWorkOutcomeState;
   mode: FactoryTimelineMode;
   receivedEventIDs: string[];
   selectedTick: number;
   worldViewCache: Record<number, WorldState>;
+}
+
+export interface FactoryTimelineState {
+  activeEntryKey: string | null;
+  currentReplayCheckpoint?: FactoryTimelineCheckpoint;
+  entriesByKey: Record<string, FactoryTimelineEntryState>;
+  events: FactoryEvent[];
+  latestTick: number;
+  materializedWorkOutcomeState: MaterializedWorkOutcomeState;
+  mode: FactoryTimelineMode;
+  receivedEventIDs: string[];
+  selectedTick: number;
+  worldViewCache: Record<number, WorldState>;
+  activateEntry: (identity: StreamDerivedCacheIdentity) => void;
   appendEvent: (event: FactoryEvent) => void;
+  appendEventForEntry: (
+    identity: StreamDerivedCacheIdentity,
+    event: FactoryEvent,
+  ) => void;
   appendEvents: (events: FactoryEvent[]) => void;
+  appendEventsForEntry: (
+    identity: StreamDerivedCacheIdentity,
+    events: FactoryEvent[],
+  ) => void;
+  entryForIdentity: (
+    identity: StreamDerivedCacheIdentity,
+  ) => FactoryTimelineEntryState | undefined;
   replaceEvents: (events: FactoryEvent[]) => void;
+  replaceEventsForEntry: (
+    identity: StreamDerivedCacheIdentity,
+    events: FactoryEvent[],
+  ) => void;
   reset: () => void;
+  resetEntry: (identity: StreamDerivedCacheIdentity) => void;
   restoreCheckpoint: (checkpoint: FactoryTimelineCheckpoint) => void;
+  restoreCheckpointForEntry: (
+    identity: StreamDerivedCacheIdentity,
+    checkpoint: FactoryTimelineCheckpoint,
+  ) => void;
   selectTick: (tick: number) => void;
+  selectTickForEntry: (
+    identity: StreamDerivedCacheIdentity,
+    tick: number,
+  ) => void;
   setCurrentMode: () => void;
+  setCurrentModeForEntry: (identity: StreamDerivedCacheIdentity) => void;
 }
 
 export interface FactoryTimelineSyncIdentity {
