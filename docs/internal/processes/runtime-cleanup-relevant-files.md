@@ -50,6 +50,12 @@ work item, and deletion gate against the register in
 `docs/architecture/architecture.md`. The exception is temporary permission to
 finish the named move, not ownership rationale for new product behavior.
 
+`make pkg-boundary` also enforces the composition-root import direction:
+`pkg/wire` may import the domain owners it composes, while only `pkg/root`,
+`pkg/initializer`, and `pkg/wire` itself may import `pkg/wire`. Domain and
+transport packages should own narrow contracts that startup injects instead of
+depending outward on the application graph.
+
 ## Vocabulary Guardrails
 
 Changed customer-facing docs, API descriptions, CLI help, dashboard copy, and
