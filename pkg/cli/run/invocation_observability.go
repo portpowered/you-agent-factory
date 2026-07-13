@@ -538,7 +538,6 @@ type responseStreamProgressWriter struct {
 	closed        bool
 	drainTimedOut bool
 	droppedLines  int
-	pendingNotice []byte
 }
 
 func newResponseStreamProgressWriter(output io.Writer) *responseStreamProgressWriter {
