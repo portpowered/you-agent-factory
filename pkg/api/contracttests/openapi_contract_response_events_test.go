@@ -1,6 +1,7 @@
 package apicontract_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,105 +10,11 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"gopkg.in/yaml.v3"
 )
 
 const responseEventStreamPath = "/factory-sessions/{session_id}/response-events"
-
-func TestOpenAPIAuthoring_ResponseEventStreamDeclaresEphemeralSSEContract(t *testing.T) {
-	doc := loadAuthoredOpenAPIDoc(t)
-	paths, ok := doc["paths"].(map[string]any)
-	if !ok {
-		t.Fatal("paths object is missing")
-	}
-	operation := pathOperation(t, paths, responseEventStreamPath, "get")
-
-	if got := operation["operationId"]; got != "getFactoryResponseEventsBySessionId" {
-		t.Fatalf("response-event operationId = %v", got)
-	}
-	description, _ := operation["description"].(string)
-	for _, phrase := range []string{
-		"ephemeral FactoryResponseEvent observation records",
-		"outside canonical FactoryEvent replay",
-		"retained matching records",
-		"continues with live matching records",
-		"decimal FactoryResponseEvent.sequence",
-		"first emitted record is STREAM_GAP",
-		"never falls back to the current or default session",
-	} {
-		if !strings.Contains(description, phrase) {
-			t.Fatalf("response-event description missing %q", phrase)
-		}
-	}
-
-	parameters, ok := operation["parameters"].([]any)
-	if !ok {
-		t.Fatal("response-event operation parameters are missing")
-	}
-	for _, ref := range []string{
-		"#/components/parameters/SessionID",
-		"#/components/parameters/ResponseEventAfterSequence",
-		"#/components/parameters/ResponseEventDispatchID",
-		"#/components/parameters/ResponseEventKind",
-	} {
-		assertParameterRef(t, parameters, ref)
-	}
-
-	assertEventStreamSchemaRef(t, operation, "#/components/schemas/FactoryResponseEvent")
-	for status, ref := range map[string]string{
-		"400": "#/components/responses/ResponseEventBadRequest",
-		"404": "#/components/responses/ResponseEventSessionNotFound",
-		"410": "#/components/responses/ResponseEventStreamExpired",
-		"500": "#/components/responses/InternalError",
-	} {
-		assertResponseRef(t, operation, status, ref)
-	}
-}
-
-func TestOpenAPIAuthoring_ResponseEventStreamParametersAreConstrained(t *testing.T) {
-	afterSequence := loadAuthoredComponentFragment(t, "../../../api/components/parameters/ResponseEventAfterSequence.yaml")
-	assertQueryParameter(t, afterSequence, "after_sequence")
-	afterSequenceSchema := objectField(t, afterSequence, "schema")
-	if got := afterSequenceSchema["format"]; got != "int64" {
-		t.Fatalf("after_sequence format = %v, want int64", got)
-	}
-	if got := afterSequenceSchema["minimum"]; got != 0 {
-		t.Fatalf("after_sequence minimum = %v, want 0", got)
-	}
-	if !strings.Contains(afterSequence["description"].(string), "Last acknowledged FactoryResponseEvent.sequence") {
-		t.Fatal("after_sequence must identify the last acknowledged response sequence")
-	}
-
-	dispatchID := loadAuthoredComponentFragment(t, "../../../api/components/parameters/ResponseEventDispatchID.yaml")
-	assertQueryParameter(t, dispatchID, "dispatch_id")
-
-	kind := loadAuthoredComponentFragment(t, "../../../api/components/parameters/ResponseEventKind.yaml")
-	assertQueryParameter(t, kind, "kind")
-	if kind["style"] != "form" || kind["explode"] != true {
-		t.Fatalf("kind repetition encoding = style:%v explode:%v, want form/true", kind["style"], kind["explode"])
-	}
-	kindItems := objectField(t, objectField(t, kind, "schema"), "items")
-	if got := kindItems["$ref"]; got != "../schemas/response-events/FactoryResponseEventKind.yaml" {
-		t.Fatalf("kind items ref = %v", got)
-	}
-}
-
-func TestOpenAPIAuthoring_ResponseEventStreamErrorsAreTyped(t *testing.T) {
-	badRequest := loadAuthoredComponentFragment(t, "../../../api/components/responses/ResponseEventBadRequest.yaml")
-	assertResponseFragmentSchema(t, badRequest, "../schemas/api/ErrorResponse.yaml")
-	assertResponseFragmentExampleCodes(t, badRequest, "INVALID_RESPONSE_EVENT_CURSOR", "INVALID_RESPONSE_EVENT_FILTER")
-
-	notFound := loadAuthoredComponentFragment(t, "../../../api/components/responses/ResponseEventSessionNotFound.yaml")
-	assertResponseFragmentSchema(t, notFound, "../schemas/api/ErrorResponse.yaml")
-	assertResponseFragmentExampleCodes(t, notFound, "RESPONSE_EVENT_SESSION_NOT_FOUND")
-	if !strings.Contains(notFound["description"].(string), "never falls back") {
-		t.Fatal("response-event 404 must prohibit current/default-session fallback")
-	}
-
-	expired := loadAuthoredComponentFragment(t, "../../../api/components/responses/ResponseEventStreamExpired.yaml")
-	assertResponseFragmentSchema(t, expired, "../schemas/api/ErrorResponse.yaml")
-	assertResponseFragmentExampleCodes(t, expired, "RESPONSE_EVENT_STREAM_EXPIRED")
-}
 
 func loadAuthoredComponentFragment(t *testing.T, path string) map[string]any {
 	t.Helper()
@@ -694,6 +601,74 @@ func TestGeneratedFactoryResponseEventRepresentativeFixturesRoundTrip(t *testing
 	}
 }
 
+func TestFactoryResponseEventRepresentativeFixturesHaveCanonicalWireParity(t *testing.T) {
+	for _, fixtureName := range representativeResponseEventFixtureNames {
+		fixtureName := fixtureName
+		t.Run(fixtureName, func(t *testing.T) {
+			raw := readRepresentativeResponseEventFixtureBytes(t, fixtureName)
+
+			var domainEvent responseevents.FactoryResponseEvent
+			if err := json.Unmarshal(raw, &domainEvent); err != nil {
+				t.Fatalf("unmarshal domain FactoryResponseEvent: %v", err)
+			}
+			var generatedEvent factoryapi.FactoryResponseEvent
+			if err := json.Unmarshal(raw, &generatedEvent); err != nil {
+				t.Fatalf("unmarshal generated FactoryResponseEvent: %v", err)
+			}
+
+			domainJSON, err := json.Marshal(domainEvent)
+			if err != nil {
+				t.Fatalf("marshal domain FactoryResponseEvent: %v", err)
+			}
+			generatedJSON, err := json.Marshal(generatedEvent)
+			if err != nil {
+				t.Fatalf("marshal generated FactoryResponseEvent: %v", err)
+			}
+			if !bytes.Equal(domainJSON, generatedJSON) {
+				t.Fatalf(
+					"canonical FactoryResponseEvent bytes differ:\ndomain=%s\ngenerated=%s",
+					domainJSON,
+					generatedJSON,
+				)
+			}
+
+			if fixtureName == "stream_gap" {
+				assertStreamGapBounds(t, domainEvent.Payload, 100, 150)
+				assertStreamGapBounds(t, generatedJSONPayload(t, generatedEvent), 100, 150)
+			}
+		})
+	}
+}
+
+func generatedJSONPayload(t *testing.T, event factoryapi.FactoryResponseEvent) json.RawMessage {
+	t.Helper()
+	encoded, err := json.Marshal(event.Payload)
+	if err != nil {
+		t.Fatalf("marshal generated FactoryResponseEvent payload: %v", err)
+	}
+	return encoded
+}
+
+func assertStreamGapBounds(t *testing.T, payload json.RawMessage, wantFrom, wantTo int64) {
+	t.Helper()
+	var gap struct {
+		FromSequence int64 `json:"fromSequence"`
+		ToSequence   int64 `json:"toSequence"`
+	}
+	if err := json.Unmarshal(payload, &gap); err != nil {
+		t.Fatalf("unmarshal STREAM_GAP payload: %v", err)
+	}
+	if gap.FromSequence != wantFrom || gap.ToSequence != wantTo {
+		t.Fatalf(
+			"STREAM_GAP bounds = %d..%d, want %d..%d",
+			gap.FromSequence,
+			gap.ToSequence,
+			wantFrom,
+			wantTo,
+		)
+	}
+}
+
 func TestGeneratedFactoryResponseEventPayloadCoverageFixturesRoundTrip(t *testing.T) {
 	raw, err := os.ReadFile(filepath.FromSlash("../testdata/canonical-response-event-payload-coverage.json"))
 	if err != nil {
@@ -925,15 +900,12 @@ func assertGeneratedFactoryResponseEventRoundTrip(t *testing.T, event factoryapi
 
 	var roundTripped factoryapi.FactoryResponseEvent
 	decodeRoundTripJSON(t, encoded, &roundTripped, "round-tripped response-event "+event.EventId)
-	if roundTripped.Kind != event.Kind || roundTripped.Phase != event.Phase {
-		t.Fatalf(
-			"round-tripped response-event %s kind/phase = %s/%s, want %s/%s",
-			event.EventId,
-			roundTripped.Kind,
-			roundTripped.Phase,
-			event.Kind,
-			event.Phase,
-		)
+	roundTrippedJSON, err := json.Marshal(roundTripped)
+	if err != nil {
+		t.Fatalf("marshal round-tripped FactoryResponseEvent %s: %v", event.EventId, err)
+	}
+	if !bytes.Equal(encoded, roundTrippedJSON) {
+		t.Fatalf("generated FactoryResponseEvent round trip changed wire bytes:\nbefore=%s\nafter=%s", encoded, roundTrippedJSON)
 	}
 	assertGeneratedFactoryResponseEventPayloadDecodes(t, roundTripped)
 }

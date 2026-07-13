@@ -11,6 +11,101 @@ import (
 	generatedclient "github.com/portpowered/infinite-you/pkg/generatedclient"
 )
 
+func TestOpenAPIAuthoring_ResponseEventStreamDeclaresEphemeralSSEContract(t *testing.T) {
+	doc := loadAuthoredOpenAPIDoc(t)
+	paths, ok := doc["paths"].(map[string]any)
+	if !ok {
+		t.Fatal("paths object is missing")
+	}
+	operation := pathOperation(t, paths, responseEventStreamPath, "get")
+
+	if got := operation["operationId"]; got != "getFactoryResponseEventsBySessionId" {
+		t.Fatalf("response-event operationId = %v", got)
+	}
+	description, _ := operation["description"].(string)
+	for _, phrase := range []string{
+		"ephemeral FactoryResponseEvent observation records",
+		"outside canonical FactoryEvent replay",
+		"retained matching records",
+		"continues with live matching records",
+		"decimal FactoryResponseEvent.sequence",
+		"first emitted record is STREAM_GAP",
+		"never falls back to the current or default session",
+	} {
+		if !strings.Contains(description, phrase) {
+			t.Fatalf("response-event description missing %q", phrase)
+		}
+	}
+
+	parameters, ok := operation["parameters"].([]any)
+	if !ok {
+		t.Fatal("response-event operation parameters are missing")
+	}
+	for _, ref := range []string{
+		"#/components/parameters/SessionID",
+		"#/components/parameters/ResponseEventAfterSequence",
+		"#/components/parameters/ResponseEventDispatchID",
+		"#/components/parameters/ResponseEventKind",
+	} {
+		assertParameterRef(t, parameters, ref)
+	}
+
+	assertEventStreamSchemaRef(t, operation, "#/components/schemas/FactoryResponseEvent")
+	for status, ref := range map[string]string{
+		"400": "#/components/responses/ResponseEventBadRequest",
+		"404": "#/components/responses/ResponseEventSessionNotFound",
+		"410": "#/components/responses/ResponseEventStreamExpired",
+		"500": "#/components/responses/InternalError",
+	} {
+		assertResponseRef(t, operation, status, ref)
+	}
+}
+
+func TestOpenAPIAuthoring_ResponseEventStreamParametersAreConstrained(t *testing.T) {
+	afterSequence := loadAuthoredComponentFragment(t, "../../../api/components/parameters/ResponseEventAfterSequence.yaml")
+	assertQueryParameter(t, afterSequence, "after_sequence")
+	afterSequenceSchema := objectField(t, afterSequence, "schema")
+	if got := afterSequenceSchema["format"]; got != "int64" {
+		t.Fatalf("after_sequence format = %v, want int64", got)
+	}
+	if got := afterSequenceSchema["minimum"]; got != 0 {
+		t.Fatalf("after_sequence minimum = %v, want 0", got)
+	}
+	if !strings.Contains(afterSequence["description"].(string), "Last acknowledged FactoryResponseEvent.sequence") {
+		t.Fatal("after_sequence must identify the last acknowledged response sequence")
+	}
+
+	dispatchID := loadAuthoredComponentFragment(t, "../../../api/components/parameters/ResponseEventDispatchID.yaml")
+	assertQueryParameter(t, dispatchID, "dispatch_id")
+
+	kind := loadAuthoredComponentFragment(t, "../../../api/components/parameters/ResponseEventKind.yaml")
+	assertQueryParameter(t, kind, "kind")
+	if kind["style"] != "form" || kind["explode"] != true {
+		t.Fatalf("kind repetition encoding = style:%v explode:%v, want form/true", kind["style"], kind["explode"])
+	}
+	kindItems := objectField(t, objectField(t, kind, "schema"), "items")
+	if got := kindItems["$ref"]; got != "../schemas/response-events/FactoryResponseEventKind.yaml" {
+		t.Fatalf("kind items ref = %v", got)
+	}
+}
+
+func TestOpenAPIAuthoring_ResponseEventStreamErrorsAreTyped(t *testing.T) {
+	badRequest := loadAuthoredComponentFragment(t, "../../../api/components/responses/ResponseEventBadRequest.yaml")
+	assertResponseFragmentSchema(t, badRequest, "../schemas/api/ErrorResponse.yaml")
+	assertResponseFragmentExampleCodes(t, badRequest, "INVALID_RESPONSE_EVENT_CURSOR", "INVALID_RESPONSE_EVENT_FILTER")
+
+	notFound := loadAuthoredComponentFragment(t, "../../../api/components/responses/ResponseEventSessionNotFound.yaml")
+	assertResponseFragmentSchema(t, notFound, "../schemas/api/ErrorResponse.yaml")
+	assertResponseFragmentExampleCodes(t, notFound, "RESPONSE_EVENT_SESSION_NOT_FOUND")
+	if !strings.Contains(notFound["description"].(string), "never falls back") {
+		t.Fatal("response-event 404 must prohibit current/default-session fallback")
+	}
+
+	expired := loadAuthoredComponentFragment(t, "../../../api/components/responses/ResponseEventStreamExpired.yaml")
+	assertResponseFragmentSchema(t, expired, "../schemas/api/ErrorResponse.yaml")
+	assertResponseFragmentExampleCodes(t, expired, "RESPONSE_EVENT_STREAM_EXPIRED")
+}
+
 func TestGeneratedGoClientBuildsFilteredResponseEventRequest(t *testing.T) {
 	const reconnectCursor int64 = 4_294_967_296
 	var afterSequence int64 = generatedclient.ResponseEventAfterSequence(reconnectCursor)
