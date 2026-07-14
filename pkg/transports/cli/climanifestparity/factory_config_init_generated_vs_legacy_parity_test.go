@@ -138,6 +138,13 @@ type factoryConfigInitGeneratedVsLegacyParsingCase struct {
 }
 
 func factoryConfigInitGeneratedVsLegacyParsingCases() []factoryConfigInitGeneratedVsLegacyParsingCase {
+	cases := make([]factoryConfigInitGeneratedVsLegacyParsingCase, 0)
+	cases = append(cases, factoryConfigInitGeneratedVsLegacyParsingCasesFactory()...)
+	cases = append(cases, factoryConfigInitGeneratedVsLegacyParsingCasesConfigInit()...)
+	return cases
+}
+
+func factoryConfigInitGeneratedVsLegacyParsingCasesFactory() []factoryConfigInitGeneratedVsLegacyParsingCase {
 	return []factoryConfigInitGeneratedVsLegacyParsingCase{
 		{
 			name:      "factory query optional positional accepts omission",
@@ -194,6 +201,11 @@ func factoryConfigInitGeneratedVsLegacyParsingCases() []factoryConfigInitGenerat
 			wantParseErr: true,
 			errContains:  "required flag(s)",
 		},
+	}
+}
+
+func factoryConfigInitGeneratedVsLegacyParsingCasesConfigInit() []factoryConfigInitGeneratedVsLegacyParsingCase {
+	return []factoryConfigInitGeneratedVsLegacyParsingCase{
 		{
 			name:      "config init optional positional accepts omission",
 			commandID: "you.config.init",

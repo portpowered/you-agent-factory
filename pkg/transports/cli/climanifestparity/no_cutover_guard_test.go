@@ -91,20 +91,21 @@ func assertProductionFactoryConfigInitCutoverWired(t *testing.T, repoRoot string
 		text := string(contents)
 		switch filepath.Base(path) {
 		case "root_work.go":
+			if !strings.Contains(text, "productionFactoryConfigInitCommands") {
+				t.Fatalf("%s must wire production factory/config/init cutover via %q", path, "productionFactoryConfigInitCommands")
+			}
+		case "root_factory.go":
 			requiredMarkers := []string{
 				"useGeneratedFactoryConfigInitFamily = true",
 				"productionFactoryConfigInitCommands",
 				"climanifestcobra.NewFactoryConfigInitFamilyComponents",
 				"NewLegacyFactoryConfigInitFamilyCommands",
+				"func newFactoryCommand(",
 			}
 			for _, marker := range requiredMarkers {
 				if !strings.Contains(text, marker) {
 					t.Fatalf("%s must wire production factory/config/init cutover via %q", path, marker)
 				}
-			}
-		case "root_factory.go":
-			if !strings.Contains(text, "func newFactoryCommand(") {
-				t.Fatalf("%s must keep handwritten newFactoryCommand constructor for rollback", path)
 			}
 		}
 	}
