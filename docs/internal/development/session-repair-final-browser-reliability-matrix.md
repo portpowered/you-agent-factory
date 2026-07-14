@@ -39,10 +39,14 @@ an external manual-evidence limitation. It must not skip, weaken, or condition t
 App, persistence, or UI Browser Integration assertions. The mandatory automated
 browser command remains:
 
-On 2026-07-14, in-app browser control was attempted for the lifecycle-resume
-story but unavailable because the environment did not provide `sandboxPolicy`.
-This is an external interactive-evidence limitation only; the automated
-two-page browser scenario ran with every assertion enabled.
+On 2026-07-14 at 07:27 UTC, in-app browser control was attempted for responsive
+inspection but unavailable because the environment did not provide
+`sandboxPolicy`. Browser control never became available, so no small or large
+viewport size, selected concrete Factory Session UUID, lifecycle action, or
+baseline/final sample count could be observed interactively. This is an external
+manual-evidence limitation only; it does not skip, weaken, or condition any
+automated release gate. The automated two-page browser scenario continues to run
+with every assertion enabled.
 
 ```bash
 make test-ui-browser-integration
