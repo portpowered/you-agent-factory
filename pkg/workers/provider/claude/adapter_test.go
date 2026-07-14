@@ -102,7 +102,8 @@ func TestAdapterReportsClaudeStreamingCapabilitiesAndFailureFacts(t *testing.T) 
 		t.Fatalf("successful failure classification = %#v", failure)
 	}
 	failure := providerAdapter.ClassifyFailure(context.Background(), adapter.FailureContext{CommandResult: workerprocess.CommandResult{ExitCode: 1}})
-	if failure.Failure == nil || failure.Failure.Message != "Claude invocation failed." || failure.Failure.Retry.Retryable {
+	if failure.Failure == nil || failure.Failure.Type != interfaces.WorkFailureTypeUnknown ||
+		failure.Failure.Message != "claude exited with code 1" || failure.Failure.Retry.Retryable {
 		t.Fatalf("failed classification = %#v", failure)
 	}
 }

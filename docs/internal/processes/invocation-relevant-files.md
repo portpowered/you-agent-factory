@@ -293,7 +293,10 @@ primary-result behavior.
   Bounded internal-cause excerpts ride on `ProviderFailureResolution.InternalCause`
   and `ProviderError.Cause`; sanitized alignment fixtures belong in
   `codex_failure_sanitized_fixture.go` with leakage negatives in
-  `codex_failure_internal_cause_test.go`. A streaming decoder must hold
+  `codex_failure_internal_cause_test.go`. Invocation error code compatibility
+  coverage lives in `provider_invocation_error_compatibility_test.go` and should
+  lock stable `WorkFailureType` / `FailureDetail.Reason` values across corpus
+  normalization and Codex reporting-path agreement probes. A streaming decoder must hold
   terminal `ERROR` drafts until the shared executor flushes it with the process
   outcome; discard a native failure when cancellation, deadline, or exit 124 wins.
   When multiple typed terminal records arrive, the held canonical draft and
