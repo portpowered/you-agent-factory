@@ -15,6 +15,7 @@ func TestProductionCLIRootSessionFamily_RepresentativeCutover(t *testing.T) {
 	assertGeneratorInfrastructurePresent(t, repoRoot)
 	assertProductionRepresentativeCutoverWired(t, repoRoot)
 	assertProductionFactoryConfigInitCutoverWired(t, repoRoot)
+	assertProductionWorkCutoverWired(t, repoRoot)
 	assertNoForbiddenCLIGeneratorMarkers(t, repoRoot)
 }
 
@@ -120,6 +121,29 @@ func assertProductionFactoryConfigInitCutoverWired(t *testing.T, repoRoot string
 					t.Fatalf("%s must wire production factory/config/init cutover via %q", path, marker)
 				}
 			}
+		}
+	}
+}
+
+func assertProductionWorkCutoverWired(t *testing.T, repoRoot string) {
+	t.Helper()
+	rootWorkGo := filepath.Join(repoRoot, "pkg", "transports", "cli", "root_work.go")
+	contents, err := os.ReadFile(rootWorkGo)
+	if err != nil {
+		t.Fatalf("read %s: %v", rootWorkGo, err)
+	}
+	text := string(contents)
+	requiredMarkers := []string{
+		"useGeneratedWorkFamily = true",
+		"productionWorkCommand",
+		"climanifestcobra.NewWorkFamilyCommand",
+		"productionWorkCommand(globals, diagnostics)",
+		"func newWorkCommand(",
+		"NewLegacyWorkFamilyCommand",
+	}
+	for _, marker := range requiredMarkers {
+		if !strings.Contains(text, marker) {
+			t.Fatalf("%s must wire production work-family cutover via %q", rootWorkGo, marker)
 		}
 	}
 }
