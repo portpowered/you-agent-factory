@@ -9,13 +9,15 @@ import (
 	"net/http"
 	"strings"
 
-	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+
+	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work/content"
 	"go.uber.org/zap"
 )
 
@@ -221,7 +223,7 @@ func validatedRawURLContentPart(fields map[string]json.RawMessage, prefix string
 		}
 		shared.URL = contentURL
 	}
-	normalized, err := workcontent.NormalizeFileBackedContentPart(shared)
+	normalized, err := content.NormalizeFileBackedContentPart(shared)
 	if err != nil {
 		if strings.Contains(err.Error(), "url and file cannot both be set") {
 			return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%s%s", prefix, err.Error())}
@@ -231,7 +233,7 @@ func validatedRawURLContentPart(fields map[string]json.RawMessage, prefix string
 		}
 		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%s%s", prefix, err.Error())}
 	}
-	if err := workcontent.ValidateContentURL(normalized.URL); err != nil {
+	if err := content.ValidateContentURL(normalized.URL); err != nil {
 		return interfaces.WorkContentPart{}, requestFieldValidationError{message: fmt.Sprintf("%surl %s", prefix, err.Error())}
 	}
 	return normalized, nil

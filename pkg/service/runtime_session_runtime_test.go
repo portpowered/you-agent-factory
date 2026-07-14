@@ -29,12 +29,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recording"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recordingreplay"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
@@ -4945,7 +4945,7 @@ type forwardingSessionInvoker struct {
 	ctx       context.Context
 	sessionID string
 	request   factoryapi.InvocationRequest
-	result    invocations.FactoryInvocationResult
+	result    sessioninvocation.FactoryInvocationResult
 	err       error
 }
 
@@ -4953,7 +4953,7 @@ func (s *forwardingSessionInvoker) InvokeFactorySession(
 	ctx context.Context,
 	sessionID string,
 	request factoryapi.InvocationRequest,
-) (invocations.FactoryInvocationResult, error) {
+) (sessioninvocation.FactoryInvocationResult, error) {
 	s.ctx = ctx
 	s.sessionID = sessionID
 	s.request = request
@@ -4963,7 +4963,7 @@ func (s *forwardingSessionInvoker) InvokeFactorySession(
 func TestFactoryService_InvokeFactorySessionForwardsToCanonicalOwner(t *testing.T) {
 	requestID := "request-1"
 	request := factoryapi.InvocationRequest{RequestId: &requestID, Args: &map[string]any{"input": "hello"}}
-	wantResult := invocations.FactoryInvocationResult{
+	wantResult := sessioninvocation.FactoryInvocationResult{
 		RequestID: "result-request", TraceID: "trace-1",
 		Status: factoryapi.InvocationTerminalStatusCompleted,
 	}

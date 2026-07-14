@@ -16,16 +16,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
-	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/service"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+
 	"github.com/portpowered/infinite-you/pkg/transports/cli/batchload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboard"
@@ -34,7 +26,17 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+
+	"github.com/google/uuid"
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/service"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"
 )
 

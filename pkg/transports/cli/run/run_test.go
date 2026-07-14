@@ -12,18 +12,19 @@ import (
 	"testing"
 	"time"
 
+	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
-	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"
 )
 

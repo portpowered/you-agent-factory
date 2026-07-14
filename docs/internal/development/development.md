@@ -520,7 +520,7 @@ Cron behavior crosses service tick production, Petri-net guards, dispatcher iden
 Use these focused checks before the broader package gates when changing cron behavior:
 
 ```bash
-go test ./pkg/config ./pkg/timework ./pkg/service ./pkg/factory/scheduler ./pkg/factory/subsystems ./pkg/factory/projections -count=1
+go test ./pkg/config ./pkg/work/timework ./pkg/service ./pkg/factory/scheduler ./pkg/factory/subsystems ./pkg/factory/projections -count=1
 make cron-time-work-smoke CRON_TIME_WORK_SMOKE_COUNT=1
 make test-full GO_TEST_TIMEOUT=300s
 ```

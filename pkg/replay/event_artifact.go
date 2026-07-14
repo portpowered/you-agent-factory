@@ -6,10 +6,11 @@ import (
 	"sort"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -580,7 +581,7 @@ func workFromGeneratedWork(work factoryapi.Work, requestID string) interfaces.Wo
 		CurrentChainingTraceID:   currentChainingTraceID,
 		PreviousChainingTraceIDs: stringSliceValue(work.PreviousChainingTraceIds),
 		TraceID:                  traceID,
-		Content:                  workcontent.PartsFromGenerated(work.Content),
+		Content:                  contentcontract.PartsFromGenerated(work.Content),
 		Payload:                  payloadBytesFromGenerated(work.Payload),
 		Tags:                     stringMapValue(work.Tags),
 	}

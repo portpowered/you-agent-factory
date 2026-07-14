@@ -14,8 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"github.com/portpowered/infinite-you/pkg/workers/worktree"
 )
@@ -123,7 +123,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 	invocationArgs := invocationArgumentsFromDispatch(dispatch)
 	invocationDiagnostics := invocationDiagnosticsForDispatch(we.RuntimeConfig, invocationArgs)
 	if invocationArgs != nil {
-		interpolatedWorkstation, err := invocations.InterpolateWorkstationConfig(*workstationDef, invocationArgs)
+		interpolatedWorkstation, err := invocations.InterpolateWorkstationConfig(*workstationDef, invocationArgs, os.ReadFile)
 		if err != nil {
 			return interfaces.WorkResult{
 				DispatchID:   dispatch.DispatchID,
@@ -148,7 +148,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 		}, nil
 	}
 	if invocationArgs != nil {
-		interpolatedWorker, err := invocations.InterpolateWorkerConfig(*workerDef, invocationArgs)
+		interpolatedWorker, err := invocations.InterpolateWorkerConfig(*workerDef, invocationArgs, os.ReadFile)
 		if err != nil {
 			return interfaces.WorkResult{
 				DispatchID:   dispatch.DispatchID,

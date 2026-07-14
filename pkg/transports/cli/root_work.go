@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -40,6 +41,7 @@ func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions
 func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig, globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions) error {
 	promptArgs, resolvedConfig, err := resolveRunCommandInvocationInput(cmd, args, cfg)
 	if err != nil {
+		_ = runcli.WriteInvocationError(cmd.ErrOrStderr(), err, globals.json)
 		return err
 	}
 	if err := applyRunCommandInvocationOutputMode(cmd, &resolvedConfig); err != nil {
@@ -53,6 +55,10 @@ func executeRunCommand(cmd *cobra.Command, args []string, cfg *runcli.RunConfig,
 	if err != nil {
 		err = factoryconfig.MaybeFormatBlockingFactoryLoadOperatorError(err, resolvedConfig.Dir)
 		errorWriter := resolveEffectiveRunPolicy(cmd, resolvedConfig, basePolicy).HumanTerminalWriter(cmd.ErrOrStderr())
+		var ambiguousInputErr *runcli.AmbiguousInvocationInputError
+		if errors.As(err, &ambiguousInputErr) {
+			errorWriter = cmd.ErrOrStderr()
+		}
 		if !runcli.WriteInvocationError(errorWriter, err, globals.json) {
 			if errorWriter != nil {
 				_, _ = fmt.Fprintln(errorWriter, err)

@@ -5,15 +5,17 @@ import (
 	"fmt"
 	"strings"
 
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
 	"go.uber.org/zap"
 )
 
@@ -63,18 +65,18 @@ func (s *Service) InvokeModel(
 		return apisurface.ModelInvocationResult{}, readinessErr
 	}
 
-	inputContent := workcontent.PartsFromGenerated(request.Content)
+	inputContent := contentcontract.PartsFromGenerated(request.Content)
 	inputTokens := []interfaces.Token{{
 		ID: "direct-model-invocation-input",
 		Color: interfaces.TokenColor{
 			Content: inputContent,
 		},
 	}}
-	workstationDef := invocations.DirectInferenceWorkstationConfig(
+	workstationDef := workerinference.DirectInferenceWorkstationConfig(
 		request.Operation,
-		invocations.OperationBindingsFromGenerated(request.Bindings),
+		workerinference.OperationBindingsFromGenerated(request.Bindings),
 	)
-	resolvedBindings, err := invocations.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
+	resolvedBindings, err := workerinference.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
 	if err != nil {
 		return apisurface.ModelInvocationResult{}, err
 	}
@@ -99,7 +101,7 @@ func (s *Service) InvokeModel(
 		return apisurface.ModelInvocationResult{}, fmt.Errorf("provider execution failed: %s", strings.TrimSpace(result.Error))
 	}
 
-	outputContent, err := invocations.WorkContentFromInferenceOutput(result.Output, operation)
+	outputContent, err := workerinference.WorkContentFromInferenceOutput(result.Output, operation)
 	if err != nil {
 		return apisurface.ModelInvocationResult{}, err
 	}
@@ -151,7 +153,7 @@ func directModelInvocationWorkstationRequest(
 	factoryRunnerID string,
 ) interfaces.WorkstationExecutionRequest {
 	selection := interfaces.ResolveRunnerSelection("", factoryRunnerID, workerDef.ModelProvider)
-	inputContent := workcontent.PartsFromGenerated(request.Content)
+	inputContent := contentcontract.PartsFromGenerated(request.Content)
 	return interfaces.WorkstationExecutionRequest{
 		Dispatch: interfaces.WorkDispatch{
 			DispatchID:      directModelInvocationTransitionID,
@@ -168,7 +170,7 @@ func directModelInvocationWorkstationRequest(
 		ModelOperation:        strings.TrimSpace(request.Operation),
 		ModelBindings:         resolvedBindings,
 		SystemPrompt:          workerDef.Body,
-		UserMessage:           invocations.InferenceOperationUserMessage(request.Operation, inputContent, resolvedBindings),
+		UserMessage:           workerinference.InferenceOperationUserMessage(request.Operation, inputContent, resolvedBindings),
 	}
 }
 

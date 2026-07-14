@@ -11,8 +11,8 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
-	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
+	"github.com/portpowered/infinite-you/pkg/work/content"
+	"github.com/portpowered/infinite-you/pkg/work/materialize"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
@@ -499,7 +499,7 @@ func codexImageArgs(ctx context.Context, req interfaces.ProviderInferenceRequest
 			if err != nil {
 				return nil, fmt.Errorf("input_tokens[%d].color.content[%d].url: %w", tokenIndex, partIndex, err)
 			}
-			resolvedURL, err := workcontent.ResolveDispatchContentURL(req.WorkingDirectory, contentURL)
+			resolvedURL, err := content.ResolveDispatchContentURL(req.WorkingDirectory, contentURL)
 			if err != nil {
 				return nil, fmt.Errorf("input_tokens[%d].color.content[%d].url: %w", tokenIndex, partIndex, err)
 			}
@@ -518,7 +518,7 @@ func codexImageContentURL(part interfaces.WorkContentPart) (string, error) {
 		return part.URL, nil
 	}
 	if strings.TrimSpace(part.File) != "" {
-		return workcontent.FilesystemPathToContentURL(part.File)
+		return content.FilesystemPathToContentURL(part.File)
 	}
 	return "", fmt.Errorf("codex image content url is required")
 }

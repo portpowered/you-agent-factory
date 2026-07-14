@@ -10,7 +10,6 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations/skippermissions"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
@@ -19,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
+	"github.com/portpowered/infinite-you/pkg/workers/skippermissions"
 )
 
 func (fs *Host) requireModelService() apisurface.ModelAPI {

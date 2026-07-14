@@ -19,16 +19,17 @@ import (
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )

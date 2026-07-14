@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
 func TestPackagedTTSInvocationPrimaryResult_ReturnsMetadataNotRawAudio(t *testing.T) {

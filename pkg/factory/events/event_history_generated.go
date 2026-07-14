@@ -4,11 +4,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+
+	"github.com/portpowered/infinite-you/pkg/factory/state"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 func generatedFactory(payload interfaces.InitialStructurePayload) factoryapi.Factory {
@@ -399,7 +400,7 @@ func generatedWork(item interfaces.FactoryWorkItem) factoryapi.Work {
 		CurrentChainingTraceId:   stringPtrIfNotEmpty(currentChainingTraceID),
 		PreviousChainingTraceIds: stringSlicePtr(item.PreviousChainingTraceIDs),
 		TraceId:                  stringPtrIfNotEmpty(item.TraceID),
-		Content:                  workcontent.GeneratedPtrFromParts(item.Content),
+		Content:                  contentcontract.GeneratedPtrFromParts(item.Content),
 		Tags:                     generatedStringMapPtr(item.Tags),
 	}
 }

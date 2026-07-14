@@ -5,10 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 // BuildFactoryWorldWorkstationRequestProjectionSlice keeps the additive
@@ -380,7 +381,7 @@ func generatedWorkItemRefs(refs []interfaces.FactoryWorldWorkItemRef) []factorya
 			CurrentChainingTraceId:   workstationRequestStringPtr(ref.CurrentChainingTraceID),
 			PreviousChainingTraceIds: stringSlicePtr(sortedStrings(ref.PreviousChainingTraceIDs)),
 			TraceId:                  workstationRequestStringPtr(ref.TraceID),
-			Content:                  workcontent.GeneratedPtrFromParts(ref.Content),
+			Content:                  contentcontract.GeneratedPtrFromParts(ref.Content),
 			PayloadStatus:            generatedWorkItemPayloadStatusPtr(ref.PayloadStatus),
 			PayloadUnavailableReason: workstationRequestStringPtr(ref.PayloadUnavailableReason),
 			LineageLogicalWorkId:     workstationRequestStringPtr(ref.LineageLogicalWorkID),

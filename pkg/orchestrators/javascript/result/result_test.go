@@ -5,10 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 func TestValidateTypedValue_AcceptsStructuredJSON(t *testing.T) {
@@ -212,8 +213,8 @@ func TestBuildSessionResultAndEventPayload_ProjectSameResultAndArtifactIDs(t *te
 		t.Fatalf("artifact ids differ: %q vs %q", (*sessionResult.ArtifactIds)[0], (*eventPayload.ArtifactIds)[0])
 	}
 
-	sessionParts := workcontent.PartsFromGenerated(sessionResult.PrimaryResult)
-	eventParts := workcontent.PartsFromGenerated(eventPayload.ResultSummary)
+	sessionParts := contentcontract.PartsFromGenerated(sessionResult.PrimaryResult)
+	eventParts := contentcontract.PartsFromGenerated(eventPayload.ResultSummary)
 	if len(sessionParts) != len(eventParts) {
 		t.Fatalf("primary result part counts differ: %d vs %d", len(sessionParts), len(eventParts))
 	}

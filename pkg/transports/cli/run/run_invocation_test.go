@@ -16,6 +16,9 @@ import (
 	"testing"
 	"time"
 
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
@@ -23,10 +26,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/service"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )

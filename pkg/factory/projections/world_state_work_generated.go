@@ -3,7 +3,7 @@ package projections
 import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 func factoryWorkItemsFromGenerated(works *[]factoryapi.Work) []interfaces.FactoryWorkItem {
@@ -41,5 +41,5 @@ func factoryWorkItemFromGenerated(work factoryapi.Work) interfaces.FactoryWorkIt
 }
 
 func generatedWorkContentToDomain(content *factoryapi.WorkContent) []interfaces.WorkContentPart {
-	return workcontent.PartsFromGenerated(content)
+	return contentcontract.PartsFromGenerated(content)
 }

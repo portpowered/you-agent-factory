@@ -10,15 +10,17 @@ import (
 	"strings"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"go.uber.org/zap"
 )
 
@@ -198,7 +200,7 @@ func modelInvocationResponseFromResult(result apisurface.ModelInvocationResult) 
 		Worker:           result.Worker,
 		Operation:        result.Operation,
 		ProviderLocality: factoryapi.WorkerModelLocality(result.ProviderLocality),
-		Content:          derefGeneratedWorkContent(workcontent.GeneratedPtrFromParts(result.Content)),
+		Content:          derefGeneratedWorkContent(contentcontract.GeneratedPtrFromParts(result.Content)),
 		Bindings:         generatedResolvedModelInvocationBindings(result.Bindings),
 	}
 }
@@ -216,7 +218,7 @@ func generatedResolvedModelInvocationBindings(values []interfaces.ResolvedModelO
 	}
 	bindings := make([]factoryapi.ResolvedModelOperationBinding, 0, len(values))
 	for _, binding := range values {
-		content := workcontent.GeneratedPtrFromParts(binding.Content)
+		content := contentcontract.GeneratedPtrFromParts(binding.Content)
 		bindings = append(bindings, factoryapi.ResolvedModelOperationBinding{
 			Slot:    binding.Slot,
 			Source:  factoryapi.ResolvedModelOperationBindingSource(binding.Source),

@@ -10,7 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
 	"github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/timework"
+	"github.com/portpowered/infinite-you/pkg/work/timework"
 )
 
 func ruleInputTypes(cfg *interfaces.FactoryConfig) []Finding {

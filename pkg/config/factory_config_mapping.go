@@ -10,12 +10,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+
+	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 // FactoryConfigMapper maps between on-disk factory configuration payloads and
@@ -1199,8 +1200,8 @@ func workstationOperationBindingsAPIFromInternal(bindings []interfaces.ModelOper
 	for i, binding := range bindings {
 		values[i] = factoryapi.WorkstationOperationBinding{
 			Slot:           binding.Slot,
-			Config:         workcontent.GeneratedPtrFromParts(binding.Config),
-			DefaultContent: workcontent.GeneratedPtrFromParts(binding.DefaultContent),
+			Config:         contentcontract.GeneratedPtrFromParts(binding.Config),
+			DefaultContent: contentcontract.GeneratedPtrFromParts(binding.DefaultContent),
 			Selector:       workstationOperationBindingSelectorAPIFromInternal(binding.Selector),
 		}
 	}

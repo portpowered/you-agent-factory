@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
+	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 )
@@ -127,14 +127,14 @@ func (ae *AgentExecutor) canonicalInferenceOutput(raw string, workerDef *interfa
 	if !ok {
 		return raw, nil
 	}
-	parts, err := invocations.WorkContentFromInferenceOutput(raw, operation)
+	parts, err := workerinference.WorkContentFromInferenceOutput(raw, operation)
 	if err != nil {
 		return "", fmt.Errorf("inference output shaping failed: %w", err)
 	}
 	if len(parts) == 0 {
 		return raw, nil
 	}
-	return invocations.MarshalWorkContentOutput(parts)
+	return workerinference.MarshalWorkContentOutput(parts)
 }
 
 func decisionEnvelopeWorkResult(
