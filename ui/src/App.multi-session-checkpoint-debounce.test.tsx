@@ -178,6 +178,19 @@ async function settleCheckpointPersistence(): Promise<void> {
   });
 }
 
+async function waitForControlledOperation(
+  fixture: ReturnType<
+    typeof createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>
+  >,
+  operation: "get" | "open" | "put",
+): Promise<void> {
+  for (let turn = 0; turn < 32; turn += 1) {
+    if (fixture.controls.pendingOperations().includes(operation)) return;
+    await flushPromiseContinuations();
+  }
+  expect(fixture.controls.pendingOperations()).toContain(operation);
+}
+
 async function advanceControlledWrite(
   fixture: ReturnType<
     typeof createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>
@@ -185,26 +198,9 @@ async function advanceControlledWrite(
   openOrdinal = 0,
 ): Promise<void> {
   fixture.controls.succeed("open", openOrdinal);
-  await flushPromiseContinuations();
+  await waitForControlledOperation(fixture, "get");
   fixture.controls.succeed("get");
-  await flushPromiseContinuations();
-  await flushPromiseContinuations();
-  fixture.controls.succeed("open", openOrdinal);
-  await flushPromiseContinuations();
-  fixture.controls.succeed("put");
-  fixture.controls.completeTransaction();
-  for (let turn = 0; turn < 4; turn += 1) {
-    await flushPromiseContinuations();
-  }
-}
-
-async function advanceQueuedControlledWrite(
-  fixture: ReturnType<
-    typeof createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>
-  >,
-): Promise<void> {
-  fixture.controls.succeed("open");
-  await flushPromiseContinuations();
+  await waitForControlledOperation(fixture, "put");
   fixture.controls.succeed("put");
   fixture.controls.completeTransaction();
   for (let turn = 0; turn < 4; turn += 1) {
@@ -433,7 +429,7 @@ describe("App checkpoint lifecycle safety", () => {
     await advanceControlledWrite(controlled, 1);
     await advanceControlledWrite(controlled);
     expect(controlled.controls.pendingOperations()).toEqual(["open"]);
-    await advanceQueuedControlledWrite(controlled);
+    await advanceControlledWrite(controlled);
 
     const stored = [...controlled.records.values()];
     expect(stored).toHaveLength(2);
