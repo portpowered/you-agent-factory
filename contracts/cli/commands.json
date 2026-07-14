@@ -257,6 +257,478 @@
       "handler": {
         "id": "you.handler"
       }
+    },
+    "you.session": {
+      "id": "you.session",
+      "name": "session",
+      "path": "you session",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.session",
+        "documentation": {
+          "title": {
+            "id": "you.session.title",
+            "canonicalEnglish": "List, open, and close factory sessions on a running host"
+          },
+          "description": {
+            "id": "you.session.description",
+            "canonicalEnglish": "Manage factory sessions on a running you-agent-factory service.\n\nSubcommands:\n  list       list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n  show       show one live or durable Factory Session from GET /factory-sessions/{session_id}\n  dispatches list durable Factory Session dispatches from GET /factory-sessions/{session_id}/dispatches\n  pause      pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause\n  resume     resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume\n  create     open another live session from a folder path\n  delete     close a live session by session id\n\nDurable list output uses Factory Session status, source identity, result availability, progress, and action availability. Session commands use the same default --port as work list. Use --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set."
+          }
+        },
+        "examples": [
+          "you session list",
+          "you session show session-beta",
+          "you session pause"
+        ],
+        "visibility": "public",
+        "sourceHash": "1d840a517ae5c7a53f4878aabe2b628719c2c9820b7a19c7e399a35f9e7d4a74"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.session",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": false,
+      "usage": {
+        "line": "session",
+        "example": "  you session list\n\n  you session show session-beta"
+      },
+      "flags": {
+        "you.session.flag.debug": {
+          "id": "you.session.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.session.flag.default-worker-model": {
+          "id": "you.session.flag.default-worker-model",
+          "long": "default-worker-model",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.session.flag.default-worker-model-provider": {
+          "id": "you.session.flag.default-worker-model-provider",
+          "long": "default-worker-model-provider",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.session.flag.json": {
+          "id": "you.session.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.session.flag.server": {
+          "id": "you.session.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.session.flag.verbose": {
+          "id": "you.session.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      }
+    },
+    "you.session.show": {
+      "id": "you.session.show",
+      "name": "show",
+      "path": "you session show",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.session.show",
+        "documentation": {
+          "title": {
+            "id": "you.session.show.title",
+            "canonicalEnglish": "Show one live factory session"
+          },
+          "description": {
+            "id": "you.session.show.description",
+            "canonicalEnglish": "Show one live factory session from GET /factory-sessions/{session_id}.\n\nHuman output uses FactorySession as the canonical runtime noun and prints orchestrator kind plus Petri or JavaScript runtime projections. Dynamic workflow wording appears only as JavaScript shorthand. Omit session-id to target the default compatibility session (~default). Use global --json for the API-shaped FactorySession payload and global --server to target the same factory API base URI as work list and factory query."
+          }
+        },
+        "examples": [
+          "you session show",
+          "you session show session-beta",
+          "you --json session show session-beta"
+        ],
+        "visibility": "public",
+        "sourceHash": "711345f63740b41cf8aa38c23f32a5e22c93b787564f2c39a221cd30c9662ebc"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.session.show",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "show [session-id]",
+        "example": "  you session show\n\n  you session show session-beta"
+      },
+      "arguments": {
+        "you.session.show.arg.0": {
+          "id": "you.session.show.arg.0",
+          "name": "session-id",
+          "position": 0,
+          "kind": "positional",
+          "valueType": "string",
+          "required": false,
+          "minCardinality": 0,
+          "maxCardinality": 1,
+          "variadic": false,
+          "enum": [],
+          "pattern": "",
+          "completion": "none",
+          "channels": [
+            "cli"
+          ],
+          "doubleDash": "terminates-flags"
+        }
+      },
+      "flags": {
+        "you.session.show.flag.debug": {
+          "id": "you.session.show.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.show.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.session.show.flag.default-worker-model": {
+          "id": "you.session.show.flag.default-worker-model",
+          "long": "default-worker-model",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.show.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.session.show.flag.default-worker-model-provider": {
+          "id": "you.session.show.flag.default-worker-model-provider",
+          "long": "default-worker-model-provider",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.show.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.session.show.flag.json": {
+          "id": "you.session.show.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.show.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.session.show.flag.port": {
+          "id": "you.session.show.flag.port",
+          "long": "port",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "int",
+          "required": false,
+          "default": "0",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "hidden",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.show.flag.port",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.session.show.flag.server": {
+          "id": "you.session.show.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.show.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.session.show.flag.verbose": {
+          "id": "you.session.show.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.session.show.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.session.show.output.human": {
+          "id": "you.session.show.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.session.show.output.json": {
+          "id": "you.session.show.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "exits": {
+        "you.session.show.exit.success": {
+          "id": "you.session.show.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.session.show.exit.failure": {
+          "id": "you.session.show.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.session.show.exit.usage": {
+          "id": "you.session.show.exit.usage",
+          "code": 2,
+          "kind": "usage"
+        }
+      },
+      "sideEffects": {
+        "you.session.show.side-effect.network": {
+          "id": "you.session.show.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      },
+      "handler": {
+        "id": "you.session.show.handler",
+        "operationId": "getFactorySession"
+      }
     }
   }
 }
