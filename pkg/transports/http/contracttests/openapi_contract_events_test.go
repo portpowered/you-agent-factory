@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/portpowered/infinite-you/pkg/interfaces/factoryeventkinds"
 	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -20,6 +21,7 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	assertUnifiedEventLegacySchemasAbsent(t, schemas)
 	assertUnifiedEventEnvelope(t, schemas)
 	assertFactoryEventTypePayloadDiscriminator(t, schemas)
+	assertPublicFactoryEventKindParityIsClosed(t)
 	assertUnifiedEventContext(t, schemas)
 	assertUnifiedRunRequestEvent(t, schemas)
 	assertUnifiedFactorySchema(t, schemas)
@@ -204,6 +206,17 @@ func assertFactoryEventTypePayloadDiscriminator(t *testing.T, schemas map[string
 		if !slices.Contains(canonicalFactoryEventTypeValues, eventType) {
 			t.Fatalf("FactoryEvent.discriminator.mapping contains orphan event type %q", eventType)
 		}
+	}
+}
+
+func assertPublicFactoryEventKindParityIsClosed(t *testing.T) {
+	t.Helper()
+	data, err := os.ReadFile("../../../../api/openapi.yaml")
+	if err != nil {
+		t.Fatalf("read bundled openapi contract: %v", err)
+	}
+	if err := factoryeventkinds.ValidateBundledFactoryEventKindParity(data); err != nil {
+		t.Fatal(err)
 	}
 }
 

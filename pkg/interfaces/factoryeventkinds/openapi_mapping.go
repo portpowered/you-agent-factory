@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"gopkg.in/yaml.v3"
 )
 
 // FactoryEventTypePayloadMappingEntry names one FactoryEventType discriminator
@@ -118,4 +119,85 @@ func ValidateFactoryEventTypePayloadMapping(
 	}
 
 	return nil
+}
+
+// LoadFactoryEventKindParityInputFromOpenAPIYAML reads the bundled OpenAPI
+// FactoryEvent discriminator mapping and enum values needed for runtime↔contract
+// parity checks.
+func LoadFactoryEventKindParityInputFromOpenAPIYAML(openAPIYAML []byte) (FactoryEventKindParityInput, error) {
+	var doc map[string]any
+	if err := yaml.Unmarshal(openAPIYAML, &doc); err != nil {
+		return FactoryEventKindParityInput{}, fmt.Errorf("parse bundled openapi contract: %w", err)
+	}
+
+	components, ok := doc["components"].(map[string]any)
+	if !ok {
+		return FactoryEventKindParityInput{}, fmt.Errorf("components object is missing")
+	}
+	schemas, ok := components["schemas"].(map[string]any)
+	if !ok {
+		return FactoryEventKindParityInput{}, fmt.Errorf("components.schemas object is missing")
+	}
+
+	eventTypeSchema, ok := schemas["FactoryEventType"].(map[string]any)
+	if !ok {
+		return FactoryEventKindParityInput{}, fmt.Errorf("components.schemas.FactoryEventType is missing")
+	}
+	rawEnum, ok := eventTypeSchema["enum"].([]any)
+	if !ok {
+		return FactoryEventKindParityInput{}, fmt.Errorf("FactoryEventType.enum is missing")
+	}
+	enumValues := make([]factoryapi.FactoryEventType, 0, len(rawEnum))
+	for index, value := range rawEnum {
+		eventType, ok := value.(string)
+		if !ok {
+			return FactoryEventKindParityInput{}, fmt.Errorf("FactoryEventType.enum[%d] = %T, want string", index, value)
+		}
+		enumValues = append(enumValues, factoryapi.FactoryEventType(eventType))
+	}
+
+	factoryEvent, ok := schemas["FactoryEvent"].(map[string]any)
+	if !ok {
+		return FactoryEventKindParityInput{}, fmt.Errorf("components.schemas.FactoryEvent is missing")
+	}
+	discriminator, ok := factoryEvent["discriminator"].(map[string]any)
+	if !ok {
+		return FactoryEventKindParityInput{}, fmt.Errorf("FactoryEvent.discriminator is missing")
+	}
+	if got, _ := discriminator["propertyName"].(string); got != "type" {
+		return FactoryEventKindParityInput{}, fmt.Errorf("FactoryEvent.discriminator.propertyName = %q, want type", got)
+	}
+	rawMapping, ok := discriminator["mapping"].(map[string]any)
+	if !ok {
+		return FactoryEventKindParityInput{}, fmt.Errorf("FactoryEvent.discriminator.mapping is missing")
+	}
+
+	mapping := make(map[string]string, len(rawMapping))
+	for eventType, payloadRefValue := range rawMapping {
+		payloadRef, ok := payloadRefValue.(string)
+		if !ok {
+			return FactoryEventKindParityInput{}, fmt.Errorf(
+				"FactoryEvent.discriminator.mapping[%q] = %T, want string",
+				eventType,
+				payloadRefValue,
+			)
+		}
+		mapping[eventType] = payloadRef
+	}
+
+	parsedMapping, err := ParseFactoryEventTypePayloadMapping(mapping)
+	if err != nil {
+		return FactoryEventKindParityInput{}, err
+	}
+
+	openAPIMappingKinds := make([]factoryapi.FactoryEventType, 0, len(parsedMapping))
+	for _, entry := range parsedMapping {
+		openAPIMappingKinds = append(openAPIMappingKinds, entry.EventType)
+	}
+
+	return FactoryEventKindParityInput{
+		RuntimeKinds:        PublicEmittableFactoryEventKinds(),
+		ContractOnlyKinds:   ContractOnlyFactoryEventKinds(),
+		OpenAPIMappingKinds: openAPIMappingKinds,
+	}, nil
 }

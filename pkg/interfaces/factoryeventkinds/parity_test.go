@@ -1,6 +1,7 @@
 package factoryeventkinds
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -30,6 +31,30 @@ func TestValidateFactoryEventKindParity_CurrentInventoryMatchesOpenAPI(t *testin
 
 	if len(enumValues) != len(openAPIMappingKinds) {
 		t.Fatalf("FactoryEventType enum length = %d, mapping length = %d", len(enumValues), len(openAPIMappingKinds))
+	}
+}
+
+func TestValidateBundledFactoryEventKindParity_ReportsZeroDrift(t *testing.T) {
+	openAPIPath := bundledOpenAPIPath(t)
+	data, err := os.ReadFile(openAPIPath)
+	if err != nil {
+		t.Fatalf("read bundled openapi contract %s: %v", openAPIPath, err)
+	}
+
+	if err := ValidateBundledFactoryEventKindParity(data); err != nil {
+		t.Fatal(err)
+	}
+
+	input, err := LoadFactoryEventKindParityInputFromOpenAPIYAML(data)
+	if err != nil {
+		t.Fatalf("load parity input: %v", err)
+	}
+	drift := CompareFactoryEventKindParity(input)
+	if len(drift.RuntimeOnlyKinds) != 0 {
+		t.Fatalf("runtime-only drift = %#v, want none after gap closure", drift.RuntimeOnlyKinds)
+	}
+	if len(drift.ContractOnlyKinds) != 0 {
+		t.Fatalf("contract-only drift = %#v, want none after gap closure", drift.ContractOnlyKinds)
 	}
 }
 

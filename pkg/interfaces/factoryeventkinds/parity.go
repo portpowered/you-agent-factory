@@ -98,6 +98,17 @@ func (d FactoryEventKindParityDrift) Error() string {
 	return strings.Join(parts, "; ")
 }
 
+// ValidateBundledFactoryEventKindParity proves public runtime-emittable FactoryEvent
+// kinds have closed parity against the bundled OpenAPI discriminator mapping:
+// zero runtime-only kinds and zero unexplained contract-only kinds.
+func ValidateBundledFactoryEventKindParity(openAPIYAML []byte) error {
+	input, err := LoadFactoryEventKindParityInputFromOpenAPIYAML(openAPIYAML)
+	if err != nil {
+		return err
+	}
+	return ValidateFactoryEventKindParity(input)
+}
+
 func formatFactoryEventKinds(kinds []factoryapi.FactoryEventType) string {
 	names := make([]string, 0, len(kinds))
 	for _, kind := range kinds {
