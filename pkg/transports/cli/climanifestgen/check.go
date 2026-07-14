@@ -20,18 +20,25 @@ func (drift Drift) Empty() bool {
 	return len(drift.Stale) == 0 && len(drift.Missing) == 0 && len(drift.Unexpected) == 0
 }
 
-// Check compares committed representative-family artifacts with freshly generated output.
+// Check compares committed representative- and work-family artifacts with freshly generated output.
 func Check(repositoryRoot string) (Drift, error) {
 	expected := map[string][]byte{
 		RepresentativeFamilyJSONPath:       nil,
+		WorkFamilyJSONPath:                 nil,
 		RepresentativeFamilyCommandIDsPath: commandIDsSource(),
 	}
 
-	jsonPayload, err := Artifact(repositoryRoot)
+	representativePayload, err := Artifact(repositoryRoot)
 	if err != nil {
 		return Drift{}, err
 	}
-	expected[RepresentativeFamilyJSONPath] = jsonPayload
+	expected[RepresentativeFamilyJSONPath] = representativePayload
+
+	workPayload, err := WorkArtifact(repositoryRoot)
+	if err != nil {
+		return Drift{}, err
+	}
+	expected[WorkFamilyJSONPath] = workPayload
 
 	drift := Drift{}
 	for path, want := range expected {

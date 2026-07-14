@@ -57,6 +57,80 @@ func TestRunGeneratesRepresentativeFamilyArtifacts(t *testing.T) {
       "runnable": true,
       "usage": {"line": "show [session-id]"},
       "handler": {"id": "you.session.show.handler", "operationId": "getFactorySession"}
+    },
+    "you.work": {
+      "id": "you.work",
+      "name": "work",
+      "path": "you work",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "work"},
+          "description": {"canonicalEnglish": "work"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": false,
+      "usage": {"line": "work"}
+    },
+    "you.work.list": {
+      "id": "you.work.list",
+      "name": "list",
+      "path": "you work list",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "list"},
+          "description": {"canonicalEnglish": "list"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "list"},
+      "handler": {"id": "you.work.list.handler", "operationId": "listWorkBySessionId"}
+    },
+    "you.work.show": {
+      "id": "you.work.show",
+      "name": "show",
+      "path": "you work show",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "show"},
+          "description": {"canonicalEnglish": "show"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "show [work-id]"},
+      "handler": {"id": "you.work.show.handler", "operationId": "getWorkBySessionId"}
+    },
+    "you.work.move": {
+      "id": "you.work.move",
+      "name": "move",
+      "path": "you work move",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "move"},
+          "description": {"canonicalEnglish": "move"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "move [work-id] [state-name]"},
+      "handler": {"id": "you.work.move.handler", "operationId": "moveWorkBySessionId"}
+    },
+    "you.work.visualize": {
+      "id": "you.work.visualize",
+      "name": "visualize",
+      "path": "you work visualize",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "visualize"},
+          "description": {"canonicalEnglish": "visualize"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "visualize [batch-path]"},
+      "handler": {"id": "you.work.visualize.handler"}
     }
   }
 }`)
@@ -72,7 +146,7 @@ func TestRunGeneratesRepresentativeFamilyArtifacts(t *testing.T) {
 	if status := run(root, false, stdout, stderr); status != 0 {
 		t.Fatalf("run() = %d, stderr = %q", status, stderr.String())
 	}
-	if got := stdout.String(); !bytes.Contains([]byte(got), []byte("representative-family CLI metadata generated")) {
+	if got := stdout.String(); !bytes.Contains([]byte(got), []byte("CLI metadata generated")) {
 		t.Fatalf("stdout = %q, want success message", got)
 	}
 

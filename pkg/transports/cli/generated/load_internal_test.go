@@ -4,6 +4,53 @@ import (
 	"testing"
 )
 
+func TestParseWorkFamilyManifestRejectsInvalidPayload(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload []byte
+	}{
+		{name: "invalid json", payload: []byte("{")},
+		{name: "missing rootPath", payload: []byte(`{"commands":{"you.work":{"id":"you.work"}}}`)},
+		{name: "missing commands", payload: []byte(`{"rootPath":"you","commands":{}}`)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := parseWorkFamilyManifest(tc.payload); err == nil {
+				t.Fatal("parseWorkFamilyManifest() = nil, want error")
+			}
+		})
+	}
+}
+
+func TestParseWorkFamilyManifestAcceptsMinimalFamily(t *testing.T) {
+	payload := []byte(`{
+		"rootPath":"you",
+		"commands":{
+			"you.work":{"id":"you.work","path":"you work"},
+			"you.work.list":{"id":"you.work.list","path":"you work list"}
+		}
+	}`)
+	manifest, err := parseWorkFamilyManifest(payload)
+	if err != nil {
+		t.Fatalf("parseWorkFamilyManifest() error = %v", err)
+	}
+	if manifest.RootPath != "you" || len(manifest.Commands) != 2 {
+		t.Fatalf("manifest = %#v, want rooted two-command family", manifest)
+	}
+	if _, err := manifest.CommandByID("you.work.list"); err != nil {
+		t.Fatalf("CommandByID(you.work.list) error = %v", err)
+	}
+}
+
+func TestWorkCommandByIDPropagatesManifestDecodeErrors(t *testing.T) {
+	original := workFamilyJSON
+	t.Cleanup(func() { workFamilyJSON = original })
+	workFamilyJSON = []byte("{")
+	if _, err := WorkCommandByID("you.work"); err == nil {
+		t.Fatal("WorkCommandByID() invalid embed = nil, want error")
+	}
+}
+
 func TestParseRepresentativeFamilyManifestRejectsInvalidPayload(t *testing.T) {
 	cases := []struct {
 		name    string

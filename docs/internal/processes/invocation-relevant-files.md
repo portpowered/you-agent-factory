@@ -211,11 +211,12 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `contracts/testdata/baseline/cli-command-execution.json`. Handler/OpenAPI binding for
   `you.session.show` asserts `operationId` `getFactorySession` maps to
   `GET /factory-sessions/{session_id}` in `api/openapi.yaml` and matches live
-  `session.Show` JSON transport. Representative-family metadata generation lives in
-  `pkg/transports/cli/climanifestgen` (`Generate`, `Check`, `ExtractRepresentativeFamily`)
-  with `cmd/climanifestgen` and committed artifacts under
+  `session.Show` JSON transport.   Representative-family metadata generation lives in
+  `pkg/transports/cli/climanifestgen` (`Generate`, `Check`, `ExtractRepresentativeFamily`,
+  `ExtractWorkFamily`, `WorkArtifact`) with `cmd/climanifestgen` and committed artifacts under
   `pkg/transports/cli/generated` (`RepresentativeFamilyManifest`, embedded
-  `representative_family.json`). Handwritten representative-family handlers are
+  `representative_family.json`; `WorkFamilyManifest`, embedded `work_family.json`;
+  `WorkFamilyCommandIDs` in `command_ids_gen.go`). Handwritten representative-family handlers are
   registered by stable command ID in `pkg/transports/cli/commandregistry`
   (`NewRepresentativeRegistry`, `SessionShowRunE`, `AttachRunE`,
   `VerifyRepresentativeRunnableCoverage`) and production wiring helper

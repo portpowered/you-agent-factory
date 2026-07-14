@@ -37,6 +37,42 @@ func TestRepresentativeFamilyCommandIDsGenMatchesGeneratorList(t *testing.T) {
 	}
 }
 
+func TestWorkFamilyCommandIDsGenMatchesGeneratorList(t *testing.T) {
+	if len(generated.WorkFamilyCommandIDs) != len(climanifestgen.WorkFamilyCommandIDs) {
+		t.Fatalf("generated id count = %d, want %d", len(generated.WorkFamilyCommandIDs), len(climanifestgen.WorkFamilyCommandIDs))
+	}
+	for i, id := range climanifestgen.WorkFamilyCommandIDs {
+		if generated.WorkFamilyCommandIDs[i] != id {
+			t.Fatalf("generated ids[%d] = %q, want %q", i, generated.WorkFamilyCommandIDs[i], id)
+		}
+	}
+}
+
+func TestWorkFamilyManifestMatchesContractedIDs(t *testing.T) {
+	manifest, err := generated.WorkFamilyManifest()
+	if err != nil {
+		t.Fatalf("WorkFamilyManifest() error = %v", err)
+	}
+	if len(manifest.Commands) != len(climanifestgen.WorkFamilyCommandIDs) {
+		t.Fatalf("command count = %d, want %d", len(manifest.Commands), len(climanifestgen.WorkFamilyCommandIDs))
+	}
+	for _, id := range climanifestgen.WorkFamilyCommandIDs {
+		record, err := generated.WorkCommandByID(id)
+		if err != nil {
+			t.Fatalf("WorkCommandByID(%q) error = %v", id, err)
+		}
+		if record.ID != id {
+			t.Fatalf("command %q record id = %q", id, record.ID)
+		}
+	}
+}
+
+func TestWorkCommandByIDRejectsUnknownWorkFamilyID(t *testing.T) {
+	if _, err := generated.WorkCommandByID("you.work.submit"); err == nil {
+		t.Fatal("WorkCommandByID(you.work.submit) = nil, want error")
+	}
+}
+
 func TestCommandByIDRejectsUnknownRepresentativeFamilyID(t *testing.T) {
 	if _, err := generated.CommandByID("you.session.list"); err == nil {
 		t.Fatal("CommandByID(you.session.list) = nil, want error")
