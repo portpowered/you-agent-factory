@@ -125,7 +125,7 @@ func runNamedGoalResponseStreamInvocationCLI(
 	if _, err := factoryconfig.PersistNamedFactory(
 		filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"),
 		goal.PackagedFactoryName,
-		factoryconfig.BuiltInGoalFactoryJSON,
+		goal.BuiltInFactoryJSON,
 	); err != nil {
 		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)
 	}

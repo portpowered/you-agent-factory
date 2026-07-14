@@ -861,12 +861,6 @@ func BlockingFactoryLoadFindings(err error) []Finding {
 	return canonicalTargetsToFindings(loadErr.Targets)
 }
 
-// FactoryConfigValidateRecoveryCommand returns the single recovery command
-// operators should run after a materialization or upgrade validation failure.
-func FactoryConfigValidateRecoveryCommand(factoryPath string) string {
-	return blockingload.FactoryConfigValidateRecoveryCommand(factoryPath)
-}
-
 // MaybeFormatBlockingFactoryLoadOperatorError wraps err with operator diagnostics
 // when it carries structured blocking findings and is not already wrapped.
 func MaybeFormatBlockingFactoryLoadOperatorError(err error, factoryPath string) error {

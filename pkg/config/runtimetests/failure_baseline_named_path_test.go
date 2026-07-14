@@ -81,9 +81,12 @@ func TestFailureBaseline_NamedPath_GoalLayoutSegmentEncodesSlash(t *testing.T) {
 	}
 }
 
-func TestFailureBaseline_NamedPath_GoalMaterializationUsesHierarchicalLayout(t *testing.T) {
+func TestFailureBaseline_NamedPath_InstalledGoalUsesHierarchicalLayout(t *testing.T) {
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()
+	if _, err := PersistNamedFactory(globalRoot, "@you/goal", namedFactoryPayload(t, "installed-goal")); err != nil {
+		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)
+	}
 
 	resolution, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
 	if err != nil {

@@ -35,7 +35,6 @@ type NamedFactoryResolutionSource string
 const (
 	NamedFactoryResolutionSourceProjectLocal NamedFactoryResolutionSource = "project-local"
 	NamedFactoryResolutionSourceGlobal       NamedFactoryResolutionSource = "global"
-	NamedFactoryResolutionSourceBuiltin      NamedFactoryResolutionSource = "builtin-materialized"
 )
 
 // NamedFactoryPrecedenceDecision reports whether cross-root resolution observed

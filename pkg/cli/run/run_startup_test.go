@@ -517,50 +517,6 @@ func TestRun_VerboseNamedFactoryDiagnosticsReportPrecedenceWithoutPayloadContent
 	}
 }
 
-func TestRun_LogsBuiltInNamedFactoryMaterialization(t *testing.T) {
-	originalBuilder := buildFactoryService
-	defer func() {
-		buildFactoryService = originalBuilder
-	}()
-
-	buildFactoryService = func(_ context.Context, _ *service.FactoryServiceConfig) (factoryServiceRunner, error) {
-		return stubFactoryService{run: func(context.Context) error { return nil }}, nil
-	}
-
-	core, observed := observer.New(zap.InfoLevel)
-	logger := zap.New(core)
-	resolution := &factoryconfig.NamedFactoryResolution{
-		Name:               "@you/tts",
-		FactoryDir:         "/tmp/home/.you-agent-factory/you-agent-factories/@you/tts",
-		Source:             factoryconfig.NamedFactoryResolutionSourceBuiltin,
-		ProjectRoot:        "/tmp/project/factory",
-		GlobalRoot:         "/tmp/home/.you-agent-factory/you-agent-factories",
-		PrecedenceDecision: factoryconfig.NamedFactoryPrecedenceDecisionNone,
-	}
-
-	err := Run(context.Background(), RunConfig{
-		Dir:                     resolution.FactoryDir,
-		DisableDefaultRecording: true,
-		Logger:                  logger,
-		NamedFactoryResolution:  resolution,
-	})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
-	}
-
-	materializedLogs := observed.FilterMessage("named factory built-in materialized").All()
-	if len(materializedLogs) != 1 {
-		t.Fatalf("built-in materialized logs = %d, want 1", len(materializedLogs))
-	}
-	context := materializedLogs[0].ContextMap()
-	if got := context["named_factory_name"]; got != "@you/tts" {
-		t.Fatalf("built-in log name = %#v, want @you/tts", got)
-	}
-	if got := context["named_factory_target_dir"]; got != "/tmp/home/.you-agent-factory/you-agent-factories/@you/tts" {
-		t.Fatalf("built-in log target dir = %#v", got)
-	}
-}
-
 func TestRun_StartupOutputSkipsDashboardOpenWhenOutputIsNonInteractive(t *testing.T) {
 	originalBuilder := buildFactoryService
 	originalOpener := dashboardOpener

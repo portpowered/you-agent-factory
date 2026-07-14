@@ -116,10 +116,10 @@ primary-result behavior.
   Fresh homes create `~/.you-agent-factory/config.json` through
   `pkg/config/systemconfig.EnsureLocalBackendScope`; existing config files are
   validated with `operatorconfig.LoadFileConfig` and left byte-identical on
-  re-run. Packaged defaults materialize through
-  `factoryconfig.EnsureBuiltInNamedFactories`, which skips existing factory
-  directories without rewriting user-edited files and can still create missing
-  catalog entries on later runs. Isolated-home rerun coverage lives in
+  re-run. `pkg/config/configinit` enumerates `pkg/factory/packages` and persists
+  only missing catalog entries through `factoryconfig.PersistNamedFactory`;
+  valid installed directories are loaded and skipped without rewriting
+  customer-owned files. Isolated-home rerun coverage lives in
   `pkg/config/configinit/init_test.go` (`TestInit_DoubleRunIsSuccessfulNoOp`,
   `TestInit_PreservesUserEditedFactoryFilesOnRerun`,
   `TestInit_CreatesMissingPackagedDefaultsWithoutTouchingExisting`) and
@@ -378,9 +378,11 @@ primary-result behavior.
   the developer's real `HOME` so `tests/release` stays hermetic through
   `make test`.
 - `pkg/factory/packages/catalog.go` owns packaged factory lookup and metadata;
-  payload sources live under `pkg/factory/packages/definitions/`, while
-  `pkg/config/layout.go` consumes the catalog for legacy aliases and on-disk
-  materialization. Packaged `@you/goal`
+  payload sources live under `pkg/factory/packages/definitions/`, and config
+  initialization is the only catalog-to-disk installation boundary. Named
+  resolution in `pkg/config/layout.go` reads project-local then global disk
+  state only; it does not install packages or expose compatibility JSON aliases.
+  Packaged `@you/goal`
   has one `execute-goal` `AGENT_RUN` workstation with `REPEATER` behavior:
   accepted completion routes to `goal:complete`, continue/reject route back to
   `goal:init`, and worker or workstation failure routes to `goal:failed`.
@@ -389,22 +391,16 @@ primary-result behavior.
   `execute-goal`.
   Packaged workstation `body` templates must use canonical `PromptData` roots
   such as `(index .Inputs 0).Payload`; legacy top-level aliases like
-  `{{ .WorkID }}` fail prompt rendering before mock-worker dispatch.
-  `upgradeMaterializedBuiltInNamedFactoryIfNeeded` repairs already-materialized
-  built-ins that still carry the legacy alias when the catalog payload has
-  canonical templates, and those repairs must patch the specific legacy prompt
-  files in place rather than replacing the whole materialized named-factory
-  directory so customer edits survive later `you run --named` reuse.
-  `@you/fusion` factory JSON (`BuiltInFusionFactoryJSON`) is also registered from
-  `builtInNamedFactoryCatalog`.
+  `{{ .WorkID }}` fail prompt rendering before mock-worker dispatch. Resolution
+  never repairs legacy prompts, so installed files remain customer-owned and
+  byte-for-byte unchanged by `you run --named` lookup.
 - `pkg/factory/packages/definitions/subagent/` owns the authored `@you/subagent` one-pass factory
   scaffold (`factory.json`, prompt files) assembled into `BuiltInSubagentFactoryJSON`
-  and registered by `pkg/factory/packages/catalog.go`; `pkg/config/layout.go` retains
-  only compatibility aliases and materialization behavior. The topology uses exactly one `AGENT_WORKER`
+  and registered by `pkg/factory/packages/catalog.go`. The topology uses exactly one `AGENT_WORKER`
   with explicit `agentTools.policy` and one `AGENT_RUN` workstation that interpolates
   `${input}` from the invocation signature into the workstation prompt body.
-  `@you/subagent` is registered in `builtInNamedFactoryCatalog` so first named
-  resolution materializes the split-layout factory under the global named-factory root.
+  `you config init` installs `@you/subagent` under the global named-factory root
+  before named invocation can resolve it.
 - `pkg/factory/packages/subagent/` owns packaged subagent factory metadata constants,
   topology validation coverage, materialization/edit-safe identity tests, response
   shaping helpers for terminal `task:complete` work content, and primary-result
@@ -457,9 +453,9 @@ primary-result behavior.
   `goal:init` and routes worker failure to `goal:failed` without live providers.
 - Behavioral proof for named goal batch invocation lives in
   `tests/functional/smoke/cli_named_goal_run_smoke_test.go` using the real
-  `you run --named @you/goal` CLI path with `--with-mock-workers`, including a
-  fresh-home materialization smoke case, a customer-edit preservation rerun
-  smoke case, and a legacy-materialized upgrade smoke case.
+  `you run --named @you/goal` CLI path with `--with-mock-workers` after explicit
+  configuration initialization. Read-only miss and edit-preservation coverage
+  lives in `pkg/config/runtimetests/named_factory_resolution_test.go`.
 - Hermetic no-server named `@you/goal` package proof lives in
   `pkg/cli/run/run_invocation_test.go`
   (`TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer`), using

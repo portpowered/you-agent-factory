@@ -165,50 +165,6 @@ func TestMaybeFormatBlockingFactoryLoadOperatorError_IncludesRecoveryForOnDiskFa
 	}
 }
 
-func TestFailureBaseline_InvalidTopology_MaterializedGoalUpgradePathReportsFindingsAndRecovery(t *testing.T) {
-	projectRoot := t.TempDir()
-	globalRoot := t.TempDir()
-
-	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
-	if err != nil {
-		t.Fatalf("ResolveNamedFactoryAcrossRoots(materialize goal): %v", err)
-	}
-	corruptGoalFactoryExecuteOutputStateForTest(t, resolution.FactoryDir, "missing-output-state")
-
-	_, err = factoryconfig.ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
-	if err == nil {
-		t.Fatal("expected corrupted materialized goal to fail upgrade resolution")
-	}
-	wrapped := blockingload.MaybeFormatBlockingFactoryLoadOperatorErrorForNamedFactory(err, projectRoot, globalRoot, "@you/goal")
-	assertInvalidTopologyMaterializationOperatorDiagnostics(t, wrapped, resolution.FactoryDir)
-}
-
-func TestFailureBaseline_InvalidTopology_PreExistingInvalidMaterializedTargetReportsFindingsAndRecovery(t *testing.T) {
-	projectRoot := t.TempDir()
-	globalRoot := t.TempDir()
-	factoryDir, err := namedfactorypath.MapDir(globalRoot, "@you/goal")
-	if err != nil {
-		t.Fatalf("MapDir: %v", err)
-	}
-	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%q): %v", factoryDir, err)
-	}
-	if err := os.WriteFile(
-		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
-		[]byte(failureBaselineInvalidGoalTopologyJSON),
-		0o644,
-	); err != nil {
-		t.Fatalf("WriteFile(factory.json): %v", err)
-	}
-
-	_, err = factoryconfig.ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
-	if err == nil {
-		t.Fatal("expected invalid pre-existing materialized target to fail")
-	}
-	wrapped := blockingload.MaybeFormatBlockingFactoryLoadOperatorErrorForNamedFactory(err, projectRoot, globalRoot, "@you/goal")
-	assertInvalidTopologyMaterializationOperatorDiagnostics(t, wrapped, factoryDir)
-}
-
 func TestFailureBaseline_InvalidTopology_MaterializeNamedFactoryFailureRetainsStructuredFindings(t *testing.T) {
 	rootDir := t.TempDir()
 	factoryPath, err := namedfactorypath.MapDir(rootDir, "@you/goal")

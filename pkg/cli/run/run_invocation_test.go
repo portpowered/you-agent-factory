@@ -19,6 +19,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/configinit"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
@@ -1341,6 +1342,9 @@ func namedGoalNoServerInvocationRunConfig(t *testing.T, goalText string) RunConf
 
 	homeDir := t.TempDir()
 	setUserHomeForTest(t, homeDir)
+	if _, err := configinit.Init(homeDir); err != nil {
+		t.Fatalf("configinit.Init: %v", err)
+	}
 	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
 	if err != nil {
 		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
@@ -1519,6 +1523,9 @@ func TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer(t *testin
 
 	homeDir := t.TempDir()
 	setUserHomeForTest(t, homeDir)
+	if _, err := configinit.Init(homeDir); err != nil {
+		t.Fatalf("configinit.Init: %v", err)
+	}
 	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
 	if err != nil {
 		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
@@ -1766,6 +1773,9 @@ func namedSubagentNoServerInvocationRunConfig(t *testing.T, requestText string) 
 
 	homeDir := t.TempDir()
 	setUserHomeForTest(t, homeDir)
+	if _, err := configinit.Init(homeDir); err != nil {
+		t.Fatalf("configinit.Init: %v", err)
+	}
 	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
 	if err != nil {
 		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
@@ -1826,6 +1836,9 @@ func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *te
 
 	homeDir := t.TempDir()
 	setUserHomeForTest(t, homeDir)
+	if _, err := configinit.Init(homeDir); err != nil {
+		t.Fatalf("configinit.Init: %v", err)
+	}
 	globalRoot, err := factoryconfig.DefaultGlobalNamedFactoryRoot()
 	if err != nil {
 		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
