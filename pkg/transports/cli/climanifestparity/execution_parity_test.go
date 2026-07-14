@@ -105,17 +105,28 @@ func TestProductionManifestLiveExitCodeParity_RootAndSessionShow(t *testing.T) {
 		t.Fatalf("CommandByID(you.session.show) error = %v", err)
 	}
 
-	for _, record := range []climanifest.Command{rootRecord, sessionShowRecord} {
+	assertLiveExitCodeContractParity(t, rootRecord, sessionShowRecord)
+
+	env := parityTestEnvironment(t)
+	assertObservedRootExitCodes(t, rootRecord, env)
+	assertObservedSessionShowExitCodes(t, sessionShowRecord, env)
+}
+
+func assertLiveExitCodeContractParity(t *testing.T, records ...climanifest.Command) {
+	t.Helper()
+	for _, record := range records {
 		t.Run(record.ID+"/contract-vs-live-boundary", func(t *testing.T) {
 			if mismatches := climanifestparity.CompareLiveExitCodes(record); len(mismatches) > 0 {
 				t.Fatalf("contract exit codes disagree with live root.Run boundary:\n%s", climanifestparity.FormatMismatchReport(mismatches))
 			}
 		})
 	}
+}
 
-	env := parityTestEnvironment(t)
+func assertObservedRootExitCodes(t *testing.T, record climanifest.Command, env []string) {
+	t.Helper()
 	t.Run("you/observed-success", func(t *testing.T) {
-		want, ok := climanifestparity.ExitCodeForKind(rootRecord, "success")
+		want, ok := climanifestparity.ExitCodeForKind(record, "success")
 		if !ok {
 			t.Fatal("contract missing success exit")
 		}
@@ -127,7 +138,7 @@ func TestProductionManifestLiveExitCodeParity_RootAndSessionShow(t *testing.T) {
 		}
 	})
 	t.Run("you/observed-usage", func(t *testing.T) {
-		want, ok := climanifestparity.ExitCodeForKind(rootRecord, "usage")
+		want, ok := climanifestparity.ExitCodeForKind(record, "usage")
 		if !ok {
 			t.Fatal("contract missing usage exit")
 		}
@@ -138,12 +149,15 @@ func TestProductionManifestLiveExitCodeParity_RootAndSessionShow(t *testing.T) {
 			t.Fatalf("usage exit code = %d, want contracted usage code %d", code, want)
 		}
 	})
+}
 
+func assertObservedSessionShowExitCodes(t *testing.T, record climanifest.Command, env []string) {
+	t.Helper()
 	originalShowSession := cli.ShowSessionAccessor()
 	defer cli.SetShowSessionAccessor(originalShowSession)
 
 	t.Run("you.session.show/observed-success", func(t *testing.T) {
-		want, ok := climanifestparity.ExitCodeForKind(sessionShowRecord, "success")
+		want, ok := climanifestparity.ExitCodeForKind(record, "success")
 		if !ok {
 			t.Fatal("contract missing success exit")
 		}
@@ -155,7 +169,7 @@ func TestProductionManifestLiveExitCodeParity_RootAndSessionShow(t *testing.T) {
 		}
 	})
 	t.Run("you.session.show/observed-failure", func(t *testing.T) {
-		want, ok := climanifestparity.ExitCodeForKind(sessionShowRecord, "failure")
+		want, ok := climanifestparity.ExitCodeForKind(record, "failure")
 		if !ok {
 			t.Fatal("contract missing failure exit")
 		}
@@ -167,7 +181,7 @@ func TestProductionManifestLiveExitCodeParity_RootAndSessionShow(t *testing.T) {
 		}
 	})
 	t.Run("you.session.show/observed-usage", func(t *testing.T) {
-		want, ok := climanifestparity.ExitCodeForKind(sessionShowRecord, "usage")
+		want, ok := climanifestparity.ExitCodeForKind(record, "usage")
 		if !ok {
 			t.Fatal("contract missing usage exit")
 		}
