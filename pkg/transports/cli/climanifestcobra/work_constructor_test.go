@@ -116,6 +116,74 @@ func TestNewWorkFamilyCommandRegistersContractedFlagsAndArgs(t *testing.T) {
 	assertWorkFamilyCompletionParity(t, work, manifest)
 }
 
+func TestNewWorkFamilyCommandAppliesBindingFlagUsages(t *testing.T) {
+	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
+		ListRunE:      noopRunE,
+		ShowRunE:      noopRunE,
+		MoveRunE:      noopRunE,
+		VisualizeRunE: noopRunE,
+	})
+	if err != nil {
+		t.Fatalf("NewWorkRegistry() error = %v", err)
+	}
+	bindings := testWorkBindings()
+	bindings.FlagUsages = map[string]string{
+		"session": "custom session help for parity",
+		"format":  "custom visualize format help",
+	}
+	work, err := climanifestcobra.NewWorkFamilyCommand(registry, bindings)
+	if err != nil {
+		t.Fatalf("NewWorkFamilyCommand() error = %v", err)
+	}
+	list, err := climanifestparity.FindCommandByPath(work, "work list")
+	if err != nil {
+		t.Fatalf("FindCommandByPath(work list) error = %v", err)
+	}
+	if got := list.Flags().Lookup("session").Usage; got != "custom session help for parity" {
+		t.Fatalf("session flag usage = %q, want custom binding usage", got)
+	}
+	visualize, err := climanifestparity.FindCommandByPath(work, "work visualize")
+	if err != nil {
+		t.Fatalf("FindCommandByPath(work visualize) error = %v", err)
+	}
+	if got := visualize.Flags().Lookup("format").Usage; got != "custom visualize format help" {
+		t.Fatalf("format flag usage = %q, want custom binding usage", got)
+	}
+}
+
+func TestNewWorkFamilyCommandRegistersEveryManifestLocalFlag(t *testing.T) {
+	manifest := mustWorkFamilyManifest(t)
+	work, _ := mustWorkFamilyTree(t)
+	for _, tc := range []struct {
+		commandID string
+		path      string
+	}{
+		{commandID: "you.work.list", path: "work list"},
+		{commandID: "you.work.show", path: "work show"},
+		{commandID: "you.work.move", path: "work move"},
+		{commandID: "you.work.visualize", path: "work visualize"},
+	} {
+		t.Run(tc.commandID, func(t *testing.T) {
+			record, err := manifest.CommandByID(tc.commandID)
+			if err != nil {
+				t.Fatalf("CommandByID(%q) error = %v", tc.commandID, err)
+			}
+			cmd, err := climanifestparity.FindCommandByPath(work, tc.path)
+			if err != nil {
+				t.Fatalf("FindCommandByPath(%q) error = %v", tc.path, err)
+			}
+			for _, flag := range record.Flags {
+				if flag.Scope != "local" {
+					continue
+				}
+				if got := cmd.Flags().Lookup(flag.Long); got == nil {
+					t.Fatalf("%s missing local flag %q", tc.path, flag.Long)
+				}
+			}
+		})
+	}
+}
+
 func mustWorkFamilyManifest(t *testing.T) climanifest.Manifest {
 	t.Helper()
 	manifest, err := generated.WorkFamilyManifest()

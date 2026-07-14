@@ -23,6 +23,30 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func TestLegacyWorkFamilyParityExportsBuildContractedTree(t *testing.T) {
+	legacyWork := cli.NewLegacyWorkFamilyCommand()
+	if legacyWork.Name() != "work" {
+		t.Fatalf("legacy work name = %q, want work", legacyWork.Name())
+	}
+	for _, path := range []string{"work list", "work show", "work move", "work visualize"} {
+		if _, err := climanifestparity.FindCommandByPath(legacyWork, path); err != nil {
+			t.Fatalf("FindCommandByPath(%q) error = %v", path, err)
+		}
+	}
+
+	legacyRoot := cli.NewLegacyWorkFamilyRootForParity()
+	if legacyRoot.Name() != "you" {
+		t.Fatalf("legacy root name = %q, want you", legacyRoot.Name())
+	}
+	if _, err := climanifestparity.FindCommandByPath(legacyRoot, "you work list"); err != nil {
+		t.Fatalf("legacy root missing work list: %v", err)
+	}
+
+	if _, _, err := cli.NewWorkFamilyParityRoots(nil, climanifestcobra.WorkFamilyBindings{}); err == nil {
+		t.Fatal("NewWorkFamilyParityRoots(nil registry) = nil, want error")
+	}
+}
+
 func TestProductionManifestParsingParity_WorkFamily(t *testing.T) {
 	manifestPath := testutil.MustRepoPath(t, climanifest.ProductionManifestPath)
 	manifest, err := climanifest.LoadProduction(manifestPath)

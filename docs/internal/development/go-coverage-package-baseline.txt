@@ -4,6 +4,8 @@
 github.com/portpowered/infinite-you/pkg/transports/http
 github.com/portpowered/infinite-you/pkg/transports/http/apitypes
 github.com/portpowered/infinite-you/pkg/transports/mapping
+github.com/portpowered/infinite-you/pkg/transports/cli
+github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra
 github.com/portpowered/infinite-you/pkg/transports/cli/config
 github.com/portpowered/infinite-you/pkg/transports/cli/mcp
 github.com/portpowered/infinite-you/pkg/transports/cli/models
