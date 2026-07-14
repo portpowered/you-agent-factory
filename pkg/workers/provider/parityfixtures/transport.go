@@ -203,44 +203,87 @@ func DecodeTransportSSEFrame(frame string) (responseevents.FactoryResponseEvent,
 // AssertObservableToolLifecycle verifies published response events include a
 // correlated tool start and completion with stable tool identity fields.
 func AssertObservableToolLifecycle(events []responseevents.FactoryResponseEvent) error {
-	var started, completed bool
-	var toolCallID, toolName string
+	var tracker toolLifecycleTracker
 	for _, event := range events {
-		if event.Kind != responseevents.KindTool {
-			continue
-		}
-		switch event.Phase {
-		case responseevents.PhaseStarted:
-			var payload responseevents.ToolPayload
-			if err := json.Unmarshal(event.Payload, &payload); err != nil {
-				return fmt.Errorf("decode tool started payload: %w", err)
-			}
-			if payload.ToolCallID == "" || payload.ToolName == "" {
-				return fmt.Errorf("tool started missing identity: %#v", payload)
-			}
-			if toolCallID == "" {
-				toolCallID = payload.ToolCallID
-				toolName = payload.ToolName
-			} else if payload.ToolCallID != toolCallID || payload.ToolName != toolName {
-				return fmt.Errorf("tool started identity drift: %#v", payload)
-			}
-			started = true
-		case responseevents.PhaseCompleted:
-			var payload responseevents.ToolPayload
-			if err := json.Unmarshal(event.Payload, &payload); err != nil {
-				return fmt.Errorf("decode tool completed payload: %w", err)
-			}
-			if payload.ToolCallID == "" || payload.ToolName == "" {
-				return fmt.Errorf("tool completed missing identity: %#v", payload)
-			}
-			if toolCallID != "" && (payload.ToolCallID != toolCallID || payload.ToolName != toolName) {
-				return fmt.Errorf("tool completed identity mismatch: %#v", payload)
-			}
-			completed = true
+		if err := tracker.observe(event); err != nil {
+			return err
 		}
 	}
-	if !started || !completed {
-		return fmt.Errorf("tool lifecycle events = started %t completed %t, want both", started, completed)
+	return tracker.finalize()
+}
+
+type toolLifecycleTracker struct {
+	started    bool
+	completed  bool
+	toolCallID string
+	toolName   string
+}
+
+func (t *toolLifecycleTracker) observe(event responseevents.FactoryResponseEvent) error {
+	if event.Kind != responseevents.KindTool {
+		return nil
+	}
+	switch event.Phase {
+	case responseevents.PhaseStarted:
+		return t.observeStarted(event)
+	case responseevents.PhaseCompleted:
+		return t.observeCompleted(event)
+	default:
+		return nil
+	}
+}
+
+func (t *toolLifecycleTracker) finalize() error {
+	if !t.started || !t.completed {
+		return fmt.Errorf("tool lifecycle events = started %t completed %t, want both", t.started, t.completed)
+	}
+	return nil
+}
+
+func (t *toolLifecycleTracker) observeStarted(event responseevents.FactoryResponseEvent) error {
+	payload, err := decodeToolPayload(event, "started")
+	if err != nil {
+		return err
+	}
+	if err := requireToolIdentity(payload, "started"); err != nil {
+		return err
+	}
+	if t.toolCallID == "" {
+		t.toolCallID = payload.ToolCallID
+		t.toolName = payload.ToolName
+	} else if payload.ToolCallID != t.toolCallID || payload.ToolName != t.toolName {
+		return fmt.Errorf("tool started identity drift: %#v", payload)
+	}
+	t.started = true
+	return nil
+}
+
+func (t *toolLifecycleTracker) observeCompleted(event responseevents.FactoryResponseEvent) error {
+	payload, err := decodeToolPayload(event, "completed")
+	if err != nil {
+		return err
+	}
+	if err := requireToolIdentity(payload, "completed"); err != nil {
+		return err
+	}
+	if t.toolCallID != "" && (payload.ToolCallID != t.toolCallID || payload.ToolName != t.toolName) {
+		return fmt.Errorf("tool completed identity mismatch: %#v", payload)
+	}
+	t.completed = true
+	return nil
+}
+
+func decodeToolPayload(event responseevents.FactoryResponseEvent, label string) (responseevents.ToolPayload, error) {
+	var payload responseevents.ToolPayload
+	if err := json.Unmarshal(event.Payload, &payload); err != nil {
+		return payload, fmt.Errorf("decode tool %s payload: %w", label, err)
+	}
+	return payload, nil
+}
+
+func requireToolIdentity(payload responseevents.ToolPayload, label string) error {
+	if payload.ToolCallID == "" || payload.ToolName == "" {
+		return fmt.Errorf("tool %s missing identity: %#v", label, payload)
 	}
 	return nil
 }
