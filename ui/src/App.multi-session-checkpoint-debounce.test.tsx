@@ -189,22 +189,6 @@ async function advanceControlledWrite(
   fixture.controls.succeed("get");
   await flushPromiseContinuations();
   await flushPromiseContinuations();
-  fixture.controls.succeed("open", openOrdinal);
-  await flushPromiseContinuations();
-  fixture.controls.succeed("put");
-  fixture.controls.completeTransaction();
-  for (let turn = 0; turn < 4; turn += 1) {
-    await flushPromiseContinuations();
-  }
-}
-
-async function advanceQueuedControlledWrite(
-  fixture: ReturnType<
-    typeof createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>
-  >,
-): Promise<void> {
-  fixture.controls.succeed("open");
-  await flushPromiseContinuations();
   fixture.controls.succeed("put");
   fixture.controls.completeTransaction();
   for (let turn = 0; turn < 4; turn += 1) {
@@ -433,7 +417,7 @@ describe("App checkpoint lifecycle safety", () => {
     await advanceControlledWrite(controlled, 1);
     await advanceControlledWrite(controlled);
     expect(controlled.controls.pendingOperations()).toEqual(["open"]);
-    await advanceQueuedControlledWrite(controlled);
+    await advanceControlledWrite(controlled);
 
     const stored = [...controlled.records.values()];
     expect(stored).toHaveLength(2);
