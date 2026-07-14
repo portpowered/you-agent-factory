@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/compatibility-inventory.schema.json",
+  "title": "You family compatibility inventory",
+  "description": "Machine-readable inventory of classified compatibility aliases and compatibility-only public surfaces for one transport family. Inventory metadata does not control runtime callability.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["formatVersion", "family", "records"],
+  "properties": {
+    "formatVersion": {
+      "description": "The explicitly supported version of this compatibility inventory format.",
+      "const": "1.0.0"
+    },
+    "family": {
+      "$ref": "https://schemas.portpowered.com/you/contracts/common/compatibility-inventory.schema.json#/$defs/family"
+    },
+    "records": {
+      "description": "Classified compatibility surfaces keyed by stable item ID. Object keys make duplicate stable IDs structurally unrepresentable.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+      },
+      "additionalProperties": {
+        "$ref": "https://schemas.portpowered.com/you/contracts/common/compatibility-inventory.schema.json#/$defs/record"
+      }
+    }
+  }
+}

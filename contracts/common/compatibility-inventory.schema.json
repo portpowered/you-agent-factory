@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/common/compatibility-inventory.schema.json",
+  "title": "You compatibility inventory vocabulary",
+  "description": "Shared vocabulary for family compatibility inventories that classify baseline aliases and compatibility-only public surfaces. Classification metadata does not control runtime callability.",
+  "$defs": {
+    "family": {
+      "description": "The transport family owning one compatibility inventory record.",
+      "enum": ["api", "cli", "mcp"]
+    },
+    "classification": {
+      "description": "Maintainer classification for one compatibility surface. remove-now means removal-ready for a later approved removal story, not physically removed in the inventory item.",
+      "enum": ["retain-temporarily", "remove-now", "separately-approved"]
+    },
+    "approvalStatus": {
+      "description": "Maintainer approval status for the recorded classification and removal gates.",
+      "enum": ["approved", "pending", "rejected"]
+    },
+    "evidence": {
+      "description": "Reviewed evidence that the public name is compatibility-only or otherwise inventoried for migration.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary"],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "references": {
+          "description": "Optional repository-relative paths or stable evidence identifiers supporting the summary.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "removalGate": {
+      "description": "One objective gate that must be satisfied before a compatibility surface may be removed in a later approved change.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "status"],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "enum": ["open", "satisfied"]
+        }
+      }
+    },
+    "record": {
+      "description": "One classified compatibility alias or compatibility-only public surface.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "itemId",
+        "family",
+        "publicName",
+        "classification",
+        "lifecycle",
+        "evidence",
+        "removalGates",
+        "approvalStatus"
+      ],
+      "properties": {
+        "itemId": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "family": {
+          "$ref": "#/$defs/family"
+        },
+        "publicName": {
+          "description": "The compatibility-facing public name callers may still use while the surface remains callable.",
+          "type": "string",
+          "minLength": 1
+        },
+        "classification": {
+          "$ref": "#/$defs/classification"
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        },
+        "evidence": {
+          "$ref": "#/$defs/evidence"
+        },
+        "removalGates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/removalGate"
+          }
+        },
+        "approvalStatus": {
+          "$ref": "#/$defs/approvalStatus"
+        }
+      },
+      "allOf": [
+        {
+          "properties": {
+            "lifecycle": {
+              "required": ["state", "since", "successor", "deprecated"],
+              "properties": {
+                "state": {
+                  "const": "deprecated"
+                },
+                "removed": false
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

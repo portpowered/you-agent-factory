@@ -72,7 +72,7 @@ func MergeRegistries(registries ...Registry) Registry {
 
 // DefaultRegistry registers every contract family validated by make contracts-validate.
 func DefaultRegistry() Registry {
-	return MergeRegistries(CommonRegistry(), CLIRegistry())
+	return MergeRegistries(CommonRegistry(), CLIRegistry(), CompatibilityInventoryRegistry())
 }
 
 // CommonRegistry registers the common schemas and their merged valid fixtures.
@@ -195,6 +195,9 @@ func validateEntry(repositoryRoot string, entry Entry) []Diagnostic {
 		if err := schema.Validate(value); err != nil {
 			diagnostics = append(diagnostics, validationDiagnostics(document.Path, err)...)
 			continue
+		}
+		if document.SchemaID == compatibilityInventorySchemaID {
+			diagnostics = append(diagnostics, compatibilityInventorySemanticsDiagnostics(document.Path, value)...)
 		}
 		if document.SchemaID == commandManifestSchemaID {
 			diagnostics = append(diagnostics, cliManifestDiagnostics(document.Path, value)...)
