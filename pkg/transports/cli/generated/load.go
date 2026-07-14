@@ -14,6 +14,9 @@ var representativeFamilyJSON []byte
 //go:embed work_family.json
 var workFamilyJSON []byte
 
+//go:embed factory_config_init_family.json
+var factoryConfigInitFamilyJSON []byte
+
 //go:embed models_docs_family.json
 var modelsDocsFamilyJSON []byte
 
@@ -29,22 +32,28 @@ func WorkFamilyManifest() (climanifest.Manifest, error) {
 	return parseFamilyManifest(workFamilyJSON, "work")
 }
 
+// FactoryConfigInitFamilyManifest returns generated §4.3 metadata for the
+// factory/config/init command family.
+func FactoryConfigInitFamilyManifest() (climanifest.Manifest, error) {
+	return parseFamilyManifest(factoryConfigInitFamilyJSON, "factory/config/init")
+}
+
 // ModelsDocsFamilyManifest returns generated §4.3 metadata for the models/docs
 // command family.
 func ModelsDocsFamilyManifest() (climanifest.Manifest, error) {
 	return parseFamilyManifest(modelsDocsFamilyJSON, "models/docs")
 }
 
-func parseFamilyManifest(payload []byte, familyName string) (climanifest.Manifest, error) {
+func parseFamilyManifest(payload []byte, familyLabel string) (climanifest.Manifest, error) {
 	var manifest climanifest.Manifest
 	if err := json.Unmarshal(payload, &manifest); err != nil {
-		return climanifest.Manifest{}, fmt.Errorf("decode generated %s-family metadata: %w", familyName, err)
+		return climanifest.Manifest{}, fmt.Errorf("decode generated %s metadata: %w", familyLabel, err)
 	}
 	if manifest.RootPath == "" {
-		return climanifest.Manifest{}, fmt.Errorf("generated %s-family metadata missing rootPath", familyName)
+		return climanifest.Manifest{}, fmt.Errorf("generated %s metadata missing rootPath", familyLabel)
 	}
 	if len(manifest.Commands) == 0 {
-		return climanifest.Manifest{}, fmt.Errorf("generated %s-family metadata missing commands", familyName)
+		return climanifest.Manifest{}, fmt.Errorf("generated %s metadata missing commands", familyLabel)
 	}
 	return manifest, nil
 }
@@ -61,6 +70,15 @@ func CommandByID(id string) (climanifest.Command, error) {
 // WorkCommandByID returns one generated work-family command record.
 func WorkCommandByID(id string) (climanifest.Command, error) {
 	manifest, err := WorkFamilyManifest()
+	if err != nil {
+		return climanifest.Command{}, err
+	}
+	return manifest.CommandByID(id)
+}
+
+// FactoryConfigInitCommandByID returns one generated factory/config/init command record.
+func FactoryConfigInitCommandByID(id string) (climanifest.Command, error) {
+	manifest, err := FactoryConfigInitFamilyManifest()
 	if err != nil {
 		return climanifest.Command{}, err
 	}

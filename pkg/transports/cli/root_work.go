@@ -10,7 +10,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
-	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
@@ -27,9 +26,10 @@ func newLegacyRootCommandWithOptions(options RootCommandOptions) *cobra.Command 
 	diagnostics := &cliDiagnosticsOptions{}
 	operatorDefaults := &cliOperatorDefaultsOptions{}
 	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	factoryConfigInit := productionFactoryConfigInitCommands(globals, diagnostics, options)
 	docsCmd := newDocsCommand(diagnostics)
 	modelsCmd := newModelsCommand(globals, diagnostics, operatorDefaults, options)
-	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, newSessionCommand(globals, diagnostics, options), docsCmd, modelsCmd)...)
+	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, newSessionCommand(globals, diagnostics, options), factoryConfigInit, docsCmd, modelsCmd)...)
 	return root
 }
 
@@ -122,13 +122,14 @@ func newRootCommandWithGeneratedRepresentativeFamily(options RootCommandOptions)
 	session := components.Session
 	session.AddCommand(handwrittenSessionSubcommands(globals, diagnostics, options, components.Show)...)
 
+	factoryConfigInit := productionFactoryConfigInitCommands(globals, diagnostics, options)
 	docsCmd, modelsCmd, err := newProductionModelsDocsCommands(globals, diagnostics, operatorDefaults, options)
 	if err != nil {
 		panic(fmt.Sprintf("build models/docs family command: %v", err))
 	}
 
 	root := components.Root
-	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, session, docsCmd, modelsCmd)...)
+	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, session, factoryConfigInit, docsCmd, modelsCmd)...)
 	return root
 }
 
@@ -138,20 +139,15 @@ func productionRootSubcommands(
 	operatorDefaults *cliOperatorDefaultsOptions,
 	options RootCommandOptions,
 	session *cobra.Command,
+	factoryConfigInit factoryConfigInitProductionCommands,
 	docsCmd *cobra.Command,
 	modelsCmd *cobra.Command,
 ) []*cobra.Command {
 	return []*cobra.Command{
 		docsCmd,
-		configinitcmd.NewSystemConfigCommand(cliBinaryName, configinitcmd.CommandGlobals{
-			JSON:    func() bool { return globals.json },
-			HomeDir: options.HomeDir,
-		}, configinitcmd.CommandDiagnostics{
-			Writer:  diagnostics.writer,
-			Verbose: diagnostics.verboseEnabled,
-		}),
-		newFactoryCommand(globals, diagnostics),
-		newInitCommand(globals, diagnostics),
+		factoryConfigInit.Config,
+		factoryConfigInit.Factory,
+		factoryConfigInit.Init,
 		newMCPCommand(options),
 		modelsCmd,
 		newRunCommand(globals, diagnostics, operatorDefaults, options),

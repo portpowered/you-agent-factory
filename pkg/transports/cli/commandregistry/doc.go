@@ -3,5 +3,6 @@
 // attach behavior through this registry instead of embedding RunE bodies in
 // generated packages. Representative-family handlers cover you and you.session.show;
 // work-family handlers cover you.work.list, you.work.show, you.work.move, and
-// you.work.visualize.
+// you.work.visualize; factory/config/init handlers cover the B11 factory/config/init
+// cutover slice.
 package commandregistry

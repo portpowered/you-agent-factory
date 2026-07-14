@@ -23,6 +23,12 @@ const (
 	// RepresentativeFamilyCommandIDsPath is the generated stable command ID list.
 	RepresentativeFamilyCommandIDsPath = "pkg/transports/cli/generated/command_ids_gen.go"
 
+	// FactoryConfigInitFamilyJSONPath is the generated factory/config/init metadata artifact.
+	FactoryConfigInitFamilyJSONPath = "pkg/transports/cli/generated/factory_config_init_family.json"
+
+	// FactoryConfigInitFamilyCommandIDsPath is the generated factory/config/init command ID list.
+	FactoryConfigInitFamilyCommandIDsPath = "pkg/transports/cli/generated/factory_config_init_command_ids_gen.go"
+
 	// ModelsDocsFamilyJSONPath is the generated models/docs-family metadata artifact.
 	ModelsDocsFamilyJSONPath = "pkg/transports/cli/generated/models_docs_family.json"
 
@@ -30,8 +36,8 @@ const (
 	ModelsDocsFamilyCommandIDsPath = "pkg/transports/cli/generated/models_docs_command_ids_gen.go"
 )
 
-// Artifact returns the deterministic generated representative-family metadata bytes.
-func Artifact(repositoryRoot string) ([]byte, error) {
+// RepresentativeFamilyArtifact returns deterministic generated representative-family metadata bytes.
+func RepresentativeFamilyArtifact(repositoryRoot string) ([]byte, error) {
 	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
 	manifest, err := climanifest.LoadProduction(manifestPath)
 	if err != nil {
@@ -58,6 +64,20 @@ func WorkArtifact(repositoryRoot string) ([]byte, error) {
 	return contractjoiner.MarshalCanonicalJSON(family)
 }
 
+// FactoryConfigInitFamilyArtifact returns deterministic generated factory/config/init metadata bytes.
+func FactoryConfigInitFamilyArtifact(repositoryRoot string) ([]byte, error) {
+	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
+	manifest, err := climanifest.LoadProduction(manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	family, err := ExtractFactoryConfigInitFamily(manifest)
+	if err != nil {
+		return nil, err
+	}
+	return contractjoiner.MarshalCanonicalJSON(family)
+}
+
 // ModelsDocsArtifact returns the deterministic generated models/docs-family metadata bytes.
 func ModelsDocsArtifact(repositoryRoot string) ([]byte, error) {
 	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
@@ -72,9 +92,9 @@ func ModelsDocsArtifact(repositoryRoot string) ([]byte, error) {
 	return contractjoiner.MarshalCanonicalJSON(family)
 }
 
-// Generate writes representative-, work-, and models/docs-family metadata artifacts.
+// Generate writes CLI family metadata artifacts for review and drift checks.
 func Generate(repositoryRoot string) error {
-	if err := writeArtifact(repositoryRoot, RepresentativeFamilyJSONPath, Artifact); err != nil {
+	if err := writeArtifact(repositoryRoot, RepresentativeFamilyJSONPath, RepresentativeFamilyArtifact); err != nil {
 		return err
 	}
 	if err := writeArtifact(repositoryRoot, WorkFamilyJSONPath, WorkArtifact); err != nil {
@@ -83,6 +103,14 @@ func Generate(repositoryRoot string) error {
 	idsTarget := filepath.Join(repositoryRoot, filepath.FromSlash(RepresentativeFamilyCommandIDsPath))
 	if err := os.WriteFile(idsTarget, representativeAndWorkCommandIDsSource(), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", RepresentativeFamilyCommandIDsPath, err)
+	}
+
+	if err := writeArtifact(repositoryRoot, FactoryConfigInitFamilyJSONPath, FactoryConfigInitFamilyArtifact); err != nil {
+		return err
+	}
+	factoryConfigInitIDsTarget := filepath.Join(repositoryRoot, filepath.FromSlash(FactoryConfigInitFamilyCommandIDsPath))
+	if err := os.WriteFile(factoryConfigInitIDsTarget, factoryConfigInitCommandIDsSource(), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", FactoryConfigInitFamilyCommandIDsPath, err)
 	}
 
 	if err := writeArtifact(repositoryRoot, ModelsDocsFamilyJSONPath, ModelsDocsArtifact); err != nil {
@@ -121,6 +149,14 @@ package generated
 	builder.WriteString("\n")
 	writeCommandIDVar(&builder, "WorkFamilyCommandIDs", "work inspection/control family", WorkFamilyCommandIDs)
 	return []byte(builder.String())
+}
+
+func factoryConfigInitCommandIDsSource() []byte {
+	return renderCommandIDsSource(
+		"FactoryConfigInitFamilyCommandIDs lists the stable command IDs emitted from\n// contracts/cli/commands.json for the factory/config/init family.",
+		"FactoryConfigInitFamilyCommandIDs",
+		FactoryConfigInitFamilyCommandIDs,
+	)
 }
 
 func modelsDocsCommandIDsSource() []byte {

@@ -1,4 +1,3 @@
-cmd/climanifestgen/manifest_fixture_test.go: unreachable func: writeMinimalProductionManifest
 pkg/runtimehost/factory_runtime_state.go: unreachable func: Host.currentRuntimeSubmitter
 pkg/runtimehost/factory_runtime_state.go: unreachable func: markModelExecutionLoadFinished
 pkg/runtimehost/factory_runtime_state.go: unreachable func: markModelExecutionLoadRequested

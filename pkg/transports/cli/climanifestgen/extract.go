@@ -18,6 +18,12 @@ func ExtractWorkFamily(manifest climanifest.Manifest) (climanifest.Manifest, err
 	return extractFamily(manifest, "work", WorkFamilyCommandIDs)
 }
 
+// ExtractFactoryConfigInitFamily returns manifest metadata for exactly the
+// factory/config/init command IDs declared in commands.json.
+func ExtractFactoryConfigInitFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
+	return extractFamily(manifest, "factory/config/init", FactoryConfigInitFamilyCommandIDs)
+}
+
 func extractFamily(
 	manifest climanifest.Manifest,
 	familyLabel string,

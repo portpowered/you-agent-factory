@@ -8,13 +8,19 @@
       "path": "you",
       "documentation": {
         "documentation": {
-          "title": {"canonicalEnglish": "root"},
-          "description": {"canonicalEnglish": "root"}
+          "title": {
+            "canonicalEnglish": "root"
+          },
+          "description": {
+            "canonicalEnglish": "root"
+          }
         }
       },
       "visibility": "visible",
       "runnable": true,
-      "usage": {"line": "you"}
+      "usage": {
+        "line": "you"
+      }
     },
     "you.session": {
       "id": "you.session",
@@ -22,13 +28,19 @@
       "path": "you session",
       "documentation": {
         "documentation": {
-          "title": {"canonicalEnglish": "session"},
-          "description": {"canonicalEnglish": "session"}
+          "title": {
+            "canonicalEnglish": "session"
+          },
+          "description": {
+            "canonicalEnglish": "session"
+          }
         }
       },
       "visibility": "visible",
       "runnable": false,
-      "usage": {"line": "session"}
+      "usage": {
+        "line": "session"
+      }
     },
     "you.session.show": {
       "id": "you.session.show",
@@ -36,14 +48,23 @@
       "path": "you session show",
       "documentation": {
         "documentation": {
-          "title": {"canonicalEnglish": "show"},
-          "description": {"canonicalEnglish": "show"}
+          "title": {
+            "canonicalEnglish": "show"
+          },
+          "description": {
+            "canonicalEnglish": "show"
+          }
         }
       },
       "visibility": "visible",
       "runnable": true,
-      "usage": {"line": "show [session-id]"},
-      "handler": {"id": "you.session.show.handler", "operationId": "getFactorySession"}
+      "usage": {
+        "line": "show [session-id]"
+      },
+      "handler": {
+        "id": "you.session.show.handler",
+        "operationId": "getFactorySession"
+      }
     },
     "you.work": {
       "id": "you.work",
@@ -51,13 +72,19 @@
       "path": "you work",
       "documentation": {
         "documentation": {
-          "title": {"canonicalEnglish": "work"},
-          "description": {"canonicalEnglish": "work"}
+          "title": {
+            "canonicalEnglish": "work"
+          },
+          "description": {
+            "canonicalEnglish": "work"
+          }
         }
       },
       "visibility": "visible",
       "runnable": false,
-      "usage": {"line": "work"}
+      "usage": {
+        "line": "work"
+      }
     },
     "you.work.list": {
       "id": "you.work.list",
@@ -65,14 +92,23 @@
       "path": "you work list",
       "documentation": {
         "documentation": {
-          "title": {"canonicalEnglish": "list"},
-          "description": {"canonicalEnglish": "list"}
+          "title": {
+            "canonicalEnglish": "list"
+          },
+          "description": {
+            "canonicalEnglish": "list"
+          }
         }
       },
       "visibility": "visible",
       "runnable": true,
-      "usage": {"line": "list"},
-      "handler": {"id": "you.work.list.handler", "operationId": "listWorkBySessionId"}
+      "usage": {
+        "line": "list"
+      },
+      "handler": {
+        "id": "you.work.list.handler",
+        "operationId": "listWorkBySessionId"
+      }
     },
     "you.work.show": {
       "id": "you.work.show",
@@ -80,14 +116,23 @@
       "path": "you work show",
       "documentation": {
         "documentation": {
-          "title": {"canonicalEnglish": "show"},
-          "description": {"canonicalEnglish": "show"}
+          "title": {
+            "canonicalEnglish": "show"
+          },
+          "description": {
+            "canonicalEnglish": "show"
+          }
         }
       },
       "visibility": "visible",
       "runnable": true,
-      "usage": {"line": "show [work-id]"},
-      "handler": {"id": "you.work.show.handler", "operationId": "getWorkBySessionId"}
+      "usage": {
+        "line": "show [work-id]"
+      },
+      "handler": {
+        "id": "you.work.show.handler",
+        "operationId": "getWorkBySessionId"
+      }
     },
     "you.work.move": {
       "id": "you.work.move",
@@ -95,14 +140,23 @@
       "path": "you work move",
       "documentation": {
         "documentation": {
-          "title": {"canonicalEnglish": "move"},
-          "description": {"canonicalEnglish": "move"}
+          "title": {
+            "canonicalEnglish": "move"
+          },
+          "description": {
+            "canonicalEnglish": "move"
+          }
         }
       },
       "visibility": "visible",
       "runnable": true,
-      "usage": {"line": "move [work-id] [state-name]"},
-      "handler": {"id": "you.work.move.handler", "operationId": "moveWorkBySessionId"}
+      "usage": {
+        "line": "move [work-id] [state-name]"
+      },
+      "handler": {
+        "id": "you.work.move.handler",
+        "operationId": "moveWorkBySessionId"
+      }
     },
     "you.work.visualize": {
       "id": "you.work.visualize",
@@ -110,14 +164,22 @@
       "path": "you work visualize",
       "documentation": {
         "documentation": {
-          "title": {"canonicalEnglish": "visualize"},
-          "description": {"canonicalEnglish": "visualize"}
+          "title": {
+            "canonicalEnglish": "visualize"
+          },
+          "description": {
+            "canonicalEnglish": "visualize"
+          }
         }
       },
       "visibility": "visible",
       "runnable": true,
-      "usage": {"line": "visualize [batch-path]"},
-      "handler": {"id": "you.work.visualize.handler"}
+      "usage": {
+        "line": "visualize [batch-path]"
+      },
+      "handler": {
+        "id": "you.work.visualize.handler"
+      }
     },
     "you.docs": {
       "id": "you.docs",
@@ -125,14 +187,22 @@
       "path": "you docs",
       "documentation": {
         "documentation": {
-          "title": {"canonicalEnglish": "docs"},
-          "description": {"canonicalEnglish": "docs"}
+          "title": {
+            "canonicalEnglish": "docs"
+          },
+          "description": {
+            "canonicalEnglish": "docs"
+          }
         }
       },
       "visibility": "visible",
       "runnable": true,
-      "usage": {"line": "docs [topic]"},
-      "handler": {"id": "you.docs.handler"}
+      "usage": {
+        "line": "docs [topic]"
+      },
+      "handler": {
+        "id": "you.docs.handler"
+      }
     },
     "you.models": {
       "id": "you.models",
@@ -140,13 +210,19 @@
       "path": "you models",
       "documentation": {
         "documentation": {
-          "title": {"canonicalEnglish": "models"},
-          "description": {"canonicalEnglish": "models"}
+          "title": {
+            "canonicalEnglish": "models"
+          },
+          "description": {
+            "canonicalEnglish": "models"
+          }
         }
       },
       "visibility": "visible",
       "runnable": false,
-      "usage": {"line": "models"}
+      "usage": {
+        "line": "models"
+      }
     },
     "you.models.list": {
       "id": "you.models.list",
@@ -154,14 +230,23 @@
       "path": "you models list",
       "documentation": {
         "documentation": {
-          "title": {"canonicalEnglish": "list"},
-          "description": {"canonicalEnglish": "list"}
+          "title": {
+            "canonicalEnglish": "list"
+          },
+          "description": {
+            "canonicalEnglish": "list"
+          }
         }
       },
       "visibility": "visible",
       "runnable": true,
-      "usage": {"line": "list"},
-      "handler": {"id": "you.models.list.handler", "operationId": "listModels"}
+      "usage": {
+        "line": "list"
+      },
+      "handler": {
+        "id": "you.models.list.handler",
+        "operationId": "listModels"
+      }
     },
     "you.models.inspect": {
       "id": "you.models.inspect",
@@ -169,14 +254,23 @@
       "path": "you models inspect",
       "documentation": {
         "documentation": {
-          "title": {"canonicalEnglish": "inspect"},
-          "description": {"canonicalEnglish": "inspect"}
+          "title": {
+            "canonicalEnglish": "inspect"
+          },
+          "description": {
+            "canonicalEnglish": "inspect"
+          }
         }
       },
       "visibility": "visible",
       "runnable": true,
-      "usage": {"line": "inspect <model-name>"},
-      "handler": {"id": "you.models.inspect.handler", "operationId": "getModel"}
+      "usage": {
+        "line": "inspect <model-name>"
+      },
+      "handler": {
+        "id": "you.models.inspect.handler",
+        "operationId": "getModel"
+      }
     },
     "you.models.invoke": {
       "id": "you.models.invoke",
@@ -184,14 +278,23 @@
       "path": "you models invoke",
       "documentation": {
         "documentation": {
-          "title": {"canonicalEnglish": "invoke"},
-          "description": {"canonicalEnglish": "invoke"}
+          "title": {
+            "canonicalEnglish": "invoke"
+          },
+          "description": {
+            "canonicalEnglish": "invoke"
+          }
         }
       },
       "visibility": "visible",
       "runnable": true,
-      "usage": {"line": "invoke <model-name>"},
-      "handler": {"id": "you.models.invoke.handler", "operationId": "invokeModel"}
+      "usage": {
+        "line": "invoke <model-name>"
+      },
+      "handler": {
+        "id": "you.models.invoke.handler",
+        "operationId": "invokeModel"
+      }
     },
     "you.models.pull": {
       "id": "you.models.pull",
@@ -199,14 +302,3780 @@
       "path": "you models pull",
       "documentation": {
         "documentation": {
-          "title": {"canonicalEnglish": "pull"},
-          "description": {"canonicalEnglish": "pull"}
+          "title": {
+            "canonicalEnglish": "pull"
+          },
+          "description": {
+            "canonicalEnglish": "pull"
+          }
         }
       },
       "visibility": "visible",
       "runnable": true,
-      "usage": {"line": "pull <model-name>"},
-      "handler": {"id": "you.models.pull.handler", "operationId": "pullModel"}
+      "usage": {
+        "line": "pull <model-name>"
+      },
+      "handler": {
+        "id": "you.models.pull.handler",
+        "operationId": "pullModel"
+      }
+    },
+    "you.config": {
+      "aliases": [],
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Initialize operator and system configuration under the shared home directory.\n\nSubcommands:\n  init  create operator/system config on a fresh home without overwriting existing files\n\nUse `you factory config` to inspect or transform factory.json configuration.",
+            "id": "you.config.description"
+          },
+          "title": {
+            "canonicalEnglish": "Initialize operator and system configuration",
+            "id": "you.config.title"
+          }
+        },
+        "examples": [
+          "you config init"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.config",
+        "sourceHash": "59c331a5612e5271ec8d1fca149d48f88ac97f7cf828194abd22d98e7af12e07",
+        "visibility": "public"
+      },
+      "flags": {
+        "you.config.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.config.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.config.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.config.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.config.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.config.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.config.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.config.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.config.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.config.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.config.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.config.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "id": "you.config",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.config",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "config",
+      "path": "you config",
+      "runnable": false,
+      "usage": {
+        "example": "  # Bootstrap operator/system config on a fresh home.\n  you config init",
+        "line": "config"
+      },
+      "visibility": "visible"
+    },
+    "you.config.init": {
+      "aliases": [],
+      "arguments": {
+        "you.config.init.arg.0": {
+          "channels": [
+            "cli"
+          ],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.config.init.arg.0",
+          "kind": "positional",
+          "maxCardinality": -1,
+          "minCardinality": 0,
+          "name": "arg0",
+          "pattern": "",
+          "position": 0,
+          "required": false,
+          "valueType": "string",
+          "variadic": true
+        }
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Create operator/system config at ~/.you-agent-factory/config.json on a fresh home.\n\nRe-running against an existing config file succeeds without rewriting user-edited contents.",
+            "id": "you.config.init.description"
+          },
+          "title": {
+            "canonicalEnglish": "Create operator/system config on a fresh home",
+            "id": "you.config.init.title"
+          }
+        },
+        "examples": [
+          "you config init"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.config.init",
+        "sourceHash": "261ea3b6e5ad5b73613f9483f39a67face057bb6805952247d0239b0b90f2abd",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.config.init.exit.failure": {
+          "code": 1,
+          "id": "you.config.init.exit.failure",
+          "kind": "failure"
+        },
+        "you.config.init.exit.success": {
+          "code": 0,
+          "id": "you.config.init.exit.success",
+          "kind": "success"
+        },
+        "you.config.init.exit.usage": {
+          "code": 1,
+          "id": "you.config.init.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.config.init.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.config.init.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.config.init.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.config.init.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.config.init.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.config.init.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.config.init.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.config.init.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.config.init.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.config.init.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.config.init.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.config.init.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.config.init.handler"
+      },
+      "id": "you.config.init",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.config.init",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "init",
+      "outputs": {
+        "you.config.init.output.human": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.config.init.output.human"
+        },
+        "you.config.init.output.json": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.config.init.output.json"
+        }
+      },
+      "path": "you config init",
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.config.init.side-effect.filesystem": {
+          "id": "you.config.init.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "usage": {
+        "example": "  # Bootstrap operator/system config on a fresh home.\n  you config init",
+        "line": "init"
+      },
+      "visibility": "visible"
+    },
+    "you.factory": {
+      "aliases": [],
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Inspect live factory runtime state and manage persisted named factories.\n\nSubcommands:\n  query    show the current active factory from a running service\n  list     list persisted named factories under a factory root\n  config   inspect and transform factory configuration\n  create   create a named factory from factory.json\n  update   replace an existing named factory from factory.json\n  replace-current  persist the live current factory from a running service\n  delete   remove an unused named factory from disk\n\nUse query against a running service. Use config validate, flatten, and expand for factory configuration inspection and transformation. Use list, create, update, and delete for on-disk named factories under --dir (default factory/). Use replace-current with global --server and --session like query to persist the live current factory.",
+            "id": "you.factory.description"
+          },
+          "title": {
+            "canonicalEnglish": "Inspect and manage factory definitions",
+            "id": "you.factory.title"
+          }
+        },
+        "examples": [
+          "you factory query",
+          "you factory config validate ./factory.json",
+          "you factory list"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory",
+        "sourceHash": "ab8362624ef227255e4584f0ab2aec9bc9566981c24af11a0622ee191b655508",
+        "visibility": "public"
+      },
+      "flags": {
+        "you.factory.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.factory.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "id": "you.factory",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "factory",
+      "path": "you factory",
+      "runnable": false,
+      "usage": {
+        "example": "  # Show the active factory from the running service.\n  you factory query\n\n  # Validate a factory config before creating or updating it.\n  you factory config validate ./factory.json\n\n  # List persisted named factories and which one is current.\n  you factory list\n\n  # Create a new named factory from a config file.\n  you factory create staging --from ./factory.json --set-current\n\n  # Replace an existing named factory definition.\n  you factory update staging --from ./factory.json\n\n  # Delete an unused named factory.\n  you factory delete staging\n\n  # Persist the live current factory back to durable storage.\n  you factory replace-current",
+        "line": "factory"
+      },
+      "visibility": "visible"
+    },
+    "you.factory.config": {
+      "aliases": [],
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Inspect and transform factory configuration.\n\nSubcommands:\n  validate validate a factory.json payload or factory directory\n  flatten  write canonical single-file factory config to stdout\n  expand   write split factory config layout beside the input file\n\nUse validate before create or update. Use flatten and expand to move between single-file and split-layout factory directories.",
+            "id": "you.factory.config.description"
+          },
+          "title": {
+            "canonicalEnglish": "Inspect and transform factory configuration",
+            "id": "you.factory.config.title"
+          }
+        },
+        "examples": [
+          "you factory config validate ./factory.json",
+          "you factory config flatten ./factory",
+          "you factory config expand ./factory.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.config",
+        "sourceHash": "3b20e6c3e6f1e64c1054b1d774ac3f4c8837f762454f13c38fc3cb5edf5f68ad",
+        "visibility": "public"
+      },
+      "flags": {
+        "you.factory.config.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.config.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.config.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.config.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.config.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.config.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.config.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.factory.config.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.config.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "id": "you.factory.config",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.config",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "config",
+      "path": "you factory config",
+      "runnable": false,
+      "usage": {
+        "example": "  # Validate a single-file factory config.\n  you factory config validate ./factory.json\n\n  # Flatten a split-layout factory directory.\n  you factory config flatten ./factory\n\n  # Expand a canonical factory.json into split layout.\n  you factory config expand ./factory.json",
+        "line": "config"
+      },
+      "visibility": "visible"
+    },
+    "you.factory.config.expand": {
+      "aliases": [],
+      "arguments": {
+        "you.factory.config.expand.arg.0": {
+          "channels": [
+            "cli"
+          ],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.factory.config.expand.arg.0",
+          "kind": "positional",
+          "maxCardinality": 1,
+          "minCardinality": 1,
+          "name": "factory.json",
+          "pattern": "",
+          "position": 0,
+          "required": true,
+          "valueType": "string",
+          "variadic": false
+        }
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Write split factory config layout.\n\nThe path may be a standalone factory.json file or a factory directory containing factory.json. The command writes canonical factory.json plus workers and workstations directories beside the input file.",
+            "id": "you.factory.config.expand.description"
+          },
+          "title": {
+            "canonicalEnglish": "Write split factory config layout",
+            "id": "you.factory.config.expand.title"
+          }
+        },
+        "examples": [
+          "you factory config expand"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.config.expand",
+        "sourceHash": "bd265fffea7442f643897302995359f7f9ff8c9cc43ba943bbbd007ae0b1e7b8",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.factory.config.expand.exit.failure": {
+          "code": 1,
+          "id": "you.factory.config.expand.exit.failure",
+          "kind": "failure"
+        },
+        "you.factory.config.expand.exit.success": {
+          "code": 0,
+          "id": "you.factory.config.expand.exit.success",
+          "kind": "success"
+        },
+        "you.factory.config.expand.exit.usage": {
+          "code": 1,
+          "id": "you.factory.config.expand.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.factory.config.expand.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.expand.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.expand.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.config.expand.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.config.expand.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.expand.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.config.expand.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.config.expand.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.expand.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.config.expand.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.expand.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.expand.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.config.expand.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.factory.config.expand.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.expand.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.config.expand.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.expand.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.expand.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.factory.config.expand.handler"
+      },
+      "id": "you.factory.config.expand",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.config.expand",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "expand",
+      "outputs": {
+        "you.factory.config.expand.output.text": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.factory.config.expand.output.text"
+        }
+      },
+      "path": "you factory config expand",
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.factory.config.expand.side-effect.filesystem": {
+          "id": "you.factory.config.expand.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "usage": {
+        "example": "",
+        "line": "expand <factory.json>"
+      },
+      "visibility": "visible"
+    },
+    "you.factory.config.flatten": {
+      "aliases": [],
+      "arguments": {
+        "you.factory.config.flatten.arg.0": {
+          "channels": [
+            "cli"
+          ],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.factory.config.flatten.arg.0",
+          "kind": "positional",
+          "maxCardinality": 1,
+          "minCardinality": 1,
+          "name": "factory-path",
+          "pattern": "",
+          "position": 0,
+          "required": true,
+          "valueType": "string",
+          "variadic": false
+        }
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Write canonical single-file factory config.\n\nThe path may be a factory directory containing factory.json or a standalone factory.json file. The command writes camelCase canonical JSON to stdout.",
+            "id": "you.factory.config.flatten.description"
+          },
+          "title": {
+            "canonicalEnglish": "Write canonical single-file factory config",
+            "id": "you.factory.config.flatten.title"
+          }
+        },
+        "examples": [
+          "you factory config flatten"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.config.flatten",
+        "sourceHash": "e608ed3e00f411998ee9ed9470270b10cadd01fdd8f39bce587401c9090cde8e",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.factory.config.flatten.exit.failure": {
+          "code": 1,
+          "id": "you.factory.config.flatten.exit.failure",
+          "kind": "failure"
+        },
+        "you.factory.config.flatten.exit.success": {
+          "code": 0,
+          "id": "you.factory.config.flatten.exit.success",
+          "kind": "success"
+        },
+        "you.factory.config.flatten.exit.usage": {
+          "code": 1,
+          "id": "you.factory.config.flatten.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.factory.config.flatten.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.flatten.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flatten.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.config.flatten.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.config.flatten.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flatten.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.config.flatten.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.config.flatten.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flatten.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.config.flatten.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.flatten.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flatten.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.config.flatten.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.factory.config.flatten.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flatten.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.config.flatten.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.flatten.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flatten.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.factory.config.flatten.handler"
+      },
+      "id": "you.factory.config.flatten",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.config.flatten",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "flatten",
+      "outputs": {
+        "you.factory.config.flatten.output.text": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.factory.config.flatten.output.text"
+        }
+      },
+      "path": "you factory config flatten",
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.factory.config.flatten.side-effect.filesystem": {
+          "id": "you.factory.config.flatten.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "usage": {
+        "example": "",
+        "line": "flatten <factory-path>"
+      },
+      "visibility": "visible"
+    },
+    "you.factory.config.validate": {
+      "aliases": [],
+      "arguments": {
+        "you.factory.config.validate.arg.0": {
+          "channels": [
+            "cli"
+          ],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.factory.config.validate.arg.0",
+          "kind": "positional",
+          "maxCardinality": 1,
+          "minCardinality": 1,
+          "name": "factory-path",
+          "pattern": "",
+          "position": 0,
+          "required": true,
+          "valueType": "string",
+          "variadic": false
+        }
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Validate a factory.json payload or factory directory through the shared validate-only factory contract used by POST /factory-validations.\n\nHuman output lists authored worker and workstation runtime taxonomy values and prints blocking validation targets with inference, agent, script, or poller terminology when worker/workstation pairings are incompatible.",
+            "id": "you.factory.config.validate.description"
+          },
+          "title": {
+            "canonicalEnglish": "Validate a factory config without persisting it",
+            "id": "you.factory.config.validate.title"
+          }
+        },
+        "examples": [
+          "you factory config validate ./factory.json",
+          "you factory config validate ./factory",
+          "you --json factory config validate ./factory.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.config.validate",
+        "sourceHash": "135113e10caf054e1abd166089409e66f290947f4b2e6606267eeeb3c03c2050",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.factory.config.validate.exit.failure": {
+          "code": 1,
+          "id": "you.factory.config.validate.exit.failure",
+          "kind": "failure"
+        },
+        "you.factory.config.validate.exit.success": {
+          "code": 0,
+          "id": "you.factory.config.validate.exit.success",
+          "kind": "success"
+        },
+        "you.factory.config.validate.exit.usage": {
+          "code": 1,
+          "id": "you.factory.config.validate.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.factory.config.validate.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.validate.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.validate.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.config.validate.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.config.validate.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.validate.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.config.validate.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.config.validate.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.validate.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.config.validate.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.validate.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.validate.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.config.validate.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.factory.config.validate.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.validate.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.config.validate.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.config.validate.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.validate.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.factory.config.validate.handler",
+        "operationId": "validateFactory"
+      },
+      "id": "you.factory.config.validate",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.config.validate",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "validate",
+      "outputs": {
+        "you.factory.config.validate.output.human": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.factory.config.validate.output.human"
+        },
+        "you.factory.config.validate.output.json": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.factory.config.validate.output.json"
+        }
+      },
+      "path": "you factory config validate",
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.factory.config.validate.side-effect.filesystem": {
+          "id": "you.factory.config.validate.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "usage": {
+        "example": "  # Validate a single-file factory config.\n  you factory config validate ./factory.json\n\n  # Validate a split-layout factory directory.\n  you factory config validate ./factory\n\n  # Emit structured validation output for automation.\n  you --json factory config validate ./factory.json",
+        "line": "validate <factory-path>"
+      },
+      "visibility": "visible"
+    },
+    "you.factory.create": {
+      "aliases": [],
+      "arguments": {
+        "you.factory.create.arg.0": {
+          "channels": [
+            "cli"
+          ],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.factory.create.arg.0",
+          "kind": "positional",
+          "maxCardinality": 1,
+          "minCardinality": 1,
+          "name": "name",
+          "pattern": "",
+          "position": 0,
+          "required": true,
+          "valueType": "string",
+          "variadic": false
+        }
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Create a new named factory from an existing factory.json file.\n\nThe command validates the payload, materializes a new named factory layout under the selected factory root, and refuses to overwrite an existing factory name.",
+            "id": "you.factory.create.description"
+          },
+          "title": {
+            "canonicalEnglish": "Create a named factory from a config file",
+            "id": "you.factory.create.title"
+          }
+        },
+        "examples": [
+          "you factory create staging --from ./factory.json",
+          "you factory create staging --from ./factory.json --set-current",
+          "you --json factory create staging --from ./factory.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.create",
+        "sourceHash": "56fdc8c151c5c8145def5d8b0cf7175edea3b98eef42bf353536e89572f2a84c",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.factory.create.exit.failure": {
+          "code": 1,
+          "id": "you.factory.create.exit.failure",
+          "kind": "failure"
+        },
+        "you.factory.create.exit.success": {
+          "code": 0,
+          "id": "you.factory.create.exit.success",
+          "kind": "success"
+        },
+        "you.factory.create.exit.usage": {
+          "code": 1,
+          "id": "you.factory.create.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.factory.create.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.create.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.create.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.create.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.create.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.create.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.create.flag.dir": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "factory",
+          "id": "you.factory.create.flag.dir",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.dir",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "dir",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.create.flag.from": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.create.flag.from",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.from",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "from",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": true,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.create.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.create.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.create.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.factory.create.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.create.flag.set-current": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.create.flag.set-current",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.set-current",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "set-current",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.create.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.create.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.factory.create.handler"
+      },
+      "id": "you.factory.create",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.create",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "create",
+      "outputs": {
+        "you.factory.create.output.human": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.factory.create.output.human"
+        },
+        "you.factory.create.output.json": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.factory.create.output.json"
+        }
+      },
+      "path": "you factory create",
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.factory.create.side-effect.filesystem": {
+          "id": "you.factory.create.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "usage": {
+        "example": "  # Create a new named factory from a config file.\n  you factory create staging --from ./factory.json\n\n  # Create and select the new factory as current.\n  you factory create staging --from ./factory.json --set-current\n\n  # Emit structured confirmation for scripting.\n  you --json factory create staging --from ./factory.json",
+        "line": "create <name>"
+      },
+      "visibility": "visible"
+    },
+    "you.factory.delete": {
+      "aliases": [],
+      "arguments": {
+        "you.factory.delete.arg.0": {
+          "channels": [
+            "cli"
+          ],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.factory.delete.arg.0",
+          "kind": "positional",
+          "maxCardinality": 1,
+          "minCardinality": 1,
+          "name": "name",
+          "pattern": "",
+          "position": 0,
+          "required": true,
+          "valueType": "string",
+          "variadic": false
+        }
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Delete a persisted named factory from disk.\n\nThe command removes the named factory directory under the selected factory root after validation. It refuses to delete the factory currently selected by .current-factory; switch the current pointer to another factory first.",
+            "id": "you.factory.delete.description"
+          },
+          "title": {
+            "canonicalEnglish": "Delete a persisted named factory",
+            "id": "you.factory.delete.title"
+          }
+        },
+        "examples": [
+          "you factory delete staging",
+          "you factory delete staging --dir my-factory"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.delete",
+        "sourceHash": "ae4f3af76bbd260e961b64a1e02092536559d5856ad0bfae4a65574fa96b0c2f",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.factory.delete.exit.failure": {
+          "code": 1,
+          "id": "you.factory.delete.exit.failure",
+          "kind": "failure"
+        },
+        "you.factory.delete.exit.success": {
+          "code": 0,
+          "id": "you.factory.delete.exit.success",
+          "kind": "success"
+        },
+        "you.factory.delete.exit.usage": {
+          "code": 1,
+          "id": "you.factory.delete.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.factory.delete.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.delete.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.delete.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.delete.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.delete.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.delete.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.delete.flag.dir": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "factory",
+          "id": "you.factory.delete.flag.dir",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.flag.dir",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "dir",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.delete.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.delete.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.delete.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.factory.delete.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.delete.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.delete.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.factory.delete.handler"
+      },
+      "id": "you.factory.delete",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.delete",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "delete",
+      "outputs": {
+        "you.factory.delete.output.human": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.factory.delete.output.human"
+        },
+        "you.factory.delete.output.json": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.factory.delete.output.json"
+        }
+      },
+      "path": "you factory delete",
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.factory.delete.side-effect.filesystem": {
+          "id": "you.factory.delete.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "usage": {
+        "example": "  # Delete an unused named factory.\n  you factory delete staging\n\n  # Delete from a custom factory root.\n  you factory delete staging --dir my-factory",
+        "line": "delete <name>"
+      },
+      "visibility": "visible"
+    },
+    "you.factory.list": {
+      "aliases": [],
+      "arguments": {
+        "you.factory.list.arg.0": {
+          "channels": [
+            "cli"
+          ],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.factory.list.arg.0",
+          "kind": "positional",
+          "maxCardinality": -1,
+          "minCardinality": 0,
+          "name": "arg0",
+          "pattern": "",
+          "position": 0,
+          "required": false,
+          "valueType": "string",
+          "variadic": true
+        }
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "List persisted named factories stored under a factory root.\n\nBy default the command lists project-local named factories from ./factory and writes a human-readable table with each factory name, on-disk directory, and whether it is selected by .current-factory. Global built-ins and customer-edited shared factories live under ~/.you-agent-factory/you-agent-factories and are listed only when you point --dir there explicitly. The command lists exactly one root at a time and never merges project-local and global entries. Use global --json for scripting output.",
+            "id": "you.factory.list.description"
+          },
+          "title": {
+            "canonicalEnglish": "List persisted named factories",
+            "id": "you.factory.list.title"
+          }
+        },
+        "examples": [
+          "you factory list",
+          "you factory list --dir ~/.you-agent-factory/you-agent-factories",
+          "you --json factory list --dir my-factory"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.list",
+        "sourceHash": "fd914b732e0b0e97b106701077036c4740fb95c6371bf63cc829b67e495793cd",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.factory.list.exit.failure": {
+          "code": 1,
+          "id": "you.factory.list.exit.failure",
+          "kind": "failure"
+        },
+        "you.factory.list.exit.success": {
+          "code": 0,
+          "id": "you.factory.list.exit.success",
+          "kind": "success"
+        },
+        "you.factory.list.exit.usage": {
+          "code": 1,
+          "id": "you.factory.list.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.factory.list.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.list.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.list.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.list.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.list.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.list.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.list.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.list.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.list.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.list.flag.dir": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "factory",
+          "id": "you.factory.list.flag.dir",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.list.flag.dir",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "dir",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.list.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.list.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.list.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.list.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.factory.list.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.list.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.list.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.list.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.list.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.factory.list.handler"
+      },
+      "id": "you.factory.list",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.list",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "list",
+      "outputs": {
+        "you.factory.list.output.human": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.factory.list.output.human"
+        },
+        "you.factory.list.output.json": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.factory.list.output.json"
+        }
+      },
+      "path": "you factory list",
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.factory.list.side-effect.filesystem": {
+          "id": "you.factory.list.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "usage": {
+        "example": "  # List named factories under the default factory root.\n  you factory list\n\n  # List global built-ins and shared factories.\n  you factory list --dir ~/.you-agent-factory/you-agent-factories\n\n  # List factories from a custom root as JSON.\n  you --json factory list --dir my-factory",
+        "line": "list"
+      },
+      "visibility": "visible"
+    },
+    "you.factory.query": {
+      "aliases": [],
+      "arguments": {
+        "you.factory.query.arg.0": {
+          "channels": [
+            "cli"
+          ],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.factory.query.arg.0",
+          "kind": "positional",
+          "maxCardinality": -1,
+          "minCardinality": 0,
+          "name": "arg0",
+          "pattern": "",
+          "position": 0,
+          "required": false,
+          "valueType": "string",
+          "variadic": true
+        }
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Show the current active factory from a running you-agent-factory service.\n\nBy default the command writes a human-readable table with the current factory name and runtime-identifying fields. Use global --json for the API-shaped current-factory payload, and use global --server to target the same factory API base URI as work list and submit. Run you session list to discover live session ids when routing other commands with --session.",
+            "id": "you.factory.query.description"
+          },
+          "title": {
+            "canonicalEnglish": "Show the current active factory",
+            "id": "you.factory.query.title"
+          }
+        },
+        "examples": [
+          "you factory query",
+          "you --json factory query",
+          "you --server http://localhost:9090 --json factory query"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.query",
+        "sourceHash": "b39d6cc087e78db8c6349c2da774fe17b8e7c9c16bb83d5a7583e454fdf1464f",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.factory.query.exit.failure": {
+          "code": 1,
+          "id": "you.factory.query.exit.failure",
+          "kind": "failure"
+        },
+        "you.factory.query.exit.success": {
+          "code": 0,
+          "id": "you.factory.query.exit.success",
+          "kind": "success"
+        },
+        "you.factory.query.exit.usage": {
+          "code": 1,
+          "id": "you.factory.query.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.factory.query.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.query.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.query.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.query.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.query.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.query.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.query.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.query.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.query.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.query.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.query.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.query.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.query.flag.port": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "0",
+          "id": "you.factory.query.flag.port",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.query.flag.port",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "port",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "int",
+          "visibility": "hidden"
+        },
+        "you.factory.query.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.factory.query.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.query.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.query.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.query.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.query.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.factory.query.handler",
+        "operationId": "getCurrentFactoryBySessionId"
+      },
+      "id": "you.factory.query",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.query",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "query",
+      "outputs": {
+        "you.factory.query.output.human": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.factory.query.output.human"
+        },
+        "you.factory.query.output.json": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.factory.query.output.json"
+        }
+      },
+      "path": "you factory query",
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.factory.query.side-effect.network": {
+          "id": "you.factory.query.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "usage": {
+        "example": "  # Show the current factory from the default local service.\n  you factory query\n\n  # Emit API-shaped JSON for automation from the default local service.\n  you --json factory query\n\n  # Query a factory API on a non-default host or port.\n  you --server http://localhost:9090 --json factory query",
+        "line": "query"
+      },
+      "visibility": "visible"
+    },
+    "you.factory.replace-current": {
+      "aliases": [],
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Read the session current factory from a running service and persist it with PUT.\n\nThe command uses global --server and --session like factory query.",
+            "id": "you.factory.replace-current.description"
+          },
+          "title": {
+            "canonicalEnglish": "Persist the live current factory from a running service",
+            "id": "you.factory.replace-current.title"
+          }
+        },
+        "examples": [
+          "you factory replace-current",
+          "you --json factory replace-current --session session-beta"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.replace-current",
+        "sourceHash": "6677d0b0024ee9c16894262aef8fba6c7670e596efde38ebc14b3cd1bccbfa0b",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.factory.replace-current.exit.failure": {
+          "code": 1,
+          "id": "you.factory.replace-current.exit.failure",
+          "kind": "failure"
+        },
+        "you.factory.replace-current.exit.success": {
+          "code": 0,
+          "id": "you.factory.replace-current.exit.success",
+          "kind": "success"
+        },
+        "you.factory.replace-current.exit.usage": {
+          "code": 1,
+          "id": "you.factory.replace-current.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.factory.replace-current.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.replace-current.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.replace-current.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.replace-current.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.replace-current.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.replace-current.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.replace-current.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.replace-current.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.replace-current.flag.port": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "0",
+          "id": "you.factory.replace-current.flag.port",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.port",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "port",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "int",
+          "visibility": "hidden"
+        },
+        "you.factory.replace-current.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.factory.replace-current.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.replace-current.flag.session": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.replace-current.flag.session",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.session",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "session",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.replace-current.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.replace-current.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.factory.replace-current.handler",
+        "operationId": "saveCurrentFactoryBySessionId"
+      },
+      "id": "you.factory.replace-current",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.replace-current",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "replace-current",
+      "outputs": {
+        "you.factory.replace-current.output.human": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.factory.replace-current.output.human"
+        },
+        "you.factory.replace-current.output.json": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.factory.replace-current.output.json"
+        }
+      },
+      "path": "you factory replace-current",
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.factory.replace-current.side-effect.network": {
+          "id": "you.factory.replace-current.side-effect.network",
+          "kind": "network"
+        }
+      },
+      "usage": {
+        "example": "  # Persist the live current factory from the running service.\n  you factory replace-current\n\n  # Persist the live current factory for one session as JSON.\n  you --json factory replace-current --session session-beta",
+        "line": "replace-current"
+      },
+      "visibility": "visible"
+    },
+    "you.factory.update": {
+      "aliases": [],
+      "arguments": {
+        "you.factory.update.arg.0": {
+          "channels": [
+            "cli"
+          ],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.factory.update.arg.0",
+          "kind": "positional",
+          "maxCardinality": 1,
+          "minCardinality": 1,
+          "name": "name",
+          "pattern": "",
+          "position": 0,
+          "required": true,
+          "valueType": "string",
+          "variadic": false
+        }
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Replace an existing named factory from an existing factory.json file.\n\nThe command validates the payload, atomically replaces the named factory layout under the selected factory root, and leaves .current-factory unchanged when it already points at the updated name.",
+            "id": "you.factory.update.description"
+          },
+          "title": {
+            "canonicalEnglish": "Update an existing named factory from a config file",
+            "id": "you.factory.update.title"
+          }
+        },
+        "examples": [
+          "you factory update staging --from ./factory.json",
+          "you --json factory update staging --from ./factory.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.update",
+        "sourceHash": "75f2471ccea3469cfedf2cbc8d998b243612ef4685692968cf07685abbc179a8",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.factory.update.exit.failure": {
+          "code": 1,
+          "id": "you.factory.update.exit.failure",
+          "kind": "failure"
+        },
+        "you.factory.update.exit.success": {
+          "code": 0,
+          "id": "you.factory.update.exit.success",
+          "kind": "success"
+        },
+        "you.factory.update.exit.usage": {
+          "code": 1,
+          "id": "you.factory.update.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.factory.update.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.update.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.update.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.update.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.update.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.update.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.update.flag.dir": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "factory",
+          "id": "you.factory.update.flag.dir",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.dir",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "dir",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.update.flag.from": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.factory.update.flag.from",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.from",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "from",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": true,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.update.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.update.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.factory.update.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.factory.update.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.factory.update.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.factory.update.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.factory.update.handler"
+      },
+      "id": "you.factory.update",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.update",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "update",
+      "outputs": {
+        "you.factory.update.output.human": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.factory.update.output.human"
+        },
+        "you.factory.update.output.json": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.factory.update.output.json"
+        }
+      },
+      "path": "you factory update",
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.factory.update.side-effect.filesystem": {
+          "id": "you.factory.update.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "usage": {
+        "example": "  # Replace an existing named factory from a config file.\n  you factory update staging --from ./factory.json\n\n  # Emit structured confirmation for scripting.\n  you --json factory update staging --from ./factory.json",
+        "line": "update <name>"
+      },
+      "visibility": "visible"
+    },
+    "you.init": {
+      "aliases": [],
+      "arguments": {
+        "you.init.arg.0": {
+          "channels": [
+            "cli"
+          ],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.init.arg.0",
+          "kind": "positional",
+          "maxCardinality": -1,
+          "minCardinality": 0,
+          "name": "arg0",
+          "pattern": "",
+          "position": 0,
+          "required": false,
+          "valueType": "string",
+          "variadic": true
+        }
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Create factory directory structure.\n\nSupported scaffold types:\n  default - single-step task-processing scaffold\n  ralph   - minimal PRD-to-execution scaffold\n\nOmitting --executor preserves the default Codex-backed starter scaffold. Supported starter scaffold values are codex and claude. Omitting --type keeps the current default scaffold behavior. For the default scaffold, --executor chooses which starter worker scaffold is generated.",
+            "id": "you.init.description"
+          },
+          "title": {
+            "canonicalEnglish": "Create factory directory structure",
+            "id": "you.init.title"
+          }
+        },
+        "examples": [
+          "you init",
+          "you init --dir my-factory --executor claude",
+          "you init --type ralph --dir ralph-factory"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.init",
+        "sourceHash": "90c4c18f546c973f8e7618a967f5785a398a8ca619bf50a0969f1b53820f06d9",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.init.exit.failure": {
+          "code": 1,
+          "id": "you.init.exit.failure",
+          "kind": "failure"
+        },
+        "you.init.exit.success": {
+          "code": 0,
+          "id": "you.init.exit.success",
+          "kind": "success"
+        },
+        "you.init.exit.usage": {
+          "code": 1,
+          "id": "you.init.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.init.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.init.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.init.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.init.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.init.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.init.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.init.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.init.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.init.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.init.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.init.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.init.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.init.flag.dir": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "factory",
+          "id": "you.init.flag.dir",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.dir",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "dir",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.init.flag.type": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "default",
+          "id": "you.init.flag.type",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.type",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "type",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.init.flag.executor": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "codex",
+          "id": "you.init.flag.executor",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.executor",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "executor",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.init.handler"
+      },
+      "id": "you.init",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.init",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "init",
+      "outputs": {
+        "you.init.output.human": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.init.output.human"
+        },
+        "you.init.output.json": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.init.output.json"
+        }
+      },
+      "path": "you init",
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.init.side-effect.filesystem": {
+          "id": "you.init.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "usage": {
+        "example": "  # Create the default Codex-backed scaffold in ./factory.\n  you init\n\n  # Create a Claude-backed default scaffold in a custom directory.\n  you init --dir my-factory --executor claude\n\n  # Create the minimal Ralph PRD-to-execution scaffold.\n  you init --type ralph --dir ralph-factory",
+        "line": "init"
+      },
+      "visibility": "visible"
     }
   }
 }

@@ -20,33 +20,41 @@ func (drift Drift) Empty() bool {
 	return len(drift.Stale) == 0 && len(drift.Missing) == 0 && len(drift.Unexpected) == 0
 }
 
-// Check compares committed CLI manifest artifacts with freshly generated output.
+// Check compares committed CLI family artifacts with freshly generated output.
 func Check(repositoryRoot string) (Drift, error) {
 	expected := map[string][]byte{
-		RepresentativeFamilyJSONPath:       nil,
-		WorkFamilyJSONPath:                 nil,
-		RepresentativeFamilyCommandIDsPath: representativeAndWorkCommandIDsSource(),
-		ModelsDocsFamilyJSONPath:           nil,
-		ModelsDocsFamilyCommandIDsPath:     modelsDocsCommandIDsSource(),
+		RepresentativeFamilyJSONPath:              nil,
+		WorkFamilyJSONPath:                        nil,
+		FactoryConfigInitFamilyJSONPath:           nil,
+		ModelsDocsFamilyJSONPath:                  nil,
+		RepresentativeFamilyCommandIDsPath:        representativeAndWorkCommandIDsSource(),
+		FactoryConfigInitFamilyCommandIDsPath:     factoryConfigInitCommandIDsSource(),
+		ModelsDocsFamilyCommandIDsPath:            modelsDocsCommandIDsSource(),
 	}
 
-	representativeJSON, err := Artifact(repositoryRoot)
+	representativePayload, err := RepresentativeFamilyArtifact(repositoryRoot)
 	if err != nil {
 		return Drift{}, err
 	}
-	expected[RepresentativeFamilyJSONPath] = representativeJSON
+	expected[RepresentativeFamilyJSONPath] = representativePayload
 
-	workJSON, err := WorkArtifact(repositoryRoot)
+	workPayload, err := WorkArtifact(repositoryRoot)
 	if err != nil {
 		return Drift{}, err
 	}
-	expected[WorkFamilyJSONPath] = workJSON
+	expected[WorkFamilyJSONPath] = workPayload
 
-	modelsDocsJSON, err := ModelsDocsArtifact(repositoryRoot)
+	factoryConfigInitPayload, err := FactoryConfigInitFamilyArtifact(repositoryRoot)
 	if err != nil {
 		return Drift{}, err
 	}
-	expected[ModelsDocsFamilyJSONPath] = modelsDocsJSON
+	expected[FactoryConfigInitFamilyJSONPath] = factoryConfigInitPayload
+
+	modelsDocsPayload, err := ModelsDocsArtifact(repositoryRoot)
+	if err != nil {
+		return Drift{}, err
+	}
+	expected[ModelsDocsFamilyJSONPath] = modelsDocsPayload
 
 	drift := Drift{}
 	for path, want := range expected {

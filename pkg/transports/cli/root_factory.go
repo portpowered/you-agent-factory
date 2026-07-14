@@ -2,10 +2,16 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
+	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	"github.com/spf13/cobra"
 )
 
@@ -357,4 +363,277 @@ func newFactoryConfigExpandCommand(diagnostics *cliDiagnosticsOptions) *cobra.Co
 	}
 
 	return cmd
+}
+
+// useGeneratedFactoryConfigInitFamily toggles production wiring for the factory,
+// system config, and init families between generated metadata and legacy constructors.
+// Flip this constant to false for a one-localized-change rollback.
+const useGeneratedFactoryConfigInitFamily = true
+
+// NewLegacyFactoryConfigInitFamilyCommand builds the isolated handwritten
+// you → factory/config/init tree used by the generator-vs-legacy parity matrix.
+func NewLegacyFactoryConfigInitFamilyCommand() *cobra.Command {
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	root.AddCommand(
+		configinitcmd.NewSystemConfigCommand(cliBinaryName, configinitcmd.CommandGlobals{
+			JSON:    func() bool { return globals.json },
+			HomeDir: options.HomeDir,
+		}, configinitcmd.CommandDiagnostics{
+			Writer:  diagnostics.writer,
+			Verbose: diagnostics.verboseEnabled,
+		}),
+		newFactoryCommand(globals, diagnostics),
+		newInitCommand(globals, diagnostics),
+	)
+	return root
+}
+
+// NewGeneratedFactoryConfigInitFamilyCommandForParity builds the generated
+// you → factory/config/init tree used by the generator-vs-legacy parity matrix.
+func NewGeneratedFactoryConfigInitFamilyCommandForParity(
+	registry *commandregistry.Registry,
+	bindings climanifestcobra.FactoryConfigInitFlagBindings,
+) (*cobra.Command, error) {
+	if registry == nil {
+		return nil, fmt.Errorf("build factory/config/init parity command: registry is required")
+	}
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	components, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(registry, bindings)
+	if err != nil {
+		return nil, fmt.Errorf("build factory/config/init parity command: %w", err)
+	}
+	root.AddCommand(components.Config, components.Factory, components.Init)
+	return root, nil
+}
+
+// LegacyFactoryConfigInitFamilyCommands holds isolated handwritten factory/config/init
+// trees used by the generator-vs-legacy parity matrix and rollback comparisons.
+type LegacyFactoryConfigInitFamilyCommands struct {
+	Factory *cobra.Command
+	Config  *cobra.Command
+	Init    *cobra.Command
+}
+
+// NewLegacyFactoryConfigInitFamilyCommands builds detached handwritten factory,
+// system config, and init commands for parity comparisons.
+func NewLegacyFactoryConfigInitFamilyCommands(options RootCommandOptions) LegacyFactoryConfigInitFamilyCommands {
+	options = normalizeRootCommandOptions(options)
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	return LegacyFactoryConfigInitFamilyCommands{
+		Factory: newFactoryCommand(globals, diagnostics),
+		Config: configinitcmd.NewSystemConfigCommand(cliBinaryName, configinitcmd.CommandGlobals{
+			JSON:    func() bool { return globals.json },
+			HomeDir: options.HomeDir,
+		}, configinitcmd.CommandDiagnostics{
+			Writer:  diagnostics.writer,
+			Verbose: diagnostics.verboseEnabled,
+		}),
+		Init: newInitCommand(globals, diagnostics),
+	}
+}
+
+type factoryConfigInitProductionCommands struct {
+	Factory *cobra.Command
+	Config  *cobra.Command
+	Init    *cobra.Command
+}
+
+func productionFactoryConfigInitCommands(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	options RootCommandOptions,
+) factoryConfigInitProductionCommands {
+	if !useGeneratedFactoryConfigInitFamily {
+		legacy := NewLegacyFactoryConfigInitFamilyCommands(options)
+		return factoryConfigInitProductionCommands{
+			Factory: legacy.Factory,
+			Config:  legacy.Config,
+			Init:    legacy.Init,
+		}
+	}
+
+	registry, bindings, err := newFactoryConfigInitWiring(globals, diagnostics, options)
+	if err != nil {
+		panic(fmt.Sprintf("build factory/config/init handler registry: %v", err))
+	}
+	components, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(registry, bindings)
+	if err != nil {
+		panic(fmt.Sprintf("build factory/config/init family commands: %v", err))
+	}
+	return factoryConfigInitProductionCommands{
+		Factory: components.Factory,
+		Config:  components.Config,
+		Init:    components.Init,
+	}
+}
+
+func newFactoryConfigInitWiring(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	rootOptions RootCommandOptions,
+) (*commandregistry.Registry, climanifestcobra.FactoryConfigInitFlagBindings, error) {
+	state := factoryConfigInitBindingState{
+		listDir:      defaultcmd.FactoryDir,
+		createDir:    defaultcmd.FactoryDir,
+		updateDir:    defaultcmd.FactoryDir,
+		deleteDir:    defaultcmd.FactoryDir,
+		initDir:      defaultcmd.FactoryDir,
+		initType:     string(initcmd.DefaultScaffoldType),
+		initExecutor: initcmd.DefaultStarterExecutor,
+	}
+	bindings := factoryConfigInitFlagBindingsFromState(&state)
+	registry, err := newFactoryConfigInitHandlerRegistry(globals, diagnostics, rootOptions, &state)
+	if err != nil {
+		return nil, climanifestcobra.FactoryConfigInitFlagBindings{}, err
+	}
+	return registry, bindings, nil
+}
+
+type factoryConfigInitBindingState struct {
+	listDir          string
+	createDir        string
+	updateDir        string
+	deleteDir        string
+	createFrom       string
+	createSetCurrent bool
+	updateFrom       string
+	replaceSessionID string
+	initDir          string
+	initType         string
+	initExecutor     string
+}
+
+func factoryConfigInitFlagBindingsFromState(state *factoryConfigInitBindingState) climanifestcobra.FactoryConfigInitFlagBindings {
+	return climanifestcobra.FactoryConfigInitFlagBindings{
+		FactoryListDir:          &state.listDir,
+		FactoryCreateDir:        &state.createDir,
+		FactoryUpdateDir:        &state.updateDir,
+		FactoryDeleteDir:        &state.deleteDir,
+		FactoryCreateFrom:       &state.createFrom,
+		FactoryCreateSetCurrent: &state.createSetCurrent,
+		FactoryUpdateFrom:       &state.updateFrom,
+		FactoryReplaceSessionID: &state.replaceSessionID,
+		InitDir:                 &state.initDir,
+		InitType:                &state.initType,
+		InitExecutor:            &state.initExecutor,
+		FlagUsages:              factoryConfigInitFlagUsages(),
+	}
+}
+
+func factoryConfigInitFlagUsages() map[string]string {
+	return map[string]string{
+		"dir":         "factory root directory containing named factories",
+		"from":        "path to an existing factory.json payload (required)",
+		"set-current": "update .current-factory to the created name",
+		"session":     "target one live factory session; omit to use the default compatibility session",
+		"type":        "scaffold type to generate (supported: default, ralph)",
+		"executor": fmt.Sprintf(
+			"starter scaffold to generate (%s)",
+			strings.Join(initcmd.SupportedStarterExecutors(), ", "),
+		),
+	}
+}
+
+func newFactoryConfigInitHandlerRegistry(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	rootOptions RootCommandOptions,
+	state *factoryConfigInitBindingState,
+) (*commandregistry.Registry, error) {
+	if state == nil {
+		fallback := factoryConfigInitBindingState{
+			listDir:      defaultcmd.FactoryDir,
+			createDir:    defaultcmd.FactoryDir,
+			updateDir:    defaultcmd.FactoryDir,
+			deleteDir:    defaultcmd.FactoryDir,
+			initDir:      defaultcmd.FactoryDir,
+			initType:     string(initcmd.DefaultScaffoldType),
+			initExecutor: initcmd.DefaultStarterExecutor,
+		}
+		state = &fallback
+	}
+
+	return commandregistry.NewFactoryConfigInitRegistry(commandregistry.FactoryConfigInitHandlers{
+		FactoryQueryRunE: commandregistry.FactoryQueryRunE(commandregistry.FactoryQueryBinding{
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			Query:             queryFactory,
+		}),
+		FactoryListRunE: commandregistry.FactoryListRunE(commandregistry.FactoryListBinding{
+			Dir:  &state.listDir,
+			JSON: &globals.json,
+			List: listFactories,
+		}),
+		FactoryCreateRunE: commandregistry.FactoryCreateRunE(commandregistry.FactoryCreateBinding{
+			Dir:        &state.createDir,
+			From:       &state.createFrom,
+			SetCurrent: &state.createSetCurrent,
+			JSON:       &globals.json,
+			Create:     createFactoryFromFile,
+		}),
+		FactoryUpdateRunE: commandregistry.FactoryUpdateRunE(commandregistry.FactoryUpdateBinding{
+			Dir:    &state.updateDir,
+			From:   &state.updateFrom,
+			JSON:   &globals.json,
+			Update: updateFactoryFromFile,
+		}),
+		FactoryDeleteRunE: commandregistry.FactoryDeleteRunE(commandregistry.FactoryDeleteBinding{
+			Dir:    &state.deleteDir,
+			JSON:   &globals.json,
+			Delete: deleteFactory,
+		}),
+		FactoryReplaceCurrentRunE: commandregistry.FactoryReplaceCurrentRunE(commandregistry.FactoryReplaceCurrentBinding{
+			Server:            &globals.server,
+			SessionID:         &state.replaceSessionID,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			DiagnosticsWriter: diagnostics.writer,
+			ReplaceCurrent:    replaceFactoryCurrent,
+		}),
+		FactoryConfigValidateRunE: commandregistry.FactoryConfigValidateRunE(commandregistry.FactoryConfigValidateBinding{
+			JSON:     &globals.json,
+			Validate: validateFactory,
+		}),
+		FactoryConfigFlattenRunE: commandregistry.FactoryConfigFlattenRunE(commandregistry.FactoryConfigFlattenBinding{
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			Flatten:           flattenFactoryConfig,
+		}),
+		FactoryConfigExpandRunE: commandregistry.FactoryConfigExpandRunE(commandregistry.FactoryConfigExpandBinding{
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			Expand:            expandFactoryConfig,
+		}),
+		ConfigInitRunE: commandregistry.ConfigInitRunE(commandregistry.ConfigInitBinding{
+			HomeDir:           rootOptions.HomeDir,
+			JSON:              func() bool { return globals.json },
+			DiagnosticsWriter: diagnostics.writer,
+			Verbose:           diagnostics.verboseEnabled,
+			Init:              configinitcmd.RunInit,
+		}),
+		InitRunE: commandregistry.InitRunE(commandregistry.InitBinding{
+			Dir:               &state.initDir,
+			Type:              &state.initType,
+			Executor:          &state.initExecutor,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			Init:              initFactory,
+		}),
+	})
 }

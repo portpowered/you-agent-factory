@@ -9,7 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 )
 
-func TestRunGeneratesRepresentativeFamilyArtifacts(t *testing.T) {
+func TestRunGeneratesCLIFamilyArtifacts(t *testing.T) {
 	root := t.TempDir()
 	writeProductionManifestFixture(t, root)
 
@@ -17,7 +17,7 @@ func TestRunGeneratesRepresentativeFamilyArtifacts(t *testing.T) {
 	if status := run(root, false, stdout, stderr); status != 0 {
 		t.Fatalf("run() = %d, stderr = %q", status, stderr.String())
 	}
-	if got := stdout.String(); !bytes.Contains([]byte(got), []byte("CLI metadata generated")) {
+	if got := stdout.String(); !bytes.Contains([]byte(got), []byte("CLI family metadata generated")) {
 		t.Fatalf("stdout = %q, want success message", got)
 	}
 

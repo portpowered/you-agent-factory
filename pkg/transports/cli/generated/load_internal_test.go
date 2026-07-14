@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestParseWorkFamilyManifestRejectsInvalidPayload(t *testing.T) {
+func TestParseFamilyManifestRejectsInvalidPayload(t *testing.T) {
 	cases := []struct {
 		name    string
 		payload []byte
@@ -87,6 +87,15 @@ func TestParseRepresentativeFamilyManifestAcceptsMinimalFamily(t *testing.T) {
 	}
 	if _, err := manifest.CommandByID("you.session.show"); err != nil {
 		t.Fatalf("CommandByID(you.session.show) error = %v", err)
+	}
+}
+
+func TestFactoryConfigInitCommandByIDPropagatesManifestDecodeErrors(t *testing.T) {
+	original := factoryConfigInitFamilyJSON
+	t.Cleanup(func() { factoryConfigInitFamilyJSON = original })
+	factoryConfigInitFamilyJSON = []byte("{")
+	if _, err := FactoryConfigInitCommandByID("you.factory"); err == nil {
+		t.Fatal("FactoryConfigInitCommandByID() invalid embed = nil, want error")
 	}
 }
 
