@@ -90,6 +90,7 @@ function resetCheckpointPreflightTestState(): void {
   });
 }
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: bootstrap outcomes share one guarded preflight harness.
 describe("useDashboardCheckpointPreflight bootstrap", () => {
   beforeEach(() => {
     resetCheckpointPreflightTestState();
@@ -139,6 +140,7 @@ describe("useDashboardCheckpointPreflight bootstrap", () => {
       },
       requestedSessionId: "session-live-001",
       resolvedSessionId: "session-live-001",
+      staleCursorDetected: false,
       streamIdentity: {
         backendScopeID: "backend-scope-a",
         factorySessionID: "session-live-001",
@@ -177,6 +179,61 @@ describe("useDashboardCheckpointPreflight bootstrap", () => {
         }),
         outcome: "checkpoint_miss",
         recoveryAction: "replay_without_cursor",
+      },
+    ]);
+  });
+
+  it("records confirmed preflight stale-cursor recovery and hands off its safe correlation", async () => {
+    const queryClient = new QueryClient();
+    const restoreCheckpoint = vi.fn();
+    const streamIdentity = {
+      backendScopeID: "backend-scope-a",
+      factorySessionID: "session-live-001",
+      logicalSessionKeyID: "lsk-default",
+      streamGenerationID: "generation-1",
+    };
+    vi.spyOn(
+      preflightResolver,
+      "resolveDashboardCheckpointPreflight",
+    ).mockResolvedValue({
+      checkpoint: null,
+      checkpointLookupOutcome: "checkpoint_hit",
+      checkpointToDelete: null,
+      clearRequestedSessionCheckpoint: false,
+      kind: "resume",
+      requestedSessionId: "session-live-001",
+      resolvedSessionId: "session-live-001",
+      staleCursorDetected: true,
+      streamIdentity,
+    });
+
+    const { result } = renderHook(
+      () =>
+        useDashboardCheckpointPreflight({
+          checkpointHydrationKey: "session-live-001::0",
+          checkpointsDisabled: false,
+          rawSessionID: "session-live-001",
+          refreshToken: 0,
+          restoreCheckpoint,
+        }),
+      { wrapper: createWrapper(queryClient) },
+    );
+
+    await waitFor(() => expect(result.current.preflightReady).toBe(true));
+    const correlationToken = correlationTokenForIdentityScope(streamIdentity);
+    expect(result.current.cursorFreeReplayCorrelationToken).toBe(
+      correlationToken,
+    );
+    expect(readSessionPersistenceInvalidationRecords()).toEqual([
+      {
+        correlationToken,
+        outcome: "checkpoint_hit",
+        recoveryAction: "reuse_checkpoint",
+      },
+      {
+        correlationToken,
+        outcome: "stale_cursor",
+        recoveryAction: "invalidate_reconnect_cursor",
       },
     ]);
   });

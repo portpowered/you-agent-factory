@@ -3,6 +3,7 @@ import {
   type FactorySessionSyncPreflightResponse,
   getFactorySessionSyncPreflight,
 } from "../../../../api/factory-sessions";
+import { FactorySessionSyncPreflightReasonCode } from "../../../../api/generated/openapi";
 import type {
   FactoryTimelineCheckpoint,
   PersistedTimelineCheckpointPeek,
@@ -52,6 +53,7 @@ export type DashboardCheckpointPreflightResolution =
           checkpointToDelete: PersistedTimelineCheckpointPeek | null;
           kind: "resume";
           reconnectCursor?: FactoryEventReconnectCursor;
+          staleCursorDetected: boolean;
           requestedSessionId: string;
           resolvedSessionId: string;
           streamIdentity: TimelineCheckpointStreamIdentity;
@@ -242,6 +244,9 @@ async function resolveResponse({
     reconnectCursor: clearRequestedSessionCheckpoint
       ? undefined
       : resolution.reconnectCursor,
+    staleCursorDetected:
+      response.reasonCode ===
+      FactorySessionSyncPreflightReasonCode.cursor_stale,
     requestedSessionId: resolution.requestedSessionId,
     resolvedSessionId: resolution.resolvedSessionId,
     streamIdentity: resolution.streamIdentity,

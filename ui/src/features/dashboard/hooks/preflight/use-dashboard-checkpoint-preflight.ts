@@ -33,6 +33,7 @@ import { useDashboardStreamStore } from "../../state/dashboardStreamStore";
 
 export interface UseDashboardCheckpointPreflightResult {
   checkpointHydrated: boolean;
+  cursorFreeReplayCorrelationToken: string | null;
   initialReconnectCursor?: FactoryEventReconnectCursor;
   preflightError: Error | null;
   preflightRecovery: DashboardSessionRecoveryState | null;
@@ -44,6 +45,7 @@ export interface UseDashboardCheckpointPreflightResult {
 
 function resetDashboardCheckpointPreflightState(
   setCheckpointHydratedKey: (value: string | null) => void,
+  setCursorFreeReplayCorrelationToken: (value: string | null) => void,
   setPersistedCheckpoint: (value: FactoryTimelineCheckpoint | null) => void,
   setPreflightError: (value: Error | null) => void,
   setPreflightRecovery: (value: DashboardSessionRecoveryState | null) => void,
@@ -55,6 +57,7 @@ function resetDashboardCheckpointPreflightState(
   setStreamIdentity: (value: TimelineCheckpointStreamIdentity | null) => void,
 ): void {
   setCheckpointHydratedKey(null);
+  setCursorFreeReplayCorrelationToken(null);
   setPersistedCheckpoint(null);
   setPreflightError(null);
   setPreflightRecovery(null);
@@ -143,6 +146,10 @@ export function useDashboardCheckpointPreflight({
   const [checkpointHydratedKey, setCheckpointHydratedKey] = useState<
     string | null
   >(null);
+  const [
+    cursorFreeReplayCorrelationToken,
+    setCursorFreeReplayCorrelationToken,
+  ] = useState<string | null>(null);
   const [preflightReadyKey, setPreflightReadyKey] = useState<string | null>(
     null,
   );
@@ -164,6 +171,7 @@ export function useDashboardCheckpointPreflight({
   const checkpointHydrated = checkpointHydratedKey === checkpointHydrationKey;
   const preflightReady = preflightReadyKey === checkpointHydrationKey;
 
+  // biome-ignore lint/complexity/noExcessiveLinesPerFunction: the effect owns one guarded preflight invocation and its apply boundary.
   useEffect(() => {
     const revision = ++invocationRevision.current;
     const abortController = new AbortController();
@@ -173,6 +181,7 @@ export function useDashboardCheckpointPreflight({
 
     resetDashboardCheckpointPreflightState(
       setCheckpointHydratedKey,
+      setCursorFreeReplayCorrelationToken,
       setPersistedCheckpoint,
       setPreflightError,
       setPreflightRecovery,
@@ -274,6 +283,19 @@ export function useDashboardCheckpointPreflight({
         remapSelectedSessionID(resolution.resolvedSessionId);
       }
       recordIdentityOutcome(resolution);
+      if (resolution.kind === "resume" && resolution.staleCursorDetected) {
+        try {
+          const correlationToken = correlationTokenForIdentityScope(
+            resolution.streamIdentity,
+          );
+          recordSessionPersistenceDiagnostic(
+            sessionPersistenceDiagnostic("stale_cursor", correlationToken),
+          );
+          setCursorFreeReplayCorrelationToken(correlationToken);
+        } catch {
+          // Diagnostics are best effort and cannot affect cursor recovery.
+        }
+      }
       if (resolution.kind === "resume" && resolution.checkpoint) {
         restoreCheckpoint(resolution.streamIdentity, {
           ...resolution.checkpoint,
@@ -304,6 +326,7 @@ export function useDashboardCheckpointPreflight({
 
   return {
     checkpointHydrated,
+    cursorFreeReplayCorrelationToken,
     initialReconnectCursor,
     preflightError,
     preflightRecovery,
