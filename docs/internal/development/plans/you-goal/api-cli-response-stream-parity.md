@@ -6,8 +6,8 @@ This artifact records what API and CLI response-stream surfaces prove on merged
 `FactoryResponseEvent` schemas, session response-event SSE, production
 publication, and canonical CLI NDJSON.
 
-**Status:** gate evidence recorded — API/CLI canonical encoding parity and terminal
-outcome parity proven for goal/subagent integration fixtures
+**Status:** gate evidence recorded — live API session response-event SSE and CLI
+NDJSON canonical semantics proven for goal/subagent integration fixtures
 
 **Last updated:** 2026-07-14 UTC
 
@@ -21,24 +21,23 @@ outcome parity proven for goal/subagent integration fixtures
 
 | Acceptance criterion | Verdict | Evidence |
 |----------------------|---------|----------|
-| CLI NDJSON `response_event.event` and API SSE `data:` decode to equivalent canonical `FactoryResponseEvent` values | **Merged** | Focused smokes marshal each CLI `response_event.event` through the API SSE frame decoder (`TestNamedGoalResponseStream_APISSEMatchesCLIResponseEventNDJSON`, `TestNamedSubagentResponseStream_APISSEMatchesCLIResponseEventNDJSON`); live API SSE delivery covered by `pkg/transports/http/server_factory_sessions_test.go` and `pkg/transports/http/servertests/server_factory_session_orchestrator_test.go` |
+| CLI NDJSON `response_event.event` and live API SSE `data:` decode to equivalent canonical `FactoryResponseEvent` values | **Merged** | `TestNamedGoalResponseStream_APISSEMatchesCLIResponseEventNDJSON` and `TestNamedSubagentResponseStream_APISSEMatchesCLIResponseEventNDJSON` subscribe to `GET /factory-sessions/~default/response-events` during API invocation, then compare decoded SSE events to CLI `response_event` NDJSON semantics (kind/phase/payload fingerprints) |
 | Provider parity shows truthful fidelity and equivalent terminal `InvocationResponse` across primary-only and stream modes | **Merged (terminal scope)** | Mock-worker fixtures are final-only; API `POST /factory-sessions/{session_id}/invocations` and CLI JSON `invocation_result` agree on terminal outcome (goal + subagent terminal parity smokes) |
-| Narrow integration corrections only; no parallel stream reimplementation | **Merged** | No broad stream-program changes in this lane; parity proofs reuse canonical helpers from stories 002–003 |
+| Narrow integration corrections only; no parallel stream reimplementation | **Merged** | Wire compose now wires inference-progress publication into `InjectFactoryService` runtime builds (matching `BuildFactoryService`); focused smokes only |
 | Final gate evidence package cites audit + focused integration tests | **Merged** | This document plus stories 001–003 artifacts and smoke suites listed below |
 
 ## Proven API/CLI parity (merged scope)
 
-### Canonical response-event encoding parity
+### Live canonical response-event parity
 
 For representative `@you/goal` and `@you/subagent` JSON response-stream fixtures:
 
-- CLI NDJSON `recordType=response_event` records embed validated public
-  `FactoryResponseEvent` values (`responseevents.ValidateEvent`).
-- Each embedded event round-trips through the API SSE frame contract (`id:` equals
-  decimal `sequence`, `data:` is JSON `FactoryResponseEvent`) without semantic
-  loss on kind, phase, or payload.
-- Live API SSE publication and reconnect semantics remain covered by transport
-  unit/servertests near `pkg/transports/http/handlers_events.go`.
+- A functional API server loads the packaged factory and mock-worker topology.
+- A goroutine opens `GET /factory-sessions/~default/response-events` before `POST /factory-sessions/~default/invocations` completes.
+- Decoded live SSE `FactoryResponseEvent` records validate through `responseevents.ValidateEvent` and match CLI `response_event` kind/phase/payload semantics for the integration fixture.
+- API SSE frame contract (`id:` equals decimal `sequence`, `data:` is JSON `FactoryResponseEvent`) is asserted for each live API event.
+
+**Fidelity note:** the API text-invocation fixture on a pre-started service-mode server may emit fewer terminal `RUN/COMPLETED` observations than a fresh bootstrap CLI `--named` invocation because dispatch breadth differs; parity is proven on the events both surfaces actually publish (truthful final-only), not on byte-identical dispatch IDs.
 
 ### Terminal invocation outcome parity
 
@@ -50,7 +49,7 @@ For representative successful `@you/goal` and `@you/subagent` fixtures:
   terminal `invocation_result` NDJSON record wrapping the same `InvocationResponse`
   shape.
 - Focused smoke tests prove API and CLI response-stream terminal outcomes agree
-  for the same fixture inputs:
+  for the same fixture inputs.
 
 ```bash
 go test ./tests/functional/smoke/ -run 'NamedGoalResponseStream_APIInvocationMatchesCLIResponseStreamTerminal|NamedSubagentResponseStream_APIInvocationMatchesCLIResponseStreamTerminal|NamedGoalResponseStream_APISSEMatchesCLIResponseEventNDJSON|NamedSubagentResponseStream_APISSEMatchesCLIResponseEventNDJSON' -count=1
@@ -63,6 +62,14 @@ provider streaming fragments. That is truthful **final-only** fidelity: stream m
 still ends with the authoritative primary result and does not invent synthetic
 progress events beyond synthesized terminal `RUN`/`COMPLETED` observations emitted
 by the canonical mapper when dispatch streams complete.
+
+## Integration correction (story 004)
+
+`compose.InjectFactoryService` previously built runtime bundles without session-scoped
+inference-progress publishers (`NewRuntimeBuildService` passed `nil` factories).
+That prevented wire-composed API servers from publishing canonical response events
+into the session store. Wire now passes the sessions registry into
+`NewRuntimeBuildService`, matching `BuildFactoryService` / `NewFactoryServiceCollaborators`.
 
 ## Final gate evidence package
 
@@ -82,5 +89,6 @@ by the canonical mapper when dispatch streams complete.
 go test ./pkg/transports/cli/run/... -short -run ResponseStream
 go test ./pkg/factory/sessions/responsestream/... -short
 go test ./pkg/transports/http/ -short -run FactoryResponseEvents
+go test ./cmd/factory/compose/ -run TestInjectFactoryService_MatchesBuildFactoryServiceCollaborators -count=1
 go test ./tests/functional/smoke/ -run 'NamedGoalResponseStream|NamedSubagentResponseStream|NamedGoalResponseStream_APIInvocationMatchesCLIResponseStreamTerminal|NamedSubagentResponseStream_APIInvocationMatchesCLIResponseStreamTerminal|NamedGoalResponseStream_APISSEMatchesCLIResponseEventNDJSON|NamedSubagentResponseStream_APISSEMatchesCLIResponseEventNDJSON' -count=1
 ```

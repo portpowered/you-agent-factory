@@ -435,13 +435,26 @@ func NewFactoryServiceCollaboratorsFromParts(
 }
 
 // NewRuntimeBuildService constructs the runtimebuild collaborator for wire.
+// When sessions is non-nil, worker dispatches publish canonical response events
+// into the live session store (matching BuildFactoryService / BuildFactoryCore).
 func NewRuntimeBuildService(
 	cfg *FactoryServiceConfig,
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	localModels *LocalModelDomain,
+	sessions *factorysessions.Registry,
 ) *runtimebuild.Service {
-	return newRuntimeBuildService(cfg, clock, baseLogger, localModels, nil, nil)
+	if sessions == nil {
+		return newRuntimeBuildService(cfg, clock, baseLogger, localModels, nil, nil)
+	}
+	return newRuntimeBuildService(
+		cfg,
+		clock,
+		baseLogger,
+		localModels,
+		newInferenceProgressPublisherFactory(sessions, baseLogger),
+		newSessionDispatchCompletionObserverFactory(sessions),
+	)
 }
 
 // ServiceClockForCompose selects the factory clock for the loaded replay artifact.

@@ -149,6 +149,10 @@ func (fs *FunctionalAPIServer) URL() string {
 	return fs.httpSrv.URL
 }
 
+func (fs *FunctionalAPIServer) Service() *service.FactoryService {
+	return fs.service
+}
+
 func (fs *FunctionalAPIServer) GetEngineStateSnapshot(t *testing.T) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	t.Helper()
 
