@@ -317,8 +317,8 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   the supported record, and omit malformed or absent attribution instead of
   inferring it from neighboring stream activity.
 
-  Legacy fragment
-  compatibility mapping lives in `pkg/factory/sessions/responsestream/compat`
+  Internal response-stream event projection into canonical FactoryResponseEvent
+  values lives in `pkg/factory/sessions/responsestream/fragmentmap`
   (`MapFragment` over `responsestream.Event` with session/run `Context`); keep
   the mapper pure, table-tested, and free of CLI/HTTP/provider imports while
   later transport lanes adopt mapped canonical events. Response fragments map to
@@ -344,10 +344,10 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   Compaction signals map to `STREAM_GAP`/`UPDATED` with `StreamGapPayload`
   (`fromSequence`/`toSequence` from `CompactionSummary` dropped bounds when
   present, `reason` from compaction reason) and always `LOSSY` provenance.
-  `compat/mapper_fixture_matrix_test.go` is the consolidated coverage matrix for
-  every declared legacy fragment kind plus legacy publisher smoke; focused
+  `fragmentmap/mapper_fixture_matrix_test.go` is the consolidated coverage matrix for
+  every declared internal response-stream event kind plus publisher smoke; focused
   invocation primary-result byte fixtures live in
-  `compat/testdata/primary_result_regression/` and are asserted by
+  `pkg/work/invocation/testdata/primary_result_regression/` and are asserted by
   `primary_result_regression_test.go` without wiring the mapper into selection.
   Provider-native typed adapters live under `pkg/workers/provider/<provider>`
   and emit validated `responseevents.Draft` values. Sanitized cross-provider
@@ -372,6 +372,31 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   (`TestCrossProviderParitySmoke_ProviderSuiteEntrypoint`). Maintainer lanes:
   `make provider-parity-smoke` (also invoked by `make api-smoke`) and
   `make response-stream-stress-smoke` for response-event backpressure/race proofs.
+  Batch 09 private-contract removal gates live in
+  `pkg/factory/sessions/responsestream/removalgate` (`AssertGate`, `AssertClosure`,
+  `AssertDocsPrerequisite`, `AssertNoPrivateNDJSONInProductionSurfaces`,
+  `AssertPublicTransportLayersDoNotImportLegacyCompat`,
+  `AssertLegacyCompatMapperDeleted`,
+  `AssertNoRetiredPrivateContractSymbolsInProductionSurfaces`,
+  `AssertReleaseNotesMigrationMapping`,
+  `AssertPrivateNDJSONRecordTypesRejected`) with package tests in `gate_test.go` and
+  functional entrypoints
+  `tests/functional/smoke/response_stream_private_contract_removal_gate_smoke_test.go`
+  (`TestResponseStreamPrivateContractRemovalGateSmoke`),
+  `tests/functional/smoke/response_stream_private_ndjson_contract_smoke_test.go`
+  (`TestResponseStreamPrivateNDJSONContractSmoke`), and
+  `tests/functional/smoke/response_stream_private_contract_closure_smoke_test.go`
+  (`TestResponseStreamPrivateContractClosureSmoke`). Supported CLI NDJSON
+  recordType constants and retired-record rejection live in
+  `pkg/factory/sessions/responsestream/ndjsoncontract`; the canonical decoder in
+  `pkg/workers/provider/parityfixtures/transport.go` rejects retired private
+  record types before validating public envelopes. Run these before deleting
+  private NDJSON record types. The retired `responsestream/compat` mapper package
+  must stay deleted; internal fragment projection now lives in `fragmentmap`.
+  The exact old→new CLI JSON migration map for retired private NDJSON records lives in
+  `docs/release-notes/response-stream-private-ndjson-removal.md` (indexed by
+  `docs/release-notes/README.md`) and is asserted by
+  `AssertReleaseNotesMigrationMapping`.
   While legacy response-stream consumers remain supported, carry an exact draft beside the compatibility
   fragment and let `pkg/factory/sessions/stream/manager.go` publish that draft
   directly; do not remap it through the lossy legacy fragment mapper. Keep the

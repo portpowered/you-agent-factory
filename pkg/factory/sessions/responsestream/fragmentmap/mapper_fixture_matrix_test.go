@@ -1,4 +1,4 @@
-package compat_test
+package fragmentmap_test
 
 import (
 	"encoding/json"
@@ -8,11 +8,11 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/compat"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/fragmentmap"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-var legacyFragmentFixtureMatrix = []struct {
+var internalFragmentFixtureMatrix = []struct {
 	name             string
 	fragment         responsestream.Event
 	wantKind         responseevents.Kind
@@ -151,17 +151,17 @@ func assertFixtureMatrixMappedEvent(
 func TestMapFragment_FixtureMatrixMapsEveryLegacyFragmentKind(t *testing.T) {
 	t.Parallel()
 
-	ctx := compat.Context{
+	ctx := fragmentmap.Context{
 		FactorySessionID: "session-matrix",
 		RunID:            "run-matrix",
 	}
 
-	for _, tc := range legacyFragmentFixtureMatrix {
+	for _, tc := range internalFragmentFixtureMatrix {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			events, err := compat.MapFragment(ctx, tc.fragment)
+			events, err := fragmentmap.MapFragment(ctx, tc.fragment)
 			if err != nil {
 				t.Fatalf("MapFragment() error = %v", err)
 			}
@@ -177,21 +177,21 @@ func TestMapFragment_FixtureMatrixMapsEveryLegacyFragmentKind(t *testing.T) {
 func TestMapFragment_FixtureMatrixMappingIsDeterministic(t *testing.T) {
 	t.Parallel()
 
-	ctx := compat.Context{
+	ctx := fragmentmap.Context{
 		FactorySessionID: "session-matrix",
 		RunID:            "run-matrix",
 	}
 
-	for _, tc := range legacyFragmentFixtureMatrix {
+	for _, tc := range internalFragmentFixtureMatrix {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			first, err := compat.MapFragment(ctx, tc.fragment)
+			first, err := fragmentmap.MapFragment(ctx, tc.fragment)
 			if err != nil {
 				t.Fatalf("first MapFragment() error = %v", err)
 			}
-			second, err := compat.MapFragment(ctx, tc.fragment)
+			second, err := fragmentmap.MapFragment(ctx, tc.fragment)
 			if err != nil {
 				t.Fatalf("second MapFragment() error = %v", err)
 			}
@@ -205,7 +205,7 @@ func TestMapFragment_FixtureMatrixMappingIsDeterministic(t *testing.T) {
 func TestMapFragment_ResponseFragmentItemIDStableAcrossMatrixDeltas(t *testing.T) {
 	t.Parallel()
 
-	ctx := compat.Context{
+	ctx := fragmentmap.Context{
 		FactorySessionID: "session-matrix",
 		RunID:            "run-matrix",
 	}
@@ -220,7 +220,7 @@ func TestMapFragment_ResponseFragmentItemIDStableAcrossMatrixDeltas(t *testing.T
 		},
 	}
 
-	first, err := compat.MapFragment(ctx, responsestream.Event{
+	first, err := fragmentmap.MapFragment(ctx, responsestream.Event{
 		Sequence:           10,
 		RecordedAt:         time.Date(2026, 7, 12, 19, 0, 0, 0, time.UTC),
 		Kind:               base.Kind,
@@ -232,7 +232,7 @@ func TestMapFragment_ResponseFragmentItemIDStableAcrossMatrixDeltas(t *testing.T
 	if err != nil {
 		t.Fatalf("first MapFragment() error = %v", err)
 	}
-	second, err := compat.MapFragment(ctx, responsestream.Event{
+	second, err := fragmentmap.MapFragment(ctx, responsestream.Event{
 		Sequence:           11,
 		RecordedAt:         time.Date(2026, 7, 12, 19, 0, 1, 0, time.UTC),
 		Kind:               base.Kind,
@@ -263,8 +263,8 @@ func TestMapFragment_CoversEveryDeclaredLegacyFragmentKind(t *testing.T) {
 		responsestream.EventKindStreamFailed:     {},
 		responsestream.EventKindCompactionSignal: {},
 	}
-	covered := make(map[responsestream.EventKind]struct{}, len(legacyFragmentFixtureMatrix))
-	for _, tc := range legacyFragmentFixtureMatrix {
+	covered := make(map[responsestream.EventKind]struct{}, len(internalFragmentFixtureMatrix))
+	for _, tc := range internalFragmentFixtureMatrix {
 		covered[tc.fragment.Kind] = struct{}{}
 	}
 

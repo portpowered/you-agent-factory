@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/ndjsoncontract"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -150,26 +151,63 @@ func DecodeTransportCLINDJSON(lines []string) ([]responseevents.FactoryResponseE
 	}
 	events := make([]responseevents.FactoryResponseEvent, 0, len(lines)-1)
 	for index, line := range lines[:len(lines)-1] {
-		var record transportCLIResponseEventRecord
-		if err := json.Unmarshal([]byte(line), &record); err != nil {
-			return nil, factoryapi.InvocationResponse{}, fmt.Errorf("decode CLI response_event line %d: %w", index, err)
-		}
-		if record.RecordType != transportJSONRecordResponseEvent {
-			return nil, factoryapi.InvocationResponse{}, fmt.Errorf("CLI line %d recordType = %q, want %q", index, record.RecordType, transportJSONRecordResponseEvent)
-		}
-		if err := responseevents.ValidateEvent(record.Event); err != nil {
-			return nil, factoryapi.InvocationResponse{}, fmt.Errorf("validate CLI response_event line %d: %w", index, err)
+		record, err := decodeTransportCLIResponseEventLine(line, index)
+		if err != nil {
+			return nil, factoryapi.InvocationResponse{}, err
 		}
 		events = append(events, record.Event)
 	}
-	var finalRecord transportCLIInvocationResultRecord
-	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &finalRecord); err != nil {
-		return nil, factoryapi.InvocationResponse{}, fmt.Errorf("decode CLI invocation_result: %w", err)
-	}
-	if finalRecord.RecordType != transportJSONRecordInvocationResult {
-		return nil, factoryapi.InvocationResponse{}, fmt.Errorf("final CLI recordType = %q, want %q", finalRecord.RecordType, transportJSONRecordInvocationResult)
+	finalRecord, err := decodeTransportCLIInvocationResultLine(lines[len(lines)-1])
+	if err != nil {
+		return nil, factoryapi.InvocationResponse{}, err
 	}
 	return events, finalRecord.Invocation, nil
+}
+
+func decodeTransportCLIRecordHeader(line string, label string) (string, error) {
+	var header struct {
+		RecordType string `json:"recordType"`
+	}
+	if err := json.Unmarshal([]byte(line), &header); err != nil {
+		return "", fmt.Errorf("decode CLI %s record header: %w", label, err)
+	}
+	if err := ndjsoncontract.RejectRetiredPrivateRecordType(header.RecordType); err != nil {
+		return "", err
+	}
+	return header.RecordType, nil
+}
+
+func decodeTransportCLIResponseEventLine(line string, index int) (transportCLIResponseEventRecord, error) {
+	recordType, err := decodeTransportCLIRecordHeader(line, fmt.Sprintf("response_event line %d", index))
+	if err != nil {
+		return transportCLIResponseEventRecord{}, err
+	}
+	if recordType != transportJSONRecordResponseEvent {
+		return transportCLIResponseEventRecord{}, fmt.Errorf("CLI line %d recordType = %q, want %q", index, recordType, transportJSONRecordResponseEvent)
+	}
+	var record transportCLIResponseEventRecord
+	if err := json.Unmarshal([]byte(line), &record); err != nil {
+		return transportCLIResponseEventRecord{}, fmt.Errorf("decode CLI response_event line %d: %w", index, err)
+	}
+	if err := responseevents.ValidateEvent(record.Event); err != nil {
+		return transportCLIResponseEventRecord{}, fmt.Errorf("validate CLI response_event line %d: %w", index, err)
+	}
+	return record, nil
+}
+
+func decodeTransportCLIInvocationResultLine(line string) (transportCLIInvocationResultRecord, error) {
+	recordType, err := decodeTransportCLIRecordHeader(line, "invocation_result")
+	if err != nil {
+		return transportCLIInvocationResultRecord{}, err
+	}
+	if recordType != transportJSONRecordInvocationResult {
+		return transportCLIInvocationResultRecord{}, fmt.Errorf("final CLI recordType = %q, want %q", recordType, transportJSONRecordInvocationResult)
+	}
+	var finalRecord transportCLIInvocationResultRecord
+	if err := json.Unmarshal([]byte(line), &finalRecord); err != nil {
+		return transportCLIInvocationResultRecord{}, fmt.Errorf("decode CLI invocation_result: %w", err)
+	}
+	return finalRecord, nil
 }
 
 // EncodeTransportSSEFrame serializes one event using the HTTP SSE wire format.
