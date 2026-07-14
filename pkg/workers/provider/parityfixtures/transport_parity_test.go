@@ -34,6 +34,11 @@ func TestTransportParity_AgyFinalOnlyCLIAndAPIAgree(t *testing.T) {
 	assertTransportParityForFixture(t, parityfixtures.FixtureAgyFinalOnly)
 }
 
+func TestTransportParity_ToolLifecycleCLIAndAPIAgree(t *testing.T) {
+	t.Parallel()
+	assertTransportParityForFixture(t, parityfixtures.FixtureToolLifecycleClaude)
+}
+
 func TestTransportParity_SSEFramesMatchAPIRecordDecoding(t *testing.T) {
 	t.Parallel()
 
@@ -84,6 +89,11 @@ func assertTransportParityForFixture(t *testing.T, fixtureID string) {
 	}
 	if err := parityfixtures.AssertCLIAPITransportParity(outcome); err != nil {
 		t.Fatalf("AssertCLIAPITransportParity(%q) error = %v", fixtureID, err)
+	}
+	if fixture.ToolLifecycle {
+		if err := parityfixtures.AssertObservableToolLifecycle(outcome.Events); err != nil {
+			t.Fatalf("AssertObservableToolLifecycle(%q) error = %v", fixtureID, err)
+		}
 	}
 	if outcome.Terminal.Response.Content != fixture.WantContent {
 		t.Fatalf("terminal content = %q, want %q", outcome.Terminal.Response.Content, fixture.WantContent)

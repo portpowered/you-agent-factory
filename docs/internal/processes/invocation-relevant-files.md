@@ -275,7 +275,8 @@ primary-result behavior.
   plus `AssertCLIAPITransportParity` and `AssertTruthfulStreamingFidelity` to
   compare decoded CLI NDJSON and API SSE `FactoryResponseEvent` values and
   terminal `InvocationResponse` outcomes for every fidelity class (full-stream,
-  partial-stream, snapshot-only, and final-only including Agy) before adding new
+  partial-stream, snapshot-only, and final-only including Agy) plus the structured
+  tool-lifecycle fixture via `AssertObservableToolLifecycle` before adding new
   transport parity tests. While legacy response-stream
   consumers remain supported, carry an exact draft beside the compatibility
   fragment and let `pkg/factory/sessions/stream/manager.go` publish that draft

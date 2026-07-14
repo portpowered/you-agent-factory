@@ -200,6 +200,51 @@ func DecodeTransportSSEFrame(frame string) (responseevents.FactoryResponseEvent,
 	return event, nil
 }
 
+// AssertObservableToolLifecycle verifies published response events include a
+// correlated tool start and completion with stable tool identity fields.
+func AssertObservableToolLifecycle(events []responseevents.FactoryResponseEvent) error {
+	var started, completed bool
+	var toolCallID, toolName string
+	for _, event := range events {
+		if event.Kind != responseevents.KindTool {
+			continue
+		}
+		switch event.Phase {
+		case responseevents.PhaseStarted:
+			var payload responseevents.ToolPayload
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				return fmt.Errorf("decode tool started payload: %w", err)
+			}
+			if payload.ToolCallID == "" || payload.ToolName == "" {
+				return fmt.Errorf("tool started missing identity: %#v", payload)
+			}
+			if toolCallID == "" {
+				toolCallID = payload.ToolCallID
+				toolName = payload.ToolName
+			} else if payload.ToolCallID != toolCallID || payload.ToolName != toolName {
+				return fmt.Errorf("tool started identity drift: %#v", payload)
+			}
+			started = true
+		case responseevents.PhaseCompleted:
+			var payload responseevents.ToolPayload
+			if err := json.Unmarshal(event.Payload, &payload); err != nil {
+				return fmt.Errorf("decode tool completed payload: %w", err)
+			}
+			if payload.ToolCallID == "" || payload.ToolName == "" {
+				return fmt.Errorf("tool completed missing identity: %#v", payload)
+			}
+			if toolCallID != "" && (payload.ToolCallID != toolCallID || payload.ToolName != toolName) {
+				return fmt.Errorf("tool completed identity mismatch: %#v", payload)
+			}
+			completed = true
+		}
+	}
+	if !started || !completed {
+		return fmt.Errorf("tool lifecycle events = started %t completed %t, want both", started, completed)
+	}
+	return nil
+}
+
 // AssertTruthfulStreamingFidelity verifies adapter events claim only the fixture
 // fidelity class's truthful streaming capabilities.
 func AssertTruthfulStreamingFidelity(fixture Fixture, outcome TransportParityOutcome) error {
