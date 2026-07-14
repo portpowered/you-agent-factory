@@ -604,3 +604,190 @@ func sessionShowInheritedDefaultsCase(rootRecord, sessionShow climanifest.Comman
 		},
 	}
 }
+
+func TestProductionManifestParsingParity_DocsFamily(t *testing.T) {
+	manifestPath := testutil.MustRepoPath(t, climanifest.ProductionManifestPath)
+	manifest, err := climanifest.LoadProduction(manifestPath)
+	if err != nil {
+		t.Fatalf("LoadProduction() error = %v", err)
+	}
+
+	rootRecord, err := manifest.CommandByID("you")
+	if err != nil {
+		t.Fatalf("CommandByID(you) error = %v", err)
+	}
+	docsRecord, err := manifest.CommandByID("you.docs")
+	if err != nil {
+		t.Fatalf("CommandByID(you.docs) error = %v", err)
+	}
+
+	cases := productionManifestDocsParsingParityCases(rootRecord, docsRecord)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			record, err := manifest.CommandByID(tc.commandID)
+			if err != nil {
+				t.Fatalf("CommandByID(%q) error = %v", tc.commandID, err)
+			}
+
+			leaf, positionals, parseErr := cli.ParseArgvForCLIInputsInventory(tc.argv)
+			if tc.wantParseErr {
+				if parseErr == nil {
+					t.Fatalf("ParseArgvForCLIInputsInventory(%v) error = nil, want parse failure", tc.argv)
+				}
+				if tc.errContains != "" && !strings.Contains(parseErr.Error(), tc.errContains) {
+					t.Fatalf("parse error = %q, want substring %q", parseErr.Error(), tc.errContains)
+				}
+				if tc.verify != nil {
+					tc.verify(t, manifest, record, leaf, positionals)
+				}
+				return
+			}
+			if parseErr != nil {
+				t.Fatalf("ParseArgvForCLIInputsInventory(%v) error = %v", tc.argv, parseErr)
+			}
+			if mismatch := climanifestparity.AssertLeafCommandPath(record.ID, record.Path, leaf); mismatch != nil {
+				t.Fatal(mismatch.Error())
+			}
+			if tc.verify != nil {
+				tc.verify(t, manifest, record, leaf, positionals)
+			}
+		})
+	}
+}
+
+func productionManifestDocsParsingParityCases(rootRecord, docsRecord climanifest.Command) []parsingParityCase {
+	cases := make([]parsingParityCase, 0)
+	cases = append(cases, docsTopicPositionalCases(docsRecord)...)
+	cases = append(cases, docsInheritedFlagCases(docsRecord)...)
+	cases = append(cases, docsInheritedDefaultsCase(rootRecord, docsRecord)...)
+	return cases
+}
+
+func docsTopicPositionalCases(docsRecord climanifest.Command) []parsingParityCase {
+	return []parsingParityCase{
+		{
+			name:      "docs optional topic accepts omission",
+			commandID: docsRecord.ID,
+			argv:      []string{"docs"},
+			verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, _ *cobra.Command, positionals []string) {
+				t.Helper()
+				arg, err := record.RequireArgumentAt(0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if arg.Required || arg.MaxCardinality != 1 || arg.Variadic || arg.Name != "topic" {
+					t.Fatalf("contract arg = %+v, want optional single topic positional", arg)
+				}
+				if mismatch := climanifestparity.CompareArgumentCardinality(record.ID, arg, positionals); mismatch != nil {
+					t.Fatal(mismatch.Error())
+				}
+				if len(positionals) != 0 {
+					t.Fatalf("positionals = %v, want empty", positionals)
+				}
+			},
+		},
+		{
+			name:      "docs optional topic accepts one value",
+			commandID: docsRecord.ID,
+			argv:      []string{"docs", "config"},
+			verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, _ *cobra.Command, positionals []string) {
+				t.Helper()
+				arg, err := record.RequireArgumentAt(0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if mismatch := climanifestparity.CompareArgumentCardinality(record.ID, arg, positionals); mismatch != nil {
+					t.Fatal(mismatch.Error())
+				}
+				if len(positionals) != 1 || positionals[0] != "config" {
+					t.Fatalf("positionals = %v, want [config]", positionals)
+				}
+			},
+		},
+		{
+			name:         "docs rejects excess positionals",
+			commandID:    docsRecord.ID,
+			argv:         []string{"docs", "config", "extra"},
+			wantParseErr: true,
+			errContains:  "accepts at most 1 arg",
+			verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, _ *cobra.Command, _ []string) {
+				t.Helper()
+				arg, err := record.RequireArgumentAt(0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if arg.MaxCardinality != 1 {
+					t.Fatalf("contract maxCardinality = %d, want 1", arg.MaxCardinality)
+				}
+			},
+		},
+		{
+			name:      "docs topic enum matches live ValidArgs",
+			commandID: docsRecord.ID,
+			argv:      []string{"docs", "agents"},
+			verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, leaf *cobra.Command, _ []string) {
+				t.Helper()
+				arg, err := record.RequireArgumentAt(0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if mismatch := climanifestparity.CompareArgumentEnum(record.ID, arg, leaf.ValidArgs); mismatch != nil {
+					t.Fatal(mismatch.Error())
+				}
+			},
+		},
+	}
+}
+
+func docsInheritedFlagCases(docsRecord climanifest.Command) []parsingParityCase {
+	return []parsingParityCase{
+		{
+			name:      "docs inherited verbose no-option applies contract default",
+			commandID: docsRecord.ID,
+			argv:      []string{"--verbose", "docs", "config"},
+			verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, leaf *cobra.Command, _ []string) {
+				t.Helper()
+				contract, err := record.RequireFlagByLong("verbose")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if mismatch := climanifestparity.CompareFlagParsed(record.ID, contract, climanifestparity.LiveFlag(leaf, "verbose"), true, "true"); mismatch != nil {
+					t.Fatal(mismatch.Error())
+				}
+			},
+		},
+		{
+			name:      "docs inherited server flag accepts explicit value",
+			commandID: docsRecord.ID,
+			argv:      []string{"--server", "http://127.0.0.1:9090", "docs", "config"},
+			verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, leaf *cobra.Command, _ []string) {
+				t.Helper()
+				contract, err := record.RequireFlagByLong("server")
+				if err != nil {
+					t.Fatal(err)
+				}
+				if mismatch := climanifestparity.CompareFlagParsed(record.ID, contract, climanifestparity.LiveFlag(leaf, "server"), true, "http://127.0.0.1:9090"); mismatch != nil {
+					t.Fatal(mismatch.Error())
+				}
+			},
+		},
+	}
+}
+
+func docsInheritedDefaultsCase(rootRecord, docsRecord climanifest.Command) []parsingParityCase {
+	return []parsingParityCase{
+		{
+			name:      "docs inherited flags match root persistent defaults",
+			commandID: docsRecord.ID,
+			argv:      []string{"docs"},
+			verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, leaf *cobra.Command, _ []string) {
+				t.Helper()
+				mismatches := climanifestparity.CompareInheritedFlagDefaultsAgainstRoot(rootRecord, record, leaf)
+				if len(mismatches) == 0 {
+					return
+				}
+				t.Fatalf("contract vs live inherited flag default drift detected:\n%s", climanifestparity.FormatMismatchReport(mismatches))
+			},
+		},
+	}
+}

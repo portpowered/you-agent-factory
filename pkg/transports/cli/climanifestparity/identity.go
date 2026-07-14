@@ -128,6 +128,78 @@ func CompareModelsHelpIdentity(
 	return mismatches
 }
 
+// CompareDocsHelpIdentity compares contracted docs help/identity against the
+// production-wired live tree. The live docs command keeps contracted long help
+// but omits Example text during cutover, so example fields are skipped until
+// legacy Example wiring returns.
+func CompareDocsHelpIdentity(
+	manifest climanifest.Manifest,
+	record climanifest.Command,
+	root *cobra.Command,
+	cmd *cobra.Command,
+) []Mismatch {
+	var mismatches []Mismatch
+	commandID := record.ID
+
+	appendMismatch := func(field, want, got string) {
+		if want == got {
+			return
+		}
+		mismatches = append(mismatches, Mismatch{
+			CommandID: commandID,
+			Field:     field,
+			Want:      want,
+			Got:       got,
+		})
+	}
+
+	appendMismatch("path", record.Path, cmd.CommandPath())
+	appendMismatch("name", record.Name, cmd.Name())
+	appendMismatch("aliases", formatStringList(record.Aliases), formatStringList(cmd.Aliases))
+	appendMismatch("visibility", record.Visibility, commandVisibility(cmd))
+	appendMismatch("runnable", fmt.Sprintf("%t", record.Runnable), fmt.Sprintf("%t", cmd.Runnable()))
+	appendMismatch("shortDescription", record.Documentation.Documentation.Title.CanonicalEnglish, cmd.Short)
+	appendMismatch("longDescription", record.Documentation.Documentation.Description.CanonicalEnglish, cmd.Long)
+	appendMismatch("usage.line", record.Usage.Line, cmd.Use)
+
+	helpOutput, err := baseline.CaptureHelpOutput(root, HelpArgsForPath(record.Path))
+	if err != nil {
+		mismatches = append(mismatches, Mismatch{
+			CommandID: commandID,
+			Field:     "help.capture",
+			Want:      "help output",
+			Got:       err.Error(),
+		})
+		return mismatches
+	}
+
+	appendMismatch(
+		"normalizedHelpUsageText",
+		buildDocsHelpIdentityPrefix(record),
+		extractHelpIdentityPrefix(helpOutput),
+	)
+
+	return mismatches
+}
+
+func buildDocsHelpIdentityPrefix(record climanifest.Command) string {
+	var b strings.Builder
+	long := record.Documentation.Documentation.Description.CanonicalEnglish
+	b.WriteString(long)
+	if !strings.HasSuffix(long, "\n") {
+		b.WriteString("\n")
+	}
+	b.WriteString("\nUsage:\n  ")
+	b.WriteString(record.Path)
+	usageTail := strings.TrimSpace(strings.TrimPrefix(record.Usage.Line, record.Name))
+	if usageTail != "" {
+		b.WriteString(" ")
+		b.WriteString(usageTail)
+	}
+	b.WriteString(" [flags]")
+	return baseline.NormalizeHelpOutput(b.String())
+}
+
 func buildModelsParentHelpIdentityPrefix(manifest climanifest.Manifest, record climanifest.Command, includeExamples bool) string {
 	var b strings.Builder
 	long := record.Documentation.Documentation.Description.CanonicalEnglish

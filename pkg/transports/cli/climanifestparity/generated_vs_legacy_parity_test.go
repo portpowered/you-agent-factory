@@ -201,6 +201,93 @@ func TestGeneratedVsLegacyParityMatrix_ModelsFamily(t *testing.T) {
 	})
 }
 
+func TestGeneratedVsLegacyParityMatrix_DocsFamily(t *testing.T) {
+	docsFamilyCases := []struct {
+		commandID string
+		path      string
+	}{
+		{commandID: "you.docs", path: "you docs"},
+	}
+
+	t.Run("identity", func(t *testing.T) {
+		legacyRoot, generatedRoot := mustDocsConstructorRoots(t)
+		for _, tc := range docsFamilyCases {
+			t.Run(tc.commandID, func(t *testing.T) {
+				legacyCmd, err := climanifestparity.FindCommandByPath(legacyRoot, tc.path)
+				if err != nil {
+					t.Fatalf("legacy FindCommandByPath(%q) error = %v", tc.path, err)
+				}
+				generatedCmd, err := climanifestparity.FindCommandByPath(generatedRoot, tc.path)
+				if err != nil {
+					t.Fatalf("generated FindCommandByPath(%q) error = %v", tc.path, err)
+				}
+				mismatches := climanifestparity.CompareConstructorIdentityParity(tc.commandID, legacyCmd, generatedCmd)
+				assertNoConstructorMismatches(t, mismatches)
+			})
+		}
+	})
+
+	t.Run("help", func(t *testing.T) {
+		for _, tc := range docsFamilyCases {
+			t.Run(tc.commandID, func(t *testing.T) {
+				legacyRoot, generatedRoot := mustDocsConstructorRoots(t)
+				mismatches, err := climanifestparity.CompareConstructorHelpParity(tc.commandID, legacyRoot, generatedRoot, tc.path)
+				if err != nil {
+					t.Fatalf("CompareConstructorHelpParity(%q) error = %v", tc.path, err)
+				}
+				assertNoConstructorMismatches(t, mismatches)
+			})
+		}
+	})
+
+	t.Run("completion", func(t *testing.T) {
+		for _, tc := range docsFamilyCases {
+			t.Run(tc.commandID, func(t *testing.T) {
+				legacyRoot, generatedRoot := mustDocsConstructorRoots(t)
+				mismatches, err := climanifestparity.CompareConstructorCompletionInventoryParity(tc.commandID, tc.path, legacyRoot, generatedRoot)
+				if err != nil {
+					t.Fatalf("CompareConstructorCompletionInventoryParity(%q) error = %v", tc.path, err)
+				}
+				assertNoConstructorMismatches(t, mismatches)
+			})
+		}
+	})
+
+	t.Run("parsing", func(t *testing.T) {
+		for _, tc := range generatedVsLegacyDocsParsingCases() {
+			t.Run(tc.name, func(t *testing.T) {
+				legacyRoot, generatedRoot := mustDocsConstructorRoots(t)
+				mismatches := climanifestparity.CompareConstructorParseParity(
+					tc.commandID,
+					legacyRoot,
+					generatedRoot,
+					tc.argv,
+					tc.wantParseErr,
+					tc.errContains,
+				)
+				assertNoConstructorMismatches(t, mismatches)
+
+				if tc.wantParseErr {
+					return
+				}
+
+				legacyLeaf, _, legacyErr := climanifestparity.ParseArgvOnRoot(legacyRoot, tc.argv)
+				if legacyErr != nil {
+					t.Fatalf("legacy ParseArgvOnRoot(%v) error = %v", tc.argv, legacyErr)
+				}
+				generatedLeaf, _, generatedErr := climanifestparity.ParseArgvOnRoot(generatedRoot, tc.argv)
+				if generatedErr != nil {
+					t.Fatalf("generated ParseArgvOnRoot(%v) error = %v", tc.argv, generatedErr)
+				}
+				for _, flagLong := range tc.flagChecks {
+					mismatches := climanifestparity.CompareConstructorFlagParity(tc.commandID, flagLong, legacyLeaf, generatedLeaf)
+					assertNoConstructorMismatches(t, mismatches)
+				}
+			})
+		}
+	})
+}
+
 type generatedVsLegacyParsingCase struct {
 	name         string
 	commandID    string
@@ -366,6 +453,50 @@ func generatedVsLegacyModelsParsingCases() []generatedVsLegacyParsingCase {
 			checkPreRun: true,
 		},
 	}
+}
+
+func generatedVsLegacyDocsParsingCases() []generatedVsLegacyParsingCase {
+	return []generatedVsLegacyParsingCase{
+		{
+			name:      "docs optional topic accepts omission",
+			commandID: "you.docs",
+			argv:      []string{"docs"},
+		},
+		{
+			name:      "docs optional topic accepts one value",
+			commandID: "you.docs",
+			argv:      []string{"docs", "config"},
+		},
+		{
+			name:         "docs rejects excess positionals",
+			commandID:    "you.docs",
+			argv:         []string{"docs", "config", "extra"},
+			wantParseErr: true,
+			errContains:  "accepts at most 1 arg",
+		},
+		{
+			name:       "docs inherited verbose no-option applies contract default",
+			commandID:  "you.docs",
+			argv:       []string{"--verbose", "docs", "config"},
+			flagChecks: []string{"verbose"},
+		},
+		{
+			name:       "docs inherited server flag accepts explicit value",
+			commandID:  "you.docs",
+			argv:       []string{"--server", "http://127.0.0.1:9090", "docs", "config"},
+			flagChecks: []string{"server"},
+		},
+	}
+}
+
+func mustDocsConstructorRoots(t *testing.T) (*cobra.Command, *cobra.Command) {
+	t.Helper()
+	legacyRoot := cli.NewLegacyDocsFamilyCommand()
+	generatedRoot, err := cli.NewGeneratedDocsFamilyParityCommand(mustDocsParityRegistry(t), modelsParityInvokeFlagBindings())
+	if err != nil {
+		t.Fatalf("NewGeneratedDocsFamilyParityCommand() error = %v", err)
+	}
+	return legacyRoot, generatedRoot
 }
 
 func mustModelsConstructorRoots(t *testing.T) (*cobra.Command, *cobra.Command) {

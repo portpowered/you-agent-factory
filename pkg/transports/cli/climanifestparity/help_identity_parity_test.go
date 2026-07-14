@@ -79,3 +79,28 @@ func TestProductionManifestHelpIdentityParity_RootAndSessionShow(t *testing.T) {
 		})
 	}
 }
+
+func TestProductionManifestHelpIdentityParity_DocsFamily(t *testing.T) {
+	manifestPath := testutil.MustRepoPath(t, climanifest.ProductionManifestPath)
+	manifest, err := climanifest.LoadProduction(manifestPath)
+	if err != nil {
+		t.Fatalf("LoadProduction() error = %v", err)
+	}
+
+	root := cli.NewRootCommand()
+	record, err := manifest.CommandByID("you.docs")
+	if err != nil {
+		t.Fatalf("CommandByID(you.docs) error = %v", err)
+	}
+
+	cmd, err := climanifestparity.FindCommandByPath(root, record.Path)
+	if err != nil {
+		t.Fatalf("FindCommandByPath(%q) error = %v", record.Path, err)
+	}
+
+	mismatches := climanifestparity.CompareDocsHelpIdentity(manifest, record, root, cmd)
+	if len(mismatches) == 0 {
+		return
+	}
+	t.Fatalf("contract vs live docs help/identity drift detected:\n%s", climanifestparity.FormatMismatchReport(mismatches))
+}

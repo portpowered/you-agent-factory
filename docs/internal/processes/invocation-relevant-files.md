@@ -244,6 +244,18 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `ListModelsAccessor` / `SetListModelsAccessor` (and inspect/invoke/pull siblings) in
   `pkg/transports/cli/root.go`. Leaf help parity intentionally omits contracted examples until
   the live tree carries `Example` text again.
+- Docs-family manifest parity for `you.docs` lives in
+  `pkg/transports/cli/climanifestparity` (`CompareDocsHelpIdentity`,
+  `TestProductionManifestHelpIdentityParity_DocsFamily`,
+  `TestProductionManifestParsingParity_DocsFamily`,
+  `TestProductionManifestCompletionParity_DocsFamily`,
+  `TestProductionManifestOfflineDocsParity_DocsFamily`,
+  `TestGeneratedVsLegacyParityMatrix_DocsFamily`,
+  `TestGeneratedVsLegacyOfflineDocsParity_DocsFamily`) with isolated legacy construction via
+  `cli.NewLegacyDocsFamilyCommand` and generated parity roots via
+  `cli.NewGeneratedDocsFamilyParityCommand`. Offline docs behavior remains proven through
+  `pkg/transports/cli/root_docs_test.go`; help parity intentionally omits contracted
+  examples until the live tree carries `Example` text again.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/transports/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
