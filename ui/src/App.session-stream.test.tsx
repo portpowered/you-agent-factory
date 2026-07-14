@@ -42,7 +42,7 @@ const rootFactorySession: FactorySessionSummary = {
 const betaFactorySession: FactorySessionSummary = {
   factoryDir: "/workspace/root/beta",
   folderPath: "/workspace/root",
-  id: "session-beta",
+  id: "b2c3d4e5-f6a7-4890-b123-456789abcdef",
   isDefault: false,
   project: "beta",
   target: {
@@ -186,7 +186,9 @@ describe("App dashboard session stream tab switch", () => {
     });
 
     act(() => {
-      useDashboardSessionStore.getState().setSelectedSessionID("session-beta");
+      useDashboardSessionStore
+        .getState()
+        .setSelectedSessionID(betaFactorySession.id);
     });
 
     await waitFor(() => {
@@ -197,7 +199,9 @@ describe("App dashboard session stream tab switch", () => {
     });
 
     const betaStream = requireEventStream(MockEventSource.instances);
-    expect(betaStream.url).toBe("/factory-sessions/session-beta/events");
+    expect(betaStream.url).toBe(
+      `/factory-sessions/${betaFactorySession.id}/events`,
+    );
 
     act(() => {
       betaStream.emit("snapshot", betaSnapshot);
@@ -232,7 +236,7 @@ describe("App dashboard session stream pause", () => {
 
     await waitFor(() => {
       expect(requireEventStream(MockEventSource.instances).url).toBe(
-        "/factory-sessions/session-beta/events",
+        `/factory-sessions/${betaFactorySession.id}/events`,
       );
     });
 
@@ -273,7 +277,9 @@ describe("App dashboard session stream pause", () => {
 
     const resumedStream = requireEventStream(MockEventSource.instances);
     expect(resumedStream.closed).toBe(false);
-    expect(resumedStream.url).toBe("/factory-sessions/session-beta/events");
+    expect(resumedStream.url).toBe(
+      `/factory-sessions/${betaFactorySession.id}/events`,
+    );
   });
 });
 
