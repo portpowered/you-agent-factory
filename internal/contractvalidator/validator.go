@@ -61,6 +61,20 @@ func NewRegistry(entries ...Entry) Registry {
 	return Registry{entries: copied}
 }
 
+// MergeRegistries combines multiple registries without mutating the inputs.
+func MergeRegistries(registries ...Registry) Registry {
+	var entries []Entry
+	for _, registry := range registries {
+		entries = append(entries, registry.entries...)
+	}
+	return Registry{entries: entries}
+}
+
+// DefaultRegistry registers every contract family validated by make contracts-validate.
+func DefaultRegistry() Registry {
+	return MergeRegistries(CommonRegistry(), CLIRegistry())
+}
+
 // CommonRegistry registers the common schemas and their merged valid fixtures.
 func CommonRegistry() Registry {
 	const (
@@ -80,6 +94,27 @@ func CommonRegistry() Registry {
 			{Path: "contracts/testdata/common/deprecations/valid-active.json", SchemaID: deprecationsID},
 			{Path: "contracts/testdata/common/deprecations/valid-deprecated.json", SchemaID: deprecationsID},
 			{Path: "contracts/testdata/common/deprecations/valid-removed.json", SchemaID: deprecationsID},
+		},
+	})
+}
+
+// CLIRegistry registers the CLI command-manifest schema and its valid fixtures.
+func CLIRegistry() Registry {
+	const (
+		commandManifestID = "https://schemas.portpowered.com/you/contracts/cli/command-manifest.schema.json"
+		documentationID   = "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+		deprecationsID    = "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+	)
+	return NewRegistry(Entry{
+		Family:        "cli",
+		FormatVersion: "1.0.0",
+		Schemas: []Schema{
+			{ID: documentationID, Path: "contracts/common/documentation.schema.json"},
+			{ID: deprecationsID, Path: "contracts/common/deprecations.schema.json"},
+			{ID: commandManifestID, Path: "contracts/cli/command-manifest.schema.json"},
+		},
+		Documents: []Document{
+			{Path: "contracts/testdata/cli/valid-identity.json", SchemaID: commandManifestID},
 		},
 	})
 }

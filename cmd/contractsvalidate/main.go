@@ -15,7 +15,7 @@ const successMessage = "[agent-factory:contracts-validate] registered contracts 
 func main() {
 	root := flag.String("root", ".", "repository root")
 	flag.Parse()
-	os.Exit(run(*root, contractvalidator.CommonRegistry(), os.Stdout, os.Stderr))
+	os.Exit(run(*root, contractvalidator.DefaultRegistry(), os.Stdout, os.Stderr))
 }
 
 func run(root string, registry contractvalidator.Registry, stdout, stderr io.Writer) int {

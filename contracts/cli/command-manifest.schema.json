@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/cli/command-manifest.schema.json",
+  "title": "You CLI command manifest",
+  "description": "Authored CLI command metadata, inputs, relationships, execution metadata, and handler bindings for one command tree.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "rootPath",
+    "commands"
+  ],
+  "properties": {
+    "formatVersion": {
+      "description": "The explicitly supported version of this command-manifest format.",
+      "const": "1.0.0"
+    },
+    "rootPath": {
+      "description": "The space-delimited command path of the manifest root command.",
+      "type": "string",
+      "minLength": 1
+    },
+    "commands": {
+      "description": "Command records keyed by stable command identifiers. Object keys make duplicate command IDs structurally unrepresentable.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/command"
+      }
+    }
+  },
+  "$defs": {
+    "command": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "path",
+        "aliases",
+        "documentation",
+        "lifecycle",
+        "visibility",
+        "runnable",
+        "usage"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "name": {
+          "description": "The final command segment name exposed to users.",
+          "type": "string",
+          "minLength": 1
+        },
+        "path": {
+          "description": "The full space-delimited command path from the manifest root.",
+          "type": "string",
+          "minLength": 1
+        },
+        "aliases": {
+          "description": "Alternate spellings accepted for the final command segment.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "groupId": {
+          "description": "Optional Cobra command-group identifier for help grouping.",
+          "type": "string"
+        },
+        "documentation": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        },
+        "visibility": {
+          "description": "Whether the command is shown in default help output.",
+          "enum": [
+            "visible",
+            "hidden"
+          ]
+        },
+        "runnable": {
+          "description": "Whether the command exposes a runnable handler.",
+          "type": "boolean"
+        },
+        "suggestion": {
+          "$ref": "#/$defs/suggestion"
+        },
+        "usage": {
+          "$ref": "#/$defs/usage"
+        }
+      }
+    },
+    "suggestion": {
+      "description": "Shell-completion and argument-suggestion metadata for one command.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minimumDistance": {
+          "description": "Minimum Levenshtein distance accepted when matching misspelled subcommands.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "disableDefaultCmd": {
+          "description": "Whether the default help subcommand suggestion is suppressed.",
+          "type": "boolean"
+        },
+        "validArgs": {
+          "description": "Static positional values accepted by the command when no dynamic completion is configured.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "usage": {
+      "description": "Invocation-line and example metadata rendered in help output.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "line"
+      ],
+      "properties": {
+        "line": {
+          "description": "The canonical usage template for the command.",
+          "type": "string",
+          "minLength": 1
+        },
+        "example": {
+          "description": "Optional multi-line example block rendered after the usage line.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

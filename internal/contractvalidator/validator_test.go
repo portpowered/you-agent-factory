@@ -18,6 +18,22 @@ func TestCommonRegistryValidFixtures(t *testing.T) {
 	}
 }
 
+func TestCLIRegistryValidFixtures(t *testing.T) {
+	root := repositoryRoot(t)
+	diagnostics := contractvalidator.Validate(root, contractvalidator.CLIRegistry(), "cli", "1.0.0")
+	if len(diagnostics) != 0 {
+		t.Fatalf("Validate() diagnostics = %+v, want none", diagnostics)
+	}
+}
+
+func TestDefaultRegistryValidFixtures(t *testing.T) {
+	root := repositoryRoot(t)
+	diagnostics := contractvalidator.ValidateAll(root, contractvalidator.DefaultRegistry())
+	if len(diagnostics) != 0 {
+		t.Fatalf("ValidateAll() diagnostics = %+v, want none", diagnostics)
+	}
+}
+
 func TestValidateRejectsUnknownRegistrySelection(t *testing.T) {
 	tests := []struct {
 		name    string
