@@ -195,7 +195,7 @@ func (a *Adapter) PTYRunner() (PTYRunner, error) {
 	if err != nil {
 		return PTYRunner{}, err
 	}
-	return PTYRunner{Allocator: allocator, Config: a.SessionCfg}, nil
+	return NewPTYRunner(allocator, a.SessionCfg)
 }
 
 var _ adapter.Adapter = (*Adapter)(nil)

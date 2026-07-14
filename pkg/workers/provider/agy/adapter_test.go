@@ -53,7 +53,7 @@ func TestAdapterFinalOnlyConformance(t *testing.T) {
 
 	factoryRoot := t.TempDir()
 	mock := &agypty.MockAllocator{}
-	providerAdapter := agy.NewAdapter(factoryRoot, agy.WithAllocator(mock), agy.WithExecutable("agy"))
+	providerAdapter := agy.NewAdapter(factoryRoot, agy.WithAllocator(mock), agy.WithExecutable("agy"), agy.WithSessionConfig(agypty.DefaultSessionConfig()))
 	testkit.RunFinalOnly(t, testkit.FinalOnlyFixture{
 		NewAdapter: func() adapter.Adapter { return providerAdapter },
 		Request: interfaces.ProviderInferenceRequest{
@@ -115,7 +115,7 @@ func TestAdapterExecutePreservesPromptMetacharactersInArgv(t *testing.T) {
 
 	factoryRoot := t.TempDir()
 	mock := &stubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "Hello from Agy"}}
-	providerAdapter := agy.NewAdapter(factoryRoot, agy.WithAllocator(mock), agy.WithExecutable("agy"))
+	providerAdapter := agy.NewAdapter(factoryRoot, agy.WithAllocator(mock), agy.WithExecutable("agy"), agy.WithSessionConfig(agypty.DefaultSessionConfig()))
 	registry, err := adapter.NewRegistry(providerAdapter)
 	if err != nil {
 		t.Fatalf("NewRegistry() error = %v", err)
