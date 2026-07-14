@@ -279,8 +279,29 @@ primary-result behavior.
   `compat/testdata/primary_result_regression/` and are asserted by
   `primary_result_regression_test.go` without wiring the mapper into selection.
   Provider-native typed adapters live under `pkg/workers/provider/<provider>`
-  and emit validated `responseevents.Draft` values. While legacy response-stream
-  consumers remain supported, carry an exact draft beside the compatibility
+  and emit validated `responseevents.Draft` values. Sanitized cross-provider
+  parity transcripts and the adapter-neutral terminal harness live in
+  `pkg/workers/provider/parityfixtures` with fidelity-class fixtures under
+  `testdata/`; extend that catalog for CLI/API parity proofs instead of
+  inventing parallel fixture trees. Use `parityfixtures.RunTransportParity`
+  plus `AssertCLIAPITransportParity` and `AssertTruthfulStreamingFidelity` to
+  compare decoded CLI NDJSON and API SSE `FactoryResponseEvent` values and
+  terminal `InvocationResponse` outcomes for every fidelity class (full-stream,
+  partial-stream, snapshot-only, and final-only including Agy) plus the structured
+  tool-lifecycle fixture via `AssertObservableToolLifecycle` before adding new
+  transport parity tests. Use `AssertPrimaryStreamModeParity` with
+  `ProjectPrimaryOnlyInvocation` and `ProjectResponseStreamInvocation` to prove
+  primary-only and response-stream observation modes agree on authoritative
+  terminal `InvocationResponse` outcomes for the same fixture run. Consolidated
+  Batch 09 parity proofs live in `parityfixtures.AssertCrossProviderParityCatalog`
+  and `AssertCrossProviderParityForFixture`; run them from
+  `pkg/workers/provider/parityfixtures/suite_test.go`
+  (`TestCrossProviderParitySuite_Catalog`) and the provider-suite entrypoint
+  `tests/functional/providers/cross_provider_parity_smoke_test.go`
+  (`TestCrossProviderParitySmoke_ProviderSuiteEntrypoint`). Maintainer lanes:
+  `make provider-parity-smoke` (also invoked by `make api-smoke`) and
+  `make response-stream-stress-smoke` for response-event backpressure/race proofs.
+  While legacy response-stream consumers remain supported, carry an exact draft beside the compatibility
   fragment and let `pkg/factory/sessions/stream/manager.go` publish that draft
   directly; do not remap it through the lossy legacy fragment mapper. Keep the
   provider's final-result parser independent from decoder observation state so
