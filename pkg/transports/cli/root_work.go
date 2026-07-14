@@ -20,6 +20,11 @@ import (
 // Flip this constant to false for a one-localized-change rollback.
 const useGeneratedRepresentativeFamily = true
 
+// useGeneratedWorkFamily toggles production work wiring between the generated
+// metadata constructor and the legacy handwritten path.
+// Flip this constant to false for a one-localized-change rollback.
+const useGeneratedWorkFamily = true
+
 func newLegacyRootCommandWithOptions(options RootCommandOptions) *cobra.Command {
 	options = normalizeRootCommandOptions(options)
 	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
@@ -381,6 +386,22 @@ func runCommandExamples() string {
 		"  echo \"Ship the login bugfix\" | " + cliBinaryName + " run --named @you/goal\n\n" +
 		"  # Opt into live internal response-stream progress instead of primary-result-only stdout.\n" +
 		"  " + cliBinaryName + " run --named @you/goal --output response-stream \"Ship the login bugfix\""
+}
+
+func productionWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	if !useGeneratedWorkFamily {
+		return newWorkCommand(globals, diagnostics)
+	}
+
+	registry, bindings, err := newWorkHandlerRegistry(globals, diagnostics)
+	if err != nil {
+		panic(fmt.Sprintf("build work handler registry: %v", err))
+	}
+	work, err := climanifestcobra.NewWorkFamilyCommand(registry, bindings)
+	if err != nil {
+		panic(fmt.Sprintf("build work family command: %v", err))
+	}
+	return work
 }
 
 // NewLegacyWorkFamilyCommand builds the isolated handwritten
