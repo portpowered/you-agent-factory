@@ -138,8 +138,9 @@ before release.
 
 Detailed threat controls (argv injection, workspace paths, environment
 inheritance, escape sequences, bounds, timeouts, cleanup edge cases) are
-specified in the companion threat review (Story 002). Mock seams and interface
-types are specified in the Go PTY/process interface proposal (Story 003).
+specified in `docs/architecture/agy-pty-threat-review.md` (Story 002). Mock
+seams and interface types are specified in the Go PTY/process interface proposal
+(Story 003).
 
 ## Upstream license and required notices
 
@@ -223,7 +224,7 @@ execution is approved.
 
 | Document | Story | Status |
 | --- | --- | --- |
-| Windows/POSIX threat review | `stream-b06-agy-integration-decision-002` | Pending |
+| Windows/POSIX threat review (`agy-pty-threat-review.md`) | `stream-b06-agy-integration-decision-002` | Accepted |
 | Go PTY/process interface proposal and fixtures | `stream-b06-agy-integration-decision-003` | Pending |
 | Stream-response program plan | `docs/temp/projects/stream-responses/stream-response-fix-plan.md` §8.6 | Reference |
 | Worker process supervision | `pkg/workers/process/doc.go` | Existing |
