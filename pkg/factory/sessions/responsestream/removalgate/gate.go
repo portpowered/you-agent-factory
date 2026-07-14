@@ -69,6 +69,22 @@ var privateNDJSONEmissionLiterals = []string{
 	`"recordType": "primary_result"`,
 }
 
+// AssertClosure records Batch 09 Story 005 end-to-end closure evidence: the
+// consolidated removal gate, release-note migration mapping, and private NDJSON
+// contract negatives that prove only the canonical public vocabulary remains.
+func AssertClosure(ctx context.Context, repoRoot string) error {
+	if err := AssertGate(ctx, repoRoot); err != nil {
+		return err
+	}
+	if err := AssertReleaseNotesMigrationMapping(repoRoot); err != nil {
+		return fmt.Errorf("release notes migration mapping: %w", err)
+	}
+	if err := AssertPrivateNDJSONRecordTypesRejected(); err != nil {
+		return fmt.Errorf("private NDJSON contract negatives: %w", err)
+	}
+	return nil
+}
+
 // AssertGate records Story 001 prerequisites and residual-use evidence. It fails
 // closed when S22 docs, S24 parity, or public-surface residual-use checks fail.
 func AssertGate(ctx context.Context, repoRoot string) error {

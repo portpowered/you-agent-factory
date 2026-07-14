@@ -373,7 +373,7 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `make provider-parity-smoke` (also invoked by `make api-smoke`) and
   `make response-stream-stress-smoke` for response-event backpressure/race proofs.
   Batch 09 private-contract removal gates live in
-  `pkg/factory/sessions/responsestream/removalgate` (`AssertGate`,
+  `pkg/factory/sessions/responsestream/removalgate` (`AssertGate`, `AssertClosure`,
   `AssertDocsPrerequisite`, `AssertNoPrivateNDJSONInProductionSurfaces`,
   `AssertPublicTransportLayersDoNotImportLegacyCompat`,
   `AssertLegacyCompatMapperDeleted`,
@@ -382,9 +382,11 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `AssertPrivateNDJSONRecordTypesRejected`) with package tests in `gate_test.go` and
   functional entrypoints
   `tests/functional/smoke/response_stream_private_contract_removal_gate_smoke_test.go`
-  (`TestResponseStreamPrivateContractRemovalGateSmoke`) and
+  (`TestResponseStreamPrivateContractRemovalGateSmoke`),
   `tests/functional/smoke/response_stream_private_ndjson_contract_smoke_test.go`
-  (`TestResponseStreamPrivateNDJSONContractSmoke`). Supported CLI NDJSON
+  (`TestResponseStreamPrivateNDJSONContractSmoke`), and
+  `tests/functional/smoke/response_stream_private_contract_closure_smoke_test.go`
+  (`TestResponseStreamPrivateContractClosureSmoke`). Supported CLI NDJSON
   recordType constants and retired-record rejection live in
   `pkg/factory/sessions/responsestream/ndjsoncontract`; the canonical decoder in
   `pkg/workers/provider/parityfixtures/transport.go` rejects retired private
