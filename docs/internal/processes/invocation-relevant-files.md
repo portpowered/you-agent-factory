@@ -286,7 +286,10 @@ primary-result behavior.
   `pkg/workers/provider/failure_precedence.go` (`SelectFailureByPrecedence`) and
   provider-owned collectors such as `ResolveCodexProviderFailure` in
   `codex_failure_resolution.go`; precedence table tests belong beside those
-  helpers rather than in transport layers. A streaming decoder must hold
+  helpers rather than in transport layers. Cross-path agreement tests for
+  listed failure classes belong in `codex_failure_reporting_agreement_test.go`
+  and should compare `CodexStructuredStreamReportingOutcome` against
+  `CodexProcessExitReportingOutcome` before shared precedence selection. A streaming decoder must hold
   terminal `ERROR` drafts until the shared executor flushes it with the process
   outcome; discard a native failure when cancellation, deadline, or exit 124 wins.
   When multiple typed terminal records arrive, the held canonical draft and

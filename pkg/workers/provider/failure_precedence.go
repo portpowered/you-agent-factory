@@ -96,9 +96,6 @@ func CodexProcessExitFailureLayers(result CommandResult) (
 		stderr = failure
 		hasStderr = true
 	}
-	exit = ProviderFailureResult{
-		Reason:  classifyCodexExitFailure(result.ExitCode),
-		Message: codexExitFailureMessage(result.ExitCode),
-	}
+	exit = codexProcessExitFallback(result.ExitCode)
 	return structured, hasStructured, stderr, hasStderr, exit
 }

@@ -53,6 +53,7 @@ const (
 	codexServerFailureMessage     = "Codex encountered a temporary server error."
 	codexThrottleFailureMessage   = "Codex is temporarily unavailable due to usage or capacity limits."
 	codexTimeoutFailureMessage    = "Codex request timed out."
+	codexUnknownFailureMessage    = "Codex reported a terminal error."
 )
 
 const (
@@ -649,10 +650,7 @@ func ParseCodexProviderFailure(result CommandResult) ProviderFailureResult {
 	if ok {
 		return resolved
 	}
-	return ProviderFailureResult{
-		Reason:  classifyCodexExitFailure(result.ExitCode),
-		Message: codexExitFailureMessage(result.ExitCode),
-	}
+	return codexProcessExitFallback(result.ExitCode)
 }
 
 func lastCodexStructuredFailure(streams []string) (ProviderFailureResult, bool) {
@@ -836,6 +834,14 @@ func classifyCodexExitFailure(exitCode int) interfaces.WorkFailureType {
 		return interfaces.WorkFailureTypeInternalServerError
 	}
 	return interfaces.WorkFailureTypeUnknown
+}
+
+func codexProcessExitFallback(exitCode int) ProviderFailureResult {
+	reason := classifyCodexExitFailure(exitCode)
+	if message := codexTextFailureMessage(reason); message != "" {
+		return ProviderFailureResult{Reason: reason, Message: message}
+	}
+	return ProviderFailureResult{Reason: reason, Message: codexUnknownFailureMessage}
 }
 
 func classifyCodexStructuredSignal(errorType string, status int) (interfaces.WorkFailureType, bool) {

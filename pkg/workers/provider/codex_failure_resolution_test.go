@@ -51,7 +51,7 @@ func TestResolveCodexProviderFailure_PrecedenceTable(t *testing.T) {
 			},
 			want: ProviderFailureResult{
 				Reason:  interfaces.WorkFailureTypeUnknown,
-				Message: "codex exited with code 17",
+				Message: codexUnknownFailureMessage,
 			},
 		},
 		{

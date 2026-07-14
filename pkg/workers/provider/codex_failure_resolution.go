@@ -12,7 +12,7 @@ import (
 
 const codexJSONLRecordBytes = 1024 * 1024
 
-const codexStructuredStreamUnknownMessage = "Codex reported a terminal error."
+const codexStructuredStreamUnknownMessage = codexUnknownFailureMessage
 
 // CodexFailureResolutionInput carries runtime cancellation and flush facts that
 // outrank structured, stderr, and exit signals.
@@ -158,10 +158,21 @@ func ParseCodexProviderFailureLayers(result CommandResult) ProviderFailureResult
 	if hasStderr {
 		return stderr
 	}
-	return ProviderFailureResult{
-		Reason:  classifyCodexExitFailure(result.ExitCode),
-		Message: codexExitFailureMessage(result.ExitCode),
-	}
+	return codexProcessExitFallback(result.ExitCode)
+}
+
+// CodexStructuredStreamReportingOutcome classifies terminal JSONL stdout without
+// applying process-exit stderr or exit-status fallback.
+func CodexStructuredStreamReportingOutcome(stdout []byte) (ProviderFailureResult, bool) {
+	return parseCodexStructuredStreamFailure(stdout)
+}
+
+// CodexProcessExitReportingOutcome classifies stderr and exit status without
+// structured-stream JSONL signals.
+func CodexProcessExitReportingOutcome(result CommandResult) ProviderFailureResult {
+	isolated := result
+	isolated.Stdout = nil
+	return ParseCodexProviderFailureLayers(isolated)
 }
 
 func forEachCodexJSONLRecord(output []byte, visit func([]byte)) {
