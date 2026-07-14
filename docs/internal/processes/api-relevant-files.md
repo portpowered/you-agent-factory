@@ -48,7 +48,10 @@ Use this map when changing the public REST contract.
   identity paths. Prove digest coverage, stability, source-change propagation,
   and rejected tampered hashes in `internal/contractstaging/manifest_test.go`;
   prove accepted/rejected manifest schema fixtures in
-  `contracts/manifest_schema_test.go`.
+  `contracts/manifest_schema_test.go`. `resolveSourceCommit` rejects shallow git
+  history that would misattribute `sourceCommit` to `HEAD` when identity inputs
+  were last changed in an unreachable ancestor; CI jobs that run
+  `make contracts-smoke` or contractstaging tests must use `fetch-depth: 0`.
 - Regeneration cleanliness for owned staging outputs lives in
   `internal/contractstaging/generate.go` (`Generate`) with repository evidence in
   `internal/contractstaging/generate_test.go` and command-level reproduction in

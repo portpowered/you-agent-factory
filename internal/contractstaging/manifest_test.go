@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -115,6 +116,38 @@ func TestManifestDigestChangesWhenStagedArtifactSourceChanges(t *testing.T) {
 	afterDigest := exportDigestForPath(t, decodeManifestPayload(t, afterPayload), "generated/cli/commands.json")
 	if beforeDigest == afterDigest {
 		t.Fatalf("CLI artifact change did not change manifest digest: %q", beforeDigest)
+	}
+}
+
+func TestShallowGitHistoryRejectsFalseSourceCommit(t *testing.T) {
+	origin := t.TempDir()
+	writeCheckFixture(t, origin, "contracts/common/documentation.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json","$defs":{"itemId":{"type":"string"}}}`)
+	writeCheckFixture(t, origin, "contracts/common/deprecations.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json","properties":{"itemId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
+	writeCheckFixture(t, origin, "contracts/manifest.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/manifest.schema.json","properties":{"packageId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
+	for _, artifact := range contractstaging.RawArtifacts() {
+		writeCheckFixture(t, origin, artifact.Source, canonicalFixture(artifact.Source))
+	}
+	initCheckGitRepo(t, origin)
+	writeCheckFixture(t, origin, "unrelated-only.txt", "follow-up")
+	if output, err := exec.Command("git", "-C", origin, "add", "-A").CombinedOutput(); err != nil {
+		t.Fatalf("stage unrelated follow-up: %s", output)
+	}
+	if output, err := exec.Command("git", "-C", origin, "commit", "-m", "unrelated follow-up").CombinedOutput(); err != nil {
+		t.Fatalf("commit unrelated follow-up: %s", output)
+	}
+
+	shallow := filepath.Join(t.TempDir(), "shallow")
+	originURI := localGitCloneURI(t, origin)
+	if output, err := exec.Command("git", "clone", "--depth", "1", originURI, shallow).CombinedOutput(); err != nil {
+		t.Fatalf("shallow clone fixture: %s", output)
+	}
+
+	_, err := contractstaging.Artifacts(shallow)
+	if err == nil {
+		t.Fatal("Artifacts() on shallow clone error = nil, want rejection of false sourceCommit attribution")
+	}
+	if !strings.Contains(err.Error(), "too shallow") {
+		t.Fatalf("Artifacts() error = %v, want shallow-history rejection", err)
 	}
 }
 

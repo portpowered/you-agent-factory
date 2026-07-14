@@ -93,6 +93,10 @@ func manifestExport(id, path, family, digest string) map[string]any {
 }
 
 func resolveSourceCommit(repositoryRoot string) (string, error) {
+	head, err := gitOutput(repositoryRoot, "rev-parse", "HEAD")
+	if err != nil {
+		return "", fmt.Errorf("resolve package source commit: %w", err)
+	}
 	args := append([]string{"-C", repositoryRoot, "rev-list", "-1", "HEAD", "--"}, SourceIdentityPaths()...)
 	cmd := exec.Command("git", args...)
 	output, err := cmd.Output()
@@ -103,5 +107,67 @@ func resolveSourceCommit(repositoryRoot string) (string, error) {
 	if !sourceCommitPattern.MatchString(sourceCommit) {
 		return "", fmt.Errorf("resolve package source commit: invalid commit %q", sourceCommit)
 	}
+	if sourceCommit != head {
+		return sourceCommit, nil
+	}
+	changed, err := sourceIdentityChangedInCommit(repositoryRoot, head)
+	if err != nil {
+		return "", fmt.Errorf("resolve package source commit: %w", err)
+	}
+	if changed {
+		return sourceCommit, nil
+	}
+	parent, err := gitOutput(repositoryRoot, "rev-parse", "HEAD^")
+	if err != nil {
+		shallow, shallowErr := isShallowRepository(repositoryRoot)
+		if shallowErr == nil && shallow {
+			return "", fmt.Errorf(
+				"resolve package source commit: git history is too shallow to determine the last change to package source inputs; fetch full history (for example fetch-depth: 0 in CI)",
+			)
+		}
+		return sourceCommit, nil
+	}
+	parentArgs := append([]string{"-C", repositoryRoot, "rev-list", "-1", parent, "--"}, SourceIdentityPaths()...)
+	parentOutput, err := exec.Command("git", parentArgs...).Output()
+	if err != nil {
+		return sourceCommit, nil
+	}
+	parentSource := strings.TrimSpace(string(parentOutput))
+	if parentSource != "" && parentSource != sourceCommit {
+		return "", fmt.Errorf(
+			"resolve package source commit: git history is too shallow to determine the last change to package source inputs; fetch full history (for example fetch-depth: 0 in CI)",
+		)
+	}
 	return sourceCommit, nil
+}
+
+func sourceIdentityChangedInCommit(repositoryRoot, commit string) (bool, error) {
+	args := append([]string{"-C", repositoryRoot, "diff-tree", "--no-commit-id", "--name-only", "-r", commit, "--"}, SourceIdentityPaths()...)
+	output, err := exec.Command("git", args...).Output()
+	if err != nil {
+		return false, err
+	}
+	for line := range strings.Lines(string(output)) {
+		if strings.TrimSpace(line) != "" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func gitOutput(repositoryRoot string, args ...string) (string, error) {
+	commandArgs := append([]string{"-C", repositoryRoot}, args...)
+	output, err := exec.Command("git", commandArgs...).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func isShallowRepository(repositoryRoot string) (bool, error) {
+	output, err := gitOutput(repositoryRoot, "rev-parse", "--is-shallow-repository")
+	if err != nil {
+		return false, err
+	}
+	return output == "true", nil
 }
