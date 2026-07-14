@@ -37,7 +37,8 @@ Use this map when changing the public REST contract.
   prove accepted/rejected manifest schema fixtures in
   `contracts/manifest_schema_test.go`. `resolveSourceCommit` rejects shallow git
   history that would misattribute `sourceCommit` to `HEAD` when identity inputs
-  were last changed in an unreachable ancestor; CI jobs that run
+  were last changed in an unreachable ancestor, but accepts merge commits that
+  appear in `rev-list` without modifying source identity paths; CI jobs that run
   `make contracts-smoke` or contractstaging tests must use `fetch-depth: 0`.
 - Regeneration cleanliness for owned staging outputs lives in
   `internal/contractstaging/generate.go` (`Generate`) with repository evidence in
