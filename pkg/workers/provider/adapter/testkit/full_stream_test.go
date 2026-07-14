@@ -71,6 +71,56 @@ func TestFullStreamAdapterConformance(t *testing.T) {
 		},
 		ForbiddenDiagnostic: []string{privatePrompt, secretToken},
 	})
+
+	testkit.RunDecoderConformance(t, testkit.DecoderConformanceFixture{
+		NewDecoder: func(input adapter.DecoderContext) adapter.Decoder {
+			return &fullStreamDecoder{context: input}
+		},
+		Lifecycle: observations(
+			line(`{"type":"orbit","session":"session-42"}`),
+			line(`{"type":"glyph","item":"message-7","text":"Hello world"}`),
+			line(`{"type":"seal","item":"message-7","text":"Hello world"}`),
+			line(`{"type":"lever","item":"tool-item-9","call":"call-9","name":"weather","arguments":{"city":"Oslo"}}`),
+			line(`{"type":"latch","item":"tool-item-9","call":"call-9","name":"weather","result":{"temperature":12}}`),
+		),
+		UnsafeAndRecovering: observations(
+			line(`{"type":"orbit","session":"session-42"}`),
+			line(`{"type":"future_shape","prompt":"`+privatePrompt+`","token":"`+secretToken+`"}`),
+			line(`{"type":"seal","item":"message-7","text":"Hello world"}`),
+		),
+		UnterminatedFinal: observations(
+			line(`{"type":"orbit","session":"session-42"}`),
+			[]byte(`{"type":"seal","item":"message-7","text":"Hello world"}`),
+		),
+		Expected: testkit.DecoderConformanceExpected{
+			ProviderRef: fixtureProviderRef, MessageItemID: fixtureMessageID,
+			ToolItemID: fixtureToolItemID, ToolCallID: fixtureToolCallID, FinalContent: "Hello world",
+		},
+		ForbiddenDiagnostic: []string{privatePrompt, secretToken},
+	})
+
+	t.Run("explicit failure decoder conformance", func(t *testing.T) {
+		testkit.RunDecoderConformance(t, testkit.DecoderConformanceFixture{
+			NewDecoder: func(input adapter.DecoderContext) adapter.Decoder {
+				return &fullStreamDecoder{context: input}
+			},
+			Lifecycle: observations(
+				line(`{"type":"orbit","session":"session-42"}`),
+				line(`{"type":"lever","item":"tool-item-9","call":"call-9","name":"weather","arguments":{"city":"Oslo"}}`),
+				line(`{"type":"latch","item":"tool-item-9","call":"call-9","name":"weather","result":{"temperature":12}}`),
+				line(`{"type":"break"}`),
+			),
+			UnsafeAndRecovering: observations(
+				line(`{"type":"future_shape","prompt":"`+privatePrompt+`"}`),
+				line(`{"type":"break"}`),
+			),
+			UnterminatedFinal: observations([]byte(`{"type":"break"}`)),
+			Expected: testkit.DecoderConformanceExpected{
+				ProviderRef: fixtureProviderRef, ToolItemID: fixtureToolItemID, ToolCallID: fixtureToolCallID,
+			},
+			ForbiddenDiagnostic: []string{privatePrompt},
+		})
+	})
 }
 
 type fullStreamAdapter struct{}
@@ -192,6 +242,8 @@ func (d *fullStreamDecoder) decodeRecord(raw []byte) adapter.DecodeResult {
 		return d.withRunStart(toolSnapshot(record, d.sessionRef, responseevents.PhaseCompleted))
 	case "pause":
 		return d.withRunStart(retryNotification(record, d.sessionRef))
+	case "break":
+		return d.withRunStart(failureNotification(d.sessionRef))
 	default:
 		return safeDiagnostic("unknown_record", "fixture provider emitted an unsupported additive record")
 	}
@@ -257,6 +309,14 @@ func retryNotification(record nativeRecord, providerRef string) responseevents.D
 		Kind: responseevents.KindError, Phase: responseevents.PhaseUpdated, ProviderSessionRef: providerRef,
 		Provenance: fixtureProvenance(record.Type, responseevents.DeliveryNativeStream, responseevents.RepresentationNotification),
 		Payload:    marshalPayload(responseevents.ErrorPayload{Code: "provider_busy", Message: "fixture provider is temporarily busy", Retryable: true, RetryAfterSeconds: &record.Seconds}),
+	}
+}
+
+func failureNotification(providerRef string) responseevents.Draft {
+	return responseevents.Draft{
+		Kind: responseevents.KindError, Phase: responseevents.PhaseFailed, ProviderSessionRef: providerRef,
+		Provenance: fixtureProvenance("break", responseevents.DeliveryNativeStream, responseevents.RepresentationNotification),
+		Payload:    marshalPayload(responseevents.ErrorPayload{Code: "provider_failed", Message: "fixture provider failed"}),
 	}
 }
 

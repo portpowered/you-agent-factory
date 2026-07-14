@@ -18,7 +18,7 @@ func TestTerminateCommandProcessGroup_GracefulChildExit(t *testing.T) {
 
 	pidFile := filepath.Join(t.TempDir(), "graceful.pid")
 	cmd, tree := startCommandHelperInProcessGroup(t, "pid-term-exit", pidFile)
-	childPID := readCommandHelperPID(t, pidFile)
+	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
 	t.Cleanup(func() {
 		commandTestTerminateProcess(childPID)
 	})
@@ -46,7 +46,7 @@ func TestTerminateCommandProcessGroup_ForceKillAfterGrace(t *testing.T) {
 
 	pidFile := filepath.Join(t.TempDir(), "force.pid")
 	cmd, tree := startCommandHelperInProcessGroup(t, "pid-ignore-term", pidFile)
-	childPID := readCommandHelperPID(t, pidFile)
+	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
 	t.Cleanup(func() {
 		commandTestTerminateProcess(childPID)
 	})

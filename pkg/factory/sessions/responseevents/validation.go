@@ -208,8 +208,30 @@ func validateErrorKindPayload(payload json.RawMessage) error {
 }
 
 func validateStreamGapKindPayload(payload json.RawMessage) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return validationError("payload", fmt.Sprintf("payload must decode as StreamGapPayload: %v", err))
+	}
 	var body StreamGapPayload
 	if err := decodePayload(payload, &body, "StreamGapPayload"); err != nil {
+		return err
+	}
+	if strings.TrimSpace(body.AffectedItemID) != "" {
+		if strings.TrimSpace(body.Reason) == "" {
+			return validationError("payload.reason", "reason is required for an item-scoped StreamGapPayload")
+		}
+		if body.FromSequence != 0 || body.ToSequence != 0 || body.FirstAvailableSequence != 0 {
+			return validationError("payload.fromSequence", "sequence fields are not allowed for an item-scoped StreamGapPayload")
+		}
+		if err := rejectItemGapSequenceFields(fields); err != nil {
+			return err
+		}
+		return nil
+	}
+	if strings.TrimSpace(body.ToolCallID) != "" {
+		return validationError("payload.affectedItemId", "affectedItemId is required when toolCallId is supplied for StreamGapPayload")
+	}
+	if err := requireRetentionGapFields(fields); err != nil {
 		return err
 	}
 	if body.FromSequence < 0 || body.ToSequence < 0 {
@@ -220,6 +242,24 @@ func validateStreamGapKindPayload(payload json.RawMessage) error {
 	}
 	if body.FirstAvailableSequence <= 0 {
 		return validationError("payload.firstAvailableSequence", "firstAvailableSequence must be positive for StreamGapPayload")
+	}
+	return nil
+}
+
+func rejectItemGapSequenceFields(fields map[string]json.RawMessage) error {
+	for _, key := range []string{"fromSequence", "toSequence", "firstAvailableSequence"} {
+		if _, present := fields[key]; present {
+			return validationError("payload."+key, "sequence fields are not allowed for an item-scoped StreamGapPayload")
+		}
+	}
+	return nil
+}
+
+func requireRetentionGapFields(fields map[string]json.RawMessage) error {
+	for _, key := range []string{"fromSequence", "toSequence", "firstAvailableSequence"} {
+		if _, present := fields[key]; !present {
+			return validationError("payload."+key, key+" is required for a retention StreamGapPayload")
+		}
 	}
 	return nil
 }
@@ -309,7 +349,10 @@ func validateContentBlock(block ContentBlock) error {
 		return validationError("kind", err.Error())
 	}
 	switch block.Kind {
-	case ContentBlockText, ContentBlockReasoningSummary:
+	case ContentBlockText:
+		// Empty text is a valid authoritative snapshot when the provider
+		// explicitly completes a message with an empty final value.
+	case ContentBlockReasoningSummary:
 		if strings.TrimSpace(block.Text) == "" {
 			return validationError("text", fmt.Sprintf("text is required for content block kind %q", block.Kind))
 		}

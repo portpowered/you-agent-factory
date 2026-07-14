@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -1060,6 +1061,7 @@ func TestBuildFactoryService_RecordModeCopiesScriptDiagnosticsToArtifact(t *test
 	recordPath := filepath.Join(t.TempDir(), "recording.json")
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:                   dir,
+		RuntimeMode:           interfaces.RuntimeModeService,
 		Logger:                zap.NewNop(),
 		RecordPath:            recordPath,
 		WorkFile:              workFile,
@@ -1069,11 +1071,7 @@ func TestBuildFactoryService_RecordModeCopiesScriptDiagnosticsToArtifact(t *test
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	if err := svc.Run(ctx); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	runServiceUntilDispatchCompletion(t, svc)
 
 	artifact, err := replay.Load(recordPath)
 	if err != nil {
@@ -1090,6 +1088,48 @@ func TestBuildFactoryService_RecordModeCopiesScriptDiagnosticsToArtifact(t *test
 	completion := completions[0].Payload
 	if serviceStringValue(completion.Output) != "script done" {
 		t.Fatalf("recorded script output = %q", serviceStringValue(completion.Output))
+	}
+}
+
+func runServiceUntilDispatchCompletion(t *testing.T, svc *FactoryService) {
+	t.Helper()
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Run(runCtx)
+	}()
+
+	deadline := time.NewTimer(serviceStreamedRecordingTimeout)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer deadline.Stop()
+	defer ticker.Stop()
+	for {
+		select {
+		case runErr := <-errCh:
+			t.Fatalf("Run returned before dispatch completion: %v", runErr)
+		case <-deadline.C:
+			t.Fatalf("worker did not publish a dispatch completion within %s", serviceStreamedRecordingTimeout)
+		case <-ticker.C:
+			events, err := svc.GetFactoryEvents(context.Background())
+			if err != nil {
+				t.Fatalf("GetFactoryEvents: %v", err)
+			}
+			if slices.ContainsFunc(events, func(event factoryapi.FactoryEvent) bool {
+				return event.Type == factoryapi.FactoryEventTypeDispatchResponse
+			}) {
+				cancelRun()
+				select {
+				case runErr := <-errCh:
+					if runErr != nil {
+						t.Fatalf("Run after cancellation: %v", runErr)
+					}
+				case <-time.After(time.Second):
+					t.Fatal("timed out waiting for service-mode factory service to stop")
+				}
+				return
+			}
+		}
 	}
 }
 

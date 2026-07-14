@@ -9,7 +9,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	cursorprovider "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 	"go.uber.org/zap"
 )
 
@@ -131,10 +130,10 @@ func (r *Bundle) emitProviderCompletionMetrics(
 	if durationMS, ok := providerMetricDurationMilliseconds(result.Diagnostics); ok {
 		r.emitMetricSample(runtimeMetricProviderDuration, durationMS, "ms", providerFields)
 	}
-	if inputTokens, ok := providerMetricMetadataFloat(result.Diagnostics, cursorprovider.ResponseMetadataInputTokens); ok {
+	if inputTokens, ok := providerMetricMetadataFloat(result.Diagnostics, interfaces.ProviderResponseMetadataInputTokens); ok {
 		r.emitMetricSample(runtimeMetricProviderInputTok, inputTokens, "tokens", providerFields)
 	}
-	if outputTokens, ok := providerMetricMetadataFloat(result.Diagnostics, cursorprovider.ResponseMetadataOutputTokens); ok {
+	if outputTokens, ok := providerMetricMetadataFloat(result.Diagnostics, interfaces.ProviderResponseMetadataOutputTokens); ok {
 		r.emitMetricSample(runtimeMetricProviderOutputTok, outputTokens, "tokens", providerFields)
 	}
 	if result.Metrics.Cost > 0 {
@@ -192,10 +191,10 @@ func providerMetricFailureReason(result interfaces.WorkResult) string {
 }
 
 func providerMetricDurationMilliseconds(diagnostics *interfaces.WorkDiagnostics) (float64, bool) {
-	if durationMS, ok := providerMetricMetadataFloat(diagnostics, cursorprovider.ResponseMetadataDurationAPIMS); ok {
+	if durationMS, ok := providerMetricMetadataFloat(diagnostics, interfaces.ProviderResponseMetadataDurationAPIMS); ok {
 		return durationMS, true
 	}
-	return providerMetricMetadataFloat(diagnostics, cursorprovider.ResponseMetadataDurationMS)
+	return providerMetricMetadataFloat(diagnostics, interfaces.ProviderResponseMetadataDurationMS)
 }
 
 func providerMetricMetadataFloat(diagnostics *interfaces.WorkDiagnostics, key string) (float64, bool) {

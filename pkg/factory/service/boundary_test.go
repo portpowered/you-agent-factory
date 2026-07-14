@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestPackageBoundary_DoesNotImportRootServiceOrFactorySessions(t *testing.T) {
+func TestPackageBoundary_DoesNotImportRootServiceOrStatefulFactorySessions(t *testing.T) {
 	t.Helper()
 
 	cmd := exec.Command(
@@ -26,7 +26,15 @@ func TestPackageBoundary_DoesNotImportRootServiceOrFactorySessions(t *testing.T)
 		"github.com/portpowered/infinite-you/pkg/service",
 		"github.com/portpowered/infinite-you/pkg/factory/sessions",
 	}
+	// Provider adapters share the pure canonical response-event vocabulary.
+	// Session registries, stores, projections, and runtime state remain forbidden.
+	allowedFactorySessionLeaves := map[string]struct{}{
+		"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents": {},
+	}
 	for _, dep := range strings.Fields(string(output)) {
+		if _, allowed := allowedFactorySessionLeaves[dep]; allowed {
+			continue
+		}
 		for _, forbidden := range forbiddenRoots {
 			if dep == forbidden || strings.HasPrefix(dep, forbidden+"/") {
 				t.Fatalf("pkg/factory/service must not import %s; found dependency %s", forbidden, dep)

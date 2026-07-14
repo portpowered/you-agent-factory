@@ -1,6 +1,9 @@
 package responseevents
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // ContentBlockKind identifies one provider-neutral message content block.
 type ContentBlockKind string
@@ -123,10 +126,41 @@ type ErrorPayload struct {
 	RetryAttempt      *int   `json:"retryAttempt,omitempty"`
 }
 
-// StreamGapPayload records a discontinuity in the retained response-event stream.
+// StreamGapPayload records either retained sequence loss or an item-scoped
+// discontinuity reported by a provider adapter.
 type StreamGapPayload struct {
-	FromSequence           int64  `json:"fromSequence"`
-	ToSequence             int64  `json:"toSequence"`
-	FirstAvailableSequence int64  `json:"firstAvailableSequence"`
+	FromSequence           int64  `json:"fromSequence,omitempty"`
+	ToSequence             int64  `json:"toSequence,omitempty"`
+	FirstAvailableSequence int64  `json:"firstAvailableSequence,omitempty"`
+	AffectedItemID         string `json:"affectedItemId,omitempty"`
+	ToolCallID             string `json:"toolCallId,omitempty"`
 	Reason                 string `json:"reason,omitempty"`
+}
+
+// MarshalJSON preserves the two exclusive public gap shapes. Retention
+// sequence fields remain present even when a valid bound is zero, while item
+// gaps never acquire synthetic zero-valued retention fields.
+func (p StreamGapPayload) MarshalJSON() ([]byte, error) {
+	if strings.TrimSpace(p.AffectedItemID) != "" {
+		return json.Marshal(struct {
+			AffectedItemID string `json:"affectedItemId"`
+			ToolCallID     string `json:"toolCallId,omitempty"`
+			Reason         string `json:"reason"`
+		}{
+			AffectedItemID: p.AffectedItemID,
+			ToolCallID:     p.ToolCallID,
+			Reason:         p.Reason,
+		})
+	}
+	return json.Marshal(struct {
+		FromSequence           int64  `json:"fromSequence"`
+		ToSequence             int64  `json:"toSequence"`
+		FirstAvailableSequence int64  `json:"firstAvailableSequence"`
+		Reason                 string `json:"reason,omitempty"`
+	}{
+		FromSequence:           p.FromSequence,
+		ToSequence:             p.ToSequence,
+		FirstAvailableSequence: p.FirstAvailableSequence,
+		Reason:                 p.Reason,
+	})
 }
