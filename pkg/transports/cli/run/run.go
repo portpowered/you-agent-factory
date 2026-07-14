@@ -719,14 +719,6 @@ func emitNamedFactoryResolutionDiagnostics(cfg RunConfig, logger *zap.Logger) {
 			zap.String("named_factory_resolution_source", string(resolution.Source)),
 		)
 	}
-	if resolution.Source == factoryconfig.NamedFactoryResolutionSourceBuiltin {
-		logger.Info(
-			"named factory built-in materialized",
-			zap.String("named_factory_name", resolution.Name),
-			zap.String("named_factory_target_dir", resolution.FactoryDir),
-			zap.String("named_factory_global_root", resolution.GlobalRoot),
-		)
-	}
 }
 
 func resolveFactoryDirForDiagnostics(dir string) string {

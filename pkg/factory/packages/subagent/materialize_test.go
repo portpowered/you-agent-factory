@@ -39,9 +39,13 @@ func TestMaterializePackagedSubagentFactory_WritesEditableSplitLayout(t *testing
 	}
 }
 
-func TestResolveNamedFactoryAcrossRoots_MaterializesBuiltInSubagentIntoGlobalRoot(t *testing.T) {
+func TestResolveNamedFactoryAcrossRoots_ResolvesInstalledSubagentFromGlobalRoot(t *testing.T) {
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()
+	installedDir, err := factoryconfig.PersistNamedFactory(globalRoot, PackagedFactoryName, BuiltInFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
 
 	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, PackagedFactoryName)
 	if err != nil {
@@ -50,11 +54,14 @@ func TestResolveNamedFactoryAcrossRoots_MaterializesBuiltInSubagentIntoGlobalRoo
 	if resolution.Name != PackagedFactoryName {
 		t.Fatalf("resolution name = %q, want %s", resolution.Name, PackagedFactoryName)
 	}
-	if resolution.Source != factoryconfig.NamedFactoryResolutionSourceBuiltin {
-		t.Fatalf("resolution source = %q, want builtin materialization", resolution.Source)
+	if resolution.Source != factoryconfig.NamedFactoryResolutionSourceGlobal {
+		t.Fatalf("resolution source = %q, want global", resolution.Source)
 	}
 
 	wantDir := filepath.Join(globalRoot, "@you", "subagent")
+	if wantDir != installedDir {
+		t.Fatalf("installed dir = %q, want %q", installedDir, wantDir)
+	}
 	if resolution.FactoryDir != wantDir {
 		t.Fatalf("factory dir = %q, want hierarchical layout %q", resolution.FactoryDir, wantDir)
 	}

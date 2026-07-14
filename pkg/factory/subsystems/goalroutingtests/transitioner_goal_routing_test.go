@@ -15,7 +15,7 @@ import (
 )
 
 func TestBuiltInGoalFactoryJSON_ExecuteRepeaterConsumesLoopInput(t *testing.T) {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(goal.BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
@@ -63,7 +63,7 @@ func TestTransitioner_BuiltInGoalRepeaterFailureRoutesToFailed(t *testing.T) {
 func builtInGoalRepeaterFixture(t *testing.T) (*state.Net, *interfaces.FactoryWorkstationConfig, *petri.Transition) {
 	t.Helper()
 
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(goal.BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}

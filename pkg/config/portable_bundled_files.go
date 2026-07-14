@@ -460,6 +460,11 @@ func materializePortableBundledFiles(targetDir string, cfg *interfaces.FactoryCo
 	return replacements, nil
 }
 
+func validatePortableBundledFileWrites(targetDir string, cfg *interfaces.FactoryConfig) error {
+	_, err := preparePortableBundledFileWrites(targetDir, cfg)
+	return err
+}
+
 func clonePortableBundledFileReplacements(replacements []PortableBundledFileReplacement) []PortableBundledFileReplacement {
 	if len(replacements) == 0 {
 		return nil

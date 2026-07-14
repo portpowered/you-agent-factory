@@ -1,17 +1,21 @@
 package configinit
 
 import (
+	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
+	factorypackages "github.com/portpowered/infinite-you/pkg/factory/packages"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -107,7 +111,7 @@ func TestInit_FreshHomeMaterializesPackagedDefaultFactories(t *testing.T) {
 		t.Fatalf("namedFactoriesRoot = %q, want %q", result.NamedFactoriesRoot, namedFactoriesRoot)
 	}
 
-	wantNames := factoryconfig.BuiltInNamedFactoryNames()
+	wantNames := factorypackages.Names()
 	if len(result.PackagedFactories) != len(wantNames) {
 		t.Fatalf("packaged factory count = %d, want %d", len(result.PackagedFactories), len(wantNames))
 	}
@@ -175,7 +179,7 @@ func TestInit_DoubleRunIsSuccessfulNoOp(t *testing.T) {
 	}
 }
 
-func TestInit_PreservesUserEditedFactoryFilesOnRerun(t *testing.T) {
+func TestInit_PreservesAllCustomerOwnedFactoryFilesOnRerun(t *testing.T) {
 	t.Parallel()
 
 	homeDir := t.TempDir()
@@ -195,11 +199,8 @@ func TestInit_PreservesUserEditedFactoryFilesOnRerun(t *testing.T) {
 		t.Fatal("expected @you/goal in packaged factory results")
 	}
 
-	workerPath := filepath.Join(goalDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName)
-	editedBody := "customer edited goal worker body\n"
-	if err := os.WriteFile(workerPath, []byte(editedBody), 0o644); err != nil {
-		t.Fatalf("WriteFile(edited worker): %v", err)
-	}
+	writeCustomerOwnedFactoryEdits(t, goalDir)
+	beforeSnapshot := snapshotDirectoryContents(t, goalDir)
 
 	second, err := Init(homeDir)
 	if err != nil {
@@ -209,13 +210,138 @@ func TestInit_PreservesUserEditedFactoryFilesOnRerun(t *testing.T) {
 		t.Fatalf("second system config outcome = %q, want %q", second.SystemConfigOutcome, SystemConfigSkipped)
 	}
 
-	got, err := os.ReadFile(workerPath)
+	assertDirectorySnapshotUnchanged(t, goalDir, beforeSnapshot)
+}
+
+func TestInit_SkipsValidPackageWithoutMaterializingInlineBundledFiles(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	first, err := Init(homeDir)
 	if err != nil {
-		t.Fatalf("ReadFile(edited worker after rerun): %v", err)
+		t.Fatalf("first Init() error = %v", err)
 	}
-	if string(got) != editedBody {
-		t.Fatalf("edited worker changed on rerun:\n%s", string(got))
+
+	goalDir := goalFactoryDir(t, first.PackagedFactories)
+	bundledFilePath := writeCustomerEditedInlineBundledFile(t, goalDir)
+	beforeBundledFileInfo, err := os.Stat(bundledFilePath)
+	if err != nil {
+		t.Fatalf("Stat(customer-edited bundled file before init): %v", err)
 	}
+	beforeSnapshot := snapshotDirectoryContents(t, goalDir)
+
+	second, err := Init(homeDir)
+	if err != nil {
+		t.Fatalf("second Init() error = %v", err)
+	}
+	for _, factory := range second.PackagedFactories {
+		if factory.Name == "@you/goal" && factory.Outcome != PackagedFactorySkipped {
+			t.Fatalf("@you/goal outcome = %q, want %q", factory.Outcome, PackagedFactorySkipped)
+		}
+	}
+
+	assertDirectorySnapshotUnchanged(t, goalDir, beforeSnapshot)
+	afterBundledFileInfo, err := os.Stat(bundledFilePath)
+	if err != nil {
+		t.Fatalf("Stat(customer-edited bundled file after init): %v", err)
+	}
+	if !afterBundledFileInfo.ModTime().Equal(beforeBundledFileInfo.ModTime()) {
+		t.Fatalf(
+			"customer-edited bundled file modification time changed: before=%s after=%s",
+			beforeBundledFileInfo.ModTime(),
+			afterBundledFileInfo.ModTime(),
+		)
+	}
+}
+
+func TestInit_InvalidExistingPackagedFactoryFailsWithoutReplacement(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(homeDir)
+	factoryName := factorypackages.Names()[0]
+	factoryDir, err := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, factoryName)
+	if err != nil {
+		t.Fatalf("MapNamedFactoryDir(%q): %v", factoryName, err)
+	}
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(invalid factory): %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
+		[]byte("customer-owned invalid factory config\n"),
+		0o640,
+	); err != nil {
+		t.Fatalf("WriteFile(invalid factory config): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "inspect-me.txt"), []byte("preserve for inspection\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(customer marker): %v", err)
+	}
+	beforeSnapshot := snapshotDirectoryContents(t, factoryDir)
+
+	_, err = Init(homeDir)
+	if err == nil {
+		t.Fatal("expected invalid existing packaged factory to fail init")
+	}
+	for _, want := range []string{"install packaged factory", factoryName, "existing target", factoryDir, "invalid"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want substring %q", err, want)
+		}
+	}
+
+	assertDirectorySnapshotUnchanged(t, factoryDir, beforeSnapshot)
+}
+
+func TestInit_RejectsExistingPackageWithBundledFileLinkEscapeWithoutWrites(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	first, err := Init(homeDir)
+	if err != nil {
+		t.Fatalf("first Init() error = %v", err)
+	}
+
+	goalDir := goalFactoryDir(t, first.PackagedFactories)
+	writeCustomerEditedInlineBundledFile(t, goalDir)
+	linkPath := filepath.Join(goalDir, "scripts")
+	if err := os.RemoveAll(linkPath); err != nil {
+		t.Fatalf("RemoveAll(bundled file directory): %v", err)
+	}
+	outsideDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outsideDir, "customer-owned.txt"), []byte("preserve external content\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(external customer content): %v", err)
+	}
+	if err := os.Symlink(outsideDir, linkPath); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skip("Windows symlink privilege unavailable; junctions do not exercise symlink resolution semantics")
+		}
+		t.Fatalf("Symlink(%s -> %s): %v", linkPath, outsideDir, err)
+	}
+
+	beforeFactory := snapshotDirectoryContents(t, goalDir)
+	beforeOutside := snapshotDirectoryContents(t, outsideDir)
+
+	result, err := Init(homeDir)
+	if err == nil {
+		t.Fatal("expected filesystem-link-invalid packaged factory to fail init")
+	}
+	if len(result.PackagedFactories) != 0 {
+		t.Fatalf("packaged factory results = %#v, want no skipped result on failure", result.PackagedFactories)
+	}
+	for _, want := range []string{
+		"install packaged factory",
+		"@you/goal",
+		"existing target",
+		"factory/scripts/customer-owned.sh",
+		"cannot escape the expand target through filesystem links",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want substring %q", err, want)
+		}
+	}
+
+	assertDirectorySnapshotUnchanged(t, goalDir, beforeFactory)
+	assertDirectorySnapshotUnchanged(t, outsideDir, beforeOutside)
 }
 
 func TestInit_CreatesMissingPackagedDefaultsWithoutTouchingExisting(t *testing.T) {
@@ -368,6 +494,83 @@ func writeEditedGoalWorker(t *testing.T, goalDir string) (string, string) {
 	return workerPath, editedBody
 }
 
+func writeCustomerOwnedFactoryEdits(t *testing.T, factoryDir string) {
+	t.Helper()
+
+	edits := map[string]string{
+		interfaces.FactoryConfigFile: "\n ",
+		filepath.Join(interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName): "customer edited goal worker body\n",
+		filepath.Join(interfaces.WorkstationsDir, "execute-goal", "prompts", "executor.md"):     "customer edited goal workstation prompt\n",
+		filepath.Join("scripts", "customer-hook.sh"):                                            "#!/bin/sh\necho customer-owned\n",
+		"customer-notes.txt": "customer-owned package notes\n",
+	}
+	for relativePath, body := range edits {
+		path := filepath.Join(factoryDir, relativePath)
+		if relativePath == interfaces.FactoryConfigFile {
+			existing, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("ReadFile(%s): %v", relativePath, err)
+			}
+			body = string(existing) + body
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll(%s): %v", relativePath, err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o640); err != nil {
+			t.Fatalf("WriteFile(%s): %v", relativePath, err)
+		}
+	}
+}
+
+func writeCustomerEditedInlineBundledFile(t *testing.T, factoryDir string) string {
+	t.Helper()
+
+	configPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	payload, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(factory config): %v", err)
+	}
+	var authored map[string]any
+	if err := json.Unmarshal(payload, &authored); err != nil {
+		t.Fatalf("Unmarshal(factory config): %v", err)
+	}
+	authored["supportingFiles"] = map[string]any{
+		"bundledFiles": []any{map[string]any{
+			"id":         "factory/scripts/customer-owned.sh",
+			"type":       interfaces.BundledFileTypeScript,
+			"targetPath": "factory/scripts/customer-owned.sh",
+			"content": map[string]any{
+				"encoding": interfaces.BundledFileEncodingUTF8,
+				"inline":   "#!/bin/sh\necho catalog-content\n",
+			},
+		}},
+	}
+	payload, err = json.MarshalIndent(authored, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent(factory config): %v", err)
+	}
+	payload = append(payload, '\n')
+	if err := os.WriteFile(configPath, payload, 0o644); err != nil {
+		t.Fatalf("WriteFile(factory config): %v", err)
+	}
+
+	targetPath := filepath.Join(factoryDir, "scripts", "customer-owned.sh")
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(bundled file parent): %v", err)
+	}
+	if err := os.WriteFile(targetPath, []byte("#!/bin/sh\necho customer-edit\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(customer-edited bundled file): %v", err)
+	}
+	if err := os.Chmod(targetPath, 0o600); err != nil {
+		t.Fatalf("Chmod(customer-edited bundled file): %v", err)
+	}
+	fixedModTime := time.Unix(1_700_000_000, 0).UTC()
+	if err := os.Chtimes(targetPath, fixedModTime, fixedModTime); err != nil {
+		t.Fatalf("Chtimes(customer-edited bundled file): %v", err)
+	}
+	return targetPath
+}
+
 func removeMaterializedFactory(t *testing.T, homeDir string, factoryName string) string {
 	t.Helper()
 
@@ -449,26 +652,45 @@ func seedLegacyEncodedGoalFactory(t *testing.T, factoriesRoot string) string {
 	return encodedDir
 }
 
-func snapshotDirectoryContents(t *testing.T, root string) map[string][]byte {
+type directoryEntrySnapshot struct {
+	Contents []byte
+	Link     string
+	Mode     fs.FileMode
+	IsDir    bool
+}
+
+func snapshotDirectoryContents(t *testing.T, root string) map[string]directoryEntrySnapshot {
 	t.Helper()
 
-	snapshot := make(map[string][]byte)
+	snapshot := make(map[string]directoryEntrySnapshot)
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
-		}
-		if entry.IsDir() {
-			return nil
 		}
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
 		}
-		data, err := os.ReadFile(path)
+		info, err := entry.Info()
 		if err != nil {
 			return err
 		}
-		snapshot[filepath.ToSlash(rel)] = data
+		entrySnapshot := directoryEntrySnapshot{
+			Mode:  info.Mode(),
+			IsDir: entry.IsDir(),
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			entrySnapshot.Link, err = os.Readlink(path)
+			if err != nil {
+				return err
+			}
+		} else if info.Mode().IsRegular() {
+			entrySnapshot.Contents, err = os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+		}
+		snapshot[filepath.ToSlash(rel)] = entrySnapshot
 		return nil
 	})
 	if err != nil {
@@ -477,7 +699,7 @@ func snapshotDirectoryContents(t *testing.T, root string) map[string][]byte {
 	return snapshot
 }
 
-func assertDirectorySnapshotUnchanged(t *testing.T, root string, before map[string][]byte) {
+func assertDirectorySnapshotUnchanged(t *testing.T, root string, before map[string]directoryEntrySnapshot) {
 	t.Helper()
 
 	after := snapshotDirectoryContents(t, root)
@@ -534,12 +756,48 @@ func TestInit_FactoryMaterializationFailureReportsActionableError(t *testing.T) 
 	}
 	got := err.Error()
 	for _, want := range []string{
-		"materialize packaged default factory",
+		"install packaged factory",
 		"@you/fusion",
 		namedFactoriesRoot,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("error = %q, want substring %q", got, want)
 		}
+	}
+}
+
+func TestEnsurePackagedFactories_InvalidPayloadDoesNotCommitTarget(t *testing.T) {
+	t.Parallel()
+
+	namedFactoriesRoot := t.TempDir()
+	definition := factorypackages.Definition{
+		Name: "@test/invalid",
+		JSON: []byte(`{"id":"invalid","workers":[`),
+	}
+
+	_, err := ensurePackagedFactories(namedFactoriesRoot, []factorypackages.Definition{definition})
+	if err == nil {
+		t.Fatal("expected invalid packaged factory payload to fail")
+	}
+	for _, want := range []string{"install packaged factory", definition.Name, namedFactoriesRoot} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want substring %q", err, want)
+		}
+	}
+
+	targetDir, mapErr := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, definition.Name)
+	if mapErr != nil {
+		t.Fatalf("MapNamedFactoryDir(%q): %v", definition.Name, mapErr)
+	}
+	if _, statErr := os.Stat(targetDir); !os.IsNotExist(statErr) {
+		t.Fatalf("Stat(%q) error = %v, want target absent", targetDir, statErr)
+	}
+
+	installed, listErr := factoryconfig.ListNamedFactories(namedFactoriesRoot)
+	if listErr != nil {
+		t.Fatalf("ListNamedFactories(%q): %v", namedFactoriesRoot, listErr)
+	}
+	if len(installed) != 0 {
+		t.Fatalf("installed factories after failed install = %v, want none", installed)
 	}
 }

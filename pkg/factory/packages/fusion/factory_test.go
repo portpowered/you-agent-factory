@@ -47,7 +47,11 @@ func TestBuiltInFactoryJSON_LoadsRunnablePackagedFusionFactory(t *testing.T) {
 }
 
 func TestMaterializedPackagedFusionFactory_PreservesInvocationSignatureAndInterpolationFields(t *testing.T) {
-	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), t.TempDir(), PackagedFactoryName)
+	globalRoot := t.TempDir()
+	if _, err := factoryconfig.PersistNamedFactory(globalRoot, PackagedFactoryName, BuiltInFactoryJSON); err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
+	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), globalRoot, PackagedFactoryName)
 	if err != nil {
 		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
 	}
@@ -143,6 +147,9 @@ func TestBuiltInFusionFactory_NormalizesMixedPositionalAndNamedArgumentsThroughS
 
 func TestBuiltInFusionFactory_RuntimeBuildAllowsInvocationInterpolatedModelProvider(t *testing.T) {
 	globalRoot := t.TempDir()
+	if _, err := factoryconfig.PersistNamedFactory(globalRoot, PackagedFactoryName, BuiltInFactoryJSON); err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
 	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(t.TempDir(), globalRoot, PackagedFactoryName)
 	if err != nil {
 		t.Fatalf("ResolveNamedFactoryAcrossRoots: %v", err)
