@@ -2,7 +2,9 @@ name: after_event_id
 in: query
 required: false
 description: >-
-  Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream
-  replays only events recorded after this stable event identifier.
+  Session-scoped reconnect cursor identifying the last acknowledged
+  FactoryEvent.id. The stream replays only events recorded after this stable
+  event identifier. When both after_event_id and after_sequence are present on
+  GET /factory-sessions/{session_id}/events, after_event_id wins.
 schema:
   type: string
