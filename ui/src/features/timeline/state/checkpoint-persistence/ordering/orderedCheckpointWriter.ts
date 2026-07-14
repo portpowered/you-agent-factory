@@ -1,3 +1,8 @@
+import {
+  correlationTokenForIdentityScope,
+  recordSessionPersistenceDiagnostic,
+  sessionPersistenceDiagnostic,
+} from "../../../../dashboard/public/session-persistence-diagnostics";
 import type { StreamDerivedCacheIdentity } from "../../../lib/stream-derived-cache-identity";
 import type { IndexedDBLike } from "../indexedDBCheckpointRequests";
 
@@ -24,6 +29,22 @@ function writeAdvancesLane(
     return true;
   }
   return candidateSequence !== undefined && candidateSequence > newestSequence;
+}
+
+function recordDurableWriteOutcome(
+  streamIdentity: StreamDerivedCacheIdentity,
+  outcome: "durable_write_failed" | "durable_write_succeeded",
+): void {
+  try {
+    recordSessionPersistenceDiagnostic(
+      sessionPersistenceDiagnostic(
+        outcome,
+        correlationTokenForIdentityScope(streamIdentity),
+      ),
+    );
+  } catch {
+    // Diagnostics are best effort and cannot affect checkpoint persistence.
+  }
 }
 
 export function enqueueOrderedCheckpointWrite(
@@ -66,8 +87,14 @@ export function enqueueOrderedCheckpointWrite(
       if (!writeAdvancesLane(lane.committedSequence, afterSequence)) {
         return;
       }
-      if (await writeCheckpoint()) {
-        lane.committedSequence = afterSequence;
+      try {
+        if (await writeCheckpoint()) {
+          lane.committedSequence = afterSequence;
+          recordDurableWriteOutcome(streamIdentity, "durable_write_succeeded");
+        }
+      } catch (error) {
+        recordDurableWriteOutcome(streamIdentity, "durable_write_failed");
+        throw error;
       }
     };
     write = startsLane ? runWrite() : lane.tail.then(runWrite);
