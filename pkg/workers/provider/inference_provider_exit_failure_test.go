@@ -321,8 +321,11 @@ func assertGPT56SolFailureMetadata(t *testing.T, providerErr *ProviderError, ent
 	if providerErr.Diagnostics.Command.TimedOut {
 		t.Fatal("expected non-timeout Codex failure diagnostics")
 	}
-	if providerErr.Cause != nil {
-		t.Fatalf("provider error cause = %v, want nil for non-zero exit", providerErr.Cause)
+	if providerErr.Cause == nil {
+		t.Fatal("expected bounded internal cause on Codex exit failure")
+	}
+	if !strings.Contains(providerErr.Cause.Error(), "gpt-5.6-sol") {
+		t.Fatalf("provider error cause = %v, want audited upgrade diagnostic", providerErr.Cause)
 	}
 }
 

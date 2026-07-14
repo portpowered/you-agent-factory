@@ -94,8 +94,8 @@ func TestResolveCodexProviderFailure_PrecedenceTable(t *testing.T) {
 			if !ok {
 				t.Fatal("ResolveCodexProviderFailure() ok = false, want true")
 			}
-			if got != tc.want {
-				t.Fatalf("ResolveCodexProviderFailure() = %#v, want %#v", got, tc.want)
+			if got.Result != tc.want {
+				t.Fatalf("ResolveCodexProviderFailure() = %#v, want %#v", got.Result, tc.want)
 			}
 		})
 	}
@@ -112,7 +112,7 @@ func TestParseCodexProviderFailure_MatchesResolveCodexProviderFailure(t *testing
 	if !ok {
 		t.Fatal("ResolveCodexProviderFailure() ok = false, want true")
 	}
-	if parsed != resolved {
-		t.Fatalf("ParseCodexProviderFailure() = %#v, ResolveCodexProviderFailure() = %#v, want matching outcomes", parsed, resolved)
+	if parsed != resolved.Result {
+		t.Fatalf("ParseCodexProviderFailure() = %#v, ResolveCodexProviderFailure() = %#v, want matching outcomes", parsed, resolved.Result)
 	}
 }

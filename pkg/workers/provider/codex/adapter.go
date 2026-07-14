@@ -57,17 +57,22 @@ func (ResponseAdapter) ClassifyFailure(_ context.Context, input adapter.FailureC
 	}
 	if input.DecodeError != nil || input.FlushError != nil || input.ParseError != nil {
 		if resolved, ok := provider.ResolveCodexProviderFailure(provider.CommandResult(input.CommandResult), resolution); ok {
-			session := codexProviderSessionFromStdout(input.CommandResult.Stdout, resolved)
-			return normalizedFailureResult(resolved.Reason, resolved.Message, session)
+			session := codexProviderSessionFromStdout(input.CommandResult.Stdout, resolved.Result)
+			return normalizedFailureResult(resolved, session)
 		}
-		return normalizedFailureResult(interfaces.WorkFailureTypeUnknown, "Codex did not produce a valid completed response.", nil)
+		return normalizedFailureResult(provider.ProviderFailureResolution{
+			Result: provider.ProviderFailureResult{
+				Reason:  interfaces.WorkFailureTypeUnknown,
+				Message: "Codex did not produce a valid completed response.",
+			},
+		}, nil)
 	}
 	resolved, ok := provider.ResolveCodexProviderFailure(provider.CommandResult(input.CommandResult), resolution)
 	if !ok {
 		return adapter.FailureResult{}
 	}
-	session := codexProviderSessionFromStdout(input.CommandResult.Stdout, resolved)
-	return normalizedFailureResult(resolved.Reason, resolved.Message, session)
+	session := codexProviderSessionFromStdout(input.CommandResult.Stdout, resolved.Result)
+	return normalizedFailureResult(resolved, session)
 }
 
 func codexProviderSessionFromStdout(stdout []byte, resolved provider.ProviderFailureResult) *interfaces.ProviderSessionMetadata {
@@ -79,11 +84,16 @@ func codexProviderSessionFromStdout(stdout []byte, resolved provider.ProviderFai
 }
 
 func terminalFailureResult(failure TerminalFailure) adapter.FailureResult {
-	return normalizedFailureResult(failure.Type, failure.Message, failure.ProviderSession)
+	return normalizedFailureResult(provider.ProviderFailureResolution{
+		Result: provider.ProviderFailureResult{
+			Reason:  failure.Type,
+			Message: failure.Message,
+		},
+	}, failure.ProviderSession)
 }
 
-func normalizedFailureResult(failureType interfaces.WorkFailureType, message string, session *interfaces.ProviderSessionMetadata) adapter.FailureResult {
-	providerError := provider.NewProviderErrorFromResult(provider.ProviderFailureResult{Reason: failureType, Message: message}, nil)
+func normalizedFailureResult(resolution provider.ProviderFailureResolution, session *interfaces.ProviderSessionMetadata) adapter.FailureResult {
+	providerError := provider.NewProviderErrorFromResult(resolution.Result, provider.ProviderFailureInternalCauseError(resolution.InternalCause))
 	decision := provider.WorkFailureDecisionFromProviderError(providerError)
 	return adapter.FailureResult{Failure: &adapter.FailureFacts{
 		Family: providerError.Family, Type: providerError.Type, Message: providerError.Message,

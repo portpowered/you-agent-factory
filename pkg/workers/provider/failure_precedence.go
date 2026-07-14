@@ -13,13 +13,21 @@ const (
 	FailureSignalTierExit
 )
 
+// ProviderFailureResolution is the winning provider failure outcome plus a
+// bounded internal cause excerpt from the selected signal.
+type ProviderFailureResolution struct {
+	Result        ProviderFailureResult
+	InternalCause string
+}
+
 // CompetingFailureSignal is one candidate outcome before shared precedence
 // selection. Recognized marks whether the tier produced a known failure class
 // rather than an unknown fallback excerpt.
 type CompetingFailureSignal struct {
-	Tier       FailureSignalTier
-	Recognized bool
-	Result     ProviderFailureResult
+	Tier          FailureSignalTier
+	Recognized    bool
+	Result        ProviderFailureResult
+	InternalCause string
 }
 
 // IsRecognizedFailureType reports whether a failure type is a known class.
@@ -36,9 +44,9 @@ func IsRecognizedFailureType(failureType interfaces.WorkFailureType) bool {
 //  4. unrecognized structured provider errors
 //  5. unrecognized stderr classification
 //  6. generic process-exit fallback
-func SelectFailureByPrecedence(signals []CompetingFailureSignal) (ProviderFailureResult, bool) {
+func SelectFailureByPrecedence(signals []CompetingFailureSignal) (ProviderFailureResolution, bool) {
 	if len(signals) == 0 {
-		return ProviderFailureResult{}, false
+		return ProviderFailureResolution{}, false
 	}
 	if selected, ok := selectFailureForTier(signals, FailureSignalTierCancelTimeout, false); ok {
 		return selected, true
@@ -58,8 +66,8 @@ func SelectFailureByPrecedence(signals []CompetingFailureSignal) (ProviderFailur
 	return selectFailureForTier(signals, FailureSignalTierExit, false)
 }
 
-func selectFailureForTier(signals []CompetingFailureSignal, tier FailureSignalTier, recognizedOnly bool) (ProviderFailureResult, bool) {
-	var selected ProviderFailureResult
+func selectFailureForTier(signals []CompetingFailureSignal, tier FailureSignalTier, recognizedOnly bool) (ProviderFailureResolution, bool) {
+	var selected ProviderFailureResolution
 	var found bool
 	for _, signal := range signals {
 		if signal.Tier != tier {
@@ -68,7 +76,10 @@ func selectFailureForTier(signals []CompetingFailureSignal, tier FailureSignalTi
 		if recognizedOnly && !signal.Recognized {
 			continue
 		}
-		selected = signal.Result
+		selected = ProviderFailureResolution{
+			Result:        signal.Result,
+			InternalCause: signal.InternalCause,
+		}
 		found = true
 	}
 	return selected, found
@@ -98,4 +109,25 @@ func CodexProcessExitFailureLayers(result CommandResult) (
 	}
 	exit = codexProcessExitFallback(result.ExitCode)
 	return structured, hasStructured, stderr, hasStderr, exit
+}
+
+// CodexProcessExitFailureLayersWithCause returns process-exit failure layers
+// plus bounded internal-cause excerpts for structured and stderr signals.
+func CodexProcessExitFailureLayersWithCause(result CommandResult) (
+	structured ProviderFailureResult,
+	structuredCause string,
+	hasStructured bool,
+	stderr ProviderFailureResult,
+	stderrCause string,
+	hasStderr bool,
+	exit ProviderFailureResult,
+) {
+	structured, hasStructured, stderr, hasStderr, exit = CodexProcessExitFailureLayers(result)
+	if hasStructured {
+		structuredCause = codexProcessExitStructuredInternalCause(result)
+	}
+	if hasStderr {
+		stderrCause = codexProcessExitStderrInternalCause(result)
+	}
+	return structured, structuredCause, hasStructured, stderr, stderrCause, hasStderr, exit
 }

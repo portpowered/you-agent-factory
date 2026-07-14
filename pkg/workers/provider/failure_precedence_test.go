@@ -98,8 +98,8 @@ func TestSelectFailureByPrecedence_Table(t *testing.T) {
 			if ok != tc.wantOK {
 				t.Fatalf("SelectFailureByPrecedence() ok = %t, want %t", ok, tc.wantOK)
 			}
-			if got != tc.want {
-				t.Fatalf("SelectFailureByPrecedence() = %#v, want %#v", got, tc.want)
+			if got.Result != tc.want {
+				t.Fatalf("SelectFailureByPrecedence() = %#v, want %#v", got.Result, tc.want)
 			}
 		})
 	}

@@ -670,11 +670,12 @@ func normalizeProviderExitFailure(provider string, result CommandResult, session
 	if parsed.providerSession != nil {
 		session = parsed.providerSession
 	}
-	return newProviderErrorFromResultWithDiagnostics(parsed.failure, nil, session, diagnostics)
+	return newProviderErrorFromResultWithDiagnostics(parsed.failure, ProviderFailureInternalCauseError(parsed.internalCause), session, diagnostics)
 }
 
 type parsedProviderFailure struct {
 	failure         ProviderFailureResult
+	internalCause   string
 	providerSession *interfaces.ProviderSessionMetadata
 }
 
@@ -684,7 +685,11 @@ func parseProviderExitFailure(provider string, result CommandResult) parsedProvi
 	case string(interfaces.ModelProviderClaude):
 		return parsedProviderFailure{failure: ParseClaudeProviderFailure(result)}
 	case string(interfaces.ModelProviderCodex):
-		return parsedProviderFailure{failure: ParseCodexProviderFailure(result)}
+		resolved, ok := ResolveCodexProviderFailure(result, CodexFailureResolutionInput{})
+		if ok {
+			return parsedProviderFailure{failure: resolved.Result, internalCause: resolved.InternalCause}
+		}
+		return parsedProviderFailure{failure: codexProcessExitFallback(result.ExitCode), internalCause: codexExitInternalCause(result.ExitCode)}
 	case string(interfaces.ModelProviderKiro):
 		return parsedProviderFailure{failure: ParseKiroProviderFailure(result)}
 	case string(interfaces.ModelProviderOpenCode):

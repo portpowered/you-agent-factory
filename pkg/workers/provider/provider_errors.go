@@ -648,9 +648,19 @@ func kiroExitFailureMessage(exitCode int) string {
 func ParseCodexProviderFailure(result CommandResult) ProviderFailureResult {
 	resolved, ok := ResolveCodexProviderFailure(result, CodexFailureResolutionInput{})
 	if ok {
-		return resolved
+		return resolved.Result
 	}
 	return codexProcessExitFallback(result.ExitCode)
+}
+
+// ProviderFailureInternalCauseError turns a bounded internal-cause excerpt into
+// the wrapped error carried on ProviderError.Cause.
+func ProviderFailureInternalCauseError(cause string) error {
+	cause = strings.TrimSpace(cause)
+	if cause == "" {
+		return nil
+	}
+	return errors.New(cause)
 }
 
 func lastCodexStructuredFailure(streams []string) (ProviderFailureResult, bool) {
@@ -877,9 +887,6 @@ func classifyCodexStructuredSignal(errorType string, status int) (interfaces.Wor
 	default:
 		return interfaces.WorkFailureTypeUnknown, false
 	}
-}
-func codexExitFailureMessage(exitCode int) string {
-	return fmt.Sprintf("codex exited with code %d", exitCode)
 }
 
 func NewProviderError(errorType interfaces.WorkFailureType, message string, cause error) *ProviderError {

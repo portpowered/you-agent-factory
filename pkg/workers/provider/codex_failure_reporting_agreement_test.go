@@ -219,7 +219,7 @@ func TestCodexFailureReportingPaths_CanceledAgreesAcrossCompetingSignals(t *test
 			if !ok {
 				t.Fatal("ResolveCodexProviderFailure() ok = false, want true")
 			}
-			got := codexFailureReportingFactsFromResult(resolved)
+			got := codexFailureReportingFactsFromResult(resolved.Result)
 			if got != want {
 				t.Fatalf("ResolveCodexProviderFailure() facts = %#v, want %#v", got, want)
 			}
@@ -262,7 +262,7 @@ func TestCodexFailureReportingPaths_TimeoutAgreesAcrossCompetingSignals(t *testi
 			if !ok {
 				t.Fatal("ResolveCodexProviderFailure() ok = false, want true")
 			}
-			got := codexFailureReportingFactsFromResult(resolved)
+			got := codexFailureReportingFactsFromResult(resolved.Result)
 			if got != want {
 				t.Fatalf("ResolveCodexProviderFailure() facts = %#v, want %#v", got, want)
 			}

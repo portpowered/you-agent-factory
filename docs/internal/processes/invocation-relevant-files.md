@@ -289,7 +289,11 @@ primary-result behavior.
   helpers rather than in transport layers. Cross-path agreement tests for
   listed failure classes belong in `codex_failure_reporting_agreement_test.go`
   and should compare `CodexStructuredStreamReportingOutcome` against
-  `CodexProcessExitReportingOutcome` before shared precedence selection. A streaming decoder must hold
+  `CodexProcessExitReportingOutcome` before shared precedence selection.
+  Bounded internal-cause excerpts ride on `ProviderFailureResolution.InternalCause`
+  and `ProviderError.Cause`; sanitized alignment fixtures belong in
+  `codex_failure_sanitized_fixture.go` with leakage negatives in
+  `codex_failure_internal_cause_test.go`. A streaming decoder must hold
   terminal `ERROR` drafts until the shared executor flushes it with the process
   outcome; discard a native failure when cancellation, deadline, or exit 124 wins.
   When multiple typed terminal records arrive, the held canonical draft and
