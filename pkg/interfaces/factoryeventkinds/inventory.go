@@ -24,6 +24,13 @@ type ExcludedNonPublicKind struct {
 	Evidence string
 }
 
+// ContractOnlyKind names a public FactoryEventType documented in OpenAPI that
+// does not yet have a canonical runtime emission path on factory event history.
+type ContractOnlyKind struct {
+	Kind     factoryapi.FactoryEventType
+	Evidence string
+}
+
 // PublicEmittableFactoryEventKinds returns every public FactoryEvent kind
 // currently emitted through the factory event history and worker boundary
 // recorders. The inventory does not invent kinds; it only names kinds with an
@@ -128,4 +135,24 @@ func ExcludedNonPublicFactoryEventKinds() []ExcludedNonPublicKind {
 		return excluded[i].Category < excluded[j].Category
 	})
 	return excluded
+}
+
+// ContractOnlyFactoryEventKinds returns public FactoryEventType values that are
+// authored in OpenAPI but intentionally absent from the runtime-emittable public
+// inventory because no canonical Record* emission path exists yet.
+func ContractOnlyFactoryEventKinds() []ContractOnlyKind {
+	kinds := []ContractOnlyKind{
+		{
+			Kind: factoryapi.FactoryEventTypeJavaScriptCheckpointRef,
+			Evidence: "Authored OpenAPI and fixture vocabulary for JavaScript workflow checkpoint refs. Canonical durable runtime emission uses ORCHESTRATOR_CHECKPOINT_WRITTEN via pkg/factory/events/event_history_orchestrator_progress.go RecordOrchestratorCheckpointWritten; projection_consistency.go accepts JAVASCRIPT_CHECKPOINT_REF for replay compatibility only.",
+		},
+		{
+			Kind: factoryapi.FactoryEventTypeJavaScriptPhaseChange,
+			Evidence: "Authored OpenAPI and fixture vocabulary for JavaScript workflow phase transitions. Canonical durable runtime emission uses ORCHESTRATOR_PHASE_CHANGED via pkg/factory/events/event_history_orchestrator_progress.go RecordOrchestratorPhaseChanged; projection_consistency.go accepts JAVASCRIPT_PHASE_CHANGE for replay compatibility only.",
+		},
+	}
+	sort.Slice(kinds, func(i, j int) bool {
+		return kinds[i].Kind < kinds[j].Kind
+	})
+	return kinds
 }
