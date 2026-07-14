@@ -26,6 +26,12 @@ Use this map when changing the public REST contract.
   `contracts/config/`; do not substitute topology or parity inventories for
   those schemas. `make contracts-check` reports stale, missing, and unexpected
   staged paths across the complete projection.
+- Raw JSON/YAML projections in `policy.go#rawArtifacts` are byte-identical copies
+  from their canonical owners (CLI/MCP baselines, `contracts/config/` schemas,
+  JavaScript runtime inventory). Factory schema is the only reviewed raw export
+  derived from OpenAPI rather than copied. Prove repository parity in
+  `internal/contractstaging/raw_artifacts_test.go`; later-phase export-map
+  families such as `components/*` stay omitted until a truthful owner exists.
 - Staged OpenAPI byte policy lives in `internal/contractstaging/openapi.go`
   (`CanonicalOpenAPIPath`, `StagedOpenAPIPath`, `ReviewedOpenAPIBytePolicy`,
   `ProjectStagedOpenAPI`, `VerifyStagedOpenAPIParity`). The reviewed policy is
