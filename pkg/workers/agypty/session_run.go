@@ -53,36 +53,7 @@ func executeSessionRun(
 		waitDone <- proc.Wait()
 	}()
 
-	readDone := make(chan struct{})
-	go func() {
-		defer close(readDone)
-		scratch := make([]byte, 32*1024)
-		for {
-			if file, ok := reader.(*os.File); ok {
-				_ = file.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
-			}
-			n, err := reader.Read(scratch)
-			if n > 0 {
-				mu.Lock()
-				lastByteAt = time.Now()
-				remaining := cfg.MaxCaptureBytes - len(buf)
-				if remaining > 0 {
-					if n > remaining {
-						buf = append(buf, scratch[:remaining]...)
-						capacityHit = true
-					} else {
-						buf = append(buf, scratch[:n]...)
-					}
-				} else {
-					capacityHit = true
-				}
-				mu.Unlock()
-			}
-			if err != nil {
-				return
-			}
-		}
-	}()
+	readDone := startPTYCapture(reader, cfg, &mu, &buf, &capacityHit, &lastByteAt)
 
 	timer := time.NewTimer(timeUntilTimeout(lastByteAt, hardDeadline, cfg))
 	defer timer.Stop()
@@ -104,8 +75,7 @@ func executeSessionRun(
 			waitErr = <-waitDone
 			return finishSessionRun(reader, readDone, &mu, buf, capacityHit, timedOut, waitErr, proc, ctx.Err())
 		case <-timer.C:
-			now := time.Now()
-			if !now.Before(hardDeadline) || (cfg.IdleTimeout > 0 && now.Sub(lastByteAt) >= cfg.IdleTimeout) {
+			if sessionRunTimedOut(time.Now(), hardDeadline, cfg, lastByteAt) {
 				timedOut = true
 				_ = proc.Terminate()
 				waitErr = <-waitDone
@@ -114,6 +84,54 @@ func executeSessionRun(
 			timer.Reset(timeUntilTimeout(lastByteAt, hardDeadline, cfg))
 		}
 	}
+}
+
+func startPTYCapture(
+	reader io.ReadCloser,
+	cfg SessionConfig,
+	mu *sync.Mutex,
+	buf *[]byte,
+	capacityHit *bool,
+	lastByteAt *time.Time,
+) chan struct{} {
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		scratch := make([]byte, 32*1024)
+		for {
+			if file, ok := reader.(*os.File); ok {
+				_ = file.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+			}
+			n, err := reader.Read(scratch)
+			if n > 0 {
+				mu.Lock()
+				*lastByteAt = time.Now()
+				remaining := cfg.MaxCaptureBytes - len(*buf)
+				if remaining > 0 {
+					if n > remaining {
+						*buf = append(*buf, scratch[:remaining]...)
+						*capacityHit = true
+					} else {
+						*buf = append(*buf, scratch[:n]...)
+					}
+				} else {
+					*capacityHit = true
+				}
+				mu.Unlock()
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+	return readDone
+}
+
+func sessionRunTimedOut(now, hardDeadline time.Time, cfg SessionConfig, lastByteAt time.Time) bool {
+	if !now.Before(hardDeadline) {
+		return true
+	}
+	return cfg.IdleTimeout > 0 && now.Sub(lastByteAt) >= cfg.IdleTimeout
 }
 
 func finishSessionRun(

@@ -137,6 +137,16 @@ func TestAdapterExecutePreservesPromptMetacharactersInArgv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute() error = %v", err)
 	}
+	assertAdapterMetacharacterExecuteResult(t, result, mock, privatePrompt)
+}
+
+func assertAdapterMetacharacterExecuteResult(
+	t *testing.T,
+	result adapter.ExecuteResult,
+	mock *stubAllocator,
+	wantPrompt string,
+) {
+	t.Helper()
 	if result.Response.Content != "Hello from Agy" {
 		t.Fatalf("response content = %q, want cleaned final text", result.Response.Content)
 	}
@@ -163,8 +173,8 @@ func TestAdapterExecutePreservesPromptMetacharactersInArgv(t *testing.T) {
 	if err := agypty.ValidateArgv(launch.Argv); err != nil {
 		t.Fatalf("ValidateArgv() error = %v", err)
 	}
-	if got := launch.Argv[len(launch.Argv)-1]; got != privatePrompt {
-		t.Fatalf("prompt argv = %q, want single metacharacter-bearing element %q", got, privatePrompt)
+	if got := launch.Argv[len(launch.Argv)-1]; got != wantPrompt {
+		t.Fatalf("prompt argv = %q, want single metacharacter-bearing element %q", got, wantPrompt)
 	}
 }
 
