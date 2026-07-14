@@ -41,3 +41,9 @@ func TestPrivateContractRemovalGate_ReleaseNotesMigrationMapping(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPrivateContractRemovalGate_PrivateNDJSONRecordTypesRejected(t *testing.T) {
+	if err := removalgate.AssertPrivateNDJSONRecordTypesRejected(); err != nil {
+		t.Fatal(err)
+	}
+}

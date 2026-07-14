@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/internal/contractguard"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/ndjsoncontract"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/parityfixtures"
 )
@@ -22,10 +23,10 @@ const (
 )
 
 // PrivateNDJSONRecordTypes are retired CLI response-stream JSON recordType values.
-var PrivateNDJSONRecordTypes = []string{"progress", "compaction", "primary_result"}
+var PrivateNDJSONRecordTypes = ndjsoncontract.RetiredPrivateRecordTypes[:3]
 
 // PublicNDJSONRecordTypes are the only supported CLI response-stream recordType values.
-var PublicNDJSONRecordTypes = []string{"response_event", "invocation_result"}
+var PublicNDJSONRecordTypes = ndjsoncontract.SupportedRecordTypes
 
 var docsTopicRequiredMarkers = map[string][]string{
 	"run": {

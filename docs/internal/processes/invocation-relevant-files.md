@@ -376,10 +376,17 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `pkg/factory/sessions/responsestream/removalgate` (`AssertGate`,
   `AssertDocsPrerequisite`, `AssertNoPrivateNDJSONInProductionSurfaces`,
   `AssertPublicTransportLayersDoNotImportLegacyCompat`,
-  `AssertReleaseNotesMigrationMapping`) with package tests in `gate_test.go` and
-  the functional entrypoint
+  `AssertReleaseNotesMigrationMapping`,
+  `AssertPrivateNDJSONRecordTypesRejected`) with package tests in `gate_test.go` and
+  functional entrypoints
   `tests/functional/smoke/response_stream_private_contract_removal_gate_smoke_test.go`
-  (`TestResponseStreamPrivateContractRemovalGateSmoke`). Run these before deleting
+  (`TestResponseStreamPrivateContractRemovalGateSmoke`) and
+  `tests/functional/smoke/response_stream_private_ndjson_contract_smoke_test.go`
+  (`TestResponseStreamPrivateNDJSONContractSmoke`). Supported CLI NDJSON
+  recordType constants and retired-record rejection live in
+  `pkg/factory/sessions/responsestream/ndjsoncontract`; the canonical decoder in
+  `pkg/workers/provider/parityfixtures/transport.go` rejects retired private
+  record types before validating public envelopes. Run these before deleting
   private NDJSON record types or legacy compat mapper code. The exact old→new CLI
   JSON migration map for retired private NDJSON records lives in
   `docs/release-notes/response-stream-private-ndjson-removal.md` (indexed by

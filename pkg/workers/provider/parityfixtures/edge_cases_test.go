@@ -56,6 +56,21 @@ func TestDecodeTransportCLINDJSON_RejectsInvalidInput(t *testing.T) {
 			`{"recordType":"invocation_result","invocation":{}}`,
 			`{"recordType":"invocation_result","invocation":{}}`,
 		}},
+		{name: "retired progress", lines: []string{
+			`{"recordType":"progress","sequence":1,"payload":"planning"}`,
+			`{"recordType":"invocation_result","invocation":{"requestId":"req-1","status":"COMPLETED"}}`,
+		}},
+		{name: "retired compaction", lines: []string{
+			`{"recordType":"compaction","reason":"truncated"}`,
+			`{"recordType":"invocation_result","invocation":{"requestId":"req-1","status":"COMPLETED"}}`,
+		}},
+		{name: "retired primary_result final", lines: []string{
+			`{"recordType":"primary_result","invocation":{"requestId":"req-1","status":"COMPLETED"}}`,
+		}},
+		{name: "retired stream_gap", lines: []string{
+			`{"recordType":"stream_gap","reason":"progress_backlog"}`,
+			`{"recordType":"invocation_result","invocation":{"requestId":"req-1","status":"COMPLETED"}}`,
+		}},
 	}
 	for _, tc := range cases {
 		tc := tc
