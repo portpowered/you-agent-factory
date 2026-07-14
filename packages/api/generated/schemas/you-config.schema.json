@@ -236,6 +236,8 @@
         "jsonPath",
         "documentation",
         "lifecycle",
+        "precedence",
+        "sensitivity",
         "defaultEmptyBehavior",
         "parseOwner",
         "persistenceOwner",
@@ -255,6 +257,12 @@
         },
         "lifecycle": {
           "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        },
+        "precedence": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/precedence.schema.json"
+        },
+        "sensitivity": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/sensitivity.schema.json"
         },
         "defaultEmptyBehavior": {
           "type": "string",
@@ -286,6 +294,7 @@
   },
   "contract": {
     "formatVersion": "1.0.0",
+    "precedenceChain": "file < env < flag",
     "sharedConfigFile": {
       "relativePath": ".you-agent-factory/config.json",
       "resolvedBy": "defaultpaths.OperatorConfigPath(homeDir)"
@@ -364,6 +373,17 @@
           "itemId": "config.backend-scope-id",
           "state": "active",
           "since": "1.0.0"
+        },
+        "precedence": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.backend-scope-id",
+          "layers": []
+        },
+        "sensitivity": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.backend-scope-id",
+          "classification": "public",
+          "notes": "Scope identifiers appear in diagnostics without redaction and are not secret material"
         }
       },
       "defaults": {
@@ -401,6 +421,20 @@
           "itemId": "config.defaults",
           "state": "active",
           "since": "1.0.0"
+        },
+        "precedence": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.defaults",
+          "layers": [
+            "file",
+            "env",
+            "flag"
+          ]
+        },
+        "sensitivity": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.defaults",
+          "classification": "public"
         }
       },
       "defaults.workerModelProvider": {
@@ -437,6 +471,22 @@
           "itemId": "config.defaults.worker-model-provider",
           "state": "active",
           "since": "1.0.0"
+        },
+        "precedence": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.defaults.worker-model-provider",
+          "layers": [
+            "file",
+            "env",
+            "flag"
+          ],
+          "environmentVariable": "YOU_DEFAULT_WORKER_MODEL_PROVIDER",
+          "flagName": "--default-worker-model-provider"
+        },
+        "sensitivity": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.defaults.worker-model-provider",
+          "classification": "public"
         }
       },
       "defaults.workerModel": {
@@ -471,6 +521,22 @@
           "itemId": "config.defaults.worker-model",
           "state": "active",
           "since": "1.0.0"
+        },
+        "precedence": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.defaults.worker-model",
+          "layers": [
+            "file",
+            "env",
+            "flag"
+          ],
+          "environmentVariable": "YOU_DEFAULT_WORKER_MODEL",
+          "flagName": "--default-worker-model"
+        },
+        "sensitivity": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.defaults.worker-model",
+          "classification": "public"
         }
       },
       "workerPresets": {
@@ -512,6 +578,19 @@
           "itemId": "config.worker-presets",
           "state": "active",
           "since": "1.0.0"
+        },
+        "precedence": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets",
+          "layers": [
+            "file"
+          ],
+          "notes": "file-only (no env or flag layers)"
+        },
+        "sensitivity": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets",
+          "classification": "public"
         }
       },
       "workerPresets[].id": {
@@ -546,6 +625,18 @@
           "itemId": "config.worker-presets.id",
           "state": "active",
           "since": "1.0.0"
+        },
+        "precedence": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.id",
+          "layers": [
+            "file"
+          ]
+        },
+        "sensitivity": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.id",
+          "classification": "public"
         }
       },
       "workerPresets[].modelProvider": {
@@ -581,6 +672,18 @@
           "itemId": "config.worker-presets.model-provider",
           "state": "active",
           "since": "1.0.0"
+        },
+        "precedence": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.model-provider",
+          "layers": [
+            "file"
+          ]
+        },
+        "sensitivity": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.model-provider",
+          "classification": "public"
         }
       },
       "workerPresets[].model": {
@@ -615,6 +718,18 @@
           "itemId": "config.worker-presets.model",
           "state": "active",
           "since": "1.0.0"
+        },
+        "precedence": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.model",
+          "layers": [
+            "file"
+          ]
+        },
+        "sensitivity": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.model",
+          "classification": "public"
         }
       },
       "workerPresets[].reasoningEffort": {
@@ -651,6 +766,18 @@
           "itemId": "config.worker-presets.reasoning-effort",
           "state": "active",
           "since": "1.0.0"
+        },
+        "precedence": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.reasoning-effort",
+          "layers": [
+            "file"
+          ]
+        },
+        "sensitivity": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.reasoning-effort",
+          "classification": "public"
         }
       }
     }

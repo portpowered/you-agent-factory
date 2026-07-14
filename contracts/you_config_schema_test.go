@@ -41,6 +41,14 @@ func youConfigSchema(t *testing.T) *jsonschema.Schema {
 			path: filepath.Join("common", "deprecations.schema.json"),
 			id:   deprecationsSchemaID,
 		},
+		schemaResource{
+			path: filepath.Join("common", "precedence.schema.json"),
+			id:   precedenceSchemaID,
+		},
+		schemaResource{
+			path: filepath.Join("common", "sensitivity.schema.json"),
+			id:   sensitivitySchemaID,
+		},
 	)
 }
 
@@ -172,6 +180,24 @@ func TestYouConfigSchemaContractMetadataValidatesThroughCommonVocabulary(t *test
 			id:   documentationSchemaID,
 		},
 	)
+	precedenceSchema := compileSchema(
+		t,
+		filepath.Join("common", "precedence.schema.json"),
+		precedenceSchemaID,
+		schemaResource{
+			path: filepath.Join("common", "documentation.schema.json"),
+			id:   documentationSchemaID,
+		},
+	)
+	sensitivitySchema := compileSchema(
+		t,
+		filepath.Join("common", "sensitivity.schema.json"),
+		sensitivitySchemaID,
+		schemaResource{
+			path: filepath.Join("common", "documentation.schema.json"),
+			id:   documentationSchemaID,
+		},
+	)
 	fieldContractSchema := compileFieldContractSchema(t, root)
 
 	for _, inventoryID := range inventoriedGlobalConfigFieldIDs {
@@ -186,6 +212,62 @@ func TestYouConfigSchemaContractMetadataValidatesThroughCommonVocabulary(t *test
 			}
 			if err := lifecycleSchema.Validate(fieldMap["lifecycle"]); err != nil {
 				t.Fatalf("validate lifecycle metadata: %v", err)
+			}
+			if err := precedenceSchema.Validate(fieldMap["precedence"]); err != nil {
+				t.Fatalf("validate precedence metadata: %v", err)
+			}
+			if err := sensitivitySchema.Validate(fieldMap["sensitivity"]); err != nil {
+				t.Fatalf("validate sensitivity metadata: %v", err)
+			}
+		})
+	}
+}
+
+func TestYouConfigSchemaPrecedenceAndSensitivityMetadataAgreesWithInventory(t *testing.T) {
+	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
+	contract := document.(map[string]any)["contract"].(map[string]any)
+	fields := contract["fields"].(map[string]any)
+
+	precedenceChain, ok := contract["precedenceChain"].(string)
+	if !ok || precedenceChain == "" {
+		t.Fatal("contract missing precedenceChain metadata")
+	}
+
+	inventory := globalconfiginventory.ProjectTopologyInventory()
+	if precedenceChain != inventory.PrecedenceChain {
+		t.Fatalf("contract precedenceChain = %q, want %q", precedenceChain, inventory.PrecedenceChain)
+	}
+
+	for _, record := range inventory.Fields {
+		t.Run(record.ID, func(t *testing.T) {
+			field, ok := fields[record.ID].(map[string]any)
+			if !ok {
+				t.Fatalf("contract missing field %q", record.ID)
+			}
+
+			precedence := field["precedence"].(map[string]any)
+			gotLayers := decodeContractValue[[]string](t, precedence["layers"])
+			if !slices.Equal(gotLayers, record.PrecedenceLayers) {
+				t.Fatalf("field %q precedence layers = %v, want %v", record.ID, gotLayers, record.PrecedenceLayers)
+			}
+			if record.EnvironmentVariable != "" {
+				if precedence["environmentVariable"] != record.EnvironmentVariable {
+					t.Fatalf("field %q environmentVariable = %#v, want %q", record.ID, precedence["environmentVariable"], record.EnvironmentVariable)
+				}
+			} else if precedence["environmentVariable"] != nil {
+				t.Fatalf("field %q environmentVariable = %#v, want absent", record.ID, precedence["environmentVariable"])
+			}
+			if record.FlagName != "" {
+				if precedence["flagName"] != record.FlagName {
+					t.Fatalf("field %q flagName = %#v, want %q", record.ID, precedence["flagName"], record.FlagName)
+				}
+			} else if precedence["flagName"] != nil {
+				t.Fatalf("field %q flagName = %#v, want absent", record.ID, precedence["flagName"])
+			}
+
+			sensitivity := field["sensitivity"].(map[string]any)
+			if sensitivity["classification"] != "public" {
+				t.Fatalf("field %q sensitivity classification = %#v, want public", record.ID, sensitivity["classification"])
 			}
 		})
 	}
@@ -445,6 +527,12 @@ func compileFieldContractSchema(t *testing.T, schemaRoot map[string]any) *jsonsc
 	}
 	if err := compiler.AddResource(deprecationsSchemaID, readJSON(t, filepath.Join("common", "deprecations.schema.json"))); err != nil {
 		t.Fatalf("add deprecations schema: %v", err)
+	}
+	if err := compiler.AddResource(precedenceSchemaID, readJSON(t, filepath.Join("common", "precedence.schema.json"))); err != nil {
+		t.Fatalf("add precedence schema: %v", err)
+	}
+	if err := compiler.AddResource(sensitivitySchemaID, readJSON(t, filepath.Join("common", "sensitivity.schema.json"))); err != nil {
+		t.Fatalf("add sensitivity schema: %v", err)
 	}
 	wrappedDocument, err := jsonschema.UnmarshalJSON(bytes.NewReader(payload))
 	if err != nil {

@@ -1,0 +1,9 @@
+{
+  "formatVersion": "2.0.0",
+  "itemId": "config.defaults.worker-model-provider",
+  "layers": [
+    "file",
+    "env",
+    "flag"
+  ]
+}
