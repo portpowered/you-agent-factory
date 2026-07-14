@@ -271,6 +271,10 @@ jobs:
         timeout-minutes: 10
         run: make api-smoke
 
+      - name: Run API package pack and export-resolution smoke verification
+        timeout-minutes: 10
+        run: make api-package-pack-smoke
+
       - name: Run factory composition Wire verification
         timeout-minutes: 10
         run: make wire-smoke

@@ -284,6 +284,7 @@ verify-build-contracts:
 	$(MAKE) ui-components-verify
 	$(MAKE) contracts-smoke
 	$(MAKE) api-smoke
+	$(MAKE) api-package-pack-smoke
 	$(MAKE) wire-smoke
 
 run-sharded-ui-coverage:
@@ -323,6 +324,7 @@ ci-verify-build-contracts: ci-typecheck
 	$(MAKE) ui-components-verify
 	$(MAKE) contracts-smoke
 	$(MAKE) api-smoke
+	$(MAKE) api-package-pack-smoke
 	$(MAKE) wire-smoke
 
 ci-verify-tests: ci-verify-build-contracts
