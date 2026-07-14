@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // FactoryWorldState is the dashboard-agnostic reconstruction of factory state

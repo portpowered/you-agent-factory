@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 

@@ -4,8 +4,8 @@ const { spawnSync } = require('node:child_process');
 
 const GENERATED_PATHS = [
   'api/openapi.yaml',
-  'pkg/api/generated/server.gen.go',
-  'pkg/generatedclient/client.gen.go',
+  'pkg/transports/http/generated/server.gen.go',
+  'pkg/transports/http/client/client.gen.go',
   'ui/src/api/generated/openapi.ts',
 ];
 

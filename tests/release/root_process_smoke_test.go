@@ -69,7 +69,7 @@ func TestRootProcessCompiledBinaryModeMatrix(t *testing.T) {
 	})
 
 	t.Run("MCP serve processes stdio and exits", func(t *testing.T) {
-		fixturePath := testutil.MustRepoPath(t, "pkg/api/testdata/durable-session-contract-fixtures.json")
+		fixturePath := testutil.MustRepoPath(t, "pkg/transports/http/testdata/durable-session-contract-fixtures.json")
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		cmd := exec.CommandContext(ctx, binaryPath, "mcp", "serve", "--fixture-catalog", fixturePath)

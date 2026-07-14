@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // Service preserves the legacy session-scoped save collaborator shape while

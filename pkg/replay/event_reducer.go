@@ -3,8 +3,8 @@ package replay
 import (
 	"fmt"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -403,7 +403,7 @@ func replayCompletionFromEvent(event factoryapi.FactoryEvent, inference replayIn
 			Feedback:                    stringValue(payload.Feedback),
 			SelectedClassificationLabel: stringValue(payload.SelectedClassificationLabel),
 			RecordedOutputWork:          recordedOutputWork,
-			FailureMetadata: interfaces.CloneWorkFailureMetadata(failureMetadata),
+			FailureMetadata:             interfaces.CloneWorkFailureMetadata(failureMetadata),
 			ProviderSession:             interfaces.CloneProviderSessionMetadata(inference.providerSession),
 			Metrics:                     replayWorkMetricsFromGenerated(payload.Metrics),
 			Diagnostics:                 diagnostics,

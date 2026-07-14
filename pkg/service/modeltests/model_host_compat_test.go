@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestFactoryService_ListModels_SourcesManagedRuntimeFromModelHost(t *testing.T) {

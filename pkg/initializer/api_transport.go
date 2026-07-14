@@ -3,7 +3,8 @@ package initializer
 import (
 	"context"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	transportmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
 )
 
 // APITransport bundles initializer-produced domain services with the session
@@ -35,7 +36,7 @@ func composeSessionAPISurface(
 	services *Services,
 	host *SessionRuntimeHost,
 ) (apisurface.SessionAPISurface, error) {
-	return composeSessionAPISurfaceWithConstructor(services, host, apisurface.NewSessionAPISurface)
+	return composeSessionAPISurfaceWithConstructor(services, host, transportmapping.NewSessionAPISurface)
 }
 
 type sessionAPISurfaceConstructor func(
@@ -43,7 +44,7 @@ type sessionAPISurfaceConstructor func(
 	apisurface.ModelAPI,
 	apisurface.FactorySaveAPI,
 	apisurface.InvocationAPI,
-	apisurface.DurableSessionAPI,
+	transportmapping.DurableSessionAPI,
 ) (apisurface.SessionAPISurface, error)
 
 func composeSessionAPISurfaceWithConstructor(
@@ -58,7 +59,7 @@ func composeSessionAPISurfaceWithConstructor(
 	var session apisurface.SessionAPI
 	var factoryDefinition apisurface.FactorySaveAPI
 	var invocation apisurface.InvocationAPI
-	var durableExecution apisurface.DurableSessionAPI
+	var durableExecution transportmapping.DurableSessionAPI
 	if host != nil {
 		session = host.SessionAPI()
 		factoryDefinition = host.FactoryDefinitionAPI()
@@ -74,7 +75,7 @@ func composeSessionAPISurfaceWithConstructor(
 	)
 }
 
-// SessionAPISurface returns handler dependencies for api.NewServer.
+// SessionAPISurface returns handler dependencies for transport/http.NewServer.
 func (t *APITransport) SessionAPISurface() apisurface.SessionAPISurface {
 	if t == nil {
 		return nil

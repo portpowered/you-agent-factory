@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 var (
@@ -43,14 +43,14 @@ type Host interface {
 
 // Identity resolves one managed runtime identity for host operations.
 type Identity struct {
-	Name                 string
-	Locality             factoryapi.WorkerModelLocality
-	SupportedOperations  []factoryapi.ModelOperation
-	Backend              string
-	LoadPolicy           string
-	SourceKind           string
-	SourceID             string
-	ResolverNotes        string
+	Name                string
+	Locality            factoryapi.WorkerModelLocality
+	SupportedOperations []factoryapi.ModelOperation
+	Backend             string
+	LoadPolicy          string
+	SourceKind          string
+	SourceID            string
+	ResolverNotes       string
 }
 
 // CacheInspection reports installed managed-runtime assets from local cache.

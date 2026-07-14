@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestClassifySuccessfulPull_MapsLegacyOutcomesToManagedContract(t *testing.T) {

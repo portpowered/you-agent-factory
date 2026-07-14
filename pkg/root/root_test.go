@@ -3,6 +3,7 @@ package root
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -10,6 +11,14 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/testutil"
+	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
+	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/wire"
 )
 
 func TestNormalizeSnapshotsArgumentsAndEnvironment(t *testing.T) {
@@ -139,6 +148,170 @@ func TestExecuteSequentialHomesControlConfigAndRunPaths(t *testing.T) {
 	if _, err := os.Stat(defaultpaths.OperatorConfigPath(ambientHome)); !os.IsNotExist(err) {
 		t.Fatalf("ambient config Stat error = %v, want not-exist", err)
 	}
+}
+
+func TestExecuteSetupAndFactoryAuthoringCommandsThroughProductionComposition(t *testing.T) {
+	t.Parallel()
+
+	home := t.TempDir()
+	factoryDir := filepath.Join(t.TempDir(), "authored-factory")
+	var initOutput bytes.Buffer
+	if err := Execute(Input{
+		Args:    []string{"you", "init", "--dir", factoryDir},
+		Env:     homeEnvironment(home),
+		Stdout:  &initOutput,
+		Context: context.Background(),
+	}); err != nil {
+		t.Fatalf("Execute(init) error = %v", err)
+	}
+	if !strings.Contains(initOutput.String(), "Initialized default factory directory structure") {
+		t.Fatalf("init output = %q", initOutput.String())
+	}
+
+	var validateOutput bytes.Buffer
+	if err := Execute(Input{
+		Args:    []string{"you", "factory", "config", "validate", factoryDir},
+		Env:     homeEnvironment(home),
+		Stdout:  &validateOutput,
+		Context: context.Background(),
+	}); err != nil {
+		t.Fatalf("Execute(factory config validate) error = %v", err)
+	}
+	if !strings.Contains(validateOutput.String(), "Factory validation passed") {
+		t.Fatalf("factory validation output = %q", validateOutput.String())
+	}
+
+	missingPath := filepath.Join(t.TempDir(), "missing-factory")
+	if err := Execute(Input{
+		Args:    []string{"you", "factory", "config", "validate", missingPath},
+		Env:     homeEnvironment(home),
+		Context: context.Background(),
+	}); err == nil || !strings.Contains(err.Error(), "find factory config") {
+		t.Fatalf("Execute(factory config validate missing path) error = %v", err)
+	}
+	if _, err := os.Stat(missingPath); !os.IsNotExist(err) {
+		t.Fatalf("missing factory path Stat error = %v, want not-exist", err)
+	}
+}
+
+func TestExecuteWorkflowStartsUseInjectedDurableExecutionService(t *testing.T) {
+	t.Parallel()
+	catalogPath := testutil.MustRepoPath(t, "pkg/transports/http/testdata/durable-session-contract-fixtures.json")
+	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(catalogPath)
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures() error = %v", err)
+	}
+	var requests []sessionexecutioncli.ServiceRequest
+	commands := []struct {
+		name      string
+		args      []string
+		sessionID string
+	}{
+		{name: "sync run", args: []string{"workflow", "run", "--request-id", "req-petri-success-001", "--factory", "customer-support-triage"}, sessionID: "dur-sess-petri-success-001"},
+		{name: "async start", args: []string{"workflow", "start", "--request-id", "req-js-run-n-001", "--workflow", "release-train"}, sessionID: "dur-sess-js-run-n-001"},
+	}
+	for _, command := range commands {
+		var output bytes.Buffer
+		err = ExecuteWithDependencies(Input{
+			Args: append([]string{"you", "--json"}, command.args...),
+			Env:  homeEnvironment(t.TempDir()), Stdout: &output, Context: context.Background(),
+		}, Dependencies{BuildSessionExecution: func(_ context.Context, request sessionexecutioncli.ServiceRequest) (factorysessionexecution.Service, error) {
+			requests = append(requests, request)
+			return service, nil
+		}})
+		if err != nil {
+			t.Fatalf("ExecuteWithDependencies(%s) error = %v", command.name, err)
+		}
+		if !strings.Contains(output.String(), `"sessionId":"`+command.sessionID+`"`) {
+			t.Fatalf("%s output = %q, want result from injected fixture service", command.name, output.String())
+		}
+	}
+	if len(requests) != len(commands) {
+		t.Fatalf("durable execution requests = %+v, want one per command", requests)
+	}
+	for _, request := range requests {
+		if request.Provider != string(factorysessionexecution.ExecutionProviderFake) {
+			t.Fatalf("durable execution request = %+v, want fake provider", request)
+		}
+	}
+}
+
+func TestExecuteModelsInvokeUsesInjectedModelCollaborator(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, "")
+	t.Chdir(repoRoot)
+	var requests []modelscli.InvocationRequest
+	runner := &sentinelModelInvocationRunner{}
+	var output bytes.Buffer
+	err := ExecuteWithDependencies(Input{
+		Args: []string{"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M", "--operation", "TTS", "--text", "hello"},
+		Env:  homeEnvironment(t.TempDir()), Stdout: &output, Context: context.Background(),
+	}, Dependencies{BuildModelInvocation: func(_ context.Context, request modelscli.InvocationRequest) (modelscli.InvocationRunner, error) {
+		requests = append(requests, request)
+		return runner, nil
+	}})
+	if err != nil {
+		t.Fatalf("ExecuteWithDependencies(models invoke) error = %v", err)
+	}
+	if len(requests) != 1 || requests[0].FactoryDir != filepath.Join(repoRoot, "factory") {
+		t.Fatalf("model invocation requests = %+v, want one request for repository factory", requests)
+	}
+	if runner.invocations != 1 || runner.modelName != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("sentinel invocations = %d model = %q, want one injected invocation", runner.invocations, runner.modelName)
+	}
+	if !strings.Contains(output.String(), `"modelName":"OMNIVOICE_Q4_K_M"`) {
+		t.Fatalf("models invoke output = %q, want sentinel result", output.String())
+	}
+}
+
+func TestExecuteMCPServeUsesInjectedExecutionCollaborator(t *testing.T) {
+	t.Parallel()
+	injected := factorysessionexecution.NewFakeService()
+	var requests []wire.MCPExecutionRequest
+	var output bytes.Buffer
+	err := ExecuteWithDependencies(Input{
+		Args: []string{"you", "mcp", "serve", "--runtime", "--project-root", t.TempDir()},
+		Env:  homeEnvironment(t.TempDir()), Stdin: strings.NewReader(""), Stdout: &output,
+		Context: context.Background(),
+	}, Dependencies{BuildMCPExecution: func(_ context.Context, request wire.MCPExecutionRequest) (factorysessionexecution.Service, error) {
+		requests = append(requests, request)
+		return injected, nil
+	}})
+	if err != nil {
+		t.Fatalf("ExecuteWithDependencies(mcp serve) error = %v", err)
+	}
+	if len(requests) != 1 || !requests[0].RuntimeBacked || strings.TrimSpace(requests[0].ProjectRoot) == "" {
+		t.Fatalf("MCP execution requests = %+v, want one normalized runtime-backed request", requests)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("MCP output = %q, want no protocol output for closed stdin", output.String())
+	}
+}
+
+type sentinelModelInvocationRunner struct {
+	invocations int
+	modelName   string
+}
+
+func (r *sentinelModelInvocationRunner) Run(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (r *sentinelModelInvocationRunner) InvokeModel(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+	r.invocations++
+	r.modelName = modelName
+	return apisurface.ModelInvocationResult{ModelName: modelName, Worker: "sentinel-model-worker", Operation: request.Operation}, nil
+}
+
+func (*sentinelModelInvocationRunner) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
+	return factoryapi.Factory{Name: "sentinel-factory"}, nil
+}
+
+func (*sentinelModelInvocationRunner) CloseFactorySession(_ context.Context, sessionID string) error {
+	if sessionID != factorysessions.DefaultSessionID {
+		return errors.New("unexpected session id")
+	}
+	return nil
 }
 
 func homeEnvironment(home string) []string {

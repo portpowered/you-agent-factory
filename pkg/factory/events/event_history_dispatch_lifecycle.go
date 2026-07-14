@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const (
@@ -61,21 +61,21 @@ type DispatchInterruptedInput struct {
 
 // DispatchReconciledInput carries replay-safe facts for DISPATCH_RECONCILED.
 type DispatchReconciledInput struct {
-	SessionID              string
-	OrchestratorKind       factoryapi.FactoryOrchestratorKind
-	OrchestratorDialect    string
-	PhaseID                string
-	PhaseName              string
-	DispatchID             string
-	Source                 string
-	Tick                   int
-	ReconciledStatus       factoryapi.FactoryDispatchStatus
-	ReconciliationSource   factoryapi.DispatchReconciliationSource
-	Replayed               bool
-	Usage                  *factoryapi.FactoryDispatchUsage
-	ResultArtifactRef      *factoryapi.FactoryArtifactRef
-	ArtifactIDs            []string
-	FailureDetail          *factoryapi.FailureDetail
+	SessionID            string
+	OrchestratorKind     factoryapi.FactoryOrchestratorKind
+	OrchestratorDialect  string
+	PhaseID              string
+	PhaseName            string
+	DispatchID           string
+	Source               string
+	Tick                 int
+	ReconciledStatus     factoryapi.FactoryDispatchStatus
+	ReconciliationSource factoryapi.DispatchReconciliationSource
+	Replayed             bool
+	Usage                *factoryapi.FactoryDispatchUsage
+	ResultArtifactRef    *factoryapi.FactoryArtifactRef
+	ArtifactIDs          []string
+	FailureDetail        *factoryapi.FailureDetail
 }
 
 // ArtifactCreatedInput carries replay-safe facts for ARTIFACT_CREATED.

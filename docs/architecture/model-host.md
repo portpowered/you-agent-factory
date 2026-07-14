@@ -19,7 +19,7 @@ sessions.
 | Readiness and failure-class projection | `pkg/models/host` |
 | Lease issuance, release, and capacity | `pkg/models/host` |
 | Idle unload and resource-pressure eviction | `pkg/models/host` |
-| Managed-runtime API/CLI vocabulary | `pkg/models/service` + `pkg/apisurface` |
+| Managed-runtime API/CLI vocabulary | `pkg/models/service` + `pkg/transports/mapping` |
 | Factory session runtime state | per-session runtime only |
 
 Factory sessions and workers **borrow** local model capacity through host leases.

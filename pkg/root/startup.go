@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
+	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
+	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
+	"github.com/portpowered/infinite-you/pkg/wire"
 )
 
 // Mode is the process behavior selected by the root after command parsing.
@@ -50,8 +53,11 @@ type Initializer interface {
 // Dependencies are the only construction and lifecycle capabilities retained
 // by the process root.
 type Dependencies struct {
-	GraphBuilder GraphBuilder
-	Initializer  Initializer
+	GraphBuilder          GraphBuilder
+	Initializer           Initializer
+	BuildSessionExecution sessionexecutioncli.ServiceBuilder
+	BuildModelInvocation  modelscli.InvocationBuilder
+	BuildMCPExecution     wire.MCPExecutionBuilder
 }
 
 func executeStartup(ctx context.Context, request startupcli.Request, dependencies Dependencies) error {
@@ -97,11 +103,20 @@ func selectMode(request startupcli.Request) (Mode, SidecarPolicy, error) {
 }
 
 func normalizeDependencies(dependencies Dependencies) Dependencies {
+	if dependencies.BuildMCPExecution == nil {
+		dependencies.BuildMCPExecution = wire.BuildMCPExecutionService
+	}
 	if dependencies.GraphBuilder == nil {
-		dependencies.GraphBuilder = productionGraphBuilder{}
+		dependencies.GraphBuilder = productionGraphBuilder{buildMCP: dependencies.BuildMCPExecution}
 	}
 	if dependencies.Initializer == nil {
 		dependencies.Initializer = productionInitializer{}
+	}
+	if dependencies.BuildSessionExecution == nil {
+		dependencies.BuildSessionExecution = wire.BuildSessionExecutionService
+	}
+	if dependencies.BuildModelInvocation == nil {
+		dependencies.BuildModelInvocation = wire.BuildModelInvocation
 	}
 	return dependencies
 }

@@ -4,8 +4,8 @@ import (
 	"context"
 	"net"
 
-	"github.com/portpowered/infinite-you/pkg/api"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
+	api "github.com/portpowered/infinite-you/pkg/transports/http"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
 
