@@ -121,62 +121,63 @@ func ValidateFactoryEventTypePayloadMapping(
 	return nil
 }
 
-// LoadFactoryEventKindParityInputFromOpenAPIYAML reads the bundled OpenAPI
-// FactoryEvent discriminator mapping and enum values needed for runtime↔contract
-// parity checks.
-func LoadFactoryEventKindParityInputFromOpenAPIYAML(openAPIYAML []byte) (FactoryEventKindParityInput, error) {
+func parseOpenAPIComponentsSchemas(openAPIYAML []byte) (map[string]any, error) {
 	var doc map[string]any
 	if err := yaml.Unmarshal(openAPIYAML, &doc); err != nil {
-		return FactoryEventKindParityInput{}, fmt.Errorf("parse bundled openapi contract: %w", err)
+		return nil, fmt.Errorf("parse bundled openapi contract: %w", err)
 	}
-
 	components, ok := doc["components"].(map[string]any)
 	if !ok {
-		return FactoryEventKindParityInput{}, fmt.Errorf("components object is missing")
+		return nil, fmt.Errorf("components object is missing")
 	}
 	schemas, ok := components["schemas"].(map[string]any)
 	if !ok {
-		return FactoryEventKindParityInput{}, fmt.Errorf("components.schemas object is missing")
+		return nil, fmt.Errorf("components.schemas object is missing")
 	}
+	return schemas, nil
+}
 
+func parseFactoryEventTypeEnumFromSchemas(schemas map[string]any) ([]factoryapi.FactoryEventType, error) {
 	eventTypeSchema, ok := schemas["FactoryEventType"].(map[string]any)
 	if !ok {
-		return FactoryEventKindParityInput{}, fmt.Errorf("components.schemas.FactoryEventType is missing")
+		return nil, fmt.Errorf("components.schemas.FactoryEventType is missing")
 	}
 	rawEnum, ok := eventTypeSchema["enum"].([]any)
 	if !ok {
-		return FactoryEventKindParityInput{}, fmt.Errorf("FactoryEventType.enum is missing")
+		return nil, fmt.Errorf("FactoryEventType.enum is missing")
 	}
 	enumValues := make([]factoryapi.FactoryEventType, 0, len(rawEnum))
 	for index, value := range rawEnum {
 		eventType, ok := value.(string)
 		if !ok {
-			return FactoryEventKindParityInput{}, fmt.Errorf("FactoryEventType.enum[%d] = %T, want string", index, value)
+			return nil, fmt.Errorf("FactoryEventType.enum[%d] = %T, want string", index, value)
 		}
 		enumValues = append(enumValues, factoryapi.FactoryEventType(eventType))
 	}
+	return enumValues, nil
+}
 
+func parseFactoryEventDiscriminatorMappingFromSchemas(schemas map[string]any) (map[string]string, error) {
 	factoryEvent, ok := schemas["FactoryEvent"].(map[string]any)
 	if !ok {
-		return FactoryEventKindParityInput{}, fmt.Errorf("components.schemas.FactoryEvent is missing")
+		return nil, fmt.Errorf("components.schemas.FactoryEvent is missing")
 	}
 	discriminator, ok := factoryEvent["discriminator"].(map[string]any)
 	if !ok {
-		return FactoryEventKindParityInput{}, fmt.Errorf("FactoryEvent.discriminator is missing")
+		return nil, fmt.Errorf("FactoryEvent.discriminator is missing")
 	}
 	if got, _ := discriminator["propertyName"].(string); got != "type" {
-		return FactoryEventKindParityInput{}, fmt.Errorf("FactoryEvent.discriminator.propertyName = %q, want type", got)
+		return nil, fmt.Errorf("FactoryEvent.discriminator.propertyName = %q, want type", got)
 	}
 	rawMapping, ok := discriminator["mapping"].(map[string]any)
 	if !ok {
-		return FactoryEventKindParityInput{}, fmt.Errorf("FactoryEvent.discriminator.mapping is missing")
+		return nil, fmt.Errorf("FactoryEvent.discriminator.mapping is missing")
 	}
-
 	mapping := make(map[string]string, len(rawMapping))
 	for eventType, payloadRefValue := range rawMapping {
 		payloadRef, ok := payloadRefValue.(string)
 		if !ok {
-			return FactoryEventKindParityInput{}, fmt.Errorf(
+			return nil, fmt.Errorf(
 				"FactoryEvent.discriminator.mapping[%q] = %T, want string",
 				eventType,
 				payloadRefValue,
@@ -184,20 +185,72 @@ func LoadFactoryEventKindParityInputFromOpenAPIYAML(openAPIYAML []byte) (Factory
 		}
 		mapping[eventType] = payloadRef
 	}
+	return mapping, nil
+}
 
+func parseFactoryEventPayloadUnionSchemaNamesFromSchemas(schemas map[string]any) ([]string, error) {
+	factoryEvent, ok := schemas["FactoryEvent"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("components.schemas.FactoryEvent is missing")
+	}
+	properties, ok := factoryEvent["properties"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("FactoryEvent.properties is missing")
+	}
+	payloadProperty, ok := properties["payload"].(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("FactoryEvent.properties.payload is missing")
+	}
+	oneOf, ok := payloadProperty["oneOf"].([]any)
+	if !ok {
+		return nil, fmt.Errorf("FactoryEvent.properties.payload.oneOf is missing")
+	}
+	payloadUnionSchemaNames := make([]string, 0, len(oneOf))
+	for index, item := range oneOf {
+		refObject, ok := item.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("FactoryEvent.properties.payload.oneOf[%d] = %T, want object", index, item)
+		}
+		ref, ok := refObject["$ref"].(string)
+		if !ok {
+			return nil, fmt.Errorf("FactoryEvent.properties.payload.oneOf[%d].$ref is missing", index)
+		}
+		schemaName, err := OpenAPISchemaNameFromRef(ref)
+		if err != nil {
+			return nil, fmt.Errorf("FactoryEvent.properties.payload.oneOf[%d]: %w", index, err)
+		}
+		payloadUnionSchemaNames = append(payloadUnionSchemaNames, schemaName)
+	}
+	return payloadUnionSchemaNames, nil
+}
+
+func factoryEventKindParityInputFromSchemas(schemas map[string]any) (FactoryEventKindParityInput, error) {
+	mapping, err := parseFactoryEventDiscriminatorMappingFromSchemas(schemas)
+	if err != nil {
+		return FactoryEventKindParityInput{}, err
+	}
 	parsedMapping, err := ParseFactoryEventTypePayloadMapping(mapping)
 	if err != nil {
 		return FactoryEventKindParityInput{}, err
 	}
-
 	openAPIMappingKinds := make([]factoryapi.FactoryEventType, 0, len(parsedMapping))
 	for _, entry := range parsedMapping {
 		openAPIMappingKinds = append(openAPIMappingKinds, entry.EventType)
 	}
-
 	return FactoryEventKindParityInput{
 		RuntimeKinds:        PublicEmittableFactoryEventKinds(),
 		ContractOnlyKinds:   ContractOnlyFactoryEventKinds(),
 		OpenAPIMappingKinds: openAPIMappingKinds,
 	}, nil
+}
+
+// LoadFactoryEventKindParityInputFromOpenAPIYAML reads the bundled OpenAPI
+// FactoryEvent discriminator mapping and enum values needed for runtime↔contract
+// parity checks.
+func LoadFactoryEventKindParityInputFromOpenAPIYAML(openAPIYAML []byte) (FactoryEventKindParityInput, error) {
+	schemas, err := parseOpenAPIComponentsSchemas(openAPIYAML)
+	if err != nil {
+		return FactoryEventKindParityInput{}, err
+	}
+	return factoryEventKindParityInputFromSchemas(schemas)
 }

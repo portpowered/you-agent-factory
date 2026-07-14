@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"gopkg.in/yaml.v3"
 )
 
 func TestOpenAPIFactoryEventTypePayloadMappingCoversEveryFactoryEventType(t *testing.T) {
@@ -86,90 +85,21 @@ func loadBundledFactoryEventDiscriminatorContract(t *testing.T) (map[string]stri
 		t.Fatalf("read bundled openapi contract %s: %v", openAPIPath, err)
 	}
 
-	var doc map[string]any
-	if err := yaml.Unmarshal(data, &doc); err != nil {
-		t.Fatalf("parse bundled openapi contract: %v", err)
+	schemas, err := parseOpenAPIComponentsSchemas(data)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	components, ok := doc["components"].(map[string]any)
-	if !ok {
-		t.Fatal("components object is missing")
+	enumValues, err := parseFactoryEventTypeEnumFromSchemas(schemas)
+	if err != nil {
+		t.Fatal(err)
 	}
-	schemas, ok := components["schemas"].(map[string]any)
-	if !ok {
-		t.Fatal("components.schemas object is missing")
+	mapping, err := parseFactoryEventDiscriminatorMappingFromSchemas(schemas)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	eventTypeSchema, ok := schemas["FactoryEventType"].(map[string]any)
-	if !ok {
-		t.Fatal("components.schemas.FactoryEventType is missing")
-	}
-	rawEnum, ok := eventTypeSchema["enum"].([]any)
-	if !ok {
-		t.Fatal("FactoryEventType.enum is missing")
-	}
-	enumValues := make([]factoryapi.FactoryEventType, 0, len(rawEnum))
-	for index, value := range rawEnum {
-		eventType, ok := value.(string)
-		if !ok {
-			t.Fatalf("FactoryEventType.enum[%d] = %T, want string", index, value)
-		}
-		enumValues = append(enumValues, factoryapi.FactoryEventType(eventType))
-	}
-
-	factoryEvent, ok := schemas["FactoryEvent"].(map[string]any)
-	if !ok {
-		t.Fatal("components.schemas.FactoryEvent is missing")
-	}
-	discriminator, ok := factoryEvent["discriminator"].(map[string]any)
-	if !ok {
-		t.Fatal("FactoryEvent.discriminator is missing")
-	}
-	if got, _ := discriminator["propertyName"].(string); got != "type" {
-		t.Fatalf("FactoryEvent.discriminator.propertyName = %q, want type", got)
-	}
-	rawMapping, ok := discriminator["mapping"].(map[string]any)
-	if !ok {
-		t.Fatal("FactoryEvent.discriminator.mapping is missing")
-	}
-
-	mapping := make(map[string]string, len(rawMapping))
-	for eventType, payloadRefValue := range rawMapping {
-		payloadRef, ok := payloadRefValue.(string)
-		if !ok {
-			t.Fatalf("FactoryEvent.discriminator.mapping[%q] = %T, want string", eventType, payloadRefValue)
-		}
-		mapping[eventType] = payloadRef
-	}
-
-	properties, ok := factoryEvent["properties"].(map[string]any)
-	if !ok {
-		t.Fatal("FactoryEvent.properties is missing")
-	}
-	payloadProperty, ok := properties["payload"].(map[string]any)
-	if !ok {
-		t.Fatal("FactoryEvent.properties.payload is missing")
-	}
-	oneOf, ok := payloadProperty["oneOf"].([]any)
-	if !ok {
-		t.Fatal("FactoryEvent.properties.payload.oneOf is missing")
-	}
-
-	payloadUnionSchemaNames := make([]string, 0, len(oneOf))
-	for index, item := range oneOf {
-		refObject, ok := item.(map[string]any)
-		if !ok {
-			t.Fatalf("FactoryEvent.properties.payload.oneOf[%d] = %T, want object", index, item)
-		}
-		ref, ok := refObject["$ref"].(string)
-		if !ok {
-			t.Fatalf("FactoryEvent.properties.payload.oneOf[%d].$ref is missing", index)
-		}
-		schemaName, err := OpenAPISchemaNameFromRef(ref)
-		if err != nil {
-			t.Fatalf("FactoryEvent.properties.payload.oneOf[%d]: %v", index, err)
-		}
-		payloadUnionSchemaNames = append(payloadUnionSchemaNames, schemaName)
+	payloadUnionSchemaNames, err := parseFactoryEventPayloadUnionSchemaNamesFromSchemas(schemas)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	return mapping, payloadUnionSchemaNames, enumValues
