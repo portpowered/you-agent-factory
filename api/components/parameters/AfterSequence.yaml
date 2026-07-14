@@ -2,9 +2,14 @@ name: after_sequence
 in: query
 required: false
 description: >-
-  Reconnect cursor identifying the last acknowledged ordering point. Global
-  event streams use FactoryEvent.context.sequence; session-scoped streams use
-  FactoryEvent.context.sessionSequence when present.
+  Session-scoped reconnect cursor identifying the last acknowledged ordering
+  point. Session-scoped FactoryEvent streams prefer
+  FactoryEvent.context.sessionSequence when present and otherwise fall back to
+  FactoryEvent.context.sequence. When both after_event_id and after_sequence are
+  present on GET /factory-sessions/{session_id}/events, after_event_id wins.
+  Cursors that no longer match the retained history boundary surface as
+  cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE
+  open.
 schema:
   type: integer
   minimum: 0

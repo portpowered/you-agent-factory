@@ -822,51 +822,12 @@ func assertDurableSessionEventSurfaceSchemas(t *testing.T, schemas map[string]an
 	t.Helper()
 
 	eventsOperation := pathOperation(t, paths, "/factory-sessions/{session_id}/events", "get")
-	if got, _ := eventsOperation["operationId"].(string); got != "getEventsBySessionId" {
-		t.Fatalf("paths./factory-sessions/{session_id}/events.get.operationId = %q, want getEventsBySessionId", got)
-	}
-	assertEventStreamSchemaRef(t, eventsOperation, "#/components/schemas/FactoryEvent")
-	assertResponseSchemaRef(t, eventsOperation, "200", "#/components/schemas/FactorySessionEventStreamRecovery")
-	assertResponseRef(t, eventsOperation, "400", "#/components/responses/BadRequest")
-	assertResponseRef(t, eventsOperation, "404", "#/components/responses/NotFound")
-	parameters, ok := eventsOperation["parameters"].([]any)
-	if !ok {
-		t.Fatalf("paths./factory-sessions/{session_id}/events.get.parameters is missing")
-	}
-	assertParameterRef(t, parameters, "#/components/parameters/SessionID")
-	assertParameterRef(t, parameters, "#/components/parameters/AfterEventId")
-	assertParameterRef(t, parameters, "#/components/parameters/AfterSequence")
-
+	assertSessionScopedEventsOperationContract(t, eventsOperation)
 	description, _ := eventsOperation["description"].(string)
-	for _, fragment := range []string{"after_event_id", "after_sequence", "sessionSequence", "application/json", "cursor_stale"} {
-		if !strings.Contains(description, fragment) {
-			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document %q, got %q", fragment, description)
-		}
-	}
-	for _, fragment := range []string{"canonical", "dashboard", "factory session", "durable replay"} {
-		if !strings.Contains(strings.ToLower(description), fragment) {
-			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document canonical session-scoped stream guidance %q, got %q", fragment, description)
-		}
-	}
+	assertSessionEventsSSELifecycleDescription(t, description)
 
 	globalEventsOperation := pathOperation(t, paths, "/events", "get")
-	assertEventStreamSchemaRef(t, globalEventsOperation, "#/components/schemas/FactoryEvent")
-	globalDescription, _ := globalEventsOperation["description"].(string)
-	for _, fragment := range []string{"compatibility-only", "get /factory-sessions/{session_id}/events", "dashboard", "factory session"} {
-		if !strings.Contains(strings.ToLower(globalDescription), fragment) {
-			t.Fatalf("paths./events.get.description must document compatibility-only session-scoped migration guidance %q, got %q", fragment, globalDescription)
-		}
-	}
-	if strings.Contains(strings.ToLower(globalDescription), "canonical dashboard") {
-		t.Fatalf("paths./events.get.description must not present GET /events as the canonical dashboard stream, got %q", globalDescription)
-	}
-	assertResponseRef(t, globalEventsOperation, "400", "#/components/responses/BadRequest")
-	globalParameters, ok := globalEventsOperation["parameters"].([]any)
-	if !ok {
-		t.Fatalf("paths./events.get.parameters is missing")
-	}
-	assertParameterRef(t, globalParameters, "#/components/parameters/AfterEventId")
-	assertParameterRef(t, globalParameters, "#/components/parameters/AfterSequence")
+	assertGlobalEventsCompatibilityOperation(t, globalEventsOperation)
 
 	factoryEvent := schemaObject(t, schemas, "FactoryEvent")
 	assertRequiredFields(t, factoryEvent, "schemaVersion", "id", "type", "context", "payload")
@@ -890,4 +851,72 @@ func assertDurableSessionEventSurfaceSchemas(t *testing.T, schemas map[string]an
 	assertEnumValues(t, schemaObject(t, schemas, "FactorySessionEventStreamRecoveryOutcome"), "FactorySessionEventStreamRecoveryOutcome", []string{
 		"STREAM_READY", "CURSOR_STALE", "UNKNOWN_SESSION", "INTERNAL_ERROR",
 	})
+}
+
+func assertSessionScopedEventsOperationContract(t *testing.T, eventsOperation map[string]any) {
+	t.Helper()
+	if got, _ := eventsOperation["operationId"].(string); got != "getEventsBySessionId" {
+		t.Fatalf("paths./factory-sessions/{session_id}/events.get.operationId = %q, want getEventsBySessionId", got)
+	}
+	docID, ok := eventsOperation["x-doc-id"].(string)
+	if !ok || strings.TrimSpace(docID) == "" {
+		t.Fatal("paths./factory-sessions/{session_id}/events.get.x-doc-id must be a non-empty string")
+	}
+	if docID != "agent-factory/api/factory-session-events" {
+		t.Fatalf("paths./factory-sessions/{session_id}/events.get.x-doc-id = %q, want agent-factory/api/factory-session-events", docID)
+	}
+	assertEventStreamSchemaRef(t, eventsOperation, "#/components/schemas/FactoryEvent")
+	assertResponseSchemaRef(t, eventsOperation, "200", "#/components/schemas/FactorySessionEventStreamRecovery")
+	assertResponseRef(t, eventsOperation, "400", "#/components/responses/BadRequest")
+	assertResponseRef(t, eventsOperation, "404", "#/components/responses/NotFound")
+	assertResponseRef(t, eventsOperation, "500", "#/components/responses/InternalError")
+	parameters, ok := eventsOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("paths./factory-sessions/{session_id}/events.get.parameters is missing")
+	}
+	assertParameterRef(t, parameters, "#/components/parameters/SessionID")
+	assertParameterRef(t, parameters, "#/components/parameters/AfterEventId")
+	assertParameterRef(t, parameters, "#/components/parameters/AfterSequence")
+}
+
+func assertSessionEventsSSELifecycleDescription(t *testing.T, description string) {
+	t.Helper()
+	descriptionLower := strings.ToLower(description)
+	for _, fragment := range []string{"after_event_id", "after_sequence", "sessionSequence", "application/json", "cursor_stale"} {
+		if !strings.Contains(description, fragment) {
+			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document %q, got %q", fragment, description)
+		}
+	}
+	for _, fragment := range []string{"ordering", "reconnect", "keepalive", "replay bound", "expired-cursor"} {
+		if !strings.Contains(descriptionLower, fragment) {
+			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document SSE lifecycle guidance %q, got %q", fragment, description)
+		}
+	}
+	for _, fragment := range []string{"canonical", "dashboard", "factory session", "durable replay"} {
+		if !strings.Contains(descriptionLower, fragment) {
+			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document canonical session-scoped stream guidance %q, got %q", fragment, description)
+		}
+	}
+}
+
+func assertGlobalEventsCompatibilityOperation(t *testing.T, globalEventsOperation map[string]any) {
+	t.Helper()
+	assertEventStreamSchemaRef(t, globalEventsOperation, "#/components/schemas/FactoryEvent")
+	globalDescription, _ := globalEventsOperation["description"].(string)
+	globalDescriptionLower := strings.ToLower(globalDescription)
+	for _, fragment := range []string{"compatibility-only", "get /factory-sessions/{session_id}/events", "dashboard", "factory session"} {
+		if !strings.Contains(globalDescriptionLower, fragment) {
+			t.Fatalf("paths./events.get.description must document compatibility-only session-scoped migration guidance %q, got %q", fragment, globalDescription)
+		}
+	}
+	if strings.Contains(globalDescriptionLower, "canonical dashboard") {
+		t.Fatalf("paths./events.get.description must not present GET /events as the canonical dashboard stream, got %q", globalDescription)
+	}
+	assertResponseRef(t, globalEventsOperation, "400", "#/components/responses/BadRequest")
+	globalParameters, ok := globalEventsOperation["parameters"].([]any)
+	if !ok {
+		t.Fatalf("paths./events.get.parameters is missing")
+	}
+	assertParameterRef(t, globalParameters, "#/components/parameters/AfterEventId")
+	assertParameterRef(t, globalParameters, "#/components/parameters/AfterSequence")
 }
