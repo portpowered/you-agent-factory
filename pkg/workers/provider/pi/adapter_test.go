@@ -258,6 +258,109 @@ func TestAdapterClassifyFailureFromTerminalAssistantMessage(t *testing.T) {
 	}
 }
 
+func TestAdapterClassifyFailureReturnsEmptyForSuccessfulInvocation(t *testing.T) {
+	t.Parallel()
+
+	failure := pi.NewAdapter().ClassifyFailure(context.Background(), adapter.FailureContext{})
+	if failure.Failure != nil {
+		t.Fatalf("failure = %#v, want empty result", failure)
+	}
+}
+
+func TestAdapterClassifyFailureMapsExecutionOutcomes(t *testing.T) {
+	t.Parallel()
+
+	adapterInstance := pi.NewAdapter()
+	cases := []struct {
+		name    string
+		input   adapter.FailureContext
+		message string
+	}{
+		{
+			name:    "canceled",
+			input:   adapter.FailureContext{CommandError: context.Canceled},
+			message: "Pi execution was canceled.",
+		},
+		{
+			name:    "flush canceled",
+			input:   adapter.FailureContext{FlushReason: adapter.FlushReasonCanceled},
+			message: "Pi execution was canceled.",
+		},
+		{
+			name:    "timeout",
+			input:   adapter.FailureContext{CommandError: context.DeadlineExceeded},
+			message: "Pi execution timed out.",
+		},
+		{
+			name:    "exit 124",
+			input:   adapter.FailureContext{CommandResult: workerprocess.CommandResult{ExitCode: 124}},
+			message: "Pi execution timed out.",
+		},
+		{
+			name:    "command failure",
+			input:   adapter.FailureContext{CommandResult: workerprocess.CommandResult{ExitCode: 2}},
+			message: "Pi invocation failed.",
+		},
+		{
+			name:    "decode failure",
+			input:   adapter.FailureContext{DecodeError: errors.New("decode failed")},
+			message: "Pi did not produce a valid completed response.",
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			failure := adapterInstance.ClassifyFailure(context.Background(), tc.input)
+			if failure.Failure == nil || failure.Failure.Message != tc.message {
+				t.Fatalf("failure = %#v, want message %q", failure, tc.message)
+			}
+		})
+	}
+}
+
+func TestAdapterClassifyFailureMapsRetryFromStdout(t *testing.T) {
+	t.Parallel()
+
+	failure := pi.NewAdapter().ClassifyFailure(context.Background(), adapter.FailureContext{
+		CommandResult: workerprocess.CommandResult{
+			ExitCode: 1,
+			Stdout: []byte(strings.Join([]string{
+				`{"type":"session","id":"pi-session-retry"}`,
+				`{"type":"auto_retry_start","attempt":2,"retryDelayMs":2000,"errorStatus":429}`,
+			}, "\n") + "\n"),
+		},
+	})
+	if failure.Failure == nil || !failure.Failure.Retry.Retryable || failure.Failure.Message != "Pi reported a retryable provider API failure." {
+		t.Fatalf("failure = %#v", failure)
+	}
+	if failure.Failure.ProviderSession == nil || failure.Failure.ProviderSession.ID != "pi-session-retry" {
+		t.Fatalf("provider session = %#v", failure.Failure.ProviderSession)
+	}
+}
+
+func TestAdapterObserveStderrEmitsIgnoredDiagnostic(t *testing.T) {
+	t.Parallel()
+
+	decoder, err := pi.NewAdapter().NewDecoder(context.Background(), adapter.DecoderContext{DispatchID: "dispatch-stderr"})
+	if err != nil {
+		t.Fatalf("NewDecoder() error = %v", err)
+	}
+	result, err := decoder.Observe(context.Background(), adapter.Observation{
+		Stream: adapter.OutputStreamStderr,
+		Chunk:  []byte("private stderr must not escape"),
+	})
+	if err != nil {
+		t.Fatalf("Observe() error = %v", err)
+	}
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "pi_stderr_ignored" {
+		t.Fatalf("diagnostics = %#v", result.Diagnostics)
+	}
+	if strings.Contains(result.Diagnostics[0].Message, "private stderr must not escape") {
+		t.Fatalf("stderr leaked into diagnostic: %#v", result.Diagnostics[0])
+	}
+}
+
 func structuredPiOutput() string {
 	return strings.Join([]string{
 		`{"type":"session","id":"pi-session-production","version":3,"cwd":"/repo"}`,

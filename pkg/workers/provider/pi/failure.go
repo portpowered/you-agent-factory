@@ -24,7 +24,8 @@ func classifyPiFailure(input adapter.FailureContext) adapter.FailureResult {
 
 func piFailureNeedsClassification(input adapter.FailureContext) bool {
 	return input.CommandError != nil || input.CommandResult.ExitCode != 0 ||
-		input.DecodeError != nil || input.FlushError != nil || input.ParseError != nil
+		input.DecodeError != nil || input.FlushError != nil || input.ParseError != nil ||
+		input.FlushReason == adapter.FlushReasonCanceled
 }
 
 func classifyPiRetryFailure(input adapter.FailureContext) adapter.FailureResult {
