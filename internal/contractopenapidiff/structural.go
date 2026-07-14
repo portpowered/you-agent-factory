@@ -213,12 +213,17 @@ func collectOperationChanges(opPath string, before, after *openapi3.Operation) (
 	}
 	changes = append(changes, paramChanges...)
 
-	if err := compareRequestBodyStructural(opPath, before.RequestBody, after.RequestBody); err != nil {
+	requestBodyChanges, err := collectRequestBodyChanges(opPath, before.RequestBody, after.RequestBody)
+	if err != nil {
 		return nil, err
 	}
-	if err := compareResponsesStructural(opPath, before.Responses, after.Responses); err != nil {
+	changes = append(changes, requestBodyChanges...)
+
+	responseChanges, err := collectResponsesChanges(opPath, before.Responses, after.Responses)
+	if err != nil {
 		return nil, err
 	}
+	changes = append(changes, responseChanges...)
 	return changes, nil
 }
 
@@ -275,58 +280,64 @@ func collectParameterPairChanges(path string, before, after *openapi3.Parameter)
 	return append(changes, schemaChanges...), nil
 }
 
-func compareRequestBodyStructural(opPath string, before, after *openapi3.RequestBodyRef) error {
+func collectRequestBodyChanges(opPath string, before, after *openapi3.RequestBodyRef) ([]Change, error) {
 	beforeBody := requestBodyValue(before)
 	afterBody := requestBodyValue(after)
 	if beforeBody == nil && afterBody == nil {
-		return nil
+		return nil, nil
 	}
 	if beforeBody == nil || afterBody == nil {
-		return unsupportedStructuralDiff(opPath + ".requestBody")
+		return nil, unsupportedStructuralDiff(opPath + ".requestBody")
 	}
 	if beforeBody.Required != afterBody.Required {
-		return unsupportedStructuralDiff(opPath + ".requestBody.required")
+		return nil, unsupportedStructuralDiff(opPath + ".requestBody.required")
 	}
-	return compareMediaTypesStructural(opPath+".requestBody.content", beforeBody.Content, afterBody.Content)
+	return collectMediaTypeChanges(opPath+".requestBody.content", beforeBody.Content, afterBody.Content)
 }
 
-func compareResponsesStructural(opPath string, before, after *openapi3.Responses) error {
+func collectResponsesChanges(opPath string, before, after *openapi3.Responses) ([]Change, error) {
 	if before == nil || after == nil {
-		return unsupportedStructuralDiff(opPath + ".responses")
+		return nil, unsupportedStructuralDiff(opPath + ".responses")
 	}
 	beforeResponses := before.Map()
 	afterResponses := after.Map()
 	if len(beforeResponses) != len(afterResponses) {
-		return unsupportedStructuralDiff(opPath + ".responses")
+		return nil, unsupportedStructuralDiff(opPath + ".responses")
 	}
+	var changes []Change
 	for status, beforeResponseRef := range beforeResponses {
 		afterResponseRef := afterResponses[status]
 		beforeResponse := responseValue(beforeResponseRef)
 		afterResponse := responseValue(afterResponseRef)
 		if beforeResponse == nil || afterResponse == nil {
-			return unsupportedStructuralDiff(opPath + ".responses." + status)
+			return nil, unsupportedStructuralDiff(opPath + ".responses." + status)
 		}
-		if err := compareMediaTypesStructural(opPath+".responses."+status+".content", beforeResponse.Content, afterResponse.Content); err != nil {
-			return err
+		responseChanges, err := collectMediaTypeChanges(opPath+".responses."+status+".content", beforeResponse.Content, afterResponse.Content)
+		if err != nil {
+			return nil, err
 		}
+		changes = append(changes, responseChanges...)
 	}
-	return nil
+	return changes, nil
 }
 
-func compareMediaTypesStructural(path string, before, after openapi3.Content) error {
+func collectMediaTypeChanges(path string, before, after openapi3.Content) ([]Change, error) {
 	if len(before) != len(after) {
-		return unsupportedStructuralDiff(path)
+		return nil, unsupportedStructuralDiff(path)
 	}
+	var changes []Change
 	for mediaType, beforeMedia := range before {
 		afterMedia, ok := after[mediaType]
 		if !ok {
-			return unsupportedStructuralDiff(path + "." + mediaType)
+			return nil, unsupportedStructuralDiff(path + "." + mediaType)
 		}
-		if err := compareSchemaRefStructural(path+"."+mediaType+".schema", beforeMedia.Schema, afterMedia.Schema); err != nil {
-			return err
+		schemaChanges, err := collectSchemaRefChanges(path+"."+mediaType+".schema", beforeMedia.Schema, afterMedia.Schema)
+		if err != nil {
+			return nil, err
 		}
+		changes = append(changes, schemaChanges...)
 	}
-	return nil
+	return changes, nil
 }
 
 func collectComponentChanges(before, after *openapi3.Components) ([]Change, error) {
@@ -373,11 +384,6 @@ func collectSchemaRefChanges(path string, before, after *openapi3.SchemaRef) ([]
 		return nil, nil
 	}
 	return collectSchemaChanges(path, before.Value, after.Value)
-}
-
-func compareSchemaRefStructural(path string, before, after *openapi3.SchemaRef) error {
-	_, err := collectSchemaRefChanges(path, before, after)
-	return err
 }
 
 func collectSchemaChanges(path string, before, after *openapi3.Schema) ([]Change, error) {

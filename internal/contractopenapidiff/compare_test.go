@@ -308,6 +308,50 @@ func TestCompareYAML_NarrowTypeFixture_ClassifiesMajor(t *testing.T) {
 	}
 }
 
+func TestCompareYAML_NarrowInlineResponseSchemaFixture_ClassifiesMajor(t *testing.T) {
+	t.Parallel()
+
+	before := readFixture(t, "narrow-inline-response-schema", "before.yaml")
+	after := readFixture(t, "narrow-inline-response-schema", "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err != nil {
+		t.Fatalf("CompareYAML() error = %v", err)
+	}
+	if result.Classification != contractopenapidiff.ClassificationMajor {
+		t.Fatalf("Classification = %q, want %q", result.Classification, contractopenapidiff.ClassificationMajor)
+	}
+
+	wantChanges := []contractopenapidiff.Change{
+		{Code: contractopenapidiff.CodeSchemaTypeNarrowed, Path: "GET /pets.responses.200.content.application/json.schema.properties.age.type"},
+	}
+	if !slices.Equal(result.Changes, wantChanges) {
+		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
+	}
+}
+
+func TestCompareYAML_AddInlineResponseSchemaPropertyFixture_ClassifiesMinor(t *testing.T) {
+	t.Parallel()
+
+	before := readFixture(t, "add-inline-response-schema-property", "before.yaml")
+	after := readFixture(t, "add-inline-response-schema-property", "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err != nil {
+		t.Fatalf("CompareYAML() error = %v", err)
+	}
+	if result.Classification != contractopenapidiff.ClassificationMinor {
+		t.Fatalf("Classification = %q, want %q", result.Classification, contractopenapidiff.ClassificationMinor)
+	}
+
+	wantChanges := []contractopenapidiff.Change{
+		{Code: contractopenapidiff.CodeSchemaPropertyAdded, Path: "GET /pets.responses.200.content.application/json.schema.properties.name"},
+	}
+	if !slices.Equal(result.Changes, wantChanges) {
+		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
+	}
+}
+
 func TestCompareYAML_MajorWinsMixedFixture_ClassifiesMajor(t *testing.T) {
 	t.Parallel()
 

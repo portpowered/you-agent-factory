@@ -97,6 +97,18 @@ var openAPIDiffFixtureMatrix = []struct {
 		classification: contractopenapidiff.ClassificationMajor,
 	},
 	{
+		name:           "narrow-inline-response-schema",
+		fixture:        "narrow-inline-response-schema",
+		category:       categoryRequestResponse,
+		classification: contractopenapidiff.ClassificationMajor,
+	},
+	{
+		name:           "add-inline-response-schema-property",
+		fixture:        "add-inline-response-schema-property",
+		category:       categoryRequestResponse,
+		classification: contractopenapidiff.ClassificationMinor,
+	},
+	{
 		name:           "major-wins-mixed",
 		fixture:        "major-wins-mixed",
 		category:       categoryRoute,

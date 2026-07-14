@@ -87,7 +87,9 @@ Use this map when changing the public REST contract.
   removing a name from `schema.required`) classify as `minor` with
   `openapi.relax.*` change codes. Removals and narrowing classify as `major`
   with `openapi.remove.*` and `openapi.narrow.*` change codes; major wins over
-  minor and patch. Unsupported
+  minor and patch. Inline request/response content schemas use the same
+  `collectSchemaRefChanges` path as component schemas (for example
+  `{operation}.responses.{status}.content.{mediaType}.schema`). Unsupported
   or ambiguous structural deltas fail closed via `UnsupportedDiffError` with an
   operation or schema path instead of returning a guessed classification.
 - Focused fixtures live under
