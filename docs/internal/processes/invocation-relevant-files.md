@@ -140,8 +140,12 @@ primary-result behavior.
   `contracts/testdata/baseline/cli-command-execution.json`. Handler/OpenAPI binding for
   `you.session.show` asserts `operationId` `getFactorySession` maps to
   `GET /factory-sessions/{session_id}` in `api/openapi.yaml` and matches live
-  `session.Show` JSON transport; constructor/generator cutover remains deferred to
-  B10-CLI-GENERATOR.
+  `session.Show` JSON transport. Representative-family metadata generation lives in
+  `pkg/transports/cli/climanifestgen` (`Generate`, `Check`, `ExtractRepresentativeFamily`)
+  with `cmd/climanifestgen` and committed artifacts under
+  `pkg/transports/cli/generated` (`RepresentativeFamilyManifest`, embedded
+  `representative_family.json`). Constructor/handler-registry cutover remains deferred
+  to later B10-CLI-GENERATOR stories.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/transports/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before

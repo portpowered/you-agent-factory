@@ -12,6 +12,7 @@ import (
 func TestProductionCLIRootSessionFamily_NoGeneratorCutover(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	assertHandwrittenRootSessionConstructors(t, repoRoot)
+	assertGeneratorInfrastructurePresent(t, repoRoot)
 	assertNoForbiddenCLICutoverPaths(t, repoRoot)
 	assertNoForbiddenCLIGeneratorMarkers(t, repoRoot)
 }
@@ -39,11 +40,22 @@ func assertHandwrittenRootSessionConstructors(t *testing.T, repoRoot string) {
 	}
 }
 
+func assertGeneratorInfrastructurePresent(t *testing.T, repoRoot string) {
+	t.Helper()
+	requiredPaths := []string{
+		filepath.Join(repoRoot, "pkg", "transports", "cli", "climanifestgen"),
+		filepath.Join(repoRoot, "pkg", "transports", "cli", "generated"),
+	}
+	for _, path := range requiredPaths {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("generator infrastructure path must exist: %s", path)
+		}
+	}
+}
+
 func assertNoForbiddenCLICutoverPaths(t *testing.T, repoRoot string) {
 	t.Helper()
 	forbiddenPaths := []string{
-		filepath.Join(repoRoot, "pkg", "transports", "cli", "generated"),
-		filepath.Join(repoRoot, "pkg", "transports", "cli", "climanifestgen"),
 		filepath.Join(repoRoot, "pkg", "transports", "cli", "commandregistry"),
 	}
 	for _, path := range forbiddenPaths {
@@ -68,7 +80,7 @@ func assertNoForbiddenCLIGeneratorMarkers(t *testing.T, repoRoot string) {
 		}
 		if entry.IsDir() {
 			switch entry.Name() {
-			case "climanifest", "climanifestparity", "cliinputs", "commandidentity", "baseline":
+			case "climanifest", "climanifestparity", "climanifestgen", "cliinputs", "commandidentity", "baseline", "generated":
 				return filepath.SkipDir
 			}
 			return nil
