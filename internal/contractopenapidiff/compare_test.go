@@ -1,6 +1,7 @@
 package contractopenapidiff_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -283,6 +284,60 @@ func TestCompareYAML_MajorWinsMixedFixture_ClassifiesMajor(t *testing.T) {
 	}
 	if !slices.Equal(result.Changes, wantChanges) {
 		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
+	}
+}
+
+func TestCompareYAML_UnsupportedOperationIDFixture_FailsClosed(t *testing.T) {
+	t.Parallel()
+
+	before := readFixture(t, "unsupported-operation-id", "before.yaml")
+	after := readFixture(t, "unsupported-operation-id", "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err == nil {
+		t.Fatalf("CompareYAML() = %#v, want unsupported diff error", result)
+	}
+	if !contractopenapidiff.IsUnsupportedDiff(err) {
+		t.Fatalf("CompareYAML() error = %v, want unsupported diff refusal", err)
+	}
+
+	var unsupported *contractopenapidiff.UnsupportedDiffError
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("errors.As() = false, want *UnsupportedDiffError")
+	}
+	if unsupported.Path != "GET /pets.operationId" {
+		t.Fatalf("unsupported.Path = %q, want %q", unsupported.Path, "GET /pets.operationId")
+	}
+}
+
+func TestCompareYAML_SupportedFixtures_StillClassifySuccessfully(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name           string
+		fixture        string
+		classification contractopenapidiff.Classification
+	}{
+		{name: "docs-only", fixture: "docs-only", classification: contractopenapidiff.ClassificationPatch},
+		{name: "add-route", fixture: "add-route", classification: contractopenapidiff.ClassificationMinor},
+		{name: "remove-route", fixture: "remove-route", classification: contractopenapidiff.ClassificationMajor},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			before := readFixture(t, tc.fixture, "before.yaml")
+			after := readFixture(t, tc.fixture, "after.yaml")
+
+			result, err := contractopenapidiff.CompareYAML(before, after)
+			if err != nil {
+				t.Fatalf("CompareYAML() error = %v", err)
+			}
+			if result.Classification != tc.classification {
+				t.Fatalf("Classification = %q, want %q", result.Classification, tc.classification)
+			}
+		})
 	}
 }
 

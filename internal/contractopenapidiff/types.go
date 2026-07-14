@@ -3,6 +3,8 @@
 // It is build tooling and must not be imported by runtime packages.
 package contractopenapidiff
 
+import "errors"
+
 // Classification is the aggregate semver signal for a compared document pair.
 type Classification string
 
@@ -22,6 +24,21 @@ type Change struct {
 type Result struct {
 	Classification Classification `json:"classification"`
 	Changes        []Change       `json:"changes"`
+}
+
+// UnsupportedDiffError means the comparator refused to classify a difference.
+type UnsupportedDiffError struct {
+	Path string
+}
+
+func (e *UnsupportedDiffError) Error() string {
+	return "openapi classification refused: unsupported diff at " + e.Path
+}
+
+// IsUnsupportedDiff reports whether err is an unsupported-diff refusal.
+func IsUnsupportedDiff(err error) bool {
+	var unsupported *UnsupportedDiffError
+	return errors.As(err, &unsupported)
 }
 
 // Stable documentation-only change codes.

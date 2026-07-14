@@ -1,8 +1,6 @@
 package contractopenapidiff
 
 import (
-	"fmt"
-
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
@@ -237,5 +235,5 @@ func schemaValue(ref *openapi3.SchemaRef) *openapi3.Schema {
 }
 
 func unsupportedStructuralDiff(path string) error {
-	return fmt.Errorf("unsupported openapi diff: non-documentation change at %s", path)
+	return &UnsupportedDiffError{Path: path}
 }
