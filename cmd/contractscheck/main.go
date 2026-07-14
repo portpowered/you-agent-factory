@@ -9,7 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/contractstaging"
 )
 
-const successMessage = "[agent-factory:contracts-check] approved joined contracts are current"
+const successMessage = "[agent-factory:contracts-check] approved contract artifacts are current"
 
 func main() {
 	root := flag.String("root", ".", "repository root")

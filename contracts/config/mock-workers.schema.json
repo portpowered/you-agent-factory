@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/config/mock-workers.schema.json",
+  "title": "You mock-worker configuration",
+  "description": "The strict mock-worker dispatch configuration accepted by ParseMockWorkersConfig.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mockWorkers"
+  ],
+  "properties": {
+    "mockWorkers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/mockWorker"
+      }
+    },
+    "unmatchedDispatchPolicy": {
+      "enum": [
+        "accept",
+        "passthrough"
+      ]
+    }
+  },
+  "$defs": {
+    "workInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workId": { "type": "string" },
+        "workType": { "type": "string" },
+        "state": { "type": "string" },
+        "inputName": { "type": "string" },
+        "traceId": { "type": "string" },
+        "channel": { "type": "string" },
+        "payloadHash": { "type": "string" }
+      }
+    },
+    "scriptConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ],
+      "properties": {
+        "command": { "type": "string", "minLength": 1 },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "workingDirectory": { "type": "string" },
+        "stdin": { "type": "string" },
+        "timeout": { "type": "string" }
+      }
+    },
+    "rejectConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "stdout": { "type": "string" },
+        "stderr": { "type": "string" },
+        "exitCode": { "type": "integer", "minimum": 1, "maximum": 255 }
+      }
+    },
+    "mockWorker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runType"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "workerName": { "type": "string" },
+        "workstationName": { "type": "string" },
+        "workInputs": { "type": "array", "items": { "$ref": "#/$defs/workInput" } },
+        "runType": { "enum": ["accept", "script", "reject"] },
+        "scriptConfig": { "$ref": "#/$defs/scriptConfig" },
+        "rejectConfig": { "$ref": "#/$defs/rejectConfig" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "runType": { "const": "script" } }, "required": ["runType"] },
+          "then": { "required": ["scriptConfig"] }
+        }
+      ]
+    }
+  }
+}
