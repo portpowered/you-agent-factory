@@ -57,10 +57,7 @@ func (r PTYRunner) Run(
 	if err != nil {
 		return workerprocess.CommandResult{}, err
 	}
-	cleaned := result.CleanedText
-	if cleaned == "" && len(result.RawBytes) > 0 {
-		cleaned = agypty.CleanTerminal(result.RawBytes)
-	}
+	cleaned := cleanedPTYText(result)
 	commandResult := workerprocess.CommandResult{
 		Stdout:   []byte(cleaned),
 		ExitCode: result.ExitCode,
@@ -78,4 +75,11 @@ func (r PTYRunner) Run(
 		return commandResult, fmt.Errorf("%w: exit code %d", agypty.ErrNonzeroExit, commandResult.ExitCode)
 	}
 	return commandResult, err
+}
+
+func cleanedPTYText(result agypty.SessionResult) string {
+	if len(result.RawBytes) > 0 {
+		return agypty.CleanTerminal(result.RawBytes)
+	}
+	return result.CleanedText
 }

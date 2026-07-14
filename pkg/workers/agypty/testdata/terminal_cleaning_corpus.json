@@ -1,0 +1,35 @@
+{
+  "cases": [
+    {
+      "name": "csi_clear_line_repaint",
+      "raw_b64": "c3Bpbm5pbmcNYW5zd2VyG1sySwppZ25vcmVkIGJsYW5rCg==",
+      "want": "answer\nignored blank"
+    },
+    {
+      "name": "osc_title_stripped",
+      "raw_b64": "G10wO2FneQdVc2VmdWwgYW5zd2VyIGhlcmUK",
+      "want": "Useful answer here"
+    },
+    {
+      "name": "control_bytes_stripped",
+      "raw_b64": "SGVsbG8HCHdvcmxkHwo=",
+      "want": "Helloworld"
+    },
+    {
+      "name": "spinner_box_drawing_chrome",
+      "raw_b64": "4qC5CuKUjOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUkArilJTilIDilIDilIDilIDilIDilIDilIDilIDilIDilJgKRmluYWwgYW5zd2VyCg==",
+      "want": "Final answer"
+    },
+    {
+      "name": "cr_repaint_progress",
+      "raw_b64": "V29ya2luZy4uLg1Xb3JraW5nLi4NV29ya2luZy4NRG9uZQo=",
+      "want": "Done"
+    },
+    {
+      "name": "empty_after_noise_only",
+      "raw_b64": "G1syShtbSOKguQ0bWzJLCgc=",
+      "want": "",
+      "empty": true
+    }
+  ]
+}

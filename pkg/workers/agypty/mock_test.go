@@ -56,14 +56,3 @@ func TestMockAllocatorRecordsLaunchAndCapture(t *testing.T) {
 		t.Fatalf("recorded MaxCaptureBytes = %d, want %d", allocator.Sessions[0].Config.MaxCaptureBytes, cfg.MaxCaptureBytes)
 	}
 }
-
-func TestCleanTerminal_StripsANSICarriageReturnNoise(t *testing.T) {
-	t.Parallel()
-
-	raw := []byte("spinning\ranswer\x1b[2K\nignored blank\n")
-	got := agypty.CleanTerminal(raw)
-	want := "answer\nignored blank"
-	if got != want {
-		t.Fatalf("CleanTerminal() = %q, want %q", got, want)
-	}
-}
