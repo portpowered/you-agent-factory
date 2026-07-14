@@ -176,7 +176,7 @@ func TestInit_DoubleRunIsSuccessfulNoOp(t *testing.T) {
 	}
 }
 
-func TestInit_PreservesUserEditedFactoryFilesOnRerun(t *testing.T) {
+func TestInit_PreservesAllCustomerOwnedFactoryFilesOnRerun(t *testing.T) {
 	t.Parallel()
 
 	homeDir := t.TempDir()
@@ -196,10 +196,10 @@ func TestInit_PreservesUserEditedFactoryFilesOnRerun(t *testing.T) {
 		t.Fatal("expected @you/goal in packaged factory results")
 	}
 
-	workerPath := filepath.Join(goalDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName)
-	editedBody := "customer edited goal worker body\n"
-	if err := os.WriteFile(workerPath, []byte(editedBody), 0o644); err != nil {
-		t.Fatalf("WriteFile(edited worker): %v", err)
+	writeCustomerOwnedFactoryEdits(t, goalDir)
+	beforeSnapshot := snapshotDirectoryContents(t, goalDir)
+	if _, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(goalDir, nil); err != nil {
+		t.Fatalf("LoadRuntimeConfigFromFactoryDir(edited @you/goal): %v", err)
 	}
 
 	second, err := Init(homeDir)
@@ -210,13 +210,45 @@ func TestInit_PreservesUserEditedFactoryFilesOnRerun(t *testing.T) {
 		t.Fatalf("second system config outcome = %q, want %q", second.SystemConfigOutcome, SystemConfigSkipped)
 	}
 
-	got, err := os.ReadFile(workerPath)
+	assertDirectorySnapshotUnchanged(t, goalDir, beforeSnapshot)
+}
+
+func TestInit_InvalidExistingPackagedFactoryFailsWithoutReplacement(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(homeDir)
+	factoryName := factorypackages.Names()[0]
+	factoryDir, err := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, factoryName)
 	if err != nil {
-		t.Fatalf("ReadFile(edited worker after rerun): %v", err)
+		t.Fatalf("MapNamedFactoryDir(%q): %v", factoryName, err)
 	}
-	if string(got) != editedBody {
-		t.Fatalf("edited worker changed on rerun:\n%s", string(got))
+	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(invalid factory): %v", err)
 	}
+	if err := os.WriteFile(
+		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
+		[]byte("customer-owned invalid factory config\n"),
+		0o640,
+	); err != nil {
+		t.Fatalf("WriteFile(invalid factory config): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(factoryDir, "inspect-me.txt"), []byte("preserve for inspection\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(customer marker): %v", err)
+	}
+	beforeSnapshot := snapshotDirectoryContents(t, factoryDir)
+
+	_, err = Init(homeDir)
+	if err == nil {
+		t.Fatal("expected invalid existing packaged factory to fail init")
+	}
+	for _, want := range []string{"install packaged factory", factoryName, "existing target", factoryDir, "invalid"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want substring %q", err, want)
+		}
+	}
+
+	assertDirectorySnapshotUnchanged(t, factoryDir, beforeSnapshot)
 }
 
 func TestInit_CreatesMissingPackagedDefaultsWithoutTouchingExisting(t *testing.T) {
@@ -367,6 +399,34 @@ func writeEditedGoalWorker(t *testing.T, goalDir string) (string, string) {
 		t.Fatalf("WriteFile(edited worker): %v", err)
 	}
 	return workerPath, editedBody
+}
+
+func writeCustomerOwnedFactoryEdits(t *testing.T, factoryDir string) {
+	t.Helper()
+
+	edits := map[string]string{
+		interfaces.FactoryConfigFile: "\n ",
+		filepath.Join(interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName): "customer edited goal worker body\n",
+		filepath.Join(interfaces.WorkstationsDir, "execute-goal", "prompts", "executor.md"):     "customer edited goal workstation prompt\n",
+		filepath.Join("scripts", "customer-hook.sh"):                                            "#!/bin/sh\necho customer-owned\n",
+		"customer-notes.txt": "customer-owned package notes\n",
+	}
+	for relativePath, body := range edits {
+		path := filepath.Join(factoryDir, relativePath)
+		if relativePath == interfaces.FactoryConfigFile {
+			existing, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("ReadFile(%s): %v", relativePath, err)
+			}
+			body = string(existing) + body
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll(%s): %v", relativePath, err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o640); err != nil {
+			t.Fatalf("WriteFile(%s): %v", relativePath, err)
+		}
+	}
 }
 
 func removeMaterializedFactory(t *testing.T, homeDir string, factoryName string) string {
