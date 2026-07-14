@@ -111,14 +111,17 @@ func TestCompareDeclaredMetadata_MismatchPaths(t *testing.T) {
 	if mismatches := climanifestparity.CompareDeclaredOutputs(record); len(mismatches) == 0 {
 		t.Fatal("CompareDeclaredOutputs(empty) mismatches = 0, want drift failures")
 	}
-	if mismatches := climanifestparity.CompareDeclaredExits(record); len(mismatches) == 0 {
-		t.Fatal("CompareDeclaredExits(empty) mismatches = 0, want drift failures")
+	if mismatches := climanifestparity.CompareLiveExitCodes(record); len(mismatches) == 0 {
+		t.Fatal("CompareLiveExitCodes(empty) mismatches = 0, want drift failures")
 	}
-	if mismatches := climanifestparity.CompareDeclaredSideEffects(record, []string{"network"}); len(mismatches) == 0 {
-		t.Fatal("CompareDeclaredSideEffects(empty) mismatches = 0, want drift failures")
+	if mismatches := climanifestparity.CompareBaselineSideEffects(record, []string{"network"}); len(mismatches) == 0 {
+		t.Fatal("CompareBaselineSideEffects(empty) mismatches = 0, want drift failures")
 	}
-	if mismatches := climanifestparity.CompareDeclaredConstraints(record); len(mismatches) == 0 {
-		t.Fatal("CompareDeclaredConstraints(empty) mismatches = 0, want drift failures")
+	if mismatches := climanifestparity.CompareBaselineConstraints(record, climanifest.Constraints{
+		Runtime:   []string{"local"},
+		Platforms: []string{"darwin"},
+	}); len(mismatches) == 0 {
+		t.Fatal("CompareBaselineConstraints(empty) mismatches = 0, want drift failures")
 	}
 	if mismatches := climanifestparity.CompareDeclaredChannels(record); len(mismatches) == 0 {
 		t.Fatal("CompareDeclaredChannels(empty) mismatches = 0, want drift failures")

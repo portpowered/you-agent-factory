@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/root"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
 )
@@ -111,20 +112,38 @@ func CompareDeclaredOutputs(record climanifest.Command) []Mismatch {
 	return mismatches
 }
 
-// CompareDeclaredExits asserts contracted success, failure, and usage exits are present with expected codes.
-func CompareDeclaredExits(record climanifest.Command) []Mismatch {
-	want := map[string]int{
-		"success": 0,
-		"failure": 1,
-		"usage":   2,
+// ExitCodeForKind returns the contracted process exit code for one semantic kind.
+func ExitCodeForKind(record climanifest.Command, kind string) (int, bool) {
+	for _, exit := range record.Exits {
+		if exit.Kind == kind {
+			return exit.Code, true
+		}
 	}
+	return 0, false
+}
+
+// LiveExitCodeForKind maps contracted exit kinds to observable root.Run process codes.
+func LiveExitCodeForKind(kind string) (int, bool) {
+	switch kind {
+	case "success":
+		return root.ExitSuccess, true
+	case "failure", "usage":
+		return root.ExitFailure, true
+	default:
+		return 0, false
+	}
+}
+
+// CompareLiveExitCodes asserts contracted exit codes match observable root.Run process codes.
+func CompareLiveExitCodes(record climanifest.Command) []Mismatch {
+	wantKinds := []string{"success", "failure", "usage"}
 	got := map[string]int{}
 	for _, exit := range record.Exits {
 		got[exit.Kind] = exit.Code
 	}
 
 	var mismatches []Mismatch
-	for kind, wantCode := range want {
+	for _, kind := range wantKinds {
 		gotCode, ok := got[kind]
 		if !ok {
 			mismatches = append(mismatches, Mismatch{
@@ -133,6 +152,10 @@ func CompareDeclaredExits(record climanifest.Command) []Mismatch {
 				Want:      fmt.Sprintf("declared exit kind %q", kind),
 				Got:       formatExitSummary(record.Exits),
 			})
+			continue
+		}
+		wantCode, ok := LiveExitCodeForKind(kind)
+		if !ok {
 			continue
 		}
 		if gotCode != wantCode {
@@ -147,15 +170,15 @@ func CompareDeclaredExits(record climanifest.Command) []Mismatch {
 	return mismatches
 }
 
-// CompareDeclaredSideEffects asserts contracted side-effect kinds include every required kind.
-func CompareDeclaredSideEffects(record climanifest.Command, requiredKinds []string) []Mismatch {
+// CompareBaselineSideEffects asserts contracted side-effect kinds match approved baseline evidence.
+func CompareBaselineSideEffects(record climanifest.Command, baselineKinds []string) []Mismatch {
 	present := map[string]bool{}
 	for _, effect := range record.SideEffects {
 		present[effect.Kind] = true
 	}
 
 	var mismatches []Mismatch
-	for _, kind := range requiredKinds {
+	for _, kind := range baselineKinds {
 		if present[kind] {
 			continue
 		}
@@ -169,22 +192,24 @@ func CompareDeclaredSideEffects(record climanifest.Command, requiredKinds []stri
 	return mismatches
 }
 
-// CompareDeclaredConstraints asserts runtime and platform declarations match approved baseline evidence.
-func CompareDeclaredConstraints(record climanifest.Command) []Mismatch {
+// CompareBaselineConstraints asserts runtime and platform declarations match approved baseline evidence.
+func CompareBaselineConstraints(record climanifest.Command, baseline climanifest.Constraints) []Mismatch {
 	var mismatches []Mismatch
 
-	if !stringListContains(record.Constraints.Runtime, "local") {
-		mismatches = append(mismatches, Mismatch{
-			CommandID: record.ID,
-			Field:     "constraints.runtime",
-			Want:      `["local"]`,
-			Got:       formatStringList(record.Constraints.Runtime),
-		})
+	for _, runtimeKind := range baseline.Runtime {
+		if !stringListContains(record.Constraints.Runtime, runtimeKind) {
+			mismatches = append(mismatches, Mismatch{
+				CommandID: record.ID,
+				Field:     "constraints.runtime",
+				Want:      formatStringList(baseline.Runtime),
+				Got:       formatStringList(record.Constraints.Runtime),
+			})
+			break
+		}
 	}
 
-	wantPlatforms := []string{"darwin", "linux", "windows"}
 	missing := make([]string, 0)
-	for _, platform := range wantPlatforms {
+	for _, platform := range baseline.Platforms {
 		if !stringListContains(record.Constraints.Platforms, platform) {
 			missing = append(missing, platform)
 		}
@@ -193,12 +218,12 @@ func CompareDeclaredConstraints(record climanifest.Command) []Mismatch {
 		mismatches = append(mismatches, Mismatch{
 			CommandID: record.ID,
 			Field:     "constraints.platforms",
-			Want:      formatStringList(wantPlatforms),
+			Want:      formatStringList(baseline.Platforms),
 			Got:       formatStringList(record.Constraints.Platforms),
 		})
 	}
 
-	if !stringListContains(record.Constraints.Platforms, runtime.GOOS) {
+	if len(baseline.Platforms) > 0 && !stringListContains(record.Constraints.Platforms, runtime.GOOS) {
 		mismatches = append(mismatches, Mismatch{
 			CommandID: record.ID,
 			Field:     "constraints.platforms.current",

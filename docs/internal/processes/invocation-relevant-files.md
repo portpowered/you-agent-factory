@@ -133,8 +133,11 @@ primary-result behavior.
 - Production CLI command manifest parity for the root + `session show` family lives in
   `pkg/transports/cli/climanifest` (`LoadProduction`, `ProductionManifestPath`) and
   `pkg/transports/cli/climanifestparity` (`CompareDeclaredHandler`,
-  `CompareHandlerOpenAPIBinding`, `OpenAPIOperationBinding`, and
-  `TestProductionCLIRootSessionFamily_NoGeneratorCutover`). Handler/OpenAPI binding for
+  `CompareHandlerOpenAPIBinding`, `OpenAPIOperationBinding`, `CompareLiveExitCodes`,
+  `CompareBaselineSideEffects`, `CompareBaselineConstraints`, and
+  `TestProductionCLIRootSessionFamily_NoGeneratorCutover`). Approved execution metadata
+  for side-effects/constraints is loaded from
+  `contracts/testdata/baseline/cli-command-execution.json`. Handler/OpenAPI binding for
   `you.session.show` asserts `operationId` `getFactorySession` maps to
   `GET /factory-sessions/{session_id}` in `api/openapi.yaml` and matches live
   `session.Show` JSON transport; constructor/generator cutover remains deferred to

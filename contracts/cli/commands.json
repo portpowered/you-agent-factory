@@ -226,7 +226,7 @@
         },
         "you.exit.usage": {
           "id": "you.exit.usage",
-          "code": 2,
+          "code": 1,
           "kind": "usage"
         }
       },
@@ -705,7 +705,7 @@
         },
         "you.session.show.exit.usage": {
           "id": "you.session.show.exit.usage",
-          "code": 2,
+          "code": 1,
           "kind": "usage"
         }
       },

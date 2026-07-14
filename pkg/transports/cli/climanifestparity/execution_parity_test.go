@@ -21,7 +21,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-func TestProductionManifestExecutionParity_RootAndSessionShow(t *testing.T) {
+func TestProductionManifestCompletionParity_RootAndSessionShow(t *testing.T) {
 	manifestPath := testutil.MustRepoPath(t, climanifest.ProductionManifestPath)
 	manifest, err := climanifest.LoadProduction(manifestPath)
 	if err != nil {
@@ -47,24 +47,140 @@ func TestProductionManifestExecutionParity_RootAndSessionShow(t *testing.T) {
 		t.Run(record.ID, func(t *testing.T) {
 			liveArgs, liveFlags := climanifestparity.InputsForCommandPath(inventory, record.Path)
 			mismatches := climanifestparity.CompareCompletionParity(record, liveArgs, liveFlags)
-			mismatches = append(mismatches, climanifestparity.CompareDeclaredOutputs(record)...)
-			mismatches = append(mismatches, climanifestparity.CompareDeclaredChannels(record)...)
-			mismatches = append(mismatches, climanifestparity.CompareDeclaredExits(record)...)
-			mismatches = append(mismatches, climanifestparity.CompareDeclaredConstraints(record)...)
-
-			switch record.ID {
-			case "you":
-				mismatches = append(mismatches, climanifestparity.CompareDeclaredSideEffects(record, []string{"filesystem", "network", "process"})...)
-			case "you.session.show":
-				mismatches = append(mismatches, climanifestparity.CompareDeclaredSideEffects(record, []string{"network"})...)
-			}
-
 			if len(mismatches) == 0 {
 				return
 			}
-			t.Fatalf("contract vs live execution metadata drift detected:\n%s", climanifestparity.FormatMismatchReport(mismatches))
+			t.Fatalf("contract vs live completion drift detected:\n%s", climanifestparity.FormatMismatchReport(mismatches))
 		})
 	}
+}
+
+func TestProductionManifestBaselineExecutionParity_RootAndSessionShow(t *testing.T) {
+	manifestPath := testutil.MustRepoPath(t, climanifest.ProductionManifestPath)
+	manifest, err := climanifest.LoadProduction(manifestPath)
+	if err != nil {
+		t.Fatalf("LoadProduction() error = %v", err)
+	}
+
+	baselinePath := testutil.MustRepoPath(t, climanifestparity.ExecutionBaselinePath)
+	baseline, err := climanifestparity.LoadExecutionBaseline(baselinePath)
+	if err != nil {
+		t.Fatalf("LoadExecutionBaseline() error = %v", err)
+	}
+
+	for _, commandID := range []string{"you", "you.session.show"} {
+		t.Run(commandID, func(t *testing.T) {
+			record, err := manifest.CommandByID(commandID)
+			if err != nil {
+				t.Fatalf("CommandByID(%s) error = %v", commandID, err)
+			}
+			evidence, ok := baseline.Commands[commandID]
+			if !ok {
+				t.Fatalf("execution baseline missing command %q", commandID)
+			}
+
+			mismatches := climanifestparity.CompareBaselineSideEffects(record, evidence.SideEffectKinds)
+			mismatches = append(mismatches, climanifestparity.CompareBaselineConstraints(record, evidence.Constraints)...)
+			if len(mismatches) == 0 {
+				return
+			}
+			t.Fatalf("contract vs baseline execution metadata drift detected:\n%s", climanifestparity.FormatMismatchReport(mismatches))
+		})
+	}
+}
+
+func TestProductionManifestLiveExitCodeParity_RootAndSessionShow(t *testing.T) {
+	manifestPath := testutil.MustRepoPath(t, climanifest.ProductionManifestPath)
+	manifest, err := climanifest.LoadProduction(manifestPath)
+	if err != nil {
+		t.Fatalf("LoadProduction() error = %v", err)
+	}
+
+	rootRecord, err := manifest.CommandByID("you")
+	if err != nil {
+		t.Fatalf("CommandByID(you) error = %v", err)
+	}
+	sessionShowRecord, err := manifest.CommandByID("you.session.show")
+	if err != nil {
+		t.Fatalf("CommandByID(you.session.show) error = %v", err)
+	}
+
+	for _, record := range []climanifest.Command{rootRecord, sessionShowRecord} {
+		t.Run(record.ID+"/contract-vs-live-boundary", func(t *testing.T) {
+			if mismatches := climanifestparity.CompareLiveExitCodes(record); len(mismatches) > 0 {
+				t.Fatalf("contract exit codes disagree with live root.Run boundary:\n%s", climanifestparity.FormatMismatchReport(mismatches))
+			}
+		})
+	}
+
+	env := parityTestEnvironment(t)
+	t.Run("you/observed-success", func(t *testing.T) {
+		want, ok := climanifestparity.ExitCodeForKind(rootRecord, "success")
+		if !ok {
+			t.Fatal("contract missing success exit")
+		}
+		var help bytes.Buffer
+		if code := root.Run(root.Input{
+			Args: []string{"you", "--help"}, Env: env, Stdout: &help,
+		}, root.Dependencies{}); code != want {
+			t.Fatalf("success exit code = %d, want contracted success code %d", code, want)
+		}
+	})
+	t.Run("you/observed-usage", func(t *testing.T) {
+		want, ok := climanifestparity.ExitCodeForKind(rootRecord, "usage")
+		if !ok {
+			t.Fatal("contract missing usage exit")
+		}
+		var stderr bytes.Buffer
+		if code := root.Run(root.Input{
+			Args: []string{"you", "unknown-command"}, Env: env, Stderr: &stderr,
+		}, root.Dependencies{}); code != want {
+			t.Fatalf("usage exit code = %d, want contracted usage code %d", code, want)
+		}
+	})
+
+	originalShowSession := cli.ShowSessionAccessor()
+	defer cli.SetShowSessionAccessor(originalShowSession)
+
+	t.Run("you.session.show/observed-success", func(t *testing.T) {
+		want, ok := climanifestparity.ExitCodeForKind(sessionShowRecord, "success")
+		if !ok {
+			t.Fatal("contract missing success exit")
+		}
+		cli.SetShowSessionAccessor(func(_ sessioncli.ShowConfig) error { return nil })
+		if code := root.Run(root.Input{
+			Args: []string{"you", "session", "show"}, Env: env, Stdout: io.Discard, Stderr: io.Discard,
+		}, root.Dependencies{}); code != want {
+			t.Fatalf("success exit code = %d, want contracted success code %d", code, want)
+		}
+	})
+	t.Run("you.session.show/observed-failure", func(t *testing.T) {
+		want, ok := climanifestparity.ExitCodeForKind(sessionShowRecord, "failure")
+		if !ok {
+			t.Fatal("contract missing failure exit")
+		}
+		cli.SetShowSessionAccessor(func(_ sessioncli.ShowConfig) error { return errors.New("show failed") })
+		if code := root.Run(root.Input{
+			Args: []string{"you", "session", "show"}, Env: env, Stdout: io.Discard, Stderr: io.Discard,
+		}, root.Dependencies{}); code != want {
+			t.Fatalf("failure exit code = %d, want contracted failure code %d", code, want)
+		}
+	})
+	t.Run("you.session.show/observed-usage", func(t *testing.T) {
+		want, ok := climanifestparity.ExitCodeForKind(sessionShowRecord, "usage")
+		if !ok {
+			t.Fatal("contract missing usage exit")
+		}
+		var stderr bytes.Buffer
+		if code := root.Run(root.Input{
+			Args: []string{"you", "session", "show", "one", "two"}, Env: env, Stdout: io.Discard, Stderr: &stderr,
+		}, root.Dependencies{}); code != want {
+			t.Fatalf("usage exit code = %d, want contracted usage code %d", code, want)
+		}
+		if !strings.Contains(stderr.String(), "accepts at most 1 arg") {
+			t.Fatalf("usage parse stderr = %q, want excess positional rejection", stderr.String())
+		}
+	})
 }
 
 func TestProductionManifestOutputModeParity_SessionShow(t *testing.T) {
@@ -163,7 +279,7 @@ func TestProductionManifestOutputModeParity_SessionShow(t *testing.T) {
 	}
 }
 
-func TestProductionManifestExitParity_SessionShow(t *testing.T) {
+func TestProductionManifestNetworkSideEffectParity_SessionShow(t *testing.T) {
 	manifestPath := testutil.MustRepoPath(t, climanifest.ProductionManifestPath)
 	manifest, err := climanifest.LoadProduction(manifestPath)
 	if err != nil {
@@ -173,36 +289,36 @@ func TestProductionManifestExitParity_SessionShow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CommandByID(you.session.show) error = %v", err)
 	}
-	if mismatches := climanifestparity.CompareDeclaredExits(record); len(mismatches) > 0 {
-		t.Fatalf("contract exit declarations drift detected:\n%s", climanifestparity.FormatMismatchReport(mismatches))
+
+	baselinePath := testutil.MustRepoPath(t, climanifestparity.ExecutionBaselinePath)
+	baseline, err := climanifestparity.LoadExecutionBaseline(baselinePath)
+	if err != nil {
+		t.Fatalf("LoadExecutionBaseline() error = %v", err)
+	}
+	evidence := baseline.Commands["you.session.show"]
+	if mismatches := climanifestparity.CompareBaselineSideEffects(record, evidence.SideEffectKinds); len(mismatches) > 0 {
+		t.Fatalf("contract side-effect declarations drift from baseline:\n%s", climanifestparity.FormatMismatchReport(mismatches))
 	}
 
-	originalShowSession := cli.ShowSessionAccessor()
-	defer cli.SetShowSessionAccessor(originalShowSession)
+	var requestCount int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"session-beta","runtime":{"orchestratorKind":"JAVASCRIPT"}}`))
+	}))
+	defer srv.Close()
 
-	env := parityTestEnvironment(t)
-	cli.SetShowSessionAccessor(func(_ sessioncli.ShowConfig) error { return nil })
-	if code := root.Run(root.Input{
-		Args: []string{"you", "session", "show"}, Env: env, Stdout: io.Discard, Stderr: io.Discard,
-	}, root.Dependencies{}); code != root.ExitSuccess {
-		t.Fatalf("success exit code = %d, want contracted success code %d", code, root.ExitSuccess)
+	var out bytes.Buffer
+	if err := sessioncli.Show(sessioncli.ShowConfig{
+		Server:    srv.URL,
+		SessionID: "session-beta",
+		JSON:      true,
+		Output:    &out,
+	}); err != nil {
+		t.Fatalf("Show() error = %v", err)
 	}
-
-	cli.SetShowSessionAccessor(func(_ sessioncli.ShowConfig) error { return errors.New("show failed") })
-	if code := root.Run(root.Input{
-		Args: []string{"you", "session", "show"}, Env: env, Stdout: io.Discard, Stderr: io.Discard,
-	}, root.Dependencies{}); code != root.ExitFailure {
-		t.Fatalf("failure exit code = %d, want contracted failure code %d", code, root.ExitFailure)
-	}
-
-	var stderr bytes.Buffer
-	if code := root.Run(root.Input{
-		Args: []string{"you", "session", "show", "one", "two"}, Env: env, Stdout: io.Discard, Stderr: &stderr,
-	}, root.Dependencies{}); code != root.ExitFailure {
-		t.Fatalf("usage parse exit code = %d, want non-zero failure exit", code)
-	}
-	if !strings.Contains(stderr.String(), "accepts at most 1 arg") {
-		t.Fatalf("usage parse stderr = %q, want excess positional rejection", stderr.String())
+	if requestCount == 0 {
+		t.Fatal("expected contracted network side effect to perform at least one HTTP request")
 	}
 }
 
