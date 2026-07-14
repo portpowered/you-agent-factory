@@ -1,4 +1,4 @@
-package provider
+package providers
 
 import (
 	"context"
@@ -6,18 +6,19 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 func TestResolveCodexProviderFailure_PrecedenceTable(t *testing.T) {
 	testCases := []struct {
 		name   string
-		result CommandResult
-		input  CodexFailureResolutionInput
-		want   ProviderFailureResult
+		result provider.CommandResult
+		input  provider.CodexFailureResolutionInput
+		want   provider.ProviderFailureResult
 	}{
 		{
 			name: "structured_stream_wins_over_stderr_and_exit",
-			result: CommandResult{
+			result: provider.CommandResult{
 				ExitCode: 1,
 				Stdout: []byte(strings.Join([]string{
 					`{"type":"thread.started","thread_id":"thread-1"}`,
@@ -25,63 +26,63 @@ func TestResolveCodexProviderFailure_PrecedenceTable(t *testing.T) {
 				}, "\n") + "\n"),
 				Stderr: []byte("ERROR: unexpected status 401\n"),
 			},
-			want: ProviderFailureResult{
+			want: provider.ProviderFailureResult{
 				Reason:  interfaces.WorkFailureTypeThrottled,
 				Message: codexThrottleFailureMessage,
 			},
 		},
 		{
 			name: "stderr_wins_when_structured_stream_unrecognized",
-			result: CommandResult{
+			result: provider.CommandResult{
 				ExitCode: 1,
 				Stdout:   []byte(`{"type":"error","message":"cleanup detail that must not win"}` + "\n"),
 				Stderr:   []byte("ERROR: unexpected status 401\n"),
 			},
-			want: ProviderFailureResult{
+			want: provider.ProviderFailureResult{
 				Reason:  interfaces.WorkFailureTypeAuthFailure,
 				Message: codexAuthFailureMessage,
 			},
 		},
 		{
 			name: "exit_fallback_when_only_noise",
-			result: CommandResult{
+			result: provider.CommandResult{
 				ExitCode: 17,
 				Stdout:   []byte("ordinary transcript output\n"),
 				Stderr:   []byte("cleanup finished\n"),
 			},
-			want: ProviderFailureResult{
+			want: provider.ProviderFailureResult{
 				Reason:  interfaces.WorkFailureTypeUnknown,
 				Message: codexUnknownFailureMessage,
 			},
 		},
 		{
 			name: "timeout_wins_over_structured_stderr_and_exit",
-			result: CommandResult{
+			result: provider.CommandResult{
 				ExitCode: 124,
 				Stdout: []byte(strings.Join([]string{
 					`{"type":"turn.failed","error":{"message":"unexpected status 429"}}`,
 				}, "\n") + "\n"),
 				Stderr: []byte("ERROR: unexpected status 401\n"),
 			},
-			input: CodexFailureResolutionInput{
+			input: provider.CodexFailureResolutionInput{
 				CommandError: context.DeadlineExceeded,
 			},
-			want: ProviderFailureResult{
+			want: provider.ProviderFailureResult{
 				Reason:  interfaces.WorkFailureTypeTimeout,
 				Message: "Codex execution timed out.",
 			},
 		},
 		{
 			name: "cancel_wins_over_structured_stderr_and_exit",
-			result: CommandResult{
+			result: provider.CommandResult{
 				ExitCode: 1,
 				Stdout:   []byte(`{"type":"turn.failed","error":{"message":"unexpected status 429"}}` + "\n"),
 				Stderr:   []byte("ERROR: unexpected status 401\n"),
 			},
-			input: CodexFailureResolutionInput{
-				FlushReason: CodexFlushReasonCanceled,
+			input: provider.CodexFailureResolutionInput{
+				FlushReason: provider.CodexFlushReasonCanceled,
 			},
-			want: ProviderFailureResult{
+			want: provider.ProviderFailureResult{
 				Reason:  interfaces.WorkFailureTypeUnknown,
 				Message: "Codex execution was canceled.",
 			},
@@ -90,7 +91,7 @@ func TestResolveCodexProviderFailure_PrecedenceTable(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := ResolveCodexProviderFailure(tc.result, tc.input)
+			got, ok := provider.ResolveCodexProviderFailure(tc.result, tc.input)
 			if !ok {
 				t.Fatal("ResolveCodexProviderFailure() ok = false, want true")
 			}
@@ -102,13 +103,13 @@ func TestResolveCodexProviderFailure_PrecedenceTable(t *testing.T) {
 }
 
 func TestParseCodexProviderFailure_MatchesResolveCodexProviderFailure(t *testing.T) {
-	result := CommandResult{
+	result := provider.CommandResult{
 		ExitCode: 1,
 		Stdout:   []byte(`{"type":"turn.failed","error":{"message":"unexpected status 503"}}` + "\n"),
 		Stderr:   []byte("ERROR: unexpected status 401\n"),
 	}
-	parsed := ParseCodexProviderFailure(result)
-	resolved, ok := ResolveCodexProviderFailure(result, CodexFailureResolutionInput{})
+	parsed := provider.ParseCodexProviderFailure(result)
+	resolved, ok := provider.ResolveCodexProviderFailure(result, provider.CodexFailureResolutionInput{})
 	if !ok {
 		t.Fatal("ResolveCodexProviderFailure() ok = false, want true")
 	}

@@ -1,28 +1,29 @@
-package provider
+package providers
 
 import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
-// Invocation error compatibility locks stable WorkFailureType codes and the
-// shared projection surfaces that CLI, API, dispatch history, and response
-// streams consume after structured-stream and process-exit alignment.
 func TestInvocationErrorCompatibility_SupportedCorpusEntriesPreserveStableWorkFailureTypes(t *testing.T) {
-	corpus := loadProviderErrorCorpusForTest(t)
+	corpus, err := provider.LoadProviderErrorCorpus()
+	if err != nil {
+		t.Fatalf("LoadProviderErrorCorpus() error = %v", err)
+	}
 
-	for _, entry := range corpus.allEntries {
+	for _, entry := range corpus.Entries() {
 		if !entry.Supported {
 			continue
 		}
 		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
-			providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
+			providerErr := provider.NormalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
 			if providerErr.Type != entry.ExpectedType {
 				t.Fatalf("ProviderError.Type = %q, want stable %q", providerErr.Type, entry.ExpectedType)
 			}
 
-			metadata := WorkFailureMetadataFromError(providerErr)
+			metadata := provider.WorkFailureMetadataFromError(providerErr)
 			if metadata == nil || metadata.Type != entry.ExpectedType {
 				t.Fatalf("WorkFailureMetadata.Type = %#v, want %q", metadata, entry.ExpectedType)
 			}
@@ -30,7 +31,7 @@ func TestInvocationErrorCompatibility_SupportedCorpusEntriesPreserveStableWorkFa
 				t.Fatalf("WorkFailureMetadata.Family = %q, want %q", metadata.Family, entry.ExpectedFamily)
 			}
 
-			detail := SafeProviderFailureDetail(providerErr)
+			detail := provider.SafeProviderFailureDetail(providerErr)
 			if detail == nil || detail.Reason != entry.ExpectedType {
 				t.Fatalf("FailureDetail.Reason = %#v, want %q", detail, entry.ExpectedType)
 			}
@@ -60,22 +61,22 @@ func TestInvocationErrorCompatibility_CodexReportingPathsPreserveStableWorkFailu
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			streamResult, ok := CodexStructuredStreamReportingOutcome(codexStructuredStreamStdout(tc.streamMessage))
+			streamResult, ok := provider.CodexStructuredStreamReportingOutcome(codexStructuredStreamStdout(tc.streamMessage))
 			if !ok {
 				t.Fatal("CodexStructuredStreamReportingOutcome() ok = false, want true")
 			}
-			exitResult := CodexProcessExitReportingOutcome(codexProcessExitResult(tc.exitStderr, tc.exitCode))
+			exitResult := provider.CodexProcessExitReportingOutcome(codexProcessExitResult(tc.exitStderr, tc.exitCode))
 
 			for _, label := range []string{"structured-stream", "process-exit"} {
 				result := streamResult
 				if label == "process-exit" {
 					result = exitResult
 				}
-				providerErr := NewProviderErrorFromResult(result, nil)
+				providerErr := provider.NewProviderErrorFromResult(result, nil)
 				if providerErr.Type != tc.wantType {
 					t.Fatalf("%s ProviderError.Type = %q, want stable %q", label, providerErr.Type, tc.wantType)
 				}
-				detail := SafeProviderFailureDetail(providerErr)
+				detail := provider.SafeProviderFailureDetail(providerErr)
 				if detail.Reason != tc.wantType {
 					t.Fatalf("%s FailureDetail.Reason = %q, want %q", label, detail.Reason, tc.wantType)
 				}
@@ -85,9 +86,9 @@ func TestInvocationErrorCompatibility_CodexReportingPathsPreserveStableWorkFailu
 }
 
 func TestInvocationErrorCompatibility_CodexUnknownExitFallbackKeepsStableTypeWithAuditedMessage(t *testing.T) {
-	providerErr := normalizeProviderExitFailure(
+	providerErr := provider.NormalizeProviderExitFailure(
 		string(interfaces.ModelProviderCodex),
-		CommandResult{ExitCode: 7, Stderr: []byte("configured stderr")},
+		provider.CommandResult{ExitCode: 7, Stderr: []byte("configured stderr")},
 		nil,
 		nil,
 	)

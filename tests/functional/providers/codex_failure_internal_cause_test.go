@@ -1,4 +1,4 @@
-package provider
+package providers
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 const (
@@ -17,8 +18,8 @@ const (
 func TestCodexFailureResolution_PreservesBoundedInternalCauseWithoutPublicLeakage(t *testing.T) {
 	testCases := []struct {
 		name            string
-		result          CommandResult
-		input           CodexFailureResolutionInput
+		result          provider.CommandResult
+		input           provider.CodexFailureResolutionInput
 		wantMessage     string
 		wantType        interfaces.WorkFailureType
 		wantCausePrefix string
@@ -26,7 +27,7 @@ func TestCodexFailureResolution_PreservesBoundedInternalCauseWithoutPublicLeakag
 	}{
 		{
 			name: "structured_stream_recognized",
-			result: CommandResult{
+			result: provider.CommandResult{
 				ExitCode: 1,
 				Stdout: codexStructuredStreamStdoutWithPrompt(
 					"unexpected status 401",
@@ -42,7 +43,7 @@ func TestCodexFailureResolution_PreservesBoundedInternalCauseWithoutPublicLeakag
 		},
 		{
 			name: "process_exit_stderr_recognized",
-			result: CommandResult{
+			result: provider.CommandResult{
 				ExitCode: 1,
 				Stdout:   []byte(alignmentPrivateResponse + "\n"),
 				Stderr:   []byte("ERROR: unexpected status 429\nprompt echo: " + alignmentPrivatePrompt + "\n"),
@@ -54,7 +55,7 @@ func TestCodexFailureResolution_PreservesBoundedInternalCauseWithoutPublicLeakag
 		},
 		{
 			name: "exit_fallback_without_echoing_prompt_or_response",
-			result: CommandResult{
+			result: provider.CommandResult{
 				ExitCode: 17,
 				Stdout:   []byte(alignmentPrivateResponse + "\n"),
 				Stderr:   []byte("prompt echo: " + alignmentPrivatePrompt + "\n"),
@@ -66,22 +67,22 @@ func TestCodexFailureResolution_PreservesBoundedInternalCauseWithoutPublicLeakag
 		},
 		{
 			name: "timeout_wins_with_safe_cause",
-			result: CommandResult{
+			result: provider.CommandResult{
 				ExitCode: 124,
 				Stdout:   codexStructuredStreamStdout(alignmentPrivateResponse),
 				Stderr:   []byte("ERROR: unexpected status 401\n"),
 			},
-			input:           CodexFailureResolutionInput{CommandError: context.DeadlineExceeded},
+			input:           provider.CodexFailureResolutionInput{CommandError: context.DeadlineExceeded},
 			wantType:        interfaces.WorkFailureTypeTimeout,
 			wantMessage:     "Codex execution timed out.",
-			wantCausePrefix: codexInternalCauseDeadlineExceeded,
+			wantCausePrefix: "context deadline exceeded",
 			forbidden:       []string{alignmentPrivatePrompt, alignmentPrivateResponse},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			resolved, ok := ResolveCodexProviderFailure(tc.result, tc.input)
+			resolved, ok := provider.ResolveCodexProviderFailure(tc.result, tc.input)
 			if !ok {
 				t.Fatal("ResolveCodexProviderFailure() ok = false, want true")
 			}
@@ -95,7 +96,7 @@ func TestCodexFailureResolution_PreservesBoundedInternalCauseWithoutPublicLeakag
 				t.Fatalf("internal cause = %q, want prefix %q", resolved.InternalCause, tc.wantCausePrefix)
 			}
 
-			providerErr := NewProviderErrorFromResult(resolved.Result, ProviderFailureInternalCauseError(resolved.InternalCause))
+			providerErr := provider.NewProviderErrorFromResult(resolved.Result, provider.ProviderFailureInternalCauseError(resolved.InternalCause))
 			if providerErr.Cause == nil {
 				t.Fatal("expected provider error cause for maintainer diagnostics")
 			}
@@ -103,7 +104,7 @@ func TestCodexFailureResolution_PreservesBoundedInternalCauseWithoutPublicLeakag
 				t.Fatalf("public message must not echo internal cause verbatim: %q", providerErr.Message)
 			}
 
-			fixture := CodexSanitizedFailureFixtureFromResolution(resolved)
+			fixture := provider.CodexSanitizedFailureFixtureFromResolution(resolved)
 			assertCodexSanitizedFailureFixtureSafe(t, fixture, tc.forbidden)
 		})
 	}
@@ -133,25 +134,24 @@ func TestCodexFailureReportingPaths_SanitizedFixturesRetainInternalCauseWithoutL
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			stdout := codexStructuredStreamStdoutWithPrompt(tc.streamMessage, alignmentPrivatePrompt, alignmentPrivateResponse)
-			streamResolution, ok := CodexStructuredStreamReportingOutcome(stdout)
+			exitResult := codexProcessExitResult(tc.exitStderr, tc.exitCode)
+
+			streamResolution, ok := provider.ResolveCodexProviderFailure(provider.CommandResult{
+				ExitCode: 1,
+				Stdout:   stdout,
+			}, provider.CodexFailureResolutionInput{})
 			if !ok {
-				t.Fatal("CodexStructuredStreamReportingOutcome() ok = false, want true")
+				t.Fatal("ResolveCodexProviderFailure() ok = false, want true stream resolution")
 			}
-			streamFixture := CodexSanitizedFailureFixtureFromResolution(ProviderFailureResolution{
-				Result:        streamResolution,
-				InternalCause: codexStructuredStreamNativeInternalCause(tc.streamMessage, IsRecognizedFailureType(streamResolution.Reason)),
-			})
+			streamFixture := provider.CodexSanitizedFailureFixtureFromResolution(streamResolution)
 
-			exitResolution := ProviderFailureResolution{
-				Result:        CodexProcessExitReportingOutcome(codexProcessExitResult(tc.exitStderr, tc.exitCode)),
-				InternalCause: codexProcessExitStderrInternalCause(codexProcessExitResult(tc.exitStderr, tc.exitCode)),
+			exitResolution, ok := provider.ResolveCodexProviderFailure(exitResult, provider.CodexFailureResolutionInput{})
+			if !ok {
+				t.Fatal("ResolveCodexProviderFailure() ok = false, want true exit resolution")
 			}
-			if exitResolution.InternalCause == "" {
-				exitResolution.InternalCause = codexExitInternalCause(tc.exitCode)
-			}
-			exitFixture := CodexSanitizedFailureFixtureFromResolution(exitResolution)
+			exitFixture := provider.CodexSanitizedFailureFixtureFromResolution(exitResolution)
 
-			for label, fixture := range map[string]CodexSanitizedFailureFixture{
+			for label, fixture := range map[string]provider.CodexSanitizedFailureFixture{
 				"structured-stream": streamFixture,
 				"process-exit":      exitFixture,
 			} {
@@ -167,12 +167,12 @@ func TestCodexFailureReportingPaths_SanitizedFixturesRetainInternalCauseWithoutL
 }
 
 func TestNormalizeProviderExitFailure_CodexPreservesInternalCauseWithoutPublicLeakage(t *testing.T) {
-	result := CommandResult{
+	result := provider.CommandResult{
 		ExitCode: 1,
 		Stdout:   []byte(alignmentPrivateResponse + "\n"),
 		Stderr:   []byte("ERROR: unexpected status 503\nprompt echo: " + alignmentPrivatePrompt + "\n"),
 	}
-	providerErr := normalizeProviderExitFailure(string(interfaces.ModelProviderCodex), result, nil, nil)
+	providerErr := provider.NormalizeProviderExitFailure(string(interfaces.ModelProviderCodex), result, nil, nil)
 	if providerErr == nil {
 		t.Fatal("expected provider error")
 	}
@@ -182,7 +182,7 @@ func TestNormalizeProviderExitFailure_CodexPreservesInternalCauseWithoutPublicLe
 	if providerErr.Cause == nil || !strings.Contains(providerErr.Cause.Error(), "unexpected status 503") {
 		t.Fatalf("provider cause = %v, want recognized stderr diagnostic", providerErr.Cause)
 	}
-	fixture := CodexSanitizedFailureFixtureFromProviderError(providerErr)
+	fixture := provider.CodexSanitizedFailureFixtureFromProviderError(providerErr)
 	assertCodexSanitizedFailureFixtureSafe(t, fixture, []string{alignmentPrivatePrompt, alignmentPrivateResponse})
 }
 
@@ -201,7 +201,7 @@ func codexStructuredStreamStdoutWithPrompt(message, prompt, response string) []b
 	return append(record, '\n')
 }
 
-func assertCodexSanitizedFailureFixtureSafe(t *testing.T, fixture CodexSanitizedFailureFixture, forbidden []string) {
+func assertCodexSanitizedFailureFixtureSafe(t *testing.T, fixture provider.CodexSanitizedFailureFixture, forbidden []string) {
 	t.Helper()
 	encoded, err := json.Marshal(fixture)
 	if err != nil {
@@ -216,7 +216,7 @@ func assertCodexSanitizedFailureFixtureSafe(t *testing.T, fixture CodexSanitized
 			t.Fatalf("sanitized fixture leaked %q: %s", secret, payload)
 		}
 	}
-	publicDetail := SafeProviderFailureDetail(NewProviderError(fixture.Type, fixture.Message, ProviderFailureInternalCauseError(fixture.InternalCause)))
+	publicDetail := provider.SafeProviderFailureDetail(provider.NewProviderError(fixture.Type, fixture.Message, provider.ProviderFailureInternalCauseError(fixture.InternalCause)))
 	if publicDetail == nil {
 		t.Fatal("expected safe public failure detail")
 	}
