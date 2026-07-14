@@ -7936,6 +7936,8 @@ export const RunnerID = {
   RunnerIDCursorCLI: "cursor-cli",
   // OpenCode runner selected through the shared runner contract.
   RunnerIDOpenCode: "opencode",
+  // Pi runner selected through the shared runner contract.
+  RunnerIDPi: "pi",
 } as const;
 export type RunnerID = (typeof RunnerID)[keyof typeof RunnerID];
 export const RunnerSelectionSource = {

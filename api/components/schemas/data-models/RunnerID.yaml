@@ -6,15 +6,18 @@ x-enum-varnames:
   - RunnerIDKiro
   - RunnerIDCursorCLI
   - RunnerIDOpenCode
+  - RunnerIDPi
 enum:
   - codex
   - gemini
   - kiro
   - cursor-cli
   - opencode
+  - pi
 x-enum-descriptions:
   - Codex runner selected through the shared runner contract.
   - Gemini runner selected through the shared runner contract.
   - Kiro runner selected through the shared runner contract.
   - Cursor CLI runner selected through the shared runner contract.
   - OpenCode runner selected through the shared runner contract.
+  - Pi runner selected through the shared runner contract.

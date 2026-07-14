@@ -308,6 +308,7 @@ const RUNNER_ID_VALUES = new Set<FactoryRunnerID>([
   "kiro",
   "cursor-cli",
   "opencode",
+  "pi",
 ]);
 const WORKSTATION_BEHAVIOR_VALUES = new Set<
   NonNullable<FactoryWorkstation["behavior"]>

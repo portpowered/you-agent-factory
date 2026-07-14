@@ -745,6 +745,7 @@ const (
 	RunnerIDGemini    RunnerID = "gemini"
 	RunnerIDKiro      RunnerID = "kiro"
 	RunnerIDOpenCode  RunnerID = "opencode"
+	RunnerIDPi        RunnerID = "pi"
 )
 
 // Defines values for RunnerSelectionSource.

@@ -130,6 +130,7 @@ func generatedPublicFactoryEnumPreservationCases() []generatedPublicFactoryEnumP
 		{name: "resource type unknown", input: "  custom-resource  ", want: "custom-resource", fn: permissiveResourceTypeString},
 		{name: "workstation type", input: "  CUSTOM_WORKSTATION  ", want: "CUSTOM_WORKSTATION", fn: generatedWorkstationTypeString},
 		{name: "runner id", input: "  GEMINI  ", want: "gemini", fn: generatedRunnerIDString},
+		{name: "runner id pi", input: "  PI  ", want: "pi", fn: generatedRunnerIDString},
 		{name: "runner id unknown", input: "  custom-runner  ", want: "custom-runner", fn: generatedRunnerIDString},
 		{name: "runner selection source", input: "  default  ", want: "default", fn: generatedRunnerSelectionSourceString},
 		{name: "runner selection source unknown", input: "  custom-source  ", want: "custom-source", fn: generatedRunnerSelectionSourceString},
