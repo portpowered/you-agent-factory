@@ -233,6 +233,17 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `CompareConstructorParseParity`, `CompareConstructorCompletionInventoryParity`,
   `TestGeneratedVsLegacyParityMatrix_RepresentativeFamily`) with isolated legacy
   construction via `cli.NewLegacyRepresentativeFamilyCommand`.
+- Models-family manifest parity for `you.models` and list/inspect/invoke/pull leaves lives in
+  `pkg/transports/cli/climanifestparity` (`CompareModelsHelpIdentity`,
+  `TestProductionManifestHelpIdentityParity_ModelsFamily`,
+  `TestProductionManifestParsingParity_ModelsFamily`,
+  `TestProductionManifestOutputModeParity_ModelsFamily`,
+  `TestGeneratedVsLegacyParityMatrix_ModelsFamily`) with isolated legacy construction via
+  `cli.NewLegacyModelsFamilyCommand` and generated parity roots via
+  `cli.NewGeneratedModelsFamilyParityCommand`. Models output-mode tests stub delegates through
+  `ListModelsAccessor` / `SetListModelsAccessor` (and inspect/invoke/pull siblings) in
+  `pkg/transports/cli/root.go`. Leaf help parity intentionally omits contracted examples until
+  the live tree carries `Example` text again.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/transports/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before

@@ -715,3 +715,43 @@ func ShowSessionAccessor() func(sessioncli.ShowConfig) error {
 func SetShowSessionAccessor(fn func(sessioncli.ShowConfig) error) {
 	showSession = fn
 }
+
+// ListModelsAccessor returns the current models list delegate.
+func ListModelsAccessor() func(modelscli.ListConfig) error {
+	return listModels
+}
+
+// SetListModelsAccessor replaces the models list delegate for tests.
+func SetListModelsAccessor(fn func(modelscli.ListConfig) error) {
+	listModels = fn
+}
+
+// InspectModelAccessor returns the current models inspect delegate.
+func InspectModelAccessor() func(modelscli.InspectConfig) error {
+	return inspectModel
+}
+
+// SetInspectModelAccessor replaces the models inspect delegate for tests.
+func SetInspectModelAccessor(fn func(modelscli.InspectConfig) error) {
+	inspectModel = fn
+}
+
+// InvokeModelAccessor returns the current models invoke delegate.
+func InvokeModelAccessor() func(modelscli.InvokeConfig) error {
+	return invokeModel
+}
+
+// SetInvokeModelAccessor replaces the models invoke delegate for tests.
+func SetInvokeModelAccessor(fn func(modelscli.InvokeConfig) error) {
+	invokeModel = fn
+}
+
+// PullModelAccessor returns the current models pull delegate.
+func PullModelAccessor() func(modelscli.PullConfig) error {
+	return pullModel
+}
+
+// SetPullModelAccessor replaces the models pull delegate for tests.
+func SetPullModelAccessor(fn func(modelscli.PullConfig) error) {
+	pullModel = fn
+}

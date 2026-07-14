@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
+	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -333,6 +335,242 @@ func TestProductionManifestNetworkSideEffectParity_SessionShow(t *testing.T) {
 	}
 	if requestCount == 0 {
 		t.Fatal("expected contracted network side effect to perform at least one HTTP request")
+	}
+}
+
+func TestProductionManifestOutputModeParity_ModelsFamily(t *testing.T) {
+	manifestPath := testutil.MustRepoPath(t, climanifest.ProductionManifestPath)
+	manifest, err := climanifest.LoadProduction(manifestPath)
+	if err != nil {
+		t.Fatalf("LoadProduction() error = %v", err)
+	}
+
+	for _, commandID := range []string{
+		"you.models.list",
+		"you.models.inspect",
+		"you.models.invoke",
+		"you.models.pull",
+	} {
+		record, err := manifest.CommandByID(commandID)
+		if err != nil {
+			t.Fatalf("CommandByID(%s) error = %v", commandID, err)
+		}
+		if mismatches := climanifestparity.CompareDeclaredOutputs(record); len(mismatches) > 0 {
+			t.Fatalf("%s contract output declarations drift detected:\n%s", commandID, climanifestparity.FormatMismatchReport(mismatches))
+		}
+	}
+
+	originalListModels := cli.ListModelsAccessor()
+	originalInspectModel := cli.InspectModelAccessor()
+	originalInvokeModel := cli.InvokeModelAccessor()
+	originalPullModel := cli.PullModelAccessor()
+	defer func() {
+		cli.SetListModelsAccessor(originalListModels)
+		cli.SetInspectModelAccessor(originalInspectModel)
+		cli.SetInvokeModelAccessor(originalInvokeModel)
+		cli.SetPullModelAccessor(originalPullModel)
+	}()
+
+	assertModelsListOutputModes(t)
+	assertModelsInspectOutputModes(t)
+	assertModelsInvokeOutputModes(t)
+	assertModelsPullOutputModes(t)
+}
+
+func assertModelsListOutputModes(t *testing.T) {
+	t.Helper()
+	var got modelscli.ListConfig
+	cli.SetListModelsAccessor(func(cfg modelscli.ListConfig) error {
+		got = cfg
+		if cfg.Diagnostics != nil {
+			if _, err := fmt.Fprintln(cfg.Diagnostics, "diagnostic: models list"); err != nil {
+				return err
+			}
+		}
+		if cfg.JSON {
+			_, err := fmt.Fprintln(cfg.Output, `{"results":[]}`)
+			return err
+		}
+		_, err := fmt.Fprintln(cfg.Output, "NAME\tREADINESS")
+		return err
+	})
+
+	jsonRoot := cli.NewRootCommand()
+	jsonRoot.SetOut(io.Discard)
+	jsonRoot.SetErr(io.Discard)
+	jsonRoot.SetArgs([]string{"--json", "models", "list", "--verbose"})
+	if err := jsonRoot.Execute(); err != nil {
+		t.Fatalf("execute models list with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to select contracted JSON stdout output mode for models list")
+	}
+	if !got.Verbose {
+		t.Fatal("expected --verbose to reach models list config")
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cli.SetListModelsAccessor(func(cfg modelscli.ListConfig) error {
+		got = cfg
+		if cfg.Diagnostics != nil {
+			if _, err := fmt.Fprintln(cfg.Diagnostics, "diagnostic: models list"); err != nil {
+				return err
+			}
+		}
+		_, err := fmt.Fprintln(cfg.Output, "NAME\tREADINESS")
+		return err
+	})
+	humanRoot := cli.NewRootCommand()
+	humanRoot.SetOut(&stdout)
+	humanRoot.SetErr(&stderr)
+	humanRoot.SetArgs([]string{"models", "list", "--verbose"})
+	if err := humanRoot.Execute(); err != nil {
+		t.Fatalf("execute models list without --json: %v", err)
+	}
+	if got.JSON {
+		t.Fatal("expected default models list invocation to select contracted human stdout output mode")
+	}
+	if !strings.Contains(stdout.String(), "NAME") {
+		t.Fatalf("human stdout = %q, want table output", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "diagnostic: models list") {
+		t.Fatalf("stderr = %q, want diagnostics on stderr", stderr.String())
+	}
+}
+
+func assertModelsInspectOutputModes(t *testing.T) {
+	t.Helper()
+	var got modelscli.InspectConfig
+	cli.SetInspectModelAccessor(func(cfg modelscli.InspectConfig) error {
+		got = cfg
+		if cfg.JSON {
+			_, err := fmt.Fprintln(cfg.Output, `{"name":"OMNIVOICE_Q4_K_M"}`)
+			return err
+		}
+		_, err := fmt.Fprintln(cfg.Output, "Readiness:\tREADY")
+		return err
+	})
+
+	jsonRoot := cli.NewRootCommand()
+	jsonRoot.SetOut(io.Discard)
+	jsonRoot.SetErr(io.Discard)
+	jsonRoot.SetArgs([]string{"--json", "models", "inspect", "OMNIVOICE_Q4_K_M"})
+	if err := jsonRoot.Execute(); err != nil {
+		t.Fatalf("execute models inspect with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to select contracted JSON stdout output mode for models inspect")
+	}
+
+	var stdout bytes.Buffer
+	cli.SetInspectModelAccessor(func(cfg modelscli.InspectConfig) error {
+		got = cfg
+		_, err := fmt.Fprintln(cfg.Output, "Readiness:\tREADY")
+		return err
+	})
+	humanRoot := cli.NewRootCommand()
+	humanRoot.SetOut(&stdout)
+	humanRoot.SetErr(io.Discard)
+	humanRoot.SetArgs([]string{"models", "inspect", "OMNIVOICE_Q4_K_M"})
+	if err := humanRoot.Execute(); err != nil {
+		t.Fatalf("execute models inspect without --json: %v", err)
+	}
+	if got.JSON {
+		t.Fatal("expected default models inspect invocation to select contracted human stdout output mode")
+	}
+	if !strings.Contains(stdout.String(), "Readiness:") {
+		t.Fatalf("human stdout = %q, want inspect table output", stdout.String())
+	}
+}
+
+func assertModelsInvokeOutputModes(t *testing.T) {
+	t.Helper()
+	var got modelscli.InvokeConfig
+	cli.SetInvokeModelAccessor(func(cfg modelscli.InvokeConfig) error {
+		got = cfg
+		if cfg.JSON {
+			_, err := fmt.Fprintln(cfg.Output, `{"modelName":"OMNIVOICE_Q4_K_M","operation":"TTS"}`)
+			return err
+		}
+		_, err := fmt.Fprintln(cfg.Output, "Invoked OMNIVOICE_Q4_K_M")
+		return err
+	})
+
+	jsonRoot := cli.NewRootCommand()
+	jsonRoot.SetOut(io.Discard)
+	jsonRoot.SetErr(io.Discard)
+	jsonRoot.SetArgs([]string{"--json", "models", "invoke", "OMNIVOICE_Q4_K_M", "--text", "hello"})
+	if err := jsonRoot.Execute(); err != nil {
+		t.Fatalf("execute models invoke with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to select contracted JSON stdout output mode for models invoke")
+	}
+
+	var stdout bytes.Buffer
+	cli.SetInvokeModelAccessor(func(cfg modelscli.InvokeConfig) error {
+		got = cfg
+		_, err := fmt.Fprintln(cfg.Output, "Invoked OMNIVOICE_Q4_K_M")
+		return err
+	})
+	humanRoot := cli.NewRootCommand()
+	humanRoot.SetOut(&stdout)
+	humanRoot.SetErr(io.Discard)
+	humanRoot.SetArgs([]string{"models", "invoke", "OMNIVOICE_Q4_K_M", "--text", "hello"})
+	if err := humanRoot.Execute(); err != nil {
+		t.Fatalf("execute models invoke without --json: %v", err)
+	}
+	if got.JSON {
+		t.Fatal("expected default models invoke invocation to select contracted human stdout output mode")
+	}
+	if !strings.Contains(stdout.String(), "Invoked") {
+		t.Fatalf("human stdout = %q, want human invoke output", stdout.String())
+	}
+}
+
+func assertModelsPullOutputModes(t *testing.T) {
+	t.Helper()
+	var got modelscli.PullConfig
+	cli.SetPullModelAccessor(func(cfg modelscli.PullConfig) error {
+		got = cfg
+		if cfg.JSON {
+			_, err := fmt.Fprintln(cfg.Output, `{"name":"OMNIVOICE_Q4_K_M","status":"PULLED"}`)
+			return err
+		}
+		_, err := fmt.Fprintln(cfg.Output, "Pulled OMNIVOICE_Q4_K_M")
+		return err
+	})
+
+	jsonRoot := cli.NewRootCommand()
+	jsonRoot.SetOut(io.Discard)
+	jsonRoot.SetErr(io.Discard)
+	jsonRoot.SetArgs([]string{"--json", "models", "pull", "OMNIVOICE_Q4_K_M"})
+	if err := jsonRoot.Execute(); err != nil {
+		t.Fatalf("execute models pull with global --json: %v", err)
+	}
+	if !got.JSON {
+		t.Fatal("expected global --json to select contracted JSON stdout output mode for models pull")
+	}
+
+	var stdout bytes.Buffer
+	cli.SetPullModelAccessor(func(cfg modelscli.PullConfig) error {
+		got = cfg
+		_, err := fmt.Fprintln(cfg.Output, "Pulled OMNIVOICE_Q4_K_M")
+		return err
+	})
+	humanRoot := cli.NewRootCommand()
+	humanRoot.SetOut(&stdout)
+	humanRoot.SetErr(io.Discard)
+	humanRoot.SetArgs([]string{"models", "pull", "OMNIVOICE_Q4_K_M"})
+	if err := humanRoot.Execute(); err != nil {
+		t.Fatalf("execute models pull without --json: %v", err)
+	}
+	if got.JSON {
+		t.Fatal("expected default models pull invocation to select contracted human stdout output mode")
+	}
+	if !strings.Contains(stdout.String(), "Pulled") {
+		t.Fatalf("human stdout = %q, want human pull output", stdout.String())
 	}
 }
 

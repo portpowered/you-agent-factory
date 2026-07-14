@@ -57,6 +57,38 @@ func NewLegacyRepresentativeFamilyCommand() *cobra.Command {
 	return root
 }
 
+// NewLegacyModelsFamilyCommand builds the isolated handwritten you → models tree
+// used by the generator-vs-legacy parity matrix.
+func NewLegacyModelsFamilyCommand() *cobra.Command {
+	root, globals, diagnostics, operatorDefaults, options := newModelsFamilyParityShell()
+	root.AddCommand(newModelsCommand(globals, diagnostics, operatorDefaults, options))
+	return root
+}
+
+// NewGeneratedModelsFamilyParityCommand builds you → models from generated metadata
+// and attaches handwritten handlers by stable command ID for parity tests.
+func NewGeneratedModelsFamilyParityCommand(
+	registry *commandregistry.Registry,
+	invokeFlags climanifestcobra.ModelsInvokeFlagBindings,
+) (*cobra.Command, error) {
+	root, _, _, _, _ := newModelsFamilyParityShell()
+	components, err := climanifestcobra.NewModelsDocsFamilyComponents(registry, invokeFlags)
+	if err != nil {
+		return nil, err
+	}
+	root.AddCommand(components.Models)
+	return root, nil
+}
+
+func newModelsFamilyParityShell() (*cobra.Command, *cliGlobalOptions, *cliDiagnosticsOptions, *cliOperatorDefaultsOptions, RootCommandOptions) {
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	return root, globals, diagnostics, operatorDefaults, options
+}
+
 func newLegacyRootCommandShell(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,

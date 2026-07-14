@@ -58,6 +58,116 @@ func CompareHelpIdentity(manifest climanifest.Manifest, record climanifest.Comma
 	return mismatches
 }
 
+// CompareModelsHelpIdentity compares contracted models-family help/identity against
+// the production-wired live tree. Leaf commands keep title-only Short and empty Long
+// during cutover, so normalized help uses the short headline instead of contracted long copy.
+func CompareModelsHelpIdentity(
+	manifest climanifest.Manifest,
+	record climanifest.Command,
+	root *cobra.Command,
+	cmd *cobra.Command,
+) []Mismatch {
+	var mismatches []Mismatch
+	commandID := record.ID
+
+	appendMismatch := func(field, want, got string) {
+		if want == got {
+			return
+		}
+		mismatches = append(mismatches, Mismatch{
+			CommandID: commandID,
+			Field:     field,
+			Want:      want,
+			Got:       got,
+		})
+	}
+
+	appendMismatch("path", record.Path, cmd.CommandPath())
+	appendMismatch("name", record.Name, cmd.Name())
+	appendMismatch("aliases", formatStringList(record.Aliases), formatStringList(cmd.Aliases))
+	appendMismatch("visibility", record.Visibility, commandVisibility(cmd))
+	appendMismatch("runnable", fmt.Sprintf("%t", record.Runnable), fmt.Sprintf("%t", cmd.Runnable()))
+	appendMismatch("shortDescription", record.Documentation.Documentation.Title.CanonicalEnglish, cmd.Short)
+	appendMismatch("usage.line", record.Usage.Line, cmd.Use)
+	if strings.TrimSpace(cmd.Example) != "" {
+		appendMismatch("usage.example", baseline.NormalizeFixtureText(record.Usage.Example), baseline.NormalizeFixtureText(cmd.Example))
+		appendMismatch("documentation.examples", formatStringList(record.Documentation.Examples), formatDocumentationExamples(cmd.Example))
+	}
+
+	if record.ID == "you.models" {
+		appendMismatch("longDescription", record.Documentation.Documentation.Description.CanonicalEnglish, cmd.Long)
+	} else if strings.TrimSpace(cmd.Long) != "" {
+		appendMismatch("longDescription", "", cmd.Long)
+	}
+
+	helpOutput, err := baseline.CaptureHelpOutput(root, HelpArgsForPath(record.Path))
+	if err != nil {
+		mismatches = append(mismatches, Mismatch{
+			CommandID: commandID,
+			Field:     "help.capture",
+			Want:      "help output",
+			Got:       err.Error(),
+		})
+		return mismatches
+	}
+
+	includeExamples := strings.TrimSpace(cmd.Example) != ""
+	var wantHelp string
+	switch record.ID {
+	case "you.models":
+		wantHelp = buildModelsParentHelpIdentityPrefix(manifest, record, includeExamples)
+	default:
+		wantHelp = buildModelsLeafHelpIdentityPrefix(record, includeExamples)
+	}
+	appendMismatch(
+		"normalizedHelpUsageText",
+		wantHelp,
+		extractHelpIdentityPrefix(helpOutput),
+	)
+
+	return mismatches
+}
+
+func buildModelsParentHelpIdentityPrefix(manifest climanifest.Manifest, record climanifest.Command, includeExamples bool) string {
+	var b strings.Builder
+	long := record.Documentation.Documentation.Description.CanonicalEnglish
+	b.WriteString(long)
+	if !strings.HasSuffix(long, "\n") {
+		b.WriteString("\n")
+	}
+	b.WriteString("\nUsage:\n  ")
+	b.WriteString(record.Path)
+	b.WriteString(" [command]")
+	if includeExamples {
+		if example := record.Usage.Example; strings.TrimSpace(example) != "" {
+			b.WriteString("\n\nExamples:\n")
+			b.WriteString(strings.TrimRight(baseline.NormalizeFixtureText(example), "\n"))
+		}
+	}
+	return baseline.NormalizeHelpOutput(b.String())
+}
+
+func buildModelsLeafHelpIdentityPrefix(record climanifest.Command, includeExamples bool) string {
+	var b strings.Builder
+	short := record.Documentation.Documentation.Title.CanonicalEnglish
+	b.WriteString(short)
+	b.WriteString("\n\nUsage:\n  ")
+	b.WriteString(record.Path)
+	usageTail := strings.TrimSpace(strings.TrimPrefix(record.Usage.Line, record.Name))
+	if usageTail != "" {
+		b.WriteString(" ")
+		b.WriteString(usageTail)
+	}
+	b.WriteString(" [flags]")
+	if includeExamples {
+		if example := record.Usage.Example; strings.TrimSpace(example) != "" {
+			b.WriteString("\n\nExamples:\n")
+			b.WriteString(strings.TrimRight(baseline.NormalizeFixtureText(example), "\n"))
+		}
+	}
+	return baseline.NormalizeHelpOutput(b.String())
+}
+
 func commandVisibility(cmd *cobra.Command) string {
 	if cmd.Hidden {
 		return "hidden"
