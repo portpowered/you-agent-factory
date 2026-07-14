@@ -12,11 +12,20 @@ import (
 )
 
 type fixedClock struct {
+	mu  sync.Mutex
 	now time.Time
 }
 
 func (c *fixedClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	return c.now
+}
+
+func (c *fixedClock) Set(now time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = now
 }
 
 func samplePublishInput() responseevents.FactoryResponseEvent {

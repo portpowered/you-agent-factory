@@ -113,14 +113,14 @@ func TestSessionResponseEventStore_CompletedSubscriptionExpiresAfterRetentionWin
 	}
 	store.Complete()
 
-	clock.now = start.Add(responseeventstore.CompletedStreamRetentionWindow - time.Nanosecond)
+	clock.Set(start.Add(responseeventstore.CompletedStreamRetentionWindow - time.Nanosecond))
 	subscription, err := store.Subscribe(0)
 	if err != nil {
 		t.Fatalf("Subscribe before retention expiry: %v", err)
 	}
 	subscription.Detach()
 
-	clock.now = start.Add(responseeventstore.CompletedStreamRetentionWindow)
+	clock.Set(start.Add(responseeventstore.CompletedStreamRetentionWindow))
 	if _, err := store.Subscribe(0); !errors.Is(err, responseeventstore.ErrStoreExpired) {
 		t.Fatalf("Subscribe at retention expiry error = %v, want ErrStoreExpired", err)
 	}

@@ -16,9 +16,11 @@ import (
 )
 
 const (
-	backpressureFloodCount          = 200
-	backpressurePublishLatencyBudget = 3 * time.Second
-	backpressureScenarioTimeout     = 10 * time.Second
+	backpressureFloodCount           = 200
+	backpressurePublishLatencyBudget   = 3 * time.Second
+	backpressureScenarioTimeout      = 10 * time.Second
+	lifecycleRaceWorkerCount         = 36
+	lifecycleRacePublishBurst        = 24
 )
 
 func TestSessionResponseEventStore_BackpressureFloodWithBlockedAndDrainingSubscribers(t *testing.T) {
@@ -169,7 +171,7 @@ func TestSessionResponseEventStore_BackpressureFloodWithBlockedAndDrainingSubscr
 	}
 	resumeSub.Detach()
 
-	clock.now = start.Add(responseeventstore.CompletedStreamRetentionWindow)
+	clock.Set(start.Add(responseeventstore.CompletedStreamRetentionWindow))
 	if _, err := store.Subscribe(0); !errors.Is(err, responseeventstore.ErrStoreExpired) {
 		t.Fatalf("Subscribe after retention expiry = %v, want ErrStoreExpired", err)
 	}
@@ -287,6 +289,131 @@ func TestSessionResponseEventStore_BackpressureFloodExactGapsAndFinalRetention(t
 	}
 
 	assertExactRetentionAccounting(t, store)
+}
+
+// TestSessionResponseEventStore_BackpressureLifecycleConcurrentRace interleaves
+// subscribe, publish bursts, complete, detach, retention-window expiry, and close
+// under retention-limited flood pressure so overlapping lifecycle work stays
+// race-clean with bounded CI timeouts.
+//
+// Soak locally or in optional CI lanes with:
+//
+//	go test -race -count=5 ./pkg/factory/sessions/responseeventstore/ \
+//	  -run BackpressureLifecycleConcurrentRace -timeout 120s
+func TestSessionResponseEventStore_BackpressureLifecycleConcurrentRace(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping lifecycle concurrent race stress test in short mode")
+	}
+
+	start := time.Date(2026, 7, 14, 13, 0, 0, 0, time.UTC)
+	clock := &fixedClock{now: start}
+	store, err := responseeventstore.NewSessionResponseEventStoreWithClockAndLimits(
+		"session-lifecycle-race",
+		clock,
+		responseeventstore.RetentionLimits{MaxEvents: 16, MaxBytes: 64 * 1024},
+	)
+	if err != nil {
+		t.Fatalf("NewSessionResponseEventStoreWithClockAndLimits: %v", err)
+	}
+
+	scenarioCtx, cancelScenario := context.WithTimeout(context.Background(), backpressureScenarioTimeout)
+	defer cancelScenario()
+
+	startWorkers := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(lifecycleRaceWorkerCount)
+	for workerID := 0; workerID < lifecycleRaceWorkerCount; workerID++ {
+		go func(id int) {
+			defer wg.Done()
+			<-startWorkers
+
+			workerCtx, cancelWorker := context.WithTimeout(scenarioCtx, 5*time.Second)
+			defer cancelWorker()
+
+			switch id % 6 {
+			case 0:
+				subscription, err := store.Subscribe(0)
+				if err != nil {
+					return
+				}
+				for {
+					_, err := subscription.Next(workerCtx)
+					if err != nil {
+						subscription.Detach()
+						return
+					}
+				}
+			case 1:
+				subscription, err := store.Subscribe(0)
+				if err != nil {
+					return
+				}
+				subscription.Detach()
+			case 2:
+				subscription, err := store.Subscribe(0)
+				if err != nil {
+					return
+				}
+				blockedDone := make(chan struct{})
+				go func() {
+					defer close(blockedDone)
+					_, _ = subscription.Next(workerCtx)
+				}()
+				select {
+				case <-blockedDone:
+				case <-time.After(50 * time.Millisecond):
+				}
+				subscription.Detach()
+				select {
+				case <-blockedDone:
+				case <-time.After(500 * time.Millisecond):
+					t.Errorf("blocked subscriber did not return promptly after Detach")
+				}
+			case 3, 4:
+				for burst := 0; burst < lifecycleRacePublishBurst; burst++ {
+					if _, err := store.Publish(deltaPublishInput(id*lifecycleRacePublishBurst + burst)); err != nil {
+						if !errors.Is(err, responseeventstore.ErrStoreCompleted) &&
+							!errors.Is(err, responseeventstore.ErrStoreClosed) {
+							t.Errorf("publish burst worker=%d index=%d: %v", id, burst, err)
+						}
+						return
+					}
+				}
+			case 5:
+				time.Sleep(time.Duration(id%7) * time.Millisecond)
+				store.Complete()
+				if store.Completed() {
+					clock.Set(start.Add(responseeventstore.CompletedStreamRetentionWindow))
+					if _, err := store.Subscribe(0); err != nil &&
+						!errors.Is(err, responseeventstore.ErrStoreExpired) &&
+						!errors.Is(err, responseeventstore.ErrStoreClosed) {
+						t.Errorf("Subscribe after retention expiry = %v, want ErrStoreExpired or ErrStoreClosed", err)
+					}
+				}
+				store.Close()
+			}
+		}(workerID)
+	}
+	close(startWorkers)
+
+	workersDone := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(workersDone)
+	}()
+
+	select {
+	case <-workersDone:
+	case <-scenarioCtx.Done():
+		t.Fatalf("lifecycle concurrent race timed out: %v", scenarioCtx.Err())
+	}
+
+	if got := store.SubscriberCount(); got != 0 {
+		t.Fatalf("subscriber count after lifecycle race = %d, want 0", got)
+	}
+	if events := store.Events(); store.LatestSequence() > 0 && len(events) == 0 {
+		t.Fatal("retained snapshot empty after lifecycle race despite published events")
+	}
 }
 
 func firstRetainedSequenceAfter(events []responseevents.FactoryResponseEvent, after int64) int64 {
