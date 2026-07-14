@@ -835,6 +835,7 @@ func TestSupportedModelProviders_IncludesAllCanonicalCommands(t *testing.T) {
 		ModelProviderCursor,
 		ModelProviderOpenCode,
 		ModelProviderPi,
+		ModelProviderAgy,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("supported provider count = %d, want %d", len(got), len(want))

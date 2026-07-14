@@ -896,6 +896,7 @@ func buildProviderBackedWorkerExecutor(
 	modelDomain localModelDomain,
 ) workers.WorkerExecutor {
 	runner := providerBackedRunner(
+		runtimeCfg,
 		def,
 		logger,
 		invocationSkipPermissionsOverride,
@@ -929,6 +930,7 @@ func buildProviderBackedWorkerExecutor(
 }
 
 func providerBackedRunner(
+	runtimeCfg interfaces.RuntimeConfigLookup,
 	def *interfaces.WorkerConfig,
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
@@ -938,7 +940,7 @@ func providerBackedRunner(
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	now func() time.Time,
 ) workers.Runner {
-	runner := newProviderRunner(def, logger, invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher, providerCommandRunner)
+	runner := newProviderRunner(runtimeCfg, def, logger, invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher, providerCommandRunner)
 	if inferenceRecorder == nil {
 		return runner
 	}
@@ -946,6 +948,7 @@ func providerBackedRunner(
 }
 
 func newProviderRunner(
+	runtimeCfg interfaces.RuntimeConfigLookup,
 	def *interfaces.WorkerConfig,
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
@@ -957,6 +960,7 @@ func newProviderRunner(
 		return workers.RunnerFromProvider(providerOverride)
 	}
 	return workerprovider.NewScriptWrapProvider(providerRunnerOptions(
+		runtimeCfg,
 		def,
 		logger,
 		invocationSkipPermissionsOverride,
@@ -966,6 +970,7 @@ func newProviderRunner(
 }
 
 func providerRunnerOptions(
+	runtimeCfg interfaces.RuntimeConfigLookup,
 	def *interfaces.WorkerConfig,
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
@@ -979,6 +984,11 @@ func providerRunnerOptions(
 			invocationSkipPermissionsOverride,
 		)),
 		workerprovider.WithProviderLogger(logger),
+	}
+	if runtimeCfg != nil {
+		if factoryDir := strings.TrimSpace(runtimeCfg.FactoryDir()); factoryDir != "" {
+			opts = append(opts, workerprovider.WithAgyFactoryRoot(factoryDir))
+		}
 	}
 	if inferenceProgressPublisher != nil {
 		opts = append(opts,

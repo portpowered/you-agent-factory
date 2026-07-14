@@ -17,6 +17,7 @@ const (
 	ModelProviderCursor   ModelProvider = "agent"
 	ModelProviderOpenCode ModelProvider = "opencode"
 	ModelProviderPi       ModelProvider = "pi"
+	ModelProviderAgy      ModelProvider = "agy"
 )
 
 // SupportedModelProviders returns the canonical internal model provider commands
@@ -30,6 +31,7 @@ func SupportedModelProviders() []ModelProvider {
 		ModelProviderCursor,
 		ModelProviderOpenCode,
 		ModelProviderPi,
+		ModelProviderAgy,
 	}
 }
 
@@ -313,6 +315,9 @@ var internalFactoryWorkerModelProviderAliases = map[string]string{
 	"openai":       publicFactoryWorkerModelProviderCodex,
 	"opencode":     publicFactoryWorkerModelProviderOpenCode,
 	"pi":           publicFactoryWorkerModelProviderPi,
+	"agy":          "agy",
+	"AGY":          "agy",
+	"antigravity":  "agy",
 }
 
 var internalFactoryWorkerProviderAliases = map[string]string{
