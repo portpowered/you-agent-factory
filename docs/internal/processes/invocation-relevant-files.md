@@ -282,7 +282,11 @@ primary-result behavior.
   reserve `ERROR`/`FAILED` plus invocation failure classification for terminal
   records and process outcomes.
   Reconcile typed terminal failures before generic process-exit fallback, but
-  preserve cancellation and timeout precedence. A streaming decoder must hold
+  preserve cancellation and timeout precedence. Shared selection lives in
+  `pkg/workers/provider/failure_precedence.go` (`SelectFailureByPrecedence`) and
+  provider-owned collectors such as `ResolveCodexProviderFailure` in
+  `codex_failure_resolution.go`; precedence table tests belong beside those
+  helpers rather than in transport layers. A streaming decoder must hold
   terminal `ERROR` drafts until the shared executor flushes it with the process
   outcome; discard a native failure when cancellation, deadline, or exit 124 wins.
   When multiple typed terminal records arrive, the held canonical draft and

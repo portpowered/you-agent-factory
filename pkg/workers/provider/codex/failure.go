@@ -60,7 +60,7 @@ func shouldSelectTerminalFailure(selectedRecognized, candidateRecognized bool) b
 }
 
 func classifyTerminalMessage(nativeType, message, threadID string) (TerminalFailure, bool) {
-	parsed := provider.ParseCodexProviderFailure(provider.CommandResult{
+	parsed := provider.ParseCodexProviderFailureLayers(provider.CommandResult{
 		ExitCode: 1,
 		Stderr:   []byte("ERROR: " + strings.TrimSpace(message)),
 	})

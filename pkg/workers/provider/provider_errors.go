@@ -645,21 +645,10 @@ func kiroExitFailureMessage(exitCode int) string {
 // codexErrorLineScanBytes before parsing, and returned messages are limited by
 // codexFailureMessageBytes.
 func ParseCodexProviderFailure(result CommandResult) ProviderFailureResult {
-	streams := []string{
-		tailForCodexErrorScan(result.Stderr),
-		tailForCodexErrorScan(result.Stdout),
+	resolved, ok := ResolveCodexProviderFailure(result, CodexFailureResolutionInput{})
+	if ok {
+		return resolved
 	}
-	if failure, ok := lastCodexStructuredFailure(streams); ok {
-		return failure
-	}
-
-	if failure, ok := lastCodexTextFailure(streams, result.ExitCode); ok {
-		return ProviderFailureResult{
-			Reason:  failure.Reason,
-			Message: failure.Message,
-		}
-	}
-
 	return ProviderFailureResult{
 		Reason:  classifyCodexExitFailure(result.ExitCode),
 		Message: codexExitFailureMessage(result.ExitCode),

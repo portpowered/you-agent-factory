@@ -2,7 +2,6 @@ package codex
 
 import (
 	"context"
-	"errors"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	provider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -44,26 +43,39 @@ func (ResponseAdapter) Capabilities(context.Context, adapter.CapabilityContext) 
 }
 
 func (ResponseAdapter) ClassifyFailure(_ context.Context, input adapter.FailureContext) adapter.FailureResult {
-	if errors.Is(input.CommandError, context.Canceled) {
-		return normalizedFailureResult(interfaces.WorkFailureTypeUnknown, "Codex execution was canceled.", nil)
+	if input.CommandError == nil && input.CommandResult.ExitCode == 0 &&
+		input.DecodeError == nil && input.FlushError == nil && input.ParseError == nil {
+		return adapter.FailureResult{}
 	}
-	if errors.Is(input.CommandError, context.DeadlineExceeded) || input.CommandResult.ExitCode == 124 {
-		return normalizedFailureResult(interfaces.WorkFailureTypeTimeout, "Codex execution timed out.", nil)
-	}
+	flushReason := ""
 	if input.FlushReason == adapter.FlushReasonCanceled {
-		return normalizedFailureResult(interfaces.WorkFailureTypeUnknown, "Codex execution was canceled.", nil)
+		flushReason = provider.CodexFlushReasonCanceled
 	}
-	if failure, ok := ParseTerminalFailure(input.CommandResult.Stdout); ok {
-		return terminalFailureResult(failure)
-	}
-	if input.CommandError != nil || input.CommandResult.ExitCode != 0 {
-		parsed := provider.ParseCodexProviderFailure(input.CommandResult)
-		return normalizedFailureResult(parsed.Reason, parsed.Message, nil)
+	resolution := provider.CodexFailureResolutionInput{
+		CommandError: input.CommandError,
+		FlushReason:  flushReason,
 	}
 	if input.DecodeError != nil || input.FlushError != nil || input.ParseError != nil {
+		if resolved, ok := provider.ResolveCodexProviderFailure(provider.CommandResult(input.CommandResult), resolution); ok {
+			session := codexProviderSessionFromStdout(input.CommandResult.Stdout, resolved)
+			return normalizedFailureResult(resolved.Reason, resolved.Message, session)
+		}
 		return normalizedFailureResult(interfaces.WorkFailureTypeUnknown, "Codex did not produce a valid completed response.", nil)
 	}
-	return adapter.FailureResult{}
+	resolved, ok := provider.ResolveCodexProviderFailure(provider.CommandResult(input.CommandResult), resolution)
+	if !ok {
+		return adapter.FailureResult{}
+	}
+	session := codexProviderSessionFromStdout(input.CommandResult.Stdout, resolved)
+	return normalizedFailureResult(resolved.Reason, resolved.Message, session)
+}
+
+func codexProviderSessionFromStdout(stdout []byte, resolved provider.ProviderFailureResult) *interfaces.ProviderSessionMetadata {
+	if terminal, ok := ParseTerminalFailure(stdout); ok &&
+		terminal.Type == resolved.Reason && terminal.Message == resolved.Message {
+		return terminal.ProviderSession
+	}
+	return nil
 }
 
 func terminalFailureResult(failure TerminalFailure) adapter.FailureResult {
