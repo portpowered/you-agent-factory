@@ -206,7 +206,7 @@ do not conflate reconnect parameters, retention, or error codes between them.
 
 - OpenAPI authoring and generated-type parity:
   `pkg/transports/http/contracttests/openapi_contract_response_events_test.go`,
-  `generated_contract_response_events_test.go`
+  `pkg/transports/http/contracttests/generated_contract_common_test.go`
 - HTTP route behavior (retained-then-live, stale cursor `STREAM_GAP`, typed
   `404`/`410`, no default-session fallback):
   `pkg/transports/http/server_factory_sessions_test.go`,
