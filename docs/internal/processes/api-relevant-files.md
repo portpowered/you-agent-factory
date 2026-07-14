@@ -91,6 +91,25 @@ Use this map when changing the public REST contract.
   versions, removal gates, approval status). Per-family schema validation stays
   in `contracts/*_deprecated_inventory_test.go`.
 
+## Focused compatibility alias internal-use lint
+
+- `internal/contractguard` loads inventoried compatibility alias match values from
+  `contracts/mcp/deprecated.json`, `contracts/cli/deprecated.json`, and
+  `contracts/api/deprecated.json`, then scans handwritten `cmd/`, `internal/`,
+  `pkg/`, and `ui/src` sources for deliberate new adoption outside approved
+  compatibility boundaries.
+- `cmd/compatibilityaliascheck` is wired through `make compatibility-alias-check`
+  and the default `make lint` target. Checked-in violation and clean fixtures
+  live under `cmd/compatibilityaliascheck/testdata/{violation-repo,clean-repo}/`.
+- Retained aliases remain callable at existing CLI/MCP/REST compatibility
+  boundaries (`pkg/transports/`, `pkg/factory/`, `ui/src/api/workflow-preview/`,
+  and related owners documented above). New first-party internal code must use
+  canonical successors instead of inventoried compatibility alias names.
+- Session-selector and process-global event compatibility surfaces
+  (`~default`, `GET /events`) stay inventoried for classification but are
+  excluded from this focused lint because they are accepted at many transport
+  boundaries rather than workflow-preview alias names.
+
 ## OpenAPI contract semver comparator
 
 - `internal/contractopenapidiff` owns the build-time OpenAPI comparator that
