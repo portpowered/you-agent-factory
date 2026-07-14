@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 	agyadapter "github.com/portpowered/infinite-you/pkg/workers/provider/agy"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	codexprogress "github.com/portpowered/infinite-you/pkg/workers/provider/codex/progress"
-	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
+	cursorprogress "github.com/portpowered/infinite-you/pkg/workers/provider/cursor/progress"
 )
 
 const (
@@ -130,9 +129,11 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 		return workerprocess.ExecCommandRunner{}.Run(ctx, req)
 	}
 	dispatchID := strings.TrimSpace(req.DispatchID)
-	var cursorStream *cursorResponseEventStream
-	if isCursorCommand(req.Command) {
-		cursorStream = newCursorResponseEventStream(dispatchID, r.Publisher, r.Logger)
+	var cursorStream *cursorprogress.ResponseEventStream
+	if cursorprogress.IsCommand(req.Command) {
+		cursorStream = cursorprogress.NewResponseEventStream(dispatchID, func(fragment cursorprogress.ProgressFragment) {
+			r.Publisher(inferenceProgressFragmentFromCursor(fragment))
+		}, r.Logger)
 	}
 	var codexStream *codexprogress.ProgressStream
 	if codexprogress.IsCommand(req.Command) {
@@ -145,7 +146,7 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 			return
 		}
 		if cursorStream != nil {
-			cursorStream.observe(ctx, stream, chunk)
+			cursorStream.Observe(ctx, stream, chunk)
 			return
 		}
 		if codexStream != nil && codexStream.Observe(stream, chunk) {
@@ -164,7 +165,7 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 		Logger:   logging.EnsureLogger(r.Logger),
 	}.Run(ctx, req)
 	if cursorStream != nil {
-		cursorStream.flush(ctx, cursorResponseFlushReason(ctx, result, err))
+		cursorStream.Flush(ctx, cursorprogress.FlushReason(ctx, result.ExitCode, err))
 	}
 	if codexStream != nil {
 		codexStream.Flush()
@@ -172,62 +173,15 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 	return result, err
 }
 
-func isCursorCommand(command string) bool {
-	base := strings.ToLower(filepath.Base(strings.TrimSpace(command)))
-	return base == string(interfaces.ModelProviderCursor) ||
-		base == string(interfaces.ModelProviderCursor)+".exe" ||
-		base == string(interfaces.ModelProviderCursor)+".cmd"
-}
-
-type cursorResponseEventStream struct {
-	dispatchID string
-	decoder    *cursorpkg.ResponseEventDecoder
-	publisher  InferenceProgressPublisher
-	logger     logging.Logger
-}
-
-func newCursorResponseEventStream(
-	dispatchID string,
-	publisher InferenceProgressPublisher,
-	logger logging.Logger,
-) *cursorResponseEventStream {
-	return &cursorResponseEventStream{
-		dispatchID: strings.TrimSpace(dispatchID),
-		decoder: cursorpkg.NewResponseEventDecoder(adapter.DecoderContext{
-			DispatchID: strings.TrimSpace(dispatchID),
-		}),
-		publisher: publisher,
-		logger:    logging.EnsureLogger(logger),
+func inferenceProgressFragmentFromCursor(fragment cursorprogress.ProgressFragment) InferenceProgressFragment {
+	if fragment.HasCanonicalDraft {
+		return StructuredResponseEvent(fragment.CanonicalDraft)
 	}
-}
-
-func (s *cursorResponseEventStream) observe(ctx context.Context, stream string, chunk []byte) {
-	decoded, err := s.decoder.Observe(ctx, adapter.Observation{
-		Stream: adapter.OutputStream(stream),
-		Chunk:  append([]byte(nil), chunk...),
-	})
-	s.publish(decoded)
-	if err != nil {
-		s.logger.Error("cursor response-event decoder observation failed", "error", err)
-	}
-}
-
-func (s *cursorResponseEventStream) flush(ctx context.Context, reason adapter.FlushReason) {
-	decoded, err := s.decoder.Flush(ctx, adapter.FlushContext{Reason: reason})
-	s.publish(decoded)
-	if err != nil {
-		s.logger.Error("cursor response-event decoder flush failed", "error", err)
-	}
-}
-
-func (s *cursorResponseEventStream) publish(decoded adapter.DecodeResult) {
-	for _, draft := range decoded.Drafts {
-		s.publisher(StructuredResponseEvent(draft))
-	}
-	for _, diagnostic := range decoded.Diagnostics {
-		fragment := ProgressFragment(s.dispatchID, nil, diagnostic.Message)
-		fragment.ExternalEventType = diagnostic.Code
-		s.publisher(fragment)
+	return InferenceProgressFragment{
+		DispatchID:        fragment.DispatchID,
+		Kind:              fragment.Kind,
+		Payload:           fragment.Payload,
+		ExternalEventType: fragment.ExternalEventType,
 	}
 }
 
@@ -241,17 +195,6 @@ func inferenceProgressFragmentFromCodex(fragment codexprogress.ProgressFragment)
 		ExternalEventType:  fragment.ExternalEventType,
 		Metadata:           fragment.Metadata,
 	}
-}
-
-func cursorResponseFlushReason(ctx context.Context, result CommandResult, err error) adapter.FlushReason {
-	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) ||
-		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return adapter.FlushReasonCanceled
-	}
-	if err != nil || result.ExitCode != 0 {
-		return adapter.FlushReasonTerminated
-	}
-	return adapter.FlushReasonCompleted
 }
 
 // NewInferenceProgressPublishingCommandRunner constructs a provider command
