@@ -448,25 +448,7 @@ func TestCompareYAML_UnsupportedSchemaKeywordFixtures_FailClosed(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			before := readFixture(t, tc.fixture, "before.yaml")
-			after := readFixture(t, tc.fixture, "after.yaml")
-
-			result, err := contractopenapidiff.CompareYAML(before, after)
-			if err == nil {
-				t.Fatalf("CompareYAML() = %#v, want unsupported diff error", result)
-			}
-			if !contractopenapidiff.IsUnsupportedDiff(err) {
-				t.Fatalf("CompareYAML() error = %v, want unsupported diff refusal", err)
-			}
-
-			var unsupported *contractopenapidiff.UnsupportedDiffError
-			if !errors.As(err, &unsupported) {
-				t.Fatalf("errors.As() = false, want *UnsupportedDiffError")
-			}
-			if unsupported.Path != tc.wantPath {
-				t.Fatalf("unsupported.Path = %q, want %q", unsupported.Path, tc.wantPath)
-			}
+			assertCompareYAMLFailsClosedAtPath(t, tc.fixture, tc.wantPath)
 		})
 	}
 }
@@ -534,6 +516,24 @@ func TestCompareYAML_UnsupportedStructuralSurfaceFixtures_FailClosed(t *testing.
 			fixture:  "unsupported-server-variables",
 			wantPath: "servers[0].variables.env.enum",
 		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assertCompareYAMLFailsClosedAtPath(t, tc.fixture, tc.wantPath)
+		})
+	}
+}
+
+func TestCompareYAML_UnsupportedExtensionFixtures_FailClosed(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		fixture  string
+		wantPath string
+	}{
 		{
 			name:     "schema-extension",
 			fixture:  "unsupported-schema-extension",
@@ -554,25 +554,7 @@ func TestCompareYAML_UnsupportedStructuralSurfaceFixtures_FailClosed(t *testing.
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-
-			before := readFixture(t, tc.fixture, "before.yaml")
-			after := readFixture(t, tc.fixture, "after.yaml")
-
-			result, err := contractopenapidiff.CompareYAML(before, after)
-			if err == nil {
-				t.Fatalf("CompareYAML() = %#v, want unsupported diff error", result)
-			}
-			if !contractopenapidiff.IsUnsupportedDiff(err) {
-				t.Fatalf("CompareYAML() error = %v, want unsupported diff refusal", err)
-			}
-
-			var unsupported *contractopenapidiff.UnsupportedDiffError
-			if !errors.As(err, &unsupported) {
-				t.Fatalf("errors.As() = false, want *UnsupportedDiffError")
-			}
-			if unsupported.Path != tc.wantPath {
-				t.Fatalf("unsupported.Path = %q, want %q", unsupported.Path, tc.wantPath)
-			}
+			assertCompareYAMLFailsClosedAtPath(t, tc.fixture, tc.wantPath)
 		})
 	}
 }
@@ -621,4 +603,27 @@ func readFixture(t *testing.T, parts ...string) []byte {
 		t.Fatalf("read fixture %s: %v", path, err)
 	}
 	return data
+}
+
+func assertCompareYAMLFailsClosedAtPath(t *testing.T, fixture, wantPath string) {
+	t.Helper()
+
+	before := readFixture(t, fixture, "before.yaml")
+	after := readFixture(t, fixture, "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err == nil {
+		t.Fatalf("CompareYAML() = %#v, want unsupported diff error", result)
+	}
+	if !contractopenapidiff.IsUnsupportedDiff(err) {
+		t.Fatalf("CompareYAML() error = %v, want unsupported diff refusal", err)
+	}
+
+	var unsupported *contractopenapidiff.UnsupportedDiffError
+	if !errors.As(err, &unsupported) {
+		t.Fatalf("errors.As() = false, want *UnsupportedDiffError")
+	}
+	if unsupported.Path != wantPath {
+		t.Fatalf("unsupported.Path = %q, want %q", unsupported.Path, wantPath)
+	}
 }
