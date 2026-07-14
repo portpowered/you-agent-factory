@@ -146,6 +146,7 @@ func TestOpenAPIContract_GeneratedWorkerModelProviderConstantsMatchOpenAPIEnum(t
 		factoryapi.WorkerModelProviderGemini,
 		factoryapi.WorkerModelProviderKiro,
 		factoryapi.WorkerModelProviderOpenCode,
+		factoryapi.WorkerModelProviderPi,
 	}
 	if len(want) != len(interfaces.SupportedModelProviders()) {
 		t.Fatalf("generated WorkerModelProvider constants = %d, supported internal providers = %d", len(want), len(interfaces.SupportedModelProviders()))

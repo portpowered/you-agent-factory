@@ -24,6 +24,7 @@ describe("runner-metadata", () => {
   it("returns display names for built-in runner ids and null for unknown ids", () => {
     expect(getRunnerDisplayName("codex")).toBe("Codex");
     expect(getRunnerDisplayName("cursor-cli")).toBe("Cursor CLI");
+    expect(getRunnerDisplayName("pi")).toBe("Pi");
     expect(getRunnerDisplayName("claude")).toBeNull();
     expect(getRunnerDisplayName(null)).toBeNull();
     expect(getRunnerDisplayName(undefined)).toBeNull();

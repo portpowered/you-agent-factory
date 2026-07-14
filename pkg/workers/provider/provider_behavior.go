@@ -91,6 +91,11 @@ type openCodeProviderBehavior struct {
 	logger logging.Logger
 }
 
+type piProviderBehavior struct {
+	sharedNonCodexProviderBehavior
+	logger logging.Logger
+}
+
 func providerBehaviorFor(provider string, logger logging.Logger) providerBehavior {
 	switch provider {
 	case string(interfaces.ModelProviderCodex):
@@ -103,6 +108,8 @@ func providerBehaviorFor(provider string, logger logging.Logger) providerBehavio
 		return cursorProviderBehavior{logger: logger}
 	case string(interfaces.ModelProviderOpenCode):
 		return openCodeProviderBehavior{logger: logger}
+	case string(interfaces.ModelProviderPi):
+		return piProviderBehavior{logger: logger}
 	default:
 		return claudeProviderBehavior{logger: logger}
 	}
@@ -333,6 +340,23 @@ func (b openCodeProviderBehavior) BuildArgs(_ context.Context, req interfaces.Pr
 	}
 	if skipPermissions {
 		args = append(args, "--dangerously-skip-permissions")
+	}
+	args = append(args, req.UserMessage)
+	return args, nil
+}
+
+func (b piProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, _ bool, _ *ProviderBuildContext) ([]string, error) {
+	logger := logging.EnsureLogger(b.logger)
+	args := []string{"--print", "--mode", "json", "--approve"}
+	if req.Model != "" {
+		args = append(args, "--model", req.Model)
+	}
+	if req.SessionID != "" {
+		logger.Info("inferencer: resuming pi session")
+		args = append(args, "--session", req.SessionID)
+	}
+	if req.SystemPrompt != "" {
+		args = append(args, "--system-prompt", req.SystemPrompt)
 	}
 	args = append(args, req.UserMessage)
 	return args, nil

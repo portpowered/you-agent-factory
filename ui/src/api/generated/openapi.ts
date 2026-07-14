@@ -7892,6 +7892,8 @@ export const WorkerModelProvider = {
   WorkerModelProviderKiro: "KIRO",
   // OpenCode model execution routed through the `opencode` provider command.
   WorkerModelProviderOpenCode: "OPENCODE",
+  // Pi model execution routed through the `pi` provider command.
+  WorkerModelProviderPi: "PI",
 } as const;
 export type WorkerModelProvider =
   (typeof WorkerModelProvider)[keyof typeof WorkerModelProvider];
@@ -7934,6 +7936,8 @@ export const RunnerID = {
   RunnerIDCursorCLI: "cursor-cli",
   // OpenCode runner selected through the shared runner contract.
   RunnerIDOpenCode: "opencode",
+  // Pi runner selected through the shared runner contract.
+  RunnerIDPi: "pi",
 } as const;
 export type RunnerID = (typeof RunnerID)[keyof typeof RunnerID];
 export const RunnerSelectionSource = {

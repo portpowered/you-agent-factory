@@ -20,6 +20,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_ModelProviderRoundTripsAllSupportedPubl
 		{factoryapi.WorkerModelProviderGemini, interfaces.ModelProviderGemini},
 		{factoryapi.WorkerModelProviderKiro, interfaces.ModelProviderKiro},
 		{factoryapi.WorkerModelProviderOpenCode, interfaces.ModelProviderOpenCode},
+		{factoryapi.WorkerModelProviderPi, interfaces.ModelProviderPi},
 	}
 
 	for _, tc := range cases {

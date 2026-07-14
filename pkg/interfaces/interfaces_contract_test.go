@@ -130,6 +130,7 @@ func generatedPublicFactoryEnumPreservationCases() []generatedPublicFactoryEnumP
 		{name: "resource type unknown", input: "  custom-resource  ", want: "custom-resource", fn: permissiveResourceTypeString},
 		{name: "workstation type", input: "  CUSTOM_WORKSTATION  ", want: "CUSTOM_WORKSTATION", fn: generatedWorkstationTypeString},
 		{name: "runner id", input: "  GEMINI  ", want: "gemini", fn: generatedRunnerIDString},
+		{name: "runner id pi", input: "  PI  ", want: "pi", fn: generatedRunnerIDString},
 		{name: "runner id unknown", input: "  custom-runner  ", want: "custom-runner", fn: generatedRunnerIDString},
 		{name: "runner selection source", input: "  default  ", want: "default", fn: generatedRunnerSelectionSourceString},
 		{name: "runner selection source unknown", input: "  custom-source  ", want: "custom-source", fn: generatedRunnerSelectionSourceString},
@@ -833,6 +834,7 @@ func TestSupportedModelProviders_IncludesAllCanonicalCommands(t *testing.T) {
 		ModelProviderKiro,
 		ModelProviderCursor,
 		ModelProviderOpenCode,
+		ModelProviderPi,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("supported provider count = %d, want %d", len(got), len(want))
@@ -855,6 +857,7 @@ func TestModelProviderPublicInternalMapping_RoundTripsAllSupportedProviders(t *t
 		{factoryapi.WorkerModelProviderGemini, ModelProviderGemini},
 		{factoryapi.WorkerModelProviderKiro, ModelProviderKiro},
 		{factoryapi.WorkerModelProviderOpenCode, ModelProviderOpenCode},
+		{factoryapi.WorkerModelProviderPi, ModelProviderPi},
 	}
 
 	for _, tt := range cases {
