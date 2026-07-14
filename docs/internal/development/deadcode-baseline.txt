@@ -10,3 +10,5 @@ pkg/runtimehost/runtime_sessions.go: unreachable func: Host.inferenceProgressPub
 pkg/runtimehost/runtime_sessions.go: unreachable func: Host.openFactorySession
 pkg/runtimehost/runtime_sessions.go: unreachable func: Host.sessionResponseStream
 pkg/runtimehost/runtime_sessions.go: unreachable func: Host.startBackgroundSession
+pkg/transports/cli/root_work.go: unreachable func: NewLegacyWorkFamilyCommand
+pkg/transports/cli/root_work.go: unreachable func: NewLegacyWorkFamilyRootForParity
