@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/javascript/runtime-manifest.schema.json",
+  "title": "JavaScript runtime symbol manifest",
+  "description": "Authored installed-runtime symbol metadata for globals, nested namespaces, and values. Callable signatures and semantic integrity checks are validated in later schema revisions and family-specific diagnostics.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "symbols"
+  ],
+  "properties": {
+    "formatVersion": {
+      "description": "The explicitly supported version of this runtime-manifest format.",
+      "const": "1.0.0"
+    },
+    "symbols": {
+      "description": "Installed runtime symbols keyed by stable symbol identifiers. Object keys make duplicate symbol IDs structurally unrepresentable.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/symbol"
+      }
+    }
+  },
+  "$defs": {
+    "symbolPath": {
+      "description": "Dot-delimited installed symbol path from the runtime global scope.",
+      "type": "string",
+      "pattern": "^[a-z][a-zA-Z0-9]*(?:[.][a-z][a-zA-Z0-9]*)*$"
+    },
+    "memberName": {
+      "description": "Final segment name of one direct child symbol within a namespace.",
+      "type": "string",
+      "pattern": "^[a-z][a-zA-Z0-9]*$"
+    },
+    "symbolBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "path",
+        "kind",
+        "documentation",
+        "lifecycle"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "name": {
+          "description": "The final segment name exposed on the installed runtime object.",
+          "type": "string",
+          "pattern": "^[a-z][a-zA-Z0-9]*$"
+        },
+        "path": {
+          "$ref": "#/$defs/symbolPath"
+        },
+        "kind": {
+          "description": "The installed symbol shape. Callable kinds are added in later schema revisions.",
+          "enum": [
+            "namespace",
+            "value"
+          ]
+        },
+        "parent": {
+          "description": "Stable identifier of the parent namespace symbol when this symbol is nested.",
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "members": {
+          "description": "Ordered direct child member names declared by a namespace symbol.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/memberName"
+          },
+          "uniqueItems": true
+        },
+        "documentation": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        }
+      }
+    },
+    "rootNamespaceSymbol": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/symbolBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "members"
+          ],
+          "properties": {
+            "kind": {
+              "const": "namespace"
+            }
+          },
+          "not": {
+            "required": [
+              "parent"
+            ]
+          }
+        }
+      ]
+    },
+    "nestedNamespaceSymbol": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/symbolBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "parent",
+            "members"
+          ],
+          "properties": {
+            "kind": {
+              "const": "namespace"
+            }
+          }
+        }
+      ]
+    },
+    "valueSymbol": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/symbolBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "value"
+            }
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "parent"
+                ]
+              },
+              {
+                "required": [
+                  "members"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "symbol": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/rootNamespaceSymbol"
+        },
+        {
+          "$ref": "#/$defs/nestedNamespaceSymbol"
+        },
+        {
+          "$ref": "#/$defs/valueSymbol"
+        }
+      ]
+    }
+  }
+}

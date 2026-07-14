@@ -72,7 +72,7 @@ func MergeRegistries(registries ...Registry) Registry {
 
 // DefaultRegistry registers every contract family validated by make contracts-validate.
 func DefaultRegistry() Registry {
-	return MergeRegistries(CommonRegistry(), CLIRegistry(), CompatibilityInventoryRegistry())
+	return MergeRegistries(CommonRegistry(), CLIRegistry(), CompatibilityInventoryRegistry(), JavaScriptRegistry())
 }
 
 // CommonRegistry registers the common schemas and their merged valid fixtures.
