@@ -825,10 +825,18 @@ func assertDurableSessionEventSurfaceSchemas(t *testing.T, schemas map[string]an
 	if got, _ := eventsOperation["operationId"].(string); got != "getEventsBySessionId" {
 		t.Fatalf("paths./factory-sessions/{session_id}/events.get.operationId = %q, want getEventsBySessionId", got)
 	}
+	docID, ok := eventsOperation["x-doc-id"].(string)
+	if !ok || strings.TrimSpace(docID) == "" {
+		t.Fatal("paths./factory-sessions/{session_id}/events.get.x-doc-id must be a non-empty string")
+	}
+	if docID != "agent-factory/api/factory-session-events" {
+		t.Fatalf("paths./factory-sessions/{session_id}/events.get.x-doc-id = %q, want agent-factory/api/factory-session-events", docID)
+	}
 	assertEventStreamSchemaRef(t, eventsOperation, "#/components/schemas/FactoryEvent")
 	assertResponseSchemaRef(t, eventsOperation, "200", "#/components/schemas/FactorySessionEventStreamRecovery")
 	assertResponseRef(t, eventsOperation, "400", "#/components/responses/BadRequest")
 	assertResponseRef(t, eventsOperation, "404", "#/components/responses/NotFound")
+	assertResponseRef(t, eventsOperation, "500", "#/components/responses/InternalError")
 	parameters, ok := eventsOperation["parameters"].([]any)
 	if !ok {
 		t.Fatalf("paths./factory-sessions/{session_id}/events.get.parameters is missing")
@@ -838,9 +846,15 @@ func assertDurableSessionEventSurfaceSchemas(t *testing.T, schemas map[string]an
 	assertParameterRef(t, parameters, "#/components/parameters/AfterSequence")
 
 	description, _ := eventsOperation["description"].(string)
+	descriptionLower := strings.ToLower(description)
 	for _, fragment := range []string{"after_event_id", "after_sequence", "sessionSequence", "application/json", "cursor_stale"} {
 		if !strings.Contains(description, fragment) {
 			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document %q, got %q", fragment, description)
+		}
+	}
+	for _, fragment := range []string{"ordering", "reconnect", "keepalive", "replay bound", "expired-cursor"} {
+		if !strings.Contains(descriptionLower, fragment) {
+			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document SSE lifecycle guidance %q, got %q", fragment, description)
 		}
 	}
 	for _, fragment := range []string{"canonical", "dashboard", "factory session", "durable replay"} {
