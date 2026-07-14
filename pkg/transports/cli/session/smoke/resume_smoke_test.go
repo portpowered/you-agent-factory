@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/testharness"
+	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/testharness"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/testutil"

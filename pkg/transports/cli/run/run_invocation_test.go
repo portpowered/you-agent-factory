@@ -17,13 +17,13 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/subagent"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -1352,7 +1352,7 @@ func namedGoalNoServerInvocationRunConfig(t *testing.T, goalText string) RunConf
 
 	return RunConfig{
 		Dir:                        resolution.FactoryDir,
-		ExecutionBaseDir:           t.TempDir(),
+		ExecutionBaseDir:           homeDir,
 		NamedFactoryName:           goal.PackagedFactoryName,
 		NamedFactoryResolution:     resolution,
 		InvocationPositionalText:   &goalText,
@@ -1538,7 +1538,7 @@ func TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer(t *testin
 
 	err = Run(ctx, RunConfig{
 		Dir:                        resolution.FactoryDir,
-		ExecutionBaseDir:           t.TempDir(),
+		ExecutionBaseDir:           homeDir,
 		NamedFactoryName:           goal.PackagedFactoryName,
 		NamedFactoryResolution:     resolution,
 		InvocationPositionalText:   &goalText,
@@ -1777,7 +1777,7 @@ func namedSubagentNoServerInvocationRunConfig(t *testing.T, requestText string) 
 
 	return RunConfig{
 		Dir:                        resolution.FactoryDir,
-		ExecutionBaseDir:           t.TempDir(),
+		ExecutionBaseDir:           homeDir,
 		NamedFactoryName:           subagent.PackagedFactoryName,
 		NamedFactoryResolution:     resolution,
 		InvocationPositionalText:   &requestText,
@@ -1845,7 +1845,7 @@ func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *te
 
 	err = Run(ctx, RunConfig{
 		Dir:                        resolution.FactoryDir,
-		ExecutionBaseDir:           t.TempDir(),
+		ExecutionBaseDir:           homeDir,
 		NamedFactoryName:           subagent.PackagedFactoryName,
 		NamedFactoryResolution:     resolution,
 		InvocationPositionalText:   &requestText,

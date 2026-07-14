@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/testharness"
+	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/testharness"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
@@ -785,7 +785,9 @@ func setupMCPRuntimeResumeSmokeWorkflowFixture(t *testing.T, fixtureName, workfl
 
 func drainRuntimeMCPResumeSmokeSessions(t *testing.T, service fse.Service) {
 	t.Helper()
+	const terminalQuiescence = 100 * time.Millisecond
 	deadline := time.Now().Add(3 * time.Second)
+	var terminalSince time.Time
 	for time.Now().Before(deadline) {
 		list, err := service.ListSessions(context.Background(), fse.ListSessionsRequest{
 			Scope: fse.SessionListScopeAll,
@@ -805,7 +807,13 @@ func drainRuntimeMCPResumeSmokeSessions(t *testing.T, service fse.Service) {
 			})
 		}
 		if !pending {
-			return
+			if terminalSince.IsZero() {
+				terminalSince = time.Now()
+			} else if time.Since(terminalSince) >= terminalQuiescence {
+				return
+			}
+		} else {
+			terminalSince = time.Time{}
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

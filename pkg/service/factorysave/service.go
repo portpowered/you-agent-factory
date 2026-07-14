@@ -4,35 +4,21 @@ import (
 	"context"
 	"fmt"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-// Service owns session-scoped factory save orchestration.
+// Service preserves the legacy session-scoped save collaborator shape while
+// delegating policy and side effects to the factory-definition owner.
 type Service struct {
-	factoryRootDir string
-	clock          factory.Clock
-	loader         func() factoryconfig.WorkstationLoader
-	host           Host
+	host Host
 }
 
-// New constructs a factory-save collaborator with explicit dependencies.
-func New(
-	factoryRootDir string,
-	clock factory.Clock,
-	loader func() factoryconfig.WorkstationLoader,
-	host Host,
-) *Service {
-	return &Service{
-		factoryRootDir: factoryRootDir,
-		clock:          clock,
-		loader:         loader,
-		host:           host,
-	}
+// New constructs a factory-save compatibility collaborator.
+func New(host Host) *Service {
+	return &Service{host: host}
 }
 
-// Save runs the session-scoped factory submission pipeline for the given mode.
+// Save delegates the session-scoped factory submission pipeline for the given mode.
 func (s *Service) Save(
 	ctx context.Context,
 	sessionID string,
@@ -42,10 +28,5 @@ func (s *Service) Save(
 	if s == nil || s.host == nil {
 		return factoryapi.Factory{}, fmt.Errorf("factory save service is required")
 	}
-	switch mode {
-	case factoryapi.FactorySaveModeUpsertNamedAndActivate:
-		return s.saveUpsertNamedAndActivateForSession(ctx, sessionID, request)
-	default:
-		return s.saveReplaceCurrentForSession(ctx, sessionID, request)
-	}
+	return s.host.SaveFactoryForSession(ctx, sessionID, mode, request)
 }

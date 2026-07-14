@@ -5,10 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
@@ -94,14 +95,73 @@ func TestExecuteFlushesBeforeReturningEveryCommandOutcome(t *testing.T) {
 	}
 }
 
+func TestExecuteRunsProviderOwnedFallbackOnceAndPublishesCapabilityUpdate(t *testing.T) {
+	t.Parallel()
+	fallback := &kernelAdapter{}
+	selected := &kernelAdapter{
+		fallback: fallback, shouldFallback: true,
+		fallbackDiagnostic: adapter.Diagnostic{Code: "degraded", Message: "fixture selected final mode"},
+	}
+	registry, err := adapter.NewRegistry(selected)
+	if err != nil {
+		t.Fatalf("NewRegistry() error = %v", err)
+	}
+	runner := &kernelRunner{}
+	result, err := adapter.Execute(context.Background(), registry, runner, adapter.ExecuteInput{Provider: selected.Identity()})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if runner.calls != 2 || result.Response.Content != "hello" || len(result.CapabilityUpdates) != 1 {
+		t.Fatalf("fallback result = %#v, runner calls = %d", result, runner.calls)
+	}
+	update := result.CapabilityUpdates[0]
+	if update.Provider != selected.Identity() || update.Diagnostic.Code != "degraded" || len(result.Diagnostics) != 1 {
+		t.Fatalf("capability update = %#v, diagnostics = %#v", update, result.Diagnostics)
+	}
+}
+
+func TestExecuteRejectsInvalidFallbackPlans(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		selected  *kernelAdapter
+		wantError string
+	}{
+		{
+			name:      "planner error",
+			selected:  &kernelAdapter{fallbackErr: errors.New("unsafe fallback policy")},
+			wantError: "plan provider adapter fallback",
+		},
+		{
+			name:      "nil adapter",
+			selected:  &kernelAdapter{shouldFallback: true},
+			wantError: "nil adapter",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			registry, err := adapter.NewRegistry(tc.selected)
+			if err != nil {
+				t.Fatalf("NewRegistry() error = %v", err)
+			}
+			_, executeErr := adapter.Execute(context.Background(), registry, &kernelRunner{}, adapter.ExecuteInput{Provider: tc.selected.Identity()})
+			if executeErr == nil || !strings.Contains(executeErr.Error(), tc.wantError) {
+				t.Fatalf("Execute() error = %v, want %q", executeErr, tc.wantError)
+			}
+		})
+	}
+}
+
 type kernelRunner struct {
 	observations []adapter.Observation
 	result       workerprocess.CommandResult
 	err          error
 	request      workerprocess.CommandRequest
+	calls        int
 }
 
 func (r *kernelRunner) Run(_ context.Context, request workerprocess.CommandRequest, observe func(adapter.Observation) error) (workerprocess.CommandResult, error) {
+	r.calls++
 	r.request = request
 	for _, observation := range r.observations {
 		if err := observe(observation); err != nil {
@@ -115,8 +175,12 @@ func (r *kernelRunner) Run(_ context.Context, request workerprocess.CommandReque
 }
 
 type kernelAdapter struct {
-	decoder         *kernelDecoder
-	parseAfterFlush bool
+	decoder            *kernelDecoder
+	parseAfterFlush    bool
+	fallback           adapter.Adapter
+	shouldFallback     bool
+	fallbackErr        error
+	fallbackDiagnostic adapter.Diagnostic
 }
 
 func (*kernelAdapter) Identity() adapter.Identity { return "opaque-fixture" }
@@ -155,6 +219,10 @@ func (*kernelAdapter) ClassifyFailure(_ context.Context, input adapter.FailureCo
 	}}
 }
 
+func (a *kernelAdapter) PlanFallback(context.Context, adapter.FallbackContext) (adapter.FallbackPlan, bool, error) {
+	return adapter.FallbackPlan{Adapter: a.fallback, Diagnostic: a.fallbackDiagnostic}, a.shouldFallback, a.fallbackErr
+}
+
 type kernelDecoder struct {
 	buffer      []byte
 	flushed     bool
@@ -190,5 +258,6 @@ func (d *kernelDecoder) Flush(_ context.Context, input adapter.FlushContext) (ad
 }
 
 var _ adapter.Adapter = (*kernelAdapter)(nil)
+var _ adapter.FallbackPlanner = (*kernelAdapter)(nil)
 var _ adapter.Decoder = (*kernelDecoder)(nil)
 var _ adapter.StreamingCommandRunner = (*kernelRunner)(nil)

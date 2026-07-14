@@ -519,17 +519,20 @@ func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
 	}
 }
 
-func TestOpenCodeProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
+func TestOpenCodeProviderBehavior_BuildArgs_AcceptsNegotiatedStructuredCapability(t *testing.T) {
 	behavior := openCodeProviderBehavior{logger: logging.NoopLogger{}}
-	_, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
+	args, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
 		ModelProvider: string(interfaces.ModelProviderOpenCode),
 		UserMessage:   "summarize the workspace",
 		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
 			interfaces.RunnerOptionalCapabilityStructuredOutput,
 		},
 	}, false, nil)
-	if err == nil || err.Error() != "structured output is not supported by the opencode runner in v1" {
-		t.Fatalf("BuildArgs error = %v, want structured output rejection", err)
+	if err != nil {
+		t.Fatalf("BuildArgs error = %v", err)
+	}
+	if len(args) != 2 || args[0] != "run" || args[1] != "summarize the workspace" {
+		t.Fatalf("BuildArgs() = %#v", args)
 	}
 }
 

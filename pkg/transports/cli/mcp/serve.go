@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"

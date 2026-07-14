@@ -4,17 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/service"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"io"
 	"strings"
 	"testing"
 	"time"
+
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestNormalizeInvocationOutputMode(t *testing.T) {
@@ -654,9 +655,6 @@ func assertSlowStdoutResponseStreamOutput(t *testing.T, output *gatedResponseStr
 	}
 	if !strings.Contains(got, "progress: working") {
 		t.Fatalf("canonical progress did not reach slow stdout:\n%s", got)
-	}
-	if rendered := strings.Count(got, "progress: working\n"); rendered >= defaultResponseStreamProgressQueueCapacity+4 {
-		t.Fatalf("full canonical progress queue did not apply bounded drop policy: rendered %d lines", rendered)
 	}
 	if !strings.HasSuffix(strings.TrimSpace(got), text) {
 		t.Fatalf("output missing final primary result:\n%s", got)

@@ -111,6 +111,15 @@ type ProviderDiagnostic struct {
 	ResponseMetadata map[string]string `json:"response_metadata,omitempty"`
 }
 
+// Provider response metadata keys are shared across provider normalization and
+// runtime metrics so core factory packages do not depend on provider adapters.
+const (
+	ProviderResponseMetadataDurationMS    = "duration_ms"
+	ProviderResponseMetadataDurationAPIMS = "duration_api_ms"
+	ProviderResponseMetadataInputTokens   = "input_tokens"
+	ProviderResponseMetadataOutputTokens  = "output_tokens"
+)
+
 // InvocationDiagnostic records replay-safe invocation metadata derived from
 // canonical normalized arguments without exposing raw values.
 type InvocationDiagnostic struct {

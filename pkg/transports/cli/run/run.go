@@ -24,7 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/batchload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
@@ -399,10 +399,9 @@ func BuildApplication(
 		return nil, err
 	}
 
-	reservedAPIServer, err := reserveAPIServerListener(cfg.Port, cfg.AutoPort)
-	if invocationMode {
-		reservedAPIServer = nil
-		err = nil
+	var reservedAPIServer *reservedAPIServerListener
+	if !invocationMode {
+		reservedAPIServer, err = reserveAPIServerListener(cfg.Port, cfg.AutoPort)
 	}
 	if err != nil {
 		return nil, err

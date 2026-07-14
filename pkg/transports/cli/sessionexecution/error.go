@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 )
 

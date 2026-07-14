@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"

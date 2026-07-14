@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	fse "github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"

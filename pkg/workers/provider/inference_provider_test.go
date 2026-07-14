@@ -659,7 +659,7 @@ func TestScriptWrapProvider_Infer_NonCodexPayloadUsesExpectedCommandRequestAndNo
 			fakeExec := &recordingProviderExec{
 				result: CommandResult{Stdout: stdout},
 			}
-			provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+			provider := newScriptWrapProviderForTest(t, fakeExec, tc.req.ModelProvider)
 
 			resp, err := provider.Infer(context.Background(), tc.req)
 			if err != nil {

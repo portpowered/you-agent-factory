@@ -13,13 +13,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
@@ -472,6 +472,13 @@ func formatHumanStreamGapEvent(event responseevents.FactoryResponseEvent) (strin
 	var payload responseevents.StreamGapPayload
 	if err := json.Unmarshal(event.Payload, &payload); err != nil {
 		return "", false
+	}
+	if itemID := normalizeHumanProgressField(payload.AffectedItemID); itemID != "" {
+		line := "stream gap: item " + itemID + " lifecycle is incomplete"
+		if reason := normalizeHumanProgressField(payload.Reason); reason != "" {
+			line += " (reason=" + reason + ")"
+		}
+		return line, true
 	}
 	line := fmt.Sprintf(
 		"stream gap: sequences %d-%d unavailable",

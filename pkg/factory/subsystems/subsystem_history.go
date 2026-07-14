@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/subagent"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 // HistorySubsystem reads WorkResults from the RuntimeStateSnapshot and computes
@@ -46,7 +46,9 @@ func (h *HistorySubsystem) Execute(_ context.Context, snapshot *interfaces.Engin
 
 	histories := make([]interfaces.TokenHistory, len(snapshot.Results))
 	for i := range snapshot.Results {
-		histories[i] = buildHistory(consumedTokensForResult(snapshot, &snapshot.Results[i]), &snapshot.Results[i])
+		result := &snapshot.Results[i]
+		consumedTokens := consumedTokensForResult(snapshot, result)
+		histories[i] = buildHistory(consumedTokens, result, candidateWorkID(snapshot.Topology, result.TransitionID, consumedTokens))
 	}
 
 	h.logger.Debug("history: computed token histories", "count", len(histories))
@@ -54,8 +56,9 @@ func (h *HistorySubsystem) Execute(_ context.Context, snapshot *interfaces.Engin
 }
 
 // buildHistory creates a TokenHistory with updated TotalVisits and ConsecutiveFailures.
-// Consumed token histories are merged from the runtime dispatch snapshot.
-func buildHistory(consumedTokens []interfaces.Token, result *interfaces.WorkResult) interfaces.TokenHistory {
+// Consumed token histories are merged from the candidate work lineage stored in
+// the runtime dispatch snapshot.
+func buildHistory(consumedTokens []interfaces.Token, result *interfaces.WorkResult, candidateID string) interfaces.TokenHistory {
 	history := interfaces.TokenHistory{
 		TotalVisits:         make(map[string]int),
 		ConsecutiveFailures: make(map[string]int),
@@ -66,7 +69,7 @@ func buildHistory(consumedTokens []interfaces.Token, result *interfaces.WorkResu
 	// carry copies of the same lineage visit counts (for example task + review
 	// companions in executor/review loops). Use max per key so visit counts reflect
 	// one work lineage instead of summing duplicate counters.
-	for _, consumed := range consumedTokens {
+	for _, consumed := range candidateLineageTokens(consumedTokens, candidateID) {
 		ih := consumed.History
 		for tid, v := range ih.TotalVisits {
 			if v > history.TotalVisits[tid] {
@@ -102,6 +105,45 @@ func buildHistory(consumedTokens []interfaces.Token, result *interfaces.WorkResu
 	}
 
 	return history
+}
+
+// candidateWorkID identifies the durable work item whose history should be
+// propagated by a transition. Authored input order is canonical, so the first
+// non-resource input arc is the candidate while later inputs may be generated
+// companions or other supporting work.
+func candidateWorkID(net *state.Net, transitionID string, consumedTokens []interfaces.Token) string {
+	if net != nil {
+		if transition := net.Transitions[transitionID]; transition != nil {
+			for _, arc := range transition.InputArcs {
+				for _, token := range consumedTokens {
+					if token.PlaceID == arc.PlaceID && token.Color.DataType != interfaces.DataTypeResource && token.Color.WorkID != "" {
+						return token.Color.WorkID
+					}
+				}
+			}
+		}
+	}
+
+	for _, token := range consumedTokens {
+		if token.Color.DataType != interfaces.DataTypeResource && token.Color.WorkID != "" {
+			return token.Color.WorkID
+		}
+	}
+	return ""
+}
+
+func candidateLineageTokens(consumedTokens []interfaces.Token, candidateID string) []interfaces.Token {
+	if candidateID == "" {
+		return consumedTokens
+	}
+
+	lineage := make([]interfaces.Token, 0, len(consumedTokens))
+	for _, token := range consumedTokens {
+		if token.Color.WorkID == candidateID || token.Color.ParentID == candidateID {
+			lineage = append(lineage, token)
+		}
+	}
+	return lineage
 }
 
 func consumedTokensForResult(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], result *interfaces.WorkResult) []interfaces.Token {

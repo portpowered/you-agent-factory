@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 )
 
 const namedGoalResponseStreamJSONRecordInvocation = "invocation_result"

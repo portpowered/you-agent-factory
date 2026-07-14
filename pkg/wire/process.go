@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/service"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"

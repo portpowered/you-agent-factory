@@ -2210,19 +2210,36 @@ type FactoryResponseEventSessionPayload struct {
 	Status *string `json:"status,omitempty"`
 }
 
-// FactoryResponseEventStreamGapPayload Discontinuity marker in the retained response-event stream.
+// FactoryResponseEventStreamGapPayload Discontinuity marker for either unavailable retained response-event sequences or an affected provider item whose lifecycle could not be fully observed. Retention gaps include fromSequence, toSequence, and firstAvailableSequence; item-scoped gaps include affectedItemId and reason. The alternatives are exclusive so empty, partial, and mixed payloads are rejected.
 type FactoryResponseEventStreamGapPayload struct {
-	// FirstAvailableSequence Sequence of the first retained event available to this subscription, or the next sequence that can be published when no retained event matches.
+	union json.RawMessage
+}
+
+// FactoryResponseEventStreamGapPayload0 defines model for .
+type FactoryResponseEventStreamGapPayload0 struct {
+	// FirstAvailableSequence First retained sequence available after the gap.
 	FirstAvailableSequence int64 `json:"firstAvailableSequence"`
 
 	// FromSequence Lowest unavailable published sequence greater than the reader's cursor.
 	FromSequence int64 `json:"fromSequence"`
 
-	// Reason Optional reason for the stream gap such as retention_window.
+	// Reason Retention-gap reason such as retention_window.
 	Reason *string `json:"reason,omitempty"`
 
 	// ToSequence Highest unavailable published sequence in the reader's catch-up window.
 	ToSequence int64 `json:"toSequence"`
+}
+
+// FactoryResponseEventStreamGapPayload1 defines model for .
+type FactoryResponseEventStreamGapPayload1 struct {
+	// AffectedItemId Stable item identifier affected by a provider lifecycle discontinuity.
+	AffectedItemId string `json:"affectedItemId"`
+
+	// Reason Provider gap reason such as provider_reconnect or provider_terminated.
+	Reason string `json:"reason"`
+
+	// ToolCallId Provider tool-call identifier when the affected item is a tool lifecycle.
+	ToolCallId *string `json:"toolCallId,omitempty"`
 }
 
 // FactoryResponseEventStructuredOutputContentBlock Structured JSON output content block.
@@ -7998,6 +8015,68 @@ func (t FactoryResponseEventPayload) MarshalJSON() ([]byte, error) {
 }
 
 func (t *FactoryResponseEventPayload) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsFactoryResponseEventStreamGapPayload0 returns the union data inside the FactoryResponseEventStreamGapPayload as a FactoryResponseEventStreamGapPayload0
+func (t FactoryResponseEventStreamGapPayload) AsFactoryResponseEventStreamGapPayload0() (FactoryResponseEventStreamGapPayload0, error) {
+	var body FactoryResponseEventStreamGapPayload0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventStreamGapPayload0 overwrites any union data inside the FactoryResponseEventStreamGapPayload as the provided FactoryResponseEventStreamGapPayload0
+func (t *FactoryResponseEventStreamGapPayload) FromFactoryResponseEventStreamGapPayload0(v FactoryResponseEventStreamGapPayload0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventStreamGapPayload0 performs a merge with any union data inside the FactoryResponseEventStreamGapPayload, using the provided FactoryResponseEventStreamGapPayload0
+func (t *FactoryResponseEventStreamGapPayload) MergeFactoryResponseEventStreamGapPayload0(v FactoryResponseEventStreamGapPayload0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsFactoryResponseEventStreamGapPayload1 returns the union data inside the FactoryResponseEventStreamGapPayload as a FactoryResponseEventStreamGapPayload1
+func (t FactoryResponseEventStreamGapPayload) AsFactoryResponseEventStreamGapPayload1() (FactoryResponseEventStreamGapPayload1, error) {
+	var body FactoryResponseEventStreamGapPayload1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromFactoryResponseEventStreamGapPayload1 overwrites any union data inside the FactoryResponseEventStreamGapPayload as the provided FactoryResponseEventStreamGapPayload1
+func (t *FactoryResponseEventStreamGapPayload) FromFactoryResponseEventStreamGapPayload1(v FactoryResponseEventStreamGapPayload1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeFactoryResponseEventStreamGapPayload1 performs a merge with any union data inside the FactoryResponseEventStreamGapPayload, using the provided FactoryResponseEventStreamGapPayload1
+func (t *FactoryResponseEventStreamGapPayload) MergeFactoryResponseEventStreamGapPayload1(v FactoryResponseEventStreamGapPayload1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t FactoryResponseEventStreamGapPayload) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *FactoryResponseEventStreamGapPayload) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }

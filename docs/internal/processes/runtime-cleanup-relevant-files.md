@@ -16,8 +16,8 @@ delegation to the target owner or part of an active removal lane.
 
 | Change area | Preferred owner for new behavior | Review guidance |
 | --- | --- | --- |
-| Dynamic workflow runtime behavior | `pkg/orchestrators/javascript/*`, with durable lifecycle and resume behavior in `pkg/factorysessionexecution` | Put JavaScript source resolution, validation, policy, runtime execution, result shaping, checkpoints, and resume state in the JavaScript orchestrator packages. Route durable start, resume, lifecycle/control, artifact, result, and persisted execution through Factory Session execution owners. |
-| Factory Session state | `pkg/factorysessions` for live session state and read models; `pkg/factorysessionexecution` for durable execution state | A Factory Session owns runtime identity, event history, lifecycle/control state, current work, Current Factory, runtime instances, stream identity, and session projections. `FactoryService` may locate or route to sessions, but must not become the state owner. |
+| Dynamic workflow runtime behavior | `pkg/orchestrators/javascript/*`, with durable lifecycle and resume behavior in `pkg/factory/sessions/execution` | Put JavaScript source resolution, validation, policy, runtime execution, result shaping, checkpoints, and resume state in the JavaScript orchestrator packages. Route durable start, resume, lifecycle/control, artifact, result, and persisted execution through Factory Session execution owners. |
+| Factory Session state | `pkg/factory/sessions` for live session state and read models; `pkg/factory/sessions/execution` for durable execution state | A Factory Session owns runtime identity, event history, lifecycle/control state, current work, Current Factory, runtime instances, stream identity, and session projections. `FactoryService` may locate or route to sessions, but must not become the state owner. |
 | Model operations | `pkg/models/host` for process-wide runtime lifecycle and leases; `pkg/models/service` for model API service behavior; `pkg/models/local` for catalog compatibility projection | Keep readiness, supervised process lifecycle, capacity, leases, diagnostics, invocation gating, and host-owned execution in the model owner. Construct the model API service once from explicit model-scoped dependencies at application composition, then inject that same instance into transports and compatibility hosts. Transport handlers should call model service or API-surface adapters instead of embedding model runtime policy. |
 | Worker and provider execution | `pkg/workers` and `pkg/workers/hosted` | Put provider adapters, script/agent/inference executors, mock workers, process runners, sidecars, hosted-worker integration, and worker execution diagnostics in the worker owner. Shared single-attempt provider invocation and canonical result mapping belong in `pkg/workers/providerexecution`; callers retain retry and durable lifecycle policy. Production creates the default provider per worker with worker-specific permissions, logging, progress publication, and command-runner options, so application graphs should own the runtime builder/factory that creates those providers rather than publishing a fabricated process-wide provider executor. Session or service code should inject callbacks and observers rather than owning provider behavior. |
 | Work domain | target `pkg/work` | Put Work content, query/selection, graph/lineage, pure invocation input and return policy, materialization, and cron/time-work concepts in the collapsed Work owner. Until Batch 006 moves a slice, use its registered migration root and do not create a parallel implementation. |
@@ -105,12 +105,13 @@ finish the named move, not ownership rationale for new product behavior.
 transport packages should own narrow contracts that startup injects instead of
 depending outward on the application graph.
 
-The same guard rejects imports of the retired transport roots `pkg/api`,
-`pkg/apisurface`, `pkg/cli`, `pkg/mcp`, and `pkg/generatedclient`, with a
-diagnostic naming the canonical successor. It also requires every Go file in
-`pkg/transports/http/client` and `pkg/transports/http/generated` to carry the
-standard generated-code marker; handwritten mapping belongs outside those
-generated-only packages.
+The same check rejects recreation or import of converged roots and reports the
+canonical replacement: `pkg/packagedfactories` to `pkg/factory/packages`,
+`pkg/factorydefinition` to `pkg/factory/definition`,
+`pkg/factorysessionexecution` to `pkg/factory/sessions/execution`,
+`pkg/factorysessions` to `pkg/factory/sessions`, and `pkg/petri` to
+`pkg/orchestrators/petri`. Add a retired-root mapping when completing a package
+convergence so an old import cannot hide inside an otherwise approved family.
 
 ## Vocabulary Guardrails
 
@@ -126,7 +127,7 @@ treated as compatibility aliases when they still exist.
 
 Petri-net vocabulary such as tokens, places, transitions, markings, and guards
 is allowed only when the text explicitly describes internal implementation
-details or `pkg/petri` ownership. It should not be the primary wording for
+details or `pkg/orchestrators/petri` ownership. It should not be the primary wording for
 customer-facing Factory Session, Work, or event-stream behavior.
 
 ## Focused Verification
@@ -159,7 +160,7 @@ When changing durable Factory Session execution construction, run
 `NewJavaScriptRuntimeService` calls only in the package-local execution-provider
 factory and approved deterministic test harness. Project-local persistence path
 resolution and directory-store construction belong at the fallible application
-composition boundary in `pkg/factorysessionexecution/service.go`; production
+composition boundary in `pkg/factory/sessions/execution/service.go`; production
 runtime code must receive either that injected store or an explicit disabled
 policy and must not use a persistence boolean.
 
@@ -185,7 +186,7 @@ direct provider-package imports and `Infer` calls there while permitting tests,
 deterministic fakes, and shared contract types.
 
 Canonical Factory Session event recording follows the same ownership check.
-`pkg/factorysessionexecution` owns canonical event validation, ordered append,
+`pkg/factory/sessions/execution` owns canonical event validation, ordered append,
 persistence, live publication, and replay projection. Production orchestrator
 packages return facts and typed orchestration records to that owner; they must
 not call canonical event builders or import `pkg/sessionpersistence` directly.

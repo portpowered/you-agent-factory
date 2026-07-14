@@ -178,6 +178,27 @@ func (b codexProviderBehavior) BuildCommandRequest(req interfaces.ProviderInfere
 	return commandReq
 }
 
+// BuildCodexStructuredCommand applies the established Codex command and image
+// materialization policy for a typed adapter invocation. Cleanup must run after
+// the subprocess attempt so dispatch-scoped image files remain available.
+func BuildCodexStructuredCommand(
+	ctx context.Context,
+	req interfaces.ProviderInferenceRequest,
+	skipPermissions bool,
+	materializeOpts *materialize.Options,
+) (CommandRequest, func(), error) {
+	buildCtx := &ProviderBuildContext{ContentCache: materialize.NewDispatchCache(), MaterializeOpts: materializeOpts}
+	cleanup := func() { buildCtx.release() }
+	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
+	args, err := behavior.BuildArgs(ctx, req, skipPermissions, buildCtx)
+	if err != nil {
+		cleanup()
+		return CommandRequest{}, nil, err
+	}
+	args = append(args[:1], append([]string{"--json"}, args[1:]...)...)
+	return behavior.BuildCommandRequest(req, args), cleanup, nil
+}
+
 func (b geminiProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
 	if err := validateGeminiOptionalCapabilities(req); err != nil {
 		return nil, err
@@ -379,9 +400,8 @@ func validateCursorOptionalCapabilities(req interfaces.ProviderInferenceRequest)
 
 func validateOpenCodeOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
 	unsupported := map[interfaces.RunnerOptionalCapability]string{
-		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the opencode runner in v1",
-		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the opencode runner in v1",
-		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the opencode runner in v1",
+		interfaces.RunnerOptionalCapabilityImageInput: "image input is not supported by the opencode runner in v1",
+		interfaces.RunnerOptionalCapabilityWorktree:   "worktree selection is not supported by the opencode runner in v1",
 	}
 	for _, capability := range req.RequiredOptionalCapabilities {
 		if message, blocked := unsupported[capability]; blocked {

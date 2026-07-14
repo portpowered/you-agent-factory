@@ -16,7 +16,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	"go.uber.org/zap"
@@ -603,16 +603,15 @@ func startOOTBSmokeRun(t *testing.T, dir string, port int, out *bytes.Buffer) (c
 	errCh := make(chan error, 1)
 	go func() {
 		errCh <- Run(ctx, RunConfig{
-			Dir:                     dir,
-			ExecutionBaseDir:        dir,
-			Bootstrap:               true,
-			Continuously:            true,
-			MockWorkersEnabled:      true,
-			DisableDefaultRecording: true,
-			Port:                    port,
-			OpenDashboard:           true,
-			StartupOutput:           out,
-			Logger:                  zap.NewNop(),
+			Dir:                dir,
+			ExecutionBaseDir:   dir,
+			Bootstrap:          true,
+			Continuously:       true,
+			MockWorkersEnabled: true,
+			Port:               port,
+			OpenDashboard:      true,
+			StartupOutput:      out,
+			Logger:             zap.NewNop(),
 		})
 	}()
 	return cancel, errCh
@@ -847,8 +846,8 @@ func writeFile(t *testing.T, path, content string) {
 
 func runWithCapturedStdout(t *testing.T, cfg RunConfig) (string, error) {
 	t.Helper()
-	if cfg.ExecutionBaseDir == "" {
-		cfg.ExecutionBaseDir = t.TempDir()
+	if cfg.ExecutionBaseDir == "" && cfg.Dir != "" {
+		cfg.ExecutionBaseDir = cfg.Dir
 	}
 
 	oldStdout := os.Stdout

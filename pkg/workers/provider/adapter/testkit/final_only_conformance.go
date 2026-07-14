@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
@@ -40,7 +40,7 @@ type FinalOnlyFailureCase struct {
 // successful final-only command.
 type FinalOnlyExpected struct {
 	Content         string
-	ProviderSession interfaces.ProviderSessionMetadata
+	ProviderSession *interfaces.ProviderSessionMetadata
 }
 
 // RunFinalOnly runs the shared conformance contract for an adapter that emits
@@ -107,7 +107,7 @@ func assertFinalOnlySuccess(t *testing.T, fixture FinalOnlyFixture) {
 	if result.Response.Content != fixture.Expected.Content {
 		t.Fatalf("final content = %q, want %q", result.Response.Content, fixture.Expected.Content)
 	}
-	if result.Response.ProviderSession == nil || *result.Response.ProviderSession != fixture.Expected.ProviderSession {
+	if !sameProviderSession(result.Response.ProviderSession, fixture.Expected.ProviderSession) {
 		t.Fatalf("provider session = %#v, want %#v", result.Response.ProviderSession, fixture.Expected.ProviderSession)
 	}
 	assertFinalOnlyDrafts(t, result.Drafts, fixture.Expected)
@@ -138,7 +138,11 @@ func assertFinalOnlyDrafts(t *testing.T, drafts []responseevents.Draft, expected
 		}
 	}
 	message := drafts[1]
-	if message.ProviderSessionRef != expected.ProviderSession.ID || messageText(t, message) != expected.Content {
+	wantProviderRef := ""
+	if expected.ProviderSession != nil {
+		wantProviderRef = expected.ProviderSession.ID
+	}
+	if message.ProviderSessionRef != wantProviderRef || messageText(t, message) != expected.Content {
 		t.Fatalf("authoritative message draft = %#v", message)
 	}
 	if message.Provenance.Delivery != responseevents.DeliveryNativeFinal || message.Provenance.Representation != responseevents.RepresentationSnapshot || message.Provenance.Fidelity != responseevents.FidelityFinalOnly {

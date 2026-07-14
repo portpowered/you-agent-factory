@@ -10,8 +10,7 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -46,7 +45,7 @@ func TestSaveDefaultCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 			},
 		},
 	}
-	svc := New(rootDir, factory.RealClock{}, func() factoryconfig.WorkstationLoader { return nil }, host)
+	svc := New(host)
 
 	replacement := factoryapi.Factory{
 		Name: apisurface.DefaultCurrentFactoryName,
@@ -148,7 +147,7 @@ func TestSaveDefaultCurrentFactoryForSession_RestoresTreeOnActivationFailure(t *
 		},
 		activateErr: errors.New("activation failed"),
 	}
-	svc := New(rootDir, factory.RealClock{}, func() factoryconfig.WorkstationLoader { return nil }, host)
+	svc := New(host)
 
 	replacement := factoryapi.Factory{
 		Name: apisurface.DefaultCurrentFactoryName,
@@ -311,20 +310,13 @@ func (h *splitLayoutDefaultSaveHost) PreparePersistedFactoryPayload(
 	return preparePersistedFactoryPayload(segment, factory, version)
 }
 
-func (h *splitLayoutDefaultSaveHost) SaveReplaceCurrentForSession(
+func (h *splitLayoutDefaultSaveHost) SaveFactoryForSession(
 	ctx context.Context,
 	sessionID string,
+	mode factoryapi.FactorySaveMode,
 	request factoryapi.Factory,
 ) (factoryapi.Factory, error) {
-	return saveReplaceCurrentThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
-}
-
-func (h *splitLayoutDefaultSaveHost) SaveUpsertNamedAndActivateForSession(
-	ctx context.Context,
-	sessionID string,
-	request factoryapi.Factory,
-) (factoryapi.Factory, error) {
-	return saveUpsertNamedThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
+	return saveFactoryThroughDefinition(h.sessionRootDir, h, ctx, sessionID, mode, request)
 }
 
 func stringPointer(value string) *string {

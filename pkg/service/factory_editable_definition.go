@@ -9,10 +9,10 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
-	factorydefinition "github.com/portpowered/infinite-you/pkg/factorydefinition/service"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -245,17 +245,6 @@ func (fs *FactoryService) currentFactoryDefinitionVersionAtRoot(rootDir string, 
 	return factoryapi.HybridLogicalTimestamp{}, fmt.Errorf("factory definition service is required")
 }
 
-func (fs *FactoryService) serializeNamedFactoryUpsertResponse(
-	name factoryapi.FactoryName,
-	current *factoryconfig.LoadedFactoryConfig,
-) (factoryapi.Factory, error) {
-	svc := fs.definitionService()
-	if svc == nil {
-		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
-	}
-	return svc.SerializeNamedFactoryUpsertResponse(name, current)
-}
-
 // factorySaveSaver is the injectable factory-save collaborator seam.
 type factorySaveSaver interface {
 	Save(
@@ -293,7 +282,7 @@ func (fs *FactoryService) SaveCurrentFactoryForSession(
 }
 
 func sessionFactoryPersistRoot(serviceRootDir string, session *factorysessions.LiveSession) string {
-	return factorysave.SessionFactoryPersistRoot(serviceRootDir, session)
+	return factorydefinition.SessionFactoryPersistRoot(serviceRootDir, session)
 }
 
 type factorySaveHost struct {
@@ -302,123 +291,21 @@ type factorySaveHost struct {
 
 var _ factorysave.Host = factorySaveHost{}
 
-func (h factorySaveHost) RequireSession(sessionID string) (*factorysessions.LiveSession, error) {
-	return h.FactoryService.requireSession(sessionID)
-}
-
-func (h factorySaveHost) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
-	return h.FactoryService.GetCurrentFactoryForSession(ctx, sessionID)
-}
-
-func (h factorySaveHost) WithActivationLock(fn func() error) error {
-	return h.FactoryService.withActivationLock(fn)
-}
-
-func (h factorySaveHost) RequireIdleRuntimeForSession(ctx context.Context, sessionID string) error {
-	return h.FactoryService.requireIdleRuntimeForSession(ctx, sessionID)
-}
-
-func (h factorySaveHost) ActivateSessionEditableFactory(
-	ctx context.Context,
-	session *factorysessions.LiveSession,
-	sessionID string,
-	sessionRootDir string,
-	factoryDir string,
-	name factoryapi.FactoryName,
-	runtimeName string,
-) error {
-	return h.FactoryService.activateSessionEditableFactory(ctx, session, sessionID, sessionRootDir, factoryDir, name, runtimeName)
-}
-
-func (h factorySaveHost) ReplaceFactoryLayoutAtDir(targetDir string, prepared *factoryconfig.PreparedFactoryLayoutPayload) (*factoryconfig.FactorySplitLayoutReplaceResult, error) {
-	return h.FactoryService.replaceFactoryLayoutAtDir(targetDir, prepared)
-}
-
-func (h factorySaveHost) CurrentFactoryDefinitionVersionAtRoot(rootDir string, name factoryapi.FactoryName) (factoryapi.HybridLogicalTimestamp, error) {
-	return h.FactoryService.currentFactoryDefinitionVersionAtRoot(rootDir, name)
-}
-
-func (h factorySaveHost) SessionRuntimeConfig(sessionID string) (*factoryconfig.LoadedFactoryConfig, error) {
-	return h.FactoryService.sessionRuntimeConfig(sessionID)
-}
-
-func (h factorySaveHost) SerializeNamedFactoryUpsertResponse(
-	name factoryapi.FactoryName,
-	runtimeCfg *factoryconfig.LoadedFactoryConfig,
-) (factoryapi.Factory, error) {
-	return h.FactoryService.serializeNamedFactoryUpsertResponse(name, runtimeCfg)
-}
-
-func (h factorySaveHost) RequireFreshEditableFactoryVersionAtRoot(
-	rootDir string,
-	name factoryapi.FactoryName,
-	baseVersion *factoryapi.HybridLogicalTimestamp,
-) error {
-	currentVersion, err := h.CurrentFactoryDefinitionVersionAtRoot(rootDir, name)
-	if err != nil {
-		return err
-	}
-	svc := h.FactoryService.definitionService()
-	if svc == nil {
-		return fmt.Errorf("factory definition service is required")
-	}
-	return svc.RequireFreshEditableFactoryVersion(baseVersion, currentVersion)
-}
-
-func (h factorySaveHost) NextEditableFactoryVersion(
-	current *factoryapi.HybridLogicalTimestamp,
-	now time.Time,
-) factoryapi.HybridLogicalTimestamp {
-	svc := h.FactoryService.definitionService()
-	if svc == nil {
-		return factoryapi.HybridLogicalTimestamp{}
-	}
-	return svc.NextEditableFactoryVersion(current, now)
-}
-
-func (h factorySaveHost) PreparePersistedFactoryPayload(
-	segment string,
-	factory factoryapi.Factory,
-	version factoryapi.HybridLogicalTimestamp,
-) (*factoryconfig.PreparedFactoryLayoutPayload, error) {
-	svc := h.FactoryService.definitionService()
-	if svc == nil {
-		return nil, fmt.Errorf("factory definition service is required")
-	}
-	return svc.PreparePersistedFactoryPayload(segment, factory, version)
-}
-
-func (h factorySaveHost) SaveReplaceCurrentForSession(
+func (h factorySaveHost) SaveFactoryForSession(
 	ctx context.Context,
 	sessionID string,
+	mode factoryapi.FactorySaveMode,
 	request factoryapi.Factory,
 ) (factoryapi.Factory, error) {
 	svc := h.FactoryService.definitionService()
 	if svc == nil {
 		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
 	}
-	return svc.SaveReplaceCurrentForSession(ctx, sessionID, request)
-}
-
-func (h factorySaveHost) SaveUpsertNamedAndActivateForSession(
-	ctx context.Context,
-	sessionID string,
-	request factoryapi.Factory,
-) (factoryapi.Factory, error) {
-	svc := h.FactoryService.definitionService()
-	if svc == nil {
-		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
-	}
-	return svc.SaveUpsertNamedAndActivateForSession(ctx, sessionID, request)
+	return svc.Save(ctx, sessionID, mode, request)
 }
 
 func newFactorySaveService(fs *FactoryService) *factorysave.Service {
-	return factorysave.New(
-		fs.factoryRootDir,
-		fs.clock,
-		fs.workstationLoaderFromConfig,
-		factorySaveHost{fs},
-	)
+	return factorysave.New(factorySaveHost{fs})
 }
 
 func wireFactorySaveCollaborator(fs *FactoryService, cfg *FactoryServiceConfig) factorySaveSaver {
@@ -426,13 +313,6 @@ func wireFactorySaveCollaborator(fs *FactoryService, cfg *FactoryServiceConfig) 
 		return cfg.FactorySave
 	}
 	return newFactorySaveService(fs)
-}
-
-func (fs *FactoryService) workstationLoaderFromConfig() factoryconfig.WorkstationLoader {
-	if fs == nil || fs.cfg == nil {
-		return nil
-	}
-	return fs.cfg.WorkstationLoader
 }
 
 func (fs *FactoryService) withActivationLock(fn func() error) error {

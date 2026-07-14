@@ -15,18 +15,18 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recording"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recording"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/recordingreplay"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -132,7 +132,7 @@ type serviceRunState struct {
 // concerns: file watcher, dashboard, API server. It owns the full lifecycle
 // so that CLI and other entry points remain thin wrappers.
 //
-// Extracted domains are composed explicitly: pkg/factorysessions owns the live
+// Extracted domains are composed explicitly: pkg/factory/sessions owns the live
 // session registry, pkg/models/local owns managed model runtime wiring, and
 // pkg/workers/hosted owns hosted poller supervision invoked from poller_watcher.
 type FactoryService struct {
@@ -428,7 +428,7 @@ type FactoryServiceConfig struct {
 	// without running the full save orchestration pipeline.
 	FactorySave factorySaveSaver
 	// SessionGateway, when non-nil, replaces the default
-	// factorysessions/service gateway collaborator. Tests use this to assert
+	// factory/sessions/service gateway collaborator. Tests use this to assert
 	// OpenFactorySession delegates without running the full open pipeline.
 	SessionGateway sessionGateway
 	// ModelAPI, when non-nil, replaces the default pkg/models/service collaborator.

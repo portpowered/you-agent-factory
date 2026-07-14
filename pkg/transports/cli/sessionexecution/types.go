@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 )
 
 // ExecutionMode selects synchronous or asynchronous durable session start.

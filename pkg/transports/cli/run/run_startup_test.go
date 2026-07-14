@@ -251,7 +251,7 @@ func TestRun_StartupOutputReportsSharedLayoutPathsFromBuiltService(t *testing.T)
 	var out bytes.Buffer
 	err := Run(context.Background(), RunConfig{
 		Dir:                        dir,
-		ExecutionBaseDir:           t.TempDir(),
+		ExecutionBaseDir:           dir,
 		Port:                       0,
 		DisableDefaultRecording:    true,
 		RuntimeLogDir:              logDir,
@@ -677,7 +677,7 @@ func TestRun_WireBuiltFactoryServiceServesStatus(t *testing.T) {
 	go func() {
 		runErrCh <- Run(ctx, RunConfig{
 			Dir:                        dir,
-			ExecutionBaseDir:           t.TempDir(),
+			ExecutionBaseDir:           dir,
 			Continuously:               true,
 			MockWorkersEnabled:         true,
 			DisableDefaultRecording:    true,
@@ -766,7 +766,7 @@ func TestRun_WireBuiltFactoryServiceListsModels(t *testing.T) {
 	go func() {
 		runErrCh <- Run(ctx, RunConfig{
 			Dir:                        dir,
-			ExecutionBaseDir:           t.TempDir(),
+			ExecutionBaseDir:           dir,
 			Continuously:               true,
 			MockWorkersEnabled:         true,
 			DisableDefaultRecording:    true,

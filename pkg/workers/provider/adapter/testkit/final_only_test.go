@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/testkit"
@@ -42,7 +42,7 @@ func TestFinalOnlyAdapterConformance(t *testing.T) {
 				Result: workerprocess.CommandResult{Stdout: []byte(`{"content":"` + finalOnlySecret)},
 			},
 		},
-		Expected:            testkit.FinalOnlyExpected{Content: "Complete response", ProviderSession: session},
+		Expected:            testkit.FinalOnlyExpected{Content: "Complete response", ProviderSession: &session},
 		ForbiddenDiagnostic: []string{finalOnlyPrompt, finalOnlySecret},
 	})
 }

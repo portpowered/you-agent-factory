@@ -33,25 +33,25 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/factorysessionexecution/fake_service_runtime_test.go",
+      "target": "pkg/factory/sessions/execution/fake_service_runtime_test.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated JavaScript runtime execution tests remain together until dedicated execution test seams split."
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/factorysessionexecution/fake_service_test.go",
+      "target": "pkg/factory/sessions/execution/fake_service_test.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated fake-service contract and projection tests remain together until dedicated execution test seams split."
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/factorysessionexecution/fixtures/runtime_restart_resume_test.go",
+      "target": "pkg/factory/sessions/execution/fixtures/runtime_restart_resume_test.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: restart-resume coverage keeps persistence, replay, provider, and event-lineage assertions in one integration fixture."
     },
     {
       "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/factorysessionexecution/resume.go",
+      "target": "pkg/factory/sessions/execution/resume.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: checkpoint resume validation, projection reconciliation, and persistence remain co-located on the runtime resume seam."
     },
@@ -159,7 +159,7 @@
     },
     {
       "rule": "backendsizecheck:ignore-function",
-      "target": "pkg/factorysessionexecution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
+      "target": "pkg/factory/sessions/execution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-function threshold. Current rationale: accepted control mutation, persistence rollback, and idempotent replay remain atomic on this runtime seam."
     },
@@ -297,121 +297,121 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
+      "target": "pkg/factory/sessions/execution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this runtime control helper keeps dispatch-targeted lifecycle validation and replay together on one seam."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/control.go#applyRuntimeAcceptedLifecycleControl",
+      "target": "pkg/factory/sessions/execution/control.go#applyRuntimeAcceptedLifecycleControl",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this runtime mutation helper keeps accepted lifecycle control transitions together on one seam."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/fake_fixture.go#parseFakeScenarioFromFixture",
+      "target": "pkg/factory/sessions/execution/fake_fixture.go#parseFakeScenarioFromFixture",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this fixture parser keeps durable fake scenario projection fields together for contract-backed tests."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/fake_fixture.go#sessionReadFromFixtureMap",
+      "target": "pkg/factory/sessions/execution/fake_fixture.go#sessionReadFromFixtureMap",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this fixture mapper keeps durable session read projections together for fake-service seeding."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/fake_service.go#FakeService.applyLifecycleControl",
+      "target": "pkg/factory/sessions/execution/fake_service.go#FakeService.applyLifecycleControl",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this fake lifecycle path keeps control validation, mutation, and projection assembly together on one seam."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/fake_service.go#FakeService.mutateSessionForControl",
+      "target": "pkg/factory/sessions/execution/fake_service.go#FakeService.mutateSessionForControl",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this fake mutation helper keeps lifecycle control state transitions together for deterministic fixtures."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/fake_service_runtime_test.go#TestFakeService_InternalLifecycleHelpers",
+      "target": "pkg/factory/sessions/execution/fake_service_runtime_test.go#TestFakeService_InternalLifecycleHelpers",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper regression keeps lifecycle mutation assertions together on one scenario."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/fake_service_runtime_test.go#TestFakeService_InterruptAcceptedBeforeCompletion_ObservableDispatchAndEventOutcomes",
+      "target": "pkg/factory/sessions/execution/fake_service_runtime_test.go#TestFakeService_InterruptAcceptedBeforeCompletion_ObservableDispatchAndEventOutcomes",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this fake-service race regression keeps interrupt and replay assertions together on one scenario."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_LateChildResultAfterInterrupt_SuppressesNormalRouting",
+      "target": "pkg/factory/sessions/execution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_LateChildResultAfterInterrupt_SuppressesNormalRouting",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this runtime regression keeps late-result suppression assertions together on one scenario."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState",
+      "target": "pkg/factory/sessions/execution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: each assertion validates one durable partial-result field across the restart boundary."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/fake_service_test.go#TestFakeService_InterruptDispatch_RecordsDispatchInterruptedEvent",
+      "target": "pkg/factory/sessions/execution/fake_service_test.go#TestFakeService_InterruptDispatch_RecordsDispatchInterruptedEvent",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this fake-service regression keeps interrupt event payload assertions together on one scenario."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/fake_service_test.go#TestFakeService_PauseResumeAppendsLifecycleControlEventsWithoutNoOpMutation",
+      "target": "pkg/factory/sessions/execution/fake_service_test.go#TestFakeService_PauseResumeAppendsLifecycleControlEventsWithoutNoOpMutation",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this regression keeps pause/resume append and no-op event immutability assertions together."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/fake_service_test.go#TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail",
+      "target": "pkg/factory/sessions/execution/fake_service_test.go#TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this focused projection regression keeps live and persisted-record assertions together."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/fixtures/inspection_test.go#TestFakeService_InterruptDispatchRace_ObservableServiceOutcomes",
+      "target": "pkg/factory/sessions/execution/fixtures/inspection_test.go#TestFakeService_InterruptDispatchRace_ObservableServiceOutcomes",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this fixture regression keeps interrupt race service outcomes together on one scenario."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/fixtures/runtime_live_child_test.go#TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatchOnWorkflowFailure",
+      "target": "pkg/factory/sessions/execution/fixtures/runtime_live_child_test.go#TestJavaScriptRuntimeService_AgentRunLiveChildFailure_ProjectsFailedDispatchOnWorkflowFailure",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this runtime fixture keeps terminal provider failure inspection in one end-to-end scenario."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/fixtures/runtime_live_child_test.go#assertParallelFailureFailedDispatch",
+      "target": "pkg/factory/sessions/execution/fixtures/runtime_live_child_test.go#assertParallelFailureFailedDispatch",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this assertion verifies the complete failed-dispatch public projection."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/lifecycle.go#EvaluateLifecycleControl",
+      "target": "pkg/factory/sessions/execution/lifecycle.go#EvaluateLifecycleControl",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this transition classifier keeps durable lifecycle control outcomes explicit across terminal and active states."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/listing.go#MatchesDurableSessionListFilters",
+      "target": "pkg/factory/sessions/execution/listing.go#MatchesDurableSessionListFilters",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this filter matcher keeps durable listing scope predicates together on one reviewer-readable seam."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/listing.go#matchesLifecycleTimeFilters",
+      "target": "pkg/factory/sessions/execution/listing.go#matchesLifecycleTimeFilters",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper keeps created/updated time-range filtering together for durable session listing."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factorysessionexecution/resume.go#validateDurableResumeFacts",
+      "target": "pkg/factory/sessions/execution/resume.go#validateDurableResumeFacts",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: each branch rejects one independently corrupted durable resume fact before provider IO."
     },
@@ -867,25 +867,25 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/factorysessionexecution/fake_service_runtime_test.go",
+      "target": "pkg/factory/sessions/execution/fake_service_runtime_test.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated JavaScript runtime execution tests remain together until dedicated execution test seams split."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/factorysessionexecution/fake_service_test.go",
+      "target": "pkg/factory/sessions/execution/fake_service_test.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated fake-service contract and projection tests remain together until dedicated execution test seams split."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/factorysessionexecution/fixtures/runtime_restart_resume_test.go",
+      "target": "pkg/factory/sessions/execution/fixtures/runtime_restart_resume_test.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: restart-resume coverage keeps persistence, replay, provider, and event-lineage assertions in one integration fixture."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/factorysessionexecution/resume.go",
+      "target": "pkg/factory/sessions/execution/resume.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: checkpoint resume validation, projection reconciliation, and persistence remain co-located on the runtime resume seam."
     },
@@ -987,13 +987,13 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/factorysessionexecution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
+      "target": "pkg/factory/sessions/execution/control.go#JavaScriptRuntimeService.applyRuntimeExtendedLifecycleControl",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-function-lines threshold. Current rationale: accepted control mutation, persistence rollback, and idempotent replay remain atomic on this runtime seam."
     },
     {
       "rule": "pkgmaintcheck:ignore-function-lines",
-      "target": "pkg/factorysessionexecution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState",
+      "target": "pkg/factory/sessions/execution/fake_service_runtime_test.go#TestJavaScriptRuntimeService_PausePersistsStablePartialTerminalReadState",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-function-lines threshold. Current rationale: this restart integration test keeps the pre-restart and post-restart observable read assertions together."
     },

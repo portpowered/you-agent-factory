@@ -14,7 +14,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -317,7 +317,7 @@ func TestFailureBaseline_QuietPreservesRuntimeFileDiagnosticsWhileTerminalStaysM
 	var stdout, stderr bytes.Buffer
 	runErr := Run(context.Background(), RunConfig{
 		Dir:                        dir,
-		ExecutionBaseDir:           t.TempDir(),
+		ExecutionBaseDir:           dir,
 		WorkFile:                   workFile,
 		MockWorkersEnabled:         true,
 		SuppressDashboardRendering: true,
@@ -381,8 +381,8 @@ func looksLikeStructuredLogLine(line string) bool {
 
 func runWithCapturedTerminal(t *testing.T, cfg RunConfig) (stdout, stderr string, err error) {
 	t.Helper()
-	if cfg.ExecutionBaseDir == "" {
-		cfg.ExecutionBaseDir = t.TempDir()
+	if cfg.ExecutionBaseDir == "" && cfg.Dir != "" {
+		cfg.ExecutionBaseDir = cfg.Dir
 	}
 
 	oldStdout := os.Stdout

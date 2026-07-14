@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"gopkg.in/yaml.v3"
 )
@@ -162,6 +162,7 @@ var representativeResponseEventFixtureNames = []string{
 	"final_only_message",
 	"usage",
 	"stream_gap",
+	"item_stream_gap",
 }
 
 var canonicalFactoryResponseEventPayloadSchemaNames = []string{
@@ -251,6 +252,30 @@ func TestOpenAPIContract_RepresentativeResponseEventFixturesValidate(t *testing.
 			assertOpenAPIFixtureValidates(t, doc, "FactoryResponseEvent", event)
 			assertTextOmitsInternalResponseStreamTerms(t, mustMarshalJSON(t, event))
 		})
+	}
+}
+
+func TestOpenAPIContract_StreamGapPayloadAcceptsOnlyCompleteExclusiveShapes(t *testing.T) {
+	doc := loadValidatedOpenAPIContract(t)
+	schema := doc.Components.Schemas["FactoryResponseEventStreamGapPayload"].Value
+	for name, payload := range map[string]map[string]any{
+		"retention": {"fromSequence": float64(1), "toSequence": float64(4), "firstAvailableSequence": float64(5), "reason": "retention_window"},
+		"item":      {"affectedItemId": "cursor-tool/call-1", "toolCallId": "call-1", "reason": "provider_reconnect"},
+	} {
+		if err := schema.VisitJSON(payload); err != nil {
+			t.Fatalf("%s stream gap should validate: %v", name, err)
+		}
+	}
+	for name, payload := range map[string]map[string]any{
+		"empty":                      {},
+		"partial retention":          {"firstAvailableSequence": float64(5)},
+		"item without reason":        {"affectedItemId": "cursor-tool/call-1"},
+		"tool without affected item": {"toolCallId": "call-1", "reason": "provider_reconnect"},
+		"mixed":                      {"fromSequence": float64(1), "toSequence": float64(4), "firstAvailableSequence": float64(5), "affectedItemId": "cursor-tool/call-1", "reason": "provider_reconnect"},
+	} {
+		if err := schema.VisitJSON(payload); err == nil {
+			t.Fatalf("%s stream gap should be rejected: %#v", name, payload)
+		}
 	}
 }
 
@@ -474,7 +499,7 @@ func assertFactoryResponseEventContentBlockDiscriminator(t *testing.T, schemas m
 
 func loadRepresentativeResponseEventFixture(t *testing.T, name string) map[string]any {
 	t.Helper()
-	path := filepath.FromSlash("../../../factorysessions/responseevents/testdata/fixtures/" + name + ".json")
+	path := filepath.FromSlash("../../../factory/sessions/responseevents/testdata/fixtures/" + name + ".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read representative response-event fixture %s: %v", name, err)
@@ -941,7 +966,7 @@ func assertGeneratedFactoryResponseEventPayloadDecodes(t *testing.T, event facto
 
 func readRepresentativeResponseEventFixtureBytes(t *testing.T, name string) []byte {
 	t.Helper()
-	path := filepath.FromSlash("../../../factorysessions/responseevents/testdata/fixtures/" + name + ".json")
+	path := filepath.FromSlash("../../../factory/sessions/responseevents/testdata/fixtures/" + name + ".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read representative response-event fixture %s: %v", name, err)

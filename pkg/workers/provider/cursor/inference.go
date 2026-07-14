@@ -24,10 +24,10 @@ const (
 	ResponseMetadataStderrExcerpt = "stderr_excerpt"
 
 	ResponseMetadataRequestID        = "request_id"
-	ResponseMetadataDurationMS       = "duration_ms"
-	ResponseMetadataDurationAPIMS    = "duration_api_ms"
-	ResponseMetadataInputTokens      = "input_tokens"
-	ResponseMetadataOutputTokens     = "output_tokens"
+	ResponseMetadataDurationMS       = interfaces.ProviderResponseMetadataDurationMS
+	ResponseMetadataDurationAPIMS    = interfaces.ProviderResponseMetadataDurationAPIMS
+	ResponseMetadataInputTokens      = interfaces.ProviderResponseMetadataInputTokens
+	ResponseMetadataOutputTokens     = interfaces.ProviderResponseMetadataOutputTokens
 	ResponseMetadataCacheReadTokens  = "cache_read_tokens"
 	ResponseMetadataCacheWriteTokens = "cache_write_tokens"
 

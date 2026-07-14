@@ -4,14 +4,17 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"hash"
 	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
 
@@ -59,6 +62,9 @@ type InferenceProgressFragment struct {
 	ExternalEventType  string
 	Metadata           map[string]string
 	CanonicalDraft     any
+	// CanonicalEventAlreadyPublished keeps a compatibility terminal marker
+	// from projecting a second canonical failure after a native terminal draft.
+	CanonicalEventAlreadyPublished bool
 }
 
 // CanonicalDraftFragment carries one provider-native canonical response draft
@@ -115,12 +121,25 @@ func FailedFragment(dispatchID string, providerSession *interfaces.ProviderSessi
 	}
 }
 
+// StructuredResponseEvent carries one provider-neutral draft to the
+// session-owned response-event publisher without converting it to a legacy
+// response or progress fragment.
+func StructuredResponseEvent(draft responseevents.Draft) InferenceProgressFragment {
+	cloned := draft
+	cloned.Payload = append(json.RawMessage(nil), draft.Payload...)
+	return CanonicalDraftFragment(draft.DispatchID, cloned)
+}
+
 // InferenceProgressPublishingCommandRunner publishes internal response-stream
 // fragments while provider subprocess stdout/stderr grow.
 type InferenceProgressPublishingCommandRunner struct {
 	Publisher InferenceProgressPublisher
 	Logger    logging.Logger
 }
+
+// SupportsResponseStreaming reports that the runner observes subprocess output
+// incrementally and can therefore consume native streaming protocols.
+func (InferenceProgressPublishingCommandRunner) SupportsResponseStreaming() bool { return true }
 
 // Run executes the provider subprocess and publishes incremental stdout/stderr
 // fragments into the configured internal session response stream.
@@ -129,24 +148,17 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 		return workerprocess.ExecCommandRunner{}.Run(ctx, req)
 	}
 	dispatchID := strings.TrimSpace(req.DispatchID)
-	var cursorStream *cursorpkg.StreamParser
-	if strings.TrimSpace(req.Command) == string(interfaces.ModelProviderCursor) {
-		cursorStream = cursorpkg.NewStreamParser(req.Command, func(fragment cursorpkg.StreamFragment) {
-			switch fragment.Kind {
-			case cursorpkg.StreamFragmentKindResponse:
-				r.Publisher(ResponseFragment(dispatchID, fragment.ProviderSession, fragment.Payload))
-			case cursorpkg.StreamFragmentKindProgress:
-				r.Publisher(ProgressFragment(dispatchID, fragment.ProviderSession, fragment.Payload))
-			}
-		})
+	var cursorStream *cursorResponseEventStream
+	if isCursorCommand(req.Command) {
+		cursorStream = newCursorResponseEventStream(dispatchID, r.Publisher, r.Logger)
 	}
 	normalizer := newCommandOutputNormalizer(req, r.Publisher)
 	observer := func(stream string, chunk []byte) {
 		if len(chunk) == 0 {
 			return
 		}
-		if cursorStream != nil && stream == workerprocess.OutputStreamStdout {
-			cursorStream.Consume(chunk)
+		if cursorStream != nil {
+			cursorStream.observe(ctx, stream, chunk)
 			return
 		}
 		if normalizer != nil && normalizer.Observe(stream, chunk) {
@@ -165,12 +177,82 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 		Logger:   logging.EnsureLogger(r.Logger),
 	}.Run(ctx, req)
 	if cursorStream != nil {
-		cursorStream.Flush()
+		cursorStream.flush(ctx, cursorResponseFlushReason(ctx, result, err))
 	}
 	if normalizer != nil {
 		normalizer.Flush()
 	}
 	return result, err
+}
+
+func isCursorCommand(command string) bool {
+	base := strings.ToLower(filepath.Base(strings.TrimSpace(command)))
+	return base == string(interfaces.ModelProviderCursor) ||
+		base == string(interfaces.ModelProviderCursor)+".exe" ||
+		base == string(interfaces.ModelProviderCursor)+".cmd"
+}
+
+type cursorResponseEventStream struct {
+	dispatchID string
+	decoder    *cursorpkg.ResponseEventDecoder
+	publisher  InferenceProgressPublisher
+	logger     logging.Logger
+}
+
+func newCursorResponseEventStream(
+	dispatchID string,
+	publisher InferenceProgressPublisher,
+	logger logging.Logger,
+) *cursorResponseEventStream {
+	return &cursorResponseEventStream{
+		dispatchID: strings.TrimSpace(dispatchID),
+		decoder: cursorpkg.NewResponseEventDecoder(adapter.DecoderContext{
+			DispatchID: strings.TrimSpace(dispatchID),
+		}),
+		publisher: publisher,
+		logger:    logging.EnsureLogger(logger),
+	}
+}
+
+func (s *cursorResponseEventStream) observe(ctx context.Context, stream string, chunk []byte) {
+	decoded, err := s.decoder.Observe(ctx, adapter.Observation{
+		Stream: adapter.OutputStream(stream),
+		Chunk:  append([]byte(nil), chunk...),
+	})
+	s.publish(decoded)
+	if err != nil {
+		s.logger.Error("cursor response-event decoder observation failed", "error", err)
+	}
+}
+
+func (s *cursorResponseEventStream) flush(ctx context.Context, reason adapter.FlushReason) {
+	decoded, err := s.decoder.Flush(ctx, adapter.FlushContext{Reason: reason})
+	s.publish(decoded)
+	if err != nil {
+		s.logger.Error("cursor response-event decoder flush failed", "error", err)
+	}
+}
+
+func (s *cursorResponseEventStream) publish(decoded adapter.DecodeResult) {
+	for _, draft := range decoded.Drafts {
+		s.publisher(StructuredResponseEvent(draft))
+	}
+	for _, diagnostic := range decoded.Diagnostics {
+		fragment := ProgressFragment(s.dispatchID, nil, diagnostic.Message)
+		fragment.ExternalEventType = diagnostic.Code
+		s.publisher(fragment)
+	}
+}
+
+func cursorResponseFlushReason(ctx context.Context, result CommandResult, err error) adapter.FlushReason {
+	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) ||
+		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return adapter.FlushReasonCanceled
+	}
+	if err != nil || result.ExitCode != 0 {
+		return adapter.FlushReasonTerminated
+	}
+	return adapter.FlushReasonCompleted
 }
 
 type commandOutputNormalizer interface {

@@ -6,8 +6,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
@@ -17,13 +18,15 @@ type Identity string
 // CommandContext contains invocation facts used to construct one subprocess
 // request. Command execution remains owned by orchestration.
 type CommandContext struct {
-	Request         interfaces.ProviderInferenceRequest
-	SkipPermissions bool
+	Request            interfaces.ProviderInferenceRequest
+	SkipPermissions    bool
+	MaterializeOptions *materialize.Options
 }
 
 // CommandBuildResult is the complete subprocess request produced by an adapter.
 type CommandBuildResult struct {
 	Request workerprocess.CommandRequest
+	Cleanup func()
 }
 
 // DecoderContext scopes a stateful decoder to one provider invocation.
@@ -150,6 +153,34 @@ type FailureFacts struct {
 // normalized facts callers use for retry and terminal outcome policy.
 type FailureResult struct {
 	Failure *FailureFacts
+}
+
+// FallbackContext contains the completed first-attempt facts an adapter may
+// use to decide whether a second subprocess launch is provably safe. Native
+// syntax remains provider-owned; orchestration only enforces a single retry.
+type FallbackContext struct {
+	CommandResult workerprocess.CommandResult
+	CommandError  error
+	DecodeError   error
+	FlushError    error
+	ParseError    error
+	FlushReason   FlushReason
+	Drafts        []responseevents.Draft
+	Diagnostics   []Diagnostic
+}
+
+// FallbackPlan selects the adapter for one final fallback attempt and carries
+// the bounded degradation signal published with its capability update.
+type FallbackPlan struct {
+	Adapter    Adapter
+	Diagnostic Diagnostic
+}
+
+// FallbackPlanner is an optional provider-owned extension. Execute consults it
+// once after the first attempt and never recursively retries its returned
+// adapter.
+type FallbackPlanner interface {
+	PlanFallback(context.Context, FallbackContext) (FallbackPlan, bool, error)
 }
 
 // Adapter separates every provider-owned operation needed by neutral

@@ -31,11 +31,11 @@ with both selected paths; every comparison returned zero matches.
 
 Batch 005 uses the two active implementation heads. Batch 006 retains the
 authoritative reservations from the inventory: every detailed directive file
-under `pkg/transports/http/**`, `pkg/transports/mapping/**`, `pkg/transports/cli/**`, `pkg/transports/mcp/**`,
-`pkg/workers/**`, `pkg/factorysessionexecution/**`, `pkg/interfaces/**`,
+under `pkg/api/**`, `pkg/apisurface/**`, `pkg/cli/**`, `pkg/mcp/**`,
+`pkg/workers/**`, `pkg/factory/sessions/execution/**`, `pkg/interfaces/**`,
 `pkg/internal/cursorstorage/**`, and `pkg/replay/**`; its named Work-family
 roots contain no registered directive file. Batch 007 reserves every detailed
-directive file under `pkg/factorysessionexecution/**` and `pkg/service/**`.
+directive file under `pkg/factory/sessions/execution/**` and `pkg/service/**`.
 Batch 008 reserves every detailed directive file under `pkg/runtimehost/**`
 and `pkg/service/**`. Neither selected `pkg/factory/requests` path is in those
 reservation sets.
