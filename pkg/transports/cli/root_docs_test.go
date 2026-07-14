@@ -284,6 +284,33 @@ func TestRunDocumentation_InvocationOutputModeExamplesReachCurrentCLIBoundary(t 
 	}
 }
 
+func TestSessionsDocumentation_ResponseEventStreamAlignsWithOpenAPI(t *testing.T) {
+	doc, err := docscli.Markdown("sessions")
+	if err != nil {
+		t.Fatalf("Markdown(sessions) error = %v", err)
+	}
+	for _, marker := range []string{
+		"## Response-event stream lifecycle and reconnect",
+		"GET /factory-sessions/{session_id}/response-events",
+		"GET /factory-sessions/{session_id}/events",
+		"FactoryResponseEvent",
+		"after_sequence",
+		"STREAM_GAP",
+		"fromSequence",
+		"toSequence",
+		"firstAvailableSequence",
+		"RESPONSE_EVENT_SESSION_NOT_FOUND",
+		"RESPONSE_EVENT_STREAM_EXPIRED",
+		"INVALID_RESPONSE_EVENT_CURSOR",
+		"durable process-restart replay",
+		"`you docs run`",
+	} {
+		if !strings.Contains(doc, marker) {
+			t.Fatalf("packaged sessions guide missing response-event marker %q", marker)
+		}
+	}
+}
+
 func executeDocumentedRunExample(t *testing.T, args []string) {
 	t.Helper()
 	root := NewRootCommand()
