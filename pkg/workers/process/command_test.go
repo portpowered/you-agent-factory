@@ -216,7 +216,10 @@ func testExecCommandRunnerAgentStyleSuccessLeavesNoChildProcess(t *testing.T) {
 		t.Fatalf("ExitCode = %d, want 0; stderr=%q", result.ExitCode, result.Stderr)
 	}
 
-	childPID := readCommandHelperPID(t, pidFile)
+	// Antivirus and indexing processes can briefly hold a newly renamed file on
+	// Windows even after the helper has closed it. Treat a transient sharing
+	// violation like the other pid-publication readiness states.
+	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
 	t.Cleanup(func() {
 		commandTestTerminateProcess(childPID)
 	})
@@ -268,29 +271,34 @@ func TestExecCommandRunner_ContextCancelTerminatesSpawnedChildProcess(t *testing
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	type runOutcome struct {
+		result CommandResult
+		err    error
+	}
+	runDone := make(chan runOutcome, 1)
 	go func() {
-		deadline := time.Now().Add(3 * time.Second)
-		for time.Now().Before(deadline) {
-			if _, err := readCommandHelperPIDFile(pidFile); err == nil {
-				cancel()
-				return
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
+		result, err := ExecCommandRunner{}.Run(ctx, CommandRequest{
+			Command: os.Args[0],
+			Args: []string{
+				"-test.run=TestExecCommandRunner_HelperProcess",
+				"--",
+				"spawn-child",
+			},
+			Env: append(os.Environ(),
+				"GO_WANT_COMMAND_HELPER=1",
+				"COMMAND_HELPER_PID_FILE="+pidFile,
+			),
+		})
+		runDone <- runOutcome{result: result, err: err}
 	}()
 
-	result, err := ExecCommandRunner{}.Run(ctx, CommandRequest{
-		Command: os.Args[0],
-		Args: []string{
-			"-test.run=TestExecCommandRunner_HelperProcess",
-			"--",
-			"spawn-child",
-		},
-		Env: append(os.Environ(),
-			"GO_WANT_COMMAND_HELPER=1",
-			"COMMAND_HELPER_PID_FILE="+pidFile,
-		),
+	childPID := waitForCommandHelperPID(t, pidFile, commandHelperSpawnTimeoutBudget)
+	t.Cleanup(func() {
+		commandTestTerminateProcess(childPID)
 	})
+	cancel()
+	outcome := <-runDone
+	result, err := outcome.result, outcome.err
 	if err == nil {
 		t.Fatal("Run error = nil, want context canceled error")
 	}
@@ -301,10 +309,6 @@ func TestExecCommandRunner_ContextCancelTerminatesSpawnedChildProcess(t *testing
 		t.Fatalf("ExitCode = %d, want zero value for cancel system error", result.ExitCode)
 	}
 
-	childPID := readCommandHelperPID(t, pidFile)
-	t.Cleanup(func() {
-		commandTestTerminateProcess(childPID)
-	})
 	if !waitForCommandHelperProcessExit(childPID, 2*time.Second) {
 		t.Fatalf("spawned child process %d is still running after context cancel", childPID)
 	}
@@ -791,6 +795,9 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 	case "spawn-child-success":
 		spawnCommandHelperChild()
 		os.Exit(0)
+	case "child-sleep":
+		time.Sleep(10 * time.Second)
+		os.Exit(0)
 	case "pid-sleep":
 		if os.Getenv("COMMAND_HELPER_PID_WRITTEN_BY_PARENT") != "1" {
 			writeCommandHelperPID()
@@ -858,7 +865,7 @@ func spawnCommandHelperChild() {
 	child := exec.Command(os.Args[0],
 		"-test.run=TestExecCommandRunner_HelperProcess",
 		"--",
-		"pid-sleep",
+		"child-sleep",
 	)
 	child.Env = append(os.Environ(),
 		"GO_WANT_COMMAND_HELPER=1",
@@ -869,7 +876,7 @@ func spawnCommandHelperChild() {
 		fmt.Fprintf(os.Stderr, "start child: %v\n", err)
 		os.Exit(2)
 	}
-	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(child.Process.Pid)), 0o600); err != nil {
+	if err := writeCommandHelperPIDFile(pidFile, child.Process.Pid); err != nil {
 		fmt.Fprintf(os.Stderr, "write child pid file: %v\n", err)
 		_ = child.Process.Kill()
 		os.Exit(2)
@@ -882,15 +889,18 @@ func writeCommandHelperPID() {
 		fmt.Fprintln(os.Stderr, "missing COMMAND_HELPER_PID_FILE")
 		os.Exit(2)
 	}
-	if err := os.WriteFile(pidFile, []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
+	if err := writeCommandHelperPIDFile(pidFile, os.Getpid()); err != nil {
 		fmt.Fprintf(os.Stderr, "write pid file: %v\n", err)
 		os.Exit(2)
 	}
 }
 
-func readCommandHelperPID(t *testing.T, pidFile string) int {
-	t.Helper()
-	return waitForCommandHelperPID(t, pidFile, 0)
+func writeCommandHelperPIDFile(pidFile string, pid int) error {
+	temporary := pidFile + ".tmp"
+	if err := os.WriteFile(temporary, []byte(strconv.Itoa(pid)), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(temporary, pidFile)
 }
 
 func waitForCommandHelperPID(t *testing.T, pidFile string, timeout time.Duration) int {
