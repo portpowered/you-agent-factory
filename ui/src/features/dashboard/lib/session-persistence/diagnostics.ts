@@ -38,11 +38,6 @@ export interface SessionPersistenceIdentityScope {
   streamGenerationID?: string;
 }
 
-export type SessionPersistenceInvalidationReason =
-  | "backend_scope_changed"
-  | "session_remapped"
-  | "stream_generation_changed";
-
 const diagnosticRecords: SessionPersistenceDiagnostic[] = [];
 const diagnosticOutcomes = new Set<string>(
   Object.keys(SESSION_PERSISTENCE_RECOVERY_ACTION_BY_OUTCOME),
@@ -123,24 +118,6 @@ export function correlationTokenForIdentityScope(
   );
 }
 
-export function classifyCheckpointIdentityMismatch(
-  previous: SessionPersistenceIdentityScope,
-  current: SessionPersistenceIdentityScope,
-): SessionPersistenceInvalidationReason | null {
-  const detail = classifyIdentityMismatchDetail(previous, current);
-  switch (detail) {
-    case "backend_scope_mismatch":
-      return "backend_scope_changed";
-    case "factory_session_mismatch":
-      return "session_remapped";
-    case "logical_session_mismatch":
-    case "stream_generation_mismatch":
-      return "stream_generation_changed";
-    default:
-      return null;
-  }
-}
-
 export function classifyCheckpointIdentityMismatchDetail(
   previous: SessionPersistenceIdentityScope,
   current: SessionPersistenceIdentityScope,
@@ -161,16 +138,6 @@ export function identityMismatchDiagnostic(
     "identity_rejected",
     correlationTokenForIdentityScope(current),
     detail,
-  );
-}
-
-export function silentReplayRecoveryDiagnostic(
-  scope: SessionPersistenceIdentityScope,
-  _requestedSessionID: string,
-): SessionPersistenceDiagnostic {
-  return sessionPersistenceDiagnostic(
-    "stale_cursor",
-    correlationTokenForIdentityScope(scope),
   );
 }
 
