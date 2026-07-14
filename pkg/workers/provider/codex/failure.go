@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	codexexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/codex/exitfailure"
 	provider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -60,7 +61,7 @@ func shouldSelectTerminalFailure(selectedRecognized, candidateRecognized bool) b
 }
 
 func classifyTerminalMessage(nativeType, message, threadID string) (TerminalFailure, bool) {
-	parsed := provider.ParseCodexProviderFailureLayers(provider.CommandResult{
+	parsed := codexexitfailure.ParseFailureLayers(codexexitfailure.ExitFailureInput{
 		ExitCode: 1,
 		Stderr:   []byte("ERROR: " + strings.TrimSpace(message)),
 	})
@@ -68,7 +69,9 @@ func classifyTerminalMessage(nativeType, message, threadID string) (TerminalFail
 	if !recognized {
 		parsed.Message = unknownTerminalFailureMessage
 	}
-	providerErr := provider.NewProviderErrorFromResult(parsed, nil)
+	providerErr := provider.NewProviderErrorFromResult(provider.ProviderFailureResult{
+		Reason: parsed.Reason, Message: parsed.Message,
+	}, nil)
 	decision := provider.WorkFailureDecisionFromProviderError(providerErr)
 	return TerminalFailure{
 		Type: parsed.Reason, Message: parsed.Message, Retryable: decision.Retryable,

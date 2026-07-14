@@ -17,13 +17,6 @@ import (
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
 
-const (
-	codexErrorLineScanBytes            = 64 * 1024
-	codexWindowsProcessFailureExitCode = 4294967295
-)
-
-const codexHighDemandTemporaryErrorsNeedle = "we're currently experiencing high demand, which may cause temporary errors."
-
 // Cursor is commonly installed through a Windows command shim whose practical
 // command-line limit is lower than CreateProcess' documented maximum. Keep the
 // prompt below the observed 8 KiB boundary and materialize larger prompts.
@@ -474,32 +467,6 @@ func formatCombinedProviderOutput(result CommandResult) string {
 	}, "\n")
 }
 
-func extractCodexErrorLine(result CommandResult) (string, bool) {
-	combined := strings.Join([]string{
-		tailForCodexErrorScan(result.Stderr),
-		tailForCodexErrorScan(result.Stdout),
-	}, "\n")
-
-	var match string
-	for _, line := range strings.Split(combined, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "ERROR:") {
-			match = trimmed
-		}
-	}
-	if match == "" {
-		return "", false
-	}
-	return match, true
-}
-
-func tailForCodexErrorScan(output []byte) string {
-	if len(output) <= codexErrorLineScanBytes {
-		return string(output)
-	}
-	return string(output[len(output)-codexErrorLineScanBytes:])
-}
-
 func codexImageArgs(ctx context.Context, req interfaces.ProviderInferenceRequest, buildCtx *ProviderBuildContext) ([]string, error) {
 	tokens := cloneInputTokens(req.InputTokens)
 	if len(tokens) == 0 {
@@ -672,11 +639,6 @@ type CompetingFailureSignal struct {
 	InternalCause string
 }
 
-// IsRecognizedFailureType reports whether a failure type is a known class.
-func IsRecognizedFailureType(failureType interfaces.WorkFailureType) bool {
-	return failureType != "" && failureType != interfaces.WorkFailureTypeUnknown
-}
-
 // SelectFailureByPrecedence collapses competing signals to one authoritative
 // outcome using the shared precedence model:
 //
@@ -725,51 +687,4 @@ func selectFailureForTier(signals []CompetingFailureSignal, tier FailureSignalTi
 		found = true
 	}
 	return selected, found
-}
-
-// CodexProcessExitFailureLayers exposes the structured ERROR-record,
-// stderr-classified, and generic exit outcomes from bounded subprocess output
-// without applying structured-stream precedence.
-func CodexProcessExitFailureLayers(result CommandResult) (
-	structured ProviderFailureResult,
-	hasStructured bool,
-	stderr ProviderFailureResult,
-	hasStderr bool,
-	exit ProviderFailureResult,
-) {
-	streams := []string{
-		tailForCodexErrorScan(result.Stderr),
-		tailForCodexErrorScan(result.Stdout),
-	}
-	if failure, ok := lastCodexStructuredFailure(streams); ok {
-		structured = failure
-		hasStructured = true
-	}
-	if failure, ok := lastCodexTextFailure(streams, result.ExitCode); ok {
-		stderr = failure
-		hasStderr = true
-	}
-	exit = codexProcessExitFallback(result.ExitCode)
-	return structured, hasStructured, stderr, hasStderr, exit
-}
-
-// CodexProcessExitFailureLayersWithCause returns process-exit failure layers
-// plus bounded internal-cause excerpts for structured and stderr signals.
-func CodexProcessExitFailureLayersWithCause(result CommandResult) (
-	structured ProviderFailureResult,
-	structuredCause string,
-	hasStructured bool,
-	stderr ProviderFailureResult,
-	stderrCause string,
-	hasStderr bool,
-	exit ProviderFailureResult,
-) {
-	structured, hasStructured, stderr, hasStderr, exit = CodexProcessExitFailureLayers(result)
-	if hasStructured {
-		structuredCause = codexProcessExitStructuredInternalCause(result)
-	}
-	if hasStderr {
-		stderrCause = codexProcessExitStderrInternalCause(result)
-	}
-	return structured, structuredCause, hasStructured, stderr, stderrCause, hasStderr, exit
 }

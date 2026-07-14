@@ -2,13 +2,99 @@ package provider
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	claudeexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/claude/exitfailure"
+	codexexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/codex/exitfailure"
+	geminipkg "github.com/portpowered/infinite-you/pkg/workers/provider/gemini"
+	kiropkg "github.com/portpowered/infinite-you/pkg/workers/provider/kiro"
+	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
 )
+
+const (
+	claudeThrottleFailureMessage   = claudeexitfailure.ThrottleFailureMessage
+	claudeTimeoutFailureMessage    = claudeexitfailure.TimeoutFailureMessage
+	claudeAuthFailureMessage       = "Claude authentication failed."
+	claudeBadRequestFailureMessage = "Claude rejected the request as invalid."
+	claudeConfigFailureMessage     = "Claude is not configured correctly."
+	claudeFailureScanBytes         = 64 * 1024
+	geminiThrottleFailureMessage   = "The provider is rate limited; retry after capacity becomes available."
+	geminiTimeoutFailureMessage      = geminipkg.TimeoutFailureMessage
+	codexGPT56SolUpgradeMessage      = codexexitfailure.GPT56SolUpgradeMessage
+	codexUnknownFailureMessage       = codexexitfailure.UnknownFailureMessage
+	codexAuthFailureMessage          = codexexitfailure.AuthFailureMessage
+	codexThrottleFailureMessage      = "Codex is temporarily unavailable due to usage or capacity limits."
+	codexServerFailureMessage        = "Codex encountered a temporary server error."
+	codexTimeoutFailureMessage       = "Codex request timed out."
+	codexWindowsProcessFailureExitCode = 4294967295
+	opencodeThrottleFailureMessage   = opencodeadapter.ThrottleFailureMessage
+	opencodeTimeoutFailureMessage    = opencodeadapter.TimeoutFailureMessage
+	opencodeServerFailureMessage     = "OpenCode encountered a temporary server error."
+	opencodeBadRequestFailureMessage = opencodeadapter.BadRequestFailureMessage
+	opencodeFailureMessageBytes      = 512
+	codexBadRequestFailureMessage    = "Codex rejected the request as invalid."
+	codexErrorLineScanBytes          = 64 * 1024
+	codexFailureMessageBytes         = 1024
+	codexHighDemandTemporaryErrorsNeedle = codexexitfailure.HighDemandTemporaryErrorsNeedle
+)
+
+func codexTextFailureMessage(reason interfaces.WorkFailureType) string {
+	switch reason {
+	case interfaces.WorkFailureTypeAuthFailure:
+		return codexAuthFailureMessage
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		return codexBadRequestFailureMessage
+	case interfaces.WorkFailureTypeThrottled:
+		return codexThrottleFailureMessage
+	case interfaces.WorkFailureTypeInternalServerError:
+		return codexServerFailureMessage
+	case interfaces.WorkFailureTypeTimeout:
+		return codexTimeoutFailureMessage
+	default:
+		return ""
+	}
+}
+
+func knownKiroFailure(reason interfaces.WorkFailureType) ProviderFailureResult {
+	message := ""
+	switch reason {
+	case interfaces.WorkFailureTypeAuthFailure:
+		message = "Kiro authentication failed. Sign in again and retry."
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		message = "Kiro rejected the request as invalid."
+	case interfaces.WorkFailureTypeThrottled:
+		message = "Kiro is temporarily unavailable due to usage or capacity limits."
+	case interfaces.WorkFailureTypeTimeout:
+		message = kiropkg.TimeoutFailureMessage
+	case interfaces.WorkFailureTypeInternalServerError:
+		message = "Kiro encountered a temporary service error."
+	}
+	return ProviderFailureResult{Reason: reason, Message: message}
+}
+
+func ParseClaudeProviderFailure(result CommandResult) ProviderFailureResult {
+	parsed := claudeexitfailure.ParseProviderFailure(claudeexitfailure.FailureInput{
+		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+	})
+	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
+}
+
+func ParseGeminiProviderFailure(result CommandResult) ProviderFailureResult {
+	parsed := geminipkg.ParseProviderFailure(geminipkg.FailureInput{
+		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+	})
+	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
+}
+
+func ParseOpenCodeProviderFailure(result CommandResult) ProviderFailureResult {
+	parsed := opencodeadapter.ParseProviderFailure(opencodeadapter.FailureInput{
+		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+	})
+	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
+}
 
 func loadProviderErrorCorpusForTest(t *testing.T) ProviderErrorCorpus {
 	t.Helper()
@@ -55,121 +141,6 @@ func providerErrorCorpusLastErrorLine(t *testing.T, entry ProviderErrorCorpusEnt
 	return lastMatch
 }
 
-func TestParseClaudeProviderFailure_StructuredTypesAndStatusesAreCanonical(t *testing.T) {
-	testCases := []struct {
-		name        string
-		stderr      string
-		wantReason  interfaces.WorkFailureType
-		wantMessage string
-	}{
-		{
-			name:        "AuthenticationTypePreservesActionableMessage",
-			stderr:      `API Error: 500 {"type":"error","error":{"type":"authentication_error","message":"  Sign in again\nwith Claude Code.  "}}`,
-			wantReason:  interfaces.WorkFailureTypeAuthFailure,
-			wantMessage: "Sign in again with Claude Code.",
-		},
-		{
-			name:        "PermissionStatusFallbackPreservesActionableMessage",
-			stderr:      `API Error: 403 {"type":"error","error":{"message":"Ask an organization owner to grant access."}}`,
-			wantReason:  interfaces.WorkFailureTypeAuthFailure,
-			wantMessage: "Ask an organization owner to grant access.",
-		},
-		{
-			name:        "InvalidRequestPreservesCorrection",
-			stderr:      `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Reduce the request size below 20 MB."}}`,
-			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
-			wantMessage: "Reduce the request size below 20 MB.",
-		},
-		{
-			name:        "RequestSizeStatusFallback",
-			stderr:      `API Error: 413 {"type":"error","error":{"message":"The request is too large; remove an attachment."}}`,
-			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
-			wantMessage: "The request is too large; remove an attachment.",
-		},
-		{
-			name:        "RateLimitUsesStableGuidance",
-			stderr:      `API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"rate limit exceeded"}}`,
-			wantReason:  interfaces.WorkFailureTypeThrottled,
-			wantMessage: claudeThrottleFailureMessage,
-		},
-		{
-			name:        "OverloadTypeWinsOverConflictingStatus",
-			stderr:      `API Error: 401 {"type":"error","error":{"type":"overloaded_error","message":"overloaded"}}`,
-			wantReason:  interfaces.WorkFailureTypeThrottled,
-			wantMessage: claudeThrottleFailureMessage,
-		},
-		{
-			name:        "ServerStatusFallback",
-			stderr:      `API Error: 502 {"type":"error","error":{"message":"gateway included internal diagnostics"}}`,
-			wantReason:  interfaces.WorkFailureTypeInternalServerError,
-			wantMessage: claudeServerFailureMessage,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := ParseClaudeProviderFailure(CommandResult{ExitCode: 1, Stderr: []byte(tc.stderr)})
-			if got.Reason != tc.wantReason || got.Message != tc.wantMessage {
-				t.Fatalf("ParseClaudeProviderFailure() = %#v, want reason=%q message=%q", got, tc.wantReason, tc.wantMessage)
-			}
-		})
-	}
-}
-
-func TestParseClaudeProviderFailure_StructuredRecordPrecedesSurroundingText(t *testing.T) {
-	result := CommandResult{
-		ExitCode: 1,
-		Stderr: []byte(strings.Join([]string{
-			"cleanup mentioned 429 rate limit and forbidden credentials",
-			`API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Choose a model available to this project."}}`,
-			"post-command timeout while deleting a temporary directory",
-		}, "\n")),
-	}
-
-	got := ParseClaudeProviderFailure(result)
-	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != "Choose a model available to this project." {
-		t.Fatalf("ParseClaudeProviderFailure() = %#v, want structured invalid-request result", got)
-	}
-}
-
-func TestParseClaudeProviderFailure_BoundsAndRejectsCredentialBearingMessages(t *testing.T) {
-	longCorrection := strings.Repeat("remove one attachment ", 100)
-	testCases := []struct {
-		name        string
-		message     string
-		wantMessage string
-	}{
-		{
-			name:        "BoundsNormalizedActionableDetail",
-			message:     longCorrection,
-			wantMessage: boundUTF8Bytes(strings.TrimSpace(longCorrection), claudeFailureMessageBytes),
-		},
-		{
-			name:        "CredentialSignalUsesProductFallback",
-			message:     "Replace Authorization: Bearer sk-ant-private",
-			wantMessage: claudeBadRequestFailureMessage,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			payload, err := json.Marshal(map[string]any{
-				"type": "error",
-				"error": map[string]string{
-					"type":    "invalid_request_error",
-					"message": tc.message,
-				},
-			})
-			if err != nil {
-				t.Fatalf("marshal fixture: %v", err)
-			}
-			got := ParseClaudeProviderFailure(CommandResult{ExitCode: 1, Stderr: []byte("API Error: 400 " + string(payload))})
-			if got.Message != tc.wantMessage || len(got.Message) > claudeFailureMessageBytes {
-				t.Fatalf("Message = %q (%d bytes), want %q bounded to %d bytes", got.Message, len(got.Message), tc.wantMessage, claudeFailureMessageBytes)
-			}
-		})
-	}
-}
 
 func TestNormalizeProviderExitFailure_ClaudeUsesOneParsedReasonAndMessageForPolicy(t *testing.T) {
 	entry := providerErrorCorpusEntryForTest(t, "claude_rate_limit_error")
@@ -187,105 +158,6 @@ func TestNormalizeProviderExitFailure_ClaudeUsesOneParsedReasonAndMessageForPoli
 	}
 }
 
-type claudeFallbackTestCase struct {
-	name        string
-	result      CommandResult
-	wantReason  interfaces.WorkFailureType
-	wantMessage string
-}
-
-func claudeFallbackTestCases() []claudeFallbackTestCase {
-	return []claudeFallbackTestCase{
-		{
-			name:        "TextConfigurationPreservesCorrection",
-			result:      CommandResult{ExitCode: 1, Stderr: []byte("Configuration error: set ANTHROPIC_BASE_URL to a valid URL.")},
-			wantReason:  interfaces.WorkFailureTypeMisconfigured,
-			wantMessage: "Configuration error: set ANTHROPIC_BASE_URL to a valid URL.",
-		},
-		{
-			name:        "TextAuthenticationPreservesCorrection",
-			result:      CommandResult{ExitCode: 1, Stderr: []byte("Not logged in. Run /login to continue.")},
-			wantReason:  interfaces.WorkFailureTypeAuthFailure,
-			wantMessage: "Not logged in. Run /login to continue.",
-		},
-		{
-			name:        "MalformedEnvelopeFallsThroughToTextSignal",
-			result:      CommandResult{ExitCode: 1, Stderr: []byte(`API Error: 429 {"type":"error","error":{"type":"rate_limit_error"`)},
-			wantReason:  interfaces.WorkFailureTypeThrottled,
-			wantMessage: claudeThrottleFailureMessage,
-		},
-		{
-			name: "LastRecognizedTextRecordExcludesCleanup",
-			result: CommandResult{ExitCode: 1, Stderr: []byte(strings.Join([]string{
-				"rate limit exceeded",
-				"Invalid request: select a supported Claude model.",
-				"cleanup finished after timeout directory removal",
-			}, "\n"))},
-			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
-			wantMessage: "Invalid request: select a supported Claude model.",
-		},
-		{
-			name:        "TimeoutExitUsesStableGuidance",
-			result:      CommandResult{ExitCode: 124},
-			wantReason:  interfaces.WorkFailureTypeTimeout,
-			wantMessage: claudeTimeoutFailureMessage,
-		},
-		{
-			name:        "SingleSafeUnknownUsesBoundedExcerpt",
-			result:      CommandResult{ExitCode: 9, Stderr: []byte("some brand new claude failure")},
-			wantReason:  interfaces.WorkFailureTypeUnknown,
-			wantMessage: "Claude failed: some brand new claude failure",
-		},
-		{
-			name:        "NoisyUnknownUsesExitCodeFallback",
-			result:      CommandResult{ExitCode: 7, Stderr: []byte("User: private prompt\ncleanup complete")},
-			wantReason:  interfaces.WorkFailureTypeUnknown,
-			wantMessage: "claude exited with code 7",
-		},
-		{
-			name:        "CredentialUnknownUsesExitCodeFallback",
-			result:      CommandResult{ExitCode: 2, Stderr: []byte("Authorization: Bearer sk-ant-private")},
-			wantReason:  interfaces.WorkFailureTypeUnknown,
-			wantMessage: "claude exited with code 2",
-		},
-	}
-}
-
-func TestParseClaudeProviderFailure_TextMalformedNoisyAndUnknownOutcomes(t *testing.T) {
-	for _, tc := range claudeFallbackTestCases() {
-		t.Run(tc.name, func(t *testing.T) {
-			got := ParseClaudeProviderFailure(tc.result)
-			if got.Reason != tc.wantReason || got.Message != tc.wantMessage {
-				t.Fatalf("ParseClaudeProviderFailure() = %#v, want reason=%q message=%q", got, tc.wantReason, tc.wantMessage)
-			}
-			if len(got.Message) > claudeFailureMessageBytes {
-				t.Fatalf("Message length = %d, want at most %d bytes", len(got.Message), claudeFailureMessageBytes)
-			}
-		})
-	}
-}
-
-func TestProviderErrorCorpus_ClaudeFixturesMatchCanonicalParserAndPolicy(t *testing.T) {
-	corpus := loadProviderErrorCorpusForTest(t)
-	for _, entry := range corpus.allEntries {
-		if entry.Provider != interfaces.ModelProviderClaude {
-			continue
-		}
-		t.Run(entry.Name, func(t *testing.T) {
-			parsed := ParseClaudeProviderFailure(entry.CommandResult())
-			if parsed.Reason != entry.ExpectedType || parsed.Message != entry.ExpectedMessage {
-				t.Fatalf("parsed = %#v, want reason=%q message=%q", parsed, entry.ExpectedType, entry.ExpectedMessage)
-			}
-			providerErr := NewProviderErrorFromResult(parsed, nil)
-			decision := WorkFailureDecisionFromProviderError(providerErr)
-			if providerErr.Family != entry.ExpectedFamily ||
-				decision.Retryable != entry.Retryable ||
-				decision.TriggersThrottlePause != entry.TriggersThrottlePause {
-				t.Fatalf("policy = family %q decision %#v, want family %q retryable=%t throttle=%t", providerErr.Family, decision, entry.ExpectedFamily, entry.Retryable, entry.TriggersThrottlePause)
-			}
-		})
-	}
-}
 
 func TestParseCodexProviderFailure_GPT56SolReturnsActionableNestedMessage(t *testing.T) {
 	entry := providerErrorCorpusEntryForTest(t, "codex_gpt_5_6_sol_requires_newer_cli")
@@ -946,5 +818,152 @@ func TestClaudeProviderBehavior_PassesUserMessageAsArgument(t *testing.T) {
 	}
 	if len(commandReq.Stdin) != 0 {
 		t.Fatalf("expected claude request not to use stdin, got %q", string(commandReq.Stdin))
+	}
+}
+
+func TestResolveCodexProviderFailure_MapsOwnedResolution(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stdout:   []byte(`{"type":"turn.failed","error":{"message":"unexpected status 503"}}` + "\n"),
+		Stderr:   []byte("ERROR: unexpected status 401\n"),
+	}
+	got, ok := ResolveCodexProviderFailure(result, CodexFailureResolutionInput{})
+	if !ok {
+		t.Fatal("ResolveCodexProviderFailure() ok = false, want true")
+	}
+	if got.Result.Reason != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("Result = %#v, want server failure", got.Result)
+	}
+	if got.InternalCause == "" {
+		t.Fatal("expected bounded internal cause on resolution")
+	}
+}
+
+func TestParseCodexProviderFailureLayers_SkipsPrecedence(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stdout:   []byte(`{"type":"turn.failed","error":{"message":"unexpected status 429"}}` + "\n"),
+		Stderr:   []byte("ERROR: unexpected status 401\n"),
+	}
+	got := ParseCodexProviderFailureLayers(result)
+	if got.Reason != interfaces.WorkFailureTypeAuthFailure {
+		t.Fatalf("ParseCodexProviderFailureLayers() = %#v, want stderr auth failure without stream precedence", got)
+	}
+}
+
+func TestCodexReportingDispatchWrappers_MapNeutralOutcomes(t *testing.T) {
+	stream, ok := CodexStructuredStreamReportingOutcome([]byte(
+		`{"type":"turn.failed","error":{"message":"unexpected status 429"}}` + "\n",
+	))
+	if !ok || stream.Reason != interfaces.WorkFailureTypeThrottled {
+		t.Fatalf("CodexStructuredStreamReportingOutcome() = (%#v, %v), want throttle", stream, ok)
+	}
+
+	exit := CodexProcessExitReportingOutcome(CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte("ERROR: unexpected status 401\n"),
+	})
+	if exit.Reason != interfaces.WorkFailureTypeAuthFailure {
+		t.Fatalf("CodexProcessExitReportingOutcome() = %#v, want auth failure", exit)
+	}
+}
+
+func TestCodexSanitizedFailureFixtureFromResolution_ProjectsPolicy(t *testing.T) {
+	resolution := ProviderFailureResolution{
+		Result: ProviderFailureResult{
+			Reason:  interfaces.WorkFailureTypeThrottled,
+			Message: "Codex is temporarily unavailable due to usage or capacity limits.",
+		},
+		InternalCause: "unexpected status 429",
+	}
+	fixture := CodexSanitizedFailureFixtureFromResolution(resolution)
+	if !fixture.Retryable || fixture.InternalCause != resolution.InternalCause {
+		t.Fatalf("CodexSanitizedFailureFixtureFromResolution() = %#v, want retryable throttle projection", fixture)
+	}
+}
+
+func TestCodexSanitizedFailureFixtureFromProviderError_IncludesCause(t *testing.T) {
+	providerErr := NewProviderErrorFromResult(ProviderFailureResult{
+		Reason:  interfaces.WorkFailureTypeTimeout,
+		Message: "Codex execution timed out.",
+	}, ProviderFailureInternalCauseError("context deadline exceeded"))
+	fixture := CodexSanitizedFailureFixtureFromProviderError(providerErr)
+	if fixture.Type != interfaces.WorkFailureTypeTimeout || fixture.InternalCause != "context deadline exceeded" {
+		t.Fatalf("CodexSanitizedFailureFixtureFromProviderError() = %#v, want timeout with cause", fixture)
+	}
+}
+
+func TestCodexSanitizedFailureFixtureFromProviderError_NilReturnsZeroValue(t *testing.T) {
+	if got := CodexSanitizedFailureFixtureFromProviderError(nil); got != (CodexSanitizedFailureFixture{}) {
+		t.Fatalf("CodexSanitizedFailureFixtureFromProviderError(nil) = %#v, want zero fixture", got)
+	}
+}
+
+func TestParseProviderExitFailure_RoutesOwnedProviderPackages(t *testing.T) {
+	testCases := []struct {
+		provider string
+		result   CommandResult
+		want     interfaces.WorkFailureType
+	}{
+		{
+			provider: string(interfaces.ModelProviderClaude),
+			result:   CommandResult{ExitCode: 1, Stderr: []byte(`API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"sign in"}}`)},
+			want:     interfaces.WorkFailureTypeAuthFailure,
+		},
+		{
+			provider: string(interfaces.ModelProviderGemini),
+			result:   CommandResult{ExitCode: 1, Stderr: []byte("ERROR: 429 RESOURCE_EXHAUSTED")},
+			want:     interfaces.WorkFailureTypeThrottled,
+		},
+		{
+			provider: string(interfaces.ModelProviderKiro),
+			result:   CommandResult{ExitCode: 1, Stderr: []byte("ERROR: Unauthorized")},
+			want:     interfaces.WorkFailureTypeAuthFailure,
+		},
+		{
+			provider: string(interfaces.ModelProviderOpenCode),
+			result:   CommandResult{ExitCode: 1, Stderr: []byte(`{"error":{"type":"invalid_request_error","message":"bad model"}}`)},
+			want:     interfaces.WorkFailureTypePermanentBadRequest,
+		},
+		{
+			provider: string(interfaces.ModelProviderCodex),
+			result:   CommandResult{ExitCode: 1, Stderr: []byte("ERROR: unexpected status 429\n")},
+			want:     interfaces.WorkFailureTypeThrottled,
+		},
+		{
+			provider: "unknown-provider",
+			result:   CommandResult{ExitCode: 9, Stderr: []byte("cleanup noise")},
+			want:     interfaces.WorkFailureTypeUnknown,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.provider, func(t *testing.T) {
+			got := parseProviderExitFailure(tc.provider, tc.result)
+			if got.failure.Reason != tc.want {
+				t.Fatalf("parseProviderExitFailure() = %#v, want reason %q", got.failure, tc.want)
+			}
+		})
+	}
+}
+
+func TestExtractCodexErrorLine_ReturnsLastErrorPrefixedLine(t *testing.T) {
+	line, ok := extractCodexErrorLine(CommandResult{Stderr: []byte("planning\nERROR: first\nERROR: decisive")})
+	if !ok || line != "ERROR: decisive" {
+		t.Fatalf("extractCodexErrorLine() = (%q, %v), want decisive error line", line, ok)
+	}
+}
+
+func TestSelectFailureByPrecedence_StructuredWinsOverStderr(t *testing.T) {
+	throttle := ProviderFailureResult{Reason: interfaces.WorkFailureTypeThrottled, Message: "throttle"}
+	auth := ProviderFailureResult{Reason: interfaces.WorkFailureTypeAuthFailure, Message: "auth"}
+	exit := ProviderFailureResult{Reason: interfaces.WorkFailureTypeUnknown, Message: "exit fallback"}
+	got, ok := SelectFailureByPrecedence([]CompetingFailureSignal{
+		{Tier: FailureSignalTierStructured, Recognized: true, Result: throttle},
+		{Tier: FailureSignalTierStderr, Recognized: true, Result: auth},
+		{Tier: FailureSignalTierExit, Result: exit},
+	})
+	if !ok || got.Result != throttle {
+		t.Fatalf("SelectFailureByPrecedence() = (%#v, %v), want structured throttle", got, ok)
 	}
 }

@@ -14,6 +14,26 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
 
+func TestRegistryLookupDoesNotDecodeNativeChunks(t *testing.T) {
+	t.Parallel()
+
+	fake := &kernelAdapter{}
+	registry, err := adapter.NewRegistry(fake)
+	if err != nil {
+		t.Fatalf("NewRegistry() error = %v", err)
+	}
+	selected, err := registry.Lookup(fake.Identity())
+	if err != nil {
+		t.Fatalf("Lookup() error = %v", err)
+	}
+	if selected != fake {
+		t.Fatalf("Lookup() = %T %p, want %p", selected, selected, fake)
+	}
+	if fake.decoder != nil {
+		t.Fatal("registry lookup must not construct decoders")
+	}
+}
+
 func TestExecuteKeepsNativeSyntaxInsideSelectedAdapter(t *testing.T) {
 	t.Parallel()
 
