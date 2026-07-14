@@ -280,8 +280,16 @@ primary-result behavior.
   transport parity tests. Use `AssertPrimaryStreamModeParity` with
   `ProjectPrimaryOnlyInvocation` and `ProjectResponseStreamInvocation` to prove
   primary-only and response-stream observation modes agree on authoritative
-  terminal `InvocationResponse` outcomes for the same fixture run. While legacy response-stream
-  consumers remain supported, carry an exact draft beside the compatibility
+  terminal `InvocationResponse` outcomes for the same fixture run. Consolidated
+  Batch 09 parity proofs live in `parityfixtures.AssertCrossProviderParityCatalog`
+  and `AssertCrossProviderParityForFixture`; run them from
+  `pkg/workers/provider/parityfixtures/suite_test.go`
+  (`TestCrossProviderParitySuite_Catalog`) and the provider-suite entrypoint
+  `tests/functional/providers/cross_provider_parity_smoke_test.go`
+  (`TestCrossProviderParitySmoke_ProviderSuiteEntrypoint`). Maintainer lanes:
+  `make provider-parity-smoke` (also invoked by `make api-smoke`) and
+  `make response-stream-stress-smoke` for response-event backpressure/race proofs.
+  While legacy response-stream consumers remain supported, carry an exact draft beside the compatibility
   fragment and let `pkg/factory/sessions/stream/manager.go` publish that draft
   directly; do not remap it through the lossy legacy fragment mapper. Keep the
   provider's final-result parser independent from decoder observation state so

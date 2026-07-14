@@ -25,6 +25,10 @@ CRON_TIME_WORK_SMOKE_TIMEOUT ?= 120s
 CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST := TestCurrentFactoryActivationFixture_ActivatesSecondPersistedFactoryAndResolvesCurrentFactory
 CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT ?= 1
 CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT ?= 120s
+CROSS_PROVIDER_PARITY_SMOKE_TEST := TestCrossProviderParity
+CROSS_PROVIDER_PARITY_SMOKE_TIMEOUT ?= 120s
+RESPONSE_STREAM_STRESS_SMOKE_TEST := TestSessionResponseEventStore_Backpressure
+RESPONSE_STREAM_STRESS_SMOKE_TIMEOUT ?= 120s
 
 ifeq ($(OS),Windows_NT)
 	BINARY_NAME := you.exe
@@ -75,7 +79,7 @@ define run_timed_step
 	exit $$status
 endef
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke api-package-pack-smoke contracts-validate contracts-generate contracts-check contracts-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check logging-boundary-check compatibility-alias-check model-facade-check readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy init dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke api-package-pack-smoke contracts-validate contracts-generate contracts-check contracts-smoke docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke response-stream-stress-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check logging-boundary-check compatibility-alias-check model-facade-check readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy init dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install clean
 
 default:
 	$(MAKE) generate-api
@@ -121,6 +125,7 @@ api-smoke:
 	node scripts/check-api-generated-drift.js
 	$(GO) test ./pkg/transports/http/contracttests -run TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional/runtime_api -run TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(MAKE) provider-parity-smoke
 
 api-package-pack-smoke:
 	node --test scripts/api-package-contract.test.mjs scripts/api-package-pack.test.mjs scripts/api-package-consumer.test.mjs
@@ -241,6 +246,12 @@ cron-time-work-smoke:
 current-factory-watcher-switch-smoke:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/bootstrap_portability -run $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TEST) -count=$(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_COUNT) -timeout $(CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT)
 
+provider-parity-smoke:
+	$(GO) test ./pkg/workers/provider/parityfixtures ./tests/functional/providers -run $(CROSS_PROVIDER_PARITY_SMOKE_TEST) -count=1 -timeout $(CROSS_PROVIDER_PARITY_SMOKE_TIMEOUT)
+
+response-stream-stress-smoke:
+	$(GO) test ./pkg/factory/sessions/responseeventstore -run $(RESPONSE_STREAM_STRESS_SMOKE_TEST) -count=1 -timeout $(RESPONSE_STREAM_STRESS_SMOKE_TIMEOUT)
+
 artifact-contract-closeout:
 	$(GO) test ./pkg/testutil -run TestArtifactContractInventory_ -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(MAKE) release-surface-smoke
@@ -288,6 +299,7 @@ verify-build-contracts:
 	$(MAKE) ui-components-verify
 	$(MAKE) contracts-smoke
 	$(MAKE) api-smoke
+	$(MAKE) response-stream-stress-smoke
 	$(MAKE) api-package-pack-smoke
 	$(MAKE) wire-smoke
 
@@ -328,6 +340,7 @@ ci-verify-build-contracts: ci-typecheck
 	$(MAKE) ui-components-verify
 	$(MAKE) contracts-smoke
 	$(MAKE) api-smoke
+	$(MAKE) response-stream-stress-smoke
 	$(MAKE) api-package-pack-smoke
 	$(MAKE) wire-smoke
 
