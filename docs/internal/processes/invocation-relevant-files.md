@@ -271,7 +271,11 @@ primary-result behavior.
   parity transcripts and the adapter-neutral terminal harness live in
   `pkg/workers/provider/parityfixtures` with fidelity-class fixtures under
   `testdata/`; extend that catalog for CLI/API parity proofs instead of
-  inventing parallel fixture trees. While legacy response-stream
+  inventing parallel fixture trees. Use `parityfixtures.RunTransportParity`
+  plus `AssertCLIAPITransportParity` and `AssertTruthfulStreamingFidelity` to
+  compare decoded CLI NDJSON and API SSE `FactoryResponseEvent` values and
+  terminal `InvocationResponse` outcomes for streaming fidelity classes before
+  adding new transport parity tests. While legacy response-stream
   consumers remain supported, carry an exact draft beside the compatibility
   fragment and let `pkg/factory/sessions/stream/manager.go` publish that draft
   directly; do not remap it through the lossy legacy fragment mapper. Keep the
