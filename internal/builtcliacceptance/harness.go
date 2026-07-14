@@ -162,8 +162,26 @@ func (s *Session) ProcessEnv() []string {
 	return ProcessEnvForIsolatedHome(s.HomeDir)
 }
 
+// ProcessEnvWith returns ProcessEnv plus additional KEY=value entries.
+func (s *Session) ProcessEnvWith(extra ...string) []string {
+	env := s.ProcessEnv()
+	if len(extra) == 0 {
+		return env
+	}
+	return append(env, extra...)
+}
+
 // Run executes the built you binary with the session's hermetic environment.
 func (s *Session) Run(ctx context.Context, args ...string) (RunResult, error) {
+	return s.run(ctx, s.ProcessEnv(), args...)
+}
+
+// RunWithEnv executes the built you binary with extra environment variables.
+func (s *Session) RunWithEnv(ctx context.Context, extraEnv []string, args ...string) (RunResult, error) {
+	return s.run(ctx, s.ProcessEnvWith(extraEnv...), args...)
+}
+
+func (s *Session) run(ctx context.Context, env []string, args ...string) (RunResult, error) {
 	if s.harness == nil {
 		return RunResult{}, errors.New("session harness is nil")
 	}
@@ -173,7 +191,7 @@ func (s *Session) Run(ctx context.Context, args ...string) (RunResult, error) {
 
 	cmd := exec.CommandContext(ctx, s.harness.BinaryPath, args...)
 	cmd.Dir = s.WorkDir
-	cmd.Env = s.ProcessEnv()
+	cmd.Env = env
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

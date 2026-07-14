@@ -561,9 +561,12 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `tests/functional/acceptance/harness_smoke_test.go`; fresh/migrated install
   customer outcomes are asserted in
   `tests/functional/acceptance/install_outcomes_test.go` via built-CLI
-  `config init` against isolated homes. Later S24 scenario stories should compose
-  scenario assertions on top of this package rather than re-building binary/home/log
-  wiring in each test file.
+  `config init` against isolated homes; provider absent/configured/discovered
+  postures are asserted in
+  `tests/functional/acceptance/provider_outcomes_test.go` via built-CLI
+  operator-default resolution and named `@you/goal` mock-worker runs. Later S24
+  scenario stories should compose scenario assertions on top of this package
+  rather than re-building binary/home/log wiring in each test file.
 - `pkg/factory/packages/catalog.go` owns packaged factory lookup and metadata;
   payload sources live under `pkg/factory/packages/definitions/`, and config
   initialization is the only catalog-to-disk installation boundary. Named
