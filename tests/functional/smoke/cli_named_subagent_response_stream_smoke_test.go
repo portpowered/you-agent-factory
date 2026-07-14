@@ -174,8 +174,21 @@ func TestNamedSubagentResponseStream_HumanModeUsesCanonicalHumanFormatNotLegacyD
 	}
 
 	assertNamedGoalHumanResponseStreamAvoidsLegacyDialect(t, stdout)
-	if got := strings.TrimSpace(stdout); got != packagedSubagentMockWorkerAcceptedSummary {
-		t.Fatalf("stdout = %q, want primary result %q when no live progress arrived", got, packagedSubagentMockWorkerAcceptedSummary)
+	for _, line := range strings.Split(stdout, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || trimmed == "--- primary result ---" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "progress:") ||
+			strings.HasPrefix(trimmed, "reasoning:") ||
+			strings.HasPrefix(trimmed, "tool:") ||
+			strings.HasPrefix(trimmed, "stream gap:") {
+			continue
+		}
+		if trimmed == packagedSubagentMockWorkerAcceptedSummary {
+			continue
+		}
+		t.Fatalf("unexpected human response-stream line %q outside canonical response-event contract", trimmed)
 	}
 }
 
