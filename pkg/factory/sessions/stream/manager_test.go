@@ -4,6 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
@@ -158,6 +163,110 @@ func TestManager_PublishesCanonicalResponseEventsToSessionStore(t *testing.T) {
 	}
 }
 
+func TestManager_CursorInvocationPublishesStructuredSnapshotAndUnresolvedToolGap(t *testing.T) {
+	session := factorysessions.NewLiveSession(
+		"sess-cursor-structured", "/factory", "/workspace", "/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory",
+	)
+	host := &streamTestHost{session: session}
+	publisher := stream.NewManager(host).InferenceProgressPublisherFactory(nil)(session.ID)
+	stdout := strings.Join([]string{
+		`{"type":"system","subtype":"init","session_id":"cursor-session-live"}`,
+		`{"type":"assistant","timestamp_ms":1,"message":{"role":"assistant","content":[{"type":"text","text":"draft answer"}]},"session_id":"cursor-session-live"}`,
+		`{"type":"tool_call","subtype":"started","call_id":"call-live-1","tool_call":{"readToolCall":{"args":{"path":"README.md"}}},"session_id":"cursor-session-live"}`,
+		`{"type":"result","subtype":"success","is_error":false,"result":"authoritative answer","session_id":"cursor-session-live"}`,
+	}, "\n") + "\n"
+	command, args := writeCursorStreamFixture(t, []byte(stdout))
+
+	runner := workerprovider.NewInferenceProgressPublishingCommandRunner(publisher, nil)
+	result, err := runner.Run(context.Background(), workerprovider.CommandRequest{
+		Command: command, Args: args, DispatchID: "dispatch-cursor-live",
+	})
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("Run() result = %#v, error = %v", result, err)
+	}
+
+	events := session.ResponseEvents.Events()
+	if len(events) != 5 {
+		t.Fatalf("response events = %#v, want session, delta, tool, gap, and snapshot", events)
+	}
+	assertCursorStructuredInvocationEvents(t, events)
+	if host.published != 0 {
+		t.Fatalf("legacy fragment publications = %d, want structured Cursor path to bypass compatibility fragments", host.published)
+	}
+}
+
+func assertCursorStructuredInvocationEvents(t *testing.T, events []responseevents.FactoryResponseEvent) {
+	t.Helper()
+	want := []struct {
+		kind  responseevents.Kind
+		phase responseevents.Phase
+	}{
+		{responseevents.KindSession, responseevents.PhaseStarted},
+		{responseevents.KindMessage, responseevents.PhaseDelta},
+		{responseevents.KindTool, responseevents.PhaseStarted},
+		{responseevents.KindStreamGap, responseevents.PhaseUpdated},
+		{responseevents.KindMessage, responseevents.PhaseCompleted},
+	}
+	for index, expected := range want {
+		event := events[index]
+		if event.Kind != expected.kind || event.Phase != expected.phase {
+			t.Fatalf("events[%d] = %s/%s, want %s/%s", index, event.Kind, event.Phase, expected.kind, expected.phase)
+		}
+		if event.DispatchID != "dispatch-cursor-live" || event.Provenance.Provider != "cursor" {
+			t.Fatalf("events[%d] correlation = %#v, want live Cursor dispatch", index, event)
+		}
+	}
+	assertCursorUnresolvedToolGap(t, events[3])
+	assertCursorAuthoritativeSnapshot(t, events[4])
+}
+
+func assertCursorUnresolvedToolGap(t *testing.T, event responseevents.FactoryResponseEvent) {
+	t.Helper()
+	var gap responseevents.StreamGapPayload
+	if err := json.Unmarshal(event.Payload, &gap); err != nil {
+		t.Fatalf("decode gap: %v", err)
+	}
+	if gap.AffectedItemID != "cursor-tool/call-live-1" || gap.ToolCallID != "call-live-1" {
+		t.Fatalf("gap = %#v, want unresolved call-live-1", gap)
+	}
+}
+
+func assertCursorAuthoritativeSnapshot(t *testing.T, event responseevents.FactoryResponseEvent) {
+	t.Helper()
+	var snapshot responseevents.MessagePayload
+	if err := json.Unmarshal(event.Payload, &snapshot); err != nil {
+		t.Fatalf("decode snapshot: %v", err)
+	}
+	if len(snapshot.ContentBlocks) != 1 || snapshot.ContentBlocks[0].Text != "authoritative answer" {
+		t.Fatalf("snapshot = %#v, want authoritative terminal result", snapshot)
+	}
+}
+
+func writeCursorStreamFixture(t *testing.T, stdout []byte) (string, []string) {
+	t.Helper()
+	dir := t.TempDir()
+	stdoutPath := filepath.Join(dir, "cursor.stdout")
+	if err := os.WriteFile(stdoutPath, stdout, 0o600); err != nil {
+		t.Fatalf("write Cursor stdout fixture: %v", err)
+	}
+	if runtime.GOOS == "windows" {
+		script := filepath.Join(dir, "agent.cmd")
+		body := fmt.Sprintf("@echo off\r\ntype %q\r\n", stdoutPath)
+		if err := os.WriteFile(script, []byte(body), 0o600); err != nil {
+			t.Fatalf("write Cursor command fixture: %v", err)
+		}
+		t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+		return "agent", nil
+	}
+	script := filepath.Join(dir, "agent")
+	body := fmt.Sprintf("#!/bin/sh\ncat %q\n", stdoutPath)
+	if err := os.WriteFile(script, []byte(body), 0o700); err != nil {
+		t.Fatalf("write Cursor command fixture: %v", err)
+	}
+	return script, nil
+}
+
 func TestManager_PublishesProviderCanonicalDraftWithoutLegacyRemapping(t *testing.T) {
 	t.Parallel()
 
@@ -193,6 +302,42 @@ func TestManager_PublishesProviderCanonicalDraftWithoutLegacyRemapping(t *testin
 	}
 	if host.published != 0 {
 		t.Fatalf("legacy response-stream publications = %d, want no lossy remapping", host.published)
+	}
+}
+
+func TestManager_SuppressesLegacyTerminalAfterProviderCanonicalDrafts(t *testing.T) {
+	t.Parallel()
+
+	session := factorysessions.NewLiveSession(
+		"sess-adapter-terminal", "/factory", "/workspace", "/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory",
+	)
+	publisher := stream.NewManager(&streamTestHost{session: session}).InferenceProgressPublisherFactory(nil)(session.ID)
+	payload, err := json.Marshal(responseevents.MessagePayload{
+		Role: "assistant", ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: "final answer"}},
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	draft := responseevents.Draft{
+		RunID: "run-1", DispatchID: "dispatch-1", Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted,
+		Provenance: responseevents.Provenance{
+			Provider: "opencode", NativeEventType: "text", Delivery: responseevents.DeliveryNativeStream,
+			Representation: responseevents.RepresentationSnapshot, Fidelity: responseevents.FidelityNormalized,
+		},
+		Payload: payload, ItemID: "message-1", ProviderSessionRef: "session-1",
+	}
+	publisher(workerprovider.CanonicalDraftFragment(draft.DispatchID, draft))
+	terminal := workerprovider.CompletedFragment(draft.DispatchID, nil)
+	terminal.CanonicalEventAlreadyPublished = true
+	publisher(terminal)
+
+	events := session.ResponseEvents.Events()
+	if len(events) != 1 || events[0].Kind != responseevents.KindMessage || events[0].Phase != responseevents.PhaseCompleted {
+		t.Fatalf("canonical events = %#v", events)
+	}
+	if events[0].Provenance != draft.Provenance || events[0].ItemID != draft.ItemID || events[0].ProviderSessionRef != draft.ProviderSessionRef {
+		t.Fatalf("adapter semantics were not preserved: %#v", events[0])
 	}
 }
 

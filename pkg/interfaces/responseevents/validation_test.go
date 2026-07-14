@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 )
 
 func TestValidateEvent_AcceptsApprovedKindPhaseMatrix(t *testing.T) {
@@ -70,6 +70,17 @@ func TestValidateEvent_RejectsInvalidKindPhasePairsWithActionableErrors(t *testi
 	assertValidationField(t, err, "phase")
 	if !strings.Contains(err.Error(), "allowed phases: UPDATED, FAILED") {
 		t.Fatalf("expected ERROR phase constraint in error, got %v", err)
+	}
+}
+
+func TestValidateEvent_AcceptsItemScopedStreamGap(t *testing.T) {
+	t.Parallel()
+
+	event := sampleEvent(t, responseevents.KindStreamGap, responseevents.PhaseUpdated, json.RawMessage(
+		`{"affectedItemId":"cursor-tool/call-1","toolCallId":"call-1","reason":"provider_reconnect"}`,
+	))
+	if err := responseevents.ValidateEvent(event); err != nil {
+		t.Fatalf("ValidateEvent() error = %v", err)
 	}
 }
 
@@ -174,6 +185,20 @@ func TestValidateEvent_RejectsRequiredPayloadFields(t *testing.T) {
 			wantField: "payload.firstAvailableSequence",
 		},
 		{
+			name:      "item stream gap missing reason",
+			kind:      responseevents.KindStreamGap,
+			phase:     responseevents.PhaseUpdated,
+			payload:   json.RawMessage(`{"affectedItemId":"cursor-tool/call-1","toolCallId":"call-1"}`),
+			wantField: "payload.reason",
+		},
+		{
+			name:      "tool stream gap missing affected item",
+			kind:      responseevents.KindStreamGap,
+			phase:     responseevents.PhaseUpdated,
+			payload:   json.RawMessage(`{"toolCallId":"call-1","reason":"provider_reconnect"}`),
+			wantField: "payload.affectedItemId",
+		},
+		{
 			name:      "message missing role",
 			kind:      responseevents.KindMessage,
 			phase:     responseevents.PhaseStarted,
@@ -211,6 +236,43 @@ func TestValidateEvent_RejectsRequiredPayloadFields(t *testing.T) {
 			err := responseevents.ValidateEvent(event)
 			assertValidationField(t, err, tc.wantField)
 		})
+	}
+}
+
+func TestValidateEvent_RejectsIncompleteOrMixedStreamGapShapes(t *testing.T) {
+	t.Parallel()
+	for name, payload := range map[string]json.RawMessage{
+		"empty": json.RawMessage(`{}`),
+		"mixed item and explicit zero sequences": json.RawMessage(
+			`{"affectedItemId":"cursor-tool/call-1","reason":"provider_reconnect","fromSequence":0,"toSequence":0,"firstAvailableSequence":0}`,
+		),
+	} {
+		name, payload := name, payload
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			event := sampleEvent(t, responseevents.KindStreamGap, responseevents.PhaseUpdated, payload)
+			assertValidationField(t, responseevents.ValidateEvent(event), "payload.fromSequence")
+		})
+	}
+}
+
+func TestStreamGapPayload_MarshalPreservesExclusiveShapes(t *testing.T) {
+	t.Parallel()
+	retention, err := json.Marshal(responseevents.StreamGapPayload{FirstAvailableSequence: 1})
+	if err != nil {
+		t.Fatalf("marshal retention gap: %v", err)
+	}
+	if string(retention) != `{"fromSequence":0,"toSequence":0,"firstAvailableSequence":1}` {
+		t.Fatalf("retention gap = %s, want explicit zero sequence bounds", retention)
+	}
+	item, err := json.Marshal(responseevents.StreamGapPayload{
+		AffectedItemID: "cursor-tool/call-1", ToolCallID: "call-1", Reason: "provider_reconnect",
+	})
+	if err != nil {
+		t.Fatalf("marshal item gap: %v", err)
+	}
+	if strings.Contains(string(item), "Sequence") {
+		t.Fatalf("item gap = %s, must omit retention sequence fields", item)
 	}
 }
 
@@ -268,6 +330,20 @@ func TestValidateEvent_ValidatesDeclaredContentBlockKinds(t *testing.T) {
 	assertValidationField(t, err, "payload.contentBlocks[0].kind")
 	if !strings.Contains(err.Error(), "TEXT, REASONING_SUMMARY, TOOL_REQUEST") {
 		t.Fatalf("expected declared content block kinds in error, got %v", err)
+	}
+}
+
+func TestValidateEvent_AllowsAuthoritativeEmptyTextSnapshot(t *testing.T) {
+	t.Parallel()
+
+	event := sampleEvent(
+		t,
+		responseevents.KindMessage,
+		responseevents.PhaseCompleted,
+		json.RawMessage(`{"role":"assistant","contentBlocks":[{"kind":"TEXT","text":""}]}`),
+	)
+	if err := responseevents.ValidateEvent(event); err != nil {
+		t.Fatalf("ValidateEvent() error = %v", err)
 	}
 }
 

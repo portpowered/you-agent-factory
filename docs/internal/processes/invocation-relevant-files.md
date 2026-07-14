@@ -244,6 +244,13 @@ primary-result behavior.
   map to `RUN`/`COMPLETED` (`RunPayload.status` `completed`) or `ERROR`/`FAILED`
   (`ErrorPayload` with stable `stream_failed` / `stream_canceled` codes and
   fragment payload as message) without selecting invocation primary results.
+  Providers with structured stream decoders must publish their
+  `responseevents.Draft` values from the real subprocess observation boundary
+  through `workerprovider.StructuredResponseEvent`; the session stream manager
+  publishes those drafts directly to the canonical response-event store and
+  bypasses legacy fragment compatibility mapping. Keep final invocation result
+  parsing independent so the provider's authoritative terminal value remains
+  both the response-event message snapshot and the invocation primary result.
   Compaction signals map to `STREAM_GAP`/`UPDATED` with `StreamGapPayload`
   (`fromSequence`/`toSequence` from `CompactionSummary` dropped bounds when
   present, `reason` from compaction reason) and always `LOSSY` provenance.

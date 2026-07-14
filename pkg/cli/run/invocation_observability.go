@@ -473,6 +473,13 @@ func formatHumanStreamGapEvent(event responseevents.FactoryResponseEvent) (strin
 	if err := json.Unmarshal(event.Payload, &payload); err != nil {
 		return "", false
 	}
+	if itemID := normalizeHumanProgressField(payload.AffectedItemID); itemID != "" {
+		line := "stream gap: item " + itemID + " lifecycle is incomplete"
+		if reason := normalizeHumanProgressField(payload.Reason); reason != "" {
+			line += " (reason=" + reason + ")"
+		}
+		return line, true
+	}
 	line := fmt.Sprintf(
 		"stream gap: sequences %d-%d unavailable",
 		payload.FromSequence,

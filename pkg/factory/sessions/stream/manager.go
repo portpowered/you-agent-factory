@@ -165,17 +165,15 @@ func (m *Manager) inferenceProgressPublisher(
 		})
 		event := mapInferenceProgressFragment(fragment)
 		stored := publisher.Publish(event)
-		if !fragment.CanonicalEventAlreadyPublished {
-			if err := publishCanonicalResponseEvents(session, stored); err != nil {
-				m.host.ObserveResponseStreamDegraded(
-					session,
-					normalizedSessionID,
-					dispatchID,
-					"CANONICAL_EVENT_PUBLISH_FAILED",
-					logger,
-					err,
-				)
-			}
+		if err := publishCanonicalResponseEvents(session, stored, fragment.CanonicalEventAlreadyPublished); err != nil {
+			m.host.ObserveResponseStreamDegraded(
+				session,
+				normalizedSessionID,
+				dispatchID,
+				"CANONICAL_EVENT_PUBLISH_FAILED",
+				logger,
+				err,
+			)
 		}
 		m.host.ObserveResponseStreamPublished(session, normalizedSessionID, stored)
 	}
@@ -199,9 +197,12 @@ func publishCanonicalDraft(session *factorysessions.LiveSession, draft responsee
 	return nil
 }
 
-func publishCanonicalResponseEvents(session *factorysessions.LiveSession, fragment responsestream.Event) error {
+func publishCanonicalResponseEvents(session *factorysessions.LiveSession, fragment responsestream.Event, skipCanonical bool) error {
 	if session == nil || session.ResponseEvents == nil {
 		return fmt.Errorf("session response-event store is unavailable")
+	}
+	if skipCanonical {
+		return nil
 	}
 	events, err := compat.MapFragment(compat.Context{
 		FactorySessionID: factorysessions.CanonicalFactorySessionID(session),

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
@@ -31,6 +31,7 @@ type ExecuteInput struct {
 	Provider Identity
 	Command  CommandContext
 	Decoder  DecoderContext
+	Publish  func(DecodeResult)
 	// ObserveDraft receives correlated drafts as decoding progresses. Session
 	// publication metadata remains owned by the caller.
 	ObserveDraft func(responseevents.Draft)
@@ -40,18 +41,28 @@ type ExecuteInput struct {
 // Event publication, retry execution, and transport formatting remain owned by
 // callers.
 type ExecuteResult struct {
-	Outcome      CommandOutcome
+	Outcome           CommandOutcome
+	Capabilities      Capabilities
+	Response          interfaces.InferenceResponse
+	Drafts            []responseevents.Draft
+	Diagnostics       []Diagnostic
+	Failure           *FailureFacts
+	Command           workerprocess.CommandResult
+	CommandError      error
+	DecodeError       error
+	FlushError        error
+	ParseError        error
+	FlushReason       FlushReason
+	CapabilityUpdates []CapabilityUpdate
+	Request           workerprocess.CommandRequest
+}
+
+// CapabilityUpdate records an invocation-specific fidelity change selected
+// after execution began.
+type CapabilityUpdate struct {
+	Provider     Identity
 	Capabilities Capabilities
-	Request      workerprocess.CommandRequest
-	Response     interfaces.InferenceResponse
-	Drafts       []responseevents.Draft
-	Diagnostics  []Diagnostic
-	Failure      *FailureFacts
-	Command      workerprocess.CommandResult
-	CommandError error
-	DecodeError  error
-	FlushError   error
-	ParseError   error
+	Diagnostic   Diagnostic
 }
 
 // Execute resolves one adapter and runs its complete neutral lifecycle. Once a
@@ -66,6 +77,31 @@ func Execute(ctx context.Context, registry *Registry, runner StreamingCommandRun
 		return ExecuteResult{}, errors.New("provider adapter execution requires a command runner")
 	}
 
+	result, attemptErr := executeAttempt(ctx, selected, runner, input)
+	planner, supportsFallback := selected.(FallbackPlanner)
+	if !supportsFallback {
+		return result, attemptErr
+	}
+	plan, fallback, err := planner.PlanFallback(ctx, fallbackContext(result))
+	if err != nil {
+		return result, fmt.Errorf("plan provider adapter fallback: %w", err)
+	}
+	if !fallback {
+		return result, attemptErr
+	}
+	if isNilAdapter(plan.Adapter) {
+		return result, errors.New("provider adapter fallback returned a nil adapter")
+	}
+
+	fallbackResult, fallbackErr := executeAttempt(ctx, plan.Adapter, runner, input)
+	fallbackResult.Diagnostics = append(fallbackResult.Diagnostics, plan.Diagnostic)
+	fallbackResult.CapabilityUpdates = append(fallbackResult.CapabilityUpdates, CapabilityUpdate{
+		Provider: selected.Identity(), Capabilities: fallbackResult.Capabilities, Diagnostic: plan.Diagnostic,
+	})
+	return fallbackResult, fallbackErr
+}
+
+func executeAttempt(ctx context.Context, selected Adapter, runner StreamingCommandRunner, input ExecuteInput) (ExecuteResult, error) {
 	capabilityResult, err := selected.Capabilities(ctx, CapabilityContext{Request: input.Command.Request})
 	if err != nil {
 		return ExecuteResult{}, fmt.Errorf("report provider adapter capabilities: %w", err)
@@ -87,6 +123,7 @@ func Execute(ctx context.Context, registry *Registry, runner StreamingCommandRun
 		decoded, observeErr := decoder.Observe(ctx, observation)
 		correlateDrafts(decoded.Drafts, input.Decoder)
 		result.appendDecoded(decoded, input.ObserveDraft)
+		publishDecoded(input.Publish, decoded)
 		if observeErr != nil && result.DecodeError == nil {
 			result.DecodeError = observeErr
 		}
@@ -94,11 +131,12 @@ func Execute(ctx context.Context, registry *Registry, runner StreamingCommandRun
 	})
 	result.Command, result.CommandError = commandResult, commandErr
 	outcome, flushReason := commandOutcome(ctx, commandResult, commandErr)
-	result.Outcome = outcome
+	result.Outcome, result.FlushReason = outcome, flushReason
 
 	flushed, flushErr := decoder.Flush(ctx, FlushContext{Reason: flushReason})
 	correlateDrafts(flushed.Drafts, input.Decoder)
 	result.appendDecoded(flushed, input.ObserveDraft)
+	publishDecoded(input.Publish, flushed)
 	result.FlushError = flushErr
 
 	final, parseErr := selected.ParseFinal(ctx, FinalParseContext{
@@ -109,12 +147,28 @@ func Execute(ctx context.Context, registry *Registry, runner StreamingCommandRun
 	correlateDrafts(final.Drafts, input.Decoder)
 	result.Drafts = append(result.Drafts, final.Drafts...)
 	observeDrafts(final.Drafts, input.ObserveDraft)
+	publishDecoded(input.Publish, DecodeResult{Drafts: final.Drafts})
 	classified := selected.ClassifyFailure(ctx, FailureContext{
 		CommandResult: commandResult, CommandError: commandErr, DecodeError: result.DecodeError,
 		FlushError: flushErr, ParseError: parseErr, FlushReason: flushReason,
 	})
 	result.Failure = classified.Failure
 	return result, errors.Join(result.DecodeError, flushErr, parseErr)
+}
+
+func publishDecoded(publish func(DecodeResult), decoded DecodeResult) {
+	if publish == nil || (len(decoded.Drafts) == 0 && len(decoded.Diagnostics) == 0) {
+		return
+	}
+	publish(decoded)
+}
+
+func fallbackContext(result ExecuteResult) FallbackContext {
+	return FallbackContext{
+		CommandResult: result.Command, CommandError: result.CommandError,
+		DecodeError: result.DecodeError, FlushError: result.FlushError, ParseError: result.ParseError,
+		FlushReason: result.FlushReason, Drafts: result.Drafts, Diagnostics: result.Diagnostics,
+	}
 }
 
 func correlateDrafts(drafts []responseevents.Draft, correlation DecoderContext) {

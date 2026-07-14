@@ -356,7 +356,7 @@ func genericNonCodexExitFailureTestCases() []exitFailureInferenceTestCase {
 			result: CommandResult{ExitCode: 1, Stdout: []byte(
 				`{"type":"error","error":{"name":"ProviderAuthError","data":{"message":"Authentication required. Run opencode auth login."}}}`,
 			)},
-			wantMessage: "Authentication required. Run opencode auth login.",
+			wantMessage: "OpenCode authentication failed.",
 			wantType:    interfaces.WorkFailureTypeAuthFailure,
 		},
 	}
@@ -366,7 +366,7 @@ func assertInferenceExitFailure(t *testing.T, tc exitFailureInferenceTestCase) {
 	t.Helper()
 
 	fakeExec := &recordingProviderExec{result: tc.result}
-	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
+	provider := newScriptWrapProviderForTest(t, fakeExec, tc.provider)
 
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
 		ModelProvider: tc.provider,

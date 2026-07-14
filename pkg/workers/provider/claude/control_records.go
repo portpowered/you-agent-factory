@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
 

@@ -1,4 +1,5 @@
 package responseevents
 
-// SchemaVersionV1 is the schema version string for FactoryResponseEvent v1.
-const SchemaVersionV1 = "agent-factory.response-event.v1"
+import shared "github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+
+const SchemaVersionV1 = shared.SchemaVersionV1

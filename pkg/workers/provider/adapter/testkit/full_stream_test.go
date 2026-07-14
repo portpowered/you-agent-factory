@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/testkit"
@@ -71,9 +71,106 @@ func TestFullStreamAdapterConformance(t *testing.T) {
 		},
 		ForbiddenDiagnostic: []string{privatePrompt, secretToken},
 	})
+
+	testkit.RunDecoderConformance(t, testkit.DecoderConformanceFixture{
+		NewDecoder: func(input adapter.DecoderContext) adapter.Decoder {
+			return &fullStreamDecoder{context: input}
+		},
+		Lifecycle: observations(
+			line(`{"type":"orbit","session":"session-42"}`),
+			line(`{"type":"glyph","item":"message-7","text":"Hello world"}`),
+			line(`{"type":"seal","item":"message-7","text":"Hello world"}`),
+			line(`{"type":"lever","item":"tool-item-9","call":"call-9","name":"weather","arguments":{"city":"Oslo"}}`),
+			line(`{"type":"latch","item":"tool-item-9","call":"call-9","name":"weather","result":{"temperature":12}}`),
+		),
+		UnsafeAndRecovering: observations(
+			line(`{"type":"orbit","session":"session-42"}`),
+			line(`{"type":"future_shape","prompt":"`+privatePrompt+`","token":"`+secretToken+`"}`),
+			line(`{"type":"seal","item":"message-7","text":"Hello world"}`),
+		),
+		UnterminatedFinal: observations(
+			line(`{"type":"orbit","session":"session-42"}`),
+			[]byte(`{"type":"seal","item":"message-7","text":"Hello world"}`),
+		),
+		Expected: testkit.DecoderConformanceExpected{
+			ProviderRef: fixtureProviderRef, MessageItemID: fixtureMessageID,
+			ToolItemID: fixtureToolItemID, ToolCallID: fixtureToolCallID, FinalContent: "Hello world",
+		},
+		ForbiddenDiagnostic: []string{privatePrompt, secretToken},
+	})
+
+	t.Run("explicit failure decoder conformance", func(t *testing.T) {
+		testkit.RunDecoderConformance(t, testkit.DecoderConformanceFixture{
+			NewDecoder: func(input adapter.DecoderContext) adapter.Decoder {
+				return &fullStreamDecoder{context: input}
+			},
+			Lifecycle: observations(
+				line(`{"type":"orbit","session":"session-42"}`),
+				line(`{"type":"lever","item":"tool-item-9","call":"call-9","name":"weather","arguments":{"city":"Oslo"}}`),
+				line(`{"type":"latch","item":"tool-item-9","call":"call-9","name":"weather","result":{"temperature":12}}`),
+				line(`{"type":"break"}`),
+			),
+			UnsafeAndRecovering: observations(
+				line(`{"type":"future_shape","prompt":"`+privatePrompt+`"}`),
+				line(`{"type":"break"}`),
+			),
+			UnterminatedFinal: observations([]byte(`{"type":"break"}`)),
+			Expected: testkit.DecoderConformanceExpected{
+				ProviderRef: fixtureProviderRef, ToolItemID: fixtureToolItemID, ToolCallID: fixtureToolCallID,
+			},
+			ForbiddenDiagnostic: []string{privatePrompt},
+		})
+	})
+}
+
+func TestFullStreamAdapterConformanceSupportsSnapshotOnlyNativeStreams(t *testing.T) {
+	t.Parallel()
+
+	session := interfaces.ProviderSessionMetadata{Provider: "fixture", Kind: "session_id", ID: fixtureProviderRef}
+	testkit.RunFullStream(t, testkit.FullStreamFixture{
+		NewAdapter: func() adapter.Adapter { return snapshotStreamAdapter{} },
+		Request: interfaces.ProviderInferenceRequest{
+			Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-snapshot-conformance"},
+			Model:    "fixture-model", UserMessage: privatePrompt,
+		},
+		ContentAndTools: observations(
+			line(`{"type":"orbit","session":"session-42"}`),
+			line(`{"type":"seal","item":"message-7","text":"Hello world"}`),
+		),
+		RetryableFailure: observations(
+			line(`{"type":"orbit","session":"session-42"}`),
+			line(`{"type":"pause","seconds":2}`),
+		),
+		UnsafeAndRecovering: observations(
+			line(`{"type":"orbit","session":"session-42"}`),
+			line(`{"type":`+privatePrompt+`,"token":"`+secretToken+`"}`),
+			line(`{"type":"future_shape","prompt":"`+privatePrompt+`","token":"`+secretToken+`"}`),
+			line(`{"type":"seal","item":"message-7","text":"Hello world"}`),
+		),
+		UnterminatedFinal: observations(
+			line(`{"type":"orbit","session":"session-42"}`),
+			[]byte(`{"type":"seal","item":"message-7","text":"Hello world"}`),
+		),
+		FinalResult: workerprocess.CommandResult{Stdout: []byte(`{"content":"Hello world","session":"session-42"}`)},
+		Expected: testkit.FullStreamExpected{
+			Capabilities:    adapter.Capabilities{NativeStreaming: true, MessageSnapshots: true, StableItemIDs: true},
+			ProviderSession: session,
+			ProviderRef:     fixtureProviderRef, MessageItemID: fixtureMessageID,
+			FinalContent: "Hello world", RetryAfter: 2,
+		},
+		ForbiddenDiagnostic: []string{privatePrompt, secretToken},
+	})
 }
 
 type fullStreamAdapter struct{}
+
+type snapshotStreamAdapter struct{ fullStreamAdapter }
+
+func (snapshotStreamAdapter) Capabilities(context.Context, adapter.CapabilityContext) (adapter.CapabilityResult, error) {
+	return adapter.CapabilityResult{Capabilities: adapter.Capabilities{
+		NativeStreaming: true, MessageSnapshots: true, StableItemIDs: true,
+	}}, nil
+}
 
 func (fullStreamAdapter) Identity() adapter.Identity { return "fixture-full-stream" }
 
@@ -192,6 +289,8 @@ func (d *fullStreamDecoder) decodeRecord(raw []byte) adapter.DecodeResult {
 		return d.withRunStart(toolSnapshot(record, d.sessionRef, responseevents.PhaseCompleted))
 	case "pause":
 		return d.withRunStart(retryNotification(record, d.sessionRef))
+	case "break":
+		return d.withRunStart(failureNotification(d.sessionRef))
 	default:
 		return safeDiagnostic("unknown_record", "fixture provider emitted an unsupported additive record")
 	}
@@ -257,6 +356,14 @@ func retryNotification(record nativeRecord, providerRef string) responseevents.D
 		Kind: responseevents.KindError, Phase: responseevents.PhaseUpdated, ProviderSessionRef: providerRef,
 		Provenance: fixtureProvenance(record.Type, responseevents.DeliveryNativeStream, responseevents.RepresentationNotification),
 		Payload:    marshalPayload(responseevents.ErrorPayload{Code: "provider_busy", Message: "fixture provider is temporarily busy", Retryable: true, RetryAfterSeconds: &record.Seconds}),
+	}
+}
+
+func failureNotification(providerRef string) responseevents.Draft {
+	return responseevents.Draft{
+		Kind: responseevents.KindError, Phase: responseevents.PhaseFailed, ProviderSessionRef: providerRef,
+		Provenance: fixtureProvenance("break", responseevents.DeliveryNativeStream, responseevents.RepresentationNotification),
+		Payload:    marshalPayload(responseevents.ErrorPayload{Code: "provider_failed", Message: "fixture provider failed"}),
 	}
 }
 
