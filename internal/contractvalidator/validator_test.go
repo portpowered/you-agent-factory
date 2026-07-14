@@ -26,6 +26,67 @@ func TestCLIRegistryValidFixtures(t *testing.T) {
 	}
 }
 
+func TestValidateCLIInvalidManifestDiagnostics(t *testing.T) {
+	root := repositoryRoot(t)
+
+	tests := []struct {
+		name     string
+		fixture  string
+		code     string
+		wantPath string
+	}{
+		{
+			name:     "duplicate stable documentation IDs",
+			fixture:  "contracts/testdata/cli/invalid-duplicate-stable-id.json",
+			code:     "identity.duplicate",
+			wantPath: "/commands/example.factory.alpha/documentation/documentation/title/id",
+		},
+		{
+			name:     "ambiguous flag and argument stable ID",
+			fixture:  "contracts/testdata/cli/invalid-ambiguous-flag-argument.json",
+			code:     "cli.input.ambiguous",
+			wantPath: "/commands/example.factory.sync/arguments/example.factory.sync.target/id",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			diagnostics := contractvalidator.Validate(root, cliManifestFixtureRegistry(test.fixture), "cli", "1.0.0")
+			if len(diagnostics) == 0 {
+				t.Fatal("expected diagnostics, got none")
+			}
+			found := false
+			for _, diagnostic := range diagnostics {
+				if diagnostic.Code == test.code && diagnostic.Path == test.wantPath && diagnostic.Document == test.fixture {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("diagnostics = %+v, want code=%q path=%q document=%q", diagnostics, test.code, test.wantPath, test.fixture)
+			}
+		})
+	}
+}
+
+func cliManifestFixtureRegistry(fixture string) contractvalidator.Registry {
+	const (
+		commandManifestID = "https://schemas.portpowered.com/you/contracts/cli/command-manifest.schema.json"
+		documentationID   = "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+		deprecationsID    = "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+	)
+	return contractvalidator.NewRegistry(contractvalidator.Entry{
+		Family:        "cli",
+		FormatVersion: "1.0.0",
+		Schemas: []contractvalidator.Schema{
+			{ID: documentationID, Path: "contracts/common/documentation.schema.json"},
+			{ID: deprecationsID, Path: "contracts/common/deprecations.schema.json"},
+			{ID: commandManifestID, Path: "contracts/cli/command-manifest.schema.json"},
+		},
+		Documents: []contractvalidator.Document{{Path: fixture, SchemaID: commandManifestID}},
+	})
+}
+
 func TestDefaultRegistryValidFixtures(t *testing.T) {
 	root := repositoryRoot(t)
 	diagnostics := contractvalidator.ValidateAll(root, contractvalidator.DefaultRegistry())
