@@ -156,7 +156,12 @@ primary-result behavior.
   metadata plus registry-attached handwritten handlers. Production root cutover is
   controlled by `useGeneratedRepresentativeFamily` in `pkg/transports/cli/root_work.go`
   (`newRootCommandWithGeneratedRepresentativeFamily` with
-  `newLegacyRootCommandWithOptions` rollback).
+  `newLegacyRootCommandWithOptions` rollback). Generated-vs-legacy parity for the
+  representative family lives in `pkg/transports/cli/climanifestparity`
+  (`CompareConstructorIdentityParity`, `CompareConstructorHelpParity`,
+  `CompareConstructorParseParity`, `CompareConstructorCompletionInventoryParity`,
+  `TestGeneratedVsLegacyParityMatrix_RepresentativeFamily`) with isolated legacy
+  construction via `cli.NewLegacyRepresentativeFamilyCommand`.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/transports/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before

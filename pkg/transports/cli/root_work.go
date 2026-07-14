@@ -32,6 +32,29 @@ func newLegacyRootCommandWithOptions(options RootCommandOptions) *cobra.Command 
 	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
 	diagnostics := &cliDiagnosticsOptions{}
 	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, newSessionCommand(globals, diagnostics, options))...)
+	return root
+}
+
+// NewLegacyRepresentativeFamilyCommand builds the isolated handwritten
+// you → session → show tree used by the generator-vs-legacy parity matrix.
+func NewLegacyRepresentativeFamilyCommand() *cobra.Command {
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	root.AddCommand(newLegacyRepresentativeSessionCommand(globals, diagnostics))
+	return root
+}
+
+func newLegacyRootCommandShell(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	options RootCommandOptions,
+) *cobra.Command {
 	root := &cobra.Command{
 		Use:          cliBinaryName,
 		Short:        "Run and manage CPN-based workflow factories",
@@ -73,9 +96,13 @@ func newLegacyRootCommandWithOptions(options RootCommandOptions) *cobra.Command 
 		"",
 		"default worker model for model workers with omitted model",
 	)
-
-	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, newSessionCommand(globals, diagnostics, options))...)
 	return root
+}
+
+func newLegacyRepresentativeSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	sessionCmd := legacySessionParentCommand()
+	sessionCmd.AddCommand(newSessionShowCommand(globals, diagnostics))
+	return sessionCmd
 }
 
 func newRootCommandWithGeneratedRepresentativeFamily(options RootCommandOptions) *cobra.Command {
@@ -509,7 +536,13 @@ func newWorkMoveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 }
 
 func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, options RootCommandOptions) *cobra.Command {
-	sessionCmd := &cobra.Command{
+	sessionCmd := legacySessionParentCommand()
+	sessionCmd.AddCommand(handwrittenSessionSubcommands(globals, diagnostics, options, newSessionShowCommand(globals, diagnostics))...)
+	return sessionCmd
+}
+
+func legacySessionParentCommand() *cobra.Command {
+	return &cobra.Command{
 		Use:   "session",
 		Short: "List, open, and close factory sessions on a running host",
 		Long: "Manage factory sessions on a running you-agent-factory service.\n\n" +
@@ -546,8 +579,6 @@ func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 			"  # Target a different service port for list output.\n" +
 			"  " + cliBinaryName + " session list --port 9090",
 	}
-	sessionCmd.AddCommand(handwrittenSessionSubcommands(globals, diagnostics, options, newSessionShowCommand(globals, diagnostics))...)
-	return sessionCmd
 }
 
 func newSessionShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
