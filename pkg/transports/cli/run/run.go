@@ -404,9 +404,9 @@ func BuildApplication(
 	var reservedAPIServer *reservedAPIServerListener
 	if !invocationMode {
 		reservedAPIServer, err = reserveAPIServerListener(cfg.Port, cfg.AutoPort)
-	}
-	if err != nil {
-		return nil, err
+		if err != nil {
+			return nil, err
+		}
 	}
 	requestedPort := cfg.Port
 	closeReserved := func() {
