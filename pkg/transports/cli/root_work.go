@@ -31,7 +31,9 @@ func newLegacyRootCommandWithOptions(options RootCommandOptions) *cobra.Command 
 	diagnostics := &cliDiagnosticsOptions{}
 	operatorDefaults := &cliOperatorDefaultsOptions{}
 	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
-	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, newSessionCommand(globals, diagnostics, options))...)
+	docsCmd := newDocsCommand(diagnostics)
+	modelsCmd := newModelsCommand(globals, diagnostics, operatorDefaults, options)
+	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, newSessionCommand(globals, diagnostics, options), docsCmd, modelsCmd)...)
 	return root
 }
 
@@ -124,8 +126,13 @@ func newRootCommandWithGeneratedRepresentativeFamily(options RootCommandOptions)
 	session := components.Session
 	session.AddCommand(handwrittenSessionSubcommands(globals, diagnostics, options, components.Show)...)
 
+	docsCmd, modelsCmd, err := newProductionModelsDocsCommands(globals, diagnostics, operatorDefaults, options)
+	if err != nil {
+		panic(fmt.Sprintf("build models/docs family command: %v", err))
+	}
+
 	root := components.Root
-	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, session)...)
+	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, session, docsCmd, modelsCmd)...)
 	return root
 }
 
@@ -135,9 +142,11 @@ func productionRootSubcommands(
 	operatorDefaults *cliOperatorDefaultsOptions,
 	options RootCommandOptions,
 	session *cobra.Command,
+	docsCmd *cobra.Command,
+	modelsCmd *cobra.Command,
 ) []*cobra.Command {
 	return []*cobra.Command{
-		newDocsCommand(diagnostics),
+		docsCmd,
 		configinitcmd.NewSystemConfigCommand(cliBinaryName, configinitcmd.CommandGlobals{
 			JSON:    func() bool { return globals.json },
 			HomeDir: options.HomeDir,
@@ -148,7 +157,7 @@ func productionRootSubcommands(
 		newFactoryCommand(globals, diagnostics),
 		newInitCommand(globals, diagnostics),
 		newMCPCommand(options),
-		newModelsCommand(globals, diagnostics, operatorDefaults, options),
+		modelsCmd,
 		newRunCommand(globals, diagnostics, operatorDefaults, options),
 		newSubmitCommand(globals, diagnostics),
 		session,

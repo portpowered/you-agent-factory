@@ -40,6 +40,7 @@ func CompareConstructorIdentityParity(commandID string, legacy, generated *cobra
 	appendField("longDescription", legacy.Long, generated.Long)
 	appendField("usage.line", legacy.Use, generated.Use)
 	appendField("usage.example", baseline.NormalizeFixtureText(legacy.Example), baseline.NormalizeFixtureText(generated.Example))
+	appendField("validArgs", formatStringList(legacy.ValidArgs), formatStringList(generated.ValidArgs))
 
 	return mismatches
 }

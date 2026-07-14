@@ -11,62 +11,7 @@ import (
 
 func TestRunGeneratesRepresentativeFamilyArtifacts(t *testing.T) {
 	root := t.TempDir()
-	manifest := []byte(`{
-  "formatVersion": "1.0.0",
-  "rootPath": "you",
-  "commands": {
-    "you": {
-      "id": "you",
-      "name": "you",
-      "path": "you",
-      "documentation": {
-        "documentation": {
-          "title": {"canonicalEnglish": "root"},
-          "description": {"canonicalEnglish": "root"}
-        }
-      },
-      "visibility": "visible",
-      "runnable": true,
-      "usage": {"line": "you"}
-    },
-    "you.session": {
-      "id": "you.session",
-      "name": "session",
-      "path": "you session",
-      "documentation": {
-        "documentation": {
-          "title": {"canonicalEnglish": "session"},
-          "description": {"canonicalEnglish": "session"}
-        }
-      },
-      "visibility": "visible",
-      "runnable": false,
-      "usage": {"line": "session"}
-    },
-    "you.session.show": {
-      "id": "you.session.show",
-      "name": "show",
-      "path": "you session show",
-      "documentation": {
-        "documentation": {
-          "title": {"canonicalEnglish": "show"},
-          "description": {"canonicalEnglish": "show"}
-        }
-      },
-      "visibility": "visible",
-      "runnable": true,
-      "usage": {"line": "show [session-id]"},
-      "handler": {"id": "you.session.show.handler", "operationId": "getFactorySession"}
-    }
-  }
-}`)
-	manifestPath := filepath.Join(root, filepath.FromSlash(climanifestgen.ProductionManifestPath))
-	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
-		t.Fatalf("create manifest directory: %v", err)
-	}
-	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
-		t.Fatalf("write manifest: %v", err)
-	}
+	writeMinimalProductionManifest(t, root)
 
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	if status := run(root, false, stdout, stderr); status != 0 {

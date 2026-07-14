@@ -11,22 +11,35 @@ import (
 //go:embed representative_family.json
 var representativeFamilyJSON []byte
 
+//go:embed models_docs_family.json
+var modelsDocsFamilyJSON []byte
+
 // RepresentativeFamilyManifest returns generated §4.3 metadata for the
 // representative root/session-show command family.
 func RepresentativeFamilyManifest() (climanifest.Manifest, error) {
 	return parseRepresentativeFamilyManifest(representativeFamilyJSON)
 }
 
+// ModelsDocsFamilyManifest returns generated §4.3 metadata for the models/docs
+// command family.
+func ModelsDocsFamilyManifest() (climanifest.Manifest, error) {
+	return parseFamilyManifest(modelsDocsFamilyJSON, "models/docs")
+}
+
 func parseRepresentativeFamilyManifest(payload []byte) (climanifest.Manifest, error) {
+	return parseFamilyManifest(payload, "representative")
+}
+
+func parseFamilyManifest(payload []byte, familyName string) (climanifest.Manifest, error) {
 	var manifest climanifest.Manifest
 	if err := json.Unmarshal(payload, &manifest); err != nil {
-		return climanifest.Manifest{}, fmt.Errorf("decode generated representative-family metadata: %w", err)
+		return climanifest.Manifest{}, fmt.Errorf("decode generated %s-family metadata: %w", familyName, err)
 	}
 	if manifest.RootPath == "" {
-		return climanifest.Manifest{}, fmt.Errorf("generated representative-family metadata missing rootPath")
+		return climanifest.Manifest{}, fmt.Errorf("generated %s-family metadata missing rootPath", familyName)
 	}
 	if len(manifest.Commands) == 0 {
-		return climanifest.Manifest{}, fmt.Errorf("generated representative-family metadata missing commands")
+		return climanifest.Manifest{}, fmt.Errorf("generated %s-family metadata missing commands", familyName)
 	}
 	return manifest, nil
 }
