@@ -205,6 +205,24 @@ var openAPIDiffFixtureMatrix = []struct {
 		failClosed: true,
 	},
 	{
+		name:       "unsupported-schema-extension",
+		fixture:    "unsupported-schema-extension",
+		category:   categoryFailClosed,
+		failClosed: true,
+	},
+	{
+		name:       "unsupported-operation-extension",
+		fixture:    "unsupported-operation-extension",
+		category:   categoryFailClosed,
+		failClosed: true,
+	},
+	{
+		name:       "unsupported-parameter-extension",
+		fixture:    "unsupported-parameter-extension",
+		category:   categoryFailClosed,
+		failClosed: true,
+	},
+	{
 		name:       "unsupported-component-parameter-remove",
 		fixture:    "unsupported-component-parameter-remove",
 		category:   categoryFailClosed,

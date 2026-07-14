@@ -534,6 +534,21 @@ func TestCompareYAML_UnsupportedStructuralSurfaceFixtures_FailClosed(t *testing.
 			fixture:  "unsupported-server-variables",
 			wantPath: "servers[0].variables.env.enum",
 		},
+		{
+			name:     "schema-extension",
+			fixture:  "unsupported-schema-extension",
+			wantPath: "components.schemas.Pet.x-internal",
+		},
+		{
+			name:     "operation-extension",
+			fixture:  "unsupported-operation-extension",
+			wantPath: "GET /pets.x-internal",
+		},
+		{
+			name:     "parameter-extension",
+			fixture:  "unsupported-parameter-extension",
+			wantPath: "GET /pets.parameters[query:tags].x-codegen-name",
+		},
 	}
 	for _, tc := range cases {
 		tc := tc

@@ -1,0 +1,16 @@
+openapi: 3.0.3
+info:
+  title: Unsupported Parameter Extension Fixture
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      parameters:
+        - name: tags
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Pet list.

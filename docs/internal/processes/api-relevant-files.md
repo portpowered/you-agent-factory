@@ -102,7 +102,10 @@ Use this map when changing the public REST contract.
   `variables` (`default`/`enum`), media-type `encoding`/`example`, response
   `links`, and operation `callbacks` must also fail closed or classify
   explicitly; path-item parameter removal reuses `collectParameterChanges` as
-  major with `openapi.remove.parameter`.
+  major with `openapi.remove.parameter`. Vendor extensions (`x-*` /
+  kin-openapi `Extensions` maps on info, operation, parameter, requestBody,
+  response, mediaType, schema, server, tag, and components) must fail closed via
+  shared `checkUnsupportedExtensions` instead of silently classifying as `patch`.
 - Focused fixtures live under
   `internal/contractopenapidiff/testdata/`; prove end-to-end outcomes in
   `internal/contractopenapidiff/compare_test.go` and the consolidated matrix in

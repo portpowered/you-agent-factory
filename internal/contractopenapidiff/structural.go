@@ -12,6 +12,9 @@ func collectStructuralChanges(before, after *openapi3.T) ([]Change, error) {
 	if before.OpenAPI != after.OpenAPI {
 		return nil, unsupportedStructuralDiff("openapi")
 	}
+	if err := checkUnsupportedExtensions("openapi", before.Extensions, after.Extensions); err != nil {
+		return nil, err
+	}
 	if err := compareInfoStructural(before.Info, after.Info); err != nil {
 		return nil, err
 	}
@@ -38,6 +41,9 @@ func collectStructuralChanges(before, after *openapi3.T) ([]Change, error) {
 func compareInfoStructural(before, after *openapi3.Info) error {
 	if before == nil || after == nil {
 		return unsupportedStructuralDiff("info")
+	}
+	if err := checkUnsupportedExtensions("info", before.Extensions, after.Extensions); err != nil {
+		return err
 	}
 	if before.Title != after.Title || before.Version != after.Version {
 		return unsupportedStructuralDiff("info")
@@ -99,6 +105,9 @@ func compareServersAt(path string, before, after openapi3.Servers) error {
 		if before[i].URL != after[i].URL {
 			return unsupportedStructuralDiff(path + "[" + fmt.Sprint(i) + "].url")
 		}
+		if err := checkUnsupportedExtensions(path+"["+fmt.Sprint(i)+"]", before[i].Extensions, after[i].Extensions); err != nil {
+			return err
+		}
 		if err := compareServerVariablesAt(path+"["+fmt.Sprint(i)+"].variables", before[i].Variables, after[i].Variables); err != nil {
 			return err
 		}
@@ -125,6 +134,9 @@ func compareServerVariablesAt(path string, before, after map[string]*openapi3.Se
 		}
 		if beforeVariable == nil || afterVariable == nil {
 			return unsupportedStructuralDiff(path + "." + name)
+		}
+		if err := checkUnsupportedExtensions(path+"."+name, beforeVariable.Extensions, afterVariable.Extensions); err != nil {
+			return err
 		}
 		if beforeVariable.Default != afterVariable.Default {
 			return unsupportedStructuralDiff(path + "." + name + ".default")
@@ -159,6 +171,9 @@ func compareTagsStructural(before, after openapi3.Tags) error {
 		}
 		if !externalDocsStructuralEqual(beforeTag.ExternalDocs, afterTag.ExternalDocs) {
 			return unsupportedStructuralDiff("tags." + name + ".externalDocs")
+		}
+		if err := checkUnsupportedExtensions("tags."+name, beforeTag.Extensions, afterTag.Extensions); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -203,6 +218,9 @@ func collectPathChanges(before, after *openapi3.Paths) ([]Change, error) {
 func collectPathItemChanges(path string, before, after *openapi3.PathItem) ([]Change, error) {
 	if before == nil || after == nil {
 		return nil, unsupportedStructuralDiff("paths." + path)
+	}
+	if err := checkUnsupportedExtensions(path, before.Extensions, after.Extensions); err != nil {
+		return nil, err
 	}
 	var changes []Change
 	pathParamChanges, err := collectParameterChanges(path, before.Parameters, after.Parameters)
@@ -250,6 +268,9 @@ func collectOperationChanges(opPath string, before, after *openapi3.Operation) (
 	if before.Deprecated != after.Deprecated {
 		return nil, unsupportedStructuralDiff(opPath + ".deprecated")
 	}
+	if err := checkUnsupportedExtensions(opPath, before.Extensions, after.Extensions); err != nil {
+		return nil, err
+	}
 	if err := checkUnsupportedOperationSecurity(opPath, before, after); err != nil {
 		return nil, err
 	}
@@ -295,6 +316,9 @@ func collectParameterChanges(opPath string, before, after openapi3.Parameters) (
 	for key, afterParameter := range afterByKey {
 		beforeParameter, ok := beforeByKey[key]
 		if !ok {
+			if err := checkUnsupportedExtensions(opPath+".parameters["+key+"]", nil, afterParameter.Extensions); err != nil {
+				return nil, err
+			}
 			if afterParameter.Required {
 				changes = appendMajorChange(changes, CodeParameterRequiredNarrowed, opPath+".parameters["+key+"]")
 			} else {
@@ -317,6 +341,9 @@ func collectParameterPairChanges(path string, before, after *openapi3.Parameter)
 	}
 	if before.Name != after.Name || before.In != after.In {
 		return nil, unsupportedStructuralDiff(path)
+	}
+	if err := checkUnsupportedExtensions(path, before.Extensions, after.Extensions); err != nil {
+		return nil, err
 	}
 	var changes []Change
 	if before.Required != after.Required {
@@ -347,6 +374,12 @@ func collectRequestBodyChanges(opPath string, before, after *openapi3.RequestBod
 	if beforeBody == nil || afterBody == nil {
 		return nil, unsupportedStructuralDiff(opPath + ".requestBody")
 	}
+	if err := checkUnsupportedRefExtensions(opPath+".requestBody", before.Extensions, after.Extensions); err != nil {
+		return nil, err
+	}
+	if err := checkUnsupportedExtensions(opPath+".requestBody", beforeBody.Extensions, afterBody.Extensions); err != nil {
+		return nil, err
+	}
 	if beforeBody.Required != afterBody.Required {
 		return nil, unsupportedStructuralDiff(opPath + ".requestBody.required")
 	}
@@ -376,6 +409,12 @@ func collectResponsesChanges(opPath string, before, after *openapi3.Responses) (
 		if err := checkUnsupportedResponseLinks(opPath+".responses."+status+".links", beforeResponse.Links, afterResponse.Links); err != nil {
 			return nil, err
 		}
+		if err := checkUnsupportedRefExtensions(opPath+".responses."+status, beforeResponseRef.Extensions, afterResponseRef.Extensions); err != nil {
+			return nil, err
+		}
+		if err := checkUnsupportedExtensions(opPath+".responses."+status, beforeResponse.Extensions, afterResponse.Extensions); err != nil {
+			return nil, err
+		}
 		responseChanges, err := collectMediaTypeChanges(opPath+".responses."+status+".content", beforeResponse.Content, afterResponse.Content)
 		if err != nil {
 			return nil, err
@@ -401,6 +440,9 @@ func collectMediaTypeChanges(path string, before, after openapi3.Content) ([]Cha
 			return nil, err
 		}
 		changes = append(changes, schemaChanges...)
+		if err := checkUnsupportedExtensions(mediaPath, beforeMedia.Extensions, afterMedia.Extensions); err != nil {
+			return nil, err
+		}
 		if err := checkUnsupportedMediaTypeResiduals(mediaPath, beforeMedia, afterMedia); err != nil {
 			return nil, err
 		}
@@ -434,6 +476,9 @@ func collectComponentChanges(before, after *openapi3.Components) ([]Change, erro
 			return nil, err
 		}
 		changes = append(changes, schemaChanges...)
+	}
+	if err := checkUnsupportedExtensions("components", before.Extensions, after.Extensions); err != nil {
+		return nil, err
 	}
 	if err := checkUnsupportedComponentResiduals(before, after); err != nil {
 		return nil, err
@@ -484,6 +529,39 @@ func checkUnsupportedMediaTypeResiduals(path string, before, after *openapi3.Med
 
 func checkUnsupportedResponseLinks(path string, before, after openapi3.Links) error {
 	return checkNamedMapResidual(path, before, after)
+}
+
+func checkUnsupportedRefExtensions(path string, before, after map[string]any) error {
+	return checkUnsupportedExtensions(path, before, after)
+}
+
+func checkUnsupportedExtensions(path string, before, after map[string]any) error {
+	if len(before) == 0 && len(after) == 0 {
+		return nil
+	}
+	allKeys := make(map[string]struct{})
+	for key := range before {
+		allKeys[key] = struct{}{}
+	}
+	for key := range after {
+		allKeys[key] = struct{}{}
+	}
+	keys := make([]string, 0, len(allKeys))
+	for key := range allKeys {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	for _, key := range keys {
+		beforeValue, beforeOK := before[key]
+		afterValue, afterOK := after[key]
+		if !beforeOK || !afterOK {
+			return unsupportedStructuralDiff(path + "." + key)
+		}
+		if !reflect.DeepEqual(beforeValue, afterValue) {
+			return unsupportedStructuralDiff(path + "." + key)
+		}
+	}
+	return nil
 }
 
 func checkNamedMapResidual[T any](path string, before, after map[string]T) error {
@@ -621,6 +699,9 @@ func collectSchemaRefChanges(path string, before, after *openapi3.SchemaRef) ([]
 	if before == nil || after == nil {
 		return nil, unsupportedStructuralDiff(path)
 	}
+	if err := checkUnsupportedExtensions(path, before.Extensions, after.Extensions); err != nil {
+		return nil, err
+	}
 	if before.Ref != after.Ref {
 		return nil, unsupportedStructuralDiff(path + ".ref")
 	}
@@ -633,6 +714,9 @@ func collectSchemaRefChanges(path string, before, after *openapi3.SchemaRef) ([]
 func collectSchemaChanges(path string, before, after *openapi3.Schema) ([]Change, error) {
 	if before == nil || after == nil {
 		return nil, unsupportedStructuralDiff(path)
+	}
+	if err := checkUnsupportedExtensions(path, before.Extensions, after.Extensions); err != nil {
+		return nil, err
 	}
 	var changes []Change
 	if !typesEqual(before.Type, after.Type) {
