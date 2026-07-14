@@ -72,12 +72,31 @@ Use this map when changing the public REST contract.
   `make api-smoke`; this inventory lane must not modify authored OpenAPI,
   generated clients, or `pkg/transports/http` handlers.
 
-## Family compatibility inventory coverage
+## Family compatibility inventory ownership
 
 - Machine-readable API, CLI, and MCP compatibility classifications live in
   `contracts/api/deprecated.json`, `contracts/cli/deprecated.json`, and
   `contracts/mcp/deprecated.json` against
-  `contracts/compatibility-inventory.schema.json`.
+  `contracts/compatibility-inventory.schema.json` and the shared vocabulary in
+  `contracts/common/compatibility-inventory.schema.json`.
+- These family inventories are the **machine-readable source of truth** for
+  classification status, successor `targetItemId`, evidence, lifecycle
+  versions, removal-gate status, and maintainer `approvalStatus`. Update the
+  JSON records first when classification changes; the human-readable appendix
+  tables in [Compatibility Alias Inventory](#compatibility-alias-inventory)
+  document boundary ownership and runtime evidence and must stay aligned.
+- Supported `classification` values (see schema `$defs/classification`):
+  - `retain-temporarily`: the alias remains callable; removal requires satisfying
+    every recorded removal gate in a separate approved removal change.
+  - `remove-now`: classified as removal-ready for a later approved removal
+    story; inventory classification does not unregister or delete runtime
+    aliases.
+  - `separately-approved`: retained under explicit maintainer approval outside
+    the default retain/remove posture.
+- Supported `approvalStatus` values are `approved`, `pending`, and `rejected`.
+  Inventory records compose lifecycle fields from
+  `contracts/common/deprecations.schema.json`; classification metadata does not
+  control runtime callability.
 - Baseline scope for coverage assertions lives under
   `contracts/testdata/baseline/` (`api-compatibility-surfaces.json`,
   `cli-commands.json`, `mcp-aliases.json`). Add new compatibility-only surfaces
@@ -109,6 +128,29 @@ Use this map when changing the public REST contract.
   (`~default`, `GET /events`) stay inventoried for classification but are
   excluded from this focused lint because they are accepted at many transport
   boundaries rather than workflow-preview alias names.
+- Retained aliases remain callable until objective removal gates are satisfied
+  in a separate approved removal change; the lint gate blocks new first-party
+  internal adoption only.
+
+## Primary navigation and reference guidance
+
+- Packaged CLI reference (`docs/reference/`, `you docs <topic>`), dashboard
+  navigation, OpenAPI primary discovery, and new first-party examples must
+  present canonical successors rather than promoting compatibility aliases as
+  primary entry points.
+- Compatibility aliases belong only in the family compatibility inventories
+  above and the maintainer appendix tables in
+  [Compatibility Alias Inventory](#compatibility-alias-inventory); they are
+  excluded from primary discovery and must not appear as recommended routes,
+  nav labels, packaged topic names, or first-party examples in customer guides.
+- When documenting public entry points, name the canonical successor (for
+  example `POST /factories/preview`, Factory Session REST routes, and
+  `you.factory_session.*` MCP tools). Mention retained workflow-named aliases
+  only in explicit migration or compatibility appendix lanes.
+- Reference topics may acknowledge long-lived CLI topic aliases (for example
+  `batch-work` → `batch-inputs`) at the edges of canonical topic lists in
+  `docs/reference/README.md`; workflow-named API/CLI/MCP aliases are not primary
+  and must not be added to primary navigation or reference tables.
 
 ## OpenAPI contract semver comparator
 
@@ -152,7 +194,13 @@ Use this map when changing the public REST contract.
 
 ## Compatibility Alias Inventory
 
-This inventory is the maintainer source of truth for retained public aliases.
+This section is the human-readable maintainer appendix for alias-accepting
+boundaries, canonical successors, runtime evidence, and objective removal gates.
+Classification status, approval posture, and removal-gate satisfaction are
+owned by the machine-readable family inventories documented in
+[Family compatibility inventory ownership](#family-compatibility-inventory-ownership);
+update those JSON records first when classification changes.
+
 An alias-accepting boundary may parse, route, or re-export an obsolete name, but
 it does not own the behavior. The canonical owner and its tests remain the final
 specification; compatibility-only tests prove deprecation signals and parity
