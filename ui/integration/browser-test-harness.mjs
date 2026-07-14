@@ -1099,9 +1099,173 @@ export async function loadReplayLines(fileName) {
     .filter((line) => line.length > 0);
 }
 
+function recordBrowserDiagnostic(
+  diagnostics,
+  value,
+  { characterLimit, entryLimit },
+) {
+  diagnostics.push(
+    characterLimit === null ? value : String(value).slice(0, characterLimit),
+  );
+  if (entryLimit !== null) {
+    diagnostics.splice(0, Math.max(0, diagnostics.length - entryLimit));
+  }
+}
+
+export function installBrowserErrorCapture(
+  page,
+  { characterLimit = null, entryLimit = null } = {},
+) {
+  const pageErrors = [];
+  const consoleErrors = [];
+  const diagnosticPolicy = { characterLimit, entryLimit };
+
+  page.on("pageerror", (error) => {
+    recordBrowserDiagnostic(
+      pageErrors,
+      error.stack ?? error.message,
+      diagnosticPolicy,
+    );
+  });
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      recordBrowserDiagnostic(consoleErrors, message.text(), diagnosticPolicy);
+    }
+  });
+
+  return { consoleErrors, pageErrors };
+}
+
+async function captureFullBrowserArtifacts({
+  artifactDirectory,
+  artifactLabel,
+  consoleErrors,
+  context,
+  page,
+  pageErrors,
+}) {
+  const warnings = [];
+  if (!page.isClosed()) {
+    try {
+      await page.screenshot({
+        fullPage: true,
+        path: path.join(artifactDirectory, `${artifactLabel}.png`),
+      });
+    } catch (error) {
+      warnings.push(`screenshot: ${error.message}`);
+    }
+    try {
+      await writeFile(
+        path.join(artifactDirectory, `${artifactLabel}.html`),
+        await page.content(),
+        "utf8",
+      );
+    } catch (error) {
+      warnings.push(`html: ${error.message}`);
+    }
+  }
+  try {
+    await context.tracing.stop({
+      path: path.join(artifactDirectory, `${artifactLabel}.trace.zip`),
+    });
+  } catch (error) {
+    warnings.push(`trace: ${error.message}`);
+  }
+  await writeFile(
+    path.join(artifactDirectory, `${artifactLabel}.diagnostics.json`),
+    JSON.stringify(
+      {
+        artifactLabel,
+        consoleErrors,
+        pageErrors,
+        warnings,
+        writtenAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+}
+
+async function captureBoundedBrowserArtifacts({
+  artifactDirectory,
+  artifactLabel,
+  consoleErrors,
+  pageErrors,
+}) {
+  await writeFile(
+    path.join(artifactDirectory, `${artifactLabel}.diagnostics.json`),
+    JSON.stringify(
+      {
+        artifactLabel,
+        consoleErrorCount: consoleErrors.length,
+        pageErrorCount: pageErrors.length,
+        writtenAt: new Date().toISOString(),
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+}
+
+async function closeBrowserPageResources({
+  artifactDirectory,
+  artifactLabel,
+  boundedArtifacts,
+  consoleErrors,
+  context,
+  page,
+  pageErrors,
+}) {
+  const failures = [];
+  try {
+    if (artifactDirectory) {
+      await mkdir(artifactDirectory, { recursive: true });
+      const capture = boundedArtifacts
+        ? captureBoundedBrowserArtifacts
+        : captureFullBrowserArtifacts;
+      await capture({
+        artifactDirectory,
+        artifactLabel,
+        consoleErrors,
+        context,
+        page,
+        pageErrors,
+      });
+    }
+  } catch (error) {
+    failures.push(error);
+  }
+  for (const close of [
+    () => (page.isClosed() ? undefined : page.close()),
+    () => context.close(),
+  ]) {
+    try {
+      await close();
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0) {
+    throw new AggregateError(
+      failures,
+      "failed to capture artifacts or close browser page",
+    );
+  }
+}
+
 export async function openBrowserPage(options = {}) {
   browserArtifactSequence += 1;
   const artifactDirectory = browserArtifactDirectory();
+  const boundedArtifacts = options.artifactMode === "bounded";
+  const diagnosticLimit = boundedArtifacts
+    ? (options.diagnosticLimit ?? 16)
+    : null;
+  const diagnosticCharacterLimit = boundedArtifacts
+    ? (options.diagnosticCharacterLimit ?? 512)
+    : null;
   const artifactLabel = sanitizeArtifactLabel(
     options.artifactLabel ??
       `browser-session-${String(browserArtifactSequence).padStart(2, "0")}`,
@@ -1127,20 +1291,19 @@ export async function openBrowserPage(options = {}) {
   const context = await browser.newContext({
     acceptDownloads: options.acceptDownloads ?? false,
   });
-  if (artifactDirectory) {
-    await context.tracing.start({ screenshots: true, snapshots: true });
-  }
-  const page = await context.newPage();
-  const pageErrors = [];
-  const consoleErrors = [];
-
-  page.on("pageerror", (error) => {
-    pageErrors.push(error.stack ?? error.message);
-  });
-  page.on("console", (message) => {
-    if (message.type() === "error") {
-      consoleErrors.push(message.text());
+  let page;
+  try {
+    if (artifactDirectory && !boundedArtifacts) {
+      await context.tracing.start({ screenshots: true, snapshots: true });
     }
+    page = await context.newPage();
+  } catch (error) {
+    await context.close().catch(() => {});
+    throw error;
+  }
+  const { consoleErrors, pageErrors } = installBrowserErrorCapture(page, {
+    characterLimit: diagnosticCharacterLimit,
+    entryLimit: diagnosticLimit,
   });
 
   return {
@@ -1151,55 +1314,16 @@ export async function openBrowserPage(options = {}) {
     context,
     page,
     pageErrors,
-    close: async () => {
-      const artifactWarnings = [];
-      if (artifactDirectory) {
-        await mkdir(artifactDirectory, { recursive: true });
-        if (!page.isClosed()) {
-          try {
-            await page.screenshot({
-              fullPage: true,
-              path: path.join(artifactDirectory, `${artifactLabel}.png`),
-            });
-          } catch (error) {
-            artifactWarnings.push(`screenshot: ${error.message}`);
-          }
-          try {
-            await writeFile(
-              path.join(artifactDirectory, `${artifactLabel}.html`),
-              await page.content(),
-              "utf8",
-            );
-          } catch (error) {
-            artifactWarnings.push(`html: ${error.message}`);
-          }
-        }
-        try {
-          await context.tracing.stop({
-            path: path.join(artifactDirectory, `${artifactLabel}.trace.zip`),
-          });
-        } catch (error) {
-          artifactWarnings.push(`trace: ${error.message}`);
-        }
-        await writeFile(
-          path.join(artifactDirectory, `${artifactLabel}.diagnostics.json`),
-          JSON.stringify(
-            {
-              artifactLabel,
-              consoleErrors,
-              pageErrors,
-              warnings: artifactWarnings,
-              writtenAt: new Date().toISOString(),
-            },
-            null,
-            2,
-          ),
-          "utf8",
-        );
-      }
-      await page.close();
-      await context.close();
-    },
+    close: () =>
+      closeBrowserPageResources({
+        artifactDirectory,
+        artifactLabel,
+        boundedArtifacts,
+        consoleErrors,
+        context,
+        page,
+        pageErrors,
+      }),
   };
 }
 

@@ -3,7 +3,6 @@ import type { IndexedDBLike } from "../indexedDBCheckpointRequests";
 
 interface CheckpointWriteLane {
   committedSequence?: number;
-  initialized: boolean;
   newestSequence?: number;
   tail: Promise<void>;
 }
@@ -31,8 +30,7 @@ export function enqueueOrderedCheckpointWrite(
   indexedDB: IndexedDBLike,
   streamIdentity: StreamDerivedCacheIdentity,
   afterSequence: number | undefined,
-  readCommittedSequence: () => Promise<number | undefined>,
-  writeCheckpoint: () => Promise<void>,
+  writeCheckpoint: () => Promise<boolean>,
 ): Promise<void> {
   const laneKey = JSON.stringify([
     streamIdentity.backendScopeID,
@@ -55,7 +53,7 @@ export function enqueueOrderedCheckpointWrite(
   }
   const startsLane = !lane;
   if (!lane) {
-    lane = { initialized: false, tail: Promise.resolve() };
+    lane = { tail: Promise.resolve() };
     lanes.set(laneKey, lane);
   }
   if (afterSequence !== undefined) {
@@ -65,15 +63,12 @@ export function enqueueOrderedCheckpointWrite(
   let write: Promise<void>;
   try {
     const runWrite = async () => {
-      if (!lane.initialized) {
-        lane.committedSequence = await readCommittedSequence();
-        lane.initialized = true;
-      }
       if (!writeAdvancesLane(lane.committedSequence, afterSequence)) {
         return;
       }
-      await writeCheckpoint();
-      lane.committedSequence = afterSequence;
+      if (await writeCheckpoint()) {
+        lane.committedSequence = afterSequence;
+      }
     };
     write = startsLane ? runWrite() : lane.tail.then(runWrite);
   } catch (error) {
@@ -112,7 +107,7 @@ export function enqueueOrderedCheckpointClear(
   let lane = lanes.get(laneKey);
   const startsLane = !lane;
   if (!lane) {
-    lane = { initialized: false, tail: Promise.resolve() };
+    lane = { tail: Promise.resolve() };
     lanes.set(laneKey, lane);
   }
   lane.newestSequence = undefined;
@@ -120,7 +115,6 @@ export function enqueueOrderedCheckpointClear(
   const runClear = async () => {
     await clearCheckpoint();
     lane.committedSequence = undefined;
-    lane.initialized = true;
   };
   const clear = startsLane ? runClear() : lane.tail.then(runClear);
   const settledTail = clear.catch(() => {});
