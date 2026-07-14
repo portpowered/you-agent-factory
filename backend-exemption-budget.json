@@ -597,6 +597,12 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/transports/cli/climanifestparity/parsing_parity_test.go#TestProductionManifestParsingParity_RootAndSessionShow",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: table-driven manifest parsing parity keeps contract lookup, parse, and per-case verify hooks in one harness."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/transports/cli/config/config_test.go#assertDeterministicExpandedRuntimeConfig",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this runtime-shape helper keeps the expanded config contract readable in one assertion pass."
