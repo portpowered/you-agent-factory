@@ -14,3 +14,6 @@ properties:
     description: Ordered typed content blocks for the message snapshot.
     items:
       $ref: ../FactoryResponseEventContentBlock.yaml
+  partial:
+    type: boolean
+    description: When true, the snapshot carries bounded timeout or cancellation capture and must not be treated as an authoritative final response.

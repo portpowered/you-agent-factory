@@ -3798,6 +3798,8 @@ export interface components {
       role: string;
       /** @description Ordered typed content blocks for the message snapshot. */
       contentBlocks: components["schemas"]["FactoryResponseEventContentBlock"][];
+      /** @description When true, the snapshot carries bounded timeout or cancellation capture and must not be treated as an authoritative final response. */
+      partial?: boolean;
     };
     /** @description Incremental message content delta for one content block. */
     FactoryResponseEventMessageDeltaPayload: {

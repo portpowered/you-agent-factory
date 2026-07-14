@@ -253,6 +253,11 @@ primary-result behavior.
   bypasses legacy fragment compatibility mapping. Keep final invocation result
   parsing independent so the provider's authoritative terminal value remains
   both the response-event message snapshot and the invocation primary result.
+  Timeout- or cancellation-captured assistant snapshots carry
+  `MessagePayload.partial=true`; use `responseevents.IsAuthoritativeMessageSnapshot`
+  to exclude them from authoritative final-result selection. Agy timeout partial
+  text must stay out of `InferenceResponse.Content` and invocation primary-result
+  selection even when published on the canonical response stream.
   Compaction signals map to `STREAM_GAP`/`UPDATED` with `StreamGapPayload`
   (`fromSequence`/`toSequence` from `CompactionSummary` dropped bounds when
   present, `reason` from compaction reason) and always `LOSSY` provenance.

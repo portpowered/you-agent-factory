@@ -2098,6 +2098,9 @@ type FactoryResponseEventMessagePayload struct {
 	// ContentBlocks Ordered typed content blocks for the message snapshot.
 	ContentBlocks []FactoryResponseEventContentBlock `json:"contentBlocks"`
 
+	// Partial When true, the snapshot carries bounded timeout or cancellation capture and must not be treated as an authoritative final response.
+	Partial *bool `json:"partial,omitempty"`
+
 	// Role Message role such as assistant or user.
 	Role string `json:"role"`
 }

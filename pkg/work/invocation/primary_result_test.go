@@ -239,6 +239,46 @@ func TestClassifyMissingPrimaryResult_ReturnsNeedsHumanForScopedWorkItem(t *test
 	})
 }
 
+func TestResolvePrimaryResult_PartialTimeoutLikeFailedWorkDoesNotResolvePrimaryResult(t *testing.T) {
+	state := invocationWorldStateFixture()
+	partialText := "partial answer before timeout"
+	rootInitial := invocationWorkItem("work-root", "task", "draft", "root", "task:init")
+	rootFailed := invocationWorkItem("work-root", "task", "failed", "root", "task:failed")
+	rootFailed.Content = []interfaces.WorkContentPart{{
+		Type: interfaces.WorkContentPartTypeText,
+		Text: partialText,
+	}}
+	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
+	state.TerminalWorkByID[rootFailed.ID] = interfaces.FactoryTerminalWork{WorkItem: rootFailed, Status: "FAILED"}
+	state.FailedWorkItemsByID[rootFailed.ID] = rootFailed
+
+	_, err := ResolvePrimaryResult(PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if err == nil {
+		t.Fatal("ResolvePrimaryResult() error = nil, want unresolved primary result for timeout-like failed work")
+	}
+	primaryErr, ok := err.(*PrimaryResultError)
+	if !ok {
+		t.Fatalf("error = %T, want *PrimaryResultError", err)
+	}
+	if primaryErr.Code != PrimaryResultErrorCodeUnresolved {
+		t.Fatalf("code = %q, want %q", primaryErr.Code, PrimaryResultErrorCodeUnresolved)
+	}
+
+	got, ok := ClassifyFailedInvocation("session-1", PrimaryResultSelectionInput{
+		RequestID:  "request-1",
+		WorldState: state,
+	})
+	if !ok {
+		t.Fatal("expected failed classification for timeout-like partial capture")
+	}
+	if got.Code != PrimaryResultErrorCodeFailed {
+		t.Fatalf("code = %q, want %q", got.Code, PrimaryResultErrorCodeFailed)
+	}
+}
+
 func TestResolvePrimaryResult_FailedTerminalDoesNotReturnResponseShapedContent(t *testing.T) {
 	state := invocationWorldStateFixture()
 	requestContent := []interfaces.WorkContentPart{{

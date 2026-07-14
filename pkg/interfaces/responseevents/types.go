@@ -163,6 +163,17 @@ type TurnPayload struct {
 type MessagePayload struct {
 	Role          string         `json:"role"`
 	ContentBlocks []ContentBlock `json:"contentBlocks"`
+	// Partial marks timeout- or cancellation-captured assistant snapshots that
+	// must not be treated as authoritative final responses.
+	Partial bool `json:"partial,omitempty"`
+}
+
+// IsAuthoritativeMessageSnapshot reports whether a completed MESSAGE snapshot
+// may be treated as an authoritative final response for invocation primary-result
+// selection or final-only provider parsing. Timeout- or cancellation-captured
+// snapshots with partial=true must return false.
+func IsAuthoritativeMessageSnapshot(payload MessagePayload) bool {
+	return !payload.Partial
 }
 type MessageDeltaPayload struct {
 	ContentBlockIndex int              `json:"contentBlockIndex"`
