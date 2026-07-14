@@ -15,171 +15,28 @@ import {
   waitForDurableCheckpoint,
 } from "./browser-test-harness.mjs";
 import {
-  checkpointStorageKey,
   clearTimelineCheckpoints,
   defaultFactoryDefinition,
-  emptyReplayWorldState,
   installNetworkCapture,
   seedTimelineCheckpoint,
 } from "./dashboard-session-recovery-manual-scenarios-harness.mjs";
-
-const alphaSessionID = "11111111-1111-4111-8111-111111111111";
-const betaSessionID = "22222222-2222-4222-8222-222222222222";
-
-function sessionFixture(id, name) {
-  return {
-    factoryDir: `/workspace/${name}`,
-    folderPath: `/workspace/${name}`,
-    id,
-    isDefault: false,
-    project: name,
-    target: { kind: "named", name },
-  };
-}
-
-function streamIdentity(sessionID, name, streamGenerationID) {
-  return {
-    backendScopeID: `/workspace/${name}::browser-integration`,
-    factorySessionID: sessionID,
-    logicalSessionKeyID: `/workspace/${name}::named::${name}`,
-    streamGenerationID,
-  };
-}
-
-function checkpointFixture({ eventID, sequence, tick, value }) {
-  const replayState = emptyReplayWorldState(tick);
-  replayState.runtime.dispatched_count = value;
-  replayState.runtime.has_data = true;
-  return {
-    afterEventId: eventID,
-    afterSequence: sequence,
-    materializedWorkOutcomeState: {
-      accumulator: {
-        activeDispatchesByID: {},
-        appliedEventCount: value,
-        completedAcceptedCount: value,
-        completedDispatchCount: value,
-        failedWorkItemsByID: {},
-        initialPlaceIDs: ["story:queued"],
-        workItemsByID: {},
-      },
-      counts: {
-        completed: value,
-        dispatched: value,
-        failed: 0,
-        inFlight: 0,
-        queued: 0,
-      },
-      cursor: {
-        eventID,
-        eventTime: initialEditableFactoryDefinitionVersion.physical,
-        sequence,
-        tick,
-      },
-      failedByWorkType: {},
-      failedWorkLabels: [],
-      samples: [
-        {
-          completedCount: value,
-          dispatchedCount: value,
-          failedByWorkType: {},
-          failedCount: 0,
-          failedWorkLabels: [],
-          inFlightCount: 0,
-          observedAt: tick * 1_000,
-          queuedCount: 0,
-          tick,
-        },
-      ],
-      version: 1,
-    },
-    replayState,
-    selectedTick: tick,
-  };
-}
-
-function tailEvent({ eventID, sequence, tick }) {
-  return JSON.stringify({
-    context: {
-      eventTime: `2026-07-13T17:00:${String(tick).padStart(2, "0")}Z`,
-      sequence,
-      tick,
-    },
-    id: eventID,
-    payload: {
-      previousState: "RUNNING",
-      reason: "isolated browser tail",
-      state: "FINISHED",
-    },
-    type: "FACTORY_STATE_RESPONSE",
-  });
-}
-
-function matchingTailURLs(urls, sessionID) {
-  return urls.filter((url) => {
-    const parsed = eventStreamURL(url);
-    return parsed.pathname.endsWith(`/factory-sessions/${sessionID}/events`);
-  });
-}
-
-function eventStreamURL(url) {
-  return new URL(url, "http://browser-integration.invalid");
-}
+import {
+  alphaSessionID,
+  betaSessionID,
+  checkpointFixture,
+  deleteCheckpointEnvelope,
+  eventStreamURL,
+  matchingTailURLs,
+  readCheckpointEnvelope,
+  sessionFixture,
+  streamIdentity,
+  tailEvent,
+} from "./dashboard-shared-indexeddb-browser-contexts-fixtures.mjs";
 
 async function selectSession(page, name) {
   const tab = page.getByRole("tab", { name });
   await tab.waitFor({ state: "visible", timeout: uiInteractionTimeoutMs });
   await tab.click();
-}
-
-async function readCheckpointEnvelope(page, identity) {
-  return page.evaluate(
-    async ({ key }) => {
-      const request = indexedDB.open("agentFactoryTimelineCheckpoints", 3);
-      const database = await new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      try {
-        return await new Promise((resolve, reject) => {
-          const read = database
-            .transaction("checkpoints", "readonly")
-            .objectStore("checkpoints")
-            .get(key);
-          read.onsuccess = () => resolve(read.result ?? null);
-          read.onerror = () => reject(read.error);
-        });
-      } finally {
-        database.close();
-      }
-    },
-    { key: checkpointStorageKey(identity) },
-  );
-}
-
-async function deleteCheckpointEnvelope(page, identity) {
-  await page.evaluate(
-    async ({ key }) => {
-      const request = indexedDB.open("agentFactoryTimelineCheckpoints", 3);
-      const database = await new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-      try {
-        await new Promise((resolve, reject) => {
-          const transaction = database.transaction("checkpoints", "readwrite");
-          const deletion = transaction.objectStore("checkpoints").delete(key);
-          deletion.onerror = () => reject(deletion.error);
-          transaction.oncomplete = () => resolve();
-          transaction.onerror = () => reject(transaction.error);
-          transaction.onabort = () => reject(transaction.error);
-        });
-      } finally {
-        database.close();
-      }
-    },
-    { key: checkpointStorageKey(identity) },
-  );
 }
 
 async function expectRestoredPage(
@@ -220,7 +77,7 @@ describe.sequential("shared IndexedDB dashboard browser contexts", () => {
   });
 
   it(
-    "restores and tails two concrete sessions without cross-tab checkpoint contamination",
+    "restores isolated concrete sessions and resumes one tail across lifecycle",
     // biome-ignore lint/complexity/noExcessiveLinesPerFunction: one shared browser context and finally-equivalent teardown make the scenario lifecycle explicit.
     async () => {
       const alphaSession = sessionFixture(alphaSessionID, "alpha");
@@ -242,9 +99,10 @@ describe.sequential("shared IndexedDB dashboard browser contexts", () => {
       );
       const alphaCheckpoint = checkpointFixture({
         eventID: "alpha-restored-17",
+        sampleTicks: [2, 3, 4, 5, 6, 7],
         sequence: 17,
         tick: 7,
-        value: 3,
+        value: 6,
       });
       const betaCheckpoint = checkpointFixture({
         eventID: "beta-restored-29",
@@ -275,6 +133,7 @@ describe.sequential("shared IndexedDB dashboard browser contexts", () => {
                 tick: alphaCheckpoint.selectedTick,
               }),
               tailEvent({ eventID: "alpha-live-18", sequence: 18, tick: 21 }),
+              tailEvent({ eventID: "alpha-live-18", sequence: 18, tick: 21 }),
             ],
             [betaSessionID]: [
               tailEvent({
@@ -282,7 +141,6 @@ describe.sequential("shared IndexedDB dashboard browser contexts", () => {
                 sequence: betaCheckpoint.afterSequence,
                 tick: betaCheckpoint.selectedTick,
               }),
-              tailEvent({ eventID: "beta-live-30", sequence: 30, tick: 22 }),
             ],
           },
           pauseBeforeTick: 20,
@@ -361,7 +219,7 @@ describe.sequential("shared IndexedDB dashboard browser contexts", () => {
           },
         );
         await Promise.all([
-          expectRestoredPage(browserPage.page, 7),
+          expectRestoredPage(browserPage.page, 7, "2,3,4,5,6,7"),
           expectRestoredPage(tabTwo, 13),
         ]);
 
@@ -411,19 +269,19 @@ describe.sequential("shared IndexedDB dashboard browser contexts", () => {
 
         server.releaseReplayStream();
         await Promise.all([
-          expectRestoredPage(browserPage.page, 21, "7,21"),
-          expectRestoredPage(tabTwo, 22, "13,22"),
+          expectRestoredPage(browserPage.page, 21, "2,3,4,5,6,7,21"),
+          expectRestoredPage(tabTwo, 13),
         ]);
         expect(
           await browserPage.page
             .locator("[data-work-chart-visible-ticks]")
             .getAttribute("data-work-chart-visible-ticks"),
-        ).toBe("7,21");
+        ).toBe("2,3,4,5,6,7,21");
         expect(
           await tabTwo
             .locator("[data-work-chart-visible-ticks]")
             .getAttribute("data-work-chart-visible-ticks"),
-        ).toBe("13,22");
+        ).toBe("13");
         const liveAlphaNetworkURLs = await alphaNetwork.readEventStreamURLs();
         const liveBetaNetworkURLs = await betaNetwork.readEventStreamURLs();
         expect(
@@ -438,6 +296,69 @@ describe.sequential("shared IndexedDB dashboard browser contexts", () => {
         expect(matchingTailURLs(liveBetaNetworkURLs, alphaSessionID)).toEqual(
           [],
         );
+
+        await browserPage.page.evaluate(() => {
+          window.dispatchEvent(new Event("pagehide"));
+        });
+        await waitForDurableCheckpoint(
+          "alpha pagehide persistence of its exact live cursor",
+          async () => {
+            const envelope = await readCheckpointEnvelope(
+              browserPage.page,
+              alphaIdentity,
+            );
+            return (
+              envelope?.checkpoint?.afterEventId === "alpha-live-18" &&
+              envelope.checkpoint.afterSequence === 18 &&
+              envelope.checkpoint.selectedTick === 21
+            );
+          },
+        );
+        await alphaNetwork.resetEventStreamURLs();
+        await browserPage.page.reload({ waitUntil: "domcontentloaded" });
+        await selectSession(browserPage.page, "alpha");
+        await waitForDurableCheckpoint(
+          "alpha lifecycle resume from its exact live cursor",
+          async () => {
+            const urls = matchingTailURLs(
+              await alphaNetwork.readEventStreamURLs(),
+              alphaSessionID,
+            );
+            return (
+              urls.length === 1 &&
+              eventStreamURL(urls[0]).searchParams.get("after_event_id") ===
+                "alpha-live-18" &&
+              eventStreamURL(urls[0]).searchParams.get("after_sequence") ===
+                "18"
+            );
+          },
+        );
+        await Promise.all([
+          expectRestoredPage(browserPage.page, 21, "2,3,4,5,6,7,21"),
+          expectRestoredPage(tabTwo, 13),
+        ]);
+
+        const [resumedAlpha, unchangedBeta] = await Promise.all([
+          readCheckpointEnvelope(browserPage.page, alphaIdentity),
+          readCheckpointEnvelope(tabTwo, betaIdentity),
+        ]);
+        expect(resumedAlpha.streamIdentity).toEqual(alphaIdentity);
+        expect(resumedAlpha.checkpoint.afterEventId).toBe("alpha-live-18");
+        expect(resumedAlpha.checkpoint.afterSequence).toBe(18);
+        expect(resumedAlpha.checkpoint.selectedTick).toBe(21);
+        expect(unchangedBeta.streamIdentity).toEqual(betaIdentity);
+        expect(unchangedBeta.checkpoint.afterEventId).toBe(
+          betaCheckpoint.afterEventId,
+        );
+        expect(unchangedBeta.checkpoint.afterSequence).toBe(
+          betaCheckpoint.afterSequence,
+        );
+        expect(unchangedBeta.checkpoint.selectedTick).toBe(13);
+        expect(
+          await tabTwo
+            .locator("[data-work-chart-visible-ticks]")
+            .getAttribute("data-work-chart-visible-ticks"),
+        ).toBe("13");
         expect(browserPage.pageErrors).toEqual([]);
         expect(browserPage.consoleErrors).toEqual([]);
         expect(tabTwoErrors.pageErrors).toEqual([]);
