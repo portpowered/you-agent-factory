@@ -77,6 +77,8 @@ func TestGenerateIsDeterministic(t *testing.T) {
 	first := fileDigests(t, root, []string{
 		climanifestgen.RepresentativeFamilyJSONPath,
 		climanifestgen.RepresentativeFamilyCommandIDsPath,
+		climanifestgen.ModelsDocsFamilyJSONPath,
+		climanifestgen.ModelsDocsFamilyCommandIDsPath,
 	})
 	if err := climanifestgen.Generate(root); err != nil {
 		t.Fatalf("second Generate() error = %v", err)
@@ -84,6 +86,8 @@ func TestGenerateIsDeterministic(t *testing.T) {
 	second := fileDigests(t, root, []string{
 		climanifestgen.RepresentativeFamilyJSONPath,
 		climanifestgen.RepresentativeFamilyCommandIDsPath,
+		climanifestgen.ModelsDocsFamilyJSONPath,
+		climanifestgen.ModelsDocsFamilyCommandIDsPath,
 	})
 	if !reflect.DeepEqual(first, second) {
 		t.Fatalf("repeated generation changed artifact digests:\nfirst=%v\nsecond=%v", first, second)
@@ -140,6 +144,55 @@ func fileDigests(t *testing.T, root string, paths []string) map[string][sha256.S
 		digests[path] = sha256.Sum256(content)
 	}
 	return digests
+}
+
+func TestExtractModelsDocsFamilyFromProductionManifest(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	manifest, err := climanifest.LoadProduction(filepath.Join(repoRoot, climanifest.ProductionManifestPath))
+	if err != nil {
+		t.Fatalf("LoadProduction() error = %v", err)
+	}
+
+	family, err := climanifestgen.ExtractModelsDocsFamily(manifest)
+	if err != nil {
+		t.Fatalf("ExtractModelsDocsFamily() error = %v", err)
+	}
+	if len(family.Commands) != len(climanifestgen.ModelsDocsFamilyCommandIDs) {
+		t.Fatalf("command count = %d, want %d", len(family.Commands), len(climanifestgen.ModelsDocsFamilyCommandIDs))
+	}
+	for _, id := range climanifestgen.ModelsDocsFamilyCommandIDs {
+		record, ok := family.Commands[id]
+		if !ok {
+			t.Fatalf("missing models/docs-family command %q", id)
+		}
+		if record.ID != id {
+			t.Fatalf("command %q record id = %q", id, record.ID)
+		}
+	}
+}
+
+func TestProductionCLIArtifactsMatchGenerator(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	drift, err := climanifestgen.Check(repoRoot)
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if !drift.Empty() {
+		t.Fatalf("production CLI manifest artifacts drift: %#v", drift)
+	}
+
+	for _, path := range []string{
+		climanifestgen.RepresentativeFamilyJSONPath,
+		climanifestgen.ModelsDocsFamilyJSONPath,
+	} {
+		payload, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(path)))
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if len(bytes.TrimSpace(payload)) == 0 {
+			t.Fatalf("%s is empty", path)
+		}
+	}
 }
 
 func TestProductionRepresentativeFamilyArtifactsMatchGenerator(t *testing.T) {

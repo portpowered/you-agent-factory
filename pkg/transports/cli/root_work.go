@@ -5,19 +5,23 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
+	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 // useGeneratedRepresentativeFamily toggles production root wiring between the
@@ -25,13 +29,19 @@ import (
 // Flip this constant to false for a one-localized-change rollback.
 const useGeneratedRepresentativeFamily = true
 
+// useGeneratedModelsDocsFamily toggles production models/docs wiring between the
+// generated metadata constructor and the legacy handwritten path.
+const useGeneratedModelsDocsFamily = true
+
 func newLegacyRootCommandWithOptions(options RootCommandOptions) *cobra.Command {
 	options = normalizeRootCommandOptions(options)
 	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
 	diagnostics := &cliDiagnosticsOptions{}
 	operatorDefaults := &cliOperatorDefaultsOptions{}
 	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
-	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, newSessionCommand(globals, diagnostics, options))...)
+	docsCmd := newDocsCommand(diagnostics)
+	modelsCmd := newModelsCommand(globals, diagnostics, operatorDefaults, options)
+	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, newSessionCommand(globals, diagnostics, options), docsCmd, modelsCmd)...)
 	return root
 }
 
@@ -124,8 +134,13 @@ func newRootCommandWithGeneratedRepresentativeFamily(options RootCommandOptions)
 	session := components.Session
 	session.AddCommand(handwrittenSessionSubcommands(globals, diagnostics, options, components.Show)...)
 
+	docsCmd, modelsCmd, err := newProductionModelsDocsCommands(globals, diagnostics, operatorDefaults, options)
+	if err != nil {
+		panic(fmt.Sprintf("build models/docs family command: %v", err))
+	}
+
 	root := components.Root
-	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, session)...)
+	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, session, docsCmd, modelsCmd)...)
 	return root
 }
 
@@ -135,9 +150,11 @@ func productionRootSubcommands(
 	operatorDefaults *cliOperatorDefaultsOptions,
 	options RootCommandOptions,
 	session *cobra.Command,
+	docsCmd *cobra.Command,
+	modelsCmd *cobra.Command,
 ) []*cobra.Command {
 	return []*cobra.Command{
-		newDocsCommand(diagnostics),
+		docsCmd,
 		configinitcmd.NewSystemConfigCommand(cliBinaryName, configinitcmd.CommandGlobals{
 			JSON:    func() bool { return globals.json },
 			HomeDir: options.HomeDir,
@@ -148,13 +165,34 @@ func productionRootSubcommands(
 		newFactoryCommand(globals, diagnostics),
 		newInitCommand(globals, diagnostics),
 		newMCPCommand(options),
-		newModelsCommand(globals, diagnostics, operatorDefaults, options),
+		modelsCmd,
 		newRunCommand(globals, diagnostics, operatorDefaults, options),
 		newSubmitCommand(globals, diagnostics),
 		session,
 		newWorkCommand(globals, diagnostics),
 		newWorkflowCommand(globals, diagnostics, options),
 	}
+}
+
+func newProductionModelsDocsCommands(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	options RootCommandOptions,
+) (*cobra.Command, *cobra.Command, error) {
+	if !useGeneratedModelsDocsFamily {
+		return newDocsCommand(diagnostics), newModelsCommand(globals, diagnostics, operatorDefaults, options), nil
+	}
+
+	registry, invokeFlags, err := newModelsDocsHandlerRegistry(globals, diagnostics, operatorDefaults, options)
+	if err != nil {
+		return nil, nil, err
+	}
+	components, err := climanifestcobra.NewModelsDocsFamilyComponents(registry, invokeFlags)
+	if err != nil {
+		return nil, nil, err
+	}
+	return components.Docs, components.Models, nil
 }
 
 func representativePersistentFlagBindings(
@@ -640,6 +678,82 @@ func newRepresentativeHandlerRegistry(
 			ShowSession:       showSession,
 		}),
 	})
+}
+
+func newModelsDocsHandlerRegistry(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	rootOptions RootCommandOptions,
+) (*commandregistry.Registry, climanifestcobra.ModelsInvokeFlagBindings, error) {
+	if operatorDefaults == nil {
+		operatorDefaults = &cliOperatorDefaultsOptions{}
+	}
+	invokeCfg := modelscli.InvokeConfig{Server: globals.server, Operation: "TTS"}
+	registry, err := commandregistry.NewModelsDocsRegistry(commandregistry.ModelsDocsHandlers{
+		DocsRunE: commandregistry.DocsRunE(commandregistry.DocsBinding{
+			BinaryName:        cliBinaryName,
+			DiagnosticsWriter: diagnostics.writer,
+			Verbose:           diagnostics.verboseEnabled,
+		}),
+		ModelsListRunE: commandregistry.ModelsListRunE(commandregistry.ModelsListBinding{
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			ListModels:        listModels,
+		}),
+		ModelsInspectRunE: commandregistry.ModelsInspectRunE(commandregistry.ModelsInspectBinding{
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			InspectModel:      inspectModel,
+		}),
+		ModelsInvokeRunE: commandregistry.ModelsInvokeRunE(commandregistry.ModelsInvokeBinding{
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Operation:         &invokeCfg.Operation,
+			Text:              &invokeCfg.Text,
+			OutputPath:        &invokeCfg.OutputPath,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			HomeDir:           rootOptions.HomeDir,
+			ResolveOperatorDefaults: func(cmd *cobra.Command, homeDir string) (operatorconfig.ResolvedDefaults, error) {
+				return resolveOperatorDefaults(cmd, operatorDefaults, rootOptions, homeDir)
+			},
+			BuildLogger: func() (*zap.Logger, error) {
+				policy := diagnostics.resolvePolicy(false)
+				return policy.BuildLogger(logging.BuildLogger)
+			},
+			BuildModelInvocation: rootOptions.BuildModelInvocation,
+			InvokeModel:          invokeModel,
+		}),
+		ModelsPullRunE: commandregistry.ModelsPullRunE(commandregistry.ModelsPullBinding{
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			PullModel:         pullModel,
+		}),
+	})
+	if err != nil {
+		return nil, climanifestcobra.ModelsInvokeFlagBindings{}, err
+	}
+	return registry, climanifestcobra.ModelsInvokeFlagBindings{
+		Operation:  &invokeCfg.Operation,
+		Text:       &invokeCfg.Text,
+		OutputPath: &invokeCfg.OutputPath,
+		FlagUsages: map[string]string{
+			"operation": "uppercase provider-agnostic operation name",
+			"text":      "text input for direct invocation",
+			"output":    "output file path for streamed audio responses",
+		},
+	}, nil
 }
 
 func newSessionDispatchesCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {

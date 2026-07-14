@@ -13,6 +13,7 @@ type Argument struct {
 	MinCardinality int      `json:"minCardinality"`
 	MaxCardinality int      `json:"maxCardinality"`
 	Variadic       bool     `json:"variadic"`
+	Enum           []string `json:"enum,omitempty"`
 	DoubleDash     string   `json:"doubleDash"`
 	Completion     string   `json:"completion"`
 	Channels       []string `json:"channels"`
