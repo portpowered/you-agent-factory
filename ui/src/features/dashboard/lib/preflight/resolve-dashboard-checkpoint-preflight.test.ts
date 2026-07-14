@@ -66,6 +66,7 @@ describe("resolveDashboardCheckpointPreflight", () => {
     });
 
     expect(result).toMatchObject({
+      checkpointLookupOutcome: "checkpoint_hit",
       checkpointToDelete: null,
       clearRequestedSessionCheckpoint: false,
       kind: "resume",
@@ -105,6 +106,7 @@ describe("resolveDashboardCheckpointPreflight", () => {
         requestedSessionId: "session-a",
       }),
     ).resolves.toMatchObject({
+      checkpointLookupOutcome: "checkpoint_hit",
       checkpointToDelete: expect.objectContaining({
         storageKey: "checkpoint-session-a",
       }),
@@ -132,6 +134,7 @@ describe("resolveDashboardCheckpointPreflight", () => {
         requestedSessionId: "session-a",
       }),
     ).resolves.toEqual({
+      checkpointLookupOutcome: "checkpoint_hit",
       checkpointToDelete: expect.objectContaining({
         storageKey: "checkpoint-session-a",
       }),
@@ -152,6 +155,7 @@ describe("resolveDashboardCheckpointPreflight", () => {
         requestedSessionId: "session-a",
       }),
     ).resolves.toMatchObject({
+      checkpointLookupOutcome: "checkpoint_hit",
       kind: "error",
       requestedSessionId: "session-a",
     });
@@ -175,5 +179,30 @@ describe("resolveDashboardCheckpointPreflight", () => {
       "session-a",
       { signal: controller.signal },
     );
+  });
+});
+
+describe("resolveDashboardCheckpointPreflight lookup diagnostics", () => {
+  it("reports a miss only after a completed empty lookup", async () => {
+    const deps = dependencies();
+    deps.peekCheckpoint.mockResolvedValue(null);
+
+    await expect(
+      resolveDashboardCheckpointPreflight({
+        dependencies: deps,
+        indexedDB: undefined,
+        requestedSessionId: "session-a",
+      }),
+    ).resolves.toMatchObject({ checkpointLookupOutcome: "checkpoint_miss" });
+
+    const failedLookup = dependencies();
+    failedLookup.peekCheckpoint.mockRejectedValue(new Error("lookup failed"));
+    await expect(
+      resolveDashboardCheckpointPreflight({
+        dependencies: failedLookup,
+        indexedDB: undefined,
+        requestedSessionId: "session-a",
+      }),
+    ).resolves.not.toHaveProperty("checkpointLookupOutcome");
   });
 });

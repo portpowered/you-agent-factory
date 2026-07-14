@@ -1,6 +1,11 @@
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../../api/events";
 import type { StreamDerivedCacheIdentity } from "../../lib/stream-derived-cache-identity";
 import { createTimelineCheckpointIndexedDBTestDouble } from "../../../../testing/timeline-checkpoint-indexeddb-test-utils";
+import {
+  correlationTokenForIdentityScope,
+  readSessionPersistenceDiagnosticRecords,
+  resetSessionPersistenceDiagnosticRecords,
+} from "../../../dashboard/public/session-persistence-diagnostics";
 import { useFactoryTimelineStore } from "../factoryTimelineStore";
 import {
   persistTimelineCheckpoint,
@@ -129,6 +134,7 @@ function entry() {
 
 afterEach(() => {
   useFactoryTimelineStore.getState().reset();
+  resetSessionPersistenceDiagnosticRecords();
 });
 
 describe("factory timeline ordered outcome append", () => {
@@ -223,6 +229,13 @@ describe("factory timeline persisted append continuation", () => {
       throw new Error("expected persisted timeline checkpoint");
     }
     store.restoreCheckpointForEntry(identity, restored);
+    expect(readSessionPersistenceDiagnosticRecords()).toEqual([
+      {
+        correlationToken: correlationTokenForIdentityScope(identity),
+        outcome: "restore_succeeded",
+        recoveryAction: "resume_from_checkpoint",
+      },
+    ]);
     const beforeReconnect = entry();
 
     store.appendEventsForEntry(identity, [

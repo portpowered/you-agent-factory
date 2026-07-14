@@ -22,6 +22,12 @@ import {
   type DashboardCheckpointPreflightResolution,
   resolveDashboardCheckpointPreflight,
 } from "../../lib/preflight/resolve-dashboard-checkpoint-preflight";
+import {
+  correlationTokenForIdentityScope,
+  createSessionPersistenceCorrelationToken,
+  recordSessionPersistenceDiagnostic,
+  sessionPersistenceDiagnostic,
+} from "../../lib/session-persistence/diagnostics";
 import { useRemapDashboardSelectedSession } from "../../session/dashboard-session-provider";
 import { useDashboardStreamStore } from "../../state/dashboardStreamStore";
 
@@ -56,6 +62,28 @@ function resetDashboardCheckpointPreflightState(
   setInitialReconnectCursor(undefined);
   setResolvedSessionID(null);
   setStreamIdentity(null);
+}
+
+function recordCheckpointLookup(
+  resolution: DashboardCheckpointPreflightResolution,
+): void {
+  if (!resolution.checkpointLookupOutcome) return;
+  try {
+    const correlationToken =
+      "streamIdentity" in resolution
+        ? correlationTokenForIdentityScope(resolution.streamIdentity)
+        : createSessionPersistenceCorrelationToken(
+            resolution.requestedSessionId,
+          );
+    recordSessionPersistenceDiagnostic(
+      sessionPersistenceDiagnostic(
+        resolution.checkpointLookupOutcome,
+        correlationToken,
+      ),
+    );
+  } catch {
+    // Diagnostics are best effort and cannot affect checkpoint recovery.
+  }
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: this hook deliberately owns the single guarded apply boundary for all preflight mutations.
@@ -184,6 +212,7 @@ export function useDashboardCheckpointPreflight({
 
       if (!remainsActive(resolution.requestedSessionId)) return;
       setCheckpointHydratedKey(checkpointHydrationKey);
+      recordCheckpointLookup(resolution);
 
       if (resolution.kind === "error") {
         setPreflightError(resolution.error);

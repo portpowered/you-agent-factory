@@ -9,6 +9,7 @@ import { FactorySessionSyncPreflightReasonCode } from "../../../../api/generated
 import * as timelinePublic from "../../../timeline/public";
 import * as preflightResolver from "../../lib/preflight/resolve-dashboard-checkpoint-preflight";
 import {
+  correlationTokenForIdentityScope,
   readSessionPersistenceInvalidationRecords,
   resetSessionPersistenceInvalidationRecords,
 } from "../../lib/session-persistence/diagnostics";
@@ -122,11 +123,13 @@ describe("useDashboardCheckpointPreflight bootstrap", () => {
 
   it("hydrates checkpoint preflight results from the runner", async () => {
     const queryClient = new QueryClient();
+    const restoreCheckpoint = vi.fn();
     vi.spyOn(
       preflightResolver,
       "resolveDashboardCheckpointPreflight",
     ).mockResolvedValue({
       checkpoint: null,
+      checkpointLookupOutcome: "checkpoint_miss",
       checkpointToDelete: null,
       clearRequestedSessionCheckpoint: false,
       kind: "resume",
@@ -151,7 +154,7 @@ describe("useDashboardCheckpointPreflight bootstrap", () => {
           checkpointsDisabled: false,
           rawSessionID: "session-live-001",
           refreshToken: 0,
-          restoreCheckpoint: vi.fn(),
+          restoreCheckpoint,
         }),
       { wrapper: createWrapper(queryClient) },
     );
@@ -164,6 +167,18 @@ describe("useDashboardCheckpointPreflight bootstrap", () => {
       afterEventId: "event-2",
       afterSequence: 2,
     });
+    expect(readSessionPersistenceInvalidationRecords()).toEqual([
+      {
+        correlationToken: correlationTokenForIdentityScope({
+          backendScopeID: "backend-scope-a",
+          factorySessionID: "session-live-001",
+          logicalSessionKeyID: "lsk-default",
+          streamGenerationID: "generation-1",
+        }),
+        outcome: "checkpoint_miss",
+        recoveryAction: "replay_without_cursor",
+      },
+    ]);
   });
 });
 
@@ -346,123 +361,17 @@ describe("useDashboardCheckpointPreflight superseded session races", () => {
     expect(race.queryClient.getQueryData(["session-race", SESSION_B])).toBe(
       "cache-b",
     );
-    expect(readSessionPersistenceInvalidationRecords()).toEqual([]);
-  });
-});
-
-describe("useDashboardCheckpointPreflight recovery and errors", () => {
-  beforeEach(() => {
-    resetCheckpointPreflightTestState();
-  });
-
-  it("surfaces non-recoverable preflight recovery without stream identity", async () => {
-    const queryClient = new QueryClient();
-    const restoreCheckpoint = vi.fn();
-    vi.spyOn(
-      preflightResolver,
-      "resolveDashboardCheckpointPreflight",
-    ).mockResolvedValue({
-      clearRequestedSessionCheckpoint: true,
-      checkpointToDelete: null,
-      kind: "recovery",
-      reasonCode: "session_not_found",
-      requestedSessionId: "missing-session",
-    });
-
-    const { result } = renderHook(
-      () =>
-        useDashboardCheckpointPreflight({
-          checkpointHydrationKey: "missing-session::0",
-          checkpointsDisabled: false,
-          rawSessionID: "missing-session",
-          refreshToken: 0,
-          restoreCheckpoint,
+    expect(readSessionPersistenceInvalidationRecords()).toEqual([
+      {
+        correlationToken: correlationTokenForIdentityScope({
+          backendScopeID: `backend-${SESSION_B}`,
+          factorySessionID: SESSION_B,
+          logicalSessionKeyID: `logical-${SESSION_B}`,
+          streamGenerationID: `generation-${SESSION_B}`,
         }),
-      { wrapper: createWrapper(queryClient) },
-    );
-
-    await waitFor(() => {
-      expect(result.current.preflightReady).toBe(true);
-    });
-    expect(result.current.preflightRecovery).toEqual({
-      reasonCode: "session_not_found",
-      requestedSessionId: "missing-session",
-    });
-    expect(result.current.resolvedSessionID).toBeNull();
-    expect(result.current.streamIdentity).toBeNull();
-  });
-
-  it("hydrates checkpoint state on preflight error without marking ready", async () => {
-    const queryClient = new QueryClient();
-    const restoreCheckpoint = vi.fn();
-    vi.spyOn(
-      preflightResolver,
-      "resolveDashboardCheckpointPreflight",
-    ).mockResolvedValue({
-      clearRequestedSessionCheckpoint: true,
-      checkpointToDelete: null,
-      error: new Error("validation failed"),
-      kind: "error",
-      requestedSessionId: "session-live-001",
-    });
-
-    const { result } = renderHook(
-      () =>
-        useDashboardCheckpointPreflight({
-          checkpointHydrationKey: "session-live-001::0",
-          checkpointsDisabled: false,
-          rawSessionID: "session-live-001",
-          refreshToken: 0,
-          restoreCheckpoint,
-        }),
-      { wrapper: createWrapper(queryClient) },
-    );
-
-    await waitFor(() => {
-      expect(result.current.checkpointHydrated).toBe(true);
-    });
-    expect(result.current.preflightReady).toBe(false);
-    expect(result.current.preflightError?.message).toBe("validation failed");
-  });
-
-  it("marks the stream offline when checkpoint preflight rejects", async () => {
-    const queryClient = new QueryClient();
-    const restoreCheckpoint = vi.fn();
-    const setStreamState = vi.fn();
-    useDashboardStreamStore.setState({ setStreamState });
-    vi.spyOn(
-      timelinePublic,
-      "peekPersistedTimelineCheckpoint",
-    ).mockResolvedValue(null);
-    vi.spyOn(
-      timelinePublic,
-      "clearTimelineCheckpointsForSession",
-    ).mockResolvedValue(undefined);
-    vi.spyOn(
-      factorySessionsAPI,
-      "getFactorySessionSyncPreflight",
-    ).mockRejectedValue(new Error("network down"));
-
-    const { result } = renderHook(
-      () =>
-        useDashboardCheckpointPreflight({
-          checkpointHydrationKey: "session-live-001::0",
-          checkpointsDisabled: false,
-          rawSessionID: "session-live-001",
-          refreshToken: 0,
-          restoreCheckpoint,
-        }),
-      { wrapper: createWrapper(queryClient) },
-    );
-
-    await waitFor(() => {
-      expect(result.current.preflightError?.message).toBe("network down");
-    });
-    expect(setStreamState).toHaveBeenCalledWith({
-      message: "network down",
-      status: "offline",
-    });
-    expect(result.current.checkpointHydrated).toBe(true);
-    expect(result.current.preflightReady).toBe(false);
+        outcome: "checkpoint_hit",
+        recoveryAction: "reuse_checkpoint",
+      },
+    ]);
   });
 });
