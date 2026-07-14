@@ -54,12 +54,28 @@ func TestDecoderMapsMessageSubtypesByExactAssistantMessageEvent(t *testing.T) {
 	if len(diagnostics) != 0 {
 		t.Fatalf("diagnostics = %#v, want none", diagnostics)
 	}
+	assertPiMessageSubtypeMapping(t, drafts)
+}
 
+func assertPiMessageSubtypeMapping(t *testing.T, drafts []responseevents.Draft) {
+	t.Helper()
+	assertPiMessageStarted(t, drafts)
+	assertPiTextDeltaMapping(t, drafts)
+	assertPiReasoningDeltaMapping(t, drafts)
+	assertPiToolDeltaMapping(t, drafts)
+	assertPiCompletedMessageMapping(t, drafts)
+}
+
+func assertPiMessageStarted(t *testing.T, drafts []responseevents.Draft) {
+	t.Helper()
 	messageStarted := findPiDraft(drafts, responseevents.KindMessage, responseevents.PhaseStarted)
 	if messageStarted == nil || messageStarted.ItemID != "msg-lifecycle" || messageStarted.ProviderSessionRef != "pi-session-lifecycle" {
 		t.Fatalf("message start = %#v", messageStarted)
 	}
+}
 
+func assertPiTextDeltaMapping(t *testing.T, drafts []responseevents.Draft) {
+	t.Helper()
 	textDeltas := piDraftsByKindAndPhase(drafts, responseevents.KindMessage, responseevents.PhaseDelta)
 	if len(textDeltas) != 1 || textDeltas[0].ItemID != "msg-lifecycle" {
 		t.Fatalf("text deltas = %#v", textDeltas)
@@ -72,7 +88,10 @@ func TestDecoderMapsMessageSubtypesByExactAssistantMessageEvent(t *testing.T) {
 	if textDeltas[0].Provenance.NativeEventType != "text_delta" {
 		t.Fatalf("text delta provenance = %#v", textDeltas[0].Provenance)
 	}
+}
 
+func assertPiReasoningDeltaMapping(t *testing.T, drafts []responseevents.Draft) {
+	t.Helper()
 	reasoning := piDraftsByKindAndPhase(drafts, responseevents.KindReasoning, responseevents.PhaseDelta)
 	if len(reasoning) != 1 || reasoning[0].ItemID != "msg-lifecycle" {
 		t.Fatalf("reasoning deltas = %#v", reasoning)
@@ -85,7 +104,10 @@ func TestDecoderMapsMessageSubtypesByExactAssistantMessageEvent(t *testing.T) {
 	if reasoning[0].Provenance.NativeEventType != "thinking_delta" {
 		t.Fatalf("reasoning provenance = %#v", reasoning[0].Provenance)
 	}
+}
 
+func assertPiToolDeltaMapping(t *testing.T, drafts []responseevents.Draft) {
+	t.Helper()
 	toolDeltas := piDraftsByKindAndPhase(drafts, responseevents.KindTool, responseevents.PhaseDelta)
 	if len(toolDeltas) != 2 {
 		t.Fatalf("tool preview deltas = %d, want tool_call_delta and input_json_delta: %#v", len(toolDeltas), toolDeltas)
@@ -96,7 +118,10 @@ func TestDecoderMapsMessageSubtypesByExactAssistantMessageEvent(t *testing.T) {
 	if toolDeltas[0].Provenance.NativeEventType != "tool_call_delta" || toolDeltas[1].Provenance.NativeEventType != "input_json_delta" {
 		t.Fatalf("tool preview provenance = %#v and %#v", toolDeltas[0].Provenance, toolDeltas[1].Provenance)
 	}
+}
 
+func assertPiCompletedMessageMapping(t *testing.T, drafts []responseevents.Draft) {
+	t.Helper()
 	completed := findPiDraft(drafts, responseevents.KindMessage, responseevents.PhaseCompleted)
 	if completed == nil || completed.ItemID != "msg-lifecycle" {
 		t.Fatalf("completed message = %#v", completed)
@@ -386,6 +411,11 @@ func TestDecoderMapsRemainingControlRecords(t *testing.T) {
 		t.Fatalf("diagnostics = %#v", diagnostics)
 	}
 	assertValidPiDrafts(t, drafts)
+	assertPiControlRecordMapping(t, drafts, diagnostics)
+}
+
+func assertPiControlRecordMapping(t *testing.T, drafts []responseevents.Draft, diagnostics []adapter.Diagnostic) {
+	t.Helper()
 
 	retry := findPiDraft(drafts, responseevents.KindError, responseevents.PhaseUpdated)
 	if retry == nil {

@@ -86,33 +86,7 @@ func (*Adapter) Capabilities(context.Context, adapter.CapabilityContext) (adapte
 }
 
 func (*Adapter) ClassifyFailure(_ context.Context, input adapter.FailureContext) adapter.FailureResult {
-	if input.CommandError == nil && input.CommandResult.ExitCode == 0 && input.DecodeError == nil && input.FlushError == nil && input.ParseError == nil {
-		return adapter.FailureResult{}
-	}
-	if failure := piRetryFailureFromStdout(input.CommandResult.Stdout); failure != nil {
-		return adapter.FailureResult{Failure: failure}
-	}
-	var retryErr *piRetryError
-	if errors.As(input.ParseError, &retryErr) {
-		failure := retryErr.failure
-		return adapter.FailureResult{Failure: &failure}
-	}
-	if failure := parseTerminalFailure(input.CommandResult.Stdout); failure != nil {
-		return terminalFailureResult(failure)
-	}
-	if errors.Is(input.CommandError, context.Canceled) || input.FlushReason == adapter.FlushReasonCanceled {
-		return normalizedFailureResult(interfaces.WorkFailureTypeUnknown, "Pi execution was canceled.", nil)
-	}
-	if errors.Is(input.CommandError, context.DeadlineExceeded) || input.CommandResult.ExitCode == 124 {
-		return normalizedFailureResult(interfaces.WorkFailureTypeTimeout, "Pi execution timed out.", nil)
-	}
-	if input.CommandError != nil || input.CommandResult.ExitCode != 0 {
-		return normalizedFailureResult(interfaces.WorkFailureTypeUnknown, "Pi invocation failed.", nil)
-	}
-	if input.DecodeError != nil || input.FlushError != nil || input.ParseError != nil {
-		return normalizedFailureResult(interfaces.WorkFailureTypeUnknown, "Pi did not produce a valid completed response.", nil)
-	}
-	return adapter.FailureResult{}
+	return classifyPiFailure(input)
 }
 
 func providerSession(sessionID string) *interfaces.ProviderSessionMetadata {

@@ -129,6 +129,23 @@ func (d *decoder) decodeRecord(raw []byte) (adapter.DecodeResult, error) {
 		return safeDiagnostic("pi_malformed_record", "Pi emitted a malformed structured record"), nil
 	}
 	switch envelope.Type {
+	case "session", "agent_start", "agent_end", "turn_start", "turn_end", "message_start":
+		return d.decodeLifecycleRecord(envelope)
+	case "message_update":
+		return d.decodeMessageUpdate(envelope)
+	case "message_end":
+		return d.decodeMessageEnd(envelope)
+	case "tool_execution_start", "tool_execution_update", "tool_execution_end":
+		return d.decodeToolRecord(envelope)
+	case "queue_update", "compaction_start", "compaction_end", "auto_retry_start", "auto_retry_end":
+		return d.decodeControlRecord(envelope)
+	default:
+		return safeDiagnostic("pi_unknown_record", "Pi emitted an unsupported additive record"), nil
+	}
+}
+
+func (d *decoder) decodeLifecycleRecord(envelope nativeEnvelope) (adapter.DecodeResult, error) {
+	switch envelope.Type {
 	case "session":
 		d.sessionRef = strings.TrimSpace(envelope.ID)
 		payload, err := marshalPayload(responseevents.SessionPayload{Status: "started"})
@@ -195,17 +212,27 @@ func (d *decoder) decodeRecord(raw []byte) (adapter.DecodeResult, error) {
 			RunID: d.context.RunID, DispatchID: d.context.DispatchID, TurnID: d.turnID, Kind: responseevents.KindMessage, Phase: responseevents.PhaseStarted,
 			ItemID: d.messageID, ProviderSessionRef: d.sessionRef, Provenance: provenance("message_start", responseevents.RepresentationNotification), Payload: payload,
 		})
-	case "message_update":
-		return d.decodeMessageUpdate(envelope)
-	case "message_end":
-		return d.decodeMessageEnd(envelope)
+	default:
+		return safeDiagnostic("pi_unknown_record", "Pi emitted an unsupported additive record"), nil
+	}
+}
+
+func (d *decoder) decodeToolRecord(envelope nativeEnvelope) (adapter.DecodeResult, error) {
+	switch envelope.Type {
 	case "tool_execution_start":
 		return d.decodeToolStart(envelope)
 	case "tool_execution_update":
 		return d.decodeToolUpdate(envelope)
 	case "tool_execution_end":
 		return d.decodeToolEnd(envelope)
-	case "queue_update":
+	default:
+		return safeDiagnostic("pi_unknown_record", "Pi emitted an unsupported additive record"), nil
+	}
+}
+
+func (d *decoder) decodeControlRecord(envelope nativeEnvelope) (adapter.DecodeResult, error) {
+	switch envelope.Type {
+	case "queue_update", "auto_retry_end":
 		return adapter.DecodeResult{}, nil
 	case "compaction_start":
 		return d.compactionObservation("compaction_start", "Pi started context compaction.")
@@ -213,8 +240,6 @@ func (d *decoder) decodeRecord(raw []byte) (adapter.DecodeResult, error) {
 		return d.compactionObservation("compaction_end", "Pi completed context compaction.")
 	case "auto_retry_start":
 		return d.retryObservation(envelope)
-	case "auto_retry_end":
-		return adapter.DecodeResult{}, nil
 	default:
 		return safeDiagnostic("pi_unknown_record", "Pi emitted an unsupported additive record"), nil
 	}
