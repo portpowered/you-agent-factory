@@ -280,6 +280,116 @@ func TestCommandManifestSchemaProductionSessionFamily(t *testing.T) {
 	}
 }
 
+func TestCommandManifestSchemaProductionModelsFamily(t *testing.T) {
+	instance := readJSON(t, filepath.Join("cli", "commands.json"))
+	commands, ok := instance.(map[string]any)["commands"].(map[string]any)
+	if !ok {
+		t.Fatal("production manifest missing commands map")
+	}
+
+	models, ok := commands["you.models"].(map[string]any)
+	if !ok {
+		t.Fatal("production manifest missing you.models command")
+	}
+	if runnable, _ := models["runnable"].(bool); runnable {
+		t.Fatal("you.models must be a non-runnable parent command")
+	}
+	if got, _ := models["path"].(string); got != "you models" {
+		t.Fatalf("you.models path = %q, want you models", got)
+	}
+
+	leafCases := []struct {
+		commandID   string
+		path        string
+		operationID string
+		requiresArg bool
+	}{
+		{commandID: "you.models.list", path: "you models list", operationID: "listModels"},
+		{commandID: "you.models.inspect", path: "you models inspect", operationID: "getModel", requiresArg: true},
+		{commandID: "you.models.invoke", path: "you models invoke", operationID: "invokeModel", requiresArg: true},
+		{commandID: "you.models.pull", path: "you models pull", operationID: "pullModel", requiresArg: true},
+	}
+
+	for _, leaf := range leafCases {
+		record, ok := commands[leaf.commandID].(map[string]any)
+		if !ok {
+			t.Fatalf("production manifest missing %s command", leaf.commandID)
+		}
+		if got, _ := record["path"].(string); got != leaf.path {
+			t.Fatalf("%s path = %q, want %q", leaf.commandID, got, leaf.path)
+		}
+		if runnable, _ := record["runnable"].(bool); !runnable {
+			t.Fatalf("%s must be runnable", leaf.commandID)
+		}
+		if leaf.requiresArg {
+			args, ok := record["arguments"].(map[string]any)
+			if !ok {
+				t.Fatalf("%s missing arguments map", leaf.commandID)
+			}
+			arg, ok := args[leaf.commandID+".arg.0"].(map[string]any)
+			if !ok {
+				t.Fatalf("%s missing model-name argument record", leaf.commandID)
+			}
+			if got, _ := arg["name"].(string); got != "model-name" {
+				t.Fatalf("%s argument name = %q, want model-name", leaf.commandID, got)
+			}
+			if required, _ := arg["required"].(bool); !required {
+				t.Fatalf("%s model-name argument must be required", leaf.commandID)
+			}
+		} else if _, ok := record["arguments"]; ok {
+			t.Fatalf("%s must not declare positional arguments", leaf.commandID)
+		}
+
+		flags, ok := record["flags"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s missing flags map", leaf.commandID)
+		}
+		port, ok := flags[leaf.commandID+".flag.port"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s missing hidden --port flag", leaf.commandID)
+		}
+		if got, _ := port["visibility"].(string); got != "hidden" {
+			t.Fatalf("%s --port visibility = %q, want hidden", leaf.commandID, got)
+		}
+
+		handler, ok := record["handler"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s missing handler binding", leaf.commandID)
+		}
+		if got, _ := handler["id"].(string); got != leaf.commandID+".handler" {
+			t.Fatalf("%s handler id = %q, want %s.handler", leaf.commandID, got, leaf.commandID)
+		}
+		if got, _ := handler["operationId"].(string); got != leaf.operationID {
+			t.Fatalf("%s handler operationId = %q, want %s", leaf.commandID, got, leaf.operationID)
+		}
+	}
+
+	invoke, ok := commands["you.models.invoke"].(map[string]any)
+	if !ok {
+		t.Fatal("production manifest missing you.models.invoke command")
+	}
+	invokeFlags, ok := invoke["flags"].(map[string]any)
+	if !ok {
+		t.Fatal("you.models.invoke missing flags map")
+	}
+	for _, flagID := range []string{
+		"you.models.invoke.flag.operation",
+		"you.models.invoke.flag.text",
+		"you.models.invoke.flag.output",
+	} {
+		if _, ok := invokeFlags[flagID]; !ok {
+			t.Fatalf("you.models.invoke missing %s", flagID)
+		}
+	}
+	operation, ok := invokeFlags["you.models.invoke.flag.operation"].(map[string]any)
+	if !ok {
+		t.Fatal("you.models.invoke missing --operation flag")
+	}
+	if got, _ := operation["default"].(string); got != "TTS" {
+		t.Fatalf("you.models.invoke --operation default = %q, want TTS", got)
+	}
+}
+
 func TestCommandManifestSchemaInvalidFixtureMatrix(t *testing.T) {
 	schema := commandManifestSchema(t)
 
