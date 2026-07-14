@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	claudeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/claude"
 	codexadapter "github.com/portpowered/infinite-you/pkg/workers/provider/codex"
+	piadapter "github.com/portpowered/infinite-you/pkg/workers/provider/pi"
 )
 
 // Executor owns the registered structured provider adapters.
@@ -25,7 +26,7 @@ type Executor struct {
 
 // NewExecutor constructs the production structured adapter registry.
 func NewExecutor() *Executor {
-	registry, err := adapter.NewRegistry(claudeadapter.NewAdapter(), codexadapter.NewResponseAdapter())
+	registry, err := adapter.NewRegistry(claudeadapter.NewAdapter(), codexadapter.NewResponseAdapter(), piadapter.NewAdapter())
 	if err != nil {
 		panic(fmt.Sprintf("register structured provider adapters: %v", err))
 	}

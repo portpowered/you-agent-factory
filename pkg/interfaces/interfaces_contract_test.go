@@ -833,6 +833,7 @@ func TestSupportedModelProviders_IncludesAllCanonicalCommands(t *testing.T) {
 		ModelProviderKiro,
 		ModelProviderCursor,
 		ModelProviderOpenCode,
+		ModelProviderPi,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("supported provider count = %d, want %d", len(got), len(want))
@@ -855,6 +856,7 @@ func TestModelProviderPublicInternalMapping_RoundTripsAllSupportedProviders(t *t
 		{factoryapi.WorkerModelProviderGemini, ModelProviderGemini},
 		{factoryapi.WorkerModelProviderKiro, ModelProviderKiro},
 		{factoryapi.WorkerModelProviderOpenCode, ModelProviderOpenCode},
+		{factoryapi.WorkerModelProviderPi, ModelProviderPi},
 	}
 
 	for _, tt := range cases {

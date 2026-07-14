@@ -867,6 +867,7 @@ const (
 	WorkerModelProviderGemini   WorkerModelProvider = "GEMINI"
 	WorkerModelProviderKiro     WorkerModelProvider = "KIRO"
 	WorkerModelProviderOpenCode WorkerModelProvider = "OPENCODE"
+	WorkerModelProviderPi       WorkerModelProvider = "PI"
 )
 
 // Defines values for WorkerProvider.

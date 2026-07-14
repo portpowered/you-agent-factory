@@ -314,6 +314,8 @@ func modelProviderForRunnerID(runnerID string) string {
 		return string(interfaces.ModelProviderCursor)
 	case interfaces.RunnerIDOpenCode:
 		return string(interfaces.ModelProviderOpenCode)
+	case interfaces.RunnerIDPi:
+		return string(interfaces.ModelProviderPi)
 	default:
 		return ""
 	}

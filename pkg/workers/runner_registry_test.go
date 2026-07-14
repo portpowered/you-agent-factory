@@ -18,6 +18,7 @@ func TestBuiltInRunnerCommand_MatchesInternalModelProviderCLI(t *testing.T) {
 		{interfaces.RunnerIDKiro, string(interfaces.ModelProviderKiro)},
 		{interfaces.RunnerIDCursorCLI, string(interfaces.ModelProviderCursor)},
 		{interfaces.RunnerIDOpenCode, string(interfaces.ModelProviderOpenCode)},
+		{interfaces.RunnerIDPi, string(interfaces.ModelProviderPi)},
 	}
 
 	for _, tc := range cases {
@@ -47,6 +48,7 @@ func TestValidateBuiltInRunnerPrerequisites_UsesExpectedCommand(t *testing.T) {
 		interfaces.RunnerIDKiro,
 		interfaces.RunnerIDCursorCLI,
 		interfaces.RunnerIDOpenCode,
+		interfaces.RunnerIDPi,
 	} {
 		if err := ValidateBuiltInRunnerPrerequisites(runnerID); err != nil {
 			t.Fatalf("ValidateBuiltInRunnerPrerequisites(%q): %v", runnerID, err)
@@ -59,6 +61,7 @@ func TestValidateBuiltInRunnerPrerequisites_UsesExpectedCommand(t *testing.T) {
 		string(interfaces.ModelProviderKiro),
 		string(interfaces.ModelProviderCursor),
 		string(interfaces.ModelProviderOpenCode),
+		string(interfaces.ModelProviderPi),
 	}
 	if len(commands) != len(want) {
 		t.Fatalf("lookPath calls = %#v, want %#v", commands, want)
