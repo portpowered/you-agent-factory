@@ -29,7 +29,7 @@ func TestRunEmitsDeterministicDiagnosticsAndFailureStatus(t *testing.T) {
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	if status := run(root, registry, stdout, stderr); status != 1 {
+	if status := runForRegistry(root, registry, stdout, stderr); status != 1 {
 		t.Fatalf("run() status = %d, want 1", status)
 	}
 	if stdout.Len() != 0 {

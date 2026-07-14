@@ -18,6 +18,14 @@ func TestCommonRegistryValidFixtures(t *testing.T) {
 	}
 }
 
+func TestCompatibilityInventoryRegistryValidFixtures(t *testing.T) {
+	root := repositoryRoot(t)
+	diagnostics := contractvalidator.Validate(root, contractvalidator.CompatibilityInventoryRegistry(), "compatibility-inventory", "1.0.0")
+	if len(diagnostics) != 0 {
+		t.Fatalf("Validate() diagnostics = %+v, want none", diagnostics)
+	}
+}
+
 func TestValidateRejectsUnknownRegistrySelection(t *testing.T) {
 	tests := []struct {
 		name    string

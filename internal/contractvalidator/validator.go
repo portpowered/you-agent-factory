@@ -151,6 +151,9 @@ func validateEntry(repositoryRoot string, entry Entry) []Diagnostic {
 			diagnostics = append(diagnostics, validationDiagnostics(document.Path, err)...)
 			continue
 		}
+		if document.SchemaID == compatibilityInventorySchemaID {
+			diagnostics = append(diagnostics, compatibilityInventorySemanticsDiagnostics(document.Path, value)...)
+		}
 		for _, source := range sourceDocuments {
 			loadedDocuments[source.path] = source
 		}
