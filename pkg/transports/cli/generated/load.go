@@ -14,6 +14,9 @@ var representativeFamilyJSON []byte
 //go:embed factory_config_init_family.json
 var factoryConfigInitFamilyJSON []byte
 
+//go:embed models_docs_family.json
+var modelsDocsFamilyJSON []byte
+
 // RepresentativeFamilyManifest returns generated §4.3 metadata for the
 // representative root/session-show command family.
 func RepresentativeFamilyManifest() (climanifest.Manifest, error) {
@@ -26,8 +29,10 @@ func FactoryConfigInitFamilyManifest() (climanifest.Manifest, error) {
 	return parseFamilyManifest(factoryConfigInitFamilyJSON, "factory/config/init family")
 }
 
-func parseRepresentativeFamilyManifest(payload []byte) (climanifest.Manifest, error) {
-	return parseFamilyManifest(payload, "representative-family")
+// ModelsDocsFamilyManifest returns generated §4.3 metadata for the models/docs
+// command family.
+func ModelsDocsFamilyManifest() (climanifest.Manifest, error) {
+	return parseFamilyManifest(modelsDocsFamilyJSON, "models/docs")
 }
 
 func parseFamilyManifest(payload []byte, familyLabel string) (climanifest.Manifest, error) {

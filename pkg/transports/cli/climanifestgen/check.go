@@ -27,6 +27,8 @@ func Check(repositoryRoot string) (Drift, error) {
 		RepresentativeFamilyCommandIDsPath:        representativeCommandIDsSource(),
 		FactoryConfigInitFamilyJSONPath:           nil,
 		FactoryConfigInitFamilyCommandIDsPath:     factoryConfigInitCommandIDsSource(),
+		ModelsDocsFamilyJSONPath:                  nil,
+		ModelsDocsFamilyCommandIDsPath:            modelsDocsCommandIDsSource(),
 	}
 
 	representativePayload, err := RepresentativeFamilyArtifact(repositoryRoot)
@@ -40,6 +42,12 @@ func Check(repositoryRoot string) (Drift, error) {
 		return Drift{}, err
 	}
 	expected[FactoryConfigInitFamilyJSONPath] = factoryConfigInitPayload
+
+	modelsDocsPayload, err := ModelsDocsArtifact(repositoryRoot)
+	if err != nil {
+		return Drift{}, err
+	}
+	expected[ModelsDocsFamilyJSONPath] = modelsDocsPayload
 
 	drift := Drift{}
 	for path, want := range expected {

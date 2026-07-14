@@ -26,6 +26,25 @@ func TestFactoryConfigInitFamilyManifestMatchesContractedIDs(t *testing.T) {
 	}
 }
 
+func TestModelsDocsFamilyManifestMatchesContractedIDs(t *testing.T) {
+	manifest, err := generated.ModelsDocsFamilyManifest()
+	if err != nil {
+		t.Fatalf("ModelsDocsFamilyManifest() error = %v", err)
+	}
+	if len(manifest.Commands) != len(climanifestgen.ModelsDocsFamilyCommandIDs) {
+		t.Fatalf("command count = %d, want %d", len(manifest.Commands), len(climanifestgen.ModelsDocsFamilyCommandIDs))
+	}
+	for _, id := range climanifestgen.ModelsDocsFamilyCommandIDs {
+		record, err := manifest.CommandByID(id)
+		if err != nil {
+			t.Fatalf("CommandByID(%q) error = %v", id, err)
+		}
+		if record.ID != id {
+			t.Fatalf("command %q record id = %q", id, record.ID)
+		}
+	}
+}
+
 func TestFactoryConfigInitFamilyCommandIDsGenMatchesGeneratorList(t *testing.T) {
 	if len(generated.FactoryConfigInitFamilyCommandIDs) != len(climanifestgen.FactoryConfigInitFamilyCommandIDs) {
 		t.Fatalf("generated id count = %d, want %d", len(generated.FactoryConfigInitFamilyCommandIDs), len(climanifestgen.FactoryConfigInitFamilyCommandIDs))
@@ -33,6 +52,17 @@ func TestFactoryConfigInitFamilyCommandIDsGenMatchesGeneratorList(t *testing.T) 
 	for i, id := range climanifestgen.FactoryConfigInitFamilyCommandIDs {
 		if generated.FactoryConfigInitFamilyCommandIDs[i] != id {
 			t.Fatalf("generated ids[%d] = %q, want %q", i, generated.FactoryConfigInitFamilyCommandIDs[i], id)
+		}
+	}
+}
+
+func TestModelsDocsFamilyCommandIDsGenMatchesGeneratorList(t *testing.T) {
+	if len(generated.ModelsDocsFamilyCommandIDs) != len(climanifestgen.ModelsDocsFamilyCommandIDs) {
+		t.Fatalf("generated id count = %d, want %d", len(generated.ModelsDocsFamilyCommandIDs), len(climanifestgen.ModelsDocsFamilyCommandIDs))
+	}
+	for i, id := range climanifestgen.ModelsDocsFamilyCommandIDs {
+		if generated.ModelsDocsFamilyCommandIDs[i] != id {
+			t.Fatalf("generated ids[%d] = %q, want %q", i, generated.ModelsDocsFamilyCommandIDs[i], id)
 		}
 	}
 }

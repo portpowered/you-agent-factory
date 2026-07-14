@@ -137,6 +137,21 @@ func CompareInheritedFlagDefaultsAgainstRoot(root climanifest.Command, sessionSh
 	return mismatches
 }
 
+// CompareArgumentEnum asserts contracted positional enum values match live ValidArgs wiring.
+func CompareArgumentEnum(commandID string, contract climanifest.Argument, live []string) *Mismatch {
+	want := formatStringList(contract.Enum)
+	got := formatStringList(live)
+	if want == got {
+		return nil
+	}
+	return &Mismatch{
+		CommandID: commandID,
+		Field:     fmt.Sprintf("arg.%d.enum", contract.Position),
+		Want:      want,
+		Got:       got,
+	}
+}
+
 // CompareArgumentCardinality asserts contracted positional cardinality matches live parsing.
 func CompareArgumentCardinality(commandID string, contract climanifest.Argument, positionals []string) *Mismatch {
 	if contract.Required && len(positionals) == 0 {

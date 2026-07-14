@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -279,6 +280,8 @@ func writePackagedGoalBuiltinTopologyMockWorkers(t *testing.T, opts packagedGoal
 	if reviewerOutput == "" {
 		reviewerOutput = "accepted"
 	}
+	checkerCommand, checkerArgs := mockWorkerEchoCommand(checkerOutput)
+	reviewerCommand, reviewerArgs := mockWorkerEchoCommand(reviewerOutput)
 
 	cfg := factoryconfig.MockWorkersConfig{
 		UnmatchedDispatchPolicy: factoryconfig.MockWorkerUnmatchedDispatchPolicyPassthrough,
@@ -298,8 +301,8 @@ func writePackagedGoalBuiltinTopologyMockWorkers(t *testing.T, opts packagedGoal
 				WorkstationName: goal.PackagedCheckWorkstationName,
 				RunType:         factoryconfig.MockWorkerRunTypeScript,
 				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
-					Command: "/bin/echo",
-					Args:    []string{checkerOutput},
+					Command: checkerCommand,
+					Args:    checkerArgs,
 				},
 			},
 			{
@@ -307,13 +310,26 @@ func writePackagedGoalBuiltinTopologyMockWorkers(t *testing.T, opts packagedGoal
 				WorkstationName: reviewerWorkstation,
 				RunType:         factoryconfig.MockWorkerRunTypeScript,
 				ScriptConfig: &factoryconfig.MockWorkerScriptConfig{
-					Command: "/bin/echo",
-					Args:    []string{reviewerOutput},
+					Command: reviewerCommand,
+					Args:    reviewerArgs,
 				},
 			},
 		},
 	}
 	return writeMockWorkersConfigFile(t, cfg, "mock-workers-packaged-goal-routing.json")
+}
+
+func mockWorkerEchoCommand(output string) (string, []string) {
+	if runtime.GOOS == "windows" {
+		literal := strings.ReplaceAll(output, "'", "''")
+		return "powershell.exe", []string{
+			"-NoProfile",
+			"-NonInteractive",
+			"-Command",
+			"[Console]::Out.Write('" + literal + "')",
+		}
+	}
+	return "/bin/echo", []string{output}
 }
 
 func writePackagedGoalBuiltinTopologySequencedReviewerMockWorkers(t *testing.T, reviewerOutputs ...string) string {

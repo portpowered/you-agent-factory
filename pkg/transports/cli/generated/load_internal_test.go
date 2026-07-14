@@ -33,8 +33,8 @@ func TestParseRepresentativeFamilyManifestRejectsInvalidPayload(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := parseRepresentativeFamilyManifest(tc.payload); err == nil {
-				t.Fatal("parseRepresentativeFamilyManifest() = nil, want error")
+			if _, err := parseFamilyManifest(tc.payload, "representative-family"); err == nil {
+				t.Fatal("parseFamilyManifest(representative-family) = nil, want error")
 			}
 		})
 	}
@@ -49,9 +49,9 @@ func TestParseRepresentativeFamilyManifestAcceptsMinimalFamily(t *testing.T) {
 			"you.session.show":{"id":"you.session.show","path":"you session show"}
 		}
 	}`)
-	manifest, err := parseRepresentativeFamilyManifest(payload)
+	manifest, err := parseFamilyManifest(payload, "representative-family")
 	if err != nil {
-		t.Fatalf("parseRepresentativeFamilyManifest() error = %v", err)
+		t.Fatalf("parseFamilyManifest(representative-family) error = %v", err)
 	}
 	if manifest.RootPath != "you" || len(manifest.Commands) != 3 {
 		t.Fatalf("manifest = %#v, want rooted three-command family", manifest)
