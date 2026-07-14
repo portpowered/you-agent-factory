@@ -114,13 +114,14 @@ func TestInvoke_JSONWritesMetadataResponse(t *testing.T) {
 
 	var out bytes.Buffer
 	if err := Invoke(InvokeConfig{
-		ModelName:  "OMNIVOICE_Q4_K_M",
-		Operation:  "TTS",
-		Text:       "hello world",
-		FactoryDir: t.TempDir(),
-		Logger:     zap.NewNop(),
-		JSON:       true,
-		Output:     &out,
+		BuildInvocation: testModelInvocationBuilder,
+		ModelName:       "OMNIVOICE_Q4_K_M",
+		Operation:       "TTS",
+		Text:            "hello world",
+		FactoryDir:      t.TempDir(),
+		Logger:          zap.NewNop(),
+		JSON:            true,
+		Output:          &out,
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
@@ -150,13 +151,14 @@ func TestInvoke_AudioWritesOutputFile(t *testing.T) {
 
 	outputPath := filepath.Join(t.TempDir(), "speech.wav")
 	if err := Invoke(InvokeConfig{
-		ModelName:  "OMNIVOICE_Q4_K_M",
-		Operation:  "TTS",
-		Text:       "hello world",
-		OutputPath: outputPath,
-		FactoryDir: t.TempDir(),
-		Logger:     zap.NewNop(),
-		Output:     io.Discard,
+		BuildInvocation: testModelInvocationBuilder,
+		ModelName:       "OMNIVOICE_Q4_K_M",
+		Operation:       "TTS",
+		Text:            "hello world",
+		OutputPath:      outputPath,
+		FactoryDir:      t.TempDir(),
+		Logger:          zap.NewNop(),
+		Output:          io.Discard,
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
@@ -186,15 +188,16 @@ func TestInvoke_AudioVerboseLogsOutputPath(t *testing.T) {
 	outputPath := filepath.Join(t.TempDir(), "speech.wav")
 	var diagnostics bytes.Buffer
 	if err := Invoke(InvokeConfig{
-		ModelName:   "OMNIVOICE_Q4_K_M",
-		Operation:   "TTS",
-		Text:        "hello world",
-		OutputPath:  outputPath,
-		FactoryDir:  t.TempDir(),
-		Logger:      zap.NewNop(),
-		Output:      io.Discard,
-		Verbose:     true,
-		Diagnostics: &diagnostics,
+		BuildInvocation: testModelInvocationBuilder,
+		ModelName:       "OMNIVOICE_Q4_K_M",
+		Operation:       "TTS",
+		Text:            "hello world",
+		OutputPath:      outputPath,
+		FactoryDir:      t.TempDir(),
+		Logger:          zap.NewNop(),
+		Output:          io.Discard,
+		Verbose:         true,
+		Diagnostics:     &diagnostics,
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
@@ -213,13 +216,14 @@ func TestInvoke_AudioNotFoundUsesFriendlyError(t *testing.T) {
 
 	outputPath := filepath.Join(t.TempDir(), "speech.wav")
 	err := Invoke(InvokeConfig{
-		ModelName:  "missing",
-		Operation:  "TTS",
-		Text:       "hello world",
-		OutputPath: outputPath,
-		FactoryDir: t.TempDir(),
-		Logger:     zap.NewNop(),
-		Output:     io.Discard,
+		BuildInvocation: testModelInvocationBuilder,
+		ModelName:       "missing",
+		Operation:       "TTS",
+		Text:            "hello world",
+		OutputPath:      outputPath,
+		FactoryDir:      t.TempDir(),
+		Logger:          zap.NewNop(),
+		Output:          io.Discard,
 	})
 	if err == nil {
 		t.Fatal("expected not found error")
@@ -235,19 +239,30 @@ func TestInvoke_JSONSurfacesClassifiedLoadingFailureFromBootstrap(t *testing.T) 
 	}))
 
 	err := Invoke(InvokeConfig{
-		ModelName:  "OMNIVOICE_Q4_K_M",
-		Operation:  "TTS",
-		Text:       "hello world",
-		FactoryDir: t.TempDir(),
-		Logger:     zap.NewNop(),
-		JSON:       true,
-		Output:     io.Discard,
+		BuildInvocation: testModelInvocationBuilder,
+		ModelName:       "OMNIVOICE_Q4_K_M",
+		Operation:       "TTS",
+		Text:            "hello world",
+		FactoryDir:      t.TempDir(),
+		Logger:          zap.NewNop(),
+		JSON:            true,
+		Output:          io.Discard,
 	})
 	if err == nil {
 		t.Fatal("expected loading failure")
 	}
 	if !strings.Contains(err.Error(), "wait for the managed runtime to finish loading") {
 		t.Fatalf("error = %q, want loading guidance", err.Error())
+	}
+}
+
+func TestInvoke_RequiresInjectedInvocationBuilder(t *testing.T) {
+	err := Invoke(InvokeConfig{
+		ModelName: "OMNIVOICE_Q4_K_M", Operation: "TTS", Text: "hello",
+		FactoryDir: t.TempDir(), JSON: true, Output: io.Discard,
+	})
+	if err == nil || !strings.Contains(err.Error(), "collaborator builder is required") {
+		t.Fatalf("Invoke() error = %v, want missing collaborator builder", err)
 	}
 }
 
@@ -271,14 +286,15 @@ func TestInvoke_AudioUnreachableUsesBootstrapInsteadOfTransportMessage(t *testin
 
 	outputPath := filepath.Join(t.TempDir(), "speech.wav")
 	err := Invoke(InvokeConfig{
-		ModelName:  "OMNIVOICE_Q4_K_M",
-		Operation:  "TTS",
-		Text:       "hello world",
-		OutputPath: outputPath,
-		FactoryDir: t.TempDir(),
-		Server:     "http://127.0.0.1:1",
-		Output:     io.Discard,
-		Logger:     zap.NewNop(),
+		BuildInvocation: testModelInvocationBuilder,
+		ModelName:       "OMNIVOICE_Q4_K_M",
+		Operation:       "TTS",
+		Text:            "hello world",
+		OutputPath:      outputPath,
+		FactoryDir:      t.TempDir(),
+		Server:          "http://127.0.0.1:1",
+		Output:          io.Discard,
+		Logger:          zap.NewNop(),
 	})
 	if err == nil {
 		t.Fatal("expected bootstrap audio invoke without stream file to fail")
@@ -418,15 +434,16 @@ func TestModelsVerboseLogsInspectInvokeAndPullMetadataWithoutInputText(t *testin
 		t.Fatalf("Inspect: %v", err)
 	}
 	if err := Invoke(InvokeConfig{
-		ModelName:   "OMNIVOICE_Q4_K_M",
-		Operation:   "TTS",
-		Text:        "secret direct input",
-		FactoryDir:  t.TempDir(),
-		Logger:      zap.NewNop(),
-		JSON:        true,
-		Output:      io.Discard,
-		Verbose:     true,
-		Diagnostics: &diagnostics,
+		BuildInvocation: testModelInvocationBuilder,
+		ModelName:       "OMNIVOICE_Q4_K_M",
+		Operation:       "TTS",
+		Text:            "secret direct input",
+		FactoryDir:      t.TempDir(),
+		Logger:          zap.NewNop(),
+		JSON:            true,
+		Output:          io.Discard,
+		Verbose:         true,
+		Diagnostics:     &diagnostics,
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}

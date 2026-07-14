@@ -38,13 +38,14 @@ func TestFailureBaseline_NoServer_ModelsInvokeJSONUsesBootstrapInsteadOfUnreacha
 
 	var out bytes.Buffer
 	if err := Invoke(InvokeConfig{
-		ModelName:  "OMNIVOICE_Q4_K_M",
-		Operation:  "TTS",
-		Text:       "hello world",
-		Server:     failureBaselineUnreachableServer,
-		FactoryDir: t.TempDir(),
-		JSON:       true,
-		Output:     &out,
+		BuildInvocation: testModelInvocationBuilder,
+		ModelName:       "OMNIVOICE_Q4_K_M",
+		Operation:       "TTS",
+		Text:            "hello world",
+		Server:          failureBaselineUnreachableServer,
+		FactoryDir:      t.TempDir(),
+		JSON:            true,
+		Output:          &out,
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}

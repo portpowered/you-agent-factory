@@ -3,6 +3,7 @@ package root
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,8 +12,12 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
+	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestNormalizeSnapshotsArgumentsAndEnvironment(t *testing.T) {
@@ -228,6 +233,60 @@ func TestExecuteWorkflowStartsUseInjectedDurableExecutionService(t *testing.T) {
 			t.Fatalf("durable execution request = %+v, want fake provider", request)
 		}
 	}
+}
+
+func TestExecuteModelsInvokeUsesInjectedModelCollaborator(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, "")
+	t.Chdir(repoRoot)
+	var requests []modelscli.InvocationRequest
+	runner := &sentinelModelInvocationRunner{}
+	var output bytes.Buffer
+	err := ExecuteWithDependencies(Input{
+		Args: []string{"you", "--json", "models", "invoke", "OMNIVOICE_Q4_K_M", "--operation", "TTS", "--text", "hello"},
+		Env:  homeEnvironment(t.TempDir()), Stdout: &output, Context: context.Background(),
+	}, Dependencies{BuildModelInvocation: func(_ context.Context, request modelscli.InvocationRequest) (modelscli.InvocationRunner, error) {
+		requests = append(requests, request)
+		return runner, nil
+	}})
+	if err != nil {
+		t.Fatalf("ExecuteWithDependencies(models invoke) error = %v", err)
+	}
+	if len(requests) != 1 || requests[0].FactoryDir != filepath.Join(repoRoot, "factory") {
+		t.Fatalf("model invocation requests = %+v, want one request for repository factory", requests)
+	}
+	if runner.invocations != 1 || runner.modelName != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("sentinel invocations = %d model = %q, want one injected invocation", runner.invocations, runner.modelName)
+	}
+	if !strings.Contains(output.String(), `"modelName":"OMNIVOICE_Q4_K_M"`) {
+		t.Fatalf("models invoke output = %q, want sentinel result", output.String())
+	}
+}
+
+type sentinelModelInvocationRunner struct {
+	invocations int
+	modelName   string
+}
+
+func (r *sentinelModelInvocationRunner) Run(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (r *sentinelModelInvocationRunner) InvokeModel(_ context.Context, modelName string, request factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+	r.invocations++
+	r.modelName = modelName
+	return apisurface.ModelInvocationResult{ModelName: modelName, Worker: "sentinel-model-worker", Operation: request.Operation}, nil
+}
+
+func (*sentinelModelInvocationRunner) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
+	return factoryapi.Factory{Name: "sentinel-factory"}, nil
+}
+
+func (*sentinelModelInvocationRunner) CloseFactorySession(_ context.Context, sessionID string) error {
+	if sessionID != factorysessions.DefaultSessionID {
+		return errors.New("unexpected session id")
+	}
+	return nil
 }
 
 func homeEnvironment(home string) []string {

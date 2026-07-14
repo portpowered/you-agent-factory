@@ -116,15 +116,16 @@ func TestInvoke_RoutesThroughSharedBootstrapWithoutHTTPEndpoint(t *testing.T) {
 	}
 
 	if err := Invoke(InvokeConfig{
-		ModelName:  "OMNIVOICE_Q4_K_M",
-		Operation:  "TTS",
-		Text:       "hello world",
-		FactoryDir: t.TempDir(),
-		HomeDir:    homeDir,
-		Server:     failureBaselineUnreachableServer,
-		JSON:       true,
-		Logger:     zap.NewNop(),
-		Output:     io.Discard,
+		BuildInvocation: testModelInvocationBuilder,
+		ModelName:       "OMNIVOICE_Q4_K_M",
+		Operation:       "TTS",
+		Text:            "hello world",
+		FactoryDir:      t.TempDir(),
+		HomeDir:         homeDir,
+		Server:          failureBaselineUnreachableServer,
+		JSON:            true,
+		Logger:          zap.NewNop(),
+		Output:          io.Discard,
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
@@ -156,14 +157,15 @@ func TestInvoke_UnreachableServerDoesNotFailWithTransportUnreachableMessage(t *t
 	}
 
 	if err := Invoke(InvokeConfig{
-		ModelName:  "OMNIVOICE_Q4_K_M",
-		Operation:  "TTS",
-		Text:       "hello world",
-		FactoryDir: t.TempDir(),
-		Server:     failureBaselineUnreachableServer,
-		JSON:       true,
-		Output:     io.Discard,
-		Logger:     zap.NewNop(),
+		BuildInvocation: testModelInvocationBuilder,
+		ModelName:       "OMNIVOICE_Q4_K_M",
+		Operation:       "TTS",
+		Text:            "hello world",
+		FactoryDir:      t.TempDir(),
+		Server:          failureBaselineUnreachableServer,
+		JSON:            true,
+		Output:          io.Discard,
+		Logger:          zap.NewNop(),
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
@@ -218,13 +220,14 @@ func TestInvoke_AudioBootstrapCopiesStreamFile(t *testing.T) {
 
 	outputPath := filepath.Join(t.TempDir(), "speech.wav")
 	if err := Invoke(InvokeConfig{
-		ModelName:  "OMNIVOICE_Q4_K_M",
-		Operation:  "TTS",
-		Text:       "hello world",
-		OutputPath: outputPath,
-		FactoryDir: t.TempDir(),
-		Logger:     zap.NewNop(),
-		Output:     io.Discard,
+		BuildInvocation: testModelInvocationBuilder,
+		ModelName:       "OMNIVOICE_Q4_K_M",
+		Operation:       "TTS",
+		Text:            "hello world",
+		OutputPath:      outputPath,
+		FactoryDir:      t.TempDir(),
+		Logger:          zap.NewNop(),
+		Output:          io.Discard,
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}

@@ -181,14 +181,15 @@ func TestInvoke_OfflineReadyLocalFixture_JSONMetadataSucceedsWithoutHTTPServer(t
 
 	var out bytes.Buffer
 	if err := Invoke(InvokeConfig{
-		ModelName:  "OMNIVOICE_Q4_K_M",
-		Operation:  "TTS",
-		Text:       "hello offline",
-		FactoryDir: factoryDir,
-		Server:     failureBaselineUnreachableServer,
-		JSON:       true,
-		Output:     &out,
-		Logger:     zap.NewNop(),
+		BuildInvocation: testModelInvocationBuilder,
+		ModelName:       "OMNIVOICE_Q4_K_M",
+		Operation:       "TTS",
+		Text:            "hello offline",
+		FactoryDir:      factoryDir,
+		Server:          failureBaselineUnreachableServer,
+		JSON:            true,
+		Output:          &out,
+		Logger:          zap.NewNop(),
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
@@ -222,14 +223,15 @@ func TestInvoke_OfflineReadyLocalFixture_AudioOutputSucceedsWithoutHTTPServer(t 
 	outputPath := filepath.Join(t.TempDir(), "speech.wav")
 	var out bytes.Buffer
 	if err := Invoke(InvokeConfig{
-		ModelName:  "OMNIVOICE_Q4_K_M",
-		Operation:  "TTS",
-		Text:       "hello offline",
-		OutputPath: outputPath,
-		FactoryDir: factoryDir,
-		Server:     failureBaselineUnreachableServer,
-		Output:     &out,
-		Logger:     zap.NewNop(),
+		BuildInvocation: testModelInvocationBuilder,
+		ModelName:       "OMNIVOICE_Q4_K_M",
+		Operation:       "TTS",
+		Text:            "hello offline",
+		OutputPath:      outputPath,
+		FactoryDir:      factoryDir,
+		Server:          failureBaselineUnreachableServer,
+		Output:          &out,
+		Logger:          zap.NewNop(),
 	}); err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}

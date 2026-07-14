@@ -38,16 +38,16 @@ var applicationCompositionCalls = map[string]struct{}{
 
 var approvedApplicationCompositionFiles = map[string]struct{}{
 	"pkg/wire/process.go":                                {},
+	"pkg/wire/model_invocation.go":                       {},
 	"pkg/wire/session_execution.go":                      {},
 	"pkg/factorysessionexecution/service.go":             {},
 	"pkg/factorysessionexecution/testharness/harness.go": {},
 	// Batch 008 moves remaining legacy composition roots behind pkg/wire.
 	"pkg/composebridge/core.go": {},
 	"pkg/service/factory.go":    {},
-	// converge-transport-family follow-ups: stories 006 and 007 move these
-	// remaining model/MCP constructors into pkg/wire.
-	"pkg/transports/cli/models/bootstrap_invoke.go": {},
-	"pkg/transports/cli/mcp/serve.go":               {},
+	// converge-transport-family story 007 moves the remaining MCP constructors
+	// into pkg/wire.
+	"pkg/transports/cli/mcp/serve.go": {},
 }
 
 var javascriptLiveChildRoots = []string{

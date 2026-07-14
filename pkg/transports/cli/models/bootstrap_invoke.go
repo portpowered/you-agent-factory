@@ -11,12 +11,9 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -25,60 +22,27 @@ import (
 	"go.uber.org/zap"
 )
 
-type bootstrapInvokeConfig struct {
+// InvocationRequest carries normalized CLI inputs to the application
+// composition boundary. It contains no service or runtime construction policy.
+type InvocationRequest struct {
 	FactoryDir       string
 	HomeDir          string
 	OperatorDefaults operatorconfig.ResolvedDefaults
 	Logger           *zap.Logger
 	Verbose          bool
-	Diagnostics      io.Writer
 }
 
-type modelBootstrapRunner interface {
+// InvocationRunner is the already-constructed model invocation collaborator
+// consumed by the CLI transport.
+type InvocationRunner interface {
 	Run(context.Context) error
 	InvokeModel(context.Context, string, factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error)
 	GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error)
 	CloseFactorySession(context.Context, string) error
 }
 
-type modelInvocationBootstrapBuilder func(context.Context, *service.FactoryServiceConfig) (modelBootstrapRunner, error)
-
-var buildModelInvocationBootstrap modelInvocationBootstrapBuilder = defaultBuildModelInvocationBootstrap
-
-func defaultBuildModelInvocationBootstrap(
-	ctx context.Context,
-	cfg *service.FactoryServiceConfig,
-) (modelBootstrapRunner, error) {
-	bootstrap, err := service.BuildInvocationBootstrap(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	return &bootstrapModelRunner{bootstrap: bootstrap}, nil
-}
-
-type bootstrapModelRunner struct {
-	bootstrap *service.InvocationBootstrap
-}
-
-func (r *bootstrapModelRunner) Run(ctx context.Context) error {
-	return r.bootstrap.Run(ctx)
-}
-
-func (r *bootstrapModelRunner) InvokeModel(
-	ctx context.Context,
-	modelName string,
-	request factoryapi.ModelInvocationRequest,
-) (apisurface.ModelInvocationResult, error) {
-	return r.bootstrap.Service.InvokeModel(ctx, modelName, request)
-}
-
-func (r *bootstrapModelRunner) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
-	return r.bootstrap.GetCurrentFactoryForSession(ctx, sessionID)
-}
-
-func (r *bootstrapModelRunner) CloseFactorySession(ctx context.Context, sessionID string) error {
-	return r.bootstrap.CloseFactorySession(ctx, sessionID)
-}
+// InvocationBuilder constructs the model collaborator outside the transport.
+type InvocationBuilder func(context.Context, InvocationRequest) (InvocationRunner, error)
 
 func invokeModelThroughBootstrap(
 	cfg invokeOptions,
@@ -106,29 +70,28 @@ func invokeModelThroughBootstrap(
 	ctx, cancel := context.WithTimeout(context.Background(), modelsRequestTimeout)
 	defer cancel()
 
-	result, err := runBootstrapModelInvocation(ctx, bootstrapCfg, strings.TrimSpace(cfg.ModelName), request)
+	result, err := runBootstrapModelInvocation(ctx, cfg.BuildInvocation, bootstrapCfg, strings.TrimSpace(cfg.ModelName), request)
 	if err != nil {
 		return apisurface.ModelInvocationResult{}, mapBootstrapModelInvokeError(err)
 	}
 	return result, nil
 }
 
-func resolveBootstrapInvokeConfig(cfg invokeOptions) (bootstrapInvokeConfig, error) {
+func resolveBootstrapInvokeConfig(cfg invokeOptions) (InvocationRequest, error) {
 	factoryDir, err := resolveModelsInvokeFactoryDir(cfg.FactoryDir)
 	if err != nil {
-		return bootstrapInvokeConfig{}, err
+		return InvocationRequest{}, err
 	}
 	logger := cfg.Logger
 	if logger == nil {
 		logger = zap.NewNop()
 	}
-	return bootstrapInvokeConfig{
+	return InvocationRequest{
 		FactoryDir:       factoryDir,
 		HomeDir:          cfg.HomeDir,
 		OperatorDefaults: cfg.OperatorDefaults,
 		Logger:           logger,
 		Verbose:          cfg.Verbose,
-		Diagnostics:      cfg.Diagnostics,
 	}, nil
 }
 
@@ -143,46 +106,22 @@ func resolveModelsInvokeFactoryDir(factoryDir string) (string, error) {
 	return factoryconfig.ResolveCurrentFactoryDir(filepath.Join(cwd, defaultcmd.FactoryDir))
 }
 
-func buildModelsInvokeBootstrapServiceConfig(cfg bootstrapInvokeConfig) *service.FactoryServiceConfig {
-	executionBaseDir := ""
-	if cwd, err := os.Getwd(); err == nil {
-		executionBaseDir = cwd
-	}
-	svcCfg := &service.FactoryServiceConfig{
-		Dir:                  cfg.FactoryDir,
-		SystemConfigHomeDir:  cfg.HomeDir,
-		OperatorDefaults:     cfg.OperatorDefaults,
-		ExecutionBaseDir:     executionBaseDir,
-		RuntimeMode:          interfaces.RuntimeModeService,
-		Logger:               cfg.Logger,
-		Verbose:              cfg.Verbose,
-		RuntimeLogConfig:     logging.DefaultRuntimeLogConfig(),
-		RuntimeMetricsConfig: logging.DefaultRuntimeMetricsConfig(),
-	}
-	if strings.TrimSpace(cfg.HomeDir) != "" {
-		svcCfg.RuntimeLogDir = defaultpaths.RuntimeLogsRoot(cfg.HomeDir)
-		svcCfg.RuntimeMetricsDir = defaultpaths.RuntimeMetricsRoot(cfg.HomeDir)
-	}
-	normalized := service.NormalizeInvocationBootstrapConfig(svcCfg)
-	if augmentModelsInvokeBootstrapServiceConfig != nil {
-		augmentModelsInvokeBootstrapServiceConfig(normalized)
-	}
-	return normalized
-}
-
-// augmentModelsInvokeBootstrapServiceConfig optionally adjusts bootstrap service
-// config during tests that exercise real in-process bootstrap wiring.
-var augmentModelsInvokeBootstrapServiceConfig func(*service.FactoryServiceConfig)
-
 func runBootstrapModelInvocation(
 	ctx context.Context,
-	cfg bootstrapInvokeConfig,
+	build InvocationBuilder,
+	cfg InvocationRequest,
 	modelName string,
 	request factoryapi.ModelInvocationRequest,
 ) (apisurface.ModelInvocationResult, error) {
-	invoker, err := buildModelInvocationBootstrap(ctx, buildModelsInvokeBootstrapServiceConfig(cfg))
+	if build == nil {
+		return apisurface.ModelInvocationResult{}, fmt.Errorf("models invoke collaborator builder is required")
+	}
+	invoker, err := build(ctx, cfg)
 	if err != nil {
 		return apisurface.ModelInvocationResult{}, err
+	}
+	if invoker == nil {
+		return apisurface.ModelInvocationResult{}, fmt.Errorf("models invoke collaborator builder returned nil runner")
 	}
 
 	runCtx, cancel := context.WithCancel(ctx)
@@ -214,7 +153,7 @@ func runBootstrapModelInvocation(
 
 func waitForModelBootstrapSessionReady(
 	ctx context.Context,
-	invoker modelBootstrapRunner,
+	invoker InvocationRunner,
 	runErrCh <-chan error,
 ) error {
 	ticker := time.NewTicker(10 * time.Millisecond)
@@ -240,7 +179,7 @@ func waitForModelBootstrapSessionReady(
 	}
 }
 
-func releaseModelBootstrapSession(ctx context.Context, invoker modelBootstrapRunner, sessionID string) error {
+func releaseModelBootstrapSession(ctx context.Context, invoker InvocationRunner, sessionID string) error {
 	if invoker == nil {
 		return fmt.Errorf("models invoke bootstrap runner is required")
 	}

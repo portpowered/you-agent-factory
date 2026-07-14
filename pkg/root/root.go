@@ -28,6 +28,7 @@ func NewCommandWithDependencies(input ProcessInput, dependencies Dependencies) *
 			return executeStartup(ctx, request, dependencies)
 		},
 		BuildSessionExecution: dependencies.BuildSessionExecution,
+		BuildModelInvocation:  dependencies.BuildModelInvocation,
 	})
 	command.SetArgs(input.Arguments())
 	command.SetIn(input.stdin)

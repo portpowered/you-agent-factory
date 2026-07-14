@@ -64,6 +64,7 @@ type InvokeConfig struct {
 	Debug            bool
 	Output           io.Writer
 	Diagnostics      io.Writer
+	BuildInvocation  InvocationBuilder
 }
 
 type PullConfig struct {
@@ -149,6 +150,7 @@ func Invoke(cfg InvokeConfig) error {
 			Logger:           cfg.Logger,
 			Verbose:          cfg.Verbose,
 			Diagnostics:      cfg.Diagnostics,
+			BuildInvocation:  cfg.BuildInvocation,
 		})
 		if err != nil {
 			return err
@@ -172,6 +174,7 @@ func Invoke(cfg InvokeConfig) error {
 		Logger:           cfg.Logger,
 		Verbose:          cfg.Verbose,
 		Diagnostics:      cfg.Diagnostics,
+		BuildInvocation:  cfg.BuildInvocation,
 	}); err != nil {
 		return err
 	}
@@ -275,6 +278,7 @@ type invokeOptions struct {
 	Logger           *zap.Logger
 	Verbose          bool
 	Diagnostics      io.Writer
+	BuildInvocation  InvocationBuilder
 }
 
 func invokeModelMetadata(cfg invokeOptions) (factoryapi.ModelInvocationResponse, error) {

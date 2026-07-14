@@ -168,6 +168,9 @@ The guard also rejects `BuildInvocationBootstrap`, `NewExecutionService`,
 approved application-composition owners. Transport packages consume injected
 invocation and durable-execution collaborators; narrow migration exceptions
 must name the unfinished story and be removed with that story.
+Model invocation composition is owned by `pkg/wire/model_invocation.go`; its
+typed builder flows through `pkg/root` into the CLI models adapter, and the
+construction guard intentionally grants no model-transport exception.
 
 Package tests, `testdata`
 fixtures, generated code, dependencies, coverage, and build artifacts are not

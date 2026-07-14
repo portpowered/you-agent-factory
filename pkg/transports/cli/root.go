@@ -91,6 +91,7 @@ type RootCommandOptions struct {
 	Startup               startupcli.Handler
 	RunFactory            func(context.Context, runcli.RunConfig) error
 	BuildSessionExecution sessionexecutioncli.ServiceBuilder
+	BuildModelInvocation  modelscli.InvocationBuilder
 }
 
 func NewRootCommand() *cobra.Command {
@@ -347,6 +348,7 @@ func newModelsInvokeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosti
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
 			cfg.Debug = diagnostics.debug
+			cfg.BuildInvocation = rootOptions.BuildModelInvocation
 			return invokeModel(cfg)
 		},
 	}

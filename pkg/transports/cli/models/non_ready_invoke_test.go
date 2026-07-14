@@ -86,14 +86,15 @@ func TestInvoke_NonReadyManagedOutcomes_StubBootstrapPreservesReadinessFailureCl
 			}))
 
 			err := Invoke(InvokeConfig{
-				ModelName:  "OMNIVOICE_Q4_K_M",
-				Operation:  "TTS",
-				Text:       "hello world",
-				FactoryDir: t.TempDir(),
-				Server:     failureBaselineUnreachableServer,
-				JSON:       true,
-				Logger:     zap.NewNop(),
-				Output:     io.Discard,
+				BuildInvocation: testModelInvocationBuilder,
+				ModelName:       "OMNIVOICE_Q4_K_M",
+				Operation:       "TTS",
+				Text:            "hello world",
+				FactoryDir:      t.TempDir(),
+				Server:          failureBaselineUnreachableServer,
+				JSON:            true,
+				Logger:          zap.NewNop(),
+				Output:          io.Discard,
 			})
 			if err == nil {
 				t.Fatal("expected readiness-gated invoke failure")
@@ -172,14 +173,15 @@ func TestInvoke_NonReadyManagedOutcomes_StubBootstrapPreservesManagedRuntimeVoca
 			}))
 
 			err := Invoke(InvokeConfig{
-				ModelName:  "OMNIVOICE_Q4_K_M",
-				Operation:  "TTS",
-				Text:       "hello world",
-				FactoryDir: t.TempDir(),
-				Server:     failureBaselineUnreachableServer,
-				JSON:       true,
-				Logger:     zap.NewNop(),
-				Output:     io.Discard,
+				BuildInvocation: testModelInvocationBuilder,
+				ModelName:       "OMNIVOICE_Q4_K_M",
+				Operation:       "TTS",
+				Text:            "hello world",
+				FactoryDir:      t.TempDir(),
+				Server:          failureBaselineUnreachableServer,
+				JSON:            true,
+				Logger:          zap.NewNop(),
+				Output:          io.Discard,
 			})
 			if err == nil {
 				t.Fatal("expected managed runtime readiness failure")

@@ -99,14 +99,15 @@ func TestInvoke_OfflineNonReadyLifecycle_ReadinessGatedFailuresWithoutHTTPServer
 			}
 
 			err := Invoke(InvokeConfig{
-				ModelName:  "OMNIVOICE_Q4_K_M",
-				Operation:  "TTS",
-				Text:       "hello offline",
-				FactoryDir: factoryDir,
-				Server:     failureBaselineUnreachableServer,
-				JSON:       true,
-				Output:     io.Discard,
-				Logger:     zap.NewNop(),
+				BuildInvocation: testModelInvocationBuilder,
+				ModelName:       "OMNIVOICE_Q4_K_M",
+				Operation:       "TTS",
+				Text:            "hello offline",
+				FactoryDir:      factoryDir,
+				Server:          failureBaselineUnreachableServer,
+				JSON:            true,
+				Output:          io.Discard,
+				Logger:          zap.NewNop(),
 			})
 			if err == nil {
 				t.Fatal("expected readiness-gated invoke failure")

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/wire"
@@ -55,6 +56,7 @@ type Dependencies struct {
 	GraphBuilder          GraphBuilder
 	Initializer           Initializer
 	BuildSessionExecution sessionexecutioncli.ServiceBuilder
+	BuildModelInvocation  modelscli.InvocationBuilder
 }
 
 func executeStartup(ctx context.Context, request startupcli.Request, dependencies Dependencies) error {
@@ -108,6 +110,9 @@ func normalizeDependencies(dependencies Dependencies) Dependencies {
 	}
 	if dependencies.BuildSessionExecution == nil {
 		dependencies.BuildSessionExecution = wire.BuildSessionExecutionService
+	}
+	if dependencies.BuildModelInvocation == nil {
+		dependencies.BuildModelInvocation = wire.BuildModelInvocation
 	}
 	return dependencies
 }
