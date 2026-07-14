@@ -219,7 +219,9 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `WorkFamilyCommandIDs` in `command_ids_gen.go`). Handwritten representative-family handlers are
   registered by stable command ID in `pkg/transports/cli/commandregistry`
   (`NewRepresentativeRegistry`, `SessionShowRunE`, `AttachRunE`,
-  `VerifyRepresentativeRunnableCoverage`) and production wiring helper
+  `VerifyRepresentativeRunnableCoverage`; work-family:
+  `NewWorkRegistry`, `ListRunE`, `ShowRunE`, `MoveRunE`, `VisualizeRunE`,
+  `VerifyWorkRunnableCoverage`) and production wiring helper
   `newRepresentativeHandlerRegistry` in `pkg/transports/cli/root_work.go`.
   The generated representative-family constructor lives in
   `pkg/transports/cli/climanifestcobra` (`NewRepresentativeFamilyCommand`,
