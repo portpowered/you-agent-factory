@@ -26,9 +26,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )

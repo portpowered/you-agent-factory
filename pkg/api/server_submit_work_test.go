@@ -20,7 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	"github.com/portpowered/infinite-you/pkg/work/content"
 )
 
 func TestSubmitWork(t *testing.T) {
@@ -211,7 +211,7 @@ func assertStructuredSubmitWorkStagedImagePart(
 	if err != nil {
 		t.Fatalf("resolve staged file ref: %v", err)
 	}
-	wantURL, err := workcontent.FilesystemPathToContentURL(stagedPath)
+	wantURL, err := content.FilesystemPathToContentURL(stagedPath)
 	if err != nil {
 		t.Fatalf("stage content url: %v", err)
 	}
@@ -388,7 +388,7 @@ func TestStageSubmitWorkFile(t *testing.T) {
 	if string(stagedContent) != "png-bytes" {
 		t.Fatalf("staged file content = %q, want png-bytes", stagedContent)
 	}
-	wantURL, err := workcontent.FilesystemPathToContentURL(stagedPath)
+	wantURL, err := content.FilesystemPathToContentURL(stagedPath)
 	if err != nil {
 		t.Fatalf("stage content url: %v", err)
 	}

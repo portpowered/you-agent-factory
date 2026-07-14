@@ -33,7 +33,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations/skippermissions"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
@@ -48,6 +47,7 @@ import (
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	providerstructured "github.com/portpowered/infinite-you/pkg/workers/provider/structured"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
+	"github.com/portpowered/infinite-you/pkg/workers/skippermissions"
 	"go.uber.org/zap"
 )
 

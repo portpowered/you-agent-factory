@@ -41,3 +41,7 @@ use the same input resolver and primary-result selector. Transport code may only
 adapt positional text, stdin, API content, or API args into the shared resolver
 input and format the shared response. It must not invent independent conflict,
 fallback, or primary-output rules.
+
+Pure resolver and selection policy lives in `pkg/work/invocation`; generated
+OpenAPI and CLI values are mapped at their transport boundaries, while live
+submission and waiting stay outside the Work package.

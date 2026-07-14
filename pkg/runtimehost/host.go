@@ -32,9 +32,9 @@ import (
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
@@ -137,7 +137,7 @@ type Host struct {
 	modelAssets              modelAssetPuller
 	modelService             apisurface.ModelAPI
 	durableExecutionAPI      apisurface.DurableSessionAPI
-	sessionInvoker           invocations.SessionInvoker
+	sessionInvoker           sessioninvocation.SessionInvoker
 	coordinator              FactoryCoordinator
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream

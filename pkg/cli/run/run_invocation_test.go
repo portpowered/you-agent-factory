@@ -25,8 +25,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/service"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )

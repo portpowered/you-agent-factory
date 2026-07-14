@@ -21,7 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"go.uber.org/zap"
 )
 
@@ -259,7 +259,7 @@ func modelInvocationResponseFromResult(result apisurface.ModelInvocationResult) 
 		Worker:           result.Worker,
 		Operation:        result.Operation,
 		ProviderLocality: factoryapi.WorkerModelLocality(result.ProviderLocality),
-		Content:          derefGeneratedWorkContent(workcontent.GeneratedPtrFromParts(result.Content)),
+		Content:          derefGeneratedWorkContent(contentcontract.GeneratedPtrFromParts(result.Content)),
 		Bindings:         generatedResolvedModelInvocationBindings(result.Bindings),
 	}
 }
@@ -277,7 +277,7 @@ func generatedResolvedModelInvocationBindings(values []interfaces.ResolvedModelO
 	}
 	bindings := make([]factoryapi.ResolvedModelOperationBinding, 0, len(values))
 	for _, binding := range values {
-		content := workcontent.GeneratedPtrFromParts(binding.Content)
+		content := contentcontract.GeneratedPtrFromParts(binding.Content)
 		bindings = append(bindings, factoryapi.ResolvedModelOperationBinding{
 			Slot:    binding.Slot,
 			Source:  factoryapi.ResolvedModelOperationBindingSource(binding.Source),

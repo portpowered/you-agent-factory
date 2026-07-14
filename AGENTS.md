@@ -93,18 +93,20 @@ the standards.
   requests, validation, scheduling, subsystems, runtime support, and workstation
   config plumbing.
 - `pkg/factory/sessions/` contains live and durable session state, projections,
-  lifecycle gateways, response streams, and execution contracts.
+  lifecycle gateways, response streams, execution contracts, and live
+  invocation orchestration.
 - `pkg/interfaces/` contains shared domain interfaces and public-ish runtime
   types used across subsystems.
-- `pkg/invocations/`, `pkg/workcontent/`, `pkg/workquery/`, and
-  `pkg/materialize/` contain shared work and invocation helpers.
+- `pkg/work/` contains canonical Work content, materialization, query, graph,
+  time-work, and pure invocation input/return-policy behavior.
 - `pkg/models/local/` contains managed model runtime catalog, readiness,
   lifecycle, source resolution, cache, pull, and invocation support.
 - `pkg/orchestrators/petri/` contains internal Petri-net primitives.
 - `pkg/service/` coordinates backend service behavior across sessions,
   runtime construction, model catalog, replay, ingestion, and factory save or
   validation flows.
-- `pkg/workers/` contains worker execution, provider integration, mock workers,
+- `pkg/workers/` contains worker execution, inference binding/output shaping,
+  provider integration, invocation-time worker capability policy, mock workers,
   worktrees, and hosted workers; `pkg/factory/packages/` contains packaged
   factory support.
 - `pkg/orchestrators/javascript/preview`, `pkg/orchestrators/javascript/policy`,

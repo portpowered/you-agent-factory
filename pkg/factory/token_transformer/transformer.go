@@ -10,7 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 // Transformer centralizes token conversions for factory submit, routing, and spawn flows.
@@ -279,7 +279,7 @@ func applyWorkerOutputContent(color *interfaces.TokenColor, output string) error
 	if color == nil {
 		return nil
 	}
-	content, err := workcontent.ContentFromWorkerOutput(output)
+	content, err := contentcontract.ContentFromWorkerOutput(output)
 	if err != nil {
 		return fmt.Errorf("shape workstation response content: %w", err)
 	}

@@ -31,10 +31,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"
 )
 

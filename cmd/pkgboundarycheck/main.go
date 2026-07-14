@@ -30,8 +30,14 @@ var factoryRetiredPackageRoots = []retiredPackageRoot{
 
 var retiredPackageRoots = append([]retiredPackageRoot{
 	{packagePath: "pkg/hostedworkers", canonicalOwner: "pkg/workers/hosted"},
+	{packagePath: "pkg/invocations", canonicalOwner: "pkg/work/invocation, pkg/factory/sessions/invocation, pkg/workers/inference, or pkg/workers/skippermissions, according to the concern"},
 	{packagePath: "pkg/localmodels", canonicalOwner: "pkg/models/local or pkg/models/assets"},
+	{packagePath: "pkg/materialize", canonicalOwner: "pkg/work/materialize"},
 	{packagePath: "pkg/modelhost", canonicalOwner: "pkg/models/host"},
+	{packagePath: "pkg/timework", canonicalOwner: "pkg/work/timework"},
+	{packagePath: "pkg/workcontent", canonicalOwner: "pkg/work/content"},
+	{packagePath: "pkg/workgraph", canonicalOwner: "pkg/work/graph"},
+	{packagePath: "pkg/workquery", canonicalOwner: "pkg/work/query"},
 }, factoryRetiredPackageRoots...)
 
 var approvedApplicationGraphImporters = []string{
@@ -99,12 +105,6 @@ var documentedMigrationPackageExceptions = []migrationPackageException{
 	{packagePath: "pkg/apisurface", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after boundary mapping and callers move to pkg/transports"},
 	{packagePath: "pkg/cli", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after CLI adapters and callers move to pkg/transports"},
 	{packagePath: "pkg/mcp", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after MCP adapters and callers move to pkg/transports"},
-	{packagePath: "pkg/invocations", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after invocation input and return policy move to pkg/work"},
-	{packagePath: "pkg/materialize", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after materialization behavior and callers move to pkg/work"},
-	{packagePath: "pkg/timework", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after cron and time-work behavior and callers move to pkg/work"},
-	{packagePath: "pkg/workcontent", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after Work content behavior and callers move to pkg/work"},
-	{packagePath: "pkg/workgraph", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after Work graph and lineage behavior and callers move to pkg/work"},
-	{packagePath: "pkg/workquery", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after Work query behavior and callers move to pkg/work"},
 	{packagePath: "pkg/logging", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after logging infrastructure and callers move to pkg/platform"},
 	{packagePath: "pkg/replay", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after replay and artifact infrastructure and callers move to pkg/platform"},
 	{packagePath: "pkg/sessionpersistence", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after cursor persistence and callers move to pkg/platform"},

@@ -11,10 +11,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
-	"github.com/portpowered/infinite-you/pkg/materialize"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	"github.com/portpowered/infinite-you/pkg/work/materialize"
 )
 
 // ModelAPI is the model catalog and direct-invocation seam for API handlers and
@@ -131,7 +130,7 @@ type SessionAPISurface interface {
 
 // FactoryInvocationResult carries the runtime-owned outcome of one session
 // invocation request after input resolution and primary-result selection.
-type FactoryInvocationResult = invocations.FactoryInvocationResult
+type FactoryInvocationResult = interfaces.FactoryInvocationResult
 
 // InvocationResponseFromResult maps a shared invocation result onto the public
 // invocation response contract used by both API and CLI JSON surfaces.
@@ -141,7 +140,7 @@ func InvocationResponseFromResult(result FactoryInvocationResult) factoryapi.Inv
 		TraceId:   result.TraceID,
 		Status:    result.Status,
 	}
-	if content := workcontent.GeneratedPtrFromParts(result.PrimaryResult); content != nil {
+	if content := contentcontract.GeneratedPtrFromParts(result.PrimaryResult); content != nil {
 		response.PrimaryResult = content
 	}
 	if code := strings.TrimSpace(result.ErrorCode); code != "" {

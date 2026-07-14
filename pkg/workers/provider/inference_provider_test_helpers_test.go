@@ -17,8 +17,8 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
-	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
+	"github.com/portpowered/infinite-you/pkg/work/content"
+	"github.com/portpowered/infinite-you/pkg/work/materialize"
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
 )
 
@@ -446,11 +446,11 @@ func TestScriptWrapProvider_Infer_CodexImageContentEmitsOrderedImageArgs(t *test
 	if err := os.WriteFile(imageTwoPath, []byte("image-two"), 0o644); err != nil {
 		t.Fatalf("write second image: %v", err)
 	}
-	imageOneURL, err := workcontent.FilesystemPathToContentURL(imageOne)
+	imageOneURL, err := content.FilesystemPathToContentURL(imageOne)
 	if err != nil {
 		t.Fatalf("image one url: %v", err)
 	}
-	imageTwoURL, err := workcontent.FilesystemPathToContentURL(imageTwo)
+	imageTwoURL, err := content.FilesystemPathToContentURL(imageTwo)
 	if err != nil {
 		t.Fatalf("image two url: %v", err)
 	}
@@ -524,7 +524,7 @@ func TestScriptWrapProvider_Infer_CodexMissingImageFailsBeforeRunner(t *testing.
 	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("codex output")}}
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
-	missingURL, err := workcontent.FilesystemPathToContentURL("fixtures/missing.png")
+	missingURL, err := content.FilesystemPathToContentURL("fixtures/missing.png")
 	if err != nil {
 		t.Fatalf("missing url: %v", err)
 	}
@@ -681,7 +681,7 @@ func TestScriptWrapProvider_Infer_CodexBatchLocalAndRemoteImageURLs(t *testing.T
 	if err := os.WriteFile(localPath, []byte("local-image"), 0o644); err != nil {
 		t.Fatalf("write local image: %v", err)
 	}
-	localURL, err := workcontent.FilesystemPathToContentURL(localPath)
+	localURL, err := content.FilesystemPathToContentURL(localPath)
 	if err != nil {
 		t.Fatalf("local content url: %v", err)
 	}

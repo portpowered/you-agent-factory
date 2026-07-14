@@ -121,6 +121,12 @@ func TestRunRejectsRetiredPackageRootsWithCanonicalOwners(t *testing.T) {
 		{packagePath: "pkg/modelhost", canonicalOwner: "pkg/models/host"},
 		{packagePath: "pkg/localmodels", canonicalOwner: "pkg/models/local or pkg/models/assets"},
 		{packagePath: "pkg/hostedworkers", canonicalOwner: "pkg/workers/hosted"},
+		{packagePath: "pkg/invocations", canonicalOwner: "pkg/work/invocation, pkg/factory/sessions/invocation, pkg/workers/inference, or pkg/workers/skippermissions, according to the concern"},
+		{packagePath: "pkg/materialize", canonicalOwner: "pkg/work/materialize"},
+		{packagePath: "pkg/timework", canonicalOwner: "pkg/work/timework"},
+		{packagePath: "pkg/workcontent", canonicalOwner: "pkg/work/content"},
+		{packagePath: "pkg/workgraph", canonicalOwner: "pkg/work/graph"},
+		{packagePath: "pkg/workquery", canonicalOwner: "pkg/work/query"},
 	} {
 		t.Run(tt.packagePath, func(t *testing.T) {
 			t.Parallel()
@@ -172,6 +178,36 @@ func TestRunRejectsRetiredPackageImportsWithCanonicalOwners(t *testing.T) {
 			importPath:     "github.com/portpowered/infinite-you/pkg/hostedworkers/linear",
 			retiredRoot:    "pkg/hostedworkers",
 			canonicalOwner: "pkg/workers/hosted",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/invocations/inference",
+			retiredRoot:    "pkg/invocations",
+			canonicalOwner: "pkg/work/invocation, pkg/factory/sessions/invocation, pkg/workers/inference, or pkg/workers/skippermissions, according to the concern",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/materialize",
+			retiredRoot:    "pkg/materialize",
+			canonicalOwner: "pkg/work/materialize",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/timework",
+			retiredRoot:    "pkg/timework",
+			canonicalOwner: "pkg/work/timework",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/workcontent",
+			retiredRoot:    "pkg/workcontent",
+			canonicalOwner: "pkg/work/content",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/workgraph",
+			retiredRoot:    "pkg/workgraph",
+			canonicalOwner: "pkg/work/graph",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/workquery",
+			retiredRoot:    "pkg/workquery",
+			canonicalOwner: "pkg/work/query",
 		},
 	} {
 		t.Run(tt.retiredRoot, func(t *testing.T) {

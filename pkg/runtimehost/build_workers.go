@@ -6,7 +6,6 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations/skippermissions"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
@@ -14,6 +13,7 @@ import (
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	providerstructured "github.com/portpowered/infinite-you/pkg/workers/provider/structured"
+	"github.com/portpowered/infinite-you/pkg/workers/skippermissions"
 )
 
 func wrapLocalModelRunner(

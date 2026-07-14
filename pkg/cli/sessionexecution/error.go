@@ -7,8 +7,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/invocations"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
 const (

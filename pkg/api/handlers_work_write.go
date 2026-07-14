@@ -16,10 +16,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
-	"github.com/portpowered/infinite-you/pkg/materialize"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	"github.com/portpowered/infinite-you/pkg/work/content"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
+	"github.com/portpowered/infinite-you/pkg/work/materialize"
 	"go.uber.org/zap"
 )
 
@@ -69,7 +70,7 @@ func decodeInvocationRequestBody(body io.Reader) (factoryapi.InvokeFactorySessio
 
 func submitWorkContent(req factoryapi.SubmitWorkRequest) ([]interfaces.WorkContentPart, error) {
 	if req.Items == nil {
-		return workcontent.PartsFromGenerated(req.Content), nil
+		return contentcontract.PartsFromGenerated(req.Content), nil
 	}
 	return submitWorkItemsToContent(*req.Items)
 }
@@ -179,7 +180,7 @@ func submitWorkStagedFileItemContentPart(
 	fileName string,
 	mediaType string,
 ) (interfaces.WorkContentPart, error) {
-	contentURL, err := workcontent.FilesystemPathToContentURL(stagedFilePath)
+	contentURL, err := content.FilesystemPathToContentURL(stagedFilePath)
 	if err != nil {
 		return interfaces.WorkContentPart{}, err
 	}
@@ -264,7 +265,7 @@ func validateSubmitWorkItemField(fields map[string]json.RawMessage, prefix strin
 		if err != nil {
 			return false, err
 		}
-		if err := workcontent.ValidateContentURL(contentURL); err != nil {
+		if err := content.ValidateContentURL(contentURL); err != nil {
 			return false, requestFieldValidationError{message: fmt.Sprintf("%surl %s", prefix, err.Error())}
 		}
 		if _, err := requiredNonEmptyStringField(fields, prefix, "stagedFileRef", string(itemType)+" items"); err != nil {
@@ -547,7 +548,7 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRe
 				CurrentChainingTraceID:   stringValue(work.CurrentChainingTraceId),
 				PreviousChainingTraceIDs: stringSliceValue(work.PreviousChainingTraceIds),
 				TraceID:                  stringValue(work.TraceId),
-				Content:                  workcontent.PartsFromGenerated(work.Content),
+				Content:                  contentcontract.PartsFromGenerated(work.Content),
 				Payload:                  work.Payload,
 				Tags:                     generatedStringMap(work.Tags),
 			})
@@ -574,7 +575,7 @@ func validateGeneratedWorkContentAtPath(content *factoryapi.WorkContent, fieldPa
 
 	for i, part := range *content {
 		pathPrefix := fmt.Sprintf("%s[%d].", fieldPath, i)
-		if _, ok := workcontent.PartFromGenerated(part); ok {
+		if _, ok := contentcontract.PartFromGenerated(part); ok {
 			continue
 		}
 

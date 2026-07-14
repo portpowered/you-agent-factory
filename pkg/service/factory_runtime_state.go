@@ -27,7 +27,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
@@ -396,7 +396,7 @@ func modelEventOutputContent(raw string) *factoryapi.WorkContent {
 	if err := json.Unmarshal([]byte(trimmed), &envelope); err == nil && len(envelope.Content) != 0 {
 		return &envelope.Content
 	}
-	return workcontent.GeneratedPtrFromParts([]interfaces.WorkContentPart{{
+	return contentcontract.GeneratedPtrFromParts([]interfaces.WorkContentPart{{
 		Type: interfaces.WorkContentPartTypeText,
 		Text: raw,
 	}})
@@ -486,7 +486,7 @@ func int64PtrIfPositive(value int64) *int64 {
 }
 
 func modelEventGeneratedWorkContent(parts []interfaces.WorkContentPart) factoryapi.WorkContent {
-	content := workcontent.GeneratedPtrFromParts(parts)
+	content := contentcontract.GeneratedPtrFromParts(parts)
 	if content == nil {
 		return nil
 	}

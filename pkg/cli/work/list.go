@@ -19,7 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/cli/sessionpath"
-	"github.com/portpowered/infinite-you/pkg/workquery"
+	workquery "github.com/portpowered/infinite-you/pkg/work/query"
 )
 
 const listRequestTimeout = 10 * time.Second
@@ -132,16 +132,14 @@ type listRequest struct {
 
 func buildListRequest(cfg ListConfig) (listRequest, error) {
 	query, err := workquery.NormalizeList(workquery.ListOptions{
-		Filters: map[string]string{
-			workquery.FilterStateName:    cfg.StateName,
-			workquery.FilterStateType:    cfg.StateType,
-			workquery.FilterName:         cfg.Name,
-			workquery.FilterWorkTypeName: cfg.WorkTypeName,
-			workquery.FilterTraceID:      cfg.TraceID,
-		},
-		SortBy:     cfg.SortBy,
-		MaxResults: cfg.MaxResults,
-		NextToken:  cfg.NextToken,
+		StateName:    cfg.StateName,
+		StateType:    cfg.StateType,
+		Name:         cfg.Name,
+		WorkTypeName: cfg.WorkTypeName,
+		TraceID:      cfg.TraceID,
+		SortBy:       cfg.SortBy,
+		MaxResults:   cfg.MaxResults,
+		NextToken:    cfg.NextToken,
 	})
 	if err != nil {
 		return listRequest{}, err
@@ -156,8 +154,31 @@ func buildListRequest(cfg ListConfig) (listRequest, error) {
 	if err != nil {
 		return listRequest{}, fmt.Errorf("parse work list endpoint: %w", err)
 	}
-	endpoint.RawQuery = query.Values().Encode()
+	endpoint.RawQuery = listQueryValues(query.Options()).Encode()
 	return listRequest{endpoint: *endpoint, filterSummary: query.FilterSummary()}, nil
+}
+
+func listQueryValues(options workquery.ListOptions) url.Values {
+	values := make(url.Values)
+	for key, value := range map[string]string{
+		workquery.FilterStateName:    options.StateName,
+		workquery.FilterStateType:    options.StateType,
+		workquery.FilterName:         options.Name,
+		workquery.FilterWorkTypeName: options.WorkTypeName,
+		workquery.FilterTraceID:      options.TraceID,
+		"sortBy":                     options.SortBy,
+	} {
+		if value != "" {
+			values.Set(key, value)
+		}
+	}
+	if options.MaxResults > 0 {
+		values.Set("maxResults", fmt.Sprintf("%d", options.MaxResults))
+	}
+	if options.NextToken != "" {
+		values.Set("nextToken", options.NextToken)
+	}
+	return values
 }
 
 func renderListResult(output io.Writer, result factoryapi.ListWorkResponse) error {

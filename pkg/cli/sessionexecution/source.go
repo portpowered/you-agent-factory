@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/invocations"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
 type sourceSelector struct {

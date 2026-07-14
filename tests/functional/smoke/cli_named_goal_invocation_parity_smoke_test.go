@@ -443,6 +443,12 @@ func assertNamedGoalInvocationParity(
 	if cliResponse.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("CLI status = %q, want COMPLETED", cliResponse.Status)
 	}
+	if strings.TrimSpace(apiResponse.RequestId) == "" || strings.TrimSpace(apiResponse.TraceId) == "" {
+		t.Fatalf("API submission identity = request %q trace %q, want non-empty invocation scope", apiResponse.RequestId, apiResponse.TraceId)
+	}
+	if strings.TrimSpace(cliResponse.RequestId) == "" || strings.TrimSpace(cliResponse.TraceId) == "" {
+		t.Fatalf("CLI submission identity = request %q trace %q, want non-empty invocation scope", cliResponse.RequestId, cliResponse.TraceId)
+	}
 
 	apiText := invocationPrimaryResultText(t, apiResponse)
 	cliText := invocationPrimaryResultText(t, cliResponse)

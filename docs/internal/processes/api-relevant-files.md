@@ -2,6 +2,8 @@
 
 Use this map when changing the public REST contract.
 
+- Work-list filtering, ordering, and validation policy belongs in `pkg/work/query`; `pkg/api/handlers_work_read.go` maps generated `ListWorkBySessionIdParams` and `Work` values into that domain projection, while `pkg/cli/work/list.go` maps normalized query options into URL parameters. Keep generated OpenAPI types and URL encoding at those transport boundaries, and prove policy with pure query tests plus route-level API and CLI request tests.
+
 ## REST operation identity inventory
 
 - `internal/contractinventory` owns the pure read-only extractor that turns bundled

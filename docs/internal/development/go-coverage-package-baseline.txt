@@ -27,7 +27,6 @@ github.com/portpowered/infinite-you/pkg/factory/sessions/stream
 github.com/portpowered/infinite-you/pkg/workers/hosted
 github.com/portpowered/infinite-you/pkg/workers/hosted/linear
 github.com/portpowered/infinite-you/pkg/internal/cursorstorage
-github.com/portpowered/infinite-you/pkg/invocations
 github.com/portpowered/infinite-you/pkg/models/assets
 github.com/portpowered/infinite-you/pkg/models/local
 github.com/portpowered/infinite-you/pkg/mcp/factorysession
@@ -43,8 +42,12 @@ github.com/portpowered/infinite-you/pkg/replay
 github.com/portpowered/infinite-you/pkg/service
 github.com/portpowered/infinite-you/pkg/runtimehost
 github.com/portpowered/infinite-you/pkg/service/factorysave
-github.com/portpowered/infinite-you/pkg/workcontent/materialize
+github.com/portpowered/infinite-you/pkg/work/content
+github.com/portpowered/infinite-you/pkg/work/invocation
+github.com/portpowered/infinite-you/pkg/work/materialize
+github.com/portpowered/infinite-you/pkg/work/timework
 github.com/portpowered/infinite-you/pkg/workers/mockworker
+github.com/portpowered/infinite-you/pkg/workers/inference
 
 
 github.com/portpowered/infinite-you/pkg/apisurface/optional 
@@ -71,8 +74,6 @@ github.com/portpowered/infinite-you/pkg/logging
 github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview 
 github.com/portpowered/infinite-you/pkg/factory/ingest 
 github.com/portpowered/infinite-you/pkg/service/runtimebuild 
-github.com/portpowered/infinite-you/pkg/timework 
-github.com/portpowered/infinite-you/pkg/workcontent 
 github.com/portpowered/infinite-you/pkg/workers 
 github.com/portpowered/infinite-you/pkg/workers/executor 
 github.com/portpowered/infinite-you/pkg/workers/process 
