@@ -8941,6 +8941,7 @@ components:
         - WorkerModelProviderGemini
         - WorkerModelProviderKiro
         - WorkerModelProviderOpenCode
+        - WorkerModelProviderPi
       enum:
         - CLAUDE
         - CODEX
@@ -8948,6 +8949,7 @@ components:
         - GEMINI
         - KIRO
         - OPENCODE
+        - PI
       x-enum-descriptions:
         - Claude model execution routed through the `claude` provider command.
         - Codex model execution routed through the `codex` provider command.
@@ -8955,6 +8957,7 @@ components:
         - Gemini model execution routed through the `gemini` provider command.
         - Kiro model execution routed through the `kiro-cli` provider command.
         - OpenCode model execution routed through the `opencode` provider command.
+        - Pi model execution routed through the `pi` provider command.
     WorkerModelLocality:
       type: string
       description: Provider locality for a model worker capability declaration.
@@ -9045,18 +9048,21 @@ components:
         - RunnerIDKiro
         - RunnerIDCursorCLI
         - RunnerIDOpenCode
+        - RunnerIDPi
       enum:
         - codex
         - gemini
         - kiro
         - cursor-cli
         - opencode
+        - pi
       x-enum-descriptions:
         - Codex runner selected through the shared runner contract.
         - Gemini runner selected through the shared runner contract.
         - Kiro runner selected through the shared runner contract.
         - Cursor CLI runner selected through the shared runner contract.
         - OpenCode runner selected through the shared runner contract.
+        - Pi runner selected through the shared runner contract.
     RunnerSelectionSource:
       type: string
       description: Configuration layer that supplied the resolved built-in runner selection for a dispatch.

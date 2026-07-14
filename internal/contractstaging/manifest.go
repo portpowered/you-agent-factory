@@ -134,6 +134,15 @@ func resolveSourceCommit(repositoryRoot string) (string, error) {
 	}
 	parentSource := strings.TrimSpace(string(parentOutput))
 	if parentSource != "" && parentSource != sourceCommit {
+		merge, mergeErr := isMergeCommit(repositoryRoot, head)
+		if mergeErr != nil {
+			return "", fmt.Errorf("resolve package source commit: %w", mergeErr)
+		}
+		if merge {
+			// Merge commits can appear in rev-list without modifying source identity
+			// paths; an empty diff-tree on HEAD is expected and not shallow history.
+			return sourceCommit, nil
+		}
 		return "", fmt.Errorf(
 			"resolve package source commit: git history is too shallow to determine the last change to package source inputs; fetch full history (for example fetch-depth: 0 in CI)",
 		)
@@ -170,4 +179,15 @@ func isShallowRepository(repositoryRoot string) (bool, error) {
 		return false, err
 	}
 	return output == "true", nil
+}
+
+func isMergeCommit(repositoryRoot, commit string) (bool, error) {
+	_, err := gitOutput(repositoryRoot, "rev-parse", "--verify", commit+"^2")
+	if err == nil {
+		return true, nil
+	}
+	if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, err
 }
