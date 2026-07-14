@@ -80,17 +80,9 @@ func NewRepresentativeFamilyComponentsFromManifest(
 		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
 	}
 
-	rootRecord, err := manifest.CommandByID("you")
+	rootRecord, sessionRecord, showRecord, err := representativeManifestRecords(manifest)
 	if err != nil {
-		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
-	}
-	sessionRecord, err := manifest.CommandByID("you.session")
-	if err != nil {
-		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
-	}
-	showRecord, err := manifest.CommandByID("you.session.show")
-	if err != nil {
-		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
+		return RepresentativeFamilyComponents{}, err
 	}
 
 	root, err := buildCommandFromRecord(rootRecord)
@@ -131,6 +123,22 @@ func NewRepresentativeFamilyComponentsFromManifest(
 		Session: session,
 		Show:    show,
 	}, nil
+}
+
+func representativeManifestRecords(manifest climanifest.Manifest) (root, session, show climanifest.Command, err error) {
+	root, err = manifest.CommandByID("you")
+	if err != nil {
+		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build representative family command: %w", err)
+	}
+	session, err = manifest.CommandByID("you.session")
+	if err != nil {
+		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build representative family command: %w", err)
+	}
+	show, err = manifest.CommandByID("you.session.show")
+	if err != nil {
+		return climanifest.Command{}, climanifest.Command{}, climanifest.Command{}, fmt.Errorf("build representative family command: %w", err)
+	}
+	return root, session, show, nil
 }
 
 func validateRepresentativeManifest(manifest climanifest.Manifest) error {
