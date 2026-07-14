@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
+	factorypackages "github.com/portpowered/infinite-you/pkg/factory/packages"
 )
 
 // SystemConfigOutcome reports whether init created or skipped operator/system config.
@@ -40,11 +41,11 @@ type PackagedFactoryResult struct {
 
 // Result summarizes a successful you config init run.
 type Result struct {
-	HomeDir              string
-	ConfigPath           string
-	NamedFactoriesRoot   string
-	SystemConfigOutcome  SystemConfigOutcome
-	PackagedFactories    []PackagedFactoryResult
+	HomeDir             string
+	ConfigPath          string
+	NamedFactoriesRoot  string
+	SystemConfigOutcome SystemConfigOutcome
+	PackagedFactories   []PackagedFactoryResult
 }
 
 // Init ensures operator/system config exists under homeDir without overwriting
@@ -113,22 +114,78 @@ func ensureSystemConfigParentIsDirectory(configPath string) error {
 }
 
 func ensurePackagedDefaultFactories(namedFactoriesRoot string) ([]PackagedFactoryResult, error) {
-	factoryResults, err := factoryconfig.EnsureBuiltInNamedFactories(namedFactoriesRoot)
+	definitions, err := packagedFactoryDefinitions()
 	if err != nil {
 		return nil, err
 	}
+	return ensurePackagedFactories(namedFactoriesRoot, definitions)
+}
 
-	packagedFactories := make([]PackagedFactoryResult, 0, len(factoryResults))
-	for _, factoryResult := range factoryResults {
-		outcome := PackagedFactorySkipped
-		if factoryResult.Outcome == factoryconfig.BuiltInNamedFactoryCreated {
-			outcome = PackagedFactoryCreated
+func packagedFactoryDefinitions() ([]factorypackages.Definition, error) {
+	names := factorypackages.Names()
+	definitions := make([]factorypackages.Definition, 0, len(names))
+	for _, name := range names {
+		definition, ok := factorypackages.Lookup(name)
+		if !ok {
+			return nil, fmt.Errorf("load packaged factory %q from catalog: definition not found", name)
 		}
-		packagedFactories = append(packagedFactories, PackagedFactoryResult{
-			Name:       factoryResult.Name,
-			FactoryDir: factoryResult.FactoryDir,
+		definitions = append(definitions, definition)
+	}
+	return definitions, nil
+}
+
+func ensurePackagedFactories(
+	namedFactoriesRoot string,
+	definitions []factorypackages.Definition,
+) ([]PackagedFactoryResult, error) {
+	results := make([]PackagedFactoryResult, 0, len(definitions))
+	for _, definition := range definitions {
+		factoryDir, outcome, err := ensurePackagedFactory(namedFactoriesRoot, definition)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, PackagedFactoryResult{
+			Name:       definition.Name,
+			FactoryDir: factoryDir,
 			Outcome:    outcome,
 		})
 	}
-	return packagedFactories, nil
+	return results, nil
+}
+
+func ensurePackagedFactory(
+	namedFactoriesRoot string,
+	definition factorypackages.Definition,
+) (string, PackagedFactoryOutcome, error) {
+	targetDir, err := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, definition.Name)
+	if err != nil {
+		return "", "", packagedFactoryInstallError(definition.Name, namedFactoriesRoot, err)
+	}
+
+	if _, err := os.Stat(targetDir); err == nil {
+		if err := factoryconfig.ValidateFactoryDirReadOnly(targetDir, nil); err != nil {
+			return "", "", packagedFactoryInstallError(
+				definition.Name,
+				namedFactoriesRoot,
+				fmt.Errorf("existing target %s is invalid: %w", targetDir, err),
+			)
+		}
+		return targetDir, PackagedFactorySkipped, nil
+	} else if !os.IsNotExist(err) {
+		return "", "", packagedFactoryInstallError(
+			definition.Name,
+			namedFactoriesRoot,
+			fmt.Errorf("inspect target %s: %w", targetDir, err),
+		)
+	}
+
+	factoryDir, err := factoryconfig.PersistNamedFactory(namedFactoriesRoot, definition.Name, definition.JSON)
+	if err != nil {
+		return "", "", packagedFactoryInstallError(definition.Name, namedFactoriesRoot, err)
+	}
+	return factoryDir, PackagedFactoryCreated, nil
+}
+
+func packagedFactoryInstallError(name, namedFactoriesRoot string, err error) error {
+	return fmt.Errorf("install packaged factory %q in global root %s: %w", name, namedFactoriesRoot, err)
 }

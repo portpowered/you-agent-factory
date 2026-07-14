@@ -11,7 +11,6 @@ import (
 	"strings"
 	"testing"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
@@ -288,39 +287,6 @@ func TestFailureBaseline_AbsentDefault_RunNamedGoalLeavesOperatorDefaultsEmptyWi
 	}
 }
 
-func assertInvalidTopologyMaterializationOperatorDiagnostics(t *testing.T, err error, wantFactoryDir string) {
-	t.Helper()
-
-	if err == nil {
-		t.Fatal("expected invalid topology materialization or upgrade failure")
-	}
-	got := err.Error()
-	if !strings.Contains(got, "invalid graph references") {
-		t.Fatalf("error = %q, want invalid graph references guidance", got)
-	}
-	if !strings.Contains(got, "Blocking findings:") {
-		t.Fatalf("error = %q, want blocking findings section", got)
-	}
-	if strings.Contains(got, "blocking validation targets") {
-		t.Fatalf("error = %q, want findings instead of target count summary", got)
-	}
-	if strings.Count(got, "you factory config validate") != 1 {
-		t.Fatalf("error = %q, want exactly one recovery command", got)
-	}
-	wantFactoryDir = strings.TrimSpace(wantFactoryDir)
-	if wantFactoryDir == "" {
-		t.Fatal("wantFactoryDir is required")
-	}
-	recovery := factoryconfig.FactoryConfigValidateRecoveryCommand(wantFactoryDir)
-	if !strings.Contains(got, recovery) {
-		t.Fatalf("error = %q, want recovery command %q", got, recovery)
-	}
-	normalized := strings.ReplaceAll(got, "\\", "/")
-	if !strings.Contains(normalized, "@you/goal") {
-		t.Fatalf("error = %q, want resolved @you/goal factory path", got)
-	}
-}
-
 func corruptGoalFactoryExecuteOutputStateForTest(t *testing.T, factoryDir, stateName string) {
 	t.Helper()
 
@@ -369,7 +335,7 @@ func corruptGoalFactoryExecuteOutputStateForTest(t *testing.T, factoryDir, state
 	}
 }
 
-func TestFailureBaseline_InvalidTopology_RunNamedGoalRejectsCorruptedMaterializedFactory(t *testing.T) {
+func TestRunNamedGoalResolutionDefersCorruptedFactoryValidationToRuntime(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
@@ -410,20 +376,22 @@ func TestFailureBaseline_InvalidTopology_RunNamedGoalRejectsCorruptedMaterialize
 		"--quiet",
 		"invalid-topology-upgrade-baseline",
 	})
-	err := env.root.Execute()
-	assertInvalidTopologyMaterializationOperatorDiagnostics(t, err, factoryDir)
-	if runCalled {
-		t.Fatal("run should not start for corrupted materialized goal topology")
+	if err := env.root.Execute(); err != nil {
+		t.Fatalf("resolve corrupted installed factory: %v", err)
+	}
+	if !runCalled {
+		t.Fatal("expected read-only named resolution to defer topology validation to runtime")
 	}
 }
 
-func TestFailureBaseline_InvalidTopology_RunNamedGoalRejectsInvalidPreExistingMaterializedTarget(t *testing.T) {
+func TestRunNamedGoalResolutionDefersInvalidInstalledTargetValidationToRuntime(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
 	}()
+	runCalled := false
 	runCLI = func(context.Context, runcli.RunConfig) error {
-		t.Fatal("run should not start for invalid pre-existing materialized target")
+		runCalled = true
 		return nil
 	}
 
@@ -444,8 +412,12 @@ func TestFailureBaseline_InvalidTopology_RunNamedGoalRejectsInvalidPreExistingMa
 		"--quiet",
 		"invalid-topology-existing-target-baseline",
 	})
-	err := env.root.Execute()
-	assertInvalidTopologyMaterializationOperatorDiagnostics(t, err, factoryDir)
+	if err := env.root.Execute(); err != nil {
+		t.Fatalf("resolve invalid installed target: %v", err)
+	}
+	if !runCalled {
+		t.Fatal("expected read-only named resolution to defer topology validation to runtime")
+	}
 }
 
 func TestFailureBaseline_InvalidTopology_RunFactoryCommandRejectsGoalShapedGraphReferences(t *testing.T) {

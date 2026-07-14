@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -16,6 +17,8 @@ func TestRunGeneratesApprovedArtifactsReproduciblyWithoutChangingOtherFiles(t *t
 	writeFixture(t, root, "contracts/common/documentation.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json","$defs":{"itemId":{"type":"string"}}}`)
 	writeFixture(t, root, "contracts/common/deprecations.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json","properties":{"itemId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
 	writeFixture(t, root, "contracts/manifest.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/manifest.schema.json","properties":{"packageId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
+	writeRawArtifactSources(t, root)
+	initGitRepo(t, root)
 	protected := []string{
 		"contracts/testdata/fixture.json",
 		"pkg/generatedclient/client.gen.go",
@@ -55,6 +58,8 @@ func TestRunPropagatesAComponentChangeToEveryConsumer(t *testing.T) {
 	writeFixture(t, root, documentation, `{"$id":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json","$defs":{"itemId":{"type":"string"}}}`)
 	writeFixture(t, root, "contracts/common/deprecations.schema.json", `{"properties":{"itemId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
 	writeFixture(t, root, "contracts/manifest.schema.json", `{"properties":{"packageId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
+	writeRawArtifactSources(t, root)
+	initGitRepo(t, root)
 	if status := run(root, &bytes.Buffer{}, &bytes.Buffer{}); status != 0 {
 		t.Fatalf("initial run() = %d", status)
 	}
@@ -67,7 +72,7 @@ func TestRunPropagatesAComponentChangeToEveryConsumer(t *testing.T) {
 	after := fileDigests(t, root, contractstaging.AllowedArtifacts())
 
 	for _, path := range contractstaging.AllowedArtifacts() {
-		if bytes.Contains([]byte(path), []byte("documentation.schema.json")) {
+		if !bytes.Contains([]byte(path), []byte("/joined/")) || bytes.Contains([]byte(path), []byte("documentation.schema.json")) {
 			continue
 		}
 		if before[path] == after[path] {
@@ -80,7 +85,7 @@ func assertOnlyAllowedArtifacts(t *testing.T, root string) {
 	t.Helper()
 	want := contractstaging.AllowedArtifacts()
 	var got []string
-	base := filepath.Join(root, "packages", "api", "generated", "joined")
+	base := filepath.Join(root, "packages", "api", "generated")
 	if err := filepath.WalkDir(base, func(path string, entry os.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return err
@@ -96,6 +101,17 @@ func assertOnlyAllowedArtifacts(t *testing.T, root string) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("generated paths = %q, want allowlist %q", got, want)
+	}
+}
+
+func writeRawArtifactSources(t *testing.T, root string) {
+	t.Helper()
+	for _, artifact := range contractstaging.RawArtifacts() {
+		contents := "canonical:" + artifact.Source
+		if artifact.Source == "api/openapi.yaml" {
+			contents = "components:\n  schemas:\n    Factory:\n      type: object\n      properties:\n        child:\n          $ref: '#/components/schemas/Child'\n    Child:\n      type: string\n"
+		}
+		writeFixture(t, root, artifact.Source, contents)
 	}
 }
 
@@ -120,5 +136,21 @@ func writeFixture(t *testing.T, root, path, contents string) {
 	}
 	if err := os.WriteFile(target, []byte(contents), 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
+	}
+}
+
+func initGitRepo(t *testing.T, root string) {
+	t.Helper()
+	commands := [][]string{
+		{"git", "-C", root, "init"},
+		{"git", "-C", root, "config", "user.email", "contracts-generate@test"},
+		{"git", "-C", root, "config", "user.name", "contracts-generate"},
+		{"git", "-C", root, "add", "-A"},
+		{"git", "-C", root, "commit", "-m", "contract generation fixture"},
+	}
+	for _, command := range commands {
+		if output, err := exec.Command(command[0], command[1:]...).CombinedOutput(); err != nil {
+			t.Fatalf("%v: %s", command, output)
+		}
 	}
 }

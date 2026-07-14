@@ -245,7 +245,7 @@ type packagedGoalTopologyMockOptions struct {
 func materializeNamedGoalFactoryForRoutingSmoke(t *testing.T) string {
 	t.Helper()
 
-	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, goal.BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)
 	}
@@ -406,7 +406,7 @@ func runNamedGoalRoutingInvocationCLIJSON(
 	if _, err := factoryconfig.PersistNamedFactory(
 		filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"),
 		goal.PackagedFactoryName,
-		factoryconfig.BuiltInGoalFactoryJSON,
+		goal.BuiltInFactoryJSON,
 	); err != nil {
 		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)
 	}

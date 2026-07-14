@@ -3,12 +3,12 @@ package main
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/contractjoiner"
 	"github.com/portpowered/infinite-you/internal/contractstaging"
 )
 
@@ -82,9 +82,17 @@ func commandFixture(t *testing.T) string {
 	writeCommandFixture(t, root, "contracts/common/documentation.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json","$defs":{"itemId":{"type":"string"}}}`)
 	writeCommandFixture(t, root, "contracts/common/deprecations.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json","properties":{"itemId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
 	writeCommandFixture(t, root, "contracts/manifest.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/manifest.schema.json","properties":{"packageId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
+	for _, artifact := range contractstaging.RawArtifacts() {
+		contents := "canonical:" + artifact.Source
+		if artifact.Source == "api/openapi.yaml" {
+			contents = "components:\n  schemas:\n    Factory:\n      type: object\n      properties:\n        child:\n          $ref: '#/components/schemas/Child'\n    Child:\n      type: string\n"
+		}
+		writeCommandFixture(t, root, artifact.Source, contents)
+	}
 	writeCommandFixture(t, root, "unrelated.txt", "unrelated")
-	if diagnostics := contractjoiner.Generate(contractstaging.JoinInput(root)); len(diagnostics) != 0 {
-		t.Fatalf("Generate() diagnostics = %#v", diagnostics)
+	initCommandGitRepo(t, root)
+	if err := contractstaging.Generate(root); err != nil {
+		t.Fatalf("Generate() error = %v", err)
 	}
 	return root
 }
@@ -120,5 +128,21 @@ func writeCommandFixture(t *testing.T, root, path, contents string) {
 	}
 	if err := os.WriteFile(target, []byte(contents), 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
+	}
+}
+
+func initCommandGitRepo(t *testing.T, root string) {
+	t.Helper()
+	commands := [][]string{
+		{"git", "-C", root, "init"},
+		{"git", "-C", root, "config", "user.email", "contracts-check@test"},
+		{"git", "-C", root, "config", "user.name", "contracts-check"},
+		{"git", "-C", root, "add", "-A"},
+		{"git", "-C", root, "commit", "-m", "contract check fixture"},
+	}
+	for _, command := range commands {
+		if output, err := exec.Command(command[0], command[1:]...).CombinedOutput(); err != nil {
+			t.Fatalf("%v: %s", command, output)
+		}
 	}
 }

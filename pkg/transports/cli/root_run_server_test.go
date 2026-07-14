@@ -4,10 +4,12 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/config/configinit"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
@@ -190,6 +192,13 @@ func withNamedPackagedFactoryRunRoot(t *testing.T) func() {
 		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
 	}
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	volumeName := filepath.VolumeName(homeDir)
+	t.Setenv("HOMEDRIVE", volumeName)
+	t.Setenv("HOMEPATH", strings.TrimPrefix(homeDir, volumeName))
+	if _, err := configinit.Init(homeDir); err != nil {
+		t.Fatalf("configinit.Init: %v", err)
+	}
 
 	return func() {
 		if chdirErr := os.Chdir(originalWorkingDirectory); chdirErr != nil {

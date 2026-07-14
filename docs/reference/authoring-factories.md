@@ -323,11 +323,12 @@ also surface `INVOCATION_BLOCKED` or `INVOCATION_NEEDS_HUMAN`. Run
 `you docs sessions` for the inspect-first recovery steps; the built-in does not
 add goal-specific inspect or resume commands.
 
-On the first invocation the CLI materializes the built-in into
-`~/.you-agent-factory/you-agent-factories`, then loads later runs from that on-disk copy.
-That keeps the built-in editable: if you modify the materialized
+`you config init` installs the built-in into
+`~/.you-agent-factory/you-agent-factories`; named invocations only read the
+project-local and global copies already on disk. That keeps the built-in
+editable: if you modify the installed
 `workers/*/AGENTS.md`, `workstations/*/AGENTS.md`, or other split-layout files,
-the next `you run --named @you/tts` invocation uses your edited version.
+the next `you run --named @you/goal` invocation uses your edited version.
 
 Use `you factory list` to inspect one named-factory root at a time. The default
 command lists only the project-local `./factory` root; point `--dir` at the

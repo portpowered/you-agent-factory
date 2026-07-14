@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/configinit"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
@@ -1154,7 +1155,8 @@ func TestRunCommand_OutputResponseStreamFlagMapsToRunConfig(t *testing.T) {
 		return nil
 	}
 
-	root := NewRootCommand()
+	env := setupNamedGoalCLIEnv(t)
+	root := env.root
 	root.SetOut(io.Discard)
 	root.SetErr(io.Discard)
 	root.SetArgs([]string{
@@ -1295,7 +1297,7 @@ func TestRunCommand_VerboseDiagnosticsUseStderr(t *testing.T) {
 	}
 }
 
-func TestRunCommand_NamedFactoryResolutionMetadataFlowsForBuiltInGoal(t *testing.T) {
+func TestRunCommand_NamedFactoryResolutionMetadataFlowsForInstalledGoal(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
@@ -1310,10 +1312,10 @@ func TestRunCommand_NamedFactoryResolutionMetadataFlowsForBuiltInGoal(t *testing
 	}
 
 	executeNamedGoalRun(t, env.root)
-	assertBuiltInGoalFirstUseResolution(t, got, env.homeDir)
+	assertInstalledGoalResolution(t, got, env.homeDir)
 }
 
-func TestRunCommand_RepeatedBuiltInGoalRunReusesMaterializedCopy(t *testing.T) {
+func TestRunCommand_RepeatedInstalledGoalRunReusesDiskCopy(t *testing.T) {
 	originalRunCLI := runCLI
 	defer func() {
 		runCLI = originalRunCLI
@@ -1333,7 +1335,7 @@ func TestRunCommand_RepeatedBuiltInGoalRunReusesMaterializedCopy(t *testing.T) {
 	if len(runs) != 2 {
 		t.Fatalf("run count = %d, want 2", len(runs))
 	}
-	assertGoalResolutionReusesMaterializedCopy(t, runs[0], runs[1])
+	assertGoalResolutionReusesInstalledCopy(t, runs[0], runs[1])
 
 	wantMaterializedDir := materializedGoalDir(env.homeDir)
 	workerPath := filepath.Join(wantMaterializedDir, interfaces.WorkersDir, "goal-executor", interfaces.FactoryAgentsFileName)
@@ -1701,6 +1703,9 @@ func setupNamedGoalCLIEnv(t *testing.T) namedGoalCLIEnv {
 	})
 	t.Setenv("HOME", homeDir)
 	t.Setenv("USERPROFILE", homeDir)
+	if _, err := configinit.Init(homeDir); err != nil {
+		t.Fatalf("configinit.Init: %v", err)
+	}
 
 	root := NewRootCommand()
 	root.SetOut(io.Discard)
@@ -1712,16 +1717,6 @@ func materializedGoalDir(homeDir string) string {
 	return filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories", "@you", "goal")
 }
 
-func assertFreshGoalMaterializationHasNoEncodedLeaf(t *testing.T, homeDir string) {
-	t.Helper()
-
-	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
-	encodedDir := filepath.Join(globalRoot, "@you%2Fgoal")
-	if _, err := os.Stat(encodedDir); !os.IsNotExist(err) {
-		t.Fatalf("fresh init must not create encoded goal leaf at %s: stat %v", encodedDir, err)
-	}
-}
-
 func executeNamedGoalRun(t *testing.T, root *cobra.Command) {
 	t.Helper()
 
@@ -1731,7 +1726,7 @@ func executeNamedGoalRun(t *testing.T, root *cobra.Command) {
 	}
 }
 
-func assertBuiltInGoalFirstUseResolution(t *testing.T, got runcli.RunConfig, homeDir string) {
+func assertInstalledGoalResolution(t *testing.T, got runcli.RunConfig, homeDir string) {
 	t.Helper()
 
 	if got.NamedFactoryName != "@you/goal" {
@@ -1746,19 +1741,18 @@ func assertBuiltInGoalFirstUseResolution(t *testing.T, got runcli.RunConfig, hom
 	if got.NamedFactoryResolution.Name != "@you/goal" {
 		t.Fatalf("resolution name = %q, want @you/goal", got.NamedFactoryResolution.Name)
 	}
-	if got.NamedFactoryResolution.Source != factoryconfig.NamedFactoryResolutionSourceBuiltin {
-		t.Fatalf("resolution source = %q, want %q", got.NamedFactoryResolution.Source, factoryconfig.NamedFactoryResolutionSourceBuiltin)
+	if got.NamedFactoryResolution.Source != factoryconfig.NamedFactoryResolutionSourceGlobal {
+		t.Fatalf("resolution source = %q, want %q", got.NamedFactoryResolution.Source, factoryconfig.NamedFactoryResolutionSourceGlobal)
 	}
 	if got.NamedFactoryResolution.PrecedenceDecision != factoryconfig.NamedFactoryPrecedenceDecisionNone {
 		t.Fatalf("resolution precedence = %q, want %q", got.NamedFactoryResolution.PrecedenceDecision, factoryconfig.NamedFactoryPrecedenceDecisionNone)
 	}
 
-	wantMaterializedDir := materializedGoalDir(homeDir)
-	if got.NamedFactoryResolution.FactoryDir != wantMaterializedDir {
-		t.Fatalf("materialized factory dir = %q, want %q", got.NamedFactoryResolution.FactoryDir, wantMaterializedDir)
+	wantInstalledDir := materializedGoalDir(homeDir)
+	if got.NamedFactoryResolution.FactoryDir != wantInstalledDir {
+		t.Fatalf("installed factory dir = %q, want %q", got.NamedFactoryResolution.FactoryDir, wantInstalledDir)
 	}
-	assertMaterializedGoalSplitLayout(t, wantMaterializedDir)
-	assertFreshGoalMaterializationHasNoEncodedLeaf(t, homeDir)
+	assertMaterializedGoalSplitLayout(t, wantInstalledDir)
 }
 
 func assertMaterializedGoalSplitLayout(t *testing.T, materializedDir string) {
@@ -1784,11 +1778,11 @@ func assertMaterializedGoalSplitLayout(t *testing.T, materializedDir string) {
 	}
 }
 
-func assertGoalResolutionReusesMaterializedCopy(t *testing.T, first, second runcli.RunConfig) {
+func assertGoalResolutionReusesInstalledCopy(t *testing.T, first, second runcli.RunConfig) {
 	t.Helper()
 
-	if first.NamedFactoryResolution.Source != factoryconfig.NamedFactoryResolutionSourceBuiltin {
-		t.Fatalf("first resolution source = %q, want %q", first.NamedFactoryResolution.Source, factoryconfig.NamedFactoryResolutionSourceBuiltin)
+	if first.NamedFactoryResolution.Source != factoryconfig.NamedFactoryResolutionSourceGlobal {
+		t.Fatalf("first resolution source = %q, want %q", first.NamedFactoryResolution.Source, factoryconfig.NamedFactoryResolutionSourceGlobal)
 	}
 	if second.NamedFactoryResolution.Source != factoryconfig.NamedFactoryResolutionSourceGlobal {
 		t.Fatalf("second resolution source = %q, want %q", second.NamedFactoryResolution.Source, factoryconfig.NamedFactoryResolutionSourceGlobal)

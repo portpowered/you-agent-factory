@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/portpowered/infinite-you/pkg/interfaces/factoryeventkinds"
 	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -18,6 +20,8 @@ func TestOpenAPIContract_DefinesUnifiedFactoryEventLog(t *testing.T) {
 	assertUnifiedEventSchemasPresent(t, schemas)
 	assertUnifiedEventLegacySchemasAbsent(t, schemas)
 	assertUnifiedEventEnvelope(t, schemas)
+	assertFactoryEventTypePayloadDiscriminator(t, schemas)
+	assertPublicFactoryEventKindParityIsClosed(t)
 	assertUnifiedEventContext(t, schemas)
 	assertUnifiedRunRequestEvent(t, schemas)
 	assertUnifiedFactorySchema(t, schemas)
@@ -161,6 +165,59 @@ func assertUnifiedEventEnvelope(t *testing.T, schemas map[string]any) {
 	eventType := schemaObject(t, schemas, "FactoryEventType")
 	assertEnumValues(t, eventType, "FactoryEventType", canonicalFactoryEventTypeValues)
 	assertEnumOmitValues(t, eventType, "FactoryEventType", retiredFactoryEventTypeValues)
+}
+
+func assertFactoryEventTypePayloadDiscriminator(t *testing.T, schemas map[string]any) {
+	t.Helper()
+	factoryEvent := schemaObject(t, schemas, "FactoryEvent")
+	discriminator, ok := factoryEvent["discriminator"].(map[string]any)
+	if !ok {
+		t.Fatal("FactoryEvent.discriminator is missing")
+	}
+	if got, _ := discriminator["propertyName"].(string); got != "type" {
+		t.Fatalf("FactoryEvent.discriminator.propertyName = %q, want type", got)
+	}
+	mapping, ok := discriminator["mapping"].(map[string]any)
+	if !ok {
+		t.Fatal("FactoryEvent.discriminator.mapping is missing")
+	}
+	for _, eventType := range canonicalFactoryEventTypeValues {
+		payloadRef, ok := mapping[eventType].(string)
+		if !ok {
+			t.Fatalf("FactoryEvent.discriminator.mapping is missing %q", eventType)
+		}
+		wantSchemaName, ok := canonicalFactoryEventPayloadSchemaNamesByType[eventType]
+		if !ok {
+			t.Fatalf("canonicalFactoryEventPayloadSchemaNamesByType is missing %q", eventType)
+		}
+		wantRef := openAPISchemaRefPrefix + wantSchemaName
+		if payloadRef != wantRef {
+			t.Fatalf("FactoryEvent.discriminator.mapping[%q] = %q, want %q", eventType, payloadRef, wantRef)
+		}
+	}
+	if len(mapping) != len(canonicalFactoryEventTypeValues) {
+		t.Fatalf(
+			"FactoryEvent.discriminator.mapping has %d entries, want %d",
+			len(mapping),
+			len(canonicalFactoryEventTypeValues),
+		)
+	}
+	for eventType := range mapping {
+		if !slices.Contains(canonicalFactoryEventTypeValues, eventType) {
+			t.Fatalf("FactoryEvent.discriminator.mapping contains orphan event type %q", eventType)
+		}
+	}
+}
+
+func assertPublicFactoryEventKindParityIsClosed(t *testing.T) {
+	t.Helper()
+	data, err := os.ReadFile("../../../../api/openapi.yaml")
+	if err != nil {
+		t.Fatalf("read bundled openapi contract: %v", err)
+	}
+	if err := factoryeventkinds.ValidateBundledFactoryEventKindParity(data); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func assertUnifiedEventContext(t *testing.T, schemas map[string]any) {

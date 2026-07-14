@@ -136,16 +136,23 @@ func TestMaterializedPackagedGoalFactory_GuardsSplitRolePromptResolutionAndVocab
 	assertPackagedGoalSplitRolePromptRegression(t, factoryDir, loaded)
 }
 
-func TestResolveNamedFactoryAcrossRoots_BuiltInGoalGuardsSplitRolePromptRegression(t *testing.T) {
+func TestResolveNamedFactoryAcrossRoots_InstalledGoalGuardsSplitRolePromptRegression(t *testing.T) {
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()
+	installedDir, err := factoryconfig.PersistNamedFactory(globalRoot, PackagedFactoryName, BuiltInFactoryJSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory: %v", err)
+	}
 
 	resolution, err := factoryconfig.ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, PackagedFactoryName)
 	if err != nil {
 		t.Fatalf("ResolveNamedFactoryAcrossRoots(builtin goal): %v", err)
 	}
-	if resolution.Source != factoryconfig.NamedFactoryResolutionSourceBuiltin {
-		t.Fatalf("resolution source = %q, want builtin materialization", resolution.Source)
+	if resolution.Source != factoryconfig.NamedFactoryResolutionSourceGlobal {
+		t.Fatalf("resolution source = %q, want global", resolution.Source)
+	}
+	if resolution.FactoryDir != installedDir {
+		t.Fatalf("resolution dir = %q, want %q", resolution.FactoryDir, installedDir)
 	}
 
 	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(resolution.FactoryDir, nil)

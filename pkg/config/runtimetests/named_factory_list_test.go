@@ -1,6 +1,7 @@
 package runtimetests
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -165,36 +166,25 @@ func TestListNamedFactories_IgnoresLegacyEncodedLeafDirectories(t *testing.T) {
 const legacyEncodedGoalMarkerFile = "legacy-encoded-sentinel.txt"
 
 func TestHierarchicalOperations_LeaveLegacyEncodedDirectoryUntouched(t *testing.T) {
-	t.Run("fresh builtin materialization", func(t *testing.T) {
+	t.Run("resolution miss", func(t *testing.T) {
 		projectRoot := t.TempDir()
 		globalRoot := t.TempDir()
 
 		encodedDir := seedLegacyEncodedGoalFactory(t, globalRoot)
 		beforeSnapshot := snapshotDirectoryContents(t, encodedDir)
 
-		resolution, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
-		if err != nil {
-			t.Fatalf("ResolveNamedFactoryAcrossRoots(@you/goal): %v", err)
+		_, err := ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, "@you/goal")
+		if !errors.Is(err, ErrNamedFactoryNotFound) {
+			t.Fatalf("ResolveNamedFactoryAcrossRoots(@you/goal) error = %v, want ErrNamedFactoryNotFound", err)
 		}
-
-		wantDir := filepath.Join(globalRoot, "@you", "goal")
-		assertNamedFactoryResolution(t, resolution, "@you/goal", wantDir, NamedFactoryResolutionSourceBuiltin, projectRoot, globalRoot)
-		assertBuiltInGoalMaterializedLayout(t, wantDir)
 		assertDirectorySnapshotUnchanged(t, encodedDir, beforeSnapshot)
 
 		entries, err := ListNamedFactories(globalRoot)
 		if err != nil {
 			t.Fatalf("ListNamedFactories: %v", err)
 		}
-		assertListIncludesHierarchicalGoalOnly(t, entries, wantDir, encodedDir)
-		assertDirectorySnapshotUnchanged(t, encodedDir, beforeSnapshot)
-
-		resolvedDir, err := ResolveNamedFactoryDir(globalRoot, "@you/goal")
-		if err != nil {
-			t.Fatalf("ResolveNamedFactoryDir(@you/goal): %v", err)
-		}
-		if resolvedDir != wantDir {
-			t.Fatalf("resolved dir = %q, want hierarchical %q", resolvedDir, wantDir)
+		if len(entries) != 0 {
+			t.Fatalf("entries = %#v, want encoded legacy leaf ignored", entries)
 		}
 		assertDirectorySnapshotUnchanged(t, encodedDir, beforeSnapshot)
 	})
@@ -302,31 +292,5 @@ func assertDirectorySnapshotUnchanged(t *testing.T, root string, before map[stri
 	after := snapshotDirectoryContents(t, root)
 	if !reflect.DeepEqual(before, after) {
 		t.Fatalf("directory %s changed after hierarchical operation:\nbefore=%#v\nafter=%#v", root, before, after)
-	}
-}
-
-func assertListIncludesHierarchicalGoalOnly(
-	t *testing.T,
-	entries []NamedFactoryListEntry,
-	wantHierarchicalDir string,
-	encodedDir string,
-) {
-	t.Helper()
-
-	var goalEntry *NamedFactoryListEntry
-	for i := range entries {
-		if entries[i].Name == "@you/goal" {
-			goalEntry = &entries[i]
-			break
-		}
-	}
-	if goalEntry == nil {
-		t.Fatalf("ListNamedFactories missing @you/goal entry: %#v", entries)
-	}
-	if goalEntry.FactoryDir != wantHierarchicalDir {
-		t.Fatalf("@you/goal factory dir = %q, want hierarchical %q", goalEntry.FactoryDir, wantHierarchicalDir)
-	}
-	if goalEntry.FactoryDir == encodedDir {
-		t.Fatalf("ListNamedFactories must not resolve @you/goal to legacy encoded dir %q", encodedDir)
 	}
 }

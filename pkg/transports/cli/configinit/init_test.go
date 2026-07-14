@@ -11,6 +11,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
+	factorypackages "github.com/portpowered/infinite-you/pkg/factory/packages"
 )
 
 func TestInit_FreshHomeCreatesSystemConfigAndReportsOutcome(t *testing.T) {
@@ -33,7 +34,7 @@ func TestInit_FreshHomeCreatesSystemConfigAndReportsOutcome(t *testing.T) {
 	if !strings.Contains(got, "Created system config at "+filepath.Clean(configPath)) {
 		t.Fatalf("stdout = %q, want created system config message", got)
 	}
-	for _, name := range factoryconfig.BuiltInNamedFactoryNames() {
+	for _, name := range factorypackages.Names() {
 		if !strings.Contains(got, "Created packaged factory "+name) {
 			t.Fatalf("stdout = %q, want created packaged factory message for %q", got, name)
 		}
@@ -65,8 +66,24 @@ func TestInit_JSONEmitsStructuredSummary(t *testing.T) {
 	if payload.NamedFactoriesRoot != defaultpaths.NamedFactoriesRoot(homeDir) {
 		t.Fatalf("namedFactoriesRoot = %q, want %q", payload.NamedFactoriesRoot, defaultpaths.NamedFactoriesRoot(homeDir))
 	}
-	if len(payload.PackagedFactories) != len(factoryconfig.BuiltInNamedFactoryNames()) {
-		t.Fatalf("packagedFactories count = %d, want %d", len(payload.PackagedFactories), len(factoryconfig.BuiltInNamedFactoryNames()))
+	wantNames := factorypackages.Names()
+	if len(payload.PackagedFactories) != len(wantNames) {
+		t.Fatalf("packagedFactories count = %d, want %d", len(payload.PackagedFactories), len(wantNames))
+	}
+	for i, factory := range payload.PackagedFactories {
+		if factory.Name != wantNames[i] {
+			t.Fatalf("packagedFactories[%d].Name = %q, want %q", i, factory.Name, wantNames[i])
+		}
+		if factory.Outcome != "created" {
+			t.Fatalf("packagedFactories[%d].Outcome = %q, want created", i, factory.Outcome)
+		}
+		wantDir, err := factoryconfig.MapNamedFactoryDir(payload.NamedFactoriesRoot, factory.Name)
+		if err != nil {
+			t.Fatalf("MapNamedFactoryDir(%q): %v", factory.Name, err)
+		}
+		if factory.FactoryDir != wantDir {
+			t.Fatalf("packagedFactories[%d].FactoryDir = %q, want %q", i, factory.FactoryDir, wantDir)
+		}
 	}
 }
 
@@ -132,7 +149,7 @@ func TestInit_DoubleRunReportsSkippedOutcomes(t *testing.T) {
 	if !strings.Contains(secondOut, "System config already present at") {
 		t.Fatalf("second stdout = %q, want already-present system config message", secondOut)
 	}
-	for _, name := range factoryconfig.BuiltInNamedFactoryNames() {
+	for _, name := range factorypackages.Names() {
 		if !strings.Contains(secondOut, "Packaged factory "+name+" already present at") {
 			t.Fatalf("second stdout = %q, want already-present packaged factory message for %q", secondOut, name)
 		}
@@ -218,7 +235,7 @@ func TestInit_FactoryMaterializationFailureSurfacesActionableCLIError(t *testing
 	}
 	got := err.Error()
 	for _, want := range []string{
-		"materialize packaged default factory",
+		"install packaged factory",
 		"@you/fusion",
 		namedFactoriesRoot,
 	} {

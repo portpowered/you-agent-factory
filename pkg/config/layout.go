@@ -10,10 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 
-	factorypackages "github.com/portpowered/infinite-you/pkg/factory/packages"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -872,19 +870,6 @@ func restoreFactorySplitLayoutReplace(targetDir, backupDir string) {
 	_ = os.RemoveAll(trashDir)
 }
 
-var builtInNamedFactoryCatalog = builtInNamedFactoryPayloads()
-
-func builtInNamedFactoryPayloads() map[string][]byte {
-	payloads := make(map[string][]byte, len(factorypackages.Names()))
-	for _, name := range factorypackages.Names() {
-		definition, ok := factorypackages.Lookup(name)
-		if ok {
-			payloads[name] = definition.JSON
-		}
-	}
-	return payloads
-}
-
 // ResolveNamedFactoryDirAcrossRoots returns the runnable factory directory for
 // name, checking the project-local root before the global root.
 func ResolveNamedFactoryDirAcrossRoots(projectRoot, globalRoot, name string) (string, error) {
@@ -939,19 +924,6 @@ func ResolveNamedFactoryAcrossRoots(projectRoot, globalRoot, name string) (*Name
 		), nil
 	}
 
-	if factoryDir, materialized, err := resolveBuiltInNamedFactory(globalRoot, canonicalName); err != nil {
-		return nil, err
-	} else if materialized {
-		return namedFactoryResolution(
-			canonicalName,
-			factoryDir,
-			NamedFactoryResolutionSourceBuiltin,
-			projectRoot,
-			globalRoot,
-			NamedFactoryPrecedenceDecisionNone,
-		), nil
-	}
-
 	return nil, fmt.Errorf(
 		"resolve named factory %q in project root %s or global root %s: %w",
 		canonicalName,
@@ -969,158 +941,13 @@ func canonicalNamedFactoryName(name string) (string, error) {
 	return NamedFactoryNameFromPathSegments(segments)
 }
 
-const legacyPromptWorkIDTemplateMarker = "{{ .WorkID }}"
-const legacyPromptWorkIDTemplateReplacement = "{{ (index .Inputs 0).WorkID }}"
-
 func resolveNamedFactoryCandidate(rootDir, name string) (string, bool, error) {
 	factoryDir, err := ResolveNamedFactoryDir(rootDir, name)
 	if err == nil {
-		upgradedDir, upgradeErr := upgradeMaterializedBuiltInNamedFactoryIfNeeded(rootDir, name, factoryDir)
-		if upgradeErr != nil {
-			return "", false, MaybeFormatBlockingFactoryLoadOperatorError(upgradeErr, factoryDir)
-		}
-		return upgradedDir, true, nil
+		return factoryDir, true, nil
 	}
 	if errors.Is(err, ErrNamedFactoryNotFound) {
 		return "", false, nil
 	}
 	return "", false, err
-}
-
-func upgradeMaterializedBuiltInNamedFactoryIfNeeded(rootDir, canonicalName, factoryDir string) (string, error) {
-	payload, ok := builtInNamedFactoryCatalog[canonicalName]
-	if !ok || bytes.Contains(payload, []byte(legacyPromptWorkIDTemplateMarker)) {
-		return factoryDir, nil
-	}
-	upgradePaths, err := materializedBuiltInLegacyPromptWorkIDUpgradePaths(factoryDir)
-	if err != nil {
-		return "", MaybeFormatBlockingFactoryLoadOperatorError(
-			fmt.Errorf("check materialized built-in named factory %q upgrade: %w", canonicalName, err),
-			factoryDir,
-		)
-	}
-	if len(upgradePaths) == 0 {
-		return factoryDir, nil
-	}
-	if err := replaceLegacyPromptWorkIDAliasInFiles(upgradePaths); err != nil {
-		return "", fmt.Errorf("upgrade materialized built-in named factory %q in %s: %w", canonicalName, rootDir, err)
-	}
-	return factoryDir, nil
-}
-
-func materializedBuiltInLegacyPromptWorkIDUpgradePaths(factoryDir string) ([]string, error) {
-	loaded, err := LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
-	if err != nil {
-		return nil, err
-	}
-	paths := map[string]struct{}{}
-	for _, workstation := range loaded.WorkstationConfigs() {
-		if workstation == nil {
-			continue
-		}
-		if !strings.Contains(workstation.Body, legacyPromptWorkIDTemplateMarker) &&
-			!strings.Contains(workstation.PromptTemplate, legacyPromptWorkIDTemplateMarker) {
-			continue
-		}
-		paths[filepath.Join(factoryDir, interfaces.FactoryConfigFile)] = struct{}{}
-		segment, err := safeFactoryLayoutSegment("workstation", workstation.Name)
-		if err != nil {
-			return nil, err
-		}
-		workstationDir := filepath.Join(factoryDir, interfaces.WorkstationsDir, segment)
-		paths[filepath.Join(workstationDir, interfaces.FactoryAgentsFileName)] = struct{}{}
-		if workstation.PromptFile != "" {
-			promptPath, err := safePromptFilePath(workstationDir, workstation.PromptFile)
-			if err != nil {
-				return nil, err
-			}
-			paths[promptPath] = struct{}{}
-		}
-	}
-	if len(paths) == 0 {
-		return nil, nil
-	}
-	ordered := make([]string, 0, len(paths))
-	for path := range paths {
-		ordered = append(ordered, path)
-	}
-	sort.Strings(ordered)
-	return ordered, nil
-}
-
-func replaceLegacyPromptWorkIDAliasInFiles(paths []string) error {
-	for _, path := range paths {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("read %s: %w", path, err)
-		}
-		updated := strings.ReplaceAll(
-			string(data),
-			legacyPromptWorkIDTemplateMarker,
-			legacyPromptWorkIDTemplateReplacement,
-		)
-		if updated == string(data) {
-			continue
-		}
-		if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
-			return fmt.Errorf("write %s: %w", path, err)
-		}
-	}
-	return nil
-}
-
-func resolveBuiltInNamedFactory(globalRoot, canonicalName string) (string, bool, error) {
-	payload, ok := builtInNamedFactoryCatalog[canonicalName]
-	if !ok {
-		return "", false, nil
-	}
-
-	targetDir, err := MapNamedFactoryDir(globalRoot, canonicalName)
-	if err != nil {
-		return "", false, err
-	}
-	if _, err := os.Stat(targetDir); err == nil {
-		if err := requireFactoryConfig(targetDir); err != nil {
-			return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: existing target invalid: %w", canonicalName, globalRoot, err)
-		}
-		upgradedDir, err := upgradeMaterializedBuiltInNamedFactoryIfNeeded(globalRoot, canonicalName, targetDir)
-		if err != nil {
-			return "", false, MaybeFormatBlockingFactoryLoadOperatorError(err, targetDir)
-		}
-		return upgradedDir, true, nil
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return "", false, fmt.Errorf("materialize built-in named factory %q in global root %s: check existing target: %w", canonicalName, globalRoot, err)
-	}
-
-	factoryDir, err := PersistNamedFactory(globalRoot, canonicalName, payload)
-	if err != nil {
-		factoryPath := factoryDir
-		if strings.TrimSpace(factoryPath) == "" {
-			factoryPath = targetDir
-		}
-		return "", false, MaybeFormatBlockingFactoryLoadOperatorError(
-			fmt.Errorf("materialize built-in named factory %q in global root %s: %w", canonicalName, globalRoot, err),
-			factoryPath,
-		)
-	}
-	return factoryDir, true, nil
-}
-
-var BuiltInGoalFactoryJSON = mustBuiltInFactoryJSON("@you/goal")
-
-// BuiltInSubagentFactoryJSON is the canonical runnable @you/subagent packaged factory payload.
-var BuiltInSubagentFactoryJSON = mustBuiltInFactoryJSON("@you/subagent")
-
-// BuiltInFusionFactoryJSON is retained for callers migrating to the factory packages owner.
-var BuiltInFusionFactoryJSON = mustBuiltInFactoryJSON("@you/fusion")
-
-// BuiltInTTSFactoryJSON is retained for callers migrating to the factory packages owner.
-var BuiltInTTSFactoryJSON = mustBuiltInFactoryJSON("@you/tts")
-
-func mustBuiltInFactoryJSON(name string) []byte {
-	definition, ok := factorypackages.Lookup(name)
-	if !ok {
-		panic("missing packaged factory definition: " + name)
-	}
-	return definition.JSON
 }
