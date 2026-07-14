@@ -22,11 +22,18 @@ import {
   type DashboardCheckpointPreflightResolution,
   resolveDashboardCheckpointPreflight,
 } from "../../lib/preflight/resolve-dashboard-checkpoint-preflight";
+import {
+  correlationTokenForIdentityScope,
+  createSessionPersistenceCorrelationToken,
+  recordSessionPersistenceDiagnostic,
+  sessionPersistenceDiagnostic,
+} from "../../lib/session-persistence/diagnostics";
 import { useRemapDashboardSelectedSession } from "../../session/dashboard-session-provider";
 import { useDashboardStreamStore } from "../../state/dashboardStreamStore";
 
 export interface UseDashboardCheckpointPreflightResult {
   checkpointHydrated: boolean;
+  cursorFreeReplayCorrelationToken: string | null;
   initialReconnectCursor?: FactoryEventReconnectCursor;
   preflightError: Error | null;
   preflightRecovery: DashboardSessionRecoveryState | null;
@@ -38,6 +45,7 @@ export interface UseDashboardCheckpointPreflightResult {
 
 function resetDashboardCheckpointPreflightState(
   setCheckpointHydratedKey: (value: string | null) => void,
+  setCursorFreeReplayCorrelationToken: (value: string | null) => void,
   setPersistedCheckpoint: (value: FactoryTimelineCheckpoint | null) => void,
   setPreflightError: (value: Error | null) => void,
   setPreflightRecovery: (value: DashboardSessionRecoveryState | null) => void,
@@ -49,6 +57,7 @@ function resetDashboardCheckpointPreflightState(
   setStreamIdentity: (value: TimelineCheckpointStreamIdentity | null) => void,
 ): void {
   setCheckpointHydratedKey(null);
+  setCursorFreeReplayCorrelationToken(null);
   setPersistedCheckpoint(null);
   setPreflightError(null);
   setPreflightRecovery(null);
@@ -56,6 +65,61 @@ function resetDashboardCheckpointPreflightState(
   setInitialReconnectCursor(undefined);
   setResolvedSessionID(null);
   setStreamIdentity(null);
+}
+
+function recordCheckpointLookup(
+  resolution: DashboardCheckpointPreflightResolution,
+): void {
+  if (!resolution.checkpointLookupOutcome) return;
+  try {
+    const correlationToken =
+      "streamIdentity" in resolution
+        ? correlationTokenForIdentityScope(resolution.streamIdentity)
+        : createSessionPersistenceCorrelationToken(
+            resolution.requestedSessionId,
+          );
+    recordSessionPersistenceDiagnostic(
+      sessionPersistenceDiagnostic(
+        resolution.checkpointLookupOutcome,
+        correlationToken,
+      ),
+    );
+  } catch {
+    // Diagnostics are best effort and cannot affect checkpoint recovery.
+  }
+}
+
+function recordIdentityOutcome(
+  resolution: DashboardCheckpointPreflightResolution,
+): void {
+  if (!("streamIdentity" in resolution)) return;
+  try {
+    const correlationToken = correlationTokenForIdentityScope(
+      resolution.streamIdentity,
+    );
+    if (resolution.identityRejectionDetail) {
+      recordSessionPersistenceDiagnostic(
+        sessionPersistenceDiagnostic(
+          "identity_rejected",
+          correlationToken,
+          resolution.identityRejectionDetail,
+        ),
+      );
+    }
+    if (
+      resolution.kind === "remap" &&
+      !isDefaultToRuntimeSessionAliasRemap(
+        resolution.requestedSessionId,
+        resolution.resolvedSessionId,
+      )
+    ) {
+      recordSessionPersistenceDiagnostic(
+        sessionPersistenceDiagnostic("logical_remap", correlationToken),
+      );
+    }
+  } catch {
+    // Diagnostics are best effort and cannot affect identity recovery.
+  }
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: this hook deliberately owns the single guarded apply boundary for all preflight mutations.
@@ -82,6 +146,10 @@ export function useDashboardCheckpointPreflight({
   const [checkpointHydratedKey, setCheckpointHydratedKey] = useState<
     string | null
   >(null);
+  const [
+    cursorFreeReplayCorrelationToken,
+    setCursorFreeReplayCorrelationToken,
+  ] = useState<string | null>(null);
   const [preflightReadyKey, setPreflightReadyKey] = useState<string | null>(
     null,
   );
@@ -103,6 +171,7 @@ export function useDashboardCheckpointPreflight({
   const checkpointHydrated = checkpointHydratedKey === checkpointHydrationKey;
   const preflightReady = preflightReadyKey === checkpointHydrationKey;
 
+  // biome-ignore lint/complexity/noExcessiveLinesPerFunction: the effect owns one guarded preflight invocation and its apply boundary.
   useEffect(() => {
     const revision = ++invocationRevision.current;
     const abortController = new AbortController();
@@ -112,6 +181,7 @@ export function useDashboardCheckpointPreflight({
 
     resetDashboardCheckpointPreflightState(
       setCheckpointHydratedKey,
+      setCursorFreeReplayCorrelationToken,
       setPersistedCheckpoint,
       setPreflightError,
       setPreflightRecovery,
@@ -184,6 +254,7 @@ export function useDashboardCheckpointPreflight({
 
       if (!remainsActive(resolution.requestedSessionId)) return;
       setCheckpointHydratedKey(checkpointHydrationKey);
+      recordCheckpointLookup(resolution);
 
       if (resolution.kind === "error") {
         setPreflightError(resolution.error);
@@ -210,6 +281,20 @@ export function useDashboardCheckpointPreflight({
         )
       ) {
         remapSelectedSessionID(resolution.resolvedSessionId);
+      }
+      recordIdentityOutcome(resolution);
+      if (resolution.kind === "resume" && resolution.staleCursorDetected) {
+        try {
+          const correlationToken = correlationTokenForIdentityScope(
+            resolution.streamIdentity,
+          );
+          recordSessionPersistenceDiagnostic(
+            sessionPersistenceDiagnostic("stale_cursor", correlationToken),
+          );
+          setCursorFreeReplayCorrelationToken(correlationToken);
+        } catch {
+          // Diagnostics are best effort and cannot affect cursor recovery.
+        }
       }
       if (resolution.kind === "resume" && resolution.checkpoint) {
         restoreCheckpoint(resolution.streamIdentity, {
@@ -241,6 +326,7 @@ export function useDashboardCheckpointPreflight({
 
   return {
     checkpointHydrated,
+    cursorFreeReplayCorrelationToken,
     initialReconnectCursor,
     preflightError,
     preflightRecovery,

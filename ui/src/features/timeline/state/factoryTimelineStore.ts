@@ -2,6 +2,11 @@ import { create, type StateCreator } from "zustand";
 
 import type { FactoryEvent } from "../../../api/events";
 import {
+  correlationTokenForIdentityScope,
+  recordSessionPersistenceDiagnostic,
+  sessionPersistenceDiagnostic,
+} from "../../dashboard/public/session-persistence-diagnostics";
+import {
   normalizeStreamDerivedCacheIdentity,
   type StreamDerivedCacheIdentity,
 } from "../lib/stream-derived-cache-identity";
@@ -241,6 +246,16 @@ function exactEntryActions(set: TimelineStoreSet, get: TimelineStoreGet) {
           withEntryTimelineState(entry, restoreTimelineCheckpoint(checkpoint)),
         ),
       );
+      try {
+        recordSessionPersistenceDiagnostic(
+          sessionPersistenceDiagnostic(
+            "restore_succeeded",
+            correlationTokenForIdentityScope(identity),
+          ),
+        );
+      } catch {
+        // Diagnostics are best effort and cannot affect timeline restoration.
+      }
     },
     selectTickForEntry: (identity, tick) => {
       set((current) =>

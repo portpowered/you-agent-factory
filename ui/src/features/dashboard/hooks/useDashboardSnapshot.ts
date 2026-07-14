@@ -12,10 +12,6 @@ import {
   type TimelineCheckpointStreamIdentity,
   useFactoryTimelineStore,
 } from "../../timeline/public";
-import {
-  recordSessionPersistenceInvalidation,
-  silentReplayRecoveryDiagnostic,
-} from "../public";
 import { useDashboardSession } from "../session/dashboard-session-provider";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
 import { useDashboardCheckpointPreflight } from "./preflight/use-dashboard-checkpoint-preflight";
@@ -242,6 +238,7 @@ export function useDashboardSnapshot({
 
   const {
     checkpointHydrated,
+    cursorFreeReplayCorrelationToken,
     initialReconnectCursor: preflightReconnectCursor,
     preflightError,
     preflightRecovery,
@@ -312,23 +309,11 @@ export function useDashboardSnapshot({
 
   const handleInvalidReconnectCursor = useCallback(() => {
     reconnectCursorInvalidatedRef.current = true;
-    if (streamIdentity && rawSessionID) {
-      recordSessionPersistenceInvalidation(
-        silentReplayRecoveryDiagnostic(
-          {
-            backendScopeID: streamIdentity.backendScopeID,
-            factorySessionID: streamIdentity.factorySessionID,
-            streamGenerationID: streamIdentity.streamGenerationID,
-          },
-          rawSessionID,
-        ),
-      );
-    }
     if (streamIdentity) {
       resetTimelineEntry(streamIdentity);
     }
     void clearTimelineCheckpoint(window.indexedDB, streamIdentity);
-  }, [rawSessionID, resetTimelineEntry, streamIdentity]);
+  }, [resetTimelineEntry, streamIdentity]);
 
   const checkpointSyncIdentity = useMemo(() => {
     if (
@@ -391,6 +376,7 @@ export function useDashboardSnapshot({
       effectiveSessionID != null &&
       !isPaused,
     initialReconnectCursor,
+    initialCursorFreeReplayCorrelationToken: cursorFreeReplayCorrelationToken,
     locale,
     onEvent: handleStreamEvent,
     onEvents: appendStreamEvents,

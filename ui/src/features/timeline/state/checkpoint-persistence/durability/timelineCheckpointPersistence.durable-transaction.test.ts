@@ -1,8 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   createControlledIndexedDBTestDouble,
   flushPromiseContinuations,
 } from "../../../../../testing/controlled-indexeddb-test-utils";
+import {
+  correlationTokenForIdentityScope,
+  readSessionPersistenceDiagnosticRecords,
+  resetSessionPersistenceDiagnosticRecords,
+} from "../../../../dashboard/public/session-persistence-diagnostics";
 import { createMaterializedWorkOutcomeState } from "../../../../work-outcome/public/materializer";
 import { emptyReplayWorldState } from "../../timeline/replayWorldStateSupport";
 import type { FactoryTimelineCheckpoint } from "../../timeline/storeState";
@@ -23,10 +28,10 @@ const streamIdentity = {
   streamGenerationID: "2026-07-13T00:00:00Z",
 } satisfies TimelineCheckpointStreamIdentity;
 
-function checkpoint(): FactoryTimelineCheckpoint {
+function checkpoint(afterSequence = 42): FactoryTimelineCheckpoint {
   return {
-    afterEventId: "event-42",
-    afterSequence: 42,
+    afterEventId: `event-${afterSequence}`,
+    afterSequence,
     materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
     replayState: emptyReplayWorldState(7),
     selectedTick: 7,
@@ -61,9 +66,15 @@ async function startWrite() {
   return { ...fixture, isSettled: () => settled, write };
 }
 
+beforeEach(() => {
+  resetSessionPersistenceDiagnosticRecords();
+});
+
 describe("timeline checkpoint durable transaction settlement", () => {
   it("keeps the write and database connection pending until transaction completion", async () => {
     const fixture = await startWrite();
+
+    expect(readSessionPersistenceDiagnosticRecords()).toEqual([]);
 
     fixture.controls.completeTransaction();
     await fixture.write;
@@ -71,6 +82,87 @@ describe("timeline checkpoint durable transaction settlement", () => {
     expect(fixture.isSettled()).toBe(true);
     expect(fixture.controls.closedDatabaseCount()).toBe(1);
     expect(fixture.records.size).toBe(1);
+    expect(readSessionPersistenceDiagnosticRecords()).toEqual([
+      {
+        correlationToken: correlationTokenForIdentityScope(streamIdentity),
+        outcome: "durable_write_succeeded",
+        recoveryAction: "none_required",
+      },
+    ]);
+  });
+
+  it("reports one failed durable write after a put request and transaction fail", async () => {
+    const fixture =
+      createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
+    const write = persistTimelineCheckpoint(
+      fixture.indexedDB,
+      checkpoint(),
+      streamIdentity,
+    );
+
+    fixture.controls.succeed("open");
+    await flushPromiseContinuations();
+    fixture.controls.succeed("get");
+    fixture.controls.fail("put", new Error("put failed"));
+    await flushPromiseContinuations();
+    expect(readSessionPersistenceDiagnosticRecords()).toEqual([]);
+
+    fixture.controls.failTransaction(new Error("transaction failed"));
+    await write;
+
+    expect(readSessionPersistenceDiagnosticRecords()).toEqual([
+      {
+        correlationToken: correlationTokenForIdentityScope(streamIdentity),
+        outcome: "durable_write_failed",
+        recoveryAction: "retain_last_committed_checkpoint",
+      },
+    ]);
+  });
+
+  it("does not report rejected or invalid persistence candidates", async () => {
+    const fixture =
+      createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
+    const committed = persistTimelineCheckpoint(
+      fixture.indexedDB,
+      checkpoint(),
+      streamIdentity,
+    );
+    fixture.controls.succeed("open");
+    await flushPromiseContinuations();
+    fixture.controls.succeed("get");
+    fixture.controls.succeed("put");
+    fixture.controls.completeTransaction();
+    await committed;
+    resetSessionPersistenceDiagnosticRecords();
+
+    const older = persistTimelineCheckpoint(
+      fixture.indexedDB,
+      checkpoint(41),
+      streamIdentity,
+    );
+    const equal = persistTimelineCheckpoint(
+      fixture.indexedDB,
+      checkpoint(),
+      streamIdentity,
+    );
+    fixture.controls.succeed("open");
+    await flushPromiseContinuations();
+    fixture.controls.succeed("get");
+    fixture.controls.completeTransaction();
+    await older;
+    fixture.controls.succeed("open");
+    await flushPromiseContinuations();
+    fixture.controls.succeed("get");
+    fixture.controls.completeTransaction();
+
+    await Promise.all([
+      equal,
+      persistTimelineCheckpoint(undefined, checkpoint(43), streamIdentity),
+      persistTimelineCheckpoint(fixture.indexedDB, undefined, streamIdentity),
+    ]);
+
+    expect(fixture.controls.pendingOperations()).toEqual([]);
+    expect(readSessionPersistenceDiagnosticRecords()).toEqual([]);
   });
 
   it("settles as a failed best-effort write when the transaction aborts after put success", async () => {
@@ -82,6 +174,12 @@ describe("timeline checkpoint durable transaction settlement", () => {
     expect(fixture.isSettled()).toBe(true);
     expect(fixture.controls.closedDatabaseCount()).toBe(1);
     expect(fixture.records.size).toBe(0);
+    expect(readSessionPersistenceDiagnosticRecords()).toEqual([
+      expect.objectContaining({
+        outcome: "durable_write_failed",
+        recoveryAction: "retain_last_committed_checkpoint",
+      }),
+    ]);
   });
 
   it("settles as a failed best-effort write when the transaction errors after put success", async () => {
@@ -93,5 +191,11 @@ describe("timeline checkpoint durable transaction settlement", () => {
     expect(fixture.isSettled()).toBe(true);
     expect(fixture.controls.closedDatabaseCount()).toBe(1);
     expect(fixture.records.size).toBe(0);
+    expect(readSessionPersistenceDiagnosticRecords()).toEqual([
+      expect.objectContaining({
+        outcome: "durable_write_failed",
+        recoveryAction: "retain_last_committed_checkpoint",
+      }),
+    ]);
   });
 });

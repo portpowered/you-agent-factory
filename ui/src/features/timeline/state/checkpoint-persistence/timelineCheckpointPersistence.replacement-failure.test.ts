@@ -4,7 +4,9 @@ import {
   flushPromiseContinuations,
 } from "../../../../testing/controlled-indexeddb-test-utils";
 import {
+  readSessionPersistenceDiagnosticRecords,
   readSessionPersistenceInvalidationRecords,
+  resetSessionPersistenceDiagnosticRecords,
   resetSessionPersistenceInvalidationRecords,
 } from "../../../dashboard/lib/session-persistence/diagnostics";
 import { createMaterializedWorkOutcomeState } from "../../../work-outcome/public/materializer";
@@ -88,6 +90,7 @@ async function expectFailedReplacementRecovery(
     isReplacementSettled: () => boolean,
   ) => Promise<void>,
 ): Promise<void> {
+  resetSessionPersistenceDiagnosticRecords();
   const fixture =
     createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>();
   const lastKnownGood = checkpoint(7, "event-7", 42);
@@ -96,6 +99,7 @@ async function expectFailedReplacementRecovery(
   const recoveredCheckpoint = checkpoint(15, "event-15", 60);
 
   await commitCheckpoint(fixture, lastKnownGood);
+  resetSessionPersistenceDiagnosticRecords();
 
   let replacementSettled = false;
   const replacementWrite = persistTimelineCheckpoint(
@@ -122,6 +126,13 @@ async function expectFailedReplacementRecovery(
   await failReplacement(fixture, () => replacementSettled);
   await replacementWrite;
 
+  expect(readSessionPersistenceDiagnosticRecords()).toEqual([
+    expect.objectContaining({
+      outcome: "durable_write_failed",
+      recoveryAction: "retain_last_committed_checkpoint",
+    }),
+  ]);
+
   await expect(readStoredCheckpoint(fixture)).resolves.toMatchObject({
     afterEventId: "event-7",
     afterSequence: 42,
@@ -131,6 +142,13 @@ async function expectFailedReplacementRecovery(
   });
 
   await commitCheckpoint(fixture, recoveredCheckpoint);
+  expect(readSessionPersistenceDiagnosticRecords()).toEqual([
+    expect.objectContaining({ outcome: "durable_write_failed" }),
+    expect.objectContaining({
+      outcome: "durable_write_succeeded",
+      recoveryAction: "none_required",
+    }),
+  ]);
   await expect(readStoredCheckpoint(fixture)).resolves.toMatchObject({
     afterEventId: "event-15",
     afterSequence: 60,
@@ -178,6 +196,7 @@ describe("timeline checkpoint replacement failure", () => {
     controls.succeed("put");
     controls.completeTransaction();
     await write;
+    resetSessionPersistenceInvalidationRecords();
     const stored = [...records.entries()][0];
     if (!stored) {
       throw new Error("expected committed checkpoint fixture");

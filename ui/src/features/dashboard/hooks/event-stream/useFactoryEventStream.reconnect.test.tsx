@@ -2,6 +2,10 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
+import {
+  readSessionPersistenceDiagnosticRecords,
+  resetSessionPersistenceDiagnosticRecords,
+} from "../../lib/session-persistence/diagnostics";
 import { useDashboardStreamStore } from "../../state/dashboardStreamStore";
 import { useFactoryEventStream } from "./useFactoryEventStream";
 import { CANONICAL_SELECTED_TICK_EVENTS } from "./useFactoryEventStream.fixtures";
@@ -13,10 +17,12 @@ import {
   seedFactoryEventStreamStores,
 } from "./useFactoryEventStream.test-support";
 
+// biome-ignore lint/complexity/noExcessiveLinesPerFunction: reconnect cases share one stream harness lifecycle.
 describe("useFactoryEventStream generic reconnect", () => {
   let queryClient = createFactoryEventStreamQueryClient();
 
   beforeEach(() => {
+    resetSessionPersistenceDiagnosticRecords();
     replayHarness.install();
     vi.stubGlobal(
       "fetch",
@@ -31,6 +37,7 @@ describe("useFactoryEventStream generic reconnect", () => {
   });
 
   afterEach(() => {
+    resetSessionPersistenceDiagnosticRecords();
     resetFactoryEventStreamStores();
     vi.unstubAllGlobals();
   });
@@ -152,5 +159,41 @@ describe("useFactoryEventStream generic reconnect", () => {
     expect(replayHarness.getStreams()[0]?.url).toBe(
       `/factory-sessions/${DEFAULT_FACTORY_SESSION_ID}/events`,
     );
+    const diagnostics = readSessionPersistenceDiagnosticRecords();
+    expect(diagnostics.map((record) => record.outcome)).toEqual([
+      "stale_cursor",
+      "cursor_free_replay_fallback",
+    ]);
+    expect(diagnostics[0]?.correlationToken).toBe(
+      diagnostics[1]?.correlationToken,
+    );
+  });
+
+  it("does not report a cursor-free fallback when no stream is handed off", async () => {
+    const openStream = vi.fn(() => null);
+    renderHook(
+      () =>
+        useFactoryEventStream({
+          enabled: true,
+          initialReconnectCursor: {
+            afterEventId: "checkpoint-event-7",
+            afterSequence: 7,
+          },
+          onEvent: () => {},
+          openStream,
+          sessionID: DEFAULT_FACTORY_SESSION_ID,
+          validateReconnectCursor: vi.fn().mockResolvedValue({
+            message: "The reconnect cursor is stale.",
+            ok: false,
+            reason: "stale_cursor",
+          }),
+        }),
+      { wrapper: createFactoryEventStreamTestWrapper(queryClient) },
+    );
+
+    await waitFor(() => expect(openStream).toHaveBeenCalledTimes(1));
+    expect(
+      readSessionPersistenceDiagnosticRecords().map(({ outcome }) => outcome),
+    ).toEqual(["stale_cursor"]);
   });
 });
