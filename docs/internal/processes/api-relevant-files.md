@@ -212,8 +212,9 @@ do not conflate reconnect parameters, retention, or error codes between them.
   `pkg/transports/http/server_factory_sessions_test.go`,
   `pkg/transports/http/servertests/server_factory_session_orchestrator_test.go`
 - Packaged docs align with authored operation prose:
-  `pkg/transports/cli/root_docs_test.go`
-  (`TestSessionsDocumentation_ResponseEventStreamAlignsWithOpenAPI`) and
+  `pkg/transports/cli/docs/docs_response_stream_openapi_alignment_test.go`
+  (`TestMarkdown_SessionsResponseEventStreamAlignsWithOpenAPI`,
+  `TestMarkdown_WorkersProviderFidelityAlignsWithPublicContract`) and
   `tests/functional/smoke/cli_docs_smoke_test.go` sessions markers
 
 **Maintainer verification commands**

@@ -1,4 +1,4 @@
-package cli
+package docs
 
 import (
 	"os"
@@ -6,12 +6,10 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
-
-	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 )
 
-func TestSessionsDocumentation_ResponseEventStreamAlignsWithOpenAPI(t *testing.T) {
-	doc, err := docscli.Markdown("sessions")
+func TestMarkdown_SessionsResponseEventStreamAlignsWithOpenAPI(t *testing.T) {
+	doc, err := Markdown("sessions")
 	if err != nil {
 		t.Fatalf("Markdown(sessions) error = %v", err)
 	}
@@ -40,9 +38,9 @@ func TestSessionsDocumentation_ResponseEventStreamAlignsWithOpenAPI(t *testing.T
 		}
 	}
 
-	notFound := loadAuthoredOpenAPIComponentFragment(t, "../../../api/components/responses/ResponseEventSessionNotFound.yaml")
-	expired := loadAuthoredOpenAPIComponentFragment(t, "../../../api/components/responses/ResponseEventStreamExpired.yaml")
-	badRequest := loadAuthoredOpenAPIComponentFragment(t, "../../../api/components/responses/ResponseEventBadRequest.yaml")
+	notFound := loadAuthoredOpenAPIComponentFragment(t, "../../../../api/components/responses/ResponseEventSessionNotFound.yaml")
+	expired := loadAuthoredOpenAPIComponentFragment(t, "../../../../api/components/responses/ResponseEventStreamExpired.yaml")
+	badRequest := loadAuthoredOpenAPIComponentFragment(t, "../../../../api/components/responses/ResponseEventBadRequest.yaml")
 	for _, item := range []struct {
 		response map[string]any
 		codes    []string
@@ -66,8 +64,8 @@ func TestSessionsDocumentation_ResponseEventStreamAlignsWithOpenAPI(t *testing.T
 	}
 }
 
-func TestWorkersDocumentation_ProviderFidelityAlignsWithPublicContract(t *testing.T) {
-	doc, err := docscli.Markdown("workers")
+func TestMarkdown_WorkersProviderFidelityAlignsWithPublicContract(t *testing.T) {
+	doc, err := Markdown("workers")
 	if err != nil {
 		t.Fatalf("Markdown(workers) error = %v", err)
 	}
@@ -78,7 +76,7 @@ func TestWorkersDocumentation_ProviderFidelityAlignsWithPublicContract(t *testin
 
 	fidelity := loadAuthoredOpenAPIComponentFragment(
 		t,
-		"../../../api/components/schemas/response-events/FactoryResponseEventProvenanceFidelity.yaml",
+		"../../../../api/components/schemas/response-events/FactoryResponseEventProvenanceFidelity.yaml",
 	)
 	finalOnlyDescription := openAPIEnumDescription(t, fidelity, "FINAL_ONLY")
 	if !strings.Contains(strings.ToLower(section), "final-only") {
@@ -92,7 +90,7 @@ func TestWorkersDocumentation_ProviderFidelityAlignsWithPublicContract(t *testin
 
 	streamGap := loadAuthoredOpenAPIComponentFragment(
 		t,
-		"../../../api/components/schemas/response-events/payloads/FactoryResponseEventStreamGapPayload.yaml",
+		"../../../../api/components/schemas/response-events/payloads/FactoryResponseEventStreamGapPayload.yaml",
 	)
 	retentionGap := openAPIOneOfVariant(t, streamGap, 0)
 	for _, field := range []string{"fromSequence", "toSequence", "firstAvailableSequence"} {
@@ -142,7 +140,7 @@ func loadAuthoredOpenAPIOperationDescription(t *testing.T, path, method string) 
 
 func loadAuthoredOpenAPIDoc(t *testing.T) map[string]any {
 	t.Helper()
-	data, err := os.ReadFile("../../../api/openapi-main.yaml")
+	data, err := os.ReadFile("../../../../api/openapi-main.yaml")
 	if err != nil {
 		t.Fatalf("read authored openapi contract: %v", err)
 	}
