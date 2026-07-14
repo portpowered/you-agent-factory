@@ -163,7 +163,7 @@ func ensurePackagedFactory(
 	}
 
 	if _, err := os.Stat(targetDir); err == nil {
-		if _, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(targetDir, nil); err != nil {
+		if err := factoryconfig.ValidateFactoryDirReadOnly(targetDir, nil); err != nil {
 			return "", "", packagedFactoryInstallError(
 				definition.Name,
 				namedFactoriesRoot,

@@ -83,6 +83,30 @@ func LoadFromFactoryDir(factoryDir string, workstationLoader WorkstationLoader) 
 	if err != nil {
 		return nil, fmt.Errorf("materialize portable bundled files: %w", err)
 	}
+	loaded, err := loadFactoryConfigFromDisk(factoryDir, factoryCfg, workstationLoader)
+	if err != nil {
+		return nil, err
+	}
+	loaded.portableBundledReplacements = clonePortableBundledFileReplacements(replacements)
+	return loaded, nil
+}
+
+// ValidateFactoryDirReadOnly validates one concrete factory directory without
+// materializing, repairing, or normalizing files on disk.
+func ValidateFactoryDirReadOnly(factoryDir string, workstationLoader WorkstationLoader) error {
+	factoryCfg, err := loadFactoryConfig(factoryDir)
+	if err != nil {
+		return err
+	}
+	_, err = loadFactoryConfigFromDisk(factoryDir, factoryCfg, workstationLoader)
+	return err
+}
+
+func loadFactoryConfigFromDisk(
+	factoryDir string,
+	factoryCfg *interfaces.FactoryConfig,
+	workstationLoader WorkstationLoader,
+) (*LoadedFactoryConfig, error) {
 	if err := ApplySupportedPortableBundledFiles(factoryDir, factoryCfg, false, false); err != nil {
 		return nil, fmt.Errorf("collect portable bundled files: %w", err)
 	}
@@ -102,7 +126,6 @@ func LoadFromFactoryDir(factoryDir string, workstationLoader WorkstationLoader) 
 	if err != nil {
 		return nil, err
 	}
-	loaded.portableBundledReplacements = clonePortableBundledFileReplacements(replacements)
 	return loaded, nil
 }
 

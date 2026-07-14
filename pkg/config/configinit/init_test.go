@@ -1,6 +1,7 @@
 package configinit
 
 import (
+	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -208,6 +209,32 @@ func TestInit_PreservesAllCustomerOwnedFactoryFilesOnRerun(t *testing.T) {
 	}
 	if second.SystemConfigOutcome != SystemConfigSkipped {
 		t.Fatalf("second system config outcome = %q, want %q", second.SystemConfigOutcome, SystemConfigSkipped)
+	}
+
+	assertDirectorySnapshotUnchanged(t, goalDir, beforeSnapshot)
+}
+
+func TestInit_SkipsValidPackageWithoutMaterializingInlineBundledFiles(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	first, err := Init(homeDir)
+	if err != nil {
+		t.Fatalf("first Init() error = %v", err)
+	}
+
+	goalDir := goalFactoryDir(t, first.PackagedFactories)
+	writeCustomerEditedInlineBundledFile(t, goalDir)
+	beforeSnapshot := snapshotDirectoryContents(t, goalDir)
+
+	second, err := Init(homeDir)
+	if err != nil {
+		t.Fatalf("second Init() error = %v", err)
+	}
+	for _, factory := range second.PackagedFactories {
+		if factory.Name == "@you/goal" && factory.Outcome != PackagedFactorySkipped {
+			t.Fatalf("@you/goal outcome = %q, want %q", factory.Outcome, PackagedFactorySkipped)
+		}
 	}
 
 	assertDirectorySnapshotUnchanged(t, goalDir, beforeSnapshot)
@@ -429,6 +456,50 @@ func writeCustomerOwnedFactoryEdits(t *testing.T, factoryDir string) {
 	}
 }
 
+func writeCustomerEditedInlineBundledFile(t *testing.T, factoryDir string) {
+	t.Helper()
+
+	configPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
+	payload, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile(factory config): %v", err)
+	}
+	var authored map[string]any
+	if err := json.Unmarshal(payload, &authored); err != nil {
+		t.Fatalf("Unmarshal(factory config): %v", err)
+	}
+	authored["supportingFiles"] = map[string]any{
+		"bundledFiles": []any{map[string]any{
+			"id":         "factory/scripts/customer-owned.sh",
+			"type":       interfaces.BundledFileTypeScript,
+			"targetPath": "factory/scripts/customer-owned.sh",
+			"content": map[string]any{
+				"encoding": interfaces.BundledFileEncodingUTF8,
+				"inline":   "#!/bin/sh\necho catalog-content\n",
+			},
+		}},
+	}
+	payload, err = json.MarshalIndent(authored, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent(factory config): %v", err)
+	}
+	payload = append(payload, '\n')
+	if err := os.WriteFile(configPath, payload, 0o644); err != nil {
+		t.Fatalf("WriteFile(factory config): %v", err)
+	}
+
+	targetPath := filepath.Join(factoryDir, "scripts", "customer-owned.sh")
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(bundled file parent): %v", err)
+	}
+	if err := os.WriteFile(targetPath, []byte("#!/bin/sh\necho customer-edit\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(customer-edited bundled file): %v", err)
+	}
+	if err := os.Chmod(targetPath, 0o600); err != nil {
+		t.Fatalf("Chmod(customer-edited bundled file): %v", err)
+	}
+}
+
 func removeMaterializedFactory(t *testing.T, homeDir string, factoryName string) string {
 	t.Helper()
 
@@ -510,26 +581,41 @@ func seedLegacyEncodedGoalFactory(t *testing.T, factoriesRoot string) string {
 	return encodedDir
 }
 
-func snapshotDirectoryContents(t *testing.T, root string) map[string][]byte {
+type directoryEntrySnapshot struct {
+	Contents    []byte
+	Mode        fs.FileMode
+	ModTimeNano int64
+	IsDir       bool
+}
+
+func snapshotDirectoryContents(t *testing.T, root string) map[string]directoryEntrySnapshot {
 	t.Helper()
 
-	snapshot := make(map[string][]byte)
+	snapshot := make(map[string]directoryEntrySnapshot)
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
-		}
-		if entry.IsDir() {
-			return nil
 		}
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
 		}
-		data, err := os.ReadFile(path)
+		info, err := entry.Info()
 		if err != nil {
 			return err
 		}
-		snapshot[filepath.ToSlash(rel)] = data
+		entrySnapshot := directoryEntrySnapshot{
+			Mode:        info.Mode(),
+			ModTimeNano: info.ModTime().UnixNano(),
+			IsDir:       entry.IsDir(),
+		}
+		if !entry.IsDir() {
+			entrySnapshot.Contents, err = os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+		}
+		snapshot[filepath.ToSlash(rel)] = entrySnapshot
 		return nil
 	})
 	if err != nil {
@@ -538,7 +624,7 @@ func snapshotDirectoryContents(t *testing.T, root string) map[string][]byte {
 	return snapshot
 }
 
-func assertDirectorySnapshotUnchanged(t *testing.T, root string, before map[string][]byte) {
+func assertDirectorySnapshotUnchanged(t *testing.T, root string, before map[string]directoryEntrySnapshot) {
 	t.Helper()
 
 	after := snapshotDirectoryContents(t, root)
