@@ -188,7 +188,9 @@ async function advanceControlledWrite(
   await flushPromiseContinuations();
   fixture.controls.succeed("get");
   await flushPromiseContinuations();
-  fixture.controls.succeed("put");
+  if (fixture.controls.pendingOperations().includes("put")) {
+    fixture.controls.succeed("put");
+  }
   fixture.controls.completeTransaction();
   for (let turn = 0; turn < 6; turn += 1) {
     await flushPromiseContinuations();
@@ -202,9 +204,15 @@ async function advanceQueuedControlledWrite(
 ): Promise<void> {
   fixture.controls.succeed("open");
   await flushPromiseContinuations();
-  fixture.controls.succeed("put");
+  if (fixture.controls.pendingOperations().includes("get")) {
+    fixture.controls.succeed("get");
+    await flushPromiseContinuations();
+  }
+  if (fixture.controls.pendingOperations().includes("put")) {
+    fixture.controls.succeed("put");
+  }
   fixture.controls.completeTransaction();
-  for (let turn = 0; turn < 4; turn += 1) {
+  for (let turn = 0; turn < 6; turn += 1) {
     await flushPromiseContinuations();
   }
 }
