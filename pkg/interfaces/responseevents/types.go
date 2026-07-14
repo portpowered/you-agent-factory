@@ -163,6 +163,9 @@ type TurnPayload struct {
 type MessagePayload struct {
 	Role          string         `json:"role"`
 	ContentBlocks []ContentBlock `json:"contentBlocks"`
+	// Partial marks timeout- or cancellation-captured assistant snapshots that
+	// must not be treated as authoritative final responses.
+	Partial bool `json:"partial,omitempty"`
 }
 type MessageDeltaPayload struct {
 	ContentBlockIndex int              `json:"contentBlockIndex"`

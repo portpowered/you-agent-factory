@@ -7835,6 +7835,9 @@ components:
           description: Ordered typed content blocks for the message snapshot.
           items:
             $ref: '#/components/schemas/FactoryResponseEventContentBlock'
+        partial:
+          type: boolean
+          description: When true, the snapshot carries bounded timeout or cancellation capture and must not be treated as an authoritative final response.
     FactoryResponseEventMessageDeltaPayload:
       type: object
       additionalProperties: false

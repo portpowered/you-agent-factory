@@ -3,11 +3,14 @@ package agy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
 
@@ -25,6 +28,9 @@ func (finalOnlyDecoder) Flush(context.Context, adapter.FlushContext) (adapter.De
 
 func parseFinalOnly(_ context.Context, input adapter.FinalParseContext) (adapter.FinalParseResult, error) {
 	if input.CommandError != nil || input.CommandResult.ExitCode != 0 {
+		if drafts, ok := partialTimeoutMessageDrafts(input); ok {
+			return adapter.FinalParseResult{Drafts: drafts}, processTerminalError(input.CommandResult, input.CommandError)
+		}
 		return adapter.FinalParseResult{}, processTerminalError(input.CommandResult, input.CommandError)
 	}
 	if !utf8.Valid(input.CommandResult.Stdout) {
@@ -44,6 +50,51 @@ func unusableFinalOnlyOutput() *terminalError {
 	return &terminalError{
 		failureType: interfaces.WorkFailureTypeUnknown,
 		message:     "Agy final-only output did not contain an authoritative response.",
+	}
+}
+
+func partialTimeoutMessageDrafts(input adapter.FinalParseContext) ([]responseevents.Draft, bool) {
+	if !isAgySessionTimeout(input.CommandResult, input.CommandError) {
+		return nil, false
+	}
+	content, ok := usableTimeoutCapture(input.CommandResult)
+	if !ok {
+		return nil, false
+	}
+	return []responseevents.Draft{partialTimeoutMessageDraft(input, content)}, true
+}
+
+func isAgySessionTimeout(result workerprocess.CommandResult, commandErr error) bool {
+	return errors.Is(commandErr, agypty.ErrSessionTimedOut) || result.ExitCode == 124
+}
+
+func usableTimeoutCapture(result workerprocess.CommandResult) (string, bool) {
+	if !utf8.Valid(result.Stdout) {
+		return "", false
+	}
+	content := strings.TrimSpace(string(result.Stdout))
+	if content == "" {
+		return "", false
+	}
+	if agypty.ContainsTerminalEscapeOrControl(content) {
+		return "", false
+	}
+	return boundedText(content), true
+}
+
+func partialTimeoutMessageDraft(input adapter.FinalParseContext, content string) responseevents.Draft {
+	return responseevents.Draft{
+		RunID: input.RunID, DispatchID: input.DispatchID,
+		Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted,
+		Provenance: responseevents.Provenance{
+			Provider: string(interfaces.ModelProviderAgy), NativeEventType: "timeout_partial_response",
+			Delivery: responseevents.DeliverySynthesized, Representation: responseevents.RepresentationSnapshot,
+			Fidelity: responseevents.FidelityLossy,
+		},
+		Payload: marshalCanonicalPayload(responseevents.MessagePayload{
+			Role: "assistant", Partial: true,
+			ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: content}},
+		}),
 	}
 }
 
