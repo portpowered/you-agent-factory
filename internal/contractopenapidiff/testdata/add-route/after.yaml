@@ -1,15 +1,14 @@
 openapi: 3.0.3
 info:
-  title: Docs Only Fixture
+  title: Add Route Fixture
   version: 1.0.0
-  description: Before API description.
 paths:
   /pets:
     get:
       operationId: listPets
       responses:
         '200':
-          description: ok
+          description: Pet list.
     post:
       operationId: createPet
       responses:

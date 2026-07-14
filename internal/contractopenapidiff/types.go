@@ -41,3 +41,12 @@ const (
 	CodeTagDescriptionChanged         = "openapi.doc.tag.description"
 	CodeTagExternalDocsChanged        = "openapi.doc.tag.external_docs"
 )
+
+// Stable compatible-addition change codes.
+const (
+	CodeOperationAdded      = "openapi.add.operation"
+	CodeParameterAdded      = "openapi.add.parameter"
+	CodeSchemaAdded         = "openapi.add.schema"
+	CodeSchemaPropertyAdded = "openapi.add.schema.property"
+	CodeEnumValueAdded      = "openapi.add.enum.value"
+)

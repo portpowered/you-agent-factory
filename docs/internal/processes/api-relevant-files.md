@@ -80,9 +80,11 @@ Use this map when changing the public REST contract.
   paths. Use `CompareYAML` or `CompareDocuments`; keep runtime packages from
   importing it.
 - Documentation-only differences (description, summary, externalDocs, schema
-  title) classify as `patch` when structural surfaces match. Non-documentation
-  differences currently fail closed until later comparator stories extend
-  classification.
+  title) classify as `patch` when structural surfaces match. Compatible
+  additions (new operations, optional parameters, optional schema properties,
+  widened enums) classify as `minor` with `openapi.add.*` change codes.
+  Removals and narrowing still fail closed until later comparator stories
+  extend classification.
 - Focused fixtures live under
   `internal/contractopenapidiff/testdata/`; prove end-to-end outcomes in
   `internal/contractopenapidiff/compare_test.go` and include the package in

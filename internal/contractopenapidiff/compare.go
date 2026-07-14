@@ -26,15 +26,21 @@ func CompareDocuments(before, after *openapi3.T) (Result, error) {
 	if before == nil || after == nil {
 		return Result{}, fmt.Errorf("openapi document is nil")
 	}
-	if err := compareStructural(before, after); err != nil {
+	structuralChanges, err := collectStructuralChanges(before, after)
+	if err != nil {
 		return Result{}, err
 	}
 
-	changes := collectDocumentationChanges(before, after)
+	changes := append(structuralChanges, collectDocumentationChanges(before, after)...)
 	sortChanges(changes)
 
+	classification := ClassificationPatch
+	if len(structuralChanges) > 0 {
+		classification = ClassificationMinor
+	}
+
 	return Result{
-		Classification: ClassificationPatch,
+		Classification: classification,
 		Changes:        changes,
 	}, nil
 }
@@ -63,6 +69,20 @@ func operationPath(method, path string) string {
 
 func appendDocChange(changes []Change, code, path string) []Change {
 	return append(changes, Change{Code: code, Path: path})
+}
+
+func appendMinorChange(changes []Change, code, path string) []Change {
+	return append(changes, Change{Code: code, Path: path})
+}
+
+func stringPtrEqual(before, after *string) bool {
+	if before == nil && after == nil {
+		return true
+	}
+	if before == nil || after == nil {
+		return false
+	}
+	return *before == *after
 }
 
 func externalDocsEqual(before, after *openapi3.ExternalDocs) bool {

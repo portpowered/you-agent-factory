@@ -65,15 +65,103 @@ func TestCompareYAML_DocsOnlyFixture_IsDeterministic(t *testing.T) {
 	}
 }
 
-func TestCompareYAML_StructuralDifferenceFailsClosed(t *testing.T) {
+func TestCompareYAML_AddRouteFixture_ClassifiesMinor(t *testing.T) {
 	t.Parallel()
 
-	before := readFixture(t, "docs-only", "before.yaml")
-	after := readFixture(t, "structural-add-route", "after.yaml")
+	before := readFixture(t, "add-route", "before.yaml")
+	after := readFixture(t, "add-route", "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err != nil {
+		t.Fatalf("CompareYAML() error = %v", err)
+	}
+	if result.Classification != contractopenapidiff.ClassificationMinor {
+		t.Fatalf("Classification = %q, want %q", result.Classification, contractopenapidiff.ClassificationMinor)
+	}
+
+	wantChanges := []contractopenapidiff.Change{
+		{Code: contractopenapidiff.CodeOperationAdded, Path: "POST /pets"},
+	}
+	if !slices.Equal(result.Changes, wantChanges) {
+		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
+	}
+}
+
+func TestCompareYAML_AddParameterFixture_ClassifiesMinor(t *testing.T) {
+	t.Parallel()
+
+	before := readFixture(t, "add-parameter", "before.yaml")
+	after := readFixture(t, "add-parameter", "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err != nil {
+		t.Fatalf("CompareYAML() error = %v", err)
+	}
+	if result.Classification != contractopenapidiff.ClassificationMinor {
+		t.Fatalf("Classification = %q, want %q", result.Classification, contractopenapidiff.ClassificationMinor)
+	}
+
+	wantChanges := []contractopenapidiff.Change{
+		{Code: contractopenapidiff.CodeParameterAdded, Path: "GET /pets.parameters[query:offset]"},
+	}
+	if !slices.Equal(result.Changes, wantChanges) {
+		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
+	}
+}
+
+func TestCompareYAML_AddSchemaPropertyFixture_ClassifiesMinor(t *testing.T) {
+	t.Parallel()
+
+	before := readFixture(t, "add-schema-property", "before.yaml")
+	after := readFixture(t, "add-schema-property", "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err != nil {
+		t.Fatalf("CompareYAML() error = %v", err)
+	}
+	if result.Classification != contractopenapidiff.ClassificationMinor {
+		t.Fatalf("Classification = %q, want %q", result.Classification, contractopenapidiff.ClassificationMinor)
+	}
+
+	wantChanges := []contractopenapidiff.Change{
+		{Code: contractopenapidiff.CodeSchemaPropertyAdded, Path: "components.schemas.Pet.properties.nickname"},
+	}
+	if !slices.Equal(result.Changes, wantChanges) {
+		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
+	}
+}
+
+func TestCompareYAML_WidenEnumFixture_ClassifiesMinor(t *testing.T) {
+	t.Parallel()
+
+	before := readFixture(t, "widen-enum", "before.yaml")
+	after := readFixture(t, "widen-enum", "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err != nil {
+		t.Fatalf("CompareYAML() error = %v", err)
+	}
+	if result.Classification != contractopenapidiff.ClassificationMinor {
+		t.Fatalf("Classification = %q, want %q", result.Classification, contractopenapidiff.ClassificationMinor)
+	}
+
+	wantChanges := []contractopenapidiff.Change{
+		{Code: contractopenapidiff.CodeEnumValueAdded, Path: "components.schemas.Pet.properties.status.enum.pending"},
+	}
+	if !slices.Equal(result.Changes, wantChanges) {
+		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
+	}
+}
+
+func TestCompareYAML_RemovedOperationFailsClosed(t *testing.T) {
+	t.Parallel()
+
+	before := readFixture(t, "add-route", "after.yaml")
+	after := readFixture(t, "add-route", "before.yaml")
 
 	_, err := contractopenapidiff.CompareYAML(before, after)
 	if err == nil {
-		t.Fatal("expected structural difference to fail closed")
+		t.Fatal("expected removed operation to fail closed")
 	}
 }
 

@@ -168,7 +168,7 @@ func appendResponseDocChanges(changes []Change, opPath string, before, after *op
 		if beforeResponse == nil || afterResponse == nil {
 			continue
 		}
-		if beforeResponse.Description != afterResponse.Description {
+		if !stringPtrEqual(beforeResponse.Description, afterResponse.Description) {
 			changes = appendDocChange(changes, CodeResponseDescriptionChanged, opPath+".responses."+status)
 		}
 	}

@@ -3,33 +3,36 @@ package contractopenapidiff
 import (
 	"fmt"
 	"reflect"
+	"slices"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )
 
-func compareStructural(before, after *openapi3.T) error {
+func collectStructuralChanges(before, after *openapi3.T) ([]Change, error) {
 	if before.OpenAPI != after.OpenAPI {
-		return unsupportedStructuralDiff("openapi")
+		return nil, unsupportedStructuralDiff("openapi")
 	}
 	if err := compareInfoStructural(before.Info, after.Info); err != nil {
-		return err
+		return nil, err
 	}
 	if err := compareServersStructural(before.Servers, after.Servers); err != nil {
-		return err
+		return nil, err
 	}
 	if err := compareSecurityStructural(before.Security, after.Security); err != nil {
-		return err
+		return nil, err
 	}
 	if err := compareTagsStructural(before.Tags, after.Tags); err != nil {
-		return err
+		return nil, err
 	}
-	if err := comparePathsStructural(before.Paths, after.Paths); err != nil {
-		return err
+	pathChanges, err := collectPathChanges(before.Paths, after.Paths)
+	if err != nil {
+		return nil, err
 	}
-	if err := compareComponentsStructural(before.Components, after.Components); err != nil {
-		return err
+	componentChanges, err := collectComponentChanges(before.Components, after.Components)
+	if err != nil {
+		return nil, err
 	}
-	return nil
+	return append(pathChanges, componentChanges...), nil
 }
 
 func compareInfoStructural(before, after *openapi3.Info) error {
@@ -124,86 +127,121 @@ func compareTagsStructural(before, after openapi3.Tags) error {
 	return nil
 }
 
-func comparePathsStructural(before, after *openapi3.Paths) error {
+func collectPathChanges(before, after *openapi3.Paths) ([]Change, error) {
 	if before == nil || after == nil {
-		return unsupportedStructuralDiff("paths")
+		return nil, unsupportedStructuralDiff("paths")
 	}
 	beforePaths := before.Map()
 	afterPaths := after.Map()
-	if len(beforePaths) != len(afterPaths) {
-		return unsupportedStructuralDiff("paths")
-	}
+
 	for path := range beforePaths {
-		afterItem, ok := afterPaths[path]
-		if !ok {
-			return unsupportedStructuralDiff("paths." + path)
-		}
-		if err := comparePathItemStructural(path, beforePaths[path], afterItem); err != nil {
-			return err
+		if _, ok := afterPaths[path]; !ok {
+			return nil, unsupportedStructuralDiff("paths." + path)
 		}
 	}
-	return nil
+
+	var changes []Change
+	for path, afterItem := range afterPaths {
+		beforeItem, ok := beforePaths[path]
+		if !ok {
+			for method := range afterItem.Operations() {
+				changes = appendMinorChange(changes, CodeOperationAdded, operationPath(method, path))
+			}
+			continue
+		}
+		pathChanges, err := collectPathItemChanges(path, beforeItem, afterItem)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, pathChanges...)
+	}
+	return changes, nil
 }
 
-func comparePathItemStructural(path string, before, after *openapi3.PathItem) error {
+func collectPathItemChanges(path string, before, after *openapi3.PathItem) ([]Change, error) {
 	if before == nil || after == nil {
-		return unsupportedStructuralDiff("paths." + path)
+		return nil, unsupportedStructuralDiff("paths." + path)
 	}
 	beforeOps := before.Operations()
 	afterOps := after.Operations()
-	if len(beforeOps) != len(afterOps) {
-		return unsupportedStructuralDiff("paths." + path)
-	}
-	for method, beforeOperation := range beforeOps {
-		afterOperation := after.GetOperation(method)
-		if err := compareOperationStructural(operationPath(method, path), beforeOperation, afterOperation); err != nil {
-			return err
+
+	for method := range beforeOps {
+		if after.GetOperation(method) == nil {
+			return nil, unsupportedStructuralDiff(operationPath(method, path))
 		}
 	}
-	return nil
+
+	var changes []Change
+	for method, afterOperation := range afterOps {
+		beforeOperation := before.GetOperation(method)
+		if beforeOperation == nil {
+			changes = appendMinorChange(changes, CodeOperationAdded, operationPath(method, path))
+			continue
+		}
+		opChanges, err := collectOperationChanges(operationPath(method, path), beforeOperation, afterOperation)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, opChanges...)
+	}
+	return changes, nil
 }
 
-func compareOperationStructural(opPath string, before, after *openapi3.Operation) error {
+func collectOperationChanges(opPath string, before, after *openapi3.Operation) ([]Change, error) {
 	if before == nil || after == nil {
-		return unsupportedStructuralDiff(opPath)
+		return nil, unsupportedStructuralDiff(opPath)
 	}
 	if before.OperationID != after.OperationID {
-		return unsupportedStructuralDiff(opPath + ".operationId")
+		return nil, unsupportedStructuralDiff(opPath + ".operationId")
 	}
 	if !reflect.DeepEqual(before.Tags, after.Tags) {
-		return unsupportedStructuralDiff(opPath + ".tags")
+		return nil, unsupportedStructuralDiff(opPath + ".tags")
 	}
 	if before.Deprecated != after.Deprecated {
-		return unsupportedStructuralDiff(opPath + ".deprecated")
+		return nil, unsupportedStructuralDiff(opPath + ".deprecated")
 	}
-	if err := compareParametersStructural(opPath, before.Parameters, after.Parameters); err != nil {
-		return err
+
+	var changes []Change
+	paramChanges, err := collectParameterChanges(opPath, before.Parameters, after.Parameters)
+	if err != nil {
+		return nil, err
 	}
+	changes = append(changes, paramChanges...)
+
 	if err := compareRequestBodyStructural(opPath, before.RequestBody, after.RequestBody); err != nil {
-		return err
+		return nil, err
 	}
 	if err := compareResponsesStructural(opPath, before.Responses, after.Responses); err != nil {
-		return err
+		return nil, err
 	}
-	return nil
+	return changes, nil
 }
 
-func compareParametersStructural(opPath string, before, after openapi3.Parameters) error {
+func collectParameterChanges(opPath string, before, after openapi3.Parameters) ([]Change, error) {
 	beforeByKey := parametersByKey(before)
 	afterByKey := parametersByKey(after)
-	if len(beforeByKey) != len(afterByKey) {
-		return unsupportedStructuralDiff(opPath + ".parameters")
+
+	for key := range beforeByKey {
+		if _, ok := afterByKey[key]; !ok {
+			return nil, unsupportedStructuralDiff(opPath + ".parameters[" + key + "]")
+		}
 	}
-	for key, beforeParameter := range beforeByKey {
-		afterParameter, ok := afterByKey[key]
+
+	var changes []Change
+	for key, afterParameter := range afterByKey {
+		beforeParameter, ok := beforeByKey[key]
 		if !ok {
-			return unsupportedStructuralDiff(opPath + ".parameters[" + key + "]")
+			if afterParameter.Required {
+				return nil, unsupportedStructuralDiff(opPath + ".parameters[" + key + "]")
+			}
+			changes = appendMinorChange(changes, CodeParameterAdded, opPath+".parameters["+key+"]")
+			continue
 		}
 		if err := compareParameterStructural(opPath+".parameters["+key+"]", beforeParameter, afterParameter); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return changes, nil
 }
 
 func compareParameterStructural(path string, before, after *openapi3.Parameter) error {
@@ -213,10 +251,7 @@ func compareParameterStructural(path string, before, after *openapi3.Parameter) 
 	if before.Name != after.Name || before.In != after.In || before.Required != after.Required {
 		return unsupportedStructuralDiff(path)
 	}
-	if err := compareSchemaRefStructural(path+".schema", before.Schema, after.Schema); err != nil {
-		return err
-	}
-	return nil
+	return compareSchemaRefStructural(path+".schema", before.Schema, after.Schema)
 }
 
 func compareRequestBodyStructural(opPath string, before, after *openapi3.RequestBodyRef) error {
@@ -273,84 +308,151 @@ func compareMediaTypesStructural(path string, before, after openapi3.Content) er
 	return nil
 }
 
-func compareComponentsStructural(before, after *openapi3.Components) error {
+func collectComponentChanges(before, after *openapi3.Components) ([]Change, error) {
 	if before == nil && after == nil {
-		return nil
+		return nil, nil
 	}
 	if before == nil || after == nil {
-		return unsupportedStructuralDiff("components")
+		return nil, unsupportedStructuralDiff("components")
 	}
-	if len(before.Schemas) != len(after.Schemas) {
-		return unsupportedStructuralDiff("components.schemas")
+
+	for name := range before.Schemas {
+		if _, ok := after.Schemas[name]; !ok {
+			return nil, unsupportedStructuralDiff("components.schemas." + name)
+		}
 	}
-	for name, beforeSchemaRef := range before.Schemas {
-		afterSchemaRef, ok := after.Schemas[name]
+
+	var changes []Change
+	for name, afterSchemaRef := range after.Schemas {
+		beforeSchemaRef, ok := before.Schemas[name]
 		if !ok {
-			return unsupportedStructuralDiff("components.schemas." + name)
+			changes = appendMinorChange(changes, CodeSchemaAdded, "components.schemas."+name)
+			continue
 		}
-		if err := compareSchemaRefStructural("components.schemas."+name, beforeSchemaRef, afterSchemaRef); err != nil {
-			return err
+		schemaChanges, err := collectSchemaRefChanges("components.schemas."+name, beforeSchemaRef, afterSchemaRef)
+		if err != nil {
+			return nil, err
 		}
+		changes = append(changes, schemaChanges...)
 	}
-	return nil
+	return changes, nil
+}
+
+func collectSchemaRefChanges(path string, before, after *openapi3.SchemaRef) ([]Change, error) {
+	if before == nil && after == nil {
+		return nil, nil
+	}
+	if before == nil || after == nil {
+		return nil, unsupportedStructuralDiff(path)
+	}
+	if before.Ref != after.Ref {
+		return nil, unsupportedStructuralDiff(path + ".ref")
+	}
+	if before.Ref != "" {
+		return nil, nil
+	}
+	return collectSchemaChanges(path, before.Value, after.Value)
 }
 
 func compareSchemaRefStructural(path string, before, after *openapi3.SchemaRef) error {
-	if before == nil && after == nil {
-		return nil
-	}
+	_, err := collectSchemaRefChanges(path, before, after)
+	return err
+}
+
+func collectSchemaChanges(path string, before, after *openapi3.Schema) ([]Change, error) {
 	if before == nil || after == nil {
-		return unsupportedStructuralDiff(path)
+		return nil, unsupportedStructuralDiff(path)
 	}
-	if before.Ref != after.Ref {
-		return unsupportedStructuralDiff(path + ".ref")
+	if !typesEqual(before.Type, after.Type) {
+		return nil, unsupportedStructuralDiff(path + ".type")
 	}
-	if before.Ref != "" {
-		return nil
+	if before.Format != after.Format {
+		return nil, unsupportedStructuralDiff(path + ".format")
 	}
-	return compareSchemaStructural(path, before.Value, after.Value)
+	if !reflect.DeepEqual(before.Required, after.Required) {
+		return nil, unsupportedStructuralDiff(path + ".required")
+	}
+	if !externalDocsStructuralEqual(before.ExternalDocs, after.ExternalDocs) {
+		return nil, unsupportedStructuralDiff(path + ".externalDocs")
+	}
+
+	var changes []Change
+	enumChanges, err := collectEnumChanges(path, before.Enum, after.Enum)
+	if err != nil {
+		return nil, err
+	}
+	changes = append(changes, enumChanges...)
+
+	for propertyName := range before.Properties {
+		if _, ok := after.Properties[propertyName]; !ok {
+			return nil, unsupportedStructuralDiff(path + ".properties." + propertyName)
+		}
+	}
+	for propertyName, afterPropertyRef := range after.Properties {
+		beforePropertyRef, ok := before.Properties[propertyName]
+		if !ok {
+			if slices.Contains(after.Required, propertyName) {
+				return nil, unsupportedStructuralDiff(path + ".properties." + propertyName)
+			}
+			changes = appendMinorChange(changes, CodeSchemaPropertyAdded, path+".properties."+propertyName)
+			continue
+		}
+		propertyChanges, err := collectSchemaRefChanges(path+".properties."+propertyName, beforePropertyRef, afterPropertyRef)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, propertyChanges...)
+	}
+	if (before.Items == nil) != (after.Items == nil) {
+		return nil, unsupportedStructuralDiff(path + ".items")
+	}
+	if before.Items != nil {
+		itemChanges, err := collectSchemaRefChanges(path+".items", before.Items, after.Items)
+		if err != nil {
+			return nil, err
+		}
+		changes = append(changes, itemChanges...)
+	}
+	return changes, nil
 }
 
 func compareSchemaStructural(path string, before, after *openapi3.Schema) error {
-	if before == nil || after == nil {
-		return unsupportedStructuralDiff(path)
-	}
-	if !typesEqual(before.Type, after.Type) {
-		return unsupportedStructuralDiff(path + ".type")
-	}
-	if before.Format != after.Format {
-		return unsupportedStructuralDiff(path + ".format")
-	}
-	if !reflect.DeepEqual(before.Enum, after.Enum) {
-		return unsupportedStructuralDiff(path + ".enum")
-	}
-	if !reflect.DeepEqual(before.Required, after.Required) {
-		return unsupportedStructuralDiff(path + ".required")
-	}
-	if !externalDocsStructuralEqual(before.ExternalDocs, after.ExternalDocs) {
-		return unsupportedStructuralDiff(path + ".externalDocs")
-	}
-	if len(before.Properties) != len(after.Properties) {
-		return unsupportedStructuralDiff(path + ".properties")
-	}
-	for propertyName, beforePropertyRef := range before.Properties {
-		afterPropertyRef, ok := after.Properties[propertyName]
-		if !ok {
-			return unsupportedStructuralDiff(path + ".properties." + propertyName)
-		}
-		if err := compareSchemaRefStructural(path+".properties."+propertyName, beforePropertyRef, afterPropertyRef); err != nil {
-			return err
+	_, err := collectSchemaChanges(path, before, after)
+	return err
+}
+
+func collectEnumChanges(path string, before, after []any) ([]Change, error) {
+	beforeValues := enumValueSet(before)
+	afterValues := enumValueSet(after)
+	for value := range beforeValues {
+		if _, ok := afterValues[value]; !ok {
+			return nil, unsupportedStructuralDiff(path + ".enum")
 		}
 	}
-	if (before.Items == nil) != (after.Items == nil) {
-		return unsupportedStructuralDiff(path + ".items")
-	}
-	if before.Items != nil {
-		if err := compareSchemaRefStructural(path+".items", before.Items, after.Items); err != nil {
-			return err
+	var changes []Change
+	for value := range afterValues {
+		if _, ok := beforeValues[value]; ok {
+			continue
 		}
+		changes = appendMinorChange(changes, CodeEnumValueAdded, path+".enum."+enumValuePath(value))
 	}
-	return nil
+	return changes, nil
+}
+
+func enumValueSet(values []any) map[string]struct{} {
+	out := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		out[enumValueKey(value)] = struct{}{}
+	}
+	return out
+}
+
+func enumValueKey(value any) string {
+	return fmt.Sprint(value)
+}
+
+func enumValuePath(value any) string {
+	return enumValueKey(value)
 }
 
 func typesEqual(before, after *openapi3.Types) bool {
