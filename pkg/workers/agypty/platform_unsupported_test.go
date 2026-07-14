@@ -5,6 +5,7 @@ package agypty
 import (
 	"context"
 	"errors"
+	"os/exec"
 	"testing"
 )
 
@@ -19,4 +20,10 @@ func TestUnsupportedPTYAllocator_FailsClosed(t *testing.T) {
 	if !errors.Is(err, ErrUnsupportedPlatform) {
 		t.Fatalf("Allocate() error = %v, want %v", err, ErrUnsupportedPlatform)
 	}
+}
+
+func startBlockingTestProcess(t *testing.T) *exec.Cmd {
+	t.Helper()
+	t.Skip("blocking process helper is unavailable on unsupported platforms")
+	return &exec.Cmd{}
 }

@@ -9,11 +9,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	factoryresponseevents "github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaceresponseevents "github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
+	agyadapter "github.com/portpowered/infinite-you/pkg/workers/provider/agy"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
@@ -124,7 +127,7 @@ func FailedFragment(dispatchID string, providerSession *interfaces.ProviderSessi
 // StructuredResponseEvent carries one provider-neutral draft to the
 // session-owned response-event publisher without converting it to a legacy
 // response or progress fragment.
-func StructuredResponseEvent(draft responseevents.Draft) InferenceProgressFragment {
+func StructuredResponseEvent(draft factoryresponseevents.Draft) InferenceProgressFragment {
 	cloned := draft
 	cloned.Payload = append(json.RawMessage(nil), draft.Payload...)
 	return CanonicalDraftFragment(draft.DispatchID, cloned)
@@ -674,4 +677,76 @@ func isCodexCommand(command string) bool {
 		base = strings.TrimSuffix(base, filepath.Ext(base))
 	}
 	return strings.EqualFold(base, string(interfaces.ModelProviderCodex))
+}
+
+func (p *ScriptWrapProvider) executeAgy(
+	ctx context.Context,
+	req interfaces.ProviderInferenceRequest,
+	logger logging.Logger,
+) (interfaces.InferenceResponse, error) {
+	factoryRoot := strings.TrimSpace(p.agyFactoryRoot)
+	if factoryRoot == "" {
+		return interfaces.InferenceResponse{}, p.agyRequestValidationError(req, errors.New("Agy factory root is unavailable"))
+	}
+	opts := []agyadapter.Option{}
+	if p.agyAllocator != nil {
+		opts = append(opts, agyadapter.WithAllocator(p.agyAllocator))
+	}
+	providerAdapter := agyadapter.NewAdapter(factoryRoot, opts...)
+	registry, err := adapter.NewRegistry(providerAdapter)
+	if err != nil {
+		return interfaces.InferenceResponse{}, p.agyRequestValidationError(req, err)
+	}
+	runner, err := providerAdapter.PTYRunner()
+	if err != nil {
+		return interfaces.InferenceResponse{}, p.agyRequestValidationError(req, err)
+	}
+	started := time.Now()
+	result, executeErr := adapter.Execute(ctx, registry, runner, adapter.ExecuteInput{
+		Provider: providerAdapter.Identity(),
+		Command:  adapter.CommandContext{Request: req, SkipPermissions: p.SkipPermissions, MaterializeOptions: p.MaterializeOptions},
+		Decoder:  adapter.DecoderContext{RunID: req.Dispatch.DispatchID, DispatchID: req.Dispatch.DispatchID},
+		ObserveDraft: func(draft interfaceresponseevents.Draft) {
+			if p.progressPublisher != nil {
+				p.progressPublisher(CanonicalDraftFragment(draft.DispatchID, draft))
+			}
+		},
+	})
+	duration := time.Since(started)
+	diagnostics := commandDiagnostics(result.Request, result.Command, duration, result.Outcome == adapter.CommandOutcomeCanceled)
+	if result.Failure != nil {
+		providerErr := providerErrorFromAdapterFailure(result.Failure, executeErr, diagnostics)
+		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result.Command, duration)...)
+		p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
+		return interfaces.InferenceResponse{}, providerErr
+	}
+	if executeErr != nil {
+		if orchestrated := agyadapter.ClassifyOrchestrationError(executeErr); orchestrated.Failure != nil {
+			providerErr := providerErrorFromAdapterFailure(orchestrated.Failure, executeErr, diagnostics)
+			logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result.Command, duration)...)
+			p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
+			return interfaces.InferenceResponse{}, providerErr
+		}
+		providerErr := normalizeProviderExecutionError(req.ModelProvider, result.Command, executeErr, result.Response.ProviderSession, diagnostics)
+		p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
+		return interfaces.InferenceResponse{}, providerErr
+	}
+	response := result.Response
+	response.Diagnostics = diagnostics
+	logger.Info("inferencer: request completed",
+		appendProviderSessionLogFields(providerLogFields(req, "output_len", len(response.Content)), response.ProviderSession)...)
+	p.publishOpenCodeCompleted(req.Dispatch.DispatchID, response.ProviderSession, len(result.Drafts) > 0)
+	return response, nil
+}
+
+func (p *ScriptWrapProvider) agyRequestValidationError(req interfaces.ProviderInferenceRequest, err error) *ProviderError {
+	providerErr := newProviderErrorWithDiagnostics(
+		interfaces.WorkFailureTypePermanentBadRequest,
+		err.Error(),
+		err,
+		nil,
+		workDiagnosticsForInferenceRequest(req),
+	)
+	p.publishFailureFragment(req.Dispatch.DispatchID, nil, providerErr)
+	return providerErr
 }
