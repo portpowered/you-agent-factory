@@ -23,7 +23,7 @@ observed portability families at their owning boundaries. Later main commits
 `19b7d3e40`, `7014131e6`, `81c132a81`, and `6214ece8c` reconcile the named
 factory path and test-layout changes implicated by the CLI/config failures.
 None of the Windows-owning files below are changed by the PR #1006 feature
-diff, except unrelated additions in `pkg/cli` session-inspection files.
+diff, except unrelated additions in `pkg/transports/cli` session-inspection files.
 Therefore the failures are current-main drift, not introspection regressions.
 
 | Observable failure in PR job | Concrete assertion/output | Current-main correction |

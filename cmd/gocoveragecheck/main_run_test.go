@@ -133,7 +133,7 @@ func TestExecuteFailsWhenCoverageBelowMinimumAndZeroCoveragePackage(t *testing.T
 		coverpkg: strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
-			modulePath + "/pkg/generatedclient",
+			modulePath + "/pkg/transports/http/client",
 		}, ","),
 		packages:        "./pkg/config",
 		packageBaseline: emptyPackageCoverageBaselinePath(t),
@@ -188,7 +188,7 @@ func TestExecuteFailsWhenZeroCoveragePackageOnly(t *testing.T) {
 		coverpkg: strings.Join([]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
-			modulePath + "/pkg/generatedclient",
+			modulePath + "/pkg/transports/http/client",
 		}, ","),
 		packages:        "./pkg/config",
 		packageBaseline: emptyPackageCoverageBaselinePath(t),

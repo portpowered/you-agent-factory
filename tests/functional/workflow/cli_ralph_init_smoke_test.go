@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )

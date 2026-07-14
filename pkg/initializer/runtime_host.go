@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // LocalRuntimeRunner is the session/runtime seam used by local in-process CLI
@@ -36,7 +36,7 @@ func NewSessionRuntimeHostFromCore(core *Core, cfg *Config) *SessionRuntimeHost 
 	return &SessionRuntimeHost{host: host}
 }
 
-// SessionAPISurface returns handler dependencies for api.NewServer.
+// SessionAPISurface returns handler dependencies for transport/http.NewServer.
 func (h *SessionRuntimeHost) SessionAPISurface() apisurface.SessionAPISurface {
 	if h == nil || h.host == nil {
 		return nil

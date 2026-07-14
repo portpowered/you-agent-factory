@@ -4,10 +4,10 @@ import (
 	"context"
 	"runtime"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/models/assets"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // AssetPuller resolves managed local model assets and pull outcomes.

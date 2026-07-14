@@ -3,8 +3,8 @@ package tts
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestClassifyInvocationWait_LoadingWhenActiveWorkRemains(t *testing.T) {

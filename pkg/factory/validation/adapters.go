@@ -1,7 +1,7 @@
 package validation
 
 import (
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // ToValidationTargets maps canonical targets onto the validation-only API response shape.
@@ -79,4 +79,3 @@ func toValidationSubjectLocation(location SubjectLocation) factoryapi.FactoryVal
 		return factoryapi.FactoryValidationSubjectLocationDefinition
 	}
 }
-

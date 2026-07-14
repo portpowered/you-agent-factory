@@ -3,7 +3,7 @@
 This directory is the **single source of truth** for packaged CLI reference
 topics. Markdown here is embedded into the `you` binary (`docs/reference/embed.go`
 → `you docs <topic>`). There is no second tree to edit or copy under
-`pkg/cli/docs/`.
+`pkg/transports/cli/docs/`.
 
 ## Maintainer workflow
 

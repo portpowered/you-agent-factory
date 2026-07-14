@@ -3,7 +3,7 @@ package interfaces
 import (
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // ModelProvider identifies the CLI command used for model inference dispatch.

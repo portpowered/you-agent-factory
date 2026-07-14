@@ -13,9 +13,9 @@ import (
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 
-	"github.com/portpowered/infinite-you/pkg/api/workstationprojection"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/transports/http/workstationprojection"
 )
 
 func TestPolicyToolExecutor_DisabledDeniesToolCalls(t *testing.T) {

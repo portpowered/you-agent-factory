@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestPreparePersistedFactoryPayload_NormalizesInlineBodiesOutOfCanonicalJSON(t *testing.T) {

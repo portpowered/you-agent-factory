@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // RequestValidationError reports a stable client-side validation failure.

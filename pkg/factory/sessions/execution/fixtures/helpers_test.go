@@ -81,7 +81,7 @@ func runtimePersistence(projectRoot string) runtimepersist.Store {
 
 func contractFixtureCatalogPath(t *testing.T) string {
 	t.Helper()
-	return filepath.Join("..", "..", "..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	return filepath.Join("..", "..", "..", "..", "transports", "http", "testdata", "durable-session-contract-fixtures.json")
 }
 
 func assertStringSliceEqual(t *testing.T, label string, got, want []string) {

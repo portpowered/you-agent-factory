@@ -4,12 +4,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestValidateFactoryAPI_ProfileTopology_CrossPathInvalidFixture(t *testing.T) {

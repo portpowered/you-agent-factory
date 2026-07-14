@@ -8,15 +8,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/composebridge"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/mcp/factorysession"
-	mcpserver "github.com/portpowered/infinite-you/pkg/mcp/server"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	transportmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
+	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
 	"go.uber.org/zap"
 )
 
@@ -125,7 +126,7 @@ func assembleProductionGraph(
 
 	sessions := host.SessionAPI()
 	definition := host.FactoryDefinitionAPI()
-	apiSurface, err := apisurface.NewSessionAPISurface(
+	apiSurface, err := transportmapping.NewSessionAPISurface(
 		sessions,
 		models,
 		definition,

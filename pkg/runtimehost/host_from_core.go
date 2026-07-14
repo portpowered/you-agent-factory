@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // HostShell is the pre-factorysave Host assembly product for wire composition.

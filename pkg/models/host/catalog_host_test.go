@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestClassifyReadiness_CoversReadyMissingLoadingFailedUnsupported(t *testing.T) {
@@ -18,12 +18,12 @@ func TestClassifyReadiness_CoversReadyMissingLoadingFailedUnsupported(t *testing
 	}
 
 	cases := []struct {
-		name       string
-		inspection CacheInspection
+		name        string
+		inspection  CacheInspection
 		unsupported bool
-		readiness  factoryapi.ManagedRuntimeReadinessState
-		lifecycle  factoryapi.ManagedRuntimeLifecycleState
-		failure    FailureClass
+		readiness   factoryapi.ManagedRuntimeReadinessState
+		lifecycle   factoryapi.ManagedRuntimeLifecycleState
+		failure     FailureClass
 	}{
 		{
 			name: "ready",
