@@ -83,15 +83,6 @@ func codexProviderSessionFromStdout(stdout []byte, resolved provider.ProviderFai
 	return nil
 }
 
-func terminalFailureResult(failure TerminalFailure) adapter.FailureResult {
-	return normalizedFailureResult(provider.ProviderFailureResolution{
-		Result: provider.ProviderFailureResult{
-			Reason:  failure.Type,
-			Message: failure.Message,
-		},
-	}, failure.ProviderSession)
-}
-
 func normalizedFailureResult(resolution provider.ProviderFailureResolution, session *interfaces.ProviderSessionMetadata) adapter.FailureResult {
 	providerError := provider.NewProviderErrorFromResult(resolution.Result, provider.ProviderFailureInternalCauseError(resolution.InternalCause))
 	decision := provider.WorkFailureDecisionFromProviderError(providerError)
