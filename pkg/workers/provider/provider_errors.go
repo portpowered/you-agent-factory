@@ -53,6 +53,7 @@ const (
 	codexServerFailureMessage     = "Codex encountered a temporary server error."
 	codexThrottleFailureMessage   = "Codex is temporarily unavailable due to usage or capacity limits."
 	codexTimeoutFailureMessage    = "Codex request timed out."
+	codexUnknownFailureMessage    = "Codex reported a terminal error."
 )
 
 const (
@@ -645,25 +646,21 @@ func kiroExitFailureMessage(exitCode int) string {
 // codexErrorLineScanBytes before parsing, and returned messages are limited by
 // codexFailureMessageBytes.
 func ParseCodexProviderFailure(result CommandResult) ProviderFailureResult {
-	streams := []string{
-		tailForCodexErrorScan(result.Stderr),
-		tailForCodexErrorScan(result.Stdout),
+	resolved, ok := ResolveCodexProviderFailure(result, CodexFailureResolutionInput{})
+	if ok {
+		return resolved.Result
 	}
-	if failure, ok := lastCodexStructuredFailure(streams); ok {
-		return failure
-	}
+	return codexProcessExitFallback(result.ExitCode)
+}
 
-	if failure, ok := lastCodexTextFailure(streams, result.ExitCode); ok {
-		return ProviderFailureResult{
-			Reason:  failure.Reason,
-			Message: failure.Message,
-		}
+// ProviderFailureInternalCauseError turns a bounded internal-cause excerpt into
+// the wrapped error carried on ProviderError.Cause.
+func ProviderFailureInternalCauseError(cause string) error {
+	cause = strings.TrimSpace(cause)
+	if cause == "" {
+		return nil
 	}
-
-	return ProviderFailureResult{
-		Reason:  classifyCodexExitFailure(result.ExitCode),
-		Message: codexExitFailureMessage(result.ExitCode),
-	}
+	return errors.New(cause)
 }
 
 func lastCodexStructuredFailure(streams []string) (ProviderFailureResult, bool) {
@@ -849,6 +846,14 @@ func classifyCodexExitFailure(exitCode int) interfaces.WorkFailureType {
 	return interfaces.WorkFailureTypeUnknown
 }
 
+func codexProcessExitFallback(exitCode int) ProviderFailureResult {
+	reason := classifyCodexExitFailure(exitCode)
+	if message := codexTextFailureMessage(reason); message != "" {
+		return ProviderFailureResult{Reason: reason, Message: message}
+	}
+	return ProviderFailureResult{Reason: reason, Message: codexUnknownFailureMessage}
+}
+
 func classifyCodexStructuredSignal(errorType string, status int) (interfaces.WorkFailureType, bool) {
 	normalizedType := strings.ToLower(strings.TrimSpace(errorType))
 	switch normalizedType {
@@ -882,9 +887,6 @@ func classifyCodexStructuredSignal(errorType string, status int) (interfaces.Wor
 	default:
 		return interfaces.WorkFailureTypeUnknown, false
 	}
-}
-func codexExitFailureMessage(exitCode int) string {
-	return fmt.Sprintf("codex exited with code %d", exitCode)
 }
 
 func NewProviderError(errorType interfaces.WorkFailureType, message string, cause error) *ProviderError {

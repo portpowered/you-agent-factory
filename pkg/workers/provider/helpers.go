@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash"
+	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
@@ -146,7 +148,7 @@ func safeProviderFailureLogMessage(provider string, providerErr *ProviderError) 
 	// Codex exit failures are parsed into bounded, audited messages. Execution
 	// errors retain raw command diagnostics in the returned error, so they must
 	// use the same fixed reason-based messages as the other providers.
-	if strings.EqualFold(strings.TrimSpace(provider), string(interfaces.ModelProviderCodex)) && providerErr.Cause == nil {
+	if strings.EqualFold(strings.TrimSpace(provider), string(interfaces.ModelProviderCodex)) && !isProviderExecutionCause(providerErr.Cause) {
 		return providerErr.Message
 	}
 	switch providerErr.Type {
@@ -169,6 +171,17 @@ func safeProviderFailureLogMessage(provider string, providerErr *ProviderError) 
 	default:
 		return "Provider execution failed."
 	}
+}
+
+func isProviderExecutionCause(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, exec.ErrNotFound) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+	var execErr *exec.Error
+	return errors.As(err, &execErr)
 }
 
 // SafeProviderFailureDetail returns the allowlisted public diagnostic for a

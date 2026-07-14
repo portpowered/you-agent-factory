@@ -528,6 +528,11 @@ func (c ProviderErrorCorpus) Entry(name string) (ProviderErrorCorpusEntry, bool)
 	return entry, ok
 }
 
+// Entries returns all corpus fixtures in stable order.
+func (c ProviderErrorCorpus) Entries() []ProviderErrorCorpusEntry {
+	return append([]ProviderErrorCorpusEntry(nil), c.allEntries...)
+}
+
 // SupportedEntriesForCategory returns the currently supported fixtures for one
 // normalized provider-failure category.
 func (c ProviderErrorCorpus) SupportedEntriesForCategory(category string) []ProviderErrorCorpusEntry {

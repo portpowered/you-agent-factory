@@ -85,8 +85,11 @@ func TestMockWorkers_ScriptRejectConfigRoutesFailureAndLogsCommandOutput(t *test
 	if record["exit_code"] != float64(9) {
 		t.Fatalf("logged exit_code = %#v, want 9", record["exit_code"])
 	}
-	if record["stdout"] != "script configured stdout" || record["stderr"] != "script configured stderr" {
-		t.Fatalf("logged stdout/stderr = %#v/%#v, want configured output", record["stdout"], record["stderr"])
+	if _, ok := record["stdout"]; ok {
+		t.Fatalf("completion log unexpectedly included stdout: %#v", record["stdout"])
+	}
+	if _, ok := record["stderr"]; ok {
+		t.Fatalf("completion log unexpectedly included stderr: %#v", record["stderr"])
 	}
 }
 

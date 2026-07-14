@@ -282,7 +282,21 @@ primary-result behavior.
   reserve `ERROR`/`FAILED` plus invocation failure classification for terminal
   records and process outcomes.
   Reconcile typed terminal failures before generic process-exit fallback, but
-  preserve cancellation and timeout precedence. A streaming decoder must hold
+  preserve cancellation and timeout precedence. Shared selection lives in
+  `pkg/workers/provider/failure_precedence.go` (`SelectFailureByPrecedence`) and
+  provider-owned collectors such as `ResolveCodexProviderFailure` in
+  `codex_failure_resolution.go`; precedence table tests belong beside those
+  helpers rather than in transport layers. Cross-path agreement tests for
+  listed failure classes belong in `codex_failure_reporting_agreement_test.go`
+  and should compare `CodexStructuredStreamReportingOutcome` against
+  `CodexProcessExitReportingOutcome` before shared precedence selection.
+  Bounded internal-cause excerpts ride on `ProviderFailureResolution.InternalCause`
+  and `ProviderError.Cause`; sanitized alignment fixtures belong in
+  `codex_failure_sanitized_fixture.go` with leakage negatives in
+  `codex_failure_internal_cause_test.go`. Invocation error code compatibility
+  coverage lives in `provider_invocation_error_compatibility_test.go` and should
+  lock stable `WorkFailureType` / `FailureDetail.Reason` values across corpus
+  normalization and Codex reporting-path agreement probes. A streaming decoder must hold
   terminal `ERROR` drafts until the shared executor flushes it with the process
   outcome; discard a native failure when cancellation, deadline, or exit 124 wins.
   When multiple typed terminal records arrive, the held canonical draft and
