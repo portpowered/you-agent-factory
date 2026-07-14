@@ -3,6 +3,7 @@ import {
   type FactorySessionSyncPreflightResponse,
   getFactorySessionSyncPreflight,
 } from "../../../../api/factory-sessions";
+import { FactorySessionSyncPreflightReasonCode } from "../../../../api/generated/openapi";
 import type {
   FactoryTimelineCheckpoint,
   PersistedTimelineCheckpointPeek,
@@ -14,6 +15,10 @@ import {
   reconnectCursorFromCheckpoint,
 } from "../../../timeline/public";
 import { isDefaultToRuntimeSessionAliasRemap } from "../dashboard-session-lifecycle";
+import {
+  classifyCheckpointIdentityMismatchDetail,
+  type SessionPersistenceDiagnosticDetail,
+} from "../session-persistence/diagnostics";
 import {
   resolveDashboardSyncPreflight,
   shouldClearCheckpointAfterPreflight,
@@ -30,49 +35,64 @@ interface ResolutionDependencies {
   readCheckpoint: typeof readTimelineCheckpoint;
 }
 
+export type DashboardCheckpointLookupOutcome =
+  | "checkpoint_hit"
+  | "checkpoint_miss";
+
+interface DashboardCheckpointLookupResolution {
+  checkpointLookupOutcome?: DashboardCheckpointLookupOutcome;
+  identityRejectionDetail?: SessionPersistenceDiagnosticDetail;
+}
+
 export type DashboardCheckpointPreflightResolution =
-  | {
-      checkpoint: FactoryTimelineCheckpoint | null;
-      clearRequestedSessionCheckpoint: boolean;
-      checkpointToDelete: PersistedTimelineCheckpointPeek | null;
-      kind: "resume";
-      reconnectCursor?: FactoryEventReconnectCursor;
-      requestedSessionId: string;
-      resolvedSessionId: string;
-      streamIdentity: TimelineCheckpointStreamIdentity;
-    }
-  | {
-      clearRequestedSessionCheckpoint: true;
-      checkpointToDelete: PersistedTimelineCheckpointPeek | null;
-      kind: "remap";
-      requestedSessionId: string;
-      resolvedSessionId: string;
-      streamIdentity: TimelineCheckpointStreamIdentity;
-    }
-  | {
-      clearRequestedSessionCheckpoint: true;
-      checkpointToDelete: PersistedTimelineCheckpointPeek | null;
-      kind: "recovery";
-      reasonCode: string;
-      requestedSessionId: string;
-    }
-  | {
-      clearRequestedSessionCheckpoint: true;
-      checkpointToDelete: null;
-      error: Error;
-      kind: "error";
-      requestedSessionId: string;
-    };
+  DashboardCheckpointLookupResolution &
+    (
+      | {
+          checkpoint: FactoryTimelineCheckpoint | null;
+          clearRequestedSessionCheckpoint: boolean;
+          checkpointToDelete: PersistedTimelineCheckpointPeek | null;
+          kind: "resume";
+          reconnectCursor?: FactoryEventReconnectCursor;
+          staleCursorDetected: boolean;
+          requestedSessionId: string;
+          resolvedSessionId: string;
+          streamIdentity: TimelineCheckpointStreamIdentity;
+        }
+      | {
+          clearRequestedSessionCheckpoint: true;
+          checkpointToDelete: PersistedTimelineCheckpointPeek | null;
+          kind: "remap";
+          requestedSessionId: string;
+          resolvedSessionId: string;
+          streamIdentity: TimelineCheckpointStreamIdentity;
+        }
+      | {
+          clearRequestedSessionCheckpoint: true;
+          checkpointToDelete: PersistedTimelineCheckpointPeek | null;
+          kind: "recovery";
+          reasonCode: string;
+          requestedSessionId: string;
+        }
+      | {
+          clearRequestedSessionCheckpoint: true;
+          checkpointToDelete: null;
+          error: Error;
+          kind: "error";
+          requestedSessionId: string;
+        }
+    );
 
 function errorOutcome(
   requestedSessionId: string,
   failure: unknown,
+  checkpointLookupOutcome?: DashboardCheckpointLookupOutcome,
 ): DashboardCheckpointPreflightResolution {
   const message =
     failure instanceof Error && failure.message.trim() !== ""
       ? failure.message
       : "The dashboard could not validate the selected session.";
   return {
+    ...(checkpointLookupOutcome ? { checkpointLookupOutcome } : {}),
     clearRequestedSessionCheckpoint: true,
     checkpointToDelete: null,
     error: new Error(message),
@@ -109,6 +129,7 @@ export async function resolveDashboardCheckpointPreflight({
     peekCheckpoint: peekPersistedTimelineCheckpoint,
     readCheckpoint: readTimelineCheckpoint,
   };
+  let checkpointLookupOutcome: DashboardCheckpointLookupOutcome | undefined;
   try {
     const stored = await resolutionDependencies.peekCheckpoint(
       indexedDB,
@@ -116,6 +137,7 @@ export async function resolveDashboardCheckpointPreflight({
       { signal },
     );
     signal?.throwIfAborted();
+    checkpointLookupOutcome = stored ? "checkpoint_hit" : "checkpoint_miss";
     const reconnectCursor = reconnectCursorFromCheckpoint(
       stored?.checkpoint ?? null,
     );
@@ -131,18 +153,19 @@ export async function resolveDashboardCheckpointPreflight({
       },
     );
     signal?.throwIfAborted();
-    return resolveResponse({
+    const resolution = await resolveResponse({
       dependencies: resolutionDependencies,
       indexedDB,
       response,
       signal,
       stored,
     });
+    return { ...resolution, checkpointLookupOutcome };
   } catch (failure: unknown) {
     if (signal?.aborted) {
       throw failure;
     }
-    return errorOutcome(requestedSessionId, failure);
+    return errorOutcome(requestedSessionId, failure, checkpointLookupOutcome);
   }
 }
 
@@ -177,6 +200,12 @@ async function resolveResponse({
         stored.streamIdentity,
         resolution.streamIdentity,
       ));
+  const identityRejectionDetail = stored?.streamIdentity
+    ? (classifyCheckpointIdentityMismatchDetail(
+        stored.streamIdentity,
+        resolution.streamIdentity,
+      ) ?? undefined)
+    : undefined;
   if (
     resolution.resolvedSessionId !== resolution.requestedSessionId &&
     !isDefaultToRuntimeSessionAliasRemap(
@@ -187,6 +216,7 @@ async function resolveResponse({
     return {
       clearRequestedSessionCheckpoint: true,
       checkpointToDelete: stored,
+      ...(identityRejectionDetail ? { identityRejectionDetail } : {}),
       kind: "remap",
       requestedSessionId: resolution.requestedSessionId,
       resolvedSessionId: resolution.resolvedSessionId,
@@ -209,10 +239,14 @@ async function resolveResponse({
     checkpoint,
     clearRequestedSessionCheckpoint,
     checkpointToDelete: clearRequestedSessionCheckpoint ? stored : null,
+    ...(identityRejectionDetail ? { identityRejectionDetail } : {}),
     kind: "resume",
     reconnectCursor: clearRequestedSessionCheckpoint
       ? undefined
       : resolution.reconnectCursor,
+    staleCursorDetected:
+      response.reasonCode ===
+      FactorySessionSyncPreflightReasonCode.cursor_stale,
     requestedSessionId: resolution.requestedSessionId,
     resolvedSessionId: resolution.resolvedSessionId,
     streamIdentity: resolution.streamIdentity,

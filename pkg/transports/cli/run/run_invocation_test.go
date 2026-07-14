@@ -1366,7 +1366,7 @@ func namedGoalNoServerInvocationRunConfig(t *testing.T, goalText string) RunConf
 		MockWorkersEnabled:         true,
 		MockWorkersConfigPath:      writePackagedGoalNoServerMockWorkersConfig(t),
 		DisableDefaultRecording:    true,
-		Port:                       reserveNoServerInvocationProbePort(t),
+		Port:                       noServerInvocationTestPort,
 		AutoPort:                   true,
 		Logger:                     zap.NewNop(),
 	}
@@ -1380,6 +1380,7 @@ func runNoServerBootstrapEquivalenceCase(
 	t.Helper()
 
 	preserveRunGlobals(t)
+	prohibitInvocationAPIServer(t)
 	capture := installCapturingRealInvocationBootstrap(t)
 	cfg := namedGoalNoServerInvocationRunConfig(t, goalText)
 	if mutate != nil {
@@ -1521,6 +1522,7 @@ func TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer(t *testin
 	}
 
 	preserveRunGlobals(t)
+	prohibitInvocationAPIServer(t)
 
 	homeDir := t.TempDir()
 	setUserHomeForTest(t, homeDir)
@@ -1537,7 +1539,6 @@ func TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer(t *testin
 	}
 
 	mockWorkersPath := writePackagedGoalNoServerMockWorkersConfig(t)
-	probePort := reserveNoServerInvocationProbePort(t)
 	goalText := "hermetic no-server named goal prompt"
 
 	var output bytes.Buffer
@@ -1556,7 +1557,7 @@ func TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer(t *testin
 		MockWorkersConfigPath:      mockWorkersPath,
 		DisableDefaultRecording:    true,
 		Output:                     &output,
-		Port:                       probePort,
+		Port:                       noServerInvocationTestPort,
 		AutoPort:                   true,
 		Logger:                     zap.NewNop(),
 	})
@@ -1566,7 +1567,6 @@ func TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer(t *testin
 	if got := output.String(); got != "mock worker accepted" {
 		t.Fatalf("stdout = %q, want primary result mock worker accepted", got)
 	}
-	assertNoServerInvocationProbePortFree(t, probePort)
 }
 
 func TestRun_NamedGoalRepositoryEditReturnsFinalResponseAsPrimaryResult(t *testing.T) {
@@ -1575,6 +1575,7 @@ func TestRun_NamedGoalRepositoryEditReturnsFinalResponseAsPrimaryResult(t *testi
 	}
 
 	preserveRunGlobals(t)
+	prohibitInvocationAPIServer(t)
 
 	repositoryDir := t.TempDir()
 	readmePath := filepath.Join(repositoryDir, "README.md")
@@ -1676,36 +1677,28 @@ func writeMockWorkersConfig(t *testing.T, cfg factoryconfig.MockWorkersConfig, n
 	return path
 }
 
-func reserveNoServerInvocationProbePort(t *testing.T) int {
+const noServerInvocationTestPort = 38317
+
+func prohibitInvocationAPIServer(t *testing.T) {
 	t.Helper()
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("Listen: %v", err)
+	startAPIServer = func(
+		context.Context,
+		apisurface.APISurface,
+		int,
+		*zap.Logger,
+		func(),
+	) error {
+		return errors.New("invocation attempted to start an API server")
 	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	if err := listener.Close(); err != nil {
-		t.Fatalf("Close listener: %v", err)
-	}
-	return port
-}
-
-func assertNoServerInvocationProbePortFree(t *testing.T, port int) {
-	t.Helper()
-
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
-	if err == nil {
-		_ = conn.Close()
-		t.Fatalf("tcp %s accepted a connection, want no factory API/dashboard listener", addr)
-	}
-
-	listener, err := net.Listen("tcp", addr)
-	if err != nil {
-		t.Fatalf("tcp %s still held by bootstrap listener: %v", addr, err)
-	}
-	if err := listener.Close(); err != nil {
-		t.Fatalf("Close probe listener: %v", err)
+	serveFactoryAPIServer = func(
+		context.Context,
+		apisurface.APISurface,
+		int,
+		*zap.Logger,
+		net.Listener,
+	) error {
+		return errors.New("invocation attempted to serve a reserved API listener")
 	}
 }
 
@@ -1738,11 +1731,10 @@ func TestNoServerNamedInvocationIntegrationAndEquivalenceProof(t *testing.T) {
 
 	t.Run("hermetic named success without listener", func(t *testing.T) {
 		preserveRunGlobals(t)
+		prohibitInvocationAPIServer(t)
 
 		goalText := "consolidated no-server named integration proof"
-		probePort := reserveNoServerInvocationProbePort(t)
 		cfg := namedGoalNoServerInvocationRunConfig(t, goalText)
-		cfg.Port = probePort
 		cfg.AutoPort = true
 		var output bytes.Buffer
 		cfg.Output = &output
@@ -1756,7 +1748,6 @@ func TestNoServerNamedInvocationIntegrationAndEquivalenceProof(t *testing.T) {
 		if got := output.String(); got != "mock worker accepted" {
 			t.Fatalf("stdout = %q, want invocationReturn primary result mock worker accepted", got)
 		}
-		assertNoServerInvocationProbePortFree(t, probePort)
 	})
 
 	t.Run("shared input resolution and primary-result equivalence", func(t *testing.T) {
@@ -1797,7 +1788,7 @@ func namedSubagentNoServerInvocationRunConfig(t *testing.T, requestText string) 
 		MockWorkersEnabled:         true,
 		MockWorkersConfigPath:      writePackagedSubagentNoServerMockWorkersConfig(t),
 		DisableDefaultRecording:    true,
-		Port:                       reserveNoServerInvocationProbePort(t),
+		Port:                       noServerInvocationTestPort,
 		AutoPort:                   true,
 		Logger:                     zap.NewNop(),
 	}
@@ -1811,6 +1802,7 @@ func runNoServerSubagentBootstrapEquivalenceCase(
 	t.Helper()
 
 	preserveRunGlobals(t)
+	prohibitInvocationAPIServer(t)
 	capture := installCapturingRealInvocationBootstrap(t)
 	cfg := namedSubagentNoServerInvocationRunConfig(t, requestText)
 	if mutate != nil {
@@ -1834,6 +1826,7 @@ func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *te
 	}
 
 	preserveRunGlobals(t)
+	prohibitInvocationAPIServer(t)
 
 	homeDir := t.TempDir()
 	setUserHomeForTest(t, homeDir)
@@ -1850,7 +1843,6 @@ func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *te
 	}
 
 	mockWorkersPath := writePackagedSubagentNoServerMockWorkersConfig(t)
-	probePort := reserveNoServerInvocationProbePort(t)
 	requestText := "hermetic no-server named subagent prompt"
 
 	var output bytes.Buffer
@@ -1869,7 +1861,7 @@ func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *te
 		MockWorkersConfigPath:      mockWorkersPath,
 		DisableDefaultRecording:    true,
 		Output:                     &output,
-		Port:                       probePort,
+		Port:                       noServerInvocationTestPort,
 		AutoPort:                   true,
 		Logger:                     zap.NewNop(),
 	})
@@ -1882,7 +1874,6 @@ func TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer(t *te
 	if got := output.String(); got == requestText {
 		t.Fatalf("stdout echoed submitted request text instead of agent response")
 	}
-	assertNoServerInvocationProbePortFree(t, probePort)
 }
 
 func TestRun_NamedSubagentNoServerBootstrap_TextPrimaryResultIsAgentResponse(t *testing.T) {
@@ -1962,11 +1953,10 @@ func TestNoServerNamedSubagentInvocationIntegrationAndEquivalenceProof(t *testin
 
 	t.Run("hermetic named success without listener", func(t *testing.T) {
 		preserveRunGlobals(t)
+		prohibitInvocationAPIServer(t)
 
 		requestText := "consolidated no-server named subagent integration proof"
-		probePort := reserveNoServerInvocationProbePort(t)
 		cfg := namedSubagentNoServerInvocationRunConfig(t, requestText)
-		cfg.Port = probePort
 		cfg.AutoPort = true
 		var output bytes.Buffer
 		cfg.Output = &output
@@ -1983,7 +1973,6 @@ func TestNoServerNamedSubagentInvocationIntegrationAndEquivalenceProof(t *testin
 		if got := output.String(); got == requestText {
 			t.Fatalf("stdout echoed submitted request text instead of agent response")
 		}
-		assertNoServerInvocationProbePortFree(t, probePort)
 	})
 
 	t.Run("shared input resolution and primary-result equivalence", func(t *testing.T) {

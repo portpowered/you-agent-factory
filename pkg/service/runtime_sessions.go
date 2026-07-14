@@ -2122,7 +2122,7 @@ func (l sessionPersistenceZapLogger) Info(msg string, fields map[string]string) 
 }
 
 // InvocationMetricNormalizationAttempts remains an exported compatibility
-// alias while metric-name ownership lives in pkg/factorysessions/invocation.
+// alias while metric-name ownership lives in pkg/factory/sessions/invocation.
 const InvocationMetricNormalizationAttempts = sessioninvocation.InvocationMetricNormalizationAttempts
 
 // InvocationMetric records one emitted runtime counter together with its

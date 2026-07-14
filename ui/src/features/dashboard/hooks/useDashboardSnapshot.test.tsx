@@ -30,6 +30,10 @@ import {
 import { emptyReplayWorldState } from "../../timeline/state/timeline/replayWorldStateSupport";
 import { readTimelineCheckpoint } from "../../timeline/state/timelineCheckpointPersistence";
 import { createMaterializedWorkOutcomeState } from "../../work-outcome/public/materializer";
+import {
+  readSessionPersistenceDiagnosticRecords,
+  resetSessionPersistenceDiagnosticRecords,
+} from "../lib/session-persistence/diagnostics";
 import { useDashboardSessionStore } from "../state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,
@@ -212,6 +216,7 @@ describe("useDashboardSnapshot composer", () => {
   let getFactorySessionSyncPreflightSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    resetSessionPersistenceDiagnosticRecords();
     replayHarness.install();
     window.history.replaceState({}, "", "/");
     indexedDBRecords = installIndexedDBTestDouble();
@@ -245,6 +250,7 @@ describe("useDashboardSnapshot composer", () => {
   });
 
   afterEach(() => {
+    resetSessionPersistenceDiagnosticRecords();
     window.history.replaceState({}, "", "/");
     vi.unstubAllGlobals();
     getFactorySessionSyncPreflightSpy.mockRestore();
@@ -684,6 +690,17 @@ describe("useDashboardSnapshot composer", () => {
       readTimelineCheckpoint(window.indexedDB, defaultStreamIdentity()),
     ).resolves.toEqual(expect.objectContaining({ selectedTick: 7 }));
     expect(indexedDBRecords.has(checkpointStorageKey())).toBe(true);
+    const recoveryDiagnostics =
+      readSessionPersistenceDiagnosticRecords().filter(({ outcome }) =>
+        ["stale_cursor", "cursor_free_replay_fallback"].includes(outcome),
+      );
+    expect(recoveryDiagnostics.map((record) => record.outcome)).toEqual([
+      "stale_cursor",
+      "cursor_free_replay_fallback",
+    ]);
+    expect(recoveryDiagnostics[0]?.correlationToken).toBe(
+      recoveryDiagnostics[1]?.correlationToken,
+    );
   });
 
   it("remaps the ~default alias to the resolved UUID runtime identity", async () => {

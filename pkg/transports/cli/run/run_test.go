@@ -63,6 +63,7 @@ func preserveRunGlobals(t *testing.T) {
 	originalOpener := dashboardOpener
 	originalInteractive := interactiveOutput
 	originalStartAPIServer := startAPIServer
+	originalServeFactoryAPIServer := serveFactoryAPIServer
 	if buildInvocationBootstrap == nil {
 		buildInvocationBootstrap = func(ctx context.Context, cfg *service.FactoryServiceConfig) (InvocationRunner, error) {
 			return service.BuildInvocationBootstrap(ctx, cfg)
@@ -75,6 +76,7 @@ func preserveRunGlobals(t *testing.T) {
 		dashboardOpener = originalOpener
 		interactiveOutput = originalInteractive
 		startAPIServer = originalStartAPIServer
+		serveFactoryAPIServer = originalServeFactoryAPIServer
 	})
 }
 

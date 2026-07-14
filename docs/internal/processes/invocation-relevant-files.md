@@ -12,12 +12,12 @@ primary-result behavior.
   model invocation and Factory Session worker execution.
 - `pkg/workers/skippermissions/` owns provider-backed worker capability and
   invocation-override policy for skip-permissions.
-- `pkg/factorysessions/invocation/session_owner.go` owns live-session request normalization,
+- `pkg/factory/sessions/invocation/session_owner.go` owns live-session request normalization,
   interpolation validation, default-handling Work submission, lifecycle
   sequencing, and delegation into the owner-local event-derived result waiter.
-  `pkg/factorysessions/invocation/session_wait.go` owns polling, timeout and cancellation,
+  `pkg/factory/sessions/invocation/session_wait.go` owns polling, timeout and cancellation,
   primary-result selection, and terminal classification over narrow runtime
-  observations. `pkg/factorysessions/invocation/session_telemetry.go` owns invocation metric
+  observations. `pkg/factory/sessions/invocation/session_telemetry.go` owns invocation metric
   names, low-cardinality labels, exactly-once emission points, safe structured
   log fields, and packaged-factory telemetry policy. Keep session configuration,
   Work submission, observation, wait/time behavior, telemetry sinks, and
@@ -82,11 +82,11 @@ primary-result behavior.
   session config, canonical Work submission, event-derived observations,
   metric/log sinks, and packaged-factory terminal classification. Their
   `InvokeFactorySession` methods must remain transparent forwards to
-  `pkg/factorysessions/invocation.SessionInvoker`; model-catalog files must not own Factory
+  `pkg/factory/sessions/invocation.SessionInvoker`; model-catalog files must not own Factory
   Session invocation behavior. Metric names, label policy, log shaping, and
   emission sequencing must not be reimplemented in these adapters. Submission
   sequencing, polling, and timeout/cancellation belong to
-  `pkg/factorysessions/invocation`; normalization, interpolation, primary-result selection,
+  `pkg/factory/sessions/invocation`; normalization, interpolation, primary-result selection,
   and general terminal classification belong to `pkg/work/invocation` and are
   delegated to by the stateful owner.
 - API structured args use the direct structured-argument carrier rather than
@@ -418,9 +418,11 @@ primary-result behavior.
   `TestRun_NamedSubagentNoServerBootstrap_TextPrimaryResultIsAgentResponse`,
   `TestRun_NamedSubagentNoServerBootstrap_SuccessJSONMatchesAPIProjection`,
   `TestNoServerNamedSubagentInvocationIntegrationAndEquivalenceProof`), using the
-  real shared bootstrap path with mock workers and a TCP probe port to assert no
-  factory API/dashboard listener is bound and exactly one agent-response
-  `primaryResult` is returned.
+  real shared bootstrap path with mock workers and deterministic API-server
+  starter guards to assert no factory API/dashboard listener is served and
+  exactly one agent-response `primaryResult` is returned. Do not use a
+  close-and-rebind TCP probe for this assertion: another package test or process
+  can claim the released port and make the proof nondeterministic.
 - `pkg/transports/cli/run/factory_invocation_help.go` owns the factory-aware help renderer
   for `you run --named <factory> --help` and `you run --factory <factory.json> --help`.
   Keep usage lines, parameter descriptions, defaults, accepted values, output
@@ -466,8 +468,10 @@ primary-result behavior.
 - Hermetic no-server named `@you/goal` package proof lives in
   `pkg/transports/cli/run/run_invocation_test.go`
   (`TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer`), using
-  the real shared bootstrap path with mock workers and a TCP probe port to
-  assert no factory API/dashboard listener is bound.
+  the real shared bootstrap path with mock workers and deterministic API-server
+  starter guards to assert no factory API/dashboard listener is served.
+  `run.BuildApplication` must also skip listener reservation entirely in
+  invocation mode rather than briefly binding and then discarding a listener.
 - No-server bootstrap CLI/API invocation-equivalence proof lives in
   `pkg/transports/cli/run/run_invocation_test.go`
   (`TestRun_NoServerBootstrap_PositionalInputMatchesAPIContract`,
@@ -582,7 +586,7 @@ primary-result behavior.
   on that same-session refresh via `shouldResumeFromPersistedCheckpoint` in
   `ui/src/features/dashboard/lib/dashboard-session-lifecycle.ts` plus
   `useDashboardInitialReconnectCursor`.
-- `pkg/factorysessions/invocation/session_wait.go` owns the session invocation wait loop and
+- `pkg/factory/sessions/invocation/session_wait.go` owns the session invocation wait loop and
   calls explicit packaged-factory hooks at active, completed, and terminal-failure
   boundaries. `pkg/service/runtime_sessions.go` and
   `pkg/runtimehost/session_invocation.go` adapt packaged TTS classification,

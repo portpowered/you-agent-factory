@@ -3,7 +3,6 @@ import {
   identityMismatchDiagnostic,
   recordSessionPersistenceInvalidation,
   type SessionPersistenceIdentityScope,
-  userClearedSessionsDiagnostic,
 } from "../../dashboard/public/session-persistence-diagnostics";
 import {
   type StreamDerivedCacheIdentity,
@@ -191,10 +190,7 @@ export async function clearTimelineCheckpointsForSession(
     await deleteCheckpointDatabaseRecordsMatching<TimelineCheckpointEnvelope>(
       indexedDB,
       (envelope) =>
-        matchesStoredCheckpointFactorySessionID(
-          envelope,
-          normalizedSessionID,
-        ),
+        matchesStoredCheckpointFactorySessionID(envelope, normalizedSessionID),
       options.signal,
     );
   } catch {
@@ -227,12 +223,6 @@ export async function clearTimelineCheckpoint(
     ) {
       return;
     }
-    recordSessionPersistenceInvalidation(
-      userClearedSessionsDiagnostic(
-        persistenceScopeFromTimelineIdentity(normalizedStreamIdentity),
-        requestedSessionID,
-      ),
-    );
   }
   await enqueueOrderedCheckpointClear(indexedDB, normalizedStreamIdentity, () =>
     deleteCheckpointDatabaseRecord(indexedDB, storageKey, options.signal),

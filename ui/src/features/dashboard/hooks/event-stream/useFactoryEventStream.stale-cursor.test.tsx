@@ -13,6 +13,10 @@ import {
 import * as timelinePublic from "../../../timeline/public";
 import { useFactoryTimelineStore } from "../../../timeline/state/factoryTimelineStore";
 import { factorySessionDetailQueryKey } from "../../lib/dashboard-session-lifecycle";
+import {
+  readSessionPersistenceDiagnosticRecords,
+  resetSessionPersistenceDiagnosticRecords,
+} from "../../lib/session-persistence/diagnostics";
 import { useDashboardSessionStore } from "../../state/dashboardSessionStore";
 import {
   createDefaultDashboardStreamState,
@@ -142,6 +146,7 @@ describe("useFactoryEventStream stale cursor recovery", () => {
   let queryClient = createFactoryEventStreamQueryClient();
 
   beforeEach(() => {
+    resetSessionPersistenceDiagnosticRecords();
     replayHarness.install();
     queryClient = createFactoryEventStreamQueryClient();
     seedFactoryEventStreamStores();
@@ -156,6 +161,7 @@ describe("useFactoryEventStream stale cursor recovery", () => {
   });
 
   afterEach(() => {
+    resetSessionPersistenceDiagnosticRecords();
     resetFactoryEventStreamStores();
     vi.unstubAllGlobals();
   });
@@ -234,6 +240,25 @@ describe("useFactoryEventStream stale cursor recovery", () => {
     expect(useDashboardStreamStore.getState().streamState.status).not.toBe(
       "recovery_failed",
     );
+    const diagnostics = readSessionPersistenceDiagnosticRecords();
+    expect(
+      diagnostics.map(({ outcome, recoveryAction }) => ({
+        outcome,
+        recoveryAction,
+      })),
+    ).toEqual([
+      {
+        outcome: "stale_cursor",
+        recoveryAction: "invalidate_reconnect_cursor",
+      },
+      {
+        outcome: "cursor_free_replay_fallback",
+        recoveryAction: "replay_without_cursor",
+      },
+    ]);
+    expect(diagnostics[0]?.correlationToken).toBe(
+      diagnostics[1]?.correlationToken,
+    );
   });
 
   it("shows a recoverable stream state when replay from scratch cannot reopen the session", async () => {
@@ -297,6 +322,89 @@ describe("useFactoryEventStream stale cursor recovery", () => {
       });
     });
     expect(replayHarness.getStreams()).toHaveLength(2);
+    expect(
+      readSessionPersistenceDiagnosticRecords().map((record) => record.outcome),
+    ).toEqual(["stale_cursor", "cursor_free_replay_fallback"]);
+  });
+
+  it("keeps a cancelled recovery probe silent", async () => {
+    const deferredProbe = Promise.withResolvers<{
+      factorySessionId: string;
+      outcome: string;
+      retry: { omitAfterEventId: boolean; omitAfterSequence: boolean };
+    }>();
+    const probeRecovery = vi.fn(() => deferredProbe.promise);
+    const hook = renderHook(
+      () =>
+        useFactoryEventStream({
+          enabled: true,
+          initialReconnectCursor: { afterEventId: "event-7", afterSequence: 7 },
+          onEvent: () => {},
+          probeRecovery,
+          sessionID: DEFAULT_FACTORY_SESSION_ID,
+          streamIdentity: resolvedDefaultStreamIdentity(),
+          validateReconnectCursor: vi.fn().mockResolvedValue({ ok: true }),
+        }),
+      { wrapper: createWrapper(queryClient) },
+    );
+    await waitFor(() => expect(replayHarness.getStreams()).toHaveLength(1));
+    act(() => replayHarness.getStreams()[0]?.onerror?.(new Event("error")));
+    await waitFor(() => expect(probeRecovery).toHaveBeenCalledTimes(1));
+    hook.unmount();
+    deferredProbe.resolve({
+      factorySessionId: RESOLVED_DEFAULT_SESSION_UUID,
+      outcome: "CURSOR_STALE",
+      retry: { omitAfterEventId: true, omitAfterSequence: true },
+    });
+    await act(async () => Promise.resolve());
+    expect(readSessionPersistenceDiagnosticRecords()).toEqual([]);
+    expect(replayHarness.getStreams()).toHaveLength(1);
+  });
+
+  it.each([
+    {
+      label: "failed",
+      probe: () => Promise.reject(new Error("probe unavailable")),
+    },
+    {
+      label: "mismatched-session",
+      probe: () =>
+        Promise.resolve({
+          factorySessionId: "different-session",
+          outcome: "CURSOR_STALE",
+          retry: { omitAfterEventId: true, omitAfterSequence: true },
+        }),
+    },
+    {
+      label: "generic-reconnect",
+      probe: () =>
+        Promise.resolve({
+          factorySessionId: RESOLVED_DEFAULT_SESSION_UUID,
+          outcome: "RECONNECT",
+          retry: { omitAfterEventId: false, omitAfterSequence: false },
+        }),
+    },
+  ])("keeps a $label recovery probe silent", async ({ probe }) => {
+    const probeRecovery = vi.fn(probe);
+    const hook = renderHook(
+      () =>
+        useFactoryEventStream({
+          enabled: true,
+          initialReconnectCursor: { afterEventId: "event-7", afterSequence: 7 },
+          onEvent: () => {},
+          probeRecovery,
+          sessionID: DEFAULT_FACTORY_SESSION_ID,
+          streamIdentity: resolvedDefaultStreamIdentity(),
+          validateReconnectCursor: vi.fn().mockResolvedValue({ ok: true }),
+        }),
+      { wrapper: createWrapper(queryClient) },
+    );
+    await waitFor(() => expect(replayHarness.getStreams()).toHaveLength(1));
+    act(() => replayHarness.getStreams()[0]?.onerror?.(new Event("error")));
+    await waitFor(() => expect(probeRecovery).toHaveBeenCalledTimes(1));
+    await act(async () => Promise.resolve());
+    expect(readSessionPersistenceDiagnosticRecords()).toEqual([]);
+    hook.unmount();
   });
 });
 
