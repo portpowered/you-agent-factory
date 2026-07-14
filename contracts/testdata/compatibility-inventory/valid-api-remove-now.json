@@ -1,0 +1,34 @@
+{
+  "formatVersion": "1.0.0",
+  "family": "api",
+  "records": {
+    "api.route.post.workflow-previews": {
+      "itemId": "api.route.post.workflow-previews",
+      "family": "api",
+      "publicName": "POST /workflow-previews",
+      "classification": "remove-now",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "api.route.post.workflow-previews",
+        "state": "deprecated",
+        "since": "1.0.0",
+        "deprecated": "1.2.0",
+        "successor": {
+          "targetItemId": "api.route.post.factories.preview",
+          "canonicalEnglish": "Use POST /factories/preview with FactoryPreviewRequest and FactoryPreviewResult."
+        }
+      },
+      "evidence": {
+        "summary": "Obsolete workflow-preview REST alias retained for compatibility-only callers."
+      },
+      "removalGates": [
+        {
+          "id": "api.route.post.workflow-previews.dashboard-migrated",
+          "description": "Dashboard and packaged reference guidance route preview through POST /factories/preview only.",
+          "status": "satisfied"
+        }
+      ],
+      "approvalStatus": "approved"
+    }
+  }
+}

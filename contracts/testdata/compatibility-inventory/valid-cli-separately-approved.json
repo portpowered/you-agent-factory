@@ -1,0 +1,34 @@
+{
+  "formatVersion": "1.0.0",
+  "family": "cli",
+  "records": {
+    "cli.command.workflow.preview": {
+      "itemId": "cli.command.workflow.preview",
+      "family": "cli",
+      "publicName": "you workflow preview",
+      "classification": "separately-approved",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "cli.command.workflow.preview",
+        "state": "deprecated",
+        "since": "1.0.0",
+        "deprecated": "1.1.0",
+        "successor": {
+          "targetItemId": "cli.command.factory.preview",
+          "canonicalEnglish": "Use you factory preview for canonical Factory preview."
+        }
+      },
+      "evidence": {
+        "summary": "Workflow-named CLI preview command is compatibility-only and forwards to Factory preview."
+      },
+      "removalGates": [
+        {
+          "id": "cli.command.workflow.preview.approval-recorded",
+          "description": "A separately approved work item records the retention or removal decision.",
+          "status": "open"
+        }
+      ],
+      "approvalStatus": "pending"
+    }
+  }
+}

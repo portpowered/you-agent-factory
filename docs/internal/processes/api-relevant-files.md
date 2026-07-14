@@ -72,6 +72,86 @@ Use this map when changing the public REST contract.
   `make api-smoke`; this inventory lane must not modify authored OpenAPI,
   generated clients, or `pkg/transports/http` handlers.
 
+## Family compatibility inventory ownership
+
+- Machine-readable API, CLI, and MCP compatibility classifications live in
+  `contracts/api/deprecated.json`, `contracts/cli/deprecated.json`, and
+  `contracts/mcp/deprecated.json` against
+  `contracts/compatibility-inventory.schema.json` and the shared vocabulary in
+  `contracts/common/compatibility-inventory.schema.json`.
+- These family inventories are the **machine-readable source of truth** for
+  classification status, successor `targetItemId`, evidence, lifecycle
+  versions, removal-gate status, and maintainer `approvalStatus`. Update the
+  JSON records first when classification changes; the human-readable appendix
+  tables in [Compatibility Alias Inventory](#compatibility-alias-inventory)
+  document boundary ownership and runtime evidence and must stay aligned.
+- Supported `classification` values (see schema `$defs/classification`):
+  - `retain-temporarily`: the alias remains callable; removal requires satisfying
+    every recorded removal gate in a separate approved removal change.
+  - `remove-now`: classified as removal-ready for a later approved removal
+    story; inventory classification does not unregister or delete runtime
+    aliases.
+  - `separately-approved`: retained under explicit maintainer approval outside
+    the default retain/remove posture.
+- Supported `approvalStatus` values are `approved`, `pending`, and `rejected`.
+  Inventory records compose lifecycle fields from
+  `contracts/common/deprecations.schema.json`; classification metadata does not
+  control runtime callability.
+- Baseline scope for coverage assertions lives under
+  `contracts/testdata/baseline/` (`api-compatibility-surfaces.json`,
+  `cli-commands.json`, `mcp-aliases.json`). Add new compatibility-only surfaces
+  to the relevant baseline file and the matching family inventory in the same
+  change.
+- `contracts/compatibility_inventory_coverage_test.go`
+  (`TestCompatibilityInventoryBaselineCoverage`) loads each family inventory plus
+  its baseline and fails when any in-scope compatibility surface lacks exactly
+  one classified record or required fields (stable `itemId`, `family`,
+  `publicName`, supported `classification`, successor, evidence, lifecycle
+  versions, removal gates, approval status). Per-family schema validation stays
+  in `contracts/*_deprecated_inventory_test.go`.
+
+## Focused compatibility alias internal-use lint
+
+- `internal/contractguard` loads inventoried compatibility alias match values from
+  `contracts/mcp/deprecated.json`, `contracts/cli/deprecated.json`, and
+  `contracts/api/deprecated.json`, then scans handwritten `cmd/`, `internal/`,
+  `pkg/`, and `ui/src` sources for deliberate new adoption outside approved
+  compatibility boundaries.
+- `cmd/compatibilityaliascheck` is wired through `make compatibility-alias-check`
+  and the default `make lint` target. Checked-in violation and clean fixtures
+  live under `cmd/compatibilityaliascheck/testdata/{violation-repo,clean-repo}/`.
+- Retained aliases remain callable at existing CLI/MCP/REST compatibility
+  boundaries (`pkg/transports/`, `pkg/factory/`, `ui/src/api/workflow-preview/`,
+  and related owners documented above). New first-party internal code must use
+  canonical successors instead of inventoried compatibility alias names.
+- Session-selector and process-global event compatibility surfaces
+  (`~default`, `GET /events`) stay inventoried for classification but are
+  excluded from this focused lint because they are accepted at many transport
+  boundaries rather than workflow-preview alias names.
+- Retained aliases remain callable until objective removal gates are satisfied
+  in a separate approved removal change; the lint gate blocks new first-party
+  internal adoption only.
+
+## Primary navigation and reference guidance
+
+- Packaged CLI reference (`docs/reference/`, `you docs <topic>`), dashboard
+  navigation, OpenAPI primary discovery, and new first-party examples must
+  present canonical successors rather than promoting compatibility aliases as
+  primary entry points.
+- Compatibility aliases belong only in the family compatibility inventories
+  above and the maintainer appendix tables in
+  [Compatibility Alias Inventory](#compatibility-alias-inventory); they are
+  excluded from primary discovery and must not appear as recommended routes,
+  nav labels, packaged topic names, or first-party examples in customer guides.
+- When documenting public entry points, name the canonical successor (for
+  example `POST /factories/preview`, Factory Session REST routes, and
+  `you.factory_session.*` MCP tools). Mention retained workflow-named aliases
+  only in explicit migration or compatibility appendix lanes.
+- Reference topics may acknowledge long-lived CLI topic aliases (for example
+  `batch-work` → `batch-inputs`) at the edges of canonical topic lists in
+  `docs/reference/README.md`; workflow-named API/CLI/MCP aliases are not primary
+  and must not be added to primary navigation or reference tables.
+
 ## OpenAPI contract semver comparator
 
 - `internal/contractopenapidiff` owns the build-time OpenAPI comparator that
@@ -114,7 +194,13 @@ Use this map when changing the public REST contract.
 
 ## Compatibility Alias Inventory
 
-This inventory is the maintainer source of truth for retained public aliases.
+This section is the human-readable maintainer appendix for alias-accepting
+boundaries, canonical successors, runtime evidence, and objective removal gates.
+Classification status, approval posture, and removal-gate satisfaction are
+owned by the machine-readable family inventories documented in
+[Family compatibility inventory ownership](#family-compatibility-inventory-ownership);
+update those JSON records first when classification changes.
+
 An alias-accepting boundary may parse, route, or re-export an obsolete name, but
 it does not own the behavior. The canonical owner and its tests remain the final
 specification; compatibility-only tests prove deprecation signals and parity
@@ -343,6 +429,7 @@ dashboard state, and event connections. This agrees with
 - Keep the response-event subscription seam in `pkg/apisurface` transport-neutral: return sequence, kind, and canonical serialized JSON records rather than importing `pkg/factorysessions/responseevents` into the shared API surface. Adapt the session-owned store at the runtime edge so core packages that depend on `pkg/apisurface` do not acquire a reverse dependency on Factory Session implementation packages.
 - Retention gaps for `GET /factory-sessions/{session_id}/response-events` are synthetic `STREAM_GAP` records owned by `pkg/factorysessions/responseeventstore`: emit them before the available suffix, always pass them through response-kind filtering, report the unavailable `fromSequence`/`toSequence` bounds plus the query-relative `firstAvailableSequence`, and never publish or persist them as canonical `FactoryEvent` history.
 - Completed response-event stores accept late subscriptions for `responseeventstore.CompletedStreamRetentionWindow` (15 minutes), then return `ErrStoreExpired`; every production `apisurface.SessionAPI` implementation, including both the legacy `pkg/service` facade and initializer-backed `pkg/runtimehost.Host`, must map that domain outcome through `apisurface.ErrFactoryResponseEventStreamExpired` to the authored HTTP 410 before SSE headers are committed. Prove initializer/runtime-host composition behavior in `pkg/initializer/api_transport_internal_test.go`, not only mock or legacy service paths. When adding a typed HTTP status, also extend `errorFamilyForStatus` in `pkg/api/handlers_common.go` so the response's `family` matches its status instead of falling back to `INTERNAL_SERVER_ERROR`.
+- B08 response-event backpressure transport proofs belong in `pkg/transports/http/servertests/server_factory_session_orchestrator_test.go` (`TestFactoryResponseEventsBySessionID_SlowConsumerFloodDoesNotBlockPublication` uses a gated SSE body reader so `GET /factory-sessions/{session_id}/response-events` can lag while store publication floods under a bounded budget) and `pkg/transports/cli/run/run_wire_api_test.go` (`runFactoryInvocationResponseStreamSlowStdoutFixture` covers human and NDJSON slow-stdout fixtures with `gatedResponseStreamWriter` plus terminal `invocation_result` assertions). Skip the HTTP fixture when `testing.Short()` is set.
 - Response-event OpenAPI contract coverage lives in `pkg/api/contracttests/openapi_contract_response_events_test.go` and `generated_contract_response_events_test.go`, with representative fixtures reused from `pkg/factorysessions/responseevents/testdata/fixtures/` plus payload/content-block coverage fixtures under `pkg/api/testdata/`. `pkg/factorysessions/responseevents` owns the canonical compact JSON envelope; because Go marshals struct fields in declaration order while generated OpenAPI structs use generator-defined ordering, keep the domain envelope and provenance order aligned with the generated server model and compare complete marshaled bytes for every shared representative fixture.
 - Internal provider/session response-stream changes stay out of the public contract by proving absence at the artifact boundary in `pkg/api/contracttests/`: when adding provider-specific normalization or internal `SessionResponseStream` semantics, add or update contract tests against `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/generatedclient/client.gen.go`, `ui/src/api/generated/openapi.ts`, and canonical public event fixtures so internal response-stream terms and provider-native event names do not leak into published schemas or `FactoryEvent` payload artifacts.
 - Historical `FactoryEvent` compatibility translation belongs at replay JSON ingestion in `pkg/replay/artifact.go` and `pkg/replay/event_stream_artifact.go`, before generated event unions discard retired fields. Keep reducers and projections canonical-only, normalize artifact and SSE inputs through the same boundary helper, and limit translation to event payload objects so customer work content is not rewritten.

@@ -78,8 +78,11 @@ func TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput(t
 	if snapshot.DispatchHistory[0].Outcome != interfaces.OutcomeFailed {
 		t.Fatalf("dispatch outcome = %s, want %s", snapshot.DispatchHistory[0].Outcome, interfaces.OutcomeFailed)
 	}
-	if !strings.Contains(snapshot.DispatchHistory[0].Reason, "code 7") {
-		t.Fatalf("dispatch reason = %q, want exit code detail", snapshot.DispatchHistory[0].Reason)
+	if snapshot.DispatchHistory[0].FailureMetadata == nil || snapshot.DispatchHistory[0].FailureMetadata.Type != interfaces.WorkFailureTypeUnknown {
+		t.Fatalf("FailureMetadata.Type = %#v, want %q", snapshot.DispatchHistory[0].FailureMetadata, interfaces.WorkFailureTypeUnknown)
+	}
+	if !strings.Contains(snapshot.DispatchHistory[0].Reason, "provider error: unknown: Codex reported a terminal error.") {
+		t.Fatalf("dispatch reason = %q, want stable unknown code with audited message", snapshot.DispatchHistory[0].Reason)
 	}
 
 	record := findRuntimeLogRecord(t, requireRuntimeLogPath(t, logDir, "mock-reject"), workers.WorkLogEventCommandRunnerCompleted)
@@ -130,7 +133,10 @@ func TestMockWorkers_AgentRejectConfigWithZeroExitCodeStillRoutesFailure(t *test
 	if snapshot.DispatchHistory[0].Outcome != interfaces.OutcomeFailed {
 		t.Fatalf("dispatch outcome = %s, want %s", snapshot.DispatchHistory[0].Outcome, interfaces.OutcomeFailed)
 	}
-	if !strings.Contains(snapshot.DispatchHistory[0].Reason, "code 1") {
-		t.Fatalf("dispatch reason = %q, want defensive non-zero exit code detail", snapshot.DispatchHistory[0].Reason)
+	if snapshot.DispatchHistory[0].FailureMetadata == nil || snapshot.DispatchHistory[0].FailureMetadata.Type != interfaces.WorkFailureTypeUnknown {
+		t.Fatalf("FailureMetadata.Type = %#v, want %q", snapshot.DispatchHistory[0].FailureMetadata, interfaces.WorkFailureTypeUnknown)
+	}
+	if !strings.Contains(snapshot.DispatchHistory[0].Reason, "provider error: unknown: Codex reported a terminal error.") {
+		t.Fatalf("dispatch reason = %q, want stable unknown code with audited message", snapshot.DispatchHistory[0].Reason)
 	}
 }

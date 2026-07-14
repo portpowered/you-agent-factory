@@ -7,11 +7,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	opencodepkg "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
-	claudepkg "github.com/portpowered/infinite-you/pkg/workers/provider/claude"
-	codexexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/codex/exitfailure"
-	geminipkg "github.com/portpowered/infinite-you/pkg/workers/provider/gemini"
-	kiropkg "github.com/portpowered/infinite-you/pkg/workers/provider/kiro"
 )
 
 func loadProviderErrorCorpusForTest(t *testing.T) ProviderErrorCorpus {
@@ -181,21 +176,21 @@ func TestParseCodexProviderFailure_BoundsAndSanitizesFallbackMessages(t *testing
 				"cleanup complete",
 			}, "\n"))},
 			wantReason:  interfaces.WorkFailureTypeUnknown,
-			wantMessage: "codex exited with code 7",
+			wantMessage: codexUnknownFailureMessage,
 			reject:      []string{"customer prompt", "cleanup", "gpt-5.6-sol"},
 		},
 		{
 			name:        "MalformedJSONUsesExitFallback",
 			result:      CommandResult{ExitCode: 1, Stderr: []byte(`ERROR: {"type":"error","error":{"message":"private transcript"}`)},
 			wantReason:  interfaces.WorkFailureTypeUnknown,
-			wantMessage: "codex exited with code 1",
+			wantMessage: codexUnknownFailureMessage,
 			reject:      []string{"private transcript", "{"},
 		},
 		{
 			name:        "CredentialsUseExitFallback",
 			result:      CommandResult{ExitCode: 1, Stderr: []byte("ERROR: request failed with Authorization: Bearer secret-token")},
 			wantReason:  interfaces.WorkFailureTypeUnknown,
-			wantMessage: "codex exited with code 1",
+			wantMessage: codexUnknownFailureMessage,
 			reject:      []string{"secret-token", "Bearer"},
 		},
 		{
@@ -204,14 +199,14 @@ func TestParseCodexProviderFailure_BoundsAndSanitizesFallbackMessages(t *testing
 				"ERROR: should not survive the bounded scan\n" + strings.Repeat("cleanup-padding\n", codexErrorLineScanBytes),
 			)},
 			wantReason:  interfaces.WorkFailureTypeUnknown,
-			wantMessage: "codex exited with code 2",
+			wantMessage: codexUnknownFailureMessage,
 			reject:      []string{"should not survive"},
 		},
 		{
 			name:        "UnknownErrorExcerptUsesExitFallback",
 			result:      CommandResult{ExitCode: 3, Stderr: []byte("ERROR: operation failed " + strings.Repeat("x", codexFailureMessageBytes+200))},
 			wantReason:  interfaces.WorkFailureTypeUnknown,
-			wantMessage: "codex exited with code 3",
+			wantMessage: codexUnknownFailureMessage,
 			reject:      []string{"operation failed", "xxx"},
 		},
 	}
@@ -259,21 +254,21 @@ func TestParseCodexProviderFailure_UnstructuredFallbackIsSafeByConstruction(t *t
 			name:        "PromptBearingErrorUsesExitFallback",
 			stderr:      "ERROR: customer prompt: explain unexpected status 429 with private details",
 			wantReason:  interfaces.WorkFailureTypeUnknown,
-			wantMessage: "codex exited with code 1",
+			wantMessage: codexUnknownFailureMessage,
 			reject:      []string{"customer prompt", "private details"},
 		},
 		{
 			name:        "TranscriptBearingErrorUsesExitFallback",
 			stderr:      "ERROR: transcript: selected model is at capacity in the user's example",
 			wantReason:  interfaces.WorkFailureTypeUnknown,
-			wantMessage: "codex exited with code 1",
+			wantMessage: codexUnknownFailureMessage,
 			reject:      []string{"transcript", "user's example"},
 		},
 		{
 			name:        "CredentialBearingErrorUsesExitFallback",
 			stderr:      "ERROR: arbitrary credential secret_token=customer-private-value",
 			wantReason:  interfaces.WorkFailureTypeUnknown,
-			wantMessage: "codex exited with code 1",
+			wantMessage: codexUnknownFailureMessage,
 			reject:      []string{"secret_token", "customer-private-value"},
 		},
 	}
@@ -737,97 +732,4 @@ func TestClaudeProviderBehavior_PassesUserMessageAsArgument(t *testing.T) {
 	if len(commandReq.Stdin) != 0 {
 		t.Fatalf("expected claude request not to use stdin, got %q", string(commandReq.Stdin))
 	}
-}
-
-const (
-	claudeFailureMessageBytes            = 1024
-	claudeFailureScanBytes               = 64 * 1024
-	claudeThrottleFailureMessage         = claudepkg.ThrottleFailureMessage
-	claudeBadRequestFailureMessage       = "Claude rejected the request as invalid."
-	claudeAuthFailureMessage             = "Claude authentication failed."
-	claudeConfigFailureMessage           = "Claude is not configured correctly."
-	claudeServerFailureMessage           = "Claude encountered a temporary server error."
-	claudeTimeoutFailureMessage          = claudepkg.TimeoutFailureMessage
-	codexAuthFailureMessage              = codexexitfailure.AuthFailureMessage
-	codexBadRequestFailureMessage        = "Codex rejected the request as invalid."
-	codexThrottleFailureMessage          = "Codex is temporarily unavailable due to usage or capacity limits."
-	codexTimeoutFailureMessage           = "Codex request timed out."
-	codexServerFailureMessage            = "Codex encountered a temporary server error."
-	codexFailureMessageBytes             = 1024
-	codexErrorLineScanBytes              = 64 * 1024
-	codexWindowsProcessFailureExitCode   = codexexitfailure.WindowsProcessFailureExitCode
-	codexHighDemandTemporaryErrorsNeedle = codexexitfailure.HighDemandTemporaryErrorsNeedle
-	codexGPT56SolUpgradeMessage          = "The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."
-	opencodeThrottleFailureMessage       = opencodepkg.ThrottleFailureMessage
-	opencodeBadRequestFailureMessage     = opencodepkg.BadRequestFailureMessage
-	opencodeTimeoutFailureMessage        = opencodepkg.TimeoutFailureMessage
-	opencodeServerFailureMessage         = "OpenCode encountered a temporary server error."
-	opencodeFailureMessageBytes          = 512
-	geminiTimeoutFailureMessage          = geminipkg.TimeoutFailureMessage
-	geminiThrottleFailureMessage         = "The provider is rate limited; retry after capacity becomes available."
-)
-
-func failureInput(result CommandResult) claudepkg.FailureInput {
-	return claudepkg.FailureInput{Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode}
-}
-
-func ParseClaudeProviderFailure(result CommandResult) ProviderFailureResult {
-	parsed := claudepkg.ParseProviderFailure(failureInput(result))
-	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
-}
-
-func ParseCodexProviderFailure(result CommandResult) ProviderFailureResult {
-	parsed := codexexitfailure.ParseExitFailure(codexexitfailure.ExitFailureInput{
-		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-	})
-	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
-}
-
-func ParseGeminiProviderFailure(result CommandResult) ProviderFailureResult {
-	parsed := geminipkg.ParseProviderFailure(geminipkg.FailureInput{
-		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-	})
-	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
-}
-
-func ParseOpenCodeProviderFailure(result CommandResult) ProviderFailureResult {
-	parsed := opencodepkg.ParseProviderFailure(opencodepkg.FailureInput{
-		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-	})
-	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
-}
-
-func codexTextFailureMessage(reason interfaces.WorkFailureType) string {
-	parsed := ParseCodexProviderFailure(CommandResult{ExitCode: 1, Stderr: []byte("ERROR: unexpected status 401")})
-	switch reason {
-	case interfaces.WorkFailureTypeAuthFailure:
-		return codexAuthFailureMessage
-	case interfaces.WorkFailureTypePermanentBadRequest:
-		return codexBadRequestFailureMessage
-	case interfaces.WorkFailureTypeThrottled:
-		return codexThrottleFailureMessage
-	case interfaces.WorkFailureTypeInternalServerError:
-		return codexServerFailureMessage
-	case interfaces.WorkFailureTypeTimeout:
-		return codexTimeoutFailureMessage
-	default:
-		return parsed.Message
-	}
-}
-
-func knownKiroFailure(reason interfaces.WorkFailureType) ProviderFailureResult {
-	message := ""
-	switch reason {
-	case interfaces.WorkFailureTypeAuthFailure:
-		message = "Kiro authentication failed. Sign in again and retry."
-	case interfaces.WorkFailureTypePermanentBadRequest:
-		message = "Kiro rejected the request as invalid."
-	case interfaces.WorkFailureTypeThrottled:
-		message = "Kiro is temporarily unavailable due to usage or capacity limits."
-	case interfaces.WorkFailureTypeTimeout:
-		message = kiropkg.TimeoutFailureMessage
-	case interfaces.WorkFailureTypeInternalServerError:
-		message = "Kiro encountered a temporary service error."
-	}
-	return ProviderFailureResult{Reason: reason, Message: message}
 }

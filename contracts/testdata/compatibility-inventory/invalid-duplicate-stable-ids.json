@@ -1,0 +1,62 @@
+{
+  "formatVersion": "1.0.0",
+  "family": "mcp",
+  "records": {
+    "mcp.alias.you.workflow.validate": {
+      "itemId": "mcp.alias.shared.duplicate",
+      "family": "mcp",
+      "publicName": "you.workflow.validate",
+      "classification": "retain-temporarily",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.alias.shared.duplicate",
+        "state": "deprecated",
+        "since": "1.0.0",
+        "deprecated": "1.1.0",
+        "successor": {
+          "targetItemId": "mcp.tool.you.factory_session.validate_source",
+          "canonicalEnglish": "Use you.factory_session.validate_source."
+        }
+      },
+      "evidence": {
+        "summary": "Compatibility-only MCP alias."
+      },
+      "removalGates": [
+        {
+          "id": "mcp.alias.you.workflow.validate.no-external-callers",
+          "description": "No supported external integrations rely on the workflow-named alias.",
+          "status": "open"
+        }
+      ],
+      "approvalStatus": "approved"
+    },
+    "mcp.alias.you.workflow.run": {
+      "itemId": "mcp.alias.shared.duplicate",
+      "family": "mcp",
+      "publicName": "you.workflow.run",
+      "classification": "retain-temporarily",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.alias.shared.duplicate",
+        "state": "deprecated",
+        "since": "1.0.0",
+        "deprecated": "1.1.0",
+        "successor": {
+          "targetItemId": "mcp.tool.you.factory_session.start_sync",
+          "canonicalEnglish": "Use you.factory_session.start_sync."
+        }
+      },
+      "evidence": {
+        "summary": "Compatibility-only MCP alias."
+      },
+      "removalGates": [
+        {
+          "id": "mcp.alias.you.workflow.run.no-external-callers",
+          "description": "No supported external integrations rely on the workflow-named alias.",
+          "status": "open"
+        }
+      ],
+      "approvalStatus": "approved"
+    }
+  }
+}

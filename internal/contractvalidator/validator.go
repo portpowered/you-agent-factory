@@ -61,6 +61,20 @@ func NewRegistry(entries ...Entry) Registry {
 	return Registry{entries: copied}
 }
 
+// MergeRegistries combines multiple registries without mutating the inputs.
+func MergeRegistries(registries ...Registry) Registry {
+	var entries []Entry
+	for _, registry := range registries {
+		entries = append(entries, registry.entries...)
+	}
+	return Registry{entries: entries}
+}
+
+// DefaultRegistry registers every contract family validated by make contracts-validate.
+func DefaultRegistry() Registry {
+	return MergeRegistries(CommonRegistry(), CLIRegistry(), CompatibilityInventoryRegistry())
+}
+
 // CommonRegistry registers the common schemas and their merged valid fixtures.
 func CommonRegistry() Registry {
 	const (
@@ -80,6 +94,37 @@ func CommonRegistry() Registry {
 			{Path: "contracts/testdata/common/deprecations/valid-active.json", SchemaID: deprecationsID},
 			{Path: "contracts/testdata/common/deprecations/valid-deprecated.json", SchemaID: deprecationsID},
 			{Path: "contracts/testdata/common/deprecations/valid-removed.json", SchemaID: deprecationsID},
+		},
+	})
+}
+
+// CLIRegistry registers the CLI command-manifest schema and its valid fixtures.
+func CLIRegistry() Registry {
+	const (
+		commandManifestID = "https://schemas.portpowered.com/you/contracts/cli/command-manifest.schema.json"
+		documentationID   = "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+		deprecationsID    = "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+	)
+	return NewRegistry(Entry{
+		Family:        "cli",
+		FormatVersion: "1.0.0",
+		Schemas: []Schema{
+			{ID: documentationID, Path: "contracts/common/documentation.schema.json"},
+			{ID: deprecationsID, Path: "contracts/common/deprecations.schema.json"},
+			{ID: commandManifestID, Path: "contracts/cli/command-manifest.schema.json"},
+		},
+		Documents: []Document{
+			{Path: "contracts/testdata/cli/valid-identity.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-optional-argument.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-variadic-argument.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-persistent-flag.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-inherited-flag.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-no-option-flag.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-mutex-relationship.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-required-together-relationship.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-conditional-relationship.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-precedence.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-handler-binding.json", SchemaID: commandManifestID},
 		},
 	})
 }
@@ -150,6 +195,12 @@ func validateEntry(repositoryRoot string, entry Entry) []Diagnostic {
 		if err := schema.Validate(value); err != nil {
 			diagnostics = append(diagnostics, validationDiagnostics(document.Path, err)...)
 			continue
+		}
+		if document.SchemaID == compatibilityInventorySchemaID {
+			diagnostics = append(diagnostics, compatibilityInventorySemanticsDiagnostics(document.Path, value)...)
+		}
+		if document.SchemaID == commandManifestSchemaID {
+			diagnostics = append(diagnostics, cliManifestDiagnostics(document.Path, value)...)
 		}
 		for _, source := range sourceDocuments {
 			loadedDocuments[source.path] = source

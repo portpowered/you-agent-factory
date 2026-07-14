@@ -32,6 +32,26 @@ const (
 	NormalizedEventTypeCanceled  = "CANCELED"
 )
 
+const (
+	codexRetainedTextBytes      = codexprogress.ProgressRetainedTextBytes
+	codexRetainedProgressBytes  = codexprogress.ProgressRetainedProgressBytes
+	codexMetadataRunnerIDKey    = codexprogress.ProgressMetadataRunnerIDKey
+	codexMetadataWorkIDKey      = codexprogress.ProgressMetadataWorkIDKey
+	codexMetadataWorkstationKey = codexprogress.ProgressMetadataWorkstationKey
+	codexMetadataTextBytesKey   = codexprogress.ProgressMetadataTextBytesKey
+	codexMetadataTruncatedKey   = codexprogress.ProgressMetadataTruncatedKey
+	codexMetadataRawBytesKey    = codexprogress.ProgressMetadataRawBytesKey
+	codexMetadataRawSHA256Key   = codexprogress.ProgressMetadataRawSHA256Key
+	codexMetadataDiagnosticKey  = codexprogress.ProgressMetadataDiagnosticKey
+	codexDiagnosticUnknownEvent  = codexprogress.ProgressDiagnosticUnknownEvent
+	codexDiagnosticMalformedJSON = codexprogress.ProgressDiagnosticMalformedJSON
+	codexDiagnosticIncompleteSSE = codexprogress.ProgressDiagnosticIncompleteSSE
+)
+
+func isCodexCommand(command string) bool {
+	return codexprogress.IsCommand(command)
+}
+
 // InferenceProgressFragment is the provider-boundary shape for transient internal
 // session progress that must not enter canonical factory event history.
 type InferenceProgressFragment struct {

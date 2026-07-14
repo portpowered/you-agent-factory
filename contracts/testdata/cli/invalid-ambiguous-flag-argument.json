@@ -1,0 +1,89 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.sync": {
+      "id": "example.factory.sync",
+      "name": "sync",
+      "path": "example factory sync",
+      "aliases": [],
+      "groupId": "factory",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.sync",
+        "documentation": {
+          "title": {
+            "id": "example.factory.sync.title",
+            "canonicalEnglish": "Synchronize factory state"
+          },
+          "description": {
+            "id": "example.factory.sync.description",
+            "canonicalEnglish": "Claims the same stable identity for one flag and one positional argument."
+          }
+        },
+        "examples": [
+          "example factory sync target"
+        ],
+        "visibility": "public",
+        "sourceHash": "3333444455556666777788889999000011112222aaaabbbbccccddddeeeeffff"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.sync",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "sync [target]",
+        "example": "  example factory sync target --target other"
+      },
+      "arguments": {
+        "example.factory.sync.target": {
+          "id": "example.factory.sync.target",
+          "name": "target",
+          "position": 0,
+          "kind": "positional",
+          "valueType": "string",
+          "required": false,
+          "minCardinality": 0,
+          "maxCardinality": 1,
+          "variadic": false,
+          "enum": [],
+          "pattern": "",
+          "completion": "none",
+          "channels": [
+            "cli"
+          ],
+          "doubleDash": "terminates-flags"
+        }
+      },
+      "flags": {
+        "example.factory.sync.target": {
+          "id": "example.factory.sync.target",
+          "long": "target",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.factory.sync.target",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      }
+    }
+  }
+}

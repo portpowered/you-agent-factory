@@ -319,8 +319,11 @@ func assertGPT56SolFailureMetadata(t *testing.T, providerErr *ProviderError, ent
 	if providerErr.Diagnostics.Command.TimedOut {
 		t.Fatal("expected non-timeout Codex failure diagnostics")
 	}
-	if providerErr.Cause != nil {
-		t.Fatalf("provider error cause = %v, want nil for non-zero exit", providerErr.Cause)
+	if providerErr.Cause == nil {
+		t.Fatal("expected bounded internal cause on Codex exit failure")
+	}
+	if !strings.Contains(providerErr.Cause.Error(), "gpt-5.6-sol") {
+		t.Fatalf("provider error cause = %v, want audited upgrade diagnostic", providerErr.Cause)
 	}
 }
 
@@ -401,6 +404,14 @@ func TestProgressStreamIdentity_SelectsProviderOwnedObservers(t *testing.T) {
 	for _, tc := range tests {
 		if got := progressStreamIdentity(tc.command); got != tc.identity {
 			t.Fatalf("progressStreamIdentity(%q) = %q, want %q", tc.command, got, tc.identity)
+		}
+	}
+}
+
+func TestIsCodexCommand_AcceptsNativeExecutableShapes(t *testing.T) {
+	for _, command := range []string{"codex", "codex.exe", `C:\tools\codex.cmd`, "/usr/local/bin/codex"} {
+		if !isCodexCommand(command) {
+			t.Fatalf("isCodexCommand(%q) = false, want true", command)
 		}
 	}
 }
