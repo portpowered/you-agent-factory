@@ -2,11 +2,11 @@ package contractstaging_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"testing"
 
-	"github.com/portpowered/infinite-you/internal/contractjoiner"
 	"github.com/portpowered/infinite-you/internal/contractstaging"
 )
 
@@ -117,10 +117,21 @@ func checkFixture(t *testing.T) string {
 	writeCheckFixture(t, root, "contracts/common/documentation.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json","$defs":{"itemId":{"type":"string"}}}`)
 	writeCheckFixture(t, root, "contracts/common/deprecations.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json","properties":{"itemId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
 	writeCheckFixture(t, root, "contracts/manifest.schema.json", `{"$id":"https://schemas.portpowered.com/you/contracts/manifest.schema.json","properties":{"packageId":{"$ref":"https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"}}}`)
-	if diagnostics := contractjoiner.Generate(contractstaging.JoinInput(root)); len(diagnostics) != 0 {
-		t.Fatalf("Generate() diagnostics = %#v", diagnostics)
+	for _, artifact := range contractstaging.RawArtifacts() {
+		writeCheckFixture(t, root, artifact.Source, canonicalFixture(artifact.Source))
+	}
+	initCheckGitRepo(t, root)
+	if err := contractstaging.Generate(root); err != nil {
+		t.Fatalf("Generate() error = %v", err)
 	}
 	return root
+}
+
+func canonicalFixture(path string) string {
+	if path == "api/openapi.yaml" {
+		return "components:\n  schemas:\n    Factory:\n      type: object\n      properties:\n        child:\n          $ref: '#/components/schemas/Child'\n    Child:\n      type: string\n"
+	}
+	return "canonical:" + path
 }
 
 func checkTree(t *testing.T, root string) map[string]string {
@@ -154,5 +165,21 @@ func writeCheckFixture(t *testing.T, root, path, contents string) {
 	}
 	if err := os.WriteFile(target, []byte(contents), 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
+	}
+}
+
+func initCheckGitRepo(t *testing.T, root string) {
+	t.Helper()
+	commands := [][]string{
+		{"git", "-C", root, "init"},
+		{"git", "-C", root, "config", "user.email", "contractstaging-check@test"},
+		{"git", "-C", root, "config", "user.name", "contractstaging-check"},
+		{"git", "-C", root, "add", "-A"},
+		{"git", "-C", root, "commit", "-m", "contract staging check fixture"},
+	}
+	for _, command := range commands {
+		if output, err := exec.Command(command[0], command[1:]...).CombinedOutput(); err != nil {
+			t.Fatalf("%v: %s", command, output)
+		}
 	}
 }
