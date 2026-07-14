@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
@@ -221,7 +222,11 @@ func TestInit_SkipsValidPackageWithoutMaterializingInlineBundledFiles(t *testing
 	}
 
 	goalDir := goalFactoryDir(t, first.PackagedFactories)
-	writeCustomerEditedInlineBundledFile(t, goalDir)
+	bundledFilePath := writeCustomerEditedInlineBundledFile(t, goalDir)
+	beforeBundledFileInfo, err := os.Stat(bundledFilePath)
+	if err != nil {
+		t.Fatalf("Stat(customer-edited bundled file before init): %v", err)
+	}
 	beforeSnapshot := snapshotDirectoryContents(t, goalDir)
 
 	second, err := Init(homeDir)
@@ -235,6 +240,17 @@ func TestInit_SkipsValidPackageWithoutMaterializingInlineBundledFiles(t *testing
 	}
 
 	assertDirectorySnapshotUnchanged(t, goalDir, beforeSnapshot)
+	afterBundledFileInfo, err := os.Stat(bundledFilePath)
+	if err != nil {
+		t.Fatalf("Stat(customer-edited bundled file after init): %v", err)
+	}
+	if !afterBundledFileInfo.ModTime().Equal(beforeBundledFileInfo.ModTime()) {
+		t.Fatalf(
+			"customer-edited bundled file modification time changed: before=%s after=%s",
+			beforeBundledFileInfo.ModTime(),
+			afterBundledFileInfo.ModTime(),
+		)
+	}
 }
 
 func TestInit_InvalidExistingPackagedFactoryFailsWithoutReplacement(t *testing.T) {
@@ -453,7 +469,7 @@ func writeCustomerOwnedFactoryEdits(t *testing.T, factoryDir string) {
 	}
 }
 
-func writeCustomerEditedInlineBundledFile(t *testing.T, factoryDir string) {
+func writeCustomerEditedInlineBundledFile(t *testing.T, factoryDir string) string {
 	t.Helper()
 
 	configPath := filepath.Join(factoryDir, interfaces.FactoryConfigFile)
@@ -495,6 +511,11 @@ func writeCustomerEditedInlineBundledFile(t *testing.T, factoryDir string) {
 	if err := os.Chmod(targetPath, 0o600); err != nil {
 		t.Fatalf("Chmod(customer-edited bundled file): %v", err)
 	}
+	fixedModTime := time.Unix(1_700_000_000, 0).UTC()
+	if err := os.Chtimes(targetPath, fixedModTime, fixedModTime); err != nil {
+		t.Fatalf("Chtimes(customer-edited bundled file): %v", err)
+	}
+	return targetPath
 }
 
 func removeMaterializedFactory(t *testing.T, homeDir string, factoryName string) string {
@@ -579,10 +600,9 @@ func seedLegacyEncodedGoalFactory(t *testing.T, factoriesRoot string) string {
 }
 
 type directoryEntrySnapshot struct {
-	Contents    []byte
-	Mode        fs.FileMode
-	ModTimeNano int64
-	IsDir       bool
+	Contents []byte
+	Mode     fs.FileMode
+	IsDir    bool
 }
 
 func snapshotDirectoryContents(t *testing.T, root string) map[string]directoryEntrySnapshot {
@@ -602,9 +622,8 @@ func snapshotDirectoryContents(t *testing.T, root string) map[string]directoryEn
 			return err
 		}
 		entrySnapshot := directoryEntrySnapshot{
-			Mode:        info.Mode(),
-			ModTimeNano: info.ModTime().UnixNano(),
-			IsDir:       entry.IsDir(),
+			Mode:  info.Mode(),
+			IsDir: entry.IsDir(),
 		}
 		if !entry.IsDir() {
 			entrySnapshot.Contents, err = os.ReadFile(path)
