@@ -221,13 +221,18 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   (`NewRepresentativeRegistry`, `SessionShowRunE`, `AttachRunE`,
   `VerifyRepresentativeRunnableCoverage`; work-family:
   `NewWorkRegistry`, `ListRunE`, `ShowRunE`, `MoveRunE`, `VisualizeRunE`,
-  `VerifyWorkRunnableCoverage`) and production wiring helper
-  `newRepresentativeHandlerRegistry` in `pkg/transports/cli/root_work.go`.
-  The generated representative-family constructor lives in
-  `pkg/transports/cli/climanifestcobra` (`NewRepresentativeFamilyCommand`,
+  `VerifyWorkRunnableCoverage`) and production wiring helpers
+  `newRepresentativeHandlerRegistry` and `newWorkHandlerRegistry` in
+  `pkg/transports/cli/root_work.go`. The generated representative-family constructor
+  lives in `pkg/transports/cli/climanifestcobra` (`NewRepresentativeFamilyCommand`,
   `NewRepresentativeFamilyComponents`, `NewRepresentativeFamilyCommandFromManifest`)
   and builds only `you` → `you session` → `you session show` from embedded generated
-  metadata plus registry-attached handwritten handlers. Production root cutover is
+  metadata plus registry-attached handwritten handlers. The generated work-family
+  constructor lives in the same package (`NewWorkFamilyCommand`,
+  `NewWorkFamilyComponents`, `NewWorkFamilyCommandFromManifest`) and builds
+  `you work` → `you work list|show|move|visualize` from embedded generated metadata
+  plus registry-attached handwritten handlers; isolated legacy construction for parity
+  uses `cli.NewLegacyWorkFamilyCommand`. Production root cutover is
   controlled by `useGeneratedRepresentativeFamily` in `pkg/transports/cli/root_work.go`
   (`newRootCommandWithGeneratedRepresentativeFamily` with
   `newLegacyRootCommandWithOptions` rollback). Generated-vs-legacy parity for the

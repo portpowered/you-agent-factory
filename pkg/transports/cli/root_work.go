@@ -382,6 +382,14 @@ func runCommandExamples() string {
 		"  " + cliBinaryName + " run --named @you/goal --output response-stream \"Ship the login bugfix\""
 }
 
+// NewLegacyWorkFamilyCommand builds the isolated handwritten
+// you work → list/show/move/visualize tree used by generator-vs-legacy parity.
+func NewLegacyWorkFamilyCommand() *cobra.Command {
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	return newWorkCommand(globals, diagnostics)
+}
+
 func newWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	workCmd := &cobra.Command{
 		Use:   "work",
@@ -615,6 +623,49 @@ func newSessionShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 
 	registerDeprecatedPortFlag(cmd)
 	return cmd
+}
+
+func newWorkHandlerRegistry(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+) (*commandregistry.Registry, error) {
+	listCfg := workcli.ListConfig{Server: globals.server}
+	showCfg := workcli.ShowConfig{Server: globals.server}
+	moveCfg := workcli.MoveConfig{Server: globals.server}
+	var visualizeFormat string
+	return commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
+		ListRunE: commandregistry.ListRunE(commandregistry.ListBinding{
+			Config:            &listCfg,
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			ListWork:          listWork,
+		}),
+		ShowRunE: commandregistry.ShowRunE(commandregistry.ShowBinding{
+			Config:            &showCfg,
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			ShowWork:          showWork,
+		}),
+		MoveRunE: commandregistry.MoveRunE(commandregistry.MoveBinding{
+			Config:            &moveCfg,
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			MoveWork:          moveWork,
+		}),
+		VisualizeRunE: commandregistry.VisualizeRunE(commandregistry.VisualizeBinding{
+			Format:    &visualizeFormat,
+			Visualize: visualizeWork,
+		}),
+	})
 }
 
 func newRepresentativeHandlerRegistry(
