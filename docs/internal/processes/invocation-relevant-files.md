@@ -130,6 +130,18 @@ primary-result behavior.
   `config init` subcommand; installer smoke coverage lives in
   `tests/release/install_script_test.go` and `scripts/release/smoke-install.sh`
   / `scripts/release/smoke-install.ps1`.
+- Production CLI command manifest parity for the root + `session show` family lives in
+  `pkg/transports/cli/climanifest` (`LoadProduction`, `ProductionManifestPath`) and
+  `pkg/transports/cli/climanifestparity` (`CompareDeclaredHandler`,
+  `CompareHandlerOpenAPIBinding`, `OpenAPIOperationBinding`, `CompareLiveExitCodes`,
+  `CompareBaselineSideEffects`, `CompareBaselineConstraints`, and
+  `TestProductionCLIRootSessionFamily_NoGeneratorCutover`). Approved execution metadata
+  for side-effects/constraints is loaded from
+  `contracts/testdata/baseline/cli-command-execution.json`. Handler/OpenAPI binding for
+  `you.session.show` asserts `operationId` `getFactorySession` maps to
+  `GET /factory-sessions/{session_id}` in `api/openapi.yaml` and matches live
+  `session.Show` JSON transport; constructor/generator cutover remains deferred to
+  B10-CLI-GENERATOR.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/transports/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before

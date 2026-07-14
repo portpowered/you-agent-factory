@@ -114,6 +114,7 @@ func CLIRegistry() Registry {
 			{ID: commandManifestID, Path: "contracts/cli/command-manifest.schema.json"},
 		},
 		Documents: []Document{
+			{Path: "contracts/cli/commands.json", SchemaID: commandManifestID},
 			{Path: "contracts/testdata/cli/valid-identity.json", SchemaID: commandManifestID},
 			{Path: "contracts/testdata/cli/valid-optional-argument.json", SchemaID: commandManifestID},
 			{Path: "contracts/testdata/cli/valid-variadic-argument.json", SchemaID: commandManifestID},

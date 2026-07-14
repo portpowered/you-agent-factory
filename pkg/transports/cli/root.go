@@ -769,3 +769,13 @@ func runCommandInputIsTTY(stdin io.Reader) bool {
 	}
 	return fi.Mode()&os.ModeCharDevice != 0
 }
+
+// ShowSessionAccessor returns the current session show delegate.
+func ShowSessionAccessor() func(sessioncli.ShowConfig) error {
+	return showSession
+}
+
+// SetShowSessionAccessor replaces the session show delegate for tests.
+func SetShowSessionAccessor(fn func(sessioncli.ShowConfig) error) {
+	showSession = fn
+}
