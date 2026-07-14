@@ -10,7 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 )
 
-const successMessage = "[agent-factory:cli-manifest-generate] representative-family CLI metadata generated"
+const successMessage = "[agent-factory:cli-manifest-generate] CLI family metadata generated"
 
 func main() {
 	root := flag.String("root", ".", "repository root")
@@ -27,7 +27,7 @@ func run(root string, check bool, stdout, stderr io.Writer) int {
 			return 1
 		}
 		if drift.Empty() {
-			fmt.Fprintln(stdout, "[agent-factory:cli-manifest-check] representative-family CLI metadata is current")
+			fmt.Fprintln(stdout, "[agent-factory:cli-manifest-check] CLI family metadata is current")
 			return 0
 		}
 		writeDrift(stderr, drift)
@@ -43,7 +43,7 @@ func run(root string, check bool, stdout, stderr io.Writer) int {
 }
 
 func writeDrift(stderr io.Writer, drift climanifestgen.Drift) {
-	fmt.Fprintln(stderr, "[agent-factory:cli-manifest-check] representative-family CLI metadata drift detected")
+	fmt.Fprintln(stderr, "[agent-factory:cli-manifest-check] CLI family metadata drift detected")
 	for _, category := range []struct {
 		label string
 		paths []string

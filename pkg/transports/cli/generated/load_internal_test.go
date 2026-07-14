@@ -4,6 +4,24 @@ import (
 	"testing"
 )
 
+func TestParseFamilyManifestRejectsInvalidPayload(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload []byte
+	}{
+		{name: "invalid json", payload: []byte("{")},
+		{name: "missing rootPath", payload: []byte(`{"commands":{"you":{"id":"you"}}}`)},
+		{name: "missing commands", payload: []byte(`{"rootPath":"you","commands":{}}`)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := parseFamilyManifest(tc.payload, "test-family"); err == nil {
+				t.Fatal("parseFamilyManifest() = nil, want error")
+			}
+		})
+	}
+}
+
 func TestParseRepresentativeFamilyManifestRejectsInvalidPayload(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -40,6 +58,15 @@ func TestParseRepresentativeFamilyManifestAcceptsMinimalFamily(t *testing.T) {
 	}
 	if _, err := manifest.CommandByID("you.session.show"); err != nil {
 		t.Fatalf("CommandByID(you.session.show) error = %v", err)
+	}
+}
+
+func TestFactoryConfigInitCommandByIDPropagatesManifestDecodeErrors(t *testing.T) {
+	original := factoryConfigInitFamilyJSON
+	t.Cleanup(func() { factoryConfigInitFamilyJSON = original })
+	factoryConfigInitFamilyJSON = []byte("{")
+	if _, err := FactoryConfigInitCommandByID("you.factory"); err == nil {
+		t.Fatal("FactoryConfigInitCommandByID() invalid embed = nil, want error")
 	}
 }
 

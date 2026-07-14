@@ -13,6 +13,55 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 )
 
+func TestExtractFactoryConfigInitFamilyFromProductionManifest(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	manifest, err := climanifest.LoadProduction(filepath.Join(repoRoot, climanifest.ProductionManifestPath))
+	if err != nil {
+		t.Fatalf("LoadProduction() error = %v", err)
+	}
+
+	family, err := climanifestgen.ExtractFactoryConfigInitFamily(manifest)
+	if err != nil {
+		t.Fatalf("ExtractFactoryConfigInitFamily() error = %v", err)
+	}
+	if len(family.Commands) != len(climanifestgen.FactoryConfigInitFamilyCommandIDs) {
+		t.Fatalf("command count = %d, want %d", len(family.Commands), len(climanifestgen.FactoryConfigInitFamilyCommandIDs))
+	}
+	for _, id := range climanifestgen.FactoryConfigInitFamilyCommandIDs {
+		record, ok := family.Commands[id]
+		if !ok {
+			t.Fatalf("missing factory/config/init command %q", id)
+		}
+		if record.ID != id {
+			t.Fatalf("command %q record id = %q", id, record.ID)
+		}
+		if record.Path == "" {
+			t.Fatalf("command %q missing path", id)
+		}
+	}
+}
+
+func TestExtractFactoryConfigInitFamilyRejectsMissingCommand(t *testing.T) {
+	manifest := climanifest.Manifest{
+		RootPath: "you",
+		Commands: map[string]climanifest.Command{
+			"you.factory": {ID: "you.factory", Path: "you factory"},
+		},
+	}
+	if _, err := climanifestgen.ExtractFactoryConfigInitFamily(manifest); err == nil {
+		t.Fatal("expected missing factory/config/init command error")
+	}
+}
+
+func TestAssertFactoryConfigInitFamilyCommandIDRejectsOutOfFamily(t *testing.T) {
+	if err := climanifestgen.AssertFactoryConfigInitFamilyCommandID("you.session.show"); err == nil {
+		t.Fatal("expected out-of-family command id rejection")
+	}
+	if err := climanifestgen.AssertFactoryConfigInitFamilyCommandID("you.factory.query"); err != nil {
+		t.Fatalf("AssertFactoryConfigInitFamilyCommandID(you.factory.query) error = %v", err)
+	}
+}
+
 func TestExtractRepresentativeFamilyFromProductionManifest(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	manifest, err := climanifest.LoadProduction(filepath.Join(repoRoot, climanifest.ProductionManifestPath))
@@ -77,6 +126,8 @@ func TestGenerateIsDeterministic(t *testing.T) {
 	first := fileDigests(t, root, []string{
 		climanifestgen.RepresentativeFamilyJSONPath,
 		climanifestgen.RepresentativeFamilyCommandIDsPath,
+		climanifestgen.FactoryConfigInitFamilyJSONPath,
+		climanifestgen.FactoryConfigInitFamilyCommandIDsPath,
 	})
 	if err := climanifestgen.Generate(root); err != nil {
 		t.Fatalf("second Generate() error = %v", err)
@@ -84,6 +135,8 @@ func TestGenerateIsDeterministic(t *testing.T) {
 	second := fileDigests(t, root, []string{
 		climanifestgen.RepresentativeFamilyJSONPath,
 		climanifestgen.RepresentativeFamilyCommandIDsPath,
+		climanifestgen.FactoryConfigInitFamilyJSONPath,
+		climanifestgen.FactoryConfigInitFamilyCommandIDsPath,
 	})
 	if !reflect.DeepEqual(first, second) {
 		t.Fatalf("repeated generation changed artifact digests:\nfirst=%v\nsecond=%v", first, second)
@@ -140,6 +193,25 @@ func fileDigests(t *testing.T, root string, paths []string) map[string][sha256.S
 		digests[path] = sha256.Sum256(content)
 	}
 	return digests
+}
+
+func TestProductionFactoryConfigInitFamilyArtifactsMatchGenerator(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	drift, err := climanifestgen.Check(repoRoot)
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if !drift.Empty() {
+		t.Fatalf("production factory/config/init artifacts drift: %#v", drift)
+	}
+
+	payload, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(climanifestgen.FactoryConfigInitFamilyJSONPath)))
+	if err != nil {
+		t.Fatalf("read factory/config/init family artifact: %v", err)
+	}
+	if len(bytes.TrimSpace(payload)) == 0 {
+		t.Fatal("factory/config/init family artifact is empty")
+	}
 }
 
 func TestProductionRepresentativeFamilyArtifactsMatchGenerator(t *testing.T) {

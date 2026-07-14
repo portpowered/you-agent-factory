@@ -6,73 +6,24 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 )
 
-func TestRunGeneratesRepresentativeFamilyArtifacts(t *testing.T) {
+func TestRunGeneratesCLIFamilyArtifacts(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
 	root := t.TempDir()
-	manifest := []byte(`{
-  "formatVersion": "1.0.0",
-  "rootPath": "you",
-  "commands": {
-    "you": {
-      "id": "you",
-      "name": "you",
-      "path": "you",
-      "documentation": {
-        "documentation": {
-          "title": {"canonicalEnglish": "root"},
-          "description": {"canonicalEnglish": "root"}
-        }
-      },
-      "visibility": "visible",
-      "runnable": true,
-      "usage": {"line": "you"}
-    },
-    "you.session": {
-      "id": "you.session",
-      "name": "session",
-      "path": "you session",
-      "documentation": {
-        "documentation": {
-          "title": {"canonicalEnglish": "session"},
-          "description": {"canonicalEnglish": "session"}
-        }
-      },
-      "visibility": "visible",
-      "runnable": false,
-      "usage": {"line": "session"}
-    },
-    "you.session.show": {
-      "id": "you.session.show",
-      "name": "show",
-      "path": "you session show",
-      "documentation": {
-        "documentation": {
-          "title": {"canonicalEnglish": "show"},
-          "description": {"canonicalEnglish": "show"}
-        }
-      },
-      "visibility": "visible",
-      "runnable": true,
-      "usage": {"line": "show [session-id]"},
-      "handler": {"id": "you.session.show.handler", "operationId": "getFactorySession"}
-    }
-  }
-}`)
-	manifestPath := filepath.Join(root, filepath.FromSlash(climanifestgen.ProductionManifestPath))
-	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
-		t.Fatalf("create manifest directory: %v", err)
-	}
-	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
-		t.Fatalf("write manifest: %v", err)
+	manifestSource := filepath.Join(repoRoot, climanifestgen.ProductionManifestPath)
+	manifestTarget := filepath.Join(root, climanifestgen.ProductionManifestPath)
+	if err := copyTestFile(manifestSource, manifestTarget); err != nil {
+		t.Fatalf("copy production manifest: %v", err)
 	}
 
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	if status := run(root, false, stdout, stderr); status != 0 {
 		t.Fatalf("run() = %d, stderr = %q", status, stderr.String())
 	}
-	if got := stdout.String(); !bytes.Contains([]byte(got), []byte("representative-family CLI metadata generated")) {
+	if got := stdout.String(); !bytes.Contains([]byte(got), []byte("CLI family metadata generated")) {
 		t.Fatalf("stdout = %q, want success message", got)
 	}
 
@@ -83,6 +34,17 @@ func TestRunGeneratesRepresentativeFamilyArtifacts(t *testing.T) {
 	if !drift.Empty() {
 		t.Fatalf("drift after generation = %#v", drift)
 	}
+}
+
+func copyTestFile(source, target string) error {
+	payload, err := os.ReadFile(source)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(target, payload, 0o644)
 }
 
 func TestRunCheckFailsOnStaleArtifact(t *testing.T) {

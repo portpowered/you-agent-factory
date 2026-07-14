@@ -7,6 +7,42 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 )
 
+func TestFactoryConfigInitFamilyManifestMatchesContractedIDs(t *testing.T) {
+	manifest, err := generated.FactoryConfigInitFamilyManifest()
+	if err != nil {
+		t.Fatalf("FactoryConfigInitFamilyManifest() error = %v", err)
+	}
+	if len(manifest.Commands) != len(climanifestgen.FactoryConfigInitFamilyCommandIDs) {
+		t.Fatalf("command count = %d, want %d", len(manifest.Commands), len(climanifestgen.FactoryConfigInitFamilyCommandIDs))
+	}
+	for _, id := range climanifestgen.FactoryConfigInitFamilyCommandIDs {
+		record, err := generated.FactoryConfigInitCommandByID(id)
+		if err != nil {
+			t.Fatalf("FactoryConfigInitCommandByID(%q) error = %v", id, err)
+		}
+		if record.ID != id {
+			t.Fatalf("command %q record id = %q", id, record.ID)
+		}
+	}
+}
+
+func TestFactoryConfigInitFamilyCommandIDsGenMatchesGeneratorList(t *testing.T) {
+	if len(generated.FactoryConfigInitFamilyCommandIDs) != len(climanifestgen.FactoryConfigInitFamilyCommandIDs) {
+		t.Fatalf("generated id count = %d, want %d", len(generated.FactoryConfigInitFamilyCommandIDs), len(climanifestgen.FactoryConfigInitFamilyCommandIDs))
+	}
+	for i, id := range climanifestgen.FactoryConfigInitFamilyCommandIDs {
+		if generated.FactoryConfigInitFamilyCommandIDs[i] != id {
+			t.Fatalf("generated ids[%d] = %q, want %q", i, generated.FactoryConfigInitFamilyCommandIDs[i], id)
+		}
+	}
+}
+
+func TestFactoryConfigInitCommandByIDRejectsUnknownID(t *testing.T) {
+	if _, err := generated.FactoryConfigInitCommandByID("you.session.show"); err == nil {
+		t.Fatal("FactoryConfigInitCommandByID(you.session.show) = nil, want error")
+	}
+}
+
 func TestRepresentativeFamilyManifestMatchesContractedIDs(t *testing.T) {
 	manifest, err := generated.RepresentativeFamilyManifest()
 	if err != nil {
