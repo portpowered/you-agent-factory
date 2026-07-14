@@ -599,9 +599,12 @@ func (m *MockFactory) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 	}
 	if m.FactoryEventStream != nil {
 		return &interfaces.FactoryEventStream{
-			StreamGenerationID: m.FactoryEventStream.StreamGenerationID,
-			History:            history,
-			Events:             m.FactoryEventStream.Events,
+			BackendScopeID:      m.FactoryEventStream.BackendScopeID,
+			LogicalSessionKeyID: m.FactoryEventStream.LogicalSessionKeyID,
+			FactorySessionID:    m.FactoryEventStream.FactorySessionID,
+			StreamGenerationID:  m.FactoryEventStream.StreamGenerationID,
+			History:             history,
+			Events:              m.FactoryEventStream.Events,
 		}, nil
 	}
 	ch := make(chan factoryapi.FactoryEvent)
