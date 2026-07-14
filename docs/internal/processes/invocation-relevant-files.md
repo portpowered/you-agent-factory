@@ -375,11 +375,16 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   Batch 09 private-contract removal gates live in
   `pkg/factory/sessions/responsestream/removalgate` (`AssertGate`,
   `AssertDocsPrerequisite`, `AssertNoPrivateNDJSONInProductionSurfaces`,
-  `AssertPublicTransportLayersDoNotImportLegacyCompat`) with package tests in
-  `gate_test.go` and the functional entrypoint
+  `AssertPublicTransportLayersDoNotImportLegacyCompat`,
+  `AssertReleaseNotesMigrationMapping`) with package tests in `gate_test.go` and
+  the functional entrypoint
   `tests/functional/smoke/response_stream_private_contract_removal_gate_smoke_test.go`
   (`TestResponseStreamPrivateContractRemovalGateSmoke`). Run these before deleting
-  private NDJSON record types or legacy compat mapper code.
+  private NDJSON record types or legacy compat mapper code. The exact old→new CLI
+  JSON migration map for retired private NDJSON records lives in
+  `docs/release-notes/response-stream-private-ndjson-removal.md` (indexed by
+  `docs/release-notes/README.md`) and is asserted by
+  `AssertReleaseNotesMigrationMapping`.
   While legacy response-stream consumers remain supported, carry an exact draft beside the compatibility
   fragment and let `pkg/factory/sessions/stream/manager.go` publish that draft
   directly; do not remap it through the lossy legacy fragment mapper. Keep the

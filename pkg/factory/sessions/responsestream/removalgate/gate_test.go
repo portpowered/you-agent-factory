@@ -34,3 +34,10 @@ func TestPrivateContractRemovalGate_PublicTransportDoesNotImportLegacyCompat(t *
 		t.Fatal(err)
 	}
 }
+
+func TestPrivateContractRemovalGate_ReleaseNotesMigrationMapping(t *testing.T) {
+	repoRoot := testutil.MustRepoRoot(t)
+	if err := removalgate.AssertReleaseNotesMigrationMapping(repoRoot); err != nil {
+		t.Fatal(err)
+	}
+}
