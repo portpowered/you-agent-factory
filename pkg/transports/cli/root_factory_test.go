@@ -12,7 +12,9 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
+	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
+	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -638,7 +640,16 @@ func TestFactoryQueryCommand_PortFlagRejected(t *testing.T) {
 func TestNewFactoryConfigInitHandlerRegistryWiresContractedRunnableIDs(t *testing.T) {
 	globals := &cliGlobalOptions{}
 	diagnostics := &cliDiagnosticsOptions{}
-	registry, err := newFactoryConfigInitHandlerRegistry(globals, diagnostics, RootCommandOptions{})
+	state := factoryConfigInitBindingState{
+		listDir:      defaultcmd.FactoryDir,
+		createDir:    defaultcmd.FactoryDir,
+		updateDir:    defaultcmd.FactoryDir,
+		deleteDir:    defaultcmd.FactoryDir,
+		initDir:      defaultcmd.FactoryDir,
+		initType:     string(initcmd.DefaultScaffoldType),
+		initExecutor: initcmd.DefaultStarterExecutor,
+	}
+	registry, err := newFactoryConfigInitHandlerRegistry(globals, diagnostics, RootCommandOptions{}, &state)
 	if err != nil {
 		t.Fatalf("newFactoryConfigInitHandlerRegistry() error = %v", err)
 	}

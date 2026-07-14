@@ -379,7 +379,7 @@ type ConfigInitBinding struct {
 func ConfigInitRunE(binding ConfigInitBinding) RunE {
 	init := binding.Init
 	if init == nil {
-		init = configinitcmd.Init
+		init = configinitcmd.RunInit
 	}
 	return func(cmd *cobra.Command, _ []string) error {
 		cfg := configinitcmd.InitConfig{}

@@ -14,6 +14,7 @@ func TestProductionCLIRootSessionFamily_RepresentativeCutover(t *testing.T) {
 	assertHandwrittenRootSessionConstructors(t, repoRoot)
 	assertGeneratorInfrastructurePresent(t, repoRoot)
 	assertProductionRepresentativeCutoverWired(t, repoRoot)
+	assertProductionFactoryConfigInitCutoverWired(t, repoRoot)
 	assertNoForbiddenCLIGeneratorMarkers(t, repoRoot)
 }
 
@@ -74,6 +75,37 @@ func assertProductionRepresentativeCutoverWired(t *testing.T, repoRoot string) {
 	for _, marker := range requiredMarkers {
 		if !strings.Contains(text, marker) {
 			t.Fatalf("%s must wire production representative-family cutover via %q", rootWorkGo, marker)
+		}
+	}
+}
+
+func assertProductionFactoryConfigInitCutoverWired(t *testing.T, repoRoot string) {
+	t.Helper()
+	rootWorkGo := filepath.Join(repoRoot, "pkg", "transports", "cli", "root_work.go")
+	rootFactoryGo := filepath.Join(repoRoot, "pkg", "transports", "cli", "root_factory.go")
+	for _, path := range []string{rootWorkGo, rootFactoryGo} {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		text := string(contents)
+		switch filepath.Base(path) {
+		case "root_work.go":
+			requiredMarkers := []string{
+				"useGeneratedFactoryConfigInitFamily = true",
+				"productionFactoryConfigInitCommands",
+				"climanifestcobra.NewFactoryConfigInitFamilyComponents",
+				"NewLegacyFactoryConfigInitFamilyCommands",
+			}
+			for _, marker := range requiredMarkers {
+				if !strings.Contains(text, marker) {
+					t.Fatalf("%s must wire production factory/config/init cutover via %q", path, marker)
+				}
+			}
+		case "root_factory.go":
+			if !strings.Contains(text, "func newFactoryCommand(") {
+				t.Fatalf("%s must keep handwritten newFactoryCommand constructor for rollback", path)
+			}
 		}
 	}
 }
