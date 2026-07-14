@@ -48,6 +48,14 @@ Use this map when changing the public REST contract.
   mutate authored OpenAPI or generated Go/TypeScript clients; `make
   contracts-smoke` runs the same generate/check loop twice at the Makefile
   layer.
+- `packages/api/package.json`, `README.md`, and `LICENSE.md` are consumer-authored
+  publication metadata only. Exports and `files` must map to `AllowedArtifacts()`
+  paths under `packages/api/generated/` plus docs/license packaging; omit
+  later-phase families such as `./components/*` until a truthful owner exists.
+  `scripts/api-package-{pack,consumer,contract}.mjs` prove `npm pack` inventory
+  and isolated export resolution without mutating staged artifact bytes; run
+  `make api-package-pack-smoke` after contract guard changes and in
+  `verify-build-contracts`/CI.
 
 ## REST operation identity inventory
 
