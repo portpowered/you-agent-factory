@@ -193,6 +193,18 @@ var openAPIDiffFixtureMatrix = []struct {
 		failClosed: true,
 	},
 	{
+		name:       "unsupported-operation-servers",
+		fixture:    "unsupported-operation-servers",
+		category:   categoryFailClosed,
+		failClosed: true,
+	},
+	{
+		name:       "unsupported-server-variables",
+		fixture:    "unsupported-server-variables",
+		category:   categoryFailClosed,
+		failClosed: true,
+	},
+	{
 		name:       "unsupported-component-parameter-remove",
 		fixture:    "unsupported-component-parameter-remove",
 		category:   categoryFailClosed,

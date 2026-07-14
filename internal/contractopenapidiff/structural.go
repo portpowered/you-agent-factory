@@ -99,6 +99,39 @@ func compareServersAt(path string, before, after openapi3.Servers) error {
 		if before[i].URL != after[i].URL {
 			return unsupportedStructuralDiff(path + "[" + fmt.Sprint(i) + "].url")
 		}
+		if err := compareServerVariablesAt(path+"["+fmt.Sprint(i)+"].variables", before[i].Variables, after[i].Variables); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func compareServerVariablesAt(path string, before, after map[string]*openapi3.ServerVariable) error {
+	if len(before) == 0 && len(after) == 0 {
+		return nil
+	}
+	allNames := make(map[string]struct{})
+	for name := range before {
+		allNames[name] = struct{}{}
+	}
+	for name := range after {
+		allNames[name] = struct{}{}
+	}
+	for name := range allNames {
+		beforeVariable := before[name]
+		afterVariable := after[name]
+		if beforeVariable == nil && afterVariable == nil {
+			continue
+		}
+		if beforeVariable == nil || afterVariable == nil {
+			return unsupportedStructuralDiff(path + "." + name)
+		}
+		if beforeVariable.Default != afterVariable.Default {
+			return unsupportedStructuralDiff(path + "." + name + ".default")
+		}
+		if !slices.Equal(beforeVariable.Enum, afterVariable.Enum) {
+			return unsupportedStructuralDiff(path + "." + name + ".enum")
+		}
 	}
 	return nil
 }
@@ -218,6 +251,9 @@ func collectOperationChanges(opPath string, before, after *openapi3.Operation) (
 		return nil, unsupportedStructuralDiff(opPath + ".deprecated")
 	}
 	if err := checkUnsupportedOperationSecurity(opPath, before, after); err != nil {
+		return nil, err
+	}
+	if err := checkUnsupportedOperationServers(opPath, before, after); err != nil {
 		return nil, err
 	}
 	if err := checkUnsupportedOperationCallbacks(opPath, before, after); err != nil {
@@ -410,6 +446,16 @@ func checkUnsupportedOperationSecurity(opPath string, before, after *openapi3.Op
 		return nil
 	}
 	return unsupportedStructuralDiff(opPath + ".security")
+}
+
+func checkUnsupportedOperationServers(opPath string, before, after *openapi3.Operation) error {
+	if before.Servers == nil && after.Servers == nil {
+		return nil
+	}
+	if before.Servers == nil || after.Servers == nil {
+		return unsupportedStructuralDiff(opPath + ".servers")
+	}
+	return compareServersAt(opPath+".servers", *before.Servers, *after.Servers)
 }
 
 func securityRequirementsEqual(before, after *openapi3.SecurityRequirements) bool {

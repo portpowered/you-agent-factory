@@ -524,6 +524,16 @@ func TestCompareYAML_UnsupportedStructuralSurfaceFixtures_FailClosed(t *testing.
 			fixture:  "unsupported-operation-callbacks",
 			wantPath: "POST /pets.callbacks.onData",
 		},
+		{
+			name:     "operation-servers",
+			fixture:  "unsupported-operation-servers",
+			wantPath: "GET /pets.servers",
+		},
+		{
+			name:     "server-variables",
+			fixture:  "unsupported-server-variables",
+			wantPath: "servers[0].variables.env.enum",
+		},
 	}
 	for _, tc := range cases {
 		tc := tc
