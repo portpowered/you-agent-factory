@@ -26,6 +26,14 @@ Use this map when changing the public REST contract.
   `contracts/config/`; do not substitute topology or parity inventories for
   those schemas. `make contracts-check` reports stale, missing, and unexpected
   staged paths across the complete projection.
+- Staged OpenAPI byte policy lives in `internal/contractstaging/openapi.go`
+  (`CanonicalOpenAPIPath`, `StagedOpenAPIPath`, `ReviewedOpenAPIBytePolicy`,
+  `ProjectStagedOpenAPI`, `VerifyStagedOpenAPIParity`). The reviewed policy is
+  byte-identical copy only: `packages/api/generated/openapi/openapi.yaml` must
+  match `api/openapi.yaml` exactly. Prove repository parity and reject divergent
+  staged bytes in `internal/contractstaging/openapi_test.go`; prove
+  `make generate-api` and Go/UI generator inputs still reference
+  `api/openapi.yaml` rather than the staged package path in the same test file.
 - `scripts/api-package-consumer.mjs` installs the real tarball offline into an
   isolated temporary consumer and resolves concrete named exports plus every
   packaged wildcard match from that installation. Keep resolution rooted in

@@ -85,9 +85,16 @@ func Artifacts(repositoryRoot string) (map[string][]byte, error) {
 		expected[path] = payload
 	}
 	for _, artifact := range rawArtifacts {
-		payload, err := os.ReadFile(filepath.Join(repositoryRoot, filepath.FromSlash(artifact.Source)))
+		sourcePath := filepath.Join(repositoryRoot, filepath.FromSlash(artifact.Source))
+		payload, err := os.ReadFile(sourcePath)
 		if err != nil {
 			return nil, fmt.Errorf("read canonical raw artifact %s: %w", artifact.Source, err)
+		}
+		if artifact.Source == CanonicalOpenAPIPath {
+			payload, err = ProjectStagedOpenAPI(payload, ReviewedOpenAPIBytePolicy)
+			if err != nil {
+				return nil, fmt.Errorf("project staged OpenAPI: %w", err)
+			}
 		}
 		expected[artifact.Target] = payload
 	}

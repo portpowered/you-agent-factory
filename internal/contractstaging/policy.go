@@ -34,7 +34,7 @@ var (
 		"contracts/common/documentation.schema.json",
 	}
 	rawArtifacts = []RawArtifact{
-		{Source: "api/openapi.yaml", Target: "packages/api/generated/openapi/openapi.yaml"},
+		{Source: CanonicalOpenAPIPath, Target: StagedOpenAPIPath},
 		{Source: "contracts/testdata/baseline/cli-commands.json", Target: "packages/api/generated/cli/commands.json"},
 		{Source: "contracts/testdata/baseline/mcp-tools.json", Target: "packages/api/generated/mcp/tools.json"},
 		{Source: "contracts/config/you-config.schema.json", Target: "packages/api/generated/schemas/you-config.schema.json"},
@@ -70,6 +70,7 @@ func SourceIdentityPaths() []string {
 	paths = append(paths,
 		"internal/contractstaging/factory_schema.go",
 		"internal/contractstaging/manifest.go",
+		"internal/contractstaging/openapi.go",
 		"internal/contractstaging/policy.go",
 	)
 	sort.Strings(paths)
