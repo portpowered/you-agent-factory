@@ -1292,7 +1292,8 @@
         "gemini",
         "kiro",
         "cursor-cli",
-        "opencode"
+        "opencode",
+        "pi"
       ],
       "type": "string",
       "x-enum-descriptions": [
@@ -1300,14 +1301,16 @@
         "Gemini runner selected through the shared runner contract.",
         "Kiro runner selected through the shared runner contract.",
         "Cursor CLI runner selected through the shared runner contract.",
-        "OpenCode runner selected through the shared runner contract."
+        "OpenCode runner selected through the shared runner contract.",
+        "Pi runner selected through the shared runner contract."
       ],
       "x-enum-varnames": [
         "RunnerIDCodex",
         "RunnerIDGemini",
         "RunnerIDKiro",
         "RunnerIDCursorCLI",
-        "RunnerIDOpenCode"
+        "RunnerIDOpenCode",
+        "RunnerIDPi"
       ]
     },
     "StringMap": {
@@ -1828,7 +1831,8 @@
         "CURSOR",
         "GEMINI",
         "KIRO",
-        "OPENCODE"
+        "OPENCODE",
+        "PI"
       ],
       "type": "string",
       "x-enum-descriptions": [
@@ -1837,7 +1841,8 @@
         "Cursor model execution routed through the `agent` provider command.",
         "Gemini model execution routed through the `gemini` provider command.",
         "Kiro model execution routed through the `kiro-cli` provider command.",
-        "OpenCode model execution routed through the `opencode` provider command."
+        "OpenCode model execution routed through the `opencode` provider command.",
+        "Pi model execution routed through the `pi` provider command."
       ],
       "x-enum-varnames": [
         "WorkerModelProviderClaude",
@@ -1845,7 +1850,8 @@
         "WorkerModelProviderCursor",
         "WorkerModelProviderGemini",
         "WorkerModelProviderKiro",
-        "WorkerModelProviderOpenCode"
+        "WorkerModelProviderOpenCode",
+        "WorkerModelProviderPi"
       ]
     },
     "WorkerProvider": {
