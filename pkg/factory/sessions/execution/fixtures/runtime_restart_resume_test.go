@@ -620,15 +620,16 @@ func seedInterruptedCheckpointedSession(t *testing.T) (string, string) {
 	if err != nil {
 		t.Fatalf("StartAsync: %v", err)
 	}
-	waitForDispatchStatus(t, initial, started.SessionID, "dispatch-1", fse.DispatchStatusCompleted, 3*time.Second)
-	waitForDispatchStatus(t, initial, started.SessionID, "dispatch-2", fse.DispatchStatusRunning, 3*time.Second)
+	waitForDispatchStatus(t, initial, started.SessionID, "dispatch-1", fse.DispatchStatusCompleted, 10*time.Second)
+	waitForDispatchStatus(t, initial, started.SessionID, "dispatch-2", fse.DispatchStatusRunning, 10*time.Second)
+	provider.waitUntilBlockedOnInfer(t, 10*time.Second)
 	if _, err := initial.InterruptDispatch(context.Background(), started.SessionID, fse.InterruptDispatchRequest{
 		ControlRequest: fse.ControlRequest{Reason: "resume failure seed"},
 		DispatchID:     "dispatch-2",
 	}); err != nil {
 		t.Fatalf("InterruptDispatch: %v", err)
 	}
-	provider.waitForCanceledInfer(t, 3*time.Second)
+	provider.waitForCanceledInfer(t, 10*time.Second)
 	interrupted := waitUntilSessionStatus(t, initial, started.SessionID, fse.LifecycleStatusInterrupted, 5*time.Second)
 	if interrupted.Status != fse.LifecycleStatusInterrupted {
 		t.Fatalf("seed status = %q, want INTERRUPTED", interrupted.Status)

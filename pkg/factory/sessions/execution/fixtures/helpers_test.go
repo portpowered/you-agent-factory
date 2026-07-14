@@ -594,8 +594,9 @@ func startInterruptedResumableSessionForWorkflow(
 		t.Fatalf("StartAsync: %v", err)
 	}
 
-	waitForDispatchStatus(t, initial, started.SessionID, "dispatch-1", fse.DispatchStatusCompleted, 3*time.Second)
-	waitForDispatchStatus(t, initial, started.SessionID, "dispatch-2", fse.DispatchStatusRunning, 3*time.Second)
+	waitForDispatchStatus(t, initial, started.SessionID, "dispatch-1", fse.DispatchStatusCompleted, 10*time.Second)
+	waitForDispatchStatus(t, initial, started.SessionID, "dispatch-2", fse.DispatchStatusRunning, 10*time.Second)
+	provider.waitUntilBlockedOnInfer(t, 10*time.Second)
 
 	interruptResult, err := initial.InterruptDispatch(context.Background(), started.SessionID, fse.InterruptDispatchRequest{
 		ControlRequest: fse.ControlRequest{Reason: "process restart simulation"},
@@ -608,7 +609,7 @@ func startInterruptedResumableSessionForWorkflow(
 		t.Fatalf("interrupt outcome = %q, want ACCEPTED", interruptResult.Outcome)
 	}
 
-	provider.waitForCanceledInfer(t, 3*time.Second)
+	provider.waitForCanceledInfer(t, 10*time.Second)
 	interrupted := waitUntilSessionStatus(t, initial, started.SessionID, fse.LifecycleStatusInterrupted, 5*time.Second)
 	if interrupted.Status != fse.LifecycleStatusInterrupted {
 		t.Fatalf("session status = %q, want INTERRUPTED", interrupted.Status)
@@ -733,14 +734,19 @@ type sequentialBlockingProvider struct {
 	blockedOnce     bool
 	contextCanceled int
 	workflowName    string
+	blockedOnCtx    chan struct{}
+	blockSignal     sync.Once
 }
 
 func newSequentialBlockingProvider() *sequentialBlockingProvider {
-	return &sequentialBlockingProvider{workflowName: "resumable-two-step-fake-children"}
+	return newSequentialBlockingProviderForWorkflow("resumable-two-step-fake-children")
 }
 
 func newSequentialBlockingProviderForWorkflow(workflowName string) *sequentialBlockingProvider {
-	return &sequentialBlockingProvider{workflowName: workflowName}
+	return &sequentialBlockingProvider{
+		workflowName: workflowName,
+		blockedOnCtx: make(chan struct{}),
+	}
 }
 
 func (p *sequentialBlockingProvider) Infer(ctx context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
@@ -766,6 +772,7 @@ func (p *sequentialBlockingProvider) Infer(ctx context.Context, _ interfaces.Pro
 		p.blockedOnce = true
 		p.mu.Unlock()
 
+		p.blockSignal.Do(func() { close(p.blockedOnCtx) })
 		<-ctx.Done()
 		p.mu.Lock()
 		p.contextCanceled++
@@ -787,6 +794,16 @@ func (p *sequentialBlockingProvider) CallCount() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.calls
+}
+
+func (p *sequentialBlockingProvider) waitUntilBlockedOnInfer(t *testing.T, timeout time.Duration) {
+	t.Helper()
+	select {
+	case <-p.blockedOnCtx:
+		return
+	case <-time.After(timeout):
+		t.Fatal("provider Infer did not block on workflow context")
+	}
 }
 
 func (p *sequentialBlockingProvider) waitForCanceledInfer(t *testing.T, timeout time.Duration) {
