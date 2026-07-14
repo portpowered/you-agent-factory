@@ -394,13 +394,12 @@ func BuildApplication(ctx context.Context, cfg RunConfig, builder FactoryService
 		return nil, err
 	}
 
-	reservedAPIServer, err := reserveAPIServerListener(cfg.Port, cfg.AutoPort)
-	if invocationMode {
-		reservedAPIServer = nil
-		err = nil
-	}
-	if err != nil {
-		return nil, err
+	var reservedAPIServer *reservedAPIServerListener
+	if !invocationMode {
+		reservedAPIServer, err = reserveAPIServerListener(cfg.Port, cfg.AutoPort)
+		if err != nil {
+			return nil, err
+		}
 	}
 	requestedPort := cfg.Port
 	closeReserved := func() {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -191,6 +192,10 @@ func withNamedPackagedFactoryRunRoot(t *testing.T) func() {
 		t.Fatalf("Chdir(%q): %v", workingDirectory, err)
 	}
 	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
+	volumeName := filepath.VolumeName(homeDir)
+	t.Setenv("HOMEDRIVE", volumeName)
+	t.Setenv("HOMEPATH", strings.TrimPrefix(homeDir, volumeName))
 	if _, err := configinit.Init(homeDir); err != nil {
 		t.Fatalf("configinit.Init: %v", err)
 	}
