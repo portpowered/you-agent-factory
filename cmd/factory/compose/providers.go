@@ -47,9 +47,10 @@ func provideRuntimeBuildService(
 	clock factory.Clock,
 	baseLogger *zap.Logger,
 	localModels service.LocalModelDomain,
+	sessions *factorysessions.Registry,
 ) *runtimebuild.Service {
 	domain := localModels
-	return service.NewRuntimeBuildService(cfg, clock, baseLogger, &domain)
+	return service.NewRuntimeBuildService(cfg, clock, baseLogger, &domain, sessions)
 }
 
 func provideWorkersSchedulerService(

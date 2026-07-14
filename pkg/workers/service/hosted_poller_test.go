@@ -66,8 +66,11 @@ func TestStartHostedLinearPoller_SubmitsIssuesThroughWorkersService(t *testing.T
 	})
 
 	sidecarCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	var sidecars sync.WaitGroup
+	t.Cleanup(func() {
+		cancel()
+		sidecars.Wait()
+	})
 	svc.StartHostedLinearPoller(sidecarCtx, &sidecars, runtimeCfg, poller, worker, submitted.submit)
 
 	waitForPollerSubmission(t, submitted, 1, time.Second)

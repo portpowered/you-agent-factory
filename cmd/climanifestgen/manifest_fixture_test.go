@@ -1,4 +1,14 @@
-{
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
+)
+
+const minimalProductionManifest = `{
   "formatVersion": "1.0.0",
   "rootPath": "you",
   "commands": {
@@ -44,80 +54,6 @@
       "runnable": true,
       "usage": {"line": "show [session-id]"},
       "handler": {"id": "you.session.show.handler", "operationId": "getFactorySession"}
-    },
-    "you.work": {
-      "id": "you.work",
-      "name": "work",
-      "path": "you work",
-      "documentation": {
-        "documentation": {
-          "title": {"canonicalEnglish": "work"},
-          "description": {"canonicalEnglish": "work"}
-        }
-      },
-      "visibility": "visible",
-      "runnable": false,
-      "usage": {"line": "work"}
-    },
-    "you.work.list": {
-      "id": "you.work.list",
-      "name": "list",
-      "path": "you work list",
-      "documentation": {
-        "documentation": {
-          "title": {"canonicalEnglish": "list"},
-          "description": {"canonicalEnglish": "list"}
-        }
-      },
-      "visibility": "visible",
-      "runnable": true,
-      "usage": {"line": "list"},
-      "handler": {"id": "you.work.list.handler", "operationId": "listWorkBySessionId"}
-    },
-    "you.work.show": {
-      "id": "you.work.show",
-      "name": "show",
-      "path": "you work show",
-      "documentation": {
-        "documentation": {
-          "title": {"canonicalEnglish": "show"},
-          "description": {"canonicalEnglish": "show"}
-        }
-      },
-      "visibility": "visible",
-      "runnable": true,
-      "usage": {"line": "show [work-id]"},
-      "handler": {"id": "you.work.show.handler", "operationId": "getWorkBySessionId"}
-    },
-    "you.work.move": {
-      "id": "you.work.move",
-      "name": "move",
-      "path": "you work move",
-      "documentation": {
-        "documentation": {
-          "title": {"canonicalEnglish": "move"},
-          "description": {"canonicalEnglish": "move"}
-        }
-      },
-      "visibility": "visible",
-      "runnable": true,
-      "usage": {"line": "move [work-id] [state-name]"},
-      "handler": {"id": "you.work.move.handler", "operationId": "moveWorkBySessionId"}
-    },
-    "you.work.visualize": {
-      "id": "you.work.visualize",
-      "name": "visualize",
-      "path": "you work visualize",
-      "documentation": {
-        "documentation": {
-          "title": {"canonicalEnglish": "visualize"},
-          "description": {"canonicalEnglish": "visualize"}
-        }
-      },
-      "visibility": "visible",
-      "runnable": true,
-      "usage": {"line": "visualize [batch-path]"},
-      "handler": {"id": "you.work.visualize.handler"}
     },
     "you.docs": {
       "id": "you.docs",
@@ -209,4 +145,15 @@
       "handler": {"id": "you.models.pull.handler", "operationId": "pullModel"}
     }
   }
+}`
+
+func writeMinimalProductionManifest(t *testing.T, root string) {
+	t.Helper()
+	manifestPath := filepath.Join(root, filepath.FromSlash(climanifestgen.ProductionManifestPath))
+	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+		t.Fatalf("create manifest directory: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, []byte(minimalProductionManifest), 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
 }

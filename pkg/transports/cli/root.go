@@ -18,7 +18,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
@@ -34,6 +36,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 var runCLI = runcli.Run
@@ -714,4 +717,209 @@ func ShowSessionAccessor() func(sessioncli.ShowConfig) error {
 // SetShowSessionAccessor replaces the session show delegate for tests.
 func SetShowSessionAccessor(fn func(sessioncli.ShowConfig) error) {
 	showSession = fn
+}
+
+// ListModelsAccessor returns the current models list delegate.
+func ListModelsAccessor() func(modelscli.ListConfig) error {
+	return listModels
+}
+
+// SetListModelsAccessor replaces the models list delegate for tests.
+func SetListModelsAccessor(fn func(modelscli.ListConfig) error) {
+	listModels = fn
+}
+
+// InspectModelAccessor returns the current models inspect delegate.
+func InspectModelAccessor() func(modelscli.InspectConfig) error {
+	return inspectModel
+}
+
+// SetInspectModelAccessor replaces the models inspect delegate for tests.
+func SetInspectModelAccessor(fn func(modelscli.InspectConfig) error) {
+	inspectModel = fn
+}
+
+// InvokeModelAccessor returns the current models invoke delegate.
+func InvokeModelAccessor() func(modelscli.InvokeConfig) error {
+	return invokeModel
+}
+
+// SetInvokeModelAccessor replaces the models invoke delegate for tests.
+func SetInvokeModelAccessor(fn func(modelscli.InvokeConfig) error) {
+	invokeModel = fn
+}
+
+// PullModelAccessor returns the current models pull delegate.
+func PullModelAccessor() func(modelscli.PullConfig) error {
+	return pullModel
+}
+
+// SetPullModelAccessor replaces the models pull delegate for tests.
+func SetPullModelAccessor(fn func(modelscli.PullConfig) error) {
+	pullModel = fn
+}
+
+// useGeneratedModelsDocsFamily toggles production models/docs wiring between the
+// generated metadata constructor and the legacy handwritten path.
+const useGeneratedModelsDocsFamily = true
+
+// NewLegacyModelsFamilyCommand builds the isolated handwritten you → models tree
+// used by the generator-vs-legacy parity matrix.
+func NewLegacyModelsFamilyCommand() *cobra.Command {
+	root, globals, diagnostics, operatorDefaults, options := newModelsFamilyParityShell()
+	root.AddCommand(newModelsCommand(globals, diagnostics, operatorDefaults, options))
+	return root
+}
+
+// NewGeneratedModelsFamilyParityCommand builds you → models from generated metadata
+// and attaches handwritten handlers by stable command ID for parity tests.
+func NewGeneratedModelsFamilyParityCommand(
+	registry *commandregistry.Registry,
+	invokeFlags climanifestcobra.ModelsInvokeFlagBindings,
+) (*cobra.Command, error) {
+	root, _, _, _, _ := newModelsFamilyParityShell()
+	components, err := climanifestcobra.NewModelsDocsFamilyComponents(registry, invokeFlags)
+	if err != nil {
+		return nil, err
+	}
+	root.AddCommand(components.Models)
+	return root, nil
+}
+
+// NewLegacyDocsFamilyCommand builds the isolated handwritten you → docs tree used
+// by the generator-vs-legacy parity matrix.
+func NewLegacyDocsFamilyCommand() *cobra.Command {
+	root, diagnostics, _, _, _ := newDocsFamilyParityShell()
+	root.AddCommand(newDocsCommand(diagnostics))
+	return root
+}
+
+// NewGeneratedDocsFamilyParityCommand builds you → docs from generated metadata
+// and attaches handwritten handlers by stable command ID for parity tests.
+func NewGeneratedDocsFamilyParityCommand(
+	registry *commandregistry.Registry,
+	invokeFlags climanifestcobra.ModelsInvokeFlagBindings,
+) (*cobra.Command, error) {
+	root, _, _, _, _ := newDocsFamilyParityShell()
+	components, err := climanifestcobra.NewModelsDocsFamilyComponents(registry, invokeFlags)
+	if err != nil {
+		return nil, err
+	}
+	root.AddCommand(components.Docs)
+	return root, nil
+}
+
+func newDocsFamilyParityShell() (*cobra.Command, *cliDiagnosticsOptions, *cliGlobalOptions, *cliOperatorDefaultsOptions, RootCommandOptions) {
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	return root, diagnostics, globals, operatorDefaults, options
+}
+
+func newModelsFamilyParityShell() (*cobra.Command, *cliGlobalOptions, *cliDiagnosticsOptions, *cliOperatorDefaultsOptions, RootCommandOptions) {
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	return root, globals, diagnostics, operatorDefaults, options
+}
+
+func newProductionModelsDocsCommands(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	options RootCommandOptions,
+) (*cobra.Command, *cobra.Command, error) {
+	if !useGeneratedModelsDocsFamily {
+		return newDocsCommand(diagnostics), newModelsCommand(globals, diagnostics, operatorDefaults, options), nil
+	}
+
+	registry, invokeFlags, err := newModelsDocsHandlerRegistry(globals, diagnostics, operatorDefaults, options)
+	if err != nil {
+		return nil, nil, err
+	}
+	components, err := climanifestcobra.NewModelsDocsFamilyComponents(registry, invokeFlags)
+	if err != nil {
+		return nil, nil, err
+	}
+	return components.Docs, components.Models, nil
+}
+
+func newModelsDocsHandlerRegistry(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	rootOptions RootCommandOptions,
+) (*commandregistry.Registry, climanifestcobra.ModelsInvokeFlagBindings, error) {
+	if operatorDefaults == nil {
+		operatorDefaults = &cliOperatorDefaultsOptions{}
+	}
+	invokeCfg := modelscli.InvokeConfig{Server: globals.server, Operation: "TTS"}
+	registry, err := commandregistry.NewModelsDocsRegistry(commandregistry.ModelsDocsHandlers{
+		DocsRunE: commandregistry.DocsRunE(commandregistry.DocsBinding{
+			BinaryName:        cliBinaryName,
+			DiagnosticsWriter: diagnostics.writer,
+			Verbose:           diagnostics.verboseEnabled,
+		}),
+		ModelsListRunE: commandregistry.ModelsListRunE(commandregistry.ModelsListBinding{
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			ListModels:        listModels,
+		}),
+		ModelsInspectRunE: commandregistry.ModelsInspectRunE(commandregistry.ModelsInspectBinding{
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			InspectModel:      inspectModel,
+		}),
+		ModelsInvokeRunE: commandregistry.ModelsInvokeRunE(commandregistry.ModelsInvokeBinding{
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Operation:         &invokeCfg.Operation,
+			Text:              &invokeCfg.Text,
+			OutputPath:        &invokeCfg.OutputPath,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			HomeDir:           rootOptions.HomeDir,
+			ResolveOperatorDefaults: func(cmd *cobra.Command, homeDir string) (operatorconfig.ResolvedDefaults, error) {
+				return resolveOperatorDefaults(cmd, operatorDefaults, rootOptions, homeDir)
+			},
+			BuildLogger: func() (*zap.Logger, error) {
+				policy := diagnostics.resolvePolicy(false)
+				return policy.BuildLogger(logging.BuildLogger)
+			},
+			BuildModelInvocation: rootOptions.BuildModelInvocation,
+			InvokeModel:          invokeModel,
+		}),
+		ModelsPullRunE: commandregistry.ModelsPullRunE(commandregistry.ModelsPullBinding{
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			PullModel:         pullModel,
+		}),
+	})
+	if err != nil {
+		return nil, climanifestcobra.ModelsInvokeFlagBindings{}, err
+	}
+	return registry, climanifestcobra.ModelsInvokeFlagBindings{
+		Operation:  &invokeCfg.Operation,
+		Text:       &invokeCfg.Text,
+		OutputPath: &invokeCfg.OutputPath,
+		FlagUsages: map[string]string{
+			"operation": "uppercase provider-agnostic operation name",
+			"text":      "text input for direct invocation",
+			"output":    "output file path for streamed audio responses",
+		},
+	}, nil
 }

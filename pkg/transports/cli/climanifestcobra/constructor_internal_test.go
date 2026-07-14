@@ -120,6 +120,75 @@ func TestPositionalArgsFromManifestCoversCardinalityModes(t *testing.T) {
 	}
 }
 
+func TestBuildModelsDocsCommandFromRecordRejectsOutOfFamilyID(t *testing.T) {
+	if _, err := buildModelsDocsCommandFromRecord(climanifest.Command{
+		ID:    "you.run",
+		Usage: climanifest.Usage{Line: "run"},
+	}); err == nil {
+		t.Fatal("buildModelsDocsCommandFromRecord() out-of-family = nil, want error")
+	}
+}
+
+func TestRegisterStringLocalFlagAppliesHiddenVisibility(t *testing.T) {
+	cmd := &cobra.Command{Use: "invoke"}
+	target := "TTS"
+	if err := registerStringLocalFlag(cmd, climanifest.Flag{
+		Long:       "operation",
+		Default:    "TTS",
+		Visibility: "hidden",
+	}, &target, "operation usage"); err != nil {
+		t.Fatalf("registerStringLocalFlag() error = %v", err)
+	}
+	flag := cmd.Flags().Lookup("operation")
+	if flag == nil || !flag.Hidden {
+		t.Fatalf("flag = %#v, want hidden invoke local flag", flag)
+	}
+}
+
+func TestBuildModelsDocsCommandFromRecordAppliesHiddenVisibility(t *testing.T) {
+	cmd, err := buildModelsDocsCommandFromRecord(climanifest.Command{
+		ID:         "you.models.list",
+		Usage:      climanifest.Usage{Line: "list"},
+		Visibility: "hidden",
+		Documentation: climanifest.Documentation{
+			Documentation: climanifest.DocumentationCopy{
+				Title: climanifest.DocumentationField{CanonicalEnglish: "title"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildModelsDocsCommandFromRecord() error = %v", err)
+	}
+	if !cmd.Hidden {
+		t.Fatal("hidden models/docs command must set cmd.Hidden")
+	}
+}
+
+func TestRegisterModelsLocalFlagsRejectsUnsupportedFlag(t *testing.T) {
+	cmd := &cobra.Command{Use: "list"}
+	err := registerModelsLocalFlags(cmd, climanifest.Command{
+		ID: "you.models.list",
+		Flags: map[string]climanifest.Flag{
+			"you.models.list.flag.foo": {
+				Long:      "foo",
+				Scope:     "local",
+				ValueType: "string",
+			},
+		},
+	}, ModelsInvokeFlagBindings{}, false)
+	if err == nil {
+		t.Fatal("registerModelsLocalFlags() unsupported flag = nil, want error")
+	}
+}
+
+func TestRegisterInvokeStringLocalFlagRejectsMissingBindingOnInvoke(t *testing.T) {
+	cmd := &cobra.Command{Use: "invoke"}
+	err := registerInvokeStringLocalFlag(cmd, climanifest.Flag{Long: "operation"}, ModelsInvokeFlagBindings{}, true, nil, "operation")
+	if err == nil {
+		t.Fatal("registerInvokeStringLocalFlag() missing binding = nil, want error")
+	}
+}
+
 func TestBuildCommandFromRecordAppliesHiddenVisibility(t *testing.T) {
 	cmd, err := buildCommandFromRecord(climanifest.Command{
 		ID:         "you.session.show",

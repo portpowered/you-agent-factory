@@ -933,3 +933,50 @@ func TestProductionRootUsesGeneratedRepresentativeFamilyCutover(t *testing.T) {
 		}
 	}
 }
+
+func TestShowSessionAccessorRoundTrip(t *testing.T) {
+	original := ShowSessionAccessor()
+	defer SetShowSessionAccessor(original)
+
+	called := false
+	SetShowSessionAccessor(func(cfg session.ShowConfig) error {
+		called = true
+		return nil
+	})
+	if ShowSessionAccessor() == nil {
+		t.Fatal("ShowSessionAccessor() = nil after setter")
+	}
+
+	root := NewRootCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"session", "show", "session-beta"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute session show: %v", err)
+	}
+	if !called {
+		t.Fatal("ShowSessionAccessor replacement was not invoked")
+	}
+}
+
+func TestNewLegacyRepresentativeFamilyCommandExecutesHandwrittenSessionShow(t *testing.T) {
+	original := showSession
+	defer func() { showSession = original }()
+
+	var got session.ShowConfig
+	showSession = func(cfg session.ShowConfig) error {
+		got = cfg
+		return nil
+	}
+
+	root := NewLegacyRepresentativeFamilyCommand()
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"session", "show", "session-beta"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute legacy session show: %v", err)
+	}
+	if got.SessionID != "session-beta" {
+		t.Fatalf("SessionID = %q, want session-beta", got.SessionID)
+	}
+}
