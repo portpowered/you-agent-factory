@@ -1,0 +1,34 @@
+{
+  "fixtures": [
+    {
+      "name": "relative_workspace_under_root",
+      "factory_root": "FACTORY_ROOT",
+      "raw_path": "workspaces/feature-a",
+      "want_suffix": ["workspaces", "feature-a"]
+    },
+    {
+      "name": "slash_normalized_relative_path",
+      "factory_root": "FACTORY_ROOT",
+      "raw_path": "workspaces/feature-b/nested",
+      "want_suffix": ["workspaces", "feature-b", "nested"]
+    },
+    {
+      "name": "reject_parent_traversal",
+      "factory_root": "FACTORY_ROOT",
+      "raw_path": "../escape",
+      "want_error": "traverse outside"
+    },
+    {
+      "name": "reject_empty_path",
+      "factory_root": "FACTORY_ROOT",
+      "raw_path": "",
+      "want_error": "workspace path is required"
+    },
+    {
+      "name": "reject_dotdot_only",
+      "factory_root": "FACTORY_ROOT",
+      "raw_path": "..",
+      "want_error": "traverse outside"
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 package: generatedclient
-output: client.gen.go
+output: client/client.gen.go
 generate:
   models: true
   client: true

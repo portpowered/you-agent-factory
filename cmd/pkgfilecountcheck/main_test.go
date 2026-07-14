@@ -118,8 +118,8 @@ func TestRunExcludesGeneratedVendorAndFixtureRoots(t *testing.T) {
 
 	repoRoot := t.TempDir()
 	writePackageFiles(t, repoRoot, "pkg/service", 15)
-	writePackageFiles(t, repoRoot, "pkg/api/generated", 16)
-	writePackageFiles(t, repoRoot, "pkg/generatedclient", 16)
+	writePackageFiles(t, repoRoot, "pkg/transports/http/generated", 16)
+	writePackageFiles(t, repoRoot, "pkg/transports/http/client", 16)
 	writePackageFiles(t, repoRoot, "pkg/service/testdata/fixture", 16)
 	writePackageFiles(t, repoRoot, "vendor/example", 16)
 	writeGoFile(t, repoRoot, "pkg/service/generated.go", strings.Join([]string{

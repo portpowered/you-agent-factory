@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	agentcli "github.com/portpowered/infinite-you/pkg/cli"
+	agentcli "github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -22,8 +22,8 @@ type docsSmokeTopic struct {
 
 // retiredDuplicateTreePaths are legacy maintainer paths removed by docs-embed-consolidation.
 var retiredDuplicateTreePaths = []string{
-	"pkg/cli/docs/reference/",
-	"pkg/cli/docs/reference",
+	"pkg/transports/cli/docs/reference/",
+	"pkg/transports/cli/docs/reference",
 }
 
 var docsSmokeTopics = []docsSmokeTopic{

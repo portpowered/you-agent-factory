@@ -19,8 +19,8 @@ import (
 const loggingPackagePath = "github.com/portpowered/infinite-you/pkg/logging"
 
 var approvedFiles = map[string]struct{}{
-	"pkg/cli/root.go":                  {},
-	"pkg/cli/terminalpolicy/policy.go": {},
+	"pkg/transports/cli/root.go":                  {},
+	"pkg/transports/cli/terminalpolicy/policy.go": {},
 	"pkg/logging/logger.go":            {},
 }
 

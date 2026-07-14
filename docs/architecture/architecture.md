@@ -181,15 +181,21 @@ root.
 | Migration-only roots | Target owner | Active work item and deletion gate |
 | --- | --- | --- |
 | `pkg/api`, `pkg/apisurface`, `pkg/cli`, `pkg/mcp` | `pkg/transports` | **Batch 006 — Transport family move.** Remove each exception when its HTTP, CLI, MCP, generated-contract/client, and boundary-mapping behavior and callers have moved to `pkg/transports`. |
-| `pkg/invocations`, `pkg/materialize`, `pkg/timework`, `pkg/workcontent`, `pkg/workgraph`, `pkg/workquery` | `pkg/work` | **Batch 006 — Work family move.** Remove each exception when its Work content, query, graph, pure invocation policy, materialization, or cron/time-work behavior and callers have moved to `pkg/work`. |
 | `pkg/logging`, `pkg/replay`, `pkg/sessionpersistence` | `pkg/platform` | **Batch 006 — Platform family move.** Remove each exception when its logging, replay/artifact, metrics, cursor persistence, or non-domain clock infrastructure and callers have moved to `pkg/platform`. |
 | `pkg/service` | `pkg/wire` after domain behavior converges on its narrow owners | **Batch 007 — Service and Factory Session ownership convergence**, followed by **Batch 008 — Legacy composition-root deletion.** Remove the exception when domain/session behavior has moved to its narrow owner and the remaining construction shell has moved to `pkg/wire`. |
 | `pkg/runtimehost`, `pkg/composebridge` | `pkg/wire` | **Batch 008 — Legacy composition-root deletion.** Remove each exception when transports and `pkg/initializer` consume the explicit graph and no caller needs the runtime-host facade or composition bridge. |
 
 Generated-code exceptions are a separate policy class, not migration roots:
-`pkg/generatedclient`, `pkg/api/generated`, and generated Go files carrying the
-standard `Code generated ... DO NOT EDIT.` header. They may contain generated
-transport contracts or clients but must never own handwritten product behavior.
+`pkg/transports/http/client`, `pkg/transports/http/generated`, and generated Go
+files carrying the standard `Code generated ... DO NOT EDIT.` header. They may
+contain generated transport contracts or clients but must never own handwritten
+product behavior.
+
+The historical transport roots `pkg/api`, `pkg/apisurface`, `pkg/cli`,
+`pkg/mcp`, and `pkg/generatedclient` are retired. Repository code imports their
+canonical successors under `pkg/transports`; the package-boundary guard rejects
+reintroduction of those imports and handwritten Go inside generated-only
+transport packages.
 
 Historical model and hosted-worker roots are a prohibited policy class, not
 migration exceptions. `pkg/modelhost`, `pkg/localmodels`, and

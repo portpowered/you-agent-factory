@@ -9,11 +9,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 func workContentJSONFromParts(parts []interfaces.WorkContentPart) json.RawMessage {
-	content := workcontent.GeneratedPtrFromParts(parts)
+	content := contentcontract.GeneratedPtrFromParts(parts)
 	if content == nil {
 		return nil
 	}

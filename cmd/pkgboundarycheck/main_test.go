@@ -23,7 +23,7 @@ func TestRunSucceedsWithApprovedRootPackageFamilies(t *testing.T) {
 	} {
 		makeDir(t, repoRoot, packagePath)
 	}
-	makeDir(t, repoRoot, "pkg/generatedclient")
+	makeDir(t, repoRoot, "pkg/transports/http/client")
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -34,7 +34,7 @@ func TestRunSucceedsWithApprovedRootPackageFamilies(t *testing.T) {
 	if got := stdout.String(); !strings.Contains(got, "package boundary passed (no blocking package-boundary violations)") {
 		t.Fatalf("run() stdout = %q, want package-boundary success message", got)
 	}
-	if got := stdout.String(); !strings.Contains(got, "active generated-code exceptions: pkg/generatedclient (root), pkg/api/generated (subtree)") {
+	if got := stdout.String(); !strings.Contains(got, "active generated-code exceptions: pkg/transports/http/client (root), pkg/transports/http/generated (root)") {
 		t.Fatalf("run() stdout = %q, want generated-code exception summary", got)
 	}
 	if got := stderr.String(); got != "" {
@@ -61,6 +61,58 @@ func TestRunAllowsOnlyStartupOwnersToImportApplicationGraph(t *testing.T) {
 	}
 	if got := stderr.String(); got != "" {
 		t.Fatalf("run() stderr = %q, want empty", got)
+	}
+}
+
+func TestRunAllowsCanonicalTransportImports(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/transport.go", "runtime", "github.com/portpowered/infinite-you/pkg/transports/mapping")
+	writeGoImportFile(t, repoRoot, "pkg/root/cli.go", "root", "github.com/portpowered/infinite-you/pkg/transports/cli")
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err != nil {
+		t.Fatalf("run() error = %v, want canonical transport imports allowed; stderr=%q", err, stderr.String())
+	}
+}
+
+func TestRunRejectsRetiredTransportImports(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	imports := []struct {
+		filePath       string
+		retiredPath    string
+		canonicalOwner string
+	}{
+		{"pkg/factory/runtime/api.go", "github.com/portpowered/infinite-you/pkg/api", "pkg/transports/http"},
+		{"pkg/factory/runtime/mapping.go", "github.com/portpowered/infinite-you/pkg/apisurface/factorysession", "pkg/transports/mapping"},
+		{"pkg/root/cli.go", "github.com/portpowered/infinite-you/pkg/cli", "pkg/transports/cli"},
+		{"pkg/root/mcp.go", "github.com/portpowered/infinite-you/pkg/mcp/server", "pkg/transports/mcp"},
+		{"pkg/factory/runtime/client.go", "github.com/portpowered/infinite-you/pkg/generatedclient", "pkg/transports/http/client"},
+	}
+	for _, fixture := range imports {
+		writeGoImportFile(t, repoRoot, fixture.filePath, filepath.Base(filepath.Dir(fixture.filePath)), fixture.retiredPath)
+	}
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want retired transport import failures")
+	}
+	for _, fixture := range imports {
+		got := stderr.String()
+		if !strings.Contains(got, "prohibited retired package import: "+fixture.retiredPath) {
+			t.Fatalf("run() stderr = %q, want retired import %q", got, fixture.retiredPath)
+		}
+		if !strings.Contains(got, "canonical owner: "+fixture.canonicalOwner) {
+			t.Fatalf("run() stderr = %q, want canonical successor %q", got, fixture.canonicalOwner)
+		}
+	}
+	if got := err.Error(); got != "[agent-factory:pkg-boundary] found 5 package-boundary violation(s)" {
+		t.Fatalf("run() error = %q, want five violations", got)
 	}
 }
 
@@ -121,6 +173,12 @@ func TestRunRejectsRetiredPackageRootsWithCanonicalOwners(t *testing.T) {
 		{packagePath: "pkg/modelhost", canonicalOwner: "pkg/models/host"},
 		{packagePath: "pkg/localmodels", canonicalOwner: "pkg/models/local or pkg/models/assets"},
 		{packagePath: "pkg/hostedworkers", canonicalOwner: "pkg/workers/hosted"},
+		{packagePath: "pkg/invocations", canonicalOwner: "pkg/work/invocation, pkg/factory/sessions/invocation, pkg/workers/inference, or pkg/workers/skippermissions, according to the concern"},
+		{packagePath: "pkg/materialize", canonicalOwner: "pkg/work/materialize"},
+		{packagePath: "pkg/timework", canonicalOwner: "pkg/work/timework"},
+		{packagePath: "pkg/workcontent", canonicalOwner: "pkg/work/content"},
+		{packagePath: "pkg/workgraph", canonicalOwner: "pkg/work/graph"},
+		{packagePath: "pkg/workquery", canonicalOwner: "pkg/work/query"},
 	} {
 		t.Run(tt.packagePath, func(t *testing.T) {
 			t.Parallel()
@@ -172,6 +230,36 @@ func TestRunRejectsRetiredPackageImportsWithCanonicalOwners(t *testing.T) {
 			importPath:     "github.com/portpowered/infinite-you/pkg/hostedworkers/linear",
 			retiredRoot:    "pkg/hostedworkers",
 			canonicalOwner: "pkg/workers/hosted",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/invocations/inference",
+			retiredRoot:    "pkg/invocations",
+			canonicalOwner: "pkg/work/invocation, pkg/factory/sessions/invocation, pkg/workers/inference, or pkg/workers/skippermissions, according to the concern",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/materialize",
+			retiredRoot:    "pkg/materialize",
+			canonicalOwner: "pkg/work/materialize",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/timework",
+			retiredRoot:    "pkg/timework",
+			canonicalOwner: "pkg/work/timework",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/workcontent",
+			retiredRoot:    "pkg/workcontent",
+			canonicalOwner: "pkg/work/content",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/workgraph",
+			retiredRoot:    "pkg/workgraph",
+			canonicalOwner: "pkg/work/graph",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/workquery",
+			retiredRoot:    "pkg/workquery",
+			canonicalOwner: "pkg/work/query",
 		},
 	} {
 		t.Run(tt.retiredRoot, func(t *testing.T) {
@@ -354,8 +442,8 @@ func TestRunAllowsDocumentedGeneratedCodeExceptions(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGeneratedGoFile(t, repoRoot, "pkg/generatedclient/client.gen.go")
-	writeGeneratedGoFile(t, repoRoot, "pkg/api/generated/server.gen.go")
+	writeGeneratedGoFile(t, repoRoot, "pkg/transports/http/client/client.gen.go")
+	writeGeneratedGoFile(t, repoRoot, "pkg/transports/http/generated/server.gen.go")
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -365,7 +453,7 @@ func TestRunAllowsDocumentedGeneratedCodeExceptions(t *testing.T) {
 	}
 	for _, want := range []string{
 		"package boundary passed",
-		"active generated-code exceptions: pkg/generatedclient (root), pkg/api/generated (subtree)",
+		"active generated-code exceptions: pkg/transports/http/client (root), pkg/transports/http/generated (root)",
 	} {
 		if got := stdout.String(); !strings.Contains(got, want) {
 			t.Fatalf("run() stdout = %q, want substring %q", got, want)
@@ -376,11 +464,33 @@ func TestRunAllowsDocumentedGeneratedCodeExceptions(t *testing.T) {
 	}
 }
 
+func TestRunRejectsHandwrittenGoInGeneratedOnlyPackage(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(t, repoRoot, "pkg/transports/http/client/compatibility.go", "generatedclient", "context")
+
+	stderr := &bytes.Buffer{}
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want handwritten generated-package failure")
+	}
+	for _, want := range []string{
+		"handwritten Go file in generated-only package: pkg/transports/http/client (pkg/transports/http/client/compatibility.go)",
+		"standard Code generated ... DO NOT EDIT. marker",
+		"move handwritten mapping or policy to pkg/transports/http or pkg/transports/mapping",
+	} {
+		if got := stderr.String(); !strings.Contains(got, want) {
+			t.Fatalf("run() stderr = %q, want substring %q", got, want)
+		}
+	}
+}
+
 func TestRunRejectsGeneratedLookingRootOutsideDocumentedExceptions(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGeneratedGoFile(t, repoRoot, "pkg/generatedclient/client.gen.go")
+	writeGeneratedGoFile(t, repoRoot, "pkg/transports/http/client/client.gen.go")
 	writeGeneratedGoFile(t, repoRoot, "pkg/generatedexperimental/client.gen.go")
 
 	stdout := &bytes.Buffer{}
@@ -397,13 +507,13 @@ func TestRunRejectsGeneratedLookingRootOutsideDocumentedExceptions(t *testing.T)
 	for _, want := range []string{
 		"[agent-factory:pkg-boundary] unapproved root package family: pkg/generatedexperimental",
 		"outside the approved package-family allowlist",
-		"active generated-code exceptions: pkg/generatedclient (root), pkg/api/generated (subtree)",
+		"active generated-code exceptions: pkg/transports/http/client (root), pkg/transports/http/generated (root)",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("run() stderr = %q, want substring %q", got, want)
 		}
 	}
-	if strings.Contains(got, "unapproved root package family: pkg/generatedclient") {
+	if strings.Contains(got, "unapproved root package family: pkg/transports/http/client") {
 		t.Fatalf("run() stderr = %q, documented generated-code root should not be rejected", got)
 	}
 }
@@ -412,9 +522,9 @@ func TestValidatePolicyRejectsGeneratedExceptionAsProductFamily(t *testing.T) {
 	t.Parallel()
 
 	policy := boundaryPolicy{
-		approvedProductPackageFamilies: []string{"pkg/generatedclient"},
+		approvedProductPackageFamilies: []string{"pkg/transports/http/client"},
 		generatedCodeExceptions: []generatedCodeException{
-			{packagePath: "pkg/generatedclient", scope: generatedCodeExceptionScopeRoot},
+			{packagePath: "pkg/transports/http/client", scope: generatedCodeExceptionScopeRoot},
 		},
 	}
 
@@ -422,7 +532,7 @@ func TestValidatePolicyRejectsGeneratedExceptionAsProductFamily(t *testing.T) {
 	if err == nil {
 		t.Fatal("validatePolicy() error = nil, want generated-code/product-family overlap rejection")
 	}
-	if got := err.Error(); got != "generated-code exception pkg/generatedclient must not also be an approved product package family" {
+	if got := err.Error(); got != "generated-code exception pkg/transports/http/client must not also be an approved product package family" {
 		t.Fatalf("validatePolicy() error = %q, want overlap diagnostic", got)
 	}
 }
@@ -433,13 +543,13 @@ func TestValidatePolicyRejectsGeneratedExceptionAsMigrationException(t *testing.
 	policy := boundaryPolicy{
 		approvedProductPackageFamilies: []string{"pkg/transports"},
 		migrationPackageExceptions: []migrationPackageException{{
-			packagePath:  "pkg/generatedclient",
+			packagePath:  "pkg/transports/http/client",
 			targetOwner:  "pkg/transports",
 			workItem:     batch006TransportFamilyMove,
 			deletionGate: "remove after generated clients move to pkg/transports",
 		}},
 		generatedCodeExceptions: []generatedCodeException{
-			{packagePath: "pkg/generatedclient", scope: generatedCodeExceptionScopeRoot},
+			{packagePath: "pkg/transports/http/client", scope: generatedCodeExceptionScopeRoot},
 		},
 	}
 
@@ -447,7 +557,7 @@ func TestValidatePolicyRejectsGeneratedExceptionAsMigrationException(t *testing.
 	if err == nil {
 		t.Fatal("validatePolicy() error = nil, want generated-code/migration overlap rejection")
 	}
-	if got := err.Error(); got != "generated-code exception pkg/generatedclient must not also be a migration-only package exception" {
+	if got := err.Error(); got != "generated-code exception pkg/transports/http/client must not also be a migration-only package exception" {
 		t.Fatalf("validatePolicy() error = %q, want overlap diagnostic", got)
 	}
 }
@@ -473,7 +583,7 @@ func TestRunFailsForUnapprovedRootPackageFamily(t *testing.T) {
 		"[agent-factory:pkg-boundary] unapproved root package family: pkg/experimental",
 		"  reason: pkg/experimental is outside the approved package-family allowlist.",
 		"  remediation: move the code under an approved owner or deliberately update the allowlist with ownership rationale.",
-		"[agent-factory:pkg-boundary] active generated-code exceptions: pkg/generatedclient (root), pkg/api/generated (subtree)",
+		"[agent-factory:pkg-boundary] active generated-code exceptions: pkg/transports/http/client (root), pkg/transports/http/generated (root)",
 		"",
 	}, "\n")
 	if got := stderr.String(); got != wantOutput {

@@ -3,30 +3,39 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
-- `pkg/invocations/` contains the shared invocation contract logic used by CLI
-  and API adapters plus the canonical Factory Session invocation owner.
-- `pkg/invocations/session_owner.go` owns live-session request normalization,
+- `pkg/work/invocation/` owns pure invocation input, argument normalization,
+  interpolation, return-policy selection, and stable policy errors used by CLI,
+  API, workers, and Factory Session orchestration. It consumes domain-owned
+  values and has no generated transport or live-session dependency.
+- `pkg/workers/inference/` owns provider-neutral inference operation binding,
+  request-envelope construction, and ordered output shaping shared by direct
+  model invocation and Factory Session worker execution.
+- `pkg/workers/skippermissions/` owns provider-backed worker capability and
+  invocation-override policy for skip-permissions.
+- `pkg/factorysessions/invocation/session_owner.go` owns live-session request normalization,
   interpolation validation, default-handling Work submission, lifecycle
   sequencing, and delegation into the owner-local event-derived result waiter.
-  `pkg/invocations/session_wait.go` owns polling, timeout and cancellation,
+  `pkg/factorysessions/invocation/session_wait.go` owns polling, timeout and cancellation,
   primary-result selection, and terminal classification over narrow runtime
-  observations. `pkg/invocations/session_telemetry.go` owns invocation metric
+  observations. `pkg/factorysessions/invocation/session_telemetry.go` owns invocation metric
   names, low-cardinality labels, exactly-once emission points, safe structured
   log fields, and packaged-factory telemetry policy. Keep session configuration,
   Work submission, observation, wait/time behavior, telemetry sinks, and
   packaged-factory classification as explicit collaborators; service and
   runtime-host facades should only adapt those dependencies and forward
   `InvokeFactorySession` unchanged.
-- `pkg/invocations/arguments.go` owns signature-backed invocation argument
+- `pkg/work/invocation/arguments.go` owns signature-backed invocation argument
   normalization for positional, named, stdin, defaulted, repeated, variadic,
   alias-backed, and compatibility fallback inputs. Transport stories should
   adapt CLI or API payloads into `NormalizeArgumentsInput` rather than
   re-implementing binding, default, or validation rules at the boundary.
-- `pkg/invocations/interpolation.go` owns runtime `${parameter}` interpolation
+- `pkg/work/invocation/interpolation.go` owns runtime `${parameter}` interpolation
   for signature-backed worker and workstation fields plus pre-dispatch
   interpolation validation. Keep file-contents substitution, omitted-exact-field
   behavior, and interpolation error codes there instead of duplicating
-  string-replacement rules in service or worker executors. The same package also
+  string-replacement rules in service or worker executors. FILE_CONTENTS reads
+  enter through the explicit `FileReader` collaborator supplied by those IO
+  boundaries. The same package also
   owns replay-safe invocation diagnostics such as `InvocationSignatureHash` and
   `InvocationDiagnostic`; execution layers should reuse that summary instead of
   inventing transport- or worker-specific argument telemetry.
@@ -42,7 +51,7 @@ primary-result behavior.
   interpolation, validate that it references a declared signature parameter
   rather than forcing the authored placeholder through concrete provider
   validation during session startup.
-- `pkg/invocations/primary_result.go` resolves invocation `primaryResult`
+- `pkg/work/invocation/primary_result.go` resolves invocation `primaryResult`
   against selected-tick `FactoryWorldState` using `WorkRequestsByID`,
   `TerminalWorkByID`, and payload-lineage scope rather than transport-specific
   polling logic. The same package also classifies missing-primary-result waits
@@ -59,11 +68,12 @@ primary-result behavior.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
   OpenAPI factory contract and the internal runtime config.
 - `pkg/interfaces/factory_runtime.go` owns the backend canonical
-  `WorkContentPart` and request-validation error shapes used below transport
-  and service boundaries; `pkg/invocations/session_owner.go` owns the shared
-  `FactoryInvocationResult` returned by the canonical owner.
-- `pkg/workcontent/` translates between generated OpenAPI `WorkContent` and the
-  backend-owned `interfaces.WorkContentPart` shape.
+  `WorkContentPart`, request-validation error, and `FactoryInvocationResult`
+  shapes used below transport and service boundaries; the Factory Session owner
+  constructs that shared result.
+- `pkg/work/content/contract` translates between generated OpenAPI `WorkContent`
+  and the backend-owned `interfaces.WorkContentPart` shape; pure content rules
+  remain in `pkg/work/content`.
 - `pkg/api/handlers_work_write.go` includes the session invocation HTTP
   boundary alongside other session work-write handlers, including projection of
   shared invocation non-success context into the public `InvocationResponse`.
@@ -72,22 +82,23 @@ primary-result behavior.
   session config, canonical Work submission, event-derived observations,
   metric/log sinks, and packaged-factory terminal classification. Their
   `InvokeFactorySession` methods must remain transparent forwards to
-  `invocations.SessionInvoker`; model-catalog files must not own Factory
+  `pkg/factorysessions/invocation.SessionInvoker`; model-catalog files must not own Factory
   Session invocation behavior. Metric names, label policy, log shaping, and
-  emission sequencing must not be reimplemented in these adapters; request
-  normalization, interpolation validation, submission sequencing, polling,
-  timeout/cancellation, primary-result selection, and general terminal
-  classification belong only to `pkg/invocations`.
+  emission sequencing must not be reimplemented in these adapters. Submission
+  sequencing, polling, and timeout/cancellation belong to
+  `pkg/factorysessions/invocation`; normalization, interpolation, primary-result selection,
+  and general terminal classification belong to `pkg/work/invocation` and are
+  delegated to by the stateful owner.
 - API structured args use the direct structured-argument carrier rather than
   being reinterpreted as CLI named flags, so canonical parameter-name keys
   still work for positional-only or stdin-bound parameters. Treat `args: {}` as
   an explicit structured invocation request, not as omitted args, so
   all-optional or defaulted signatures stay transport-equivalent with CLI.
-- `pkg/cli/run/` is the `you run --factory` CLI boundary.
+- `pkg/transports/cli/run/` is the `you run --factory` CLI boundary.
 - Canonical default-path ownership for operator config
   (`~/.you-agent-factory/config.json`) and generated live replay recording roots
   (`~/.you-agent-factory/recordings/...`) belongs in `pkg/config/defaultpaths`;
-  `pkg/config/operatorconfig` and `pkg/cli/run` should keep only precedence,
+  `pkg/config/operatorconfig` and `pkg/transports/cli/run` should keep only precedence,
   filename, and reporting behavior around those defaults.
 - Persisted local `backendScopeID` values live in the same
   `~/.you-agent-factory/config.json` system config file. Keep load/generate/persist
@@ -100,8 +111,8 @@ primary-result behavior.
   startup with a config error instead of being silently replaced.
 - Canonical `you config init` system bootstrap belongs in
   `pkg/config/configinit` (`Init`, `SystemConfigOutcome`) and
-  `pkg/cli/configinit` (`Init`, `InitConfig`) with command wiring in
-  `pkg/cli/root.go` (`newSystemConfigCommand`, `newSystemConfigInitCommand`).
+  `pkg/transports/cli/configinit` (`Init`, `InitConfig`) with command wiring in
+  `pkg/transports/cli/root.go` (`newSystemConfigCommand`, `newSystemConfigInitCommand`).
   Fresh homes create `~/.you-agent-factory/config.json` through
   `pkg/config/systemconfig.EnsureLocalBackendScope`; existing config files are
   validated with `operatorconfig.LoadFileConfig` and left byte-identical on
@@ -112,7 +123,7 @@ primary-result behavior.
   `pkg/config/configinit/init_test.go` (`TestInit_DoubleRunIsSuccessfulNoOp`,
   `TestInit_PreservesUserEditedFactoryFilesOnRerun`,
   `TestInit_CreatesMissingPackagedDefaultsWithoutTouchingExisting`) and
-  `pkg/cli/configinit/init_test.go` / `pkg/cli/root_config_init_test.go`. Keep
+  `pkg/transports/cli/configinit/init_test.go` / `pkg/transports/cli/root_config_init_test.go`. Keep
   `you factory config` factory.json tooling separate from this top-level
   operator/system initializer. Post-install bootstrap is invoked from
   `scripts/install.sh` and `scripts/install.ps1` via the installed binary's
@@ -120,22 +131,24 @@ primary-result behavior.
   `tests/release/install_script_test.go` and `scripts/release/smoke-install.sh`
   / `scripts/release/smoke-install.ps1`.
 - Operator default worker model settings resolve at the CLI/process boundary in
-  `pkg/cli/root.go` (`resolveOperatorDefaults`) and flow through
+  `pkg/transports/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before
   `cmd/factory/compose.InjectCLITransport`; Wire providers must not read
   `~/.you-agent-factory/config.json` or `YOU_DEFAULT_WORKER_MODEL_*` directly.
-- Process startup follows `cmd/factory -> pkg/root -> pkg/wire -> pkg/initializer`: `pkg/cli/startup` carries parsed run or MCP inputs, `pkg/root` selects one `initializer.ProcessPolicy`, `pkg/wire/process.go` applies that policy while constructing exactly one typed `initializer.ProcessGraph`, and `pkg/initializer/core.go` validates the graph policy before starting the already-built graph. Do not duplicate or recompute mode/sidecar policy downstream; API, dashboard, runtime mode, worker-scheduler, and watcher enablement must be governed by the root-selected policy carried on the graph. Keep domain construction out of root and do not restore root-local deferred lifecycle closures or process-global builder registration. The normalized root home must likewise remain authoritative: thread it through config initialization, named-factory lookup, `run.RunConfig.HomeDir`, system-config persistence, automatic recording, runtime logging, and runtime metrics rather than consulting ambient process globals after command construction. Run construction is split between `run.BuildApplication` and `Application.Run`; MCP construction is split between `mcp.BuildServeApplication` and `ServeApplication.Run`, so construction failures occur before initializer startup. Initializer-backed local construction uses `pkg/initializer/cli_transport.go` (`InitializeCLITransport`, `CLITransport.Runner`) and `pkg/wire/cli.go` (`BuildCLIRunner`). Dashboard-suppressed non-invocation CLI runs (`--quiet`, work-file batch, clean-invocation batch) stay on `service.BuildFactoryService` through `wire.BuildCLIRunner`, while dashboard-suppressed one-shot invocation uses `service.BuildInvocationBootstrap` / `service.NormalizeInvocationBootstrapConfig` from `pkg/service/factory_build.go` via `pkg/cli/run/factory_invocation_input.go` only. `InvocationBootstrap.InvokeFactorySession` and `InvocationBootstrap.CloseFactorySession` must stay transparent forwards to the wrapped `FactoryService`; `runFactoryInvocation` releases sessions through `releaseInvocationSession` after invocation instead of a CLI-local submit/wait loop. Boundary coverage lives in `pkg/root/process_test.go`, `pkg/wire/process_test.go`, `pkg/initializer/initialize_test.go`, and the compiled-binary matrix in `tests/release/root_process_smoke_test.go`; transport parity coverage remains in `pkg/initializer/startup_compatibility_test.go`. Focused initializer migration verification: `go test ./cmd/... ./pkg/api/... ./pkg/cli/... ./pkg/mcp/... ./pkg/initializer/... -short`.
+- Process startup follows `cmd/factory -> pkg/root -> pkg/wire -> pkg/initializer`: `pkg/transports/cli/startup` carries parsed run or MCP inputs, `pkg/root` selects one `initializer.ProcessPolicy`, `pkg/wire/process.go` applies that policy while constructing exactly one typed `initializer.ProcessGraph`, and `pkg/initializer/core.go` validates the graph policy before starting the already-built graph. Do not duplicate or recompute mode/sidecar policy downstream; API, dashboard, runtime mode, worker-scheduler, and watcher enablement must be governed by the root-selected policy carried on the graph. Keep domain construction out of root and do not restore root-local deferred lifecycle closures or process-global builder registration. The normalized root home must likewise remain authoritative: thread it through config initialization, named-factory lookup, `run.RunConfig.HomeDir`, system-config persistence, automatic recording, runtime logging, and runtime metrics rather than consulting ambient process globals after command construction. Run construction is split between `run.BuildApplication` and `Application.Run`; MCP construction is split between `mcp.BuildServeApplication` and `ServeApplication.Run`, so construction failures occur before initializer startup. Initializer-backed local construction uses `pkg/initializer/cli_transport.go` (`InitializeCLITransport`, `CLITransport.Runner`) and `pkg/wire/cli.go` (`BuildCLIRunner`). Dashboard-suppressed non-invocation CLI runs (`--quiet`, work-file batch, clean-invocation batch) stay on `service.BuildFactoryService` through `wire.BuildCLIRunner`, while dashboard-suppressed one-shot invocation uses `service.BuildInvocationBootstrap` / `service.NormalizeInvocationBootstrapConfig` from `pkg/service/factory_build.go` via `pkg/transports/cli/run/factory_invocation_input.go` only. `InvocationBootstrap.InvokeFactorySession` and `InvocationBootstrap.CloseFactorySession` must stay transparent forwards to the wrapped `FactoryService`; `runFactoryInvocation` releases sessions through `releaseInvocationSession` after invocation instead of a CLI-local submit/wait loop. Boundary coverage lives in `pkg/root/process_test.go`, `pkg/wire/process_test.go`, `pkg/initializer/initialize_test.go`, and the compiled-binary matrix in `tests/release/root_process_smoke_test.go`; transport parity coverage remains in `pkg/initializer/startup_compatibility_test.go`. Focused initializer migration verification: `go test ./cmd/... ./pkg/transports/http/... ./pkg/transports/cli/... ./pkg/transports/mcp/... ./pkg/initializer/... -short`.
 - `you models invoke` reuses the same `service.BuildInvocationBootstrap` /
   `service.NormalizeInvocationBootstrapConfig` path as one-shot factory
-  invocation, wired from `pkg/cli/models/bootstrap_invoke.go`. The CLI must call
+  invocation, constructed by `pkg/wire/model_invocation.go` from the typed
+  request carried through `pkg/root` and `pkg/transports/cli/root.go`. The models
+  transport must fail fast when the builder is absent and call
   `FactoryService.InvokeModel` through the bootstrap-owned service rather than
   posting to `/models/{model_name}/invocations`; keep managed readiness/lifecycle
-  error mapping aligned with `pkg/api/handlers_models.go` via
+  error mapping aligned with `pkg/transports/http/handlers_models.go` via
   `mapBootstrapModelInvokeError`. Return classified `InferenceFailure` and
   `ManagedRuntimeInvocationError` values without re-wrapping so readiness causes
   stay `errors.Is`-able;   non-ready bootstrap invoke coverage lives in
-  `pkg/cli/models/non_ready_invoke_test.go` (stub bootstrap lifecycle vocabulary) and
-  `pkg/cli/models/bootstrap_lifecycle_invoke_test.go` (offline MISSING/LOADING/FAILED
+  `pkg/transports/cli/models/non_ready_invoke_test.go` (stub bootstrap lifecycle vocabulary) and
+  `pkg/transports/cli/models/bootstrap_lifecycle_invoke_test.go` (offline MISSING/LOADING/FAILED
   integration through the real bootstrap). Ready offline invoke coverage lives in
   `pkg/cli/models/offline_ready_invoke_test.go`; bootstrap routing and failure-baseline
   contracts live in `pkg/cli/models/bootstrap_invoke_test.go` and
@@ -143,22 +156,22 @@ primary-result behavior.
   `pkg/cli/models` (`resolveModelsInvokeFactoryDir`), with operator defaults and
   logger passed from `pkg/cli/root.go` `newModelsInvokeCommand`.
 - `pkg/cli/run/run.go` resolves positional versus non-TTY stdin through the
-  shared `pkg/invocations` contract, then runs the local service in
+  shared `pkg/work/invocation` contract, then runs the local service in
   invocation-only service mode so stdout stays reserved for primary-result
   output instead of startup or dashboard noise; CLI-only source conflicts are
   logged and counted there before the service runtime exists. `you run
-  --skip-permissions` is registered in `pkg/cli/root_work.go`, mapped to
+  --skip-permissions` is registered in `pkg/transports/cli/root_work.go`, mapped to
   `RunConfig.InvocationSkipPermissionsOverride`, and forwarded through
   `buildRunServiceConfig` into `service.FactoryServiceConfig` as an ephemeral
   invocation override that must not mutate persisted worker `skipPermissions`.
-  `pkg/invocations/skippermissions.EffectiveSkipPermissions` resolves persisted worker config plus
+  `pkg/workers/skippermissions.EffectiveSkipPermissions` resolves persisted worker config plus
   `FactoryServiceConfig.InvocationSkipPermissionsOverride` when building
   provider-backed worker CLI args in `pkg/service/factory_build.go` and
   `pkg/runtimehost/build_workers.go`. `skippermissions.ValidateInvocationSkipPermissionsWorkers`
   and `ValidateInvocationSkipPermissionsForWorker` fail closed before worker
   construction when `--skip-permissions` is set but an agent worker uses an
   unsupported CLI provider or local managed model path. S14 regression evidence
-  lives in `pkg/invocations/skippermissions/skip_permissions_test.go`,
+  lives in `pkg/workers/skippermissions/skip_permissions_test.go`,
   `pkg/workers/provider/provider_behavior_test.go`, and
   `pkg/service/factory_test_helpers_test.go` alongside the story-level
   propagation and fail-closed service tests. `RunConfig.JSONOutput`
@@ -169,17 +182,17 @@ primary-result behavior.
   `FactoryResponseEvent` subscription for supported one-shot factory invocations.
   Do not fall back to legacy provider-progress payloads when the canonical
   subscription is unavailable. Keep mode validation, unsupported
-  run-shape rejection, and fallback behavior in `pkg/cli/run/invocation_error.go`,
+  run-shape rejection, and fallback behavior in `pkg/transports/cli/run/invocation_error.go`,
   stream attachment, bounded human-progress draining, and lossless canonical
   JSON stdout ordering in
-  `pkg/cli/run/invocation_observability.go`, human progress and canonical JSON rendering in
-  `pkg/cli/run/run_clean_invocation.go`, response-stream unit tests in
-  `pkg/cli/run/run_config_test.go`, response-stream CLI integration tests in
-  `pkg/cli/run/run_wire_api_test.go`, and invocation wiring in
-  `pkg/cli/run/factory_invocation_input.go`. `pkg/cli/root_work.go` and
-  `pkg/cli/root_run_test.go` apply manually parsed `you run --output response-stream`
+  `pkg/transports/cli/run/invocation_observability.go`, human progress and canonical JSON rendering in
+  `pkg/transports/cli/run/run_clean_invocation.go`, response-stream unit tests in
+  `pkg/transports/cli/run/run_config_test.go`, response-stream CLI integration tests in
+  `pkg/transports/cli/run/run_wire_api_test.go`, and invocation wiring in
+  `pkg/transports/cli/run/factory_invocation_input.go`. `pkg/transports/cli/root_work.go` and
+  `pkg/transports/cli/root_run_test.go` apply manually parsed `you run --output response-stream`
   to `RunConfig.InvocationOutputMode` after `DisableFlagParsing` argument parsing.
-  The `pkg/cli/run` package is at the
+  The `pkg/transports/cli/run` package is at the
   15-file limit; extend existing files instead of adding new ones. Human response-stream
   terminal outcomes use `--- invocation outcome ---` with structured status/error
   fields. Both human and JSON modes subscribe from the latest session-owned
@@ -311,7 +324,7 @@ primary-result behavior.
   `responsestream.StreamSet.CloseDispatch` retains completed dispatch streams so
   late CLI pollers can still subscribe and drain retained progress until the
   completed-dispatch retention window expires; `runResponseStreamAttachment` in
-  `pkg/cli/run/invocation_observability.go` performs one final dispatch-ID
+  `pkg/transports/cli/run/invocation_observability.go` performs one final dispatch-ID
   discovery pass when attachment shutdown is requested so dispatches that
   complete between poll ticks are still subscribed before `streamAttachment.stop()`
   returns. `StreamSet` evicts completed streams after
@@ -329,40 +342,45 @@ primary-result behavior.
   plus public session, event, artifact, and result reads with fail-on-use live
   dependencies.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin
-  bytes into `invocations.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
+  bytes into `pkg/work/invocation.ResolveTextInput` and surface `INVOCATION_INPUT_EMPTY`
   from the shared resolver instead of pre-trimming or short-circuiting with
   transport-specific empty-stdin errors. When `Stdin` is overridden away from
   `os.Stdin` (cobra `SetIn`, tests, or programmatic callers), treat it as piped
   input even if the process-level `os.Stdin` is still a TTY.
-- `pkg/invocations/inference.go` resolves inference-run operation bindings,
+- `pkg/workers/inference/inference.go` resolves inference-run operation bindings,
   maps direct invocation request bindings, builds the provider-neutral inference
   request envelope, and shapes inference responses into ordered canonical
   `WorkContentPart` output shared by direct model invocation and factory-session
   execution paths.
-- `pkg/apisurface/inference_failure.go` classifies inference readiness and
+- `pkg/transports/mapping/inference_failure.go` classifies inference readiness and
   execution failures into actionable customer-facing outcomes for missing model,
   loading model, unsupported operation, timeout, and runtime failure cases
   shared by direct model invocation and HTTP handlers.
 - `pkg/workers/executor/model_operation_bindings.go` delegates inference binding
-  resolution to `pkg/invocations`.
+  resolution to `pkg/workers/inference`.
 - `pkg/cli/root_run_args.go` owns the `you run` manual flag split that preserves
   known run and inherited flags while leaving unknown `--factory-arg` tokens
   intact for signature-backed parsing; keep factory-argument normalization
   itself in `pkg/cli/run/factory_invocation_signature_input.go` plus
-  `pkg/invocations/arguments.go` rather than re-implementing binding logic in
+  `pkg/work/invocation/arguments.go` rather than re-implementing binding logic in
   Cobra parsing.
-- `pkg/invocations/input.go` owns logical empty-text detection via
+- `pkg/work/invocation/input.go` owns logical empty-text detection via
   `strings.TrimSpace` inside `ResolveTextInput` and `ResolveAPITextInputContent`;
   CLI and API adapters must not duplicate whitespace-only rejection.
-- `pkg/cli/root.go` owns the customer-facing `you run --factory` help text for
+- `pkg/transports/cli/root.go` owns the customer-facing `you run --factory` help text for
   invocation input-source rules and the canonical pointers into packaged docs.
   `runInvocationModes` and `resolveRunFactoryPrompt` also treat `you run --named`
   as an invocation factory selector for positional/stdin text.
   `runFactory` resolves `--named` / `--factory` / `--dir` conflicts and portable
   `--factory` preflight before loading operator defaults so flag and path failures
   stay independent of `~/.you-agent-factory/config.json` contents.
-- `pkg/cli/root_run_test.go` isolates `HOME` for the whole CLI package so `make test`
+- `pkg/transports/cli/root_run_test.go` isolates `HOME` for the whole CLI package so `make test`
   does not depend on the developer's real operator config file.
+- Real-service tests under `pkg/transports/cli/run` must set `ExecutionBaseDir` to a
+  `t.TempDir()` root so project-local durable Factory Session snapshots never land in
+  the package working directory. Set `DisableDefaultRecording` when replay recording is
+  irrelevant; tests that cover recording should inject `defaultLiveRunRecordPath` beneath
+  `t.TempDir()` and assert the resolved artifact there.
 - `internal/releasesmoke/harness.go` isolates spawned `you run` smoke processes from
   the developer's real `HOME` so `tests/release` stays hermetic through
   `make test`.
@@ -399,7 +417,7 @@ primary-result behavior.
   shaping helpers for terminal `task:complete` work content, and primary-result
   selection tests for the one-pass built-in factory JSON.
 - Hermetic no-server named `@you/subagent` package proof lives in
-  `pkg/cli/run/run_invocation_test.go`
+  `pkg/transports/cli/run/run_invocation_test.go`
   (`TestRun_NamedSubagentHermeticInvocationSucceedsWithoutListeningServer`,
   `TestRun_NamedSubagentNoServerBootstrap_TextPrimaryResultIsAgentResponse`,
   `TestRun_NamedSubagentNoServerBootstrap_SuccessJSONMatchesAPIProjection`,
@@ -407,7 +425,7 @@ primary-result behavior.
   real shared bootstrap path with mock workers and a TCP probe port to assert no
   factory API/dashboard listener is bound and exactly one agent-response
   `primaryResult` is returned.
-- `pkg/cli/run/factory_invocation_help.go` owns the factory-aware help renderer
+- `pkg/transports/cli/run/factory_invocation_help.go` owns the factory-aware help renderer
   for `you run --named <factory> --help` and `you run --factory <factory.json> --help`.
   Keep usage lines, parameter descriptions, defaults, accepted values, output
   hints, and example rendering derived from `interfaces.InvocationSignatureConfig`
@@ -450,12 +468,12 @@ primary-result behavior.
   fresh-home materialization smoke case, a customer-edit preservation rerun
   smoke case, and a legacy-materialized upgrade smoke case.
 - Hermetic no-server named `@you/goal` package proof lives in
-  `pkg/cli/run/run_invocation_test.go`
+  `pkg/transports/cli/run/run_invocation_test.go`
   (`TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer`), using
   the real shared bootstrap path with mock workers and a TCP probe port to
   assert no factory API/dashboard listener is bound.
 - No-server bootstrap CLI/API invocation-equivalence proof lives in
-  `pkg/cli/run/run_invocation_test.go`
+  `pkg/transports/cli/run/run_invocation_test.go`
   (`TestRun_NoServerBootstrap_PositionalInputMatchesAPIContract`,
   `TestRun_NoServerBootstrap_StdinInputMatchesAPIContract`,
   `TestRun_NoServerBootstrap_SuccessJSONMatchesAPIProjection`,
@@ -464,7 +482,7 @@ primary-result behavior.
   to the shared API text-input resolver plus `apisurface.InvocationResponseFromResult`
   projection for packaged `@you/goal` primary-result selection.
 - Consolidated no-server named integration and invocation-equivalence proof for
-  reviewers lives in `pkg/cli/run/run_invocation_test.go`
+  reviewers lives in `pkg/transports/cli/run/run_invocation_test.go`
   (`TestNoServerNamedInvocationIntegrationAndEquivalenceProof`), combining
   hermetic `@you/goal` success without a TCP listener with shared input-resolution
   and primary-result equivalence on the real bootstrap path.
@@ -534,21 +552,21 @@ primary-result behavior.
 - `pkg/factory/packages/tts/observability.go` classifies packaged TTS loading,
   model-not-ready, and generation-failure outcomes and defines stable invocation
   error codes plus packaged-factory metric names.
-- `pkg/cli/run/packaged_tts_invocation.go` logs named-factory resolution context at
+- `pkg/transports/cli/run/packaged_tts_invocation.go` logs named-factory resolution context at
   the CLI boundary without recording packaged-factory metrics or logging submitted
   text or generated artifact bodies.
 - `pkg/factory/packages/goal/` owns packaged `@you/goal` factory metadata
   constants (`PackagedFactoryName`, `PackagedInvokeWorkstationName`).
-- `pkg/cli/run/run_invocation_test.go` proves `@you/goal` CLI invocation input
+- `pkg/transports/cli/run/run_invocation_test.go` proves `@you/goal` CLI invocation input
   sources resolve through `invocations.ResolveTextInput`, reach the shared
   `InvocationRequest` payload shape, fail with stable
   `INVOCATION_INPUT_SOURCE_CONFLICT` before `InvokeFactorySession`, and match the
   session invocation API contract for the same logical text input and JSON success
   envelopes.
-- `pkg/cli/root_run_server_test.go` proves root `you run --named @you/goal` and
+- `pkg/transports/cli/root_run_server_test.go` proves root `you run --named @you/goal` and
   `@you/tts` wiring for positional text, piped stdin, explicit `-` stdin forms,
   and stable `INVOCATION_INPUT_SOURCE_CONFLICT` rejection when sources combine.
-- `pkg/api/server_factory_sessions_test.go` proves the session invocation API
+- `pkg/transports/http/server_factory_sessions_test.go` proves the session invocation API
   returns the same observable request and primary-result behavior for packaged
   `@you/goal` text input and source-conflict failures as the CLI parity tests.
 - Dashboard signature-backed invocation submission belongs in
@@ -568,7 +586,7 @@ primary-result behavior.
   on that same-session refresh via `shouldResumeFromPersistedCheckpoint` in
   `ui/src/features/dashboard/lib/dashboard-session-lifecycle.ts` plus
   `useDashboardInitialReconnectCursor`.
-- `pkg/invocations/session_wait.go` owns the session invocation wait loop and
+- `pkg/factorysessions/invocation/session_wait.go` owns the session invocation wait loop and
   calls explicit packaged-factory hooks at active, completed, and terminal-failure
   boundaries. `pkg/service/runtime_sessions.go` and
   `pkg/runtimehost/session_invocation.go` adapt packaged TTS classification,
@@ -604,4 +622,4 @@ primary-result behavior.
   authored fields when the current factory payload also declares that parameter
   in `invocationSignature`, or live session pages will fall back to legacy UI
   flows even when backend runtime validation already accepts the factory.
-- Managed-runtime invocation readiness gating and direct invocation policy live in `pkg/models/service/invoke.go`; the canonical service consumes neutral `pkg/models/host.Host.InspectReadiness` snapshots, projects public readiness through `pkg/apisurface/managed_runtime_invocation.go`, and owns invocation failure classification and readiness logs. `pkg/wire/production.go` supplies the active-runtime reader, process model host, assets, logger, clock, metrics, invocation executor builder, and runner identity directly; `FactoryService` and `runtimehost.Host` only retain compatibility forwarding/composition seams and are never passed into the model family. Factory worker execution routes through `pkg/models/host/execution.go` (`LeaseExecution.WrapRunner`) when a process-wide host is configured, otherwise `pkg/models/local/runtime.go` manager fallback. Supervised leases pass `lease.Endpoint` into `localmodels.LoadRequest.ServingEndpoint` for host-owned HTTP execution. Process-wide local-runtime ownership and lease boundaries belong in `pkg/models/host`; keep `pkg/models/local` as the managed-runtime catalog compatibility projection layer. Model host operator diagnostics for load/lease/unload/crash paths live in `pkg/models/host/diagnostics.go`; managed-runtime pull logs and metrics live only in `pkg/models/service/pull.go`. See `docs/architecture/model-host.md`. Focused modelhost lease coverage for INFERENCE_WORKER/INFERENCE_RUN lives in `pkg/service/inference_modelhost_test.go`.
+- Managed-runtime invocation readiness gating and direct invocation policy live in `pkg/models/service/invoke.go`; the canonical service consumes neutral `pkg/models/host.Host.InspectReadiness` snapshots, projects public readiness through `pkg/transports/mapping/managed_runtime_invocation.go`, and owns invocation failure classification and readiness logs. `pkg/wire/production.go` supplies the active-runtime reader, process model host, assets, logger, clock, metrics, invocation executor builder, and runner identity directly; `FactoryService` and `runtimehost.Host` only retain compatibility forwarding/composition seams and are never passed into the model family. Factory worker execution routes through `pkg/models/host/execution.go` (`LeaseExecution.WrapRunner`) when a process-wide host is configured, otherwise `pkg/models/local/runtime.go` manager fallback. Supervised leases pass `lease.Endpoint` into `localmodels.LoadRequest.ServingEndpoint` for host-owned HTTP execution. Process-wide local-runtime ownership and lease boundaries belong in `pkg/models/host`; keep `pkg/models/local` as the managed-runtime catalog compatibility projection layer. Model host operator diagnostics for load/lease/unload/crash paths live in `pkg/models/host/diagnostics.go`; managed-runtime pull logs and metrics live only in `pkg/models/service/pull.go`. See `docs/architecture/model-host.md`. Focused modelhost lease coverage for INFERENCE_WORKER/INFERENCE_RUN lives in `pkg/service/inference_modelhost_test.go`.

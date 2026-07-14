@@ -3,12 +3,12 @@ package workflowresult
 import (
 	"encoding/json"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const (
-	ArtifactURIScheme      = "you-artifact"
+	ArtifactURIScheme       = "you-artifact"
 	DefaultMaxEmbeddedBytes = 64 * 1024
 )
 
@@ -33,13 +33,13 @@ func (r Result) HasIssues() bool {
 // Runtime adapters populate the non-JSON markers when a value cannot be
 // structured-clone projected directly.
 type TypedValue struct {
-	JSON         json.RawMessage
-	Unresolved   bool
-	Function     bool
-	HostHandle   string
-	RawBinary    []byte
-	Visited      map[uintptr]struct{}
-	HostObject   any
+	JSON       json.RawMessage
+	Unresolved bool
+	Function   bool
+	HostHandle string
+	RawBinary  []byte
+	Visited    map[uintptr]struct{}
+	HostObject any
 }
 
 // SessionResultInput supplies one terminal session result projection.

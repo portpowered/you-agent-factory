@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"testing"
 
-	factoryboundary "github.com/portpowered/infinite-you/pkg/api"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryboundary "github.com/portpowered/infinite-you/pkg/transports/http"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func assertThinEventReconstructedModelReader(t *testing.T, smoke dualDispatchSmokeFixture, worldState interfaces.FactoryWorldState) {

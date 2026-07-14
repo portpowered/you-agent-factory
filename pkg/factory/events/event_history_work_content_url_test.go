@@ -8,10 +8,11 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
-	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
+	"github.com/portpowered/infinite-you/pkg/work/content"
+	"github.com/portpowered/infinite-you/pkg/work/materialize"
 )
 
 // T9: WORK_REQUEST after submit serializes canonical url on content parts, not dispatch temps.
@@ -21,7 +22,7 @@ func TestFactoryEventHistory_RecordWorkRequest_SerializesContentURLNotMaterializ
 	if err := os.WriteFile(localPath, []byte("png"), 0o644); err != nil {
 		t.Fatalf("write local image: %v", err)
 	}
-	localURL, err := workcontent.FilesystemPathToContentURL(localPath)
+	localURL, err := content.FilesystemPathToContentURL(localPath)
 	if err != nil {
 		t.Fatalf("local content url: %v", err)
 	}

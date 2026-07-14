@@ -7,7 +7,7 @@ import (
 
 	builtintts "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/tts"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
+	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
 )
 
 // BuiltInFactoryJSON is the canonical runnable @you/tts definition owned by
@@ -115,7 +115,7 @@ func MetadataContentFromWorkerOutput(output, traceID, sessionID, backendLabel st
 }
 
 func audioPartsFromInferenceOutput(output string) ([]interfaces.WorkContentPart, error) {
-	parts, err := invocations.WorkContentFromInferenceOutput(output, interfaces.ModelOperation{
+	parts, err := workerinference.WorkContentFromInferenceOutput(output, interfaces.ModelOperation{
 		Name: "TTS",
 		Outputs: []interfaces.ModelOperationSlot{{
 			Name:         "audio",

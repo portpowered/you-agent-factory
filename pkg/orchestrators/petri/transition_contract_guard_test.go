@@ -119,7 +119,7 @@ func walkTransitionGuardProductionFiles(moduleRoot string, visit func(path strin
 			if contractguard.ShouldSkipDir(
 				moduleRoot,
 				path,
-				"pkg/api/generated",
+				"pkg/transports/http/generated",
 				"ui/dist",
 				"ui/node_modules",
 				"ui/storybook-static",

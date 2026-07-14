@@ -25,12 +25,12 @@ func TestGoCoverageCheckFakeGoProcess(t *testing.T) {
 			writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
 				"mode: count",
 				modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
-				modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+				modulePath + "/pkg/transports/http/client/client.go:1.1,2.1 4 0",
 				"",
 			}, "\n"))
 			fmt.Fprint(os.Stdout,
 				modulePath+"/pkg/config\t\tcoverage: 0.0% of statements\n"+
-					modulePath+"/pkg/generatedclient\t\tcoverage: 0.0% of statements\n",
+					modulePath+"/pkg/transports/http/client\t\tcoverage: 0.0% of statements\n",
 			)
 			os.Exit(0)
 		}
@@ -64,12 +64,12 @@ func TestGoCoverageCheckFakeGoProcessWithOKSummary(t *testing.T) {
 			writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
 				"mode: count",
 				modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
-				modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+				modulePath + "/pkg/transports/http/client/client.go:1.1,2.1 4 0",
 				"",
 			}, "\n"))
 			fmt.Fprint(os.Stdout,
 				"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements\n"+
-					"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements\n",
+					"ok  "+modulePath+"/pkg/transports/http/client\t(cached)\tcoverage: 0.0% of statements\n",
 			)
 			os.Exit(0)
 		}
@@ -140,12 +140,12 @@ func TestGoCoverageCheckFakeGoProcessWithCoverpkgOKSummary(t *testing.T) {
 			writeFakeCoverageProfileOrExit(profilePath, strings.Join([]string{
 				"mode: count",
 				modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
-				modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+				modulePath + "/pkg/transports/http/client/client.go:1.1,2.1 4 0",
 				"",
 			}, "\n"))
 			fmt.Fprint(os.Stdout,
-				"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements in "+modulePath+"/pkg/config, "+modulePath+"/pkg/service, "+modulePath+"/pkg/generatedclient\n"+
-					"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements in "+modulePath+"/pkg/generatedclient, "+modulePath+"/pkg/service\n",
+				"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements in "+modulePath+"/pkg/config, "+modulePath+"/pkg/service, "+modulePath+"/pkg/transports/http/client\n"+
+					"ok  "+modulePath+"/pkg/transports/http/client\t(cached)\tcoverage: 0.0% of statements in "+modulePath+"/pkg/transports/http/client, "+modulePath+"/pkg/service\n",
 			)
 			os.Exit(0)
 		}
@@ -340,7 +340,7 @@ func TestGoListCommandWithExcludedPackagesOnly(t *testing.T) {
 		return
 	}
 
-	fmt.Fprintln(os.Stdout, modulePath+"/pkg/generatedclient")
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/transports/http/client")
 	fmt.Fprintln(os.Stdout, modulePath+"/pkg/testutil/runtimefixtures")
 	os.Exit(0)
 }
@@ -369,7 +369,7 @@ func TestGoListCommandWithDuplicatesAndExcludedPackages(t *testing.T) {
 	fmt.Fprintln(os.Stdout, modulePath+"/pkg/config\t2")
 	fmt.Fprintln(os.Stdout, modulePath+"/pkg/config\t2")
 	fmt.Fprintln(os.Stdout, modulePath+"/pkg/config/exhaustiontests\t0")
-	fmt.Fprintln(os.Stdout, modulePath+"/pkg/generatedclient\t4")
+	fmt.Fprintln(os.Stdout, modulePath+"/pkg/transports/http/client\t4")
 	fmt.Fprintln(os.Stdout, modulePath+"/pkg/testutil/runtimefixtures\t1")
 	fmt.Fprintln(os.Stdout, modulePath+"/cmd/factory\t1")
 	os.Exit(0)

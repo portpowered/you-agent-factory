@@ -23,7 +23,7 @@ workflow recovery lanes or reconciling same-trace task and review residue.
 - `tests/functional/workflow/process_review_contract_long_test.go` proves the
   owning `process`/`review` workstation contract for continue, rejection, and
   loop-breaker paths.
-- `pkg/cli/work/list.go` and `pkg/cli/work/move.go` are the operator boundaries
+- `pkg/transports/cli/work/list.go` and `pkg/transports/cli/work/move.go` are the operator boundaries
   for queue inspection and bounded manual repair.
 
 ## Residual Recovery Lane Disposition (2026-06-15 UTC)

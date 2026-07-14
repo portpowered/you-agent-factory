@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 // ProjectPrimaryResult maps one validated workflow result to WorkContent parts.
@@ -60,7 +61,7 @@ func BuildSessionResult(input SessionResultInput) factoryapi.FactorySessionResul
 		ResultStatus: resultStatusFromSessionStatus(input.Status),
 	}
 	if parts, validation := ProjectPrimaryResult(input.SessionID, input.PrimaryValue, input.Artifacts); !validation.HasIssues() && len(parts) > 0 {
-		if generated := workcontent.GeneratedPtrFromParts(parts); generated != nil {
+		if generated := contentcontract.GeneratedPtrFromParts(parts); generated != nil {
 			result.PrimaryResult = generated
 		}
 	}

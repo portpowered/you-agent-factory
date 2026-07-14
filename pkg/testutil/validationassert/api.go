@@ -5,7 +5,7 @@ package validationassert
 import (
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // HasTarget asserts that targets contains a validation target matching code,

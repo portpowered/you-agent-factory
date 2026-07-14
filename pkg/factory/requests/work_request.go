@@ -9,7 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	workcontent "github.com/portpowered/infinite-you/pkg/work/content"
 )
 
 // NormalizeWorkRequest validates a FACTORY_REQUEST_BATCH and converts it into runtime submit requests.

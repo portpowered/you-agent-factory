@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const (
@@ -52,14 +52,14 @@ func ReconstructFactoryWorldState(events []factoryapi.FactoryEvent, selectedTick
 }
 
 type factoryWorldReducer struct {
-	stateValue              interfaces.FactoryWorldState
-	placeTokens             map[string]map[string]struct{}
-	tokenPlaces             map[string]string
-	tokenWorkIDs            map[string]string
-	tokenKinds              map[string]string
-	placeCats               map[string]string
-	workPlaces              map[string]string
-	interruptedDispatchIDs  map[string]struct{}
+	stateValue             interfaces.FactoryWorldState
+	placeTokens            map[string]map[string]struct{}
+	tokenPlaces            map[string]string
+	tokenWorkIDs           map[string]string
+	tokenKinds             map[string]string
+	placeCats              map[string]string
+	workPlaces             map[string]string
+	interruptedDispatchIDs map[string]struct{}
 }
 
 func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
@@ -83,10 +83,10 @@ func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
 			TracesByID:                    make(map[string]interfaces.FactoryWorldTrace),
 			WorkStateChangesByWorkID:      make(map[string][]interfaces.FactoryWorldWorkStateChangeRecord),
 		},
-		placeTokens:  make(map[string]map[string]struct{}),
-		tokenPlaces:  make(map[string]string),
-		tokenWorkIDs: make(map[string]string),
-		tokenKinds:   make(map[string]string),
+		placeTokens:            make(map[string]map[string]struct{}),
+		tokenPlaces:            make(map[string]string),
+		tokenWorkIDs:           make(map[string]string),
+		tokenKinds:             make(map[string]string),
 		placeCats:              make(map[string]string),
 		workPlaces:             make(map[string]string),
 		interruptedDispatchIDs: make(map[string]struct{}),
@@ -1093,7 +1093,6 @@ func (r *factoryWorldReducer) applyArtifactCreatedEvent(event factoryapi.Factory
 	}
 	return nil
 }
-
 
 func (r *factoryWorldReducer) ensureJavaScriptRuntime() *interfaces.FactorySessionJavaScriptRuntimeState {
 	if r.stateValue.JavaScriptRuntime == nil {

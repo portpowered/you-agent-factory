@@ -29,9 +29,20 @@ var factoryRetiredPackageRoots = []retiredPackageRoot{
 }
 
 var retiredPackageRoots = append([]retiredPackageRoot{
+	{packagePath: "pkg/api", canonicalOwner: "pkg/transports/http"},
+	{packagePath: "pkg/apisurface", canonicalOwner: "pkg/transports/mapping"},
+	{packagePath: "pkg/cli", canonicalOwner: "pkg/transports/cli"},
+	{packagePath: "pkg/generatedclient", canonicalOwner: "pkg/transports/http/client"},
 	{packagePath: "pkg/hostedworkers", canonicalOwner: "pkg/workers/hosted"},
+	{packagePath: "pkg/invocations", canonicalOwner: "pkg/work/invocation, pkg/factory/sessions/invocation, pkg/workers/inference, or pkg/workers/skippermissions, according to the concern"},
 	{packagePath: "pkg/localmodels", canonicalOwner: "pkg/models/local or pkg/models/assets"},
+	{packagePath: "pkg/materialize", canonicalOwner: "pkg/work/materialize"},
+	{packagePath: "pkg/mcp", canonicalOwner: "pkg/transports/mcp"},
 	{packagePath: "pkg/modelhost", canonicalOwner: "pkg/models/host"},
+	{packagePath: "pkg/timework", canonicalOwner: "pkg/work/timework"},
+	{packagePath: "pkg/workcontent", canonicalOwner: "pkg/work/content"},
+	{packagePath: "pkg/workgraph", canonicalOwner: "pkg/work/graph"},
+	{packagePath: "pkg/workquery", canonicalOwner: "pkg/work/query"},
 }, factoryRetiredPackageRoots...)
 
 var approvedApplicationGraphImporters = []string{
@@ -99,12 +110,6 @@ var documentedMigrationPackageExceptions = []migrationPackageException{
 	{packagePath: "pkg/apisurface", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after boundary mapping and callers move to pkg/transports"},
 	{packagePath: "pkg/cli", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after CLI adapters and callers move to pkg/transports"},
 	{packagePath: "pkg/mcp", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after MCP adapters and callers move to pkg/transports"},
-	{packagePath: "pkg/invocations", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after invocation input and return policy move to pkg/work"},
-	{packagePath: "pkg/materialize", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after materialization behavior and callers move to pkg/work"},
-	{packagePath: "pkg/timework", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after cron and time-work behavior and callers move to pkg/work"},
-	{packagePath: "pkg/workcontent", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after Work content behavior and callers move to pkg/work"},
-	{packagePath: "pkg/workgraph", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after Work graph and lineage behavior and callers move to pkg/work"},
-	{packagePath: "pkg/workquery", targetOwner: "pkg/work", workItem: batch006WorkFamilyMove, deletionGate: "remove after Work query behavior and callers move to pkg/work"},
 	{packagePath: "pkg/logging", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after logging infrastructure and callers move to pkg/platform"},
 	{packagePath: "pkg/replay", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after replay and artifact infrastructure and callers move to pkg/platform"},
 	{packagePath: "pkg/sessionpersistence", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after cursor persistence and callers move to pkg/platform"},
@@ -114,8 +119,8 @@ var documentedMigrationPackageExceptions = []migrationPackageException{
 }
 
 var documentedGeneratedCodeExceptions = []generatedCodeException{
-	{packagePath: "pkg/generatedclient", scope: generatedCodeExceptionScopeRoot},
-	{packagePath: "pkg/api/generated", scope: generatedCodeExceptionScopeSubtree},
+	{packagePath: "pkg/transports/http/client", scope: generatedCodeExceptionScopeRoot},
+	{packagePath: "pkg/transports/http/generated", scope: generatedCodeExceptionScopeRoot},
 }
 
 func defaultBoundaryPolicy() boundaryPolicy {
@@ -137,6 +142,7 @@ type scanResult struct {
 	retiredPackageImportFindings   []retiredPackageImportFinding
 	migrationShimFindings          []migrationShimFinding
 	applicationGraphImportFindings []applicationGraphImportFinding
+	handwrittenGeneratedFindings   []handwrittenGeneratedFinding
 }
 
 type retiredPackageRoot struct {
@@ -152,6 +158,11 @@ type retiredPackageImportFinding struct {
 	retiredPackageRoot
 	importPath string
 	filePath   string
+}
+
+type handwrittenGeneratedFinding struct {
+	filePath    string
+	packagePath string
 }
 
 type rootPackageFinding struct {
@@ -206,7 +217,8 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 		len(findings.retiredPackageRootFindings) +
 		len(findings.retiredPackageImportFindings) +
 		len(findings.migrationShimFindings) +
-		len(findings.applicationGraphImportFindings)
+		len(findings.applicationGraphImportFindings) +
+		len(findings.handwrittenGeneratedFindings)
 	if blockingViolationCount == 0 {
 		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (no blocking package-boundary violations)")
 		writeGeneratedCodeExceptionSummary(stdout, policy)
@@ -222,6 +234,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	writeRetiredPackageImportFindings(stderr, findings.retiredPackageImportFindings)
 	writeMigrationShimBlockingFindings(stderr, findings.migrationShimFindings)
 	writeApplicationGraphImportFindings(stderr, findings.applicationGraphImportFindings)
+	writeHandwrittenGeneratedFindings(stderr, findings.handwrittenGeneratedFindings)
 	writeGeneratedCodeExceptionSummary(stderr, policy)
 	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", blockingViolationCount)
 }
@@ -283,6 +296,10 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 	if err != nil {
 		return scanResult{}, err
 	}
+	result.handwrittenGeneratedFindings, err = scanHandwrittenGeneratedFiles(repoRoot, policy.generatedCodeExceptions)
+	if err != nil {
+		return scanResult{}, err
+	}
 
 	slices.SortFunc(result.rootPackageFindings, func(left, right rootPackageFinding) int {
 		return strings.Compare(left.packagePath, right.packagePath)
@@ -297,6 +314,66 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		return strings.Compare(left.importPath, right.importPath)
 	})
 	return result, nil
+}
+
+func scanHandwrittenGeneratedFiles(repoRoot string, exceptions []generatedCodeException) ([]handwrittenGeneratedFinding, error) {
+	var findings []handwrittenGeneratedFinding
+	for _, exception := range exceptions {
+		packageDir := filepath.Join(repoRoot, filepath.FromSlash(exception.packagePath))
+		info, err := os.Stat(packageDir)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, fmt.Errorf("stat generated-only package %s: %w", exception.packagePath, err)
+		}
+		if !info.IsDir() {
+			continue
+		}
+
+		err = filepath.WalkDir(packageDir, func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
+				return nil
+			}
+			relativePath, err := filepath.Rel(packageDir, path)
+			if err != nil {
+				return err
+			}
+			if exception.scope == generatedCodeExceptionScopeRoot && filepath.Dir(relativePath) != "." {
+				return nil
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ParseComments)
+			if err != nil {
+				return fmt.Errorf("parse generated-only package file %s: %w", filepath.ToSlash(path), err)
+			}
+			if ast.IsGenerated(parsedFile) {
+				return nil
+			}
+			filePath, err := filepath.Rel(repoRoot, path)
+			if err != nil {
+				return err
+			}
+			findings = append(findings, handwrittenGeneratedFinding{
+				filePath:    filepath.ToSlash(filePath),
+				packagePath: exception.packagePath,
+			})
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("scan generated-only package %s: %w", exception.packagePath, err)
+		}
+	}
+	slices.SortFunc(findings, func(left, right handwrittenGeneratedFinding) int {
+		return strings.Compare(left.filePath, right.filePath)
+	})
+	return findings, nil
 }
 
 func findRetiredPackageRoot(packagePath string) (retiredPackageRoot, bool) {
@@ -626,5 +703,13 @@ func writeApplicationGraphImportFindings(writer io.Writer, findings []applicatio
 		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited application composition import: %s (%s)\n", finding.packagePath, finding.filePath)
 		fmt.Fprintln(writer, "  reason: pkg/wire is the outward application composition root and must not be imported by domain or transport packages.")
 		fmt.Fprintln(writer, "  remediation: depend on a narrow domain-owned contract and inject the collaborator through pkg/root or pkg/initializer.")
+	}
+}
+
+func writeHandwrittenGeneratedFindings(writer io.Writer, findings []handwrittenGeneratedFinding) {
+	for _, finding := range findings {
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] handwritten Go file in generated-only package: %s (%s)\n", finding.packagePath, finding.filePath)
+		fmt.Fprintln(writer, "  reason: generated-only packages may contain only files with the standard Code generated ... DO NOT EDIT. marker.")
+		fmt.Fprintln(writer, "  remediation: move handwritten mapping or policy to pkg/transports/http or pkg/transports/mapping.")
 	}
 }

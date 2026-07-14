@@ -12,7 +12,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/timework"
+	"github.com/portpowered/infinite-you/pkg/work/timework"
 	"go.uber.org/zap"
 )
 
@@ -201,6 +201,9 @@ func cronSchedule(ws interfaces.FactoryWorkstationConfig) (string, error) {
 	schedule := strings.TrimSpace(ws.Cron.Schedule)
 	if schedule == "" {
 		return "", fmt.Errorf("missing cron schedule")
+	}
+	if err := timework.ValidateCronSchedule(schedule); err != nil {
+		return "", err
 	}
 	return schedule, nil
 }

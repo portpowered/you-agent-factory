@@ -13,16 +13,16 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func contractFixturesPath(t *testing.T) string {
 	t.Helper()
-	return filepath.Join("..", "..", "..", "api", "testdata", "durable-session-contract-fixtures.json")
+	return filepath.Join("..", "..", "..", "transports", "http", "testdata", "durable-session-contract-fixtures.json")
 }
 
 func newContractFakeService(t *testing.T) *FakeService {

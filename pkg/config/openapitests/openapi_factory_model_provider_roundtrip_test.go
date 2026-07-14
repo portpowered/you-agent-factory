@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	. "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestGeneratedFactoryFromOpenAPIJSON_ModelProviderRoundTripsAllSupportedPublicValues(t *testing.T) {
