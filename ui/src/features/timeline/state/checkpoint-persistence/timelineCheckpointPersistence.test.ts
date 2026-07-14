@@ -191,7 +191,7 @@ describe("timeline checkpoint persistence", () => {
 });
 
 describe("timeline checkpoint persistence diagnostics", () => {
-  it("records user-initiated checkpoint clears through session persistence diagnostics", async () => {
+  it("does not force user-initiated clears into the closed recovery outcome vocabulary", async () => {
     resetSessionPersistenceInvalidationRecords();
     const { indexedDB, records } = createIndexedDBTestDouble();
     const streamIdentity = streamIdentityFixture();
@@ -207,19 +207,7 @@ describe("timeline checkpoint persistence diagnostics", () => {
     });
 
     expect(records.has(checkpointStorageKey(streamIdentity))).toBe(false);
-    expect(readSessionPersistenceInvalidationRecords()).toEqual([
-      {
-        reason: "user_cleared_sessions",
-        recoveryAction: "clear_checkpoint",
-        requestedSessionID: streamIdentity.factorySessionID,
-        scope: {
-          backendScopeID: streamIdentity.backendScopeID,
-          factorySessionID: streamIdentity.factorySessionID,
-          logicalSessionKeyID: streamIdentity.logicalSessionKeyID,
-          streamGenerationID: streamIdentity.streamGenerationID,
-        },
-      },
-    ]);
+    expect(readSessionPersistenceInvalidationRecords()).toEqual([]);
   });
 
   it("records identity mismatch diagnostics when stored checkpoint scope drifts", async () => {
@@ -244,9 +232,9 @@ describe("timeline checkpoint persistence diagnostics", () => {
     expect(records.has(storageKey)).toBe(false);
     expect(readSessionPersistenceInvalidationRecords()).toEqual([
       expect.objectContaining({
-        reason: "stream_generation_changed",
-        recoveryAction: "clear_stream_derived_state",
-        requestedSessionID: streamIdentity.factorySessionID,
+        outcome: "identity_rejected",
+        recoveryAction: "discard_rejected_checkpoint",
+        detail: "stream_generation_mismatch",
       }),
     ]);
   });
