@@ -186,6 +186,14 @@ func TestCommandManifestSchemaValidFixtureMatrix(t *testing.T) {
 	}
 }
 
+func TestCommandManifestSchemaProductionRootManifest(t *testing.T) {
+	schema := commandManifestSchema(t)
+	instance := readJSON(t, filepath.Join("cli", "commands.json"))
+	if err := schema.Validate(instance); err != nil {
+		t.Fatalf("validate production root manifest: %v", err)
+	}
+}
+
 func TestCommandManifestSchemaInvalidFixtureMatrix(t *testing.T) {
 	schema := commandManifestSchema(t)
 

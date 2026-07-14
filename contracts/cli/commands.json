@@ -1,0 +1,262 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "you",
+  "commands": {
+    "you": {
+      "id": "you",
+      "name": "you",
+      "path": "you",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you",
+        "documentation": {
+          "title": {
+            "id": "you.title",
+            "canonicalEnglish": "Run and manage CPN-based workflow factories"
+          },
+          "description": {
+            "id": "you.description",
+            "canonicalEnglish": "Run and manage CPN-based workflow factories.\n\nWhat:\nCPN-based workflow factory CLI for running factories, submitting work, and inspecting live sessions.\n\nHow to use:\nRun you run --work ./docs/examples/startup-work.json to start the current Factory with explicit Work and the local dashboard (http://localhost:7437/dashboard/ui).\nUse you run --dir factory --work ./docs/examples/startup-work.json for an explicit Factory directory. See you <cmd> --help for subcommand details.\n\nAgents:\nStart with you docs agents for orientation, you submit or you submit batch to enqueue work, and you session list to confirm a live factory.\nRun you docs for all packaged reference topics. Use --verbose or --debug for stderr diagnostics; full policy in you docs."
+          }
+        },
+        "examples": [
+          "you run --work ./docs/examples/startup-work.json",
+          "you docs agents"
+        ],
+        "visibility": "public",
+        "sourceHash": "e5e34cb36219695b80f23b06dbb0cb6d54cb481e806684543429c5aa5317175d"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "you",
+        "example": "  # Start the default Codex-backed Factory with explicit Work.\n  you run --work ./docs/examples/startup-work.json\n\n  # Agent orientation and command matrix.\n  you docs agents"
+      },
+      "flags": {
+        "you.flag.debug": {
+          "id": "you.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "persistent",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.flag.default-worker-model": {
+          "id": "you.flag.default-worker-model",
+          "long": "default-worker-model",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "persistent",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.flag.default-worker-model-provider": {
+          "id": "you.flag.default-worker-model-provider",
+          "long": "default-worker-model-provider",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "persistent",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.flag.json": {
+          "id": "you.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "persistent",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.flag.server": {
+          "id": "you.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "persistent",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.flag.verbose": {
+          "id": "you.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "persistent",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.output.human": {
+          "id": "you.output.human",
+          "channel": "stdout",
+          "format": "text"
+        },
+        "you.output.json": {
+          "id": "you.output.json",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "exits": {
+        "you.exit.success": {
+          "id": "you.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.exit.failure": {
+          "id": "you.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.exit.usage": {
+          "id": "you.exit.usage",
+          "code": 2,
+          "kind": "usage"
+        }
+      },
+      "sideEffects": {
+        "you.side-effect.filesystem": {
+          "id": "you.side-effect.filesystem",
+          "kind": "filesystem"
+        },
+        "you.side-effect.network": {
+          "id": "you.side-effect.network",
+          "kind": "network"
+        },
+        "you.side-effect.process": {
+          "id": "you.side-effect.process",
+          "kind": "process"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      },
+      "handler": {
+        "id": "you.handler"
+      }
+    }
+  }
+}
