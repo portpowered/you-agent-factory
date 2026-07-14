@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"sync"
 	"testing"
@@ -177,6 +178,141 @@ func TestSessionResponseEventStore_BackpressureFloodWithBlockedAndDrainingSubscr
 	}
 
 	drainingSub.Detach()
+}
+
+func TestSessionResponseEventStore_BackpressureFloodExactGapsAndFinalRetention(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping backpressure gap/final retention stress test in short mode")
+	}
+
+	start := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+	clock := &fixedClock{now: start}
+	store, err := responseeventstore.NewSessionResponseEventStoreWithClockAndLimits(
+		"session-backpressure-gap-finals",
+		clock,
+		responseeventstore.RetentionLimits{MaxEvents: 16, MaxBytes: 64 * 1024},
+	)
+	if err != nil {
+		t.Fatalf("NewSessionResponseEventStoreWithClockAndLimits: %v", err)
+	}
+
+	finals := publishRetentionEvents(t, store,
+		retentionEvent(responseevents.KindMessage, responseevents.PhaseCompleted, "final-answer"),
+		retentionEvent(responseevents.KindTool, responseevents.PhaseFailed, "failed-tool"),
+		retentionEvent(responseevents.KindRun, responseevents.PhaseCompleted, "run-completed"),
+	)
+
+	staleSub, err := store.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe(stale): %v", err)
+	}
+	defer staleSub.Detach()
+
+	blockedSub, err := store.Subscribe(0)
+	if err != nil {
+		t.Fatalf("Subscribe(blocked): %v", err)
+	}
+
+	scenarioCtx, cancelScenario := context.WithTimeout(context.Background(), backpressureScenarioTimeout)
+	defer cancelScenario()
+
+	blockedWaiting := make(chan struct{})
+	go func() {
+		close(blockedWaiting)
+		_, _ = blockedSub.Next(scenarioCtx)
+	}()
+
+	select {
+	case <-blockedWaiting:
+	case <-scenarioCtx.Done():
+		t.Fatal("blocked subscriber did not start waiting")
+	}
+
+	allPublished := append([]responseevents.FactoryResponseEvent{}, finals...)
+	publishStarted := time.Now()
+	for i := 0; i < backpressureFloodCount; i++ {
+		event, err := store.Publish(deltaPublishInput(i))
+		if err != nil {
+			t.Fatalf("publish flood delta %d: %v", i, err)
+		}
+		allPublished = append(allPublished, event)
+	}
+
+	if elapsed := time.Since(publishStarted); elapsed > backpressurePublishLatencyBudget {
+		t.Fatalf("publish elapsed = %v, want <= %v", elapsed, backpressurePublishLatencyBudget)
+	}
+
+	store.Complete()
+	blockedSub.Detach()
+
+	retainedBySequence := make(map[int64]responseevents.FactoryResponseEvent, len(store.Events()))
+	retainedSet := make(map[int64]struct{}, len(store.Events()))
+	for _, event := range store.Events() {
+		retainedBySequence[event.Sequence] = event
+		retainedSet[event.Sequence] = struct{}{}
+	}
+	for _, final := range finals {
+		if _, ok := retainedSet[final.Sequence]; !ok {
+			t.Fatalf("final event seq=%d kind=%s phase=%s evicted under flood pressure", final.Sequence, final.Kind, final.Phase)
+		}
+	}
+
+	wantFrom, wantTo, wantGap := removedBoundsAfter(allPublished, retainedSet, 0)
+	if !wantGap {
+		t.Fatal("stale cursor after flood: want retention gap, got none")
+	}
+
+	readCtx, cancelRead := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancelRead()
+	events, err := staleSub.Next(readCtx)
+	if err != nil {
+		t.Fatalf("stale Next after flood: %v", err)
+	}
+	if len(events) < 2 {
+		t.Fatalf("stale read count = %d, want gap plus retained catch-up", len(events))
+	}
+
+	gap := decodeGap(t, events[0])
+	if gap.FromSequence != wantFrom || gap.ToSequence != wantTo {
+		t.Fatalf("gap = [%d,%d], want exact removed bounds [%d,%d]", gap.FromSequence, gap.ToSequence, wantFrom, wantTo)
+	}
+	wantFirstAvailable := firstRetainedSequenceAfter(store.Events(), 0)
+	if gap.FirstAvailableSequence != wantFirstAvailable {
+		t.Fatalf("gap first available sequence = %d, want %d", gap.FirstAvailableSequence, wantFirstAvailable)
+	}
+
+	wantCatchUp := retainedCatchUpAfter(allPublished, retainedBySequence, 0)
+	if !reflect.DeepEqual(events[1:], wantCatchUp) {
+		t.Fatalf("stale catch-up = %#v, want retained originals %#v", events[1:], wantCatchUp)
+	}
+
+	assertExactRetentionAccounting(t, store)
+}
+
+func firstRetainedSequenceAfter(events []responseevents.FactoryResponseEvent, after int64) int64 {
+	for _, event := range events {
+		if event.Sequence > after {
+			return event.Sequence
+		}
+	}
+	return 0
+}
+
+func retainedCatchUpAfter(
+	all []responseevents.FactoryResponseEvent,
+	retained map[int64]responseevents.FactoryResponseEvent,
+	after int64,
+) []responseevents.FactoryResponseEvent {
+	catchUp := make([]responseevents.FactoryResponseEvent, 0, len(retained))
+	for _, event := range all {
+		if event.Sequence <= after {
+			continue
+		}
+		if kept, ok := retained[event.Sequence]; ok {
+			catchUp = append(catchUp, kept)
+		}
+	}
+	return catchUp
 }
 
 func deltaPublishInput(index int) responseevents.FactoryResponseEvent {
