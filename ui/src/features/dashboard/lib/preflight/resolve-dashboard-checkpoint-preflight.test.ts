@@ -111,13 +111,66 @@ describe("resolveDashboardCheckpointPreflight", () => {
         storageKey: "checkpoint-session-a",
       }),
       clearRequestedSessionCheckpoint: true,
+      identityRejectionDetail: "factory_session_mismatch",
       kind: "remap",
       requestedSessionId: "session-a",
       resolvedSessionId: "session-b",
     });
     expect(deps.readCheckpoint).not.toHaveBeenCalled();
   });
+});
 
+describe("resolveDashboardCheckpointPreflight identity rejection", () => {
+  it.each([
+    [
+      "backend scope",
+      { backendScopeID: "backend-stale" },
+      "backend_scope_mismatch",
+    ],
+    [
+      "factory session",
+      { factorySessionID: "session-stale" },
+      "factory_session_mismatch",
+    ],
+    [
+      "logical session",
+      { logicalSessionKeyID: "logical-stale" },
+      "logical_session_mismatch",
+    ],
+    [
+      "stream generation",
+      { streamGenerationID: "generation-stale" },
+      "stream_generation_mismatch",
+    ],
+  ] as const)("returns a bounded identity rejection detail for a %s mismatch", async (_label, mismatch, expectedDetail) => {
+    const deps = dependencies();
+    deps.peekCheckpoint.mockResolvedValue({
+      checkpoint: {
+        afterEventId: "event-7",
+        afterSequence: 7,
+        replayState: {},
+        selectedTick: 7,
+      },
+      storageKey: "sensitive-storage-key",
+      streamIdentity: { ...identity, ...mismatch },
+    });
+
+    const result = await resolveDashboardCheckpointPreflight({
+      dependencies: deps,
+      indexedDB: undefined,
+      requestedSessionId: "session-a",
+    });
+
+    expect(result).toMatchObject({
+      clearRequestedSessionCheckpoint: true,
+      identityRejectionDetail: expectedDetail,
+    });
+    expect(result).not.toHaveProperty("identityRejectionScope");
+    expect(deps.readCheckpoint).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveDashboardCheckpointPreflight failures", () => {
   it("returns recovery for unresolved sessions", async () => {
     const deps = dependencies(
       response({

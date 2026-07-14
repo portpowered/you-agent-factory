@@ -15,6 +15,10 @@ import {
 } from "../../../timeline/public";
 import { isDefaultToRuntimeSessionAliasRemap } from "../dashboard-session-lifecycle";
 import {
+  classifyCheckpointIdentityMismatchDetail,
+  type SessionPersistenceDiagnosticDetail,
+} from "../session-persistence/diagnostics";
+import {
   resolveDashboardSyncPreflight,
   shouldClearCheckpointAfterPreflight,
   syncPreflightIdentityHintsFromCheckpoint,
@@ -36,6 +40,7 @@ export type DashboardCheckpointLookupOutcome =
 
 interface DashboardCheckpointLookupResolution {
   checkpointLookupOutcome?: DashboardCheckpointLookupOutcome;
+  identityRejectionDetail?: SessionPersistenceDiagnosticDetail;
 }
 
 export type DashboardCheckpointPreflightResolution =
@@ -193,6 +198,12 @@ async function resolveResponse({
         stored.streamIdentity,
         resolution.streamIdentity,
       ));
+  const identityRejectionDetail = stored?.streamIdentity
+    ? (classifyCheckpointIdentityMismatchDetail(
+        stored.streamIdentity,
+        resolution.streamIdentity,
+      ) ?? undefined)
+    : undefined;
   if (
     resolution.resolvedSessionId !== resolution.requestedSessionId &&
     !isDefaultToRuntimeSessionAliasRemap(
@@ -203,6 +214,7 @@ async function resolveResponse({
     return {
       clearRequestedSessionCheckpoint: true,
       checkpointToDelete: stored,
+      ...(identityRejectionDetail ? { identityRejectionDetail } : {}),
       kind: "remap",
       requestedSessionId: resolution.requestedSessionId,
       resolvedSessionId: resolution.resolvedSessionId,
@@ -225,6 +237,7 @@ async function resolveResponse({
     checkpoint,
     clearRequestedSessionCheckpoint,
     checkpointToDelete: clearRequestedSessionCheckpoint ? stored : null,
+    ...(identityRejectionDetail ? { identityRejectionDetail } : {}),
     kind: "resume",
     reconnectCursor: clearRequestedSessionCheckpoint
       ? undefined

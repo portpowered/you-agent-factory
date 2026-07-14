@@ -86,6 +86,39 @@ function recordCheckpointLookup(
   }
 }
 
+function recordIdentityOutcome(
+  resolution: DashboardCheckpointPreflightResolution,
+): void {
+  if (!("streamIdentity" in resolution)) return;
+  try {
+    const correlationToken = correlationTokenForIdentityScope(
+      resolution.streamIdentity,
+    );
+    if (resolution.identityRejectionDetail) {
+      recordSessionPersistenceDiagnostic(
+        sessionPersistenceDiagnostic(
+          "identity_rejected",
+          correlationToken,
+          resolution.identityRejectionDetail,
+        ),
+      );
+    }
+    if (
+      resolution.kind === "remap" &&
+      !isDefaultToRuntimeSessionAliasRemap(
+        resolution.requestedSessionId,
+        resolution.resolvedSessionId,
+      )
+    ) {
+      recordSessionPersistenceDiagnostic(
+        sessionPersistenceDiagnostic("logical_remap", correlationToken),
+      );
+    }
+  } catch {
+    // Diagnostics are best effort and cannot affect identity recovery.
+  }
+}
+
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: this hook deliberately owns the single guarded apply boundary for all preflight mutations.
 export function useDashboardCheckpointPreflight({
   checkpointHydrationKey,
@@ -240,6 +273,7 @@ export function useDashboardCheckpointPreflight({
       ) {
         remapSelectedSessionID(resolution.resolvedSessionId);
       }
+      recordIdentityOutcome(resolution);
       if (resolution.kind === "resume" && resolution.checkpoint) {
         restoreCheckpoint(resolution.streamIdentity, {
           ...resolution.checkpoint,

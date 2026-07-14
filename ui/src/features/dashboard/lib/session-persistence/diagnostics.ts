@@ -141,6 +141,13 @@ export function classifyCheckpointIdentityMismatch(
   }
 }
 
+export function classifyCheckpointIdentityMismatchDetail(
+  previous: SessionPersistenceIdentityScope,
+  current: SessionPersistenceIdentityScope,
+): SessionPersistenceDiagnosticDetail | null {
+  return classifyIdentityMismatchDetail(previous, current);
+}
+
 export function identityMismatchDiagnostic(
   previous: SessionPersistenceIdentityScope,
   current: SessionPersistenceIdentityScope,
