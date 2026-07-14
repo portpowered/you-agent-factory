@@ -818,6 +818,25 @@ func assertDurableSessionScenarioEventFixtures(t *testing.T, doc *openapi3.T, sc
 	}
 }
 
+func assertOperationDescriptionFragments(t *testing.T, operationLabel, description string, fragments []string) {
+	t.Helper()
+	for _, fragment := range fragments {
+		if !strings.Contains(description, fragment) {
+			t.Fatalf("%s.description must document %q, got %q", operationLabel, fragment, description)
+		}
+	}
+}
+
+func assertOperationDescriptionFragmentsIgnoreCase(t *testing.T, operationLabel, description string, fragments []string) {
+	t.Helper()
+	descriptionLower := strings.ToLower(description)
+	for _, fragment := range fragments {
+		if !strings.Contains(descriptionLower, strings.ToLower(fragment)) {
+			t.Fatalf("%s.description must document %q, got %q", operationLabel, fragment, description)
+		}
+	}
+}
+
 func assertDurableSessionEventSurfaceSchemas(t *testing.T, schemas map[string]any, paths map[string]any) {
 	t.Helper()
 
@@ -845,32 +864,25 @@ func assertDurableSessionEventSurfaceSchemas(t *testing.T, schemas map[string]an
 	assertParameterRef(t, parameters, "#/components/parameters/AfterEventId")
 	assertParameterRef(t, parameters, "#/components/parameters/AfterSequence")
 
+	sessionEventsLabel := "paths./factory-sessions/{session_id}/events.get"
 	description, _ := eventsOperation["description"].(string)
-	descriptionLower := strings.ToLower(description)
-	for _, fragment := range []string{"after_event_id", "after_sequence", "sessionSequence", "application/json", "cursor_stale"} {
-		if !strings.Contains(description, fragment) {
-			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document %q, got %q", fragment, description)
-		}
-	}
-	for _, fragment := range []string{"ordering", "reconnect", "keepalive", "replay bound", "expired-cursor"} {
-		if !strings.Contains(descriptionLower, fragment) {
-			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document SSE lifecycle guidance %q, got %q", fragment, description)
-		}
-	}
-	for _, fragment := range []string{"canonical", "dashboard", "factory session", "durable replay"} {
-		if !strings.Contains(strings.ToLower(description), fragment) {
-			t.Fatalf("paths./factory-sessions/{session_id}/events.get.description must document canonical session-scoped stream guidance %q, got %q", fragment, description)
-		}
-	}
+	assertOperationDescriptionFragments(t, sessionEventsLabel, description, []string{
+		"after_event_id", "after_sequence", "sessionSequence", "application/json", "cursor_stale",
+	})
+	assertOperationDescriptionFragmentsIgnoreCase(t, sessionEventsLabel, description, []string{
+		"ordering", "reconnect", "keepalive", "replay bound", "expired-cursor",
+	})
+	assertOperationDescriptionFragmentsIgnoreCase(t, sessionEventsLabel, description, []string{
+		"canonical", "dashboard", "factory session", "durable replay",
+	})
 
 	globalEventsOperation := pathOperation(t, paths, "/events", "get")
 	assertEventStreamSchemaRef(t, globalEventsOperation, "#/components/schemas/FactoryEvent")
 	globalDescription, _ := globalEventsOperation["description"].(string)
-	for _, fragment := range []string{"compatibility-only", "get /factory-sessions/{session_id}/events", "dashboard", "factory session"} {
-		if !strings.Contains(strings.ToLower(globalDescription), fragment) {
-			t.Fatalf("paths./events.get.description must document compatibility-only session-scoped migration guidance %q, got %q", fragment, globalDescription)
-		}
-	}
+	globalEventsLabel := "paths./events.get"
+	assertOperationDescriptionFragmentsIgnoreCase(t, globalEventsLabel, globalDescription, []string{
+		"compatibility-only", "get /factory-sessions/{session_id}/events", "dashboard", "factory session",
+	})
 	if strings.Contains(strings.ToLower(globalDescription), "canonical dashboard") {
 		t.Fatalf("paths./events.get.description must not present GET /events as the canonical dashboard stream, got %q", globalDescription)
 	}
