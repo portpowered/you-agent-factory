@@ -97,41 +97,43 @@ func executeSessionRun(
 		select {
 		case waitErr = <-waitDone:
 			timer.Stop()
-			closePTYReader(reader)
-			<-readDone
-			mu.Lock()
-			resultBuf := append([]byte(nil), buf...)
-			hit := capacityHit
-			mu.Unlock()
-			return finalizeSessionResult(resultBuf, hit, timedOut, waitErr, proc), runErr
+			return finishSessionRun(reader, readDone, &mu, buf, capacityHit, timedOut, waitErr, proc, runErr)
 		case <-ctx.Done():
 			timer.Stop()
 			_ = proc.Terminate()
 			waitErr = <-waitDone
-			closePTYReader(reader)
-			<-readDone
-			mu.Lock()
-			resultBuf := append([]byte(nil), buf...)
-			hit := capacityHit
-			mu.Unlock()
-			return finalizeSessionResult(resultBuf, hit, timedOut, waitErr, proc), ctx.Err()
+			return finishSessionRun(reader, readDone, &mu, buf, capacityHit, timedOut, waitErr, proc, ctx.Err())
 		case <-timer.C:
 			now := time.Now()
 			if !now.Before(hardDeadline) || (cfg.IdleTimeout > 0 && now.Sub(lastByteAt) >= cfg.IdleTimeout) {
 				timedOut = true
 				_ = proc.Terminate()
 				waitErr = <-waitDone
-				closePTYReader(reader)
-				<-readDone
-				mu.Lock()
-				resultBuf := append([]byte(nil), buf...)
-				hit := capacityHit
-				mu.Unlock()
-				return finalizeSessionResult(resultBuf, hit, timedOut, waitErr, proc), nil
+				return finishSessionRun(reader, readDone, &mu, buf, capacityHit, timedOut, waitErr, proc, nil)
 			}
 			timer.Reset(timeUntilTimeout(lastByteAt, hardDeadline, cfg))
 		}
 	}
+}
+
+func finishSessionRun(
+	reader io.ReadCloser,
+	readDone <-chan struct{},
+	mu *sync.Mutex,
+	buf []byte,
+	capacityHit bool,
+	timedOut bool,
+	waitErr error,
+	proc *sessionProcess,
+	runErr error,
+) (SessionResult, error) {
+	closePTYReader(reader)
+	<-readDone
+	mu.Lock()
+	resultBuf := append([]byte(nil), buf...)
+	hit := capacityHit
+	mu.Unlock()
+	return finalizeSessionResult(resultBuf, hit, timedOut, waitErr, proc), runErr
 }
 
 func closePTYReader(reader io.ReadCloser) {
