@@ -72,7 +72,7 @@ func MergeRegistries(registries ...Registry) Registry {
 
 // DefaultRegistry registers every contract family validated by make contracts-validate.
 func DefaultRegistry() Registry {
-	return MergeRegistries(CommonRegistry(), CLIRegistry(), CompatibilityInventoryRegistry())
+	return MergeRegistries(CommonRegistry(), CLIRegistry(), CompatibilityInventoryRegistry(), MCPRegistry())
 }
 
 // CommonRegistry registers the common schemas and their merged valid fixtures.
@@ -94,6 +94,27 @@ func CommonRegistry() Registry {
 			{Path: "contracts/testdata/common/deprecations/valid-active.json", SchemaID: deprecationsID},
 			{Path: "contracts/testdata/common/deprecations/valid-deprecated.json", SchemaID: deprecationsID},
 			{Path: "contracts/testdata/common/deprecations/valid-removed.json", SchemaID: deprecationsID},
+		},
+	})
+}
+
+// MCPRegistry registers the MCP tool-catalog schema and its valid fixtures.
+func MCPRegistry() Registry {
+	const (
+		toolCatalogID   = "https://schemas.portpowered.com/you/contracts/mcp/tool-catalog.schema.json"
+		documentationID = "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+		deprecationsID  = "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+	)
+	return NewRegistry(Entry{
+		Family:        "mcp",
+		FormatVersion: "1.0.0",
+		Schemas: []Schema{
+			{ID: documentationID, Path: "contracts/common/documentation.schema.json"},
+			{ID: deprecationsID, Path: "contracts/common/deprecations.schema.json"},
+			{ID: toolCatalogID, Path: "contracts/mcp/tool-catalog.schema.json"},
+		},
+		Documents: []Document{
+			{Path: "contracts/testdata/mcp/valid-minimal.json", SchemaID: toolCatalogID},
 		},
 	})
 }

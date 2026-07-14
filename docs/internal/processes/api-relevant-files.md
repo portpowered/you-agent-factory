@@ -110,6 +110,22 @@ Use this map when changing the public REST contract.
   versions, removal gates, approval status). Per-family schema validation stays
   in `contracts/*_deprecated_inventory_test.go`.
 
+## MCP tool catalog contract ownership
+
+- Authored MCP tool catalog schema lives at
+  `contracts/mcp/tool-catalog.schema.json` (Draft 2020-12, protocol pin
+  `2024-11-05`, format version `1.0.0`). Tool records compose B04 documentation
+  and lifecycle shapes via `$ref` to `contracts/common/documentation.schema.json`
+  and `contracts/common/deprecations.schema.json`.
+- Valid MCP catalog fixtures live under `contracts/testdata/mcp/` and register
+  through `internal/contractvalidator.MCPRegistry()` into
+  `make contracts-validate`. Invalid fixtures are asserted in focused
+  `internal/contractvalidator` tests with path-bearing diagnostics, not in the
+  default valid-only registry pass.
+- Compatibility aliases remain only in `contracts/mcp/deprecated.json`; the
+  tool-catalog schema is build-time contract validation only and does not cut
+  over `packages/api/generated/mcp/tools.json` or runtime discovery.
+
 ## Focused compatibility alias internal-use lint
 
 - `internal/contractguard` loads inventoried compatibility alias match values from

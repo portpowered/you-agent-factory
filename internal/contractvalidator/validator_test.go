@@ -34,6 +34,14 @@ func TestCLIRegistryValidFixtures(t *testing.T) {
 	}
 }
 
+func TestMCPRegistryValidFixtures(t *testing.T) {
+	root := repositoryRoot(t)
+	diagnostics := contractvalidator.Validate(root, contractvalidator.MCPRegistry(), "mcp", "1.0.0")
+	if len(diagnostics) != 0 {
+		t.Fatalf("Validate() diagnostics = %+v, want none", diagnostics)
+	}
+}
+
 func TestValidateCLIInvalidManifestDiagnostics(t *testing.T) {
 	root := repositoryRoot(t)
 

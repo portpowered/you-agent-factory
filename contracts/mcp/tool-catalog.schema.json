@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/mcp/tool-catalog.schema.json",
+  "title": "You MCP tool catalog",
+  "description": "Authored MCP tool metadata, documentation, and lifecycle records for one protocol-pinned tool catalog.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "protocolVersion",
+    "tools"
+  ],
+  "properties": {
+    "formatVersion": {
+      "description": "The explicitly supported version of this tool-catalog format.",
+      "const": "1.0.0"
+    },
+    "protocolVersion": {
+      "description": "The MCP protocol revision pinned by this catalog.",
+      "const": "2024-11-05"
+    },
+    "tools": {
+      "description": "Tool records keyed by stable tool identifiers. Object keys make duplicate tool IDs structurally unrepresentable.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/toolId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/tool"
+      }
+    }
+  },
+  "$defs": {
+    "toolId": {
+      "description": "Stable MCP tool identity with the mcp.tool prefix.",
+      "allOf": [
+        {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        {
+          "pattern": "^mcp[.]tool[.].+"
+        }
+      ]
+    },
+    "canonicalToolName": {
+      "description": "The canonical MCP protocol tool name exposed to clients.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^you[.][a-z0-9_]+(?:[.][a-z0-9_]+)*$"
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "documentation",
+        "lifecycle"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/toolId"
+        },
+        "name": {
+          "$ref": "#/$defs/canonicalToolName"
+        },
+        "documentation": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        }
+      }
+    }
+  }
+}
