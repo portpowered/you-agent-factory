@@ -699,7 +699,8 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `materializeNamedSubagentFactoryForSmoke`, `startNamedGoalRoutingAPIServer`,
   `postNamedGoalRoutingInvocationOnServer`, and the goal/subagent response-stream
   CLI helpers when extending API/CLI stream parity verification. Story-004 gate
-  evidence and upstream canonical-event exclusions are recorded in
+  evidence for canonical `FactoryResponseEvent` SSE payload encoding parity and
+  terminal outcome parity is recorded in
   `docs/internal/development/plans/you-goal/api-cli-response-stream-parity.md`.
 - `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
   regression coverage for adjacent `you run` modes after packaged-goal changes:
