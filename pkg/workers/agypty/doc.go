@@ -2,13 +2,13 @@
 // pure argv/path helpers, and mock seams approved in
 // docs/architecture/agy-pty-interface.md.
 //
-// This package is specification-only for Story 16 (stream-b06-agy-integration-decision).
-// Production Agy headless execution remains out of scope until Story 17 consumes
-// these interfaces. The package does not invoke or embed the upstream Python bridge
-// and does not require an installed Agy binary for unit tests.
+// Platform PTY allocation uses WindowsConPTYAllocator (ConPTY pseudo-console) and
+// POSIXPTYAllocator (openpty master/slave). Unsupported OS builds return
+// ErrUnsupportedPlatform and never fall back to pipe IO. Story 002+ implement
+// PTYSession.Run capture, timeout, and cleanup. Tests substitute MockAllocator or
+// inject mock openers for hermetic coverage without an installed Agy binary.
 //
-// Platform PTY allocation (Windows ConPTY, POSIX openpty) is implemented in Story 17.
-// Tests substitute MockAllocator for real ConPTY/PTY allocation.
+// The package does not invoke or embed the upstream Python bridge.
 //
 // Related documents:
 //   - docs/architecture/agy-pty-boundary.md — ADR scope and gating
