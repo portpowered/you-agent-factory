@@ -666,6 +666,15 @@ func assertSlowStdoutResponseStreamOutput(t *testing.T, output *gatedResponseStr
 }
 
 func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T) {
+	runFactoryInvocationResponseStreamSlowStdoutFixture(t, false)
+}
+
+func TestRun_FactoryInvocationResponseStreamJSONCompletesWithSlowStdout(t *testing.T) {
+	runFactoryInvocationResponseStreamSlowStdoutFixture(t, true)
+}
+
+func runFactoryInvocationResponseStreamSlowStdoutFixture(t *testing.T, jsonMode bool) {
+	t.Helper()
 	preserveRunGlobals(t)
 
 	text := "goal completed"
@@ -692,6 +701,7 @@ func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T
 			FactoryConfigPath:        "/tmp/factory.json",
 			InvocationPositionalText: &text,
 			InvocationOutputMode:     InvocationOutputResponseStream,
+			JSONOutput:               jsonMode,
 			StdinIsTTY:               func() bool { return true },
 			Output:                   output,
 			Port:                     7437,
@@ -702,7 +712,45 @@ func TestRun_FactoryInvocationResponseStreamCompletesWithSlowStdout(t *testing.T
 	waitForBlockedStdoutWrites(t, output, 2*time.Second)
 	output.release()
 	waitForResponseStreamRunCompletion(t, done, 2*time.Second)
+	if jsonMode {
+		assertSlowStdoutJSONResponseStreamOutput(t, output, text)
+		return
+	}
 	assertSlowStdoutResponseStreamOutput(t, output, text)
+}
+
+func assertSlowStdoutJSONResponseStreamOutput(t *testing.T, output *gatedResponseStreamWriter, text string) {
+	t.Helper()
+	got := output.String()
+	lines := strings.Split(strings.TrimSpace(got), "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected NDJSON response_event and invocation_result lines, got:\n%s", got)
+	}
+	foundProgress := false
+	for _, line := range lines[:len(lines)-1] {
+		if strings.Contains(line, `"recordType":"response_event"`) {
+			foundProgress = true
+			break
+		}
+	}
+	if !foundProgress {
+		t.Fatalf("NDJSON output missing response_event records:\n%s", got)
+	}
+	var finalRecord responseStreamJSONInvocationResultRecord
+	if err := json.Unmarshal([]byte(lines[len(lines)-1]), &finalRecord); err != nil {
+		t.Fatalf("unmarshal final invocation_result record: %v\n%s", err, lines[len(lines)-1])
+	}
+	if finalRecord.RecordType != responseStreamJSONRecordInvocationResult {
+		t.Fatalf("final record type = %q, want %q", finalRecord.RecordType, responseStreamJSONRecordInvocationResult)
+	}
+	assertInvocationResponseMatchesFactoryResult(t, finalRecord.Invocation, apisurface.FactoryInvocationResult{
+		RequestID: "req-1",
+		TraceID:   "trace-1",
+		Status:    factoryapi.InvocationTerminalStatusCompleted,
+		PrimaryResult: []interfaces.WorkContentPart{
+			{Type: interfaces.WorkContentPartTypeText, Text: text},
+		},
+	})
 }
 
 func waitForResponseStreamFinalWritePastDrainTimeout(
