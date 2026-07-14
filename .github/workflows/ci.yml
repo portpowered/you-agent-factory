@@ -26,6 +26,8 @@ env:
   # before cache restore, which causes cache extraction collisions on CI.
   GO_VERSION: 1.24.2
 
+# Contract staging lanes require full git history so manifest sourceCommit
+# resolution can find the last change to package source identity paths.
 jobs:
   classify-pr-impact:
     name: Classify PR Impact
