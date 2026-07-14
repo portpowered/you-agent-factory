@@ -1,0 +1,18 @@
+openapi: 3.0.3
+info:
+  title: Unsupported Component Parameter Remove Fixture
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      responses:
+        '200':
+          description: Pet list.
+components:
+  parameters:
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer

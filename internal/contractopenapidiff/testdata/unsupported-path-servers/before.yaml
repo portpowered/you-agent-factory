@@ -1,0 +1,13 @@
+openapi: 3.0.3
+info:
+  title: Unsupported Path Servers Fixture
+  version: 1.0.0
+paths:
+  /pets:
+    servers:
+      - url: https://api.example.com/v1
+    get:
+      operationId: listPets
+      responses:
+        '200':
+          description: Pet list.

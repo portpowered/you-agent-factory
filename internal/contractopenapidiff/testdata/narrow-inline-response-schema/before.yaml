@@ -1,0 +1,22 @@
+openapi: 3.0.3
+info:
+  title: Narrow Inline Response Schema Fixture
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      responses:
+        '200':
+          description: Pet list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - id
+                properties:
+                  id:
+                    type: string
+                  age:
+                    type: integer

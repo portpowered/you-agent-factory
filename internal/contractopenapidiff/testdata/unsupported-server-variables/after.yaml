@@ -1,0 +1,18 @@
+openapi: 3.0.3
+info:
+  title: Unsupported Server Variables Fixture
+  version: 1.0.0
+servers:
+  - url: https://{env}.example.com
+    variables:
+      env:
+        default: prod
+        enum:
+          - prod
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      responses:
+        '200':
+          description: Pet list.

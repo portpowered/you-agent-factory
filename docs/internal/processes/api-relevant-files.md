@@ -72,6 +72,46 @@ Use this map when changing the public REST contract.
   `make api-smoke`; this inventory lane must not modify authored OpenAPI,
   generated clients, or `pkg/transports/http` handlers.
 
+## OpenAPI contract semver comparator
+
+- `internal/contractopenapidiff` owns the build-time OpenAPI comparator that
+  classifies supported semantic deltas between two loaded documents as
+  `major`, `minor`, or `patch` with stable change codes and operation/schema
+  paths. Use `CompareYAML` or `CompareDocuments`; keep runtime packages from
+  importing it.
+- Documentation-only differences (description, summary, externalDocs, schema
+  title) classify as `patch` when structural surfaces match. Compatible
+  additions (new operations, optional parameters, optional schema properties,
+  widened enums) classify as `minor` with `openapi.add.*` change codes.
+  Compatible requiredness relaxations (parameter `required: true` to `false`,
+  removing a name from `schema.required`) classify as `minor` with
+  `openapi.relax.*` change codes. Removals and narrowing classify as `major`
+  with `openapi.remove.*` and `openapi.narrow.*` change codes; major wins over
+  minor and patch. Inline request/response content schemas use the same
+  `collectSchemaRefChanges` path as component schemas (for example
+  `{operation}.responses.{status}.content.{mediaType}.schema`). Unsupported
+  or ambiguous structural deltas fail closed via `UnsupportedDiffError` with an
+  operation or schema path instead of returning a guessed classification.
+  Residual schema keywords outside the supported comparison surface (for example
+  `nullable`, `additionalProperties`, `oneOf`, constraints, and `default`) also
+  fail closed instead of silently classifying as `patch`. Unhandled parameter
+  serialization fields (`style`, `explode`, `allowReserved`), response `headers`,
+  and non-schema `components` maps (`parameters`, `securitySchemes`, etc.) also
+  fail closed with path-aware `UnsupportedDiffError` outcomes. Operation
+  `security`, path-item `parameters`/`servers`, operation `servers`, server
+  `variables` (`default`/`enum`), media-type `encoding`/`example`, response
+  `links`, and operation `callbacks` must also fail closed or classify
+  explicitly; path-item parameter removal reuses `collectParameterChanges` as
+  major with `openapi.remove.parameter`. Vendor extensions (`x-*` /
+  kin-openapi `Extensions` maps on info, operation, parameter, requestBody,
+  response, mediaType, schema, server, tag, and components) must fail closed via
+  shared `checkUnsupportedExtensions` instead of silently classifying as `patch`.
+- Focused fixtures live under
+  `internal/contractopenapidiff/testdata/`; prove end-to-end outcomes in
+  `internal/contractopenapidiff/compare_test.go` and the consolidated matrix in
+  `internal/contractopenapidiff/fixture_matrix_test.go`; include the package in
+  `make contracts-smoke`.
+
 ## Compatibility Alias Inventory
 
 This inventory is the maintainer source of truth for retained public aliases.

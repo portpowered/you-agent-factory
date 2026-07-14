@@ -1,0 +1,19 @@
+openapi: 3.0.3
+info:
+  title: Unsupported Additional Properties Narrow Fixture
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      responses:
+        '200':
+          description: Pet list.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                properties:
+                  id:
+                    type: string
