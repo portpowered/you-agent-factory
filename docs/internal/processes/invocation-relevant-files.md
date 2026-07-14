@@ -3,6 +3,77 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+## CLI invocation output modes (primary-result, human response-stream, NDJSON)
+
+Use this lane when changing `you run` stdout modes, `--output response-stream`,
+root `--json` NDJSON records, or packaged `you docs run` output-mode guidance.
+Supported one-shot factory invocations expose three modes; continuous, replay,
+`--work`, and other non-invocation run shapes do not offer response-stream output.
+
+| Mode | Selection | Stdout contract |
+|---|---|---|
+| Primary-result (default) | `you run --factory …` or `you run --named …` without `--output response-stream` | Successful invocations write only the configured `primaryResult` to stdout |
+| Human response-stream | `you run --factory … --output response-stream` (no root `--json`) | Bounded human progress from canonical `FactoryResponseEvent` records, then `--- invocation outcome ---` with structured status/error fields and the primary result |
+| NDJSON automation | `you --json run --factory … --output response-stream` | Each non-empty stdout line is one JSON record: `recordType=response_event` with nested public `FactoryResponseEvent`, ending with exactly one terminal `recordType=invocation_result` |
+
+**CLI boundary ownership**
+
+- Mode flag wiring and unsupported run-shape rejection:
+  `pkg/transports/cli/root_work.go`, `pkg/transports/cli/root_run_test.go`
+  (manual `you run --output response-stream` parsing after `DisableFlagParsing`)
+- `RunConfig.InvocationOutputMode`, validation, and error mapping:
+  `pkg/transports/cli/run/invocation_error.go`
+- Session-owned canonical subscription, human progress draining, and lossless JSON
+  stdout ordering:
+  `pkg/transports/cli/run/invocation_observability.go`,
+  `pkg/transports/cli/run/run_clean_invocation.go`,
+  `pkg/transports/cli/run/factory_invocation_input.go`
+- Shared bootstrap forward and post-invocation retained-window drain:
+  `service.InvocationBootstrap.SubscribeSessionResponseEventsFromLatest` via
+  `pkg/transports/cli/run/factory_invocation_input.go`
+
+**Shared observation contract**
+
+- Provider-neutral public event vocabulary:
+  `pkg/factory/sessions/responseevents/`
+- Session-scoped ephemeral store (CLI and API share the same records):
+  `pkg/factory/sessions/responseeventstore/`
+- Retained-window `STREAM_GAP` visibility applies to both human and NDJSON modes;
+  do not fall back to legacy provider-progress payloads when the canonical
+  subscription is unavailable
+
+**Packaged operator guidance**
+
+- `docs/reference/run.md` (invocation output modes and copyable examples);
+  cross-link `you docs config` for return/output policy
+- Provider fidelity variability:
+  `docs/reference/workers.md` (`## Response-stream provider fidelity`)
+- Session SSE counterpart:
+  `docs/reference/sessions.md` (`## Response-event stream lifecycle and reconnect`)
+- Run `make docs-reference-smoke` after `docs/reference/` edits
+
+**Focused CLI and docs verification**
+
+- Documented commands reach the current CLI output-mode boundary:
+  `pkg/transports/cli/root_docs_test.go`
+  (`TestRunDocumentation_InvocationOutputModeExamplesReachCurrentCLIBoundary`)
+- Mode unit coverage:
+  `pkg/transports/cli/run/run_config_test.go`,
+  `pkg/transports/cli/run/run_response_stream_renderer_test.go`
+- Integration coverage (human and NDJSON ordering, slow stdout, terminal
+  `invocation_result`):
+  `pkg/transports/cli/run/run_wire_api_test.go`
+- Packaged topic smoke markers:
+  `tests/functional/smoke/cli_docs_smoke_test.go` (`run` topic)
+- End-to-end response-stream boundary with real CLI and API:
+  `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`
+
+**Maintainer verification commands**
+
+- Packaged run-topic edits: `make docs-reference-smoke`
+- Focused CLI lane:
+  `go test ./pkg/transports/cli/run/... ./pkg/transports/cli/... -run 'ResponseStream|InvocationOutput' -count=1`
+
 - `pkg/work/invocation/` owns pure invocation input, argument normalization,
   interpolation, return-policy selection, and stable policy errors used by CLI,
   API, workers, and Factory Session orchestration. It consumes domain-owned

@@ -152,6 +152,78 @@ Use this map when changing the public REST contract.
   `docs/reference/README.md`; workflow-named API/CLI/MCP aliases are not primary
   and must not be added to primary navigation or reference tables.
 
+## Session response-event SSE surface
+
+Use this lane when changing `GET /factory-sessions/{session_id}/response-events`,
+`FactoryResponseEvent` schemas, retention or `STREAM_GAP` semantics, or packaged
+session guidance for the ephemeral observation stream. This route is separate
+from canonical `GET /factory-sessions/{session_id}/events` Factory event replay;
+do not conflate reconnect parameters, retention, or error codes between them.
+
+**Authored OpenAPI and fragments**
+
+- Route and operation prose:
+  `api/openapi-main.yaml` (`getFactoryResponseEventsBySessionId` on
+  `/factory-sessions/{session_id}/response-events`)
+- Query parameters:
+  `api/components/parameters/ResponseEventAfterSequence.yaml`,
+  `ResponseEventDispatchID.yaml`, `ResponseEventKind.yaml`
+- Event schema graph:
+  `api/components/schemas/response-events/` (envelope, kind/phase/provenance,
+  payload union, content blocks)
+- Typed error responses:
+  `api/components/responses/ResponseEventSessionNotFound.yaml`,
+  `ResponseEventStreamExpired.yaml`, `ResponseEventBadRequest.yaml`; codes in
+  `api/components/schemas/api/ErrorResponse.yaml`
+
+**Generated clients** (run `make generate-api` after OpenAPI edits)
+
+- `api/openapi.yaml`
+- `pkg/transports/http/generated/server.gen.go`
+- `pkg/transports/http/client/client.gen.go`
+- `ui/src/api/generated/openapi.ts`
+
+**Runtime, handler, and mapping ownership**
+
+- HTTP SSE transport:
+  `pkg/transports/http/handlers_events.go` (`GetFactoryResponseEventsBySessionId`)
+- Transport-neutral subscription contract:
+  `pkg/transports/mapping/surface.go`, `pkg/transports/mapping/contract.go`
+  (`SubscribeFactoryResponseEventsForSession`, `FactoryResponseEventRecord`)
+- Session-owned ephemeral store and retention gaps:
+  `pkg/factory/sessions/responseeventstore/`; canonical event vocabulary in
+  `pkg/factory/sessions/responseevents/`
+- Runtime composition and typed 410 mapping:
+  `pkg/service/runtime_sessions.go`, `pkg/runtimehost/` session facades,
+  `pkg/initializer/api_transport_internal_test.go`
+
+**Packaged operator guidance**
+
+- `docs/reference/sessions.md` (`## Response-event stream lifecycle and reconnect`);
+  run `make docs-reference-smoke` after reference-topic edits
+
+**Focused contract and behavior tests**
+
+- OpenAPI authoring and generated-type parity:
+  `pkg/transports/http/contracttests/openapi_contract_response_events_test.go`,
+  `pkg/transports/http/contracttests/generated_contract_common_test.go`
+- HTTP route behavior (retained-then-live, stale cursor `STREAM_GAP`, typed
+  `404`/`410`, no default-session fallback):
+  `pkg/transports/http/server_factory_sessions_test.go`,
+  `pkg/transports/http/servertests/server_factory_session_orchestrator_test.go`
+- Packaged docs align with authored operation prose:
+  `pkg/transports/cli/docs/docs_response_stream_openapi_alignment_test.go`
+  (`TestMarkdown_SessionsResponseEventStreamAlignsWithOpenAPI`,
+  `TestMarkdown_WorkersProviderFidelityAlignsWithPublicContract`) and
+  `tests/functional/smoke/cli_docs_smoke_test.go` sessions markers
+
+**Maintainer verification commands**
+
+- OpenAPI or schema edits: `make generate-api`, then `make api-smoke` when feasible
+- Packaged session guidance edits: `make docs-reference-smoke`
+- Focused HTTP lane:
+  `go test ./pkg/transports/http/... -run 'FactoryResponseEvents' -count=1`
+
 ## OpenAPI contract semver comparator
 
 - `internal/contractopenapidiff` owns the build-time OpenAPI comparator that
@@ -430,7 +502,7 @@ dashboard state, and event connections. This agrees with
 - Retention gaps for `GET /factory-sessions/{session_id}/response-events` are synthetic `STREAM_GAP` records owned by `pkg/factorysessions/responseeventstore`: emit them before the available suffix, always pass them through response-kind filtering, report the unavailable `fromSequence`/`toSequence` bounds plus the query-relative `firstAvailableSequence`, and never publish or persist them as canonical `FactoryEvent` history.
 - Completed response-event stores accept late subscriptions for `responseeventstore.CompletedStreamRetentionWindow` (15 minutes), then return `ErrStoreExpired`; every production `apisurface.SessionAPI` implementation, including both the legacy `pkg/service` facade and initializer-backed `pkg/runtimehost.Host`, must map that domain outcome through `apisurface.ErrFactoryResponseEventStreamExpired` to the authored HTTP 410 before SSE headers are committed. Prove initializer/runtime-host composition behavior in `pkg/initializer/api_transport_internal_test.go`, not only mock or legacy service paths. When adding a typed HTTP status, also extend `errorFamilyForStatus` in `pkg/api/handlers_common.go` so the response's `family` matches its status instead of falling back to `INTERNAL_SERVER_ERROR`.
 - B08 response-event backpressure transport proofs belong in `pkg/transports/http/servertests/server_factory_session_orchestrator_test.go` (`TestFactoryResponseEventsBySessionID_SlowConsumerFloodDoesNotBlockPublication` uses a gated SSE body reader so `GET /factory-sessions/{session_id}/response-events` can lag while store publication floods under a bounded budget) and `pkg/transports/cli/run/run_wire_api_test.go` (`runFactoryInvocationResponseStreamSlowStdoutFixture` covers human and NDJSON slow-stdout fixtures with `gatedResponseStreamWriter` plus terminal `invocation_result` assertions). Skip the HTTP fixture when `testing.Short()` is set.
-- Response-event OpenAPI contract coverage lives in `pkg/api/contracttests/openapi_contract_response_events_test.go` and `generated_contract_response_events_test.go`, with representative fixtures reused from `pkg/factorysessions/responseevents/testdata/fixtures/` plus payload/content-block coverage fixtures under `pkg/api/testdata/`. `pkg/factorysessions/responseevents` owns the canonical compact JSON envelope; because Go marshals struct fields in declaration order while generated OpenAPI structs use generator-defined ordering, keep the domain envelope and provenance order aligned with the generated server model and compare complete marshaled bytes for every shared representative fixture.
+- Response-event OpenAPI contract coverage lives in `pkg/transports/http/contracttests/openapi_contract_response_events_test.go` and `pkg/transports/http/contracttests/generated_contract_common_test.go`, with representative fixtures reused from `pkg/factory/sessions/responseevents/testdata/fixtures/` plus payload/content-block coverage fixtures under `pkg/transports/http/testdata/`. `pkg/factory/sessions/responseevents` owns the canonical compact JSON envelope; because Go marshals struct fields in declaration order while generated OpenAPI structs use generator-defined ordering, keep the domain envelope and provenance order aligned with the generated server model and compare complete marshaled bytes for every shared representative fixture.
 - Internal provider/session response-stream changes stay out of the public contract by proving absence at the artifact boundary in `pkg/api/contracttests/`: when adding provider-specific normalization or internal `SessionResponseStream` semantics, add or update contract tests against `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/generatedclient/client.gen.go`, `ui/src/api/generated/openapi.ts`, and canonical public event fixtures so internal response-stream terms and provider-native event names do not leak into published schemas or `FactoryEvent` payload artifacts.
 - Historical `FactoryEvent` compatibility translation belongs at replay JSON ingestion in `pkg/replay/artifact.go` and `pkg/replay/event_stream_artifact.go`, before generated event unions discard retired fields. Keep reducers and projections canonical-only, normalize artifact and SSE inputs through the same boundary helper, and limit translation to event payload objects so customer work content is not rewritten.
 - Durable factory-session contract fixtures live in `pkg/transports/http/testdata/durable-session-contract-fixtures.json` with round-trip and OpenAPI validation coverage in `generated_contract_durable_session_test.go`; keep `WorkContent` payloads as ordered part arrays and use API-relative artifact retrieval refs instead of host filesystem paths.

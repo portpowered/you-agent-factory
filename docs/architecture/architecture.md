@@ -314,6 +314,51 @@ JavaScript-orchestrator imports of session persistence, with diagnostics that
 direct the caller back to the Factory Session recorder. Tests and typed
 orchestration-record definitions remain permitted.
 
+### Ephemeral response-event observation
+
+Factory Sessions expose two distinct event surfaces that must not be conflated
+in customer-facing architecture or API guidance:
+
+| Surface | Route or transport | What it carries | Replay role |
+| --- | --- | --- | --- |
+| Canonical Factory events | `GET /factory-sessions/{session_id}/events` | Ordered `FactoryEvent` history for lifecycle, dispatches, artifacts, and replay projections | Durable session history for dashboard timeline, status derivation, and reconnect replay within the session's retained event history |
+| Ephemeral response events | `GET /factory-sessions/{session_id}/response-events` | Ordered `FactoryResponseEvent` observation records for invocation progress | Session-scoped retained catch-up, then live continuation only while the session retains response-event history |
+
+`FactoryResponseEvent` streams are session-owned **observations**. They do not
+enter or replace canonical `FactoryEvent` history and must not be used to derive
+lifecycle, dispatch, artifact, or terminal outcome facts. Dashboard timeline
+replay, `SESSION_LIFECYCLE_CONTROL` derivation, and durable session inspection
+belong on the Factory event stream.
+
+Consumers reconnect to response events with `after_sequence`, the last
+acknowledged `FactoryResponseEvent.sequence`. Omitting the cursor starts at the
+beginning of the session's **currently retained** response-event history. When
+a stale cursor predates retained history, the stream begins with `STREAM_GAP`
+describing lost sequence bounds rather than silently skipping unavailable
+records. Response-event streaming never falls back to the current or default
+session; unknown sessions and expired retained streams return typed HTTP
+outcomes before the stream opens.
+
+Response-event history is session-scoped and ephemeral. The service retains
+only a bounded window while the Factory Session is live and for a limited time
+after completion. Architecture notes and public docs must not promise durable
+process-restart replay of response events beyond that retention window,
+byte-identical provider transcripts on the public stream, or unsupported
+provider-native fidelity.
+
+Provider-backed observation fidelity varies by capability. Native-streaming
+providers may emit incremental public response events; final-only providers
+may emit only terminal semantic snapshots. Retention pressure, final-only
+providers, and slow consumers can produce sparse observation or `STREAM_GAP`
+without changing the authoritative invocation contract: `primaryResult` on
+invocation responses and terminal work or session facts on canonical Factory
+events remain the success contract even when intermediate observation is sparse.
+
+For operator task procedures — CLI primary-result, human response-stream, and
+NDJSON output modes; response-event SSE reconnect; and provider fidelity
+expectations — use the packaged reference topics `you docs run`, `you docs
+sessions`, and `you docs workers`.
+
 # Front End
 
 The frontend is an embedded React application that consumes the backend event stream and derives a customer-facing world view from it. The UI emphasizes composable dashboards and visualizations rather than owning the authoritative system state.

@@ -223,6 +223,67 @@ func TestRunDocumentation_RepresentativeExamplesReachCurrentCLIBoundary(t *testi
 	}
 }
 
+func TestRunDocumentation_InvocationOutputModeExamplesReachCurrentCLIBoundary(t *testing.T) {
+	doc, err := docscli.Markdown("run")
+	if err != nil {
+		t.Fatalf("Markdown(run) error = %v", err)
+	}
+	for _, marker := range []string{
+		"### Primary-result mode (default)",
+		"### Human response-stream mode",
+		"### NDJSON automation mode",
+		"recordType=response_event",
+		"recordType=invocation_result",
+		`you run --named team-review --output response-stream "Review the release notes"`,
+		`you --json run --factory ./factory.json --output response-stream "Summarize the changelog"`,
+		"`you docs config`",
+	} {
+		if !strings.Contains(doc, marker) {
+			t.Fatalf("packaged run guide missing output-mode marker %q", marker)
+		}
+	}
+	for _, retired := range []string{
+		"recordType=progress",
+		"recordType=compaction",
+		"recordType=primary_result",
+		"PROGRESS_FRAGMENT",
+		"STREAM_COMPACTION_SIGNAL",
+	} {
+		if strings.Contains(doc, retired) {
+			t.Fatalf("packaged run guide advertises retired output record %q", retired)
+		}
+	}
+
+	originalRunCLI := runCLI
+	defer func() {
+		runCLI = originalRunCLI
+	}()
+
+	var runs []runcli.RunConfig
+	runCLI = func(_ context.Context, cfg runcli.RunConfig) error {
+		runs = append(runs, cfg)
+		return nil
+	}
+
+	factoryPath := writePortableFactoryWithDefaultHandling(t, t.TempDir())
+	executeDocumentedRunExample(t, []string{"run", "--factory", factoryPath, "Summarize the changelog"})
+	executeDocumentedRunExample(t, []string{"run", "--factory", factoryPath, "--output", "response-stream", "Summarize the changelog"})
+	executeDocumentedRunExample(t, []string{"--json", "run", "--factory", factoryPath, "--output", "response-stream", "Summarize the changelog"})
+
+	if len(runs) != 3 {
+		t.Fatalf("documented output-mode examples reaching run boundary = %d, want 3", len(runs))
+	}
+	if runs[0].InvocationOutputMode != runcli.InvocationOutputPrimaryResult {
+		t.Fatalf("primary-result mode = %q, want default primary output", runs[0].InvocationOutputMode)
+	}
+	if runs[1].InvocationOutputMode != runcli.InvocationOutputResponseStream || runs[1].JSONOutput {
+		t.Fatalf("human response-stream mode = %#v, want response-stream without JSON", runs[1])
+	}
+	if runs[2].InvocationOutputMode != runcli.InvocationOutputResponseStream || !runs[2].JSONOutput {
+		t.Fatalf("NDJSON response-stream mode = %#v, want response-stream with JSON", runs[2])
+	}
+}
+
 func executeDocumentedRunExample(t *testing.T, args []string) {
 	t.Helper()
 	root := NewRootCommand()

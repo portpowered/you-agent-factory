@@ -109,31 +109,48 @@ Use `you docs mock-workers` for the config contract and passthrough behavior.
 
 ## Invocation output
 
-Successful one-shot `--factory` and `--named` invocations write only the
-Factory's configured primary result to stdout by default. Redirect it directly:
+Supported one-shot `--factory` and `--named` invocations expose three stdout
+modes. Use `you docs config` for `invocationReturn` and primary-result
+selection policy.
+
+### Primary-result mode (default)
+
+Successful invocations write only the Factory's configured primary result to
+stdout. Redirect it directly:
 
 ```bash
 you run --factory ./factory.json "Summarize the changelog" > result.txt
 ```
 
-For live internal progress followed by the primary result, select the response
-stream on a supported one-shot invocation:
+### Human response-stream mode
+
+Select `--output response-stream` to render live progress for people on the
+terminal. The stream ends with the same primary result as primary-result mode:
 
 ```bash
 you run --named team-review --output response-stream "Review the release notes"
 ```
 
-Add `--json` for newline-delimited automation output. Each event line is a
-complete `{"recordType":"response_event","event":{...}}` record whose nested
-event uses the same `FactoryResponseEvent` contract as the session API. The
-stream ends with exactly one `invocation_result` record when an invocation
-response is available. That terminal record is always the final line, including
-when stdout is slow. JSON mode does not emit the internal progress, compaction,
-gap, or primary-result record shapes used by earlier releases.
+### NDJSON automation mode
+
+Add global `--json` with `--output response-stream` for newline-delimited
+automation output. Each non-empty stdout line is one complete JSON record.
+Streamed events use `recordType=response_event` with a nested public
+`FactoryResponseEvent` that matches the session API contract. An available
+invocation response ends with exactly one terminal `recordType=invocation_result`
+record. That terminal record is always the final line, including when stdout is
+slow. NDJSON mode does not emit retired private progress, compaction, gap, or
+`primary_result` record shapes from earlier releases.
+
+```bash
+you --json run --factory ./factory.json --output response-stream "Summarize the changelog"
+```
+
+### Mode availability
 
 `--output response-stream` is not available for `--work`, continuous, replay,
-or other non-invocation run shapes. For primary-result mode, global `--json`
-preserves the invocation response contract for automation:
+or other non-invocation run shapes. For primary-result automation without
+response events, global `--json` preserves the invocation response contract:
 
 ```bash
 you --json run --factory ./factory.json "Summarize the changelog"
