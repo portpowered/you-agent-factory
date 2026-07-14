@@ -1,0 +1,17 @@
+root:
+  type: object
+  properties:
+    widget:
+      $ref: '#/components/schemas/Widget'
+  required:
+    - widget
+components:
+  Widget:
+    type: object
+    properties:
+      part:
+        $ref: '#/components/schemas/Part'
+    required:
+      - part
+  Part:
+    type: string

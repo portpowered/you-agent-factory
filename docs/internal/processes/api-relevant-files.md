@@ -11,9 +11,11 @@ Use this map when changing the public REST contract.
   lives in
   `docs/internal/contract/openapi-to-draft-2020-12-converter-profile.md`;
   `ConvertCoreSchema` covers the story-001 primitive/object/array/enum/required
-  surface, with later stories expanding references, composition/nullable forms,
-  fail-closed rejection, and `internal/contractstaging` integration. Golden
-  fixtures and byte-stability tests live beside the converter package; reuse
+  surface, `ConvertRefsSchema` covers story-002 internal component references and
+  deterministic `$defs` materialization, with later stories expanding
+  composition/nullable forms, fail-closed rejection, and
+  `internal/contractstaging` integration. Golden fixtures and byte-stability
+  tests live beside the converter package; reuse
   `contractjoiner.MarshalCanonicalJSON` for canonical output bytes.
 - `internal/contractstaging` owns joined generation, the reviewed raw
   source-to-package projection map, the Factory JSON Schema projection from the

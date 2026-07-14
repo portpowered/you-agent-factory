@@ -59,6 +59,54 @@ handled by `ConvertCoreSchema`:
 Later profile stages document the exact Draft 2020-12 mapping for references,
 composition, nullable forms, and the fail-closed rejection contract.
 
+## Stage: `refs`
+
+`ConvertRefsSchema` accepts one OpenAPI 3.0.3 root schema object plus the
+`components.schemas` map that supplies referenced component bodies. The stage
+extends `core-shapes` by allowing `$ref` values that target internal component
+schemas and by materializing referenced components under `$defs`.
+
+### Supported references
+
+| OpenAPI reference | Draft 2020-12 outcome |
+| --- | --- |
+| `#/components/schemas/<Name>` | `{"$ref": "#/$defs/<Name>"}` with `<Name>` materialized once under `$defs` |
+
+Rules:
+
+- `<Name>` must be a single path segment with no `/` characters.
+- `$ref` must be the only keyword on the schema object that carries it.
+- Shared and transitive component references produce one `$defs` entry per
+  component name.
+- `$defs` object-key order is canonical and independent of discovery order
+  because output is serialized with `contractjoiner.MarshalCanonicalJSON`.
+
+### Reference rejection for `refs`
+
+The following reference forms are rejected and must not be silently rewritten:
+
+| Case | Diagnostic code |
+| --- | --- |
+| External URL, absolute path, repository-escaping, or other non-component refs | `openapi.convert.unsupported_reference` |
+| Missing `components.schemas/<Name>` target | `openapi.convert.missing_component` |
+| Component reference cycle | `openapi.convert.reference_cycle` |
+| `$ref` combined with sibling keywords | `openapi.convert.unsupported_reference` |
+| Empty or non-string `$ref` | `openapi.convert.invalid_reference` |
+
+Story `interfaces-b15-factory-converter-004` expands the fail-closed
+rejection suite; this stage owns the reference classifier for supported internal
+component refs and the deterministic `$defs` materialization contract.
+
+### Explicit non-goals for `refs`
+
+The following remain out of profile for this stage:
+
+- `nullable`
+- `allOf`, `oneOf`, `anyOf`, `not`, `if`, `then`, `else`
+- `discriminator`
+- every keyword listed as non-goal for `core-shapes` except the supported
+  internal component `$ref` form above
+
 ### Canonical output
 
 Converted schema objects are serialized with

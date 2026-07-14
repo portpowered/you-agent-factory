@@ -1,0 +1,20 @@
+{
+  "$defs": {
+    "Widget": {
+      "enum": [
+        "A",
+        "B"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "primary": {
+      "$ref": "#/$defs/Widget"
+    },
+    "secondary": {
+      "$ref": "#/$defs/Widget"
+    }
+  },
+  "type": "object"
+}

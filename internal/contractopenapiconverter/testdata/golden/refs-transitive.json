@@ -1,0 +1,25 @@
+{
+  "$defs": {
+    "LevelA": {
+      "properties": {
+        "child": {
+          "$ref": "#/$defs/LevelB"
+        }
+      },
+      "type": "object"
+    },
+    "LevelB": {
+      "properties": {
+        "leaf": {
+          "$ref": "#/$defs/LevelC"
+        }
+      },
+      "type": "object"
+    },
+    "LevelC": {
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "$ref": "#/$defs/LevelA"
+}

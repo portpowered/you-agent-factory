@@ -2,7 +2,12 @@ package contractopenapiconverter
 
 const (
 	profileStageCoreShapes = "core-shapes"
+	profileStageRefs       = "refs"
 	codeUnsupportedKeyword = "openapi.convert.unsupported_keyword"
+	codeUnsupportedRef     = "openapi.convert.unsupported_reference"
+	codeMissingComponent   = "openapi.convert.missing_component"
+	codeReferenceCycle     = "openapi.convert.reference_cycle"
+	codeInvalidReference   = "openapi.convert.invalid_reference"
 )
 
 var (

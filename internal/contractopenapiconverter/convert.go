@@ -27,7 +27,7 @@ func ConvertCoreSchema(schema map[string]any) (map[string]any, []contractvalidat
 func convertSchemaObject(schema map[string]any, path string) (any, []contractvalidator.Diagnostic) {
 	for key := range schema {
 		if !isCoreShapeKeyword(key) {
-			return nil, []contractvalidator.Diagnostic{unsupportedKeyword(key, joinPath(path, key))}
+			return nil, []contractvalidator.Diagnostic{unsupportedKeyword(key, joinPath(path, key), profileStageCoreShapes)}
 		}
 	}
 
@@ -82,7 +82,7 @@ func convertSchemaObject(schema map[string]any, path string) (any, []contractval
 				return nil, []contractvalidator.Diagnostic{invalidSchemaValue(childPath)}
 			}
 			if _, supported := supportedPrimitiveTypes[typeValue]; !supported {
-				return nil, []contractvalidator.Diagnostic{unsupportedKeyword("type:"+typeValue, childPath)}
+				return nil, []contractvalidator.Diagnostic{unsupportedKeyword("type:"+typeValue, childPath, profileStageCoreShapes)}
 			}
 			result[key] = typeValue
 		case "required", "enum", "description", "title", "format", "default",
@@ -90,7 +90,7 @@ func convertSchemaObject(schema map[string]any, path string) (any, []contractval
 			"minLength", "maxLength", "pattern", "minItems", "maxItems", "uniqueItems":
 			result[key] = value
 		default:
-			return nil, []contractvalidator.Diagnostic{unsupportedKeyword(key, childPath)}
+			return nil, []contractvalidator.Diagnostic{unsupportedKeyword(key, childPath, profileStageCoreShapes)}
 		}
 	}
 	return result, nil
