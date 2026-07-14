@@ -17,13 +17,6 @@ import (
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
 
-const (
-	codexErrorLineScanBytes            = 64 * 1024
-	codexWindowsProcessFailureExitCode = 4294967295
-)
-
-const codexHighDemandTemporaryErrorsNeedle = "we're currently experiencing high demand, which may cause temporary errors."
-
 // Cursor is commonly installed through a Windows command shim whose practical
 // command-line limit is lower than CreateProcess' documented maximum. Keep the
 // prompt below the observed 8 KiB boundary and materialize larger prompts.
@@ -472,32 +465,6 @@ func formatCombinedProviderOutput(result CommandResult) string {
 		strings.TrimSpace(string(result.Stderr)),
 		strings.TrimSpace(string(result.Stdout)),
 	}, "\n")
-}
-
-func extractCodexErrorLine(result CommandResult) (string, bool) {
-	combined := strings.Join([]string{
-		tailForCodexErrorScan(result.Stderr),
-		tailForCodexErrorScan(result.Stdout),
-	}, "\n")
-
-	var match string
-	for _, line := range strings.Split(combined, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "ERROR:") {
-			match = trimmed
-		}
-	}
-	if match == "" {
-		return "", false
-	}
-	return match, true
-}
-
-func tailForCodexErrorScan(output []byte) string {
-	if len(output) <= codexErrorLineScanBytes {
-		return string(output)
-	}
-	return string(output[len(output)-codexErrorLineScanBytes:])
 }
 
 func codexImageArgs(ctx context.Context, req interfaces.ProviderInferenceRequest, buildCtx *ProviderBuildContext) ([]string, error) {

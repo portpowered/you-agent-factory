@@ -18,7 +18,11 @@ import (
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/commandenv"
+	claudepkg "github.com/portpowered/infinite-you/pkg/workers/provider/claude"
+	codexexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/codex/exitfailure"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
+	geminipkg "github.com/portpowered/infinite-you/pkg/workers/provider/gemini"
+	kiropkg "github.com/portpowered/infinite-you/pkg/workers/provider/kiro"
 )
 
 // Provider abstracts LLM inference calls. Implementations handle the
@@ -678,19 +682,34 @@ type parsedProviderFailure struct {
 	providerSession *interfaces.ProviderSessionMetadata
 }
 
-func parseProviderExitFailure(provider string, result CommandResult) parsedProviderFailure {
-	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
+func parseProviderExitFailure(providerName string, result CommandResult) parsedProviderFailure {
+	normalizedProvider := strings.ToLower(strings.TrimSpace(providerName))
 	switch normalizedProvider {
 	case string(interfaces.ModelProviderClaude):
-		return parsedProviderFailure{failure: ParseClaudeProviderFailure(result)}
+		failure := claudepkg.ParseProviderFailure(claudepkg.FailureInput{
+			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+		})
+		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
 	case string(interfaces.ModelProviderCodex):
-		return parsedProviderFailure{failure: ParseCodexProviderFailure(result)}
+		parsed := codexexitfailure.ParseExitFailure(codexexitfailure.ExitFailureInput{
+			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+		})
+		return parsedProviderFailure{failure: ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}}
 	case string(interfaces.ModelProviderKiro):
-		return parsedProviderFailure{failure: ParseKiroProviderFailure(result)}
+		failure := kiropkg.ParseProviderFailure(kiropkg.FailureInput{
+			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+		})
+		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
 	case string(interfaces.ModelProviderOpenCode):
-		return parsedProviderFailure{failure: ParseOpenCodeProviderFailure(result)}
+		failure := opencodeadapter.ParseProviderFailure(opencodeadapter.FailureInput{
+			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+		})
+		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
 	case string(interfaces.ModelProviderGemini):
-		return parsedProviderFailure{failure: ParseGeminiProviderFailure(result)}
+		failure := geminipkg.ParseProviderFailure(geminipkg.FailureInput{
+			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+		})
+		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
 	case string(interfaces.ModelProviderCursor):
 		failure := cursorpkg.ParseProviderFailure(cursorpkg.FailureInput{
 			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
@@ -791,13 +810,15 @@ func parseProviderTimeoutFailure(provider string, result CommandResult) Provider
 	message := formatProviderOutputOrDefault(result, "execution timeout")
 	switch normalizedProvider {
 	case string(interfaces.ModelProviderCodex):
-		if codexError, ok := extractCodexErrorLine(result); ok {
+		if codexError, ok := codexexitfailure.ExtractErrorLine(codexexitfailure.ExitFailureInput{
+			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+		}); ok {
 			message = codexError
 		}
 	case string(interfaces.ModelProviderGemini):
-		message = geminiTimeoutFailureMessage
+		message = geminipkg.TimeoutFailureMessage
 	case string(interfaces.ModelProviderKiro):
-		message = kiroTimeoutFailureMessage
+		message = kiropkg.TimeoutFailureMessage
 	}
 	return ProviderFailureResult{
 		Reason:  interfaces.WorkFailureTypeTimeout,

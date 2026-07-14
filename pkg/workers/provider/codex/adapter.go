@@ -7,6 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	provider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/codex/exitfailure"
 )
 
 // ResponseAdapter exposes the production Codex JSONL decoder, final parser,
@@ -57,7 +58,9 @@ func (ResponseAdapter) ClassifyFailure(_ context.Context, input adapter.FailureC
 		return terminalFailureResult(failure)
 	}
 	if input.CommandError != nil || input.CommandResult.ExitCode != 0 {
-		parsed := provider.ParseCodexProviderFailure(input.CommandResult)
+		parsed := exitfailure.ParseExitFailure(exitfailure.ExitFailureInput{
+			Stdout: input.CommandResult.Stdout, Stderr: input.CommandResult.Stderr, ExitCode: input.CommandResult.ExitCode,
+		})
 		return normalizedFailureResult(parsed.Reason, parsed.Message, nil)
 	}
 	if input.DecodeError != nil || input.FlushError != nil || input.ParseError != nil {
