@@ -57,6 +57,30 @@ func TestProductionWorkCommandAttachesHandwrittenRunE(t *testing.T) {
 	}
 }
 
+func TestProductionRootUsesGeneratedWorkFamilyCutover(t *testing.T) {
+	if !useGeneratedWorkFamily {
+		t.Fatal("useGeneratedWorkFamily = false, want production cutover enabled")
+	}
+
+	root := NewRootCommand()
+	work, _, err := root.Find([]string{"work"})
+	if err != nil {
+		t.Fatalf("Find(work) error = %v", err)
+	}
+	if work.RunE != nil {
+		t.Fatal("you work must remain non-runnable through generated cutover")
+	}
+	for _, path := range []string{"list", "show", "move", "visualize"} {
+		leaf, _, err := root.Find([]string{"work", path})
+		if err != nil {
+			t.Fatalf("Find(work %s) error = %v", path, err)
+		}
+		if leaf.RunE == nil {
+			t.Fatalf("you work %s must attach handwritten RunE through generated cutover", path)
+		}
+	}
+}
+
 func TestLegacyWorkFamilyConstructorsRemainCallable(t *testing.T) {
 	legacy := NewLegacyWorkFamilyCommand()
 	if legacy == nil {

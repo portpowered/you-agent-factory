@@ -158,7 +158,7 @@ func productionRootSubcommands(
 		newRunCommand(globals, diagnostics, operatorDefaults, options),
 		newSubmitCommand(globals, diagnostics),
 		session,
-		newWorkCommand(globals, diagnostics),
+		productionWorkCommand(globals, diagnostics),
 		newWorkflowCommand(globals, diagnostics, options),
 	}
 }
