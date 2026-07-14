@@ -43,11 +43,274 @@
         }
       ]
     },
+    "argumentId": {
+      "description": "Stable MCP tool argument identity with the mcp.arg prefix.",
+      "allOf": [
+        {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        {
+          "pattern": "^mcp[.]arg[.].+"
+        }
+      ]
+    },
     "canonicalToolName": {
       "description": "The canonical MCP protocol tool name exposed to clients.",
       "type": "string",
       "minLength": 1,
       "pattern": "^you[.][a-z0-9_]+(?:[.][a-z0-9_]+)*$"
+    },
+    "transport": {
+      "description": "One supported MCP transport surface for tool discovery and invocation.",
+      "enum": [
+        "stdio-json-rpc"
+      ]
+    },
+    "executionMode": {
+      "description": "The supported execution model for one tool under the pinned protocol.",
+      "enum": [
+        "tools-call"
+      ]
+    },
+    "toolAnnotations": {
+      "description": "Closed behavioral hints advertised with one MCP tool.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "readOnlyHint": {
+          "type": "boolean"
+        },
+        "destructiveHint": {
+          "type": "boolean"
+        },
+        "idempotentHint": {
+          "type": "boolean"
+        },
+        "openWorldHint": {
+          "type": "boolean"
+        }
+      }
+    },
+    "argumentConstraints": {
+      "description": "Optional scalar constraints represented alongside one argument record.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "items": true,
+          "uniqueItems": true
+        },
+        "pattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "inputArgument": {
+      "description": "One authored MCP tool argument with stable identity and Draft input metadata.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "required"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/argumentId"
+        },
+        "name": {
+          "description": "The JSON property name accepted by tools/call arguments.",
+          "type": "string",
+          "minLength": 1
+        },
+        "required": {
+          "description": "Whether the argument must be present in tools/call arguments.",
+          "type": "boolean"
+        },
+        "documentation": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+        },
+        "sensitivity": {
+          "description": "How sensitive the argument value is when documented or exemplified.",
+          "enum": [
+            "public",
+            "internal",
+            "secret"
+          ]
+        },
+        "default": true,
+        "examples": {
+          "description": "Representative argument values in any JSON shape.",
+          "type": "array",
+          "minItems": 1,
+          "items": true
+        },
+        "constraints": {
+          "$ref": "#/$defs/argumentConstraints"
+        }
+      }
+    },
+    "closedSchemaNode": {
+      "description": "Recursive Draft schema node requiring closed objects and closed array items.",
+      "type": "object",
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "object"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "additionalProperties"
+            ],
+            "properties": {
+              "additionalProperties": {
+                "const": false
+              },
+              "properties": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/closedSchemaNode"
+                }
+              },
+              "patternProperties": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/closedSchemaNode"
+                }
+              },
+              "propertyNames": {
+                "$ref": "#/$defs/closedSchemaNode"
+              },
+              "$defs": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/closedSchemaNode"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "items": {
+                "$ref": "#/$defs/closedSchemaNode"
+              },
+              "prefixItems": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/closedSchemaNode"
+                }
+              },
+              "contains": {
+                "$ref": "#/$defs/closedSchemaNode"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "closedDraftSchema": {
+      "description": "Draft 2020-12 tools/call input object schema with closed nested object and array shapes.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/closedSchemaNode"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "$schema",
+            "type",
+            "additionalProperties"
+          ],
+          "properties": {
+            "$schema": {
+              "const": "https://json-schema.org/draft/2020-12/schema"
+            },
+            "type": {
+              "const": "object"
+            },
+            "additionalProperties": {
+              "const": false
+            },
+            "required": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            },
+            "properties": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/closedSchemaNode"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "toolInput": {
+      "description": "Authored tools/call input schema and stable argument metadata for one tool.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "arguments"
+      ],
+      "properties": {
+        "schema": {
+          "$ref": "#/$defs/closedDraftSchema"
+        },
+        "arguments": {
+          "description": "Argument records keyed by stable argument identifiers. Object keys make duplicate argument IDs structurally unrepresentable.",
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/argumentId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/inputArgument"
+          }
+        }
+      }
     },
     "tool": {
       "type": "object",
@@ -70,6 +333,34 @@
         },
         "lifecycle": {
           "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        },
+        "transports": {
+          "description": "Supported MCP transports for discovery and tools/call invocation.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/transport"
+          }
+        },
+        "execution": {
+          "description": "Execution and task-support metadata limited to currently supported behavior.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/executionMode"
+            }
+          }
+        },
+        "annotations": {
+          "$ref": "#/$defs/toolAnnotations"
+        },
+        "input": {
+          "$ref": "#/$defs/toolInput"
         }
       }
     }

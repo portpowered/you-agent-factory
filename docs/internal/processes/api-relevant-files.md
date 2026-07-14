@@ -122,6 +122,10 @@ Use this map when changing the public REST contract.
   `make contracts-validate`. Invalid fixtures are asserted in focused
   `internal/contractvalidator` tests with path-bearing diagnostics, not in the
   default valid-only registry pass.
+- Tool `input` combines a closed Draft `schema` (`#/$defs/closedDraftSchema`)
+  with object-keyed `arguments` using `mcp.arg.*` stable IDs; `execution.mode`
+  is pinned to `tools-call` and `transports` to `stdio-json-rpc` for the
+  supported protocol surface.
 - Compatibility aliases remain only in `contracts/mcp/deprecated.json`; the
   tool-catalog schema is build-time contract validation only and does not cut
   over `packages/api/generated/mcp/tools.json` or runtime discovery.

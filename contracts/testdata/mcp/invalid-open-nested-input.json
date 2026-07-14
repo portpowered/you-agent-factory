@@ -1,0 +1,104 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2024-11-05",
+  "tools": {
+    "mcp.tool.you.factory_session.start_async": {
+      "id": "mcp.tool.you.factory_session.start_async",
+      "name": "you.factory_session.start_async",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.start_async",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.start_async.title",
+            "canonicalEnglish": "Start Factory Session Async"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.start_async.description",
+            "canonicalEnglish": "Starts one async Factory Session and returns an accepted or running summary for polling."
+          }
+        },
+        "examples": [
+          {
+            "requestId": "req-001",
+            "source": {
+              "kind": "WORKFLOW_NAME",
+              "workflowName": "example.workflow"
+            }
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.start_async",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "transports": [
+        "stdio-json-rpc"
+      ],
+      "execution": {
+        "mode": "tools-call"
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "input": {
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requestId",
+            "source"
+          ],
+          "properties": {
+            "requestId": {
+              "type": "string",
+              "minLength": 1
+            },
+            "source": {
+              "type": "object",
+              "additionalProperties": true,
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "FACTORY_ID",
+                    "FACTORY_INLINE",
+                    "WORKFLOW_FILE",
+                    "WORKFLOW_NAME",
+                    "INLINE_WORKFLOW"
+                  ]
+                },
+                "workflowName": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "arguments": {
+          "mcp.arg.you.factory_session.start_async.request_id": {
+            "id": "mcp.arg.you.factory_session.start_async.request_id",
+            "name": "requestId",
+            "required": true
+          },
+          "mcp.arg.you.factory_session.start_async.source": {
+            "id": "mcp.arg.you.factory_session.start_async.source",
+            "name": "source",
+            "required": true
+          }
+        }
+      }
+    }
+  }
+}
