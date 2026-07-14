@@ -319,7 +319,7 @@ Checked against `docs/internal/standards/code/general-backend-standards.md`:
 | Document | Role |
 | --- | --- |
 | `docs/architecture/agy-pty-boundary.md` | ADR — scope, platforms, exclusions |
-| Story 003 interface proposal | Mock seams, `maxCaptureBytes`, fixture locations |
+| Story 003 interface proposal (`agy-pty-interface.md`, `pkg/workers/agypty`) | Mock seams, `maxCaptureBytes`, fixture locations |
 | `pkg/workers/process/doc.go` | Supervision and cleanup escape documentation |
 | `pkg/workers/provider/commandenv/environment.go` | Environment merge policy |
 | `pkg/workers/worktree/paths.go` | Path normalization reference for workspace containment |

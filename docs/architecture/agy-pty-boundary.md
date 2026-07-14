@@ -225,7 +225,7 @@ execution is approved.
 | Document | Story | Status |
 | --- | --- | --- |
 | Windows/POSIX threat review (`agy-pty-threat-review.md`) | `stream-b06-agy-integration-decision-002` | Accepted |
-| Go PTY/process interface proposal and fixtures | `stream-b06-agy-integration-decision-003` | Pending |
+| Go PTY/process interface proposal and fixtures (`agy-pty-interface.md`) | `stream-b06-agy-integration-decision-003` | Accepted |
 | Stream-response program plan | `docs/temp/projects/stream-responses/stream-response-fix-plan.md` §8.6 | Reference |
 | Worker process supervision | `pkg/workers/process/doc.go` | Existing |
 | Provider subprocess environment policy | `pkg/workers/provider/commandenv/environment.go` | Existing |
