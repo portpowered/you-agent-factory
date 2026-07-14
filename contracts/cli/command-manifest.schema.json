@@ -126,6 +126,48 @@
           "additionalProperties": {
             "$ref": "#/$defs/relationship"
           }
+        },
+        "precedence": {
+          "$ref": "#/$defs/precedence"
+        },
+        "channels": {
+          "$ref": "#/$defs/channels"
+        },
+        "outputs": {
+          "description": "Declared command output records keyed by stable output identifiers. Object keys make duplicate output IDs structurally unrepresentable.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/output"
+          }
+        },
+        "exits": {
+          "description": "Declared exit-code records keyed by stable exit identifiers. Object keys make duplicate exit IDs structurally unrepresentable.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/exit"
+          }
+        },
+        "sideEffects": {
+          "description": "Declared side-effect records keyed by stable side-effect identifiers. Object keys make duplicate side-effect IDs structurally unrepresentable.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/sideEffect"
+          }
+        },
+        "constraints": {
+          "$ref": "#/$defs/constraints"
+        },
+        "handler": {
+          "$ref": "#/$defs/handler"
         }
       }
     },
@@ -609,6 +651,208 @@
         "example": {
           "description": "Optional multi-line example block rendered after the usage line.",
           "type": "string"
+        }
+      }
+    },
+    "precedence": {
+      "description": "Relative precedence of input sources when resolving one command invocation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "order"
+      ],
+      "properties": {
+        "order": {
+          "description": "Ordered input sources from highest to lowest precedence. Each source appears exactly once.",
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "flags",
+              "args",
+              "env",
+              "config",
+              "stdin",
+              "defaults"
+            ]
+          }
+        }
+      }
+    },
+    "channels": {
+      "description": "Invocation input and output channels exposed by one command.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "input",
+        "output"
+      ],
+      "properties": {
+        "input": {
+          "description": "Input channels that may supply values for this command.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "cli",
+              "env",
+              "config",
+              "stdin"
+            ]
+          }
+        },
+        "output": {
+          "description": "Output channels that may receive values from this command.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "stdout",
+              "stderr",
+              "file"
+            ]
+          }
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "channel",
+        "format"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "channel": {
+          "description": "The output channel that carries this payload.",
+          "enum": [
+            "stdout",
+            "stderr",
+            "file"
+          ]
+        },
+        "format": {
+          "description": "The serialized payload format emitted on the channel.",
+          "enum": [
+            "text",
+            "json",
+            "yaml",
+            "binary"
+          ]
+        }
+      }
+    },
+    "exit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "code",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "code": {
+          "description": "Process exit code returned for this outcome.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "kind": {
+          "description": "Semantic classification of the exit outcome.",
+          "enum": [
+            "success",
+            "failure",
+            "usage",
+            "cancel"
+          ]
+        }
+      }
+    },
+    "sideEffect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "kind": {
+          "description": "The external surface touched by this side effect.",
+          "enum": [
+            "filesystem",
+            "network",
+            "process",
+            "config"
+          ]
+        }
+      }
+    },
+    "constraints": {
+      "description": "Runtime and platform constraints governing command execution.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtime",
+        "platforms"
+      ],
+      "properties": {
+        "runtime": {
+          "description": "Supported runtime environments for this command.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "local",
+              "hosted",
+              "container"
+            ]
+          }
+        },
+        "platforms": {
+          "description": "Supported host platforms for this command.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "linux",
+              "darwin",
+              "windows"
+            ]
+          }
+        }
+      }
+    },
+    "handler": {
+      "description": "Stable handler identity and optional OpenAPI operation binding for one runnable command.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "operationId": {
+          "description": "Optional OpenAPI operationId bound to this handler.",
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9]*$"
         }
       }
     }

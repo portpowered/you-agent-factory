@@ -155,3 +155,41 @@ func TestCommandManifestSchemaRelationshipFixtures(t *testing.T) {
 		})
 	}
 }
+
+func TestCommandManifestSchemaExecutionMetadataFixtures(t *testing.T) {
+	schema := commandManifestSchema(t)
+
+	tests := []struct {
+		name     string
+		fixture  string
+		valid    bool
+		wantPath string
+	}{
+		{name: "valid precedence and execution metadata", fixture: "valid-precedence.json", valid: true},
+		{name: "valid handler binding", fixture: "valid-handler-binding.json", valid: true},
+		{
+			name:     "invalid handler id",
+			fixture:  "invalid-handler-id.json",
+			wantPath: "/commands/example.factory.dispatch/handler/id",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			instance := readJSON(t, filepath.Join("testdata", "cli", test.fixture))
+			err := schema.Validate(instance)
+			if test.valid {
+				if err != nil {
+					t.Fatalf("validate valid fixture: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("expected fixture validation to fail")
+			}
+			if paths := validationPaths(t, err); !slices.Contains(paths, test.wantPath) {
+				t.Fatalf("validation paths = %v, want %q", paths, test.wantPath)
+			}
+		})
+	}
+}
