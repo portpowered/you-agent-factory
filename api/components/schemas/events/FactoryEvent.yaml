@@ -59,3 +59,37 @@ properties:
       - $ref: ./payloads/JavaScriptCheckpointRefEventPayload.yaml
       - $ref: ./payloads/JavaScriptPhaseChangeEventPayload.yaml
       - $ref: ./payloads/ArtifactCreatedEventPayload.yaml
+discriminator:
+  propertyName: type
+  mapping:
+    RUN_REQUEST: ./payloads/RunRequestEventPayload.yaml
+    INITIAL_STRUCTURE_REQUEST: ./payloads/InitialStructureRequestEventPayload.yaml
+    FACTORY_CHANGE: ./payloads/FactoryChangeEventPayload.yaml
+    WORK_REQUEST: ./payloads/WorkRequestEventPayload.yaml
+    RELATIONSHIP_CHANGE_REQUEST: ./payloads/RelationshipChangeRequestEventPayload.yaml
+    DISPATCH_REQUEST: ./payloads/DispatchRequestEventPayload.yaml
+    MODEL_REQUEST: ./payloads/ModelRequestEventPayload.yaml
+    MODEL_RESPONSE: ./payloads/ModelResponseEventPayload.yaml
+    INFERENCE_REQUEST: ./payloads/InferenceRequestEventPayload.yaml
+    INFERENCE_RESPONSE: ./payloads/InferenceResponseEventPayload.yaml
+    SCRIPT_REQUEST: ./payloads/ScriptRequestEventPayload.yaml
+    SCRIPT_RESPONSE: ./payloads/ScriptResponseEventPayload.yaml
+    AGENT_RUN_RESPONSE: ./payloads/AgentRunResponseEventPayload.yaml
+    DISPATCH_RESPONSE: ./payloads/DispatchResponseEventPayload.yaml
+    WORK_STATE_CHANGE: ./payloads/WorkStateChangeEventPayload.yaml
+    FACTORY_STATE_RESPONSE: ./payloads/FactoryStateResponseEventPayload.yaml
+    RUN_RESPONSE: ./payloads/RunResponseEventPayload.yaml
+    SESSION_STARTED: ./payloads/SessionStartedEventPayload.yaml
+    SESSION_PAUSED: ./payloads/SessionPausedEventPayload.yaml
+    SESSION_RESUMED: ./payloads/SessionResumedEventPayload.yaml
+    SESSION_RESULT_UPDATED: ./payloads/SessionResultUpdatedEventPayload.yaml
+    SESSION_COMPLETED: ./payloads/SessionCompletedEventPayload.yaml
+    SESSION_LIFECYCLE_CONTROL: ./payloads/SessionLifecycleControlEventPayload.yaml
+    ORCHESTRATOR_PHASE_CHANGED: ./payloads/OrchestratorPhaseChangedEventPayload.yaml
+    ORCHESTRATOR_CHECKPOINT_WRITTEN: ./payloads/OrchestratorCheckpointWrittenEventPayload.yaml
+    DISPATCH_QUEUED: ./payloads/DispatchQueuedEventPayload.yaml
+    DISPATCH_INTERRUPTED: ./payloads/DispatchInterruptedEventPayload.yaml
+    DISPATCH_RECONCILED: ./payloads/DispatchReconciledEventPayload.yaml
+    JAVASCRIPT_CHECKPOINT_REF: ./payloads/JavaScriptCheckpointRefEventPayload.yaml
+    JAVASCRIPT_PHASE_CHANGE: ./payloads/JavaScriptPhaseChangeEventPayload.yaml
+    ARTIFACT_CREATED: ./payloads/ArtifactCreatedEventPayload.yaml
