@@ -34,10 +34,11 @@ func TestAdapterParseFinalTimeoutEmitsOnePartialMessage(t *testing.T) {
 	if result.Response.Content != "" {
 		t.Fatalf("response content = %q, want empty on timeout", result.Response.Content)
 	}
-	if len(result.Drafts) != 1 {
-		t.Fatalf("drafts = %#v, want exactly one partial message", result.Drafts)
+	if len(result.Drafts) != 3 {
+		t.Fatalf("drafts = %#v, want partial message plus timeout error and failed run", result.Drafts)
 	}
 	assertPartialTimeoutMessageDraft(t, result.Drafts[0], "partial answer before timeout")
+	assertTimeoutTerminalDrafts(t, result.Drafts[1:], "", false)
 }
 
 func TestAdapterExecuteTimeoutEmitsPartialMessageBeforeFailure(t *testing.T) {
@@ -82,6 +83,7 @@ func TestAdapterExecuteTimeoutEmitsPartialMessageBeforeFailure(t *testing.T) {
 		t.Fatalf("partial message drafts = %#v, want exactly one", partialDrafts)
 	}
 	assertPartialTimeoutMessageDraft(t, partialDrafts[0], "partial answer before timeout")
+	assertTimeoutTerminalDrafts(t, result.Drafts[1:], "", false)
 }
 
 func TestAdapterParseFinalTimeoutBoundsPartialContent(t *testing.T) {
@@ -102,8 +104,8 @@ func TestAdapterParseFinalTimeoutBoundsPartialContent(t *testing.T) {
 	if err == nil {
 		t.Fatal("ParseFinal() error = nil, want timeout failure")
 	}
-	if len(result.Drafts) != 1 {
-		t.Fatalf("drafts = %d, want one bounded partial message", len(result.Drafts))
+	if len(result.Drafts) != 3 {
+		t.Fatalf("drafts = %d, want partial message plus timeout error and failed run", len(result.Drafts))
 	}
 	var payload responseevents.MessagePayload
 	if err := json.Unmarshal(result.Drafts[0].Payload, &payload); err != nil {
@@ -147,9 +149,10 @@ func TestAdapterParseFinalTimeoutSkipsPartialForUnusableCapture(t *testing.T) {
 			if err == nil {
 				t.Fatal("ParseFinal() error = nil, want timeout failure")
 			}
-			if len(result.Drafts) != 0 {
-				t.Fatalf("drafts = %#v, want no partial message for unusable capture", result.Drafts)
+			if len(result.Drafts) != 2 {
+				t.Fatalf("drafts = %#v, want timeout error and failed run without partial message", result.Drafts)
 			}
+			assertTimeoutTerminalDrafts(t, result.Drafts, "", false)
 		})
 	}
 }

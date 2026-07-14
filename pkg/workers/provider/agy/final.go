@@ -28,10 +28,8 @@ func (finalOnlyDecoder) Flush(context.Context, adapter.FlushContext) (adapter.De
 
 func parseFinalOnly(_ context.Context, input adapter.FinalParseContext) (adapter.FinalParseResult, error) {
 	if input.CommandError != nil || input.CommandResult.ExitCode != 0 {
-		if drafts, ok := partialTimeoutMessageDrafts(input); ok {
-			return adapter.FinalParseResult{Drafts: drafts}, processTerminalError(input.CommandResult, input.CommandError)
-		}
-		return adapter.FinalParseResult{}, processTerminalError(input.CommandResult, input.CommandError)
+		terminal := processTerminalError(input.CommandResult, input.CommandError)
+		return adapter.FinalParseResult{Drafts: timeoutFailureDrafts(input, terminal)}, terminal
 	}
 	if !utf8.Valid(input.CommandResult.Stdout) {
 		return adapter.FinalParseResult{}, unusableFinalOnlyOutput()
@@ -51,6 +49,47 @@ func unusableFinalOnlyOutput() *terminalError {
 		failureType: interfaces.WorkFailureTypeUnknown,
 		message:     "Agy final-only output did not contain an authoritative response.",
 	}
+}
+
+func timeoutFailureDrafts(input adapter.FinalParseContext, terminal *terminalError) []responseevents.Draft {
+	if terminal == nil || terminal.failureType != interfaces.WorkFailureTypeTimeout {
+		return nil
+	}
+	var drafts []responseevents.Draft
+	if partial, ok := partialTimeoutMessageDrafts(input); ok {
+		drafts = append(drafts, partial...)
+	}
+	drafts = append(drafts, timeoutTerminalFailureDrafts(input, terminal)...)
+	return drafts
+}
+
+func timeoutTerminalFailureDrafts(input adapter.FinalParseContext, terminal *terminalError) []responseevents.Draft {
+	return []responseevents.Draft{
+		timeoutErrorDraft(input, terminal),
+		timeoutFailedRunDraft(input),
+	}
+}
+
+func timeoutErrorDraft(input adapter.FinalParseContext, terminal *terminalError) responseevents.Draft {
+	return responseevents.Draft{
+		RunID: input.RunID, DispatchID: input.DispatchID,
+		Kind: responseevents.KindError, Phase: responseevents.PhaseUpdated,
+		Provenance: responseevents.Provenance{
+			Provider: string(interfaces.ModelProviderAgy), NativeEventType: "session_timeout",
+			Delivery: responseevents.DeliverySynthesized, Representation: responseevents.RepresentationNotification,
+			Fidelity: responseevents.FidelityLifecycleOnly,
+		},
+		Payload: marshalCanonicalPayload(responseevents.ErrorPayload{
+			Code: string(terminal.failureType), Message: terminal.message, Retryable: terminal.retryable,
+		}),
+	}
+}
+
+func timeoutFailedRunDraft(input adapter.FinalParseContext) responseevents.Draft {
+	draft := finalOnlyRunDraft(responseevents.PhaseFailed, "failed")
+	draft.RunID = input.RunID
+	draft.DispatchID = input.DispatchID
+	return draft
 }
 
 func partialTimeoutMessageDrafts(input adapter.FinalParseContext) ([]responseevents.Draft, bool) {
