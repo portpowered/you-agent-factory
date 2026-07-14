@@ -60,8 +60,7 @@ func TestGenerateAPIInputsRemainLocalSourceDriven(t *testing.T) {
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
 	hardcodedLocalSources := []string{
 		"Makefile",
-		"pkg/api/server.go",
-		"pkg/generatedclient/generate.go",
+		"pkg/transports/http/generate.go",
 	}
 	stagedOpenAPIReference := filepath.ToSlash(contractstaging.StagedOpenAPIPath)
 	localOpenAPIReference := contractstaging.CanonicalOpenAPIPath

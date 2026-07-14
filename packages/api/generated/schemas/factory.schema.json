@@ -982,7 +982,7 @@
           "type": "string",
           "x-go-type": "apitypes.Int64String",
           "x-go-type-import": {
-            "path": "github.com/portpowered/infinite-you/pkg/api/apitypes"
+            "path": "github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
           }
         },
         "physical": {
