@@ -450,66 +450,103 @@ func runBackpressureLifecycleRaceWorker(
 
 	switch id % 6 {
 	case 0:
-		subscription, err := store.Subscribe(0)
-		if err != nil {
-			return
-		}
-		for {
-			_, err := subscription.Next(workerCtx)
-			if err != nil {
-				subscription.Detach()
-				return
-			}
-		}
+		lifecycleRaceDrainWorker(store, workerCtx)
 	case 1:
-		subscription, err := store.Subscribe(0)
-		if err != nil {
-			return
-		}
-		subscription.Detach()
+		lifecycleRaceSubscribeDetachWorker(store)
 	case 2:
-		subscription, err := store.Subscribe(0)
+		lifecycleRaceBlockedDetachWorker(t, store, workerCtx)
+	case 3, 4:
+		lifecycleRacePublishBurstWorker(t, store, id)
+	case 5:
+		lifecycleRaceCompleteExpireCloseWorker(t, store, clock, start, id)
+	}
+}
+
+func lifecycleRaceDrainWorker(
+	store *responseeventstore.SessionResponseEventStore,
+	workerCtx context.Context,
+) {
+	subscription, err := store.Subscribe(0)
+	if err != nil {
+		return
+	}
+	for {
+		_, err := subscription.Next(workerCtx)
 		if err != nil {
+			subscription.Detach()
 			return
 		}
-		blockedDone := make(chan struct{})
-		go func() {
-			defer close(blockedDone)
-			_, _ = subscription.Next(workerCtx)
-		}()
-		select {
-		case <-blockedDone:
-		case <-time.After(50 * time.Millisecond):
-		}
-		subscription.Detach()
-		select {
-		case <-blockedDone:
-		case <-time.After(500 * time.Millisecond):
-			t.Errorf("blocked subscriber did not return promptly after Detach")
-		}
-	case 3, 4:
-		for burst := 0; burst < lifecycleRacePublishBurst; burst++ {
-			if _, err := store.Publish(deltaPublishInput(id*lifecycleRacePublishBurst + burst)); err != nil {
-				if !errors.Is(err, responseeventstore.ErrStoreCompleted) &&
-					!errors.Is(err, responseeventstore.ErrStoreClosed) {
-					t.Errorf("publish burst worker=%d index=%d: %v", id, burst, err)
-				}
-				return
-			}
-		}
-	case 5:
-		time.Sleep(time.Duration(id%7) * time.Millisecond)
-		store.Complete()
-		if store.Completed() {
-			clock.Set(start.Add(responseeventstore.CompletedStreamRetentionWindow))
-			if _, err := store.Subscribe(0); err != nil &&
-				!errors.Is(err, responseeventstore.ErrStoreExpired) &&
-				!errors.Is(err, responseeventstore.ErrStoreClosed) {
-				t.Errorf("Subscribe after retention expiry = %v, want ErrStoreExpired or ErrStoreClosed", err)
-			}
-		}
-		store.Close()
 	}
+}
+
+func lifecycleRaceSubscribeDetachWorker(store *responseeventstore.SessionResponseEventStore) {
+	subscription, err := store.Subscribe(0)
+	if err != nil {
+		return
+	}
+	subscription.Detach()
+}
+
+func lifecycleRaceBlockedDetachWorker(
+	t *testing.T,
+	store *responseeventstore.SessionResponseEventStore,
+	workerCtx context.Context,
+) {
+	subscription, err := store.Subscribe(0)
+	if err != nil {
+		return
+	}
+	blockedDone := make(chan struct{})
+	go func() {
+		defer close(blockedDone)
+		_, _ = subscription.Next(workerCtx)
+	}()
+	select {
+	case <-blockedDone:
+	case <-time.After(50 * time.Millisecond):
+	}
+	subscription.Detach()
+	select {
+	case <-blockedDone:
+	case <-time.After(500 * time.Millisecond):
+		t.Errorf("blocked subscriber did not return promptly after Detach")
+	}
+}
+
+func lifecycleRacePublishBurstWorker(
+	t *testing.T,
+	store *responseeventstore.SessionResponseEventStore,
+	id int,
+) {
+	for burst := 0; burst < lifecycleRacePublishBurst; burst++ {
+		if _, err := store.Publish(deltaPublishInput(id*lifecycleRacePublishBurst + burst)); err != nil {
+			if !errors.Is(err, responseeventstore.ErrStoreCompleted) &&
+				!errors.Is(err, responseeventstore.ErrStoreClosed) {
+				t.Errorf("publish burst worker=%d index=%d: %v", id, burst, err)
+			}
+			return
+		}
+	}
+}
+
+func lifecycleRaceCompleteExpireCloseWorker(
+	t *testing.T,
+	store *responseeventstore.SessionResponseEventStore,
+	clock *fixedClock,
+	start time.Time,
+	id int,
+) {
+	time.Sleep(time.Duration(id%7) * time.Millisecond)
+	store.Complete()
+	if store.Completed() {
+		clock.Set(start.Add(responseeventstore.CompletedStreamRetentionWindow))
+		if _, err := store.Subscribe(0); err != nil &&
+			!errors.Is(err, responseeventstore.ErrStoreExpired) &&
+			!errors.Is(err, responseeventstore.ErrStoreClosed) {
+			t.Errorf("Subscribe after retention expiry = %v, want ErrStoreExpired or ErrStoreClosed", err)
+		}
+	}
+	store.Close()
 }
 
 func firstRetainedSequenceAfter(events []responseevents.FactoryResponseEvent, after int64) int64 {
