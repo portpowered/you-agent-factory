@@ -54,11 +54,6 @@ func FactoryConfigInitFamilyArtifact(repositoryRoot string) ([]byte, error) {
 	return contractjoiner.MarshalCanonicalJSON(family)
 }
 
-// Artifact returns the deterministic generated representative-family metadata bytes.
-func Artifact(repositoryRoot string) ([]byte, error) {
-	return RepresentativeFamilyArtifact(repositoryRoot)
-}
-
 // Generate writes CLI family metadata artifacts for review and drift checks.
 func Generate(repositoryRoot string) error {
 	representativePayload, err := RepresentativeFamilyArtifact(repositoryRoot)
