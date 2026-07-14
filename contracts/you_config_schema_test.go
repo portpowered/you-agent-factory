@@ -174,6 +174,85 @@ func TestYouConfigSchemaContractMetadataValidatesThroughCommonVocabulary(t *test
 	}
 }
 
+func TestYouConfigSchemaClosedObjectBoundaries(t *testing.T) {
+	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
+	root := document.(map[string]any)
+
+	if root["additionalProperties"] != false {
+		t.Fatalf("root additionalProperties = %#v, want false", root["additionalProperties"])
+	}
+
+	defaults := root["properties"].(map[string]any)["defaults"].(map[string]any)
+	if defaults["additionalProperties"] != false {
+		t.Fatalf("defaults additionalProperties = %#v, want false", defaults["additionalProperties"])
+	}
+
+	workerPreset := root["$defs"].(map[string]any)["workerPreset"].(map[string]any)
+	if workerPreset["additionalProperties"] != false {
+		t.Fatalf("workerPreset additionalProperties = %#v, want false", workerPreset["additionalProperties"])
+	}
+}
+
+func TestYouConfigSchemaRejectsInvalidFixtures(t *testing.T) {
+	schema := youConfigSchema(t)
+	fixtureRoot := filepath.Join("..", "pkg", "config", "operatorconfig", "testdata", "fixtures")
+
+	tests := []struct {
+		name     string
+		fixture  string
+		wantPath string
+	}{
+		{
+			name:     "unknown top-level field",
+			fixture:  filepath.Join(fixtureRoot, "invalid", "unknown-top-level.json"),
+			wantPath: "",
+		},
+		{
+			name:     "unknown nested defaults field",
+			fixture:  filepath.Join(fixtureRoot, "invalid", "unknown-nested-defaults.json"),
+			wantPath: "/defaults",
+		},
+		{
+			name:     "preset empty id",
+			fixture:  filepath.Join(fixtureRoot, "invalid", "preset-empty-id.json"),
+			wantPath: "/workerPresets/0/id",
+		},
+		{
+			name:     "preset missing provider",
+			fixture:  filepath.Join(fixtureRoot, "invalid", "preset-missing-provider.json"),
+			wantPath: "/workerPresets/0",
+		},
+		{
+			name:     "preset symbolic provider",
+			fixture:  filepath.Join(fixtureRoot, "invalid", "preset-symbolic-provider.json"),
+			wantPath: "/workerPresets/0/modelProvider",
+		},
+		{
+			name:     "preset unsupported provider",
+			fixture:  filepath.Join(fixtureRoot, "invalid", "preset-unsupported-provider.json"),
+			wantPath: "/workerPresets/0/modelProvider",
+		},
+		{
+			name:     "preset unsupported reasoning effort",
+			fixture:  filepath.Join(fixtureRoot, "invalid", "preset-unsupported-reasoning.json"),
+			wantPath: "/workerPresets/0/reasoningEffort",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			instance := readJSON(t, test.fixture)
+			err := schema.Validate(instance)
+			if err == nil {
+				t.Fatalf("validate invalid fixture %s: expected rejection", test.fixture)
+			}
+			if paths := validationPaths(t, err); !slices.Contains(paths, test.wantPath) {
+				t.Fatalf("validation paths = %v, want %q", paths, test.wantPath)
+			}
+		})
+	}
+}
+
 func TestYouConfigSchemaInstancePropertiesMatchInventoriedTopology(t *testing.T) {
 	document := readJSON(t, filepath.Join("config", "you-config.schema.json"))
 	root := document.(map[string]any)

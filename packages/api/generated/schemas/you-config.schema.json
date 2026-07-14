@@ -62,6 +62,39 @@
     }
   },
   "$defs": {
+    "operatorWorkerModelProvider": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".*\\S.*",
+      "enum": [
+        "AGY",
+        "ANTHROPIC",
+        "CLAUDE",
+        "CODEX",
+        "CURSOR",
+        "CURSOR_AGENT",
+        "GEMINI",
+        "KIRO",
+        "OPENAI",
+        "OPENCODE",
+        "PI",
+        "agent",
+        "agy",
+        "anthropic",
+        "antigravity",
+        "claude",
+        "codex",
+        "cursor",
+        "cursor-agent",
+        "gemini",
+        "kiro",
+        "kiro-cli",
+        "openai",
+        "opencode",
+        "pi"
+      ],
+      "description": "Required non-empty model provider canonicalized to supported providers. Symbolic DEFAULT is rejected in presets."
+    },
     "workerPreset": {
       "type": "object",
       "additionalProperties": false,
@@ -73,6 +106,7 @@
         "id": {
           "type": "string",
           "minLength": 1,
+          "pattern": ".*\\S.*",
           "description": "Required non-empty preset identifier after trim.",
           "examples": [
             "research",
@@ -80,11 +114,7 @@
           ]
         },
         "modelProvider": {
-          "type": "string",
-          "minLength": 1,
-          "not": {
-            "const": "DEFAULT"
-          },
+          "$ref": "#/$defs/operatorWorkerModelProvider",
           "description": "Required non-empty model provider canonicalized to supported providers.",
           "examples": [
             "openai",

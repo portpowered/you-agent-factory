@@ -271,7 +271,7 @@
       "path": "generated/schemas/mock-workers.schema.json"
     },
     "generated.schemas.you-config": {
-      "artifactHash": "c7a863e564778ec807fb0475de04a7dc8f1e67db1bf4a9344e9a51fdb78fec85",
+      "artifactHash": "d4f19f11b28739449ef089c258480b26e4b9fc876367676d7eeccfa726bc208c",
       "documentation": {
         "documentation": {
           "description": {
@@ -288,7 +288,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.you-config",
-        "sourceHash": "c7a863e564778ec807fb0475de04a7dc8f1e67db1bf4a9344e9a51fdb78fec85",
+        "sourceHash": "d4f19f11b28739449ef089c258480b26e4b9fc876367676d7eeccfa726bc208c",
         "visibility": "public"
       },
       "family": "config",
@@ -312,5 +312,5 @@
   "formatVersion": "1.0.0",
   "packageId": "you-agent-factory.api",
   "packageVersion": "0.0.0",
-  "sourceCommit": "cb22e59a990ba90bc7ef4daca6b7001eacfe0b9e"
+  "sourceCommit": "f2b2f856ca78fe7cb20829b54c77a3617078d7d0"
 }
