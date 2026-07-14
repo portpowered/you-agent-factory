@@ -39,7 +39,7 @@ func (b *factorySessionSSEDeadlineBody) SetReadDeadline(deadline time.Time) erro
 	return nil
 }
 
-func TestTryReadNextSSEFrame_ParsesCommentDataAndEventFrames(t *testing.T) {
+func TestTryReadNextSSEFrame_ParsesCommentFrame(t *testing.T) {
 	t.Parallel()
 
 	commentReader := bufio.NewReader(strings.NewReader(": heartbeat\n\n"))
@@ -50,6 +50,10 @@ func TestTryReadNextSSEFrame_ParsesCommentDataAndEventFrames(t *testing.T) {
 	if commentFrame.kind != factorySessionSSEFrameComment || commentFrame.comment != "heartbeat" {
 		t.Fatalf("comment frame = %#v, want heartbeat comment", commentFrame)
 	}
+}
+
+func TestTryReadNextSSEFrame_ParsesEventAndDataFrames(t *testing.T) {
+	t.Parallel()
 
 	eventReader := bufio.NewReader(strings.NewReader("event: ping\n\n"))
 	eventFrame, ok, err := tryReadNextSSEFrame(eventReader)
