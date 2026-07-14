@@ -1,3 +1,4 @@
+cmd/climanifestgen/manifest_fixture_test.go: unreachable func: writeMinimalProductionManifest
 pkg/runtimehost/factory_runtime_state.go: unreachable func: Host.currentRuntimeSubmitter
 pkg/runtimehost/factory_runtime_state.go: unreachable func: markModelExecutionLoadFinished
 pkg/runtimehost/factory_runtime_state.go: unreachable func: markModelExecutionLoadRequested
@@ -10,5 +11,3 @@ pkg/runtimehost/runtime_sessions.go: unreachable func: Host.inferenceProgressPub
 pkg/runtimehost/runtime_sessions.go: unreachable func: Host.openFactorySession
 pkg/runtimehost/runtime_sessions.go: unreachable func: Host.sessionResponseStream
 pkg/runtimehost/runtime_sessions.go: unreachable func: Host.startBackgroundSession
-pkg/transports/cli/root_work.go: unreachable func: NewLegacyWorkFamilyCommand
-pkg/transports/cli/root_work.go: unreachable func: NewLegacyWorkFamilyRootForParity
