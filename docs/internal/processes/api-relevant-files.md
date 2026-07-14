@@ -89,7 +89,8 @@ Use this map when changing the public REST contract.
   operation or schema path instead of returning a guessed classification.
 - Focused fixtures live under
   `internal/contractopenapidiff/testdata/`; prove end-to-end outcomes in
-  `internal/contractopenapidiff/compare_test.go` and include the package in
+  `internal/contractopenapidiff/compare_test.go` and the consolidated matrix in
+  `internal/contractopenapidiff/fixture_matrix_test.go`; include the package in
   `make contracts-smoke`.
 
 ## Compatibility Alias Inventory
