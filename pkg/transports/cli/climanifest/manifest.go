@@ -9,15 +9,17 @@ type Manifest struct {
 
 // Command is one §4.3 command record from the production manifest.
 type Command struct {
-	ID            string        `json:"id"`
-	Name          string        `json:"name"`
-	Path          string        `json:"path"`
-	Aliases       []string      `json:"aliases"`
-	GroupID       string        `json:"groupId,omitempty"`
-	Documentation Documentation `json:"documentation"`
-	Visibility    string        `json:"visibility"`
-	Runnable      bool          `json:"runnable"`
-	Usage         Usage         `json:"usage"`
+	ID            string              `json:"id"`
+	Name          string              `json:"name"`
+	Path          string              `json:"path"`
+	Aliases       []string            `json:"aliases"`
+	GroupID       string              `json:"groupId,omitempty"`
+	Documentation Documentation       `json:"documentation"`
+	Visibility    string              `json:"visibility"`
+	Runnable      bool                `json:"runnable"`
+	Usage         Usage               `json:"usage"`
+	Arguments     map[string]Argument `json:"arguments,omitempty"`
+	Flags         map[string]Flag     `json:"flags,omitempty"`
 }
 
 // Documentation carries shared documentation-schema fields used for help parity.
