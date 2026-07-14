@@ -14,8 +14,12 @@ var representativeFamilyJSON []byte
 // RepresentativeFamilyManifest returns generated §4.3 metadata for the
 // representative root/session-show command family.
 func RepresentativeFamilyManifest() (climanifest.Manifest, error) {
+	return parseRepresentativeFamilyManifest(representativeFamilyJSON)
+}
+
+func parseRepresentativeFamilyManifest(payload []byte) (climanifest.Manifest, error) {
 	var manifest climanifest.Manifest
-	if err := json.Unmarshal(representativeFamilyJSON, &manifest); err != nil {
+	if err := json.Unmarshal(payload, &manifest); err != nil {
 		return climanifest.Manifest{}, fmt.Errorf("decode generated representative-family metadata: %w", err)
 	}
 	if manifest.RootPath == "" {

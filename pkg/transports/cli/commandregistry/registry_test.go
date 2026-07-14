@@ -46,3 +46,36 @@ func TestRegistry_AttachRunESetsHandwrittenHandler(t *testing.T) {
 		t.Fatalf("RunE() error = %v, want %v", err, wantErr)
 	}
 }
+
+func TestRegistry_RejectsNilRegistryOperations(t *testing.T) {
+	var registry *commandregistry.Registry
+	if err := registry.Register("you", noopRegistryRunE); err == nil {
+		t.Fatal("Register() on nil registry = nil, want error")
+	}
+	if _, err := registry.Lookup("you"); err == nil {
+		t.Fatal("Lookup() on nil registry = nil, want error")
+	}
+	if err := registry.AttachRunE(&cobra.Command{}, "you"); err == nil {
+		t.Fatal("AttachRunE() on nil registry = nil, want error")
+	}
+}
+
+func TestRegistry_RegisterRejectsInvalidInput(t *testing.T) {
+	registry := commandregistry.NewRegistry()
+	handler := noopRegistryRunE
+	if err := registry.Register("", handler); err == nil {
+		t.Fatal("Register() empty command ID = nil, want error")
+	}
+	if err := registry.Register("you.session.show", nil); err == nil {
+		t.Fatal("Register() nil handler = nil, want error")
+	}
+}
+
+func TestRegistry_AttachRunERejectsNilCommand(t *testing.T) {
+	registry := commandregistry.NewRegistry()
+	if err := registry.AttachRunE(nil, "you.session.show"); err == nil {
+		t.Fatal("AttachRunE() nil command = nil, want error")
+	}
+}
+
+func noopRegistryRunE(cmd *cobra.Command, args []string) error { return nil }

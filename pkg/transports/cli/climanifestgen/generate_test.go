@@ -160,3 +160,64 @@ func TestProductionRepresentativeFamilyArtifactsMatchGenerator(t *testing.T) {
 		t.Fatal("representative family artifact is empty")
 	}
 }
+
+func TestExtractRepresentativeFamilyRejectsEmptyManifest(t *testing.T) {
+	if _, err := climanifestgen.ExtractRepresentativeFamily(climanifest.Manifest{}); err == nil {
+		t.Fatal("expected empty manifest rejection")
+	}
+}
+
+func TestCheckTreatsCRLFArtifactsAsCurrent(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	root := t.TempDir()
+	manifestSource := filepath.Join(repoRoot, climanifest.ProductionManifestPath)
+	manifestTarget := filepath.Join(root, climanifest.ProductionManifestPath)
+	if err := copyFile(manifestSource, manifestTarget); err != nil {
+		t.Fatalf("copy production manifest: %v", err)
+	}
+	if err := climanifestgen.Generate(root); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	jsonTarget := filepath.Join(root, filepath.FromSlash(climanifestgen.RepresentativeFamilyJSONPath))
+	payload, err := os.ReadFile(jsonTarget)
+	if err != nil {
+		t.Fatalf("read generated json: %v", err)
+	}
+	if err := os.WriteFile(jsonTarget, bytes.ReplaceAll(payload, []byte("\n"), []byte("\r\n")), 0o644); err != nil {
+		t.Fatalf("write CRLF artifact: %v", err)
+	}
+
+	drift, err := climanifestgen.Check(root)
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if !drift.Empty() {
+		t.Fatalf("CRLF artifacts drift = %#v, want current", drift)
+	}
+}
+
+func TestCheckDetectsMissingRepresentativeFamilyArtifacts(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	root := t.TempDir()
+	manifestSource := filepath.Join(repoRoot, climanifest.ProductionManifestPath)
+	manifestTarget := filepath.Join(root, climanifest.ProductionManifestPath)
+	if err := copyFile(manifestSource, manifestTarget); err != nil {
+		t.Fatalf("copy production manifest: %v", err)
+	}
+	if err := climanifestgen.Generate(root); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	jsonTarget := filepath.Join(root, filepath.FromSlash(climanifestgen.RepresentativeFamilyJSONPath))
+	if err := os.Remove(jsonTarget); err != nil {
+		t.Fatalf("remove generated json: %v", err)
+	}
+
+	drift, err := climanifestgen.Check(root)
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if drift.Empty() || len(drift.Missing) == 0 {
+		t.Fatalf("missing drift = %#v, want missing generated artifacts", drift)
+	}
+}

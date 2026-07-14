@@ -36,3 +36,9 @@ func TestRepresentativeFamilyCommandIDsGenMatchesGeneratorList(t *testing.T) {
 		}
 	}
 }
+
+func TestCommandByIDRejectsUnknownRepresentativeFamilyID(t *testing.T) {
+	if _, err := generated.CommandByID("you.session.list"); err == nil {
+		t.Fatal("CommandByID(you.session.list) = nil, want error")
+	}
+}

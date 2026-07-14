@@ -89,6 +89,41 @@ func TestSessionShowRunEWritesDiagnosticsToConfiguredWriter(t *testing.T) {
 	}
 }
 
+func TestNewRepresentativeRegistryRejectsMissingHandlers(t *testing.T) {
+	if _, err := commandregistry.NewRepresentativeRegistry(commandregistry.RepresentativeHandlers{
+		SessionShowRunE: noopRunE,
+	}); err == nil {
+		t.Fatal("NewRepresentativeRegistry() missing root handler = nil, want error")
+	}
+	if _, err := commandregistry.NewRepresentativeRegistry(commandregistry.RepresentativeHandlers{
+		RootRunE: noopRunE,
+	}); err == nil {
+		t.Fatal("NewRepresentativeRegistry() missing session show handler = nil, want error")
+	}
+}
+
+func TestSessionShowRunEMapsVerboseAndDebugBindings(t *testing.T) {
+	verbose := true
+	debug := true
+	runE := commandregistry.SessionShowRunE(commandregistry.SessionShowBinding{
+		Verbose: func() bool { return verbose },
+		Debug:   &debug,
+		ShowSession: func(cfg sessioncli.ShowConfig) error {
+			if !cfg.Verbose {
+				t.Fatal("expected verbose binding")
+			}
+			if !cfg.Debug {
+				t.Fatal("expected debug binding")
+			}
+			return nil
+		},
+	})
+	cmd := &cobra.Command{Use: "show"}
+	if err := runE(cmd, nil); err != nil {
+		t.Fatalf("RunE() error = %v", err)
+	}
+}
+
 func stringPtr(value string) *string {
 	return &value
 }
