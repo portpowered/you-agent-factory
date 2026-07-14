@@ -206,13 +206,33 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `pkg/transports/cli/climanifestparity` (`CompareDeclaredHandler`,
   `CompareHandlerOpenAPIBinding`, `OpenAPIOperationBinding`, `CompareLiveExitCodes`,
   `CompareBaselineSideEffects`, `CompareBaselineConstraints`, and
-  `TestProductionCLIRootSessionFamily_NoGeneratorCutover`). Approved execution metadata
+  `TestProductionCLIRootSessionFamily_RepresentativeCutover`). Approved execution metadata
   for side-effects/constraints is loaded from
   `contracts/testdata/baseline/cli-command-execution.json`. Handler/OpenAPI binding for
   `you.session.show` asserts `operationId` `getFactorySession` maps to
   `GET /factory-sessions/{session_id}` in `api/openapi.yaml` and matches live
-  `session.Show` JSON transport; constructor/generator cutover remains deferred to
-  B10-CLI-GENERATOR.
+  `session.Show` JSON transport. Representative-family metadata generation lives in
+  `pkg/transports/cli/climanifestgen` (`Generate`, `Check`, `ExtractRepresentativeFamily`)
+  with `cmd/climanifestgen` and committed artifacts under
+  `pkg/transports/cli/generated` (`RepresentativeFamilyManifest`, embedded
+  `representative_family.json`). Handwritten representative-family handlers are
+  registered by stable command ID in `pkg/transports/cli/commandregistry`
+  (`NewRepresentativeRegistry`, `SessionShowRunE`, `AttachRunE`,
+  `VerifyRepresentativeRunnableCoverage`) and production wiring helper
+  `newRepresentativeHandlerRegistry` in `pkg/transports/cli/root_work.go`.
+  The generated representative-family constructor lives in
+  `pkg/transports/cli/climanifestcobra` (`NewRepresentativeFamilyCommand`,
+  `NewRepresentativeFamilyComponents`, `NewRepresentativeFamilyCommandFromManifest`)
+  and builds only `you` → `you session` → `you session show` from embedded generated
+  metadata plus registry-attached handwritten handlers. Production root cutover is
+  controlled by `useGeneratedRepresentativeFamily` in `pkg/transports/cli/root_work.go`
+  (`newRootCommandWithGeneratedRepresentativeFamily` with
+  `newLegacyRootCommandWithOptions` rollback). Generated-vs-legacy parity for the
+  representative family lives in `pkg/transports/cli/climanifestparity`
+  (`CompareConstructorIdentityParity`, `CompareConstructorHelpParity`,
+  `CompareConstructorParseParity`, `CompareConstructorCompletionInventoryParity`,
+  `TestGeneratedVsLegacyParityMatrix_RepresentativeFamily`) with isolated legacy
+  construction via `cli.NewLegacyRepresentativeFamilyCommand`.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/transports/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before

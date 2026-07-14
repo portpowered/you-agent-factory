@@ -9,10 +9,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
-func TestProductionCLIRootSessionFamily_NoGeneratorCutover(t *testing.T) {
+func TestProductionCLIRootSessionFamily_RepresentativeCutover(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	assertHandwrittenRootSessionConstructors(t, repoRoot)
-	assertNoForbiddenCLICutoverPaths(t, repoRoot)
+	assertGeneratorInfrastructurePresent(t, repoRoot)
+	assertProductionRepresentativeCutoverWired(t, repoRoot)
 	assertNoForbiddenCLIGeneratorMarkers(t, repoRoot)
 }
 
@@ -33,22 +34,46 @@ func assertHandwrittenRootSessionConstructors(t *testing.T, repoRoot string) {
 			}
 		case "root_work.go":
 			if !strings.Contains(text, "func newSessionShowCommand(") {
-				t.Fatalf("%s must keep handwritten newSessionShowCommand constructor", path)
+				t.Fatalf("%s must keep handwritten newSessionShowCommand constructor for rollback", path)
+			}
+			if !strings.Contains(text, "func newLegacyRootCommandWithOptions(") {
+				t.Fatalf("%s must keep legacy rollback constructor", path)
 			}
 		}
 	}
 }
 
-func assertNoForbiddenCLICutoverPaths(t *testing.T, repoRoot string) {
+func assertGeneratorInfrastructurePresent(t *testing.T, repoRoot string) {
 	t.Helper()
-	forbiddenPaths := []string{
-		filepath.Join(repoRoot, "pkg", "transports", "cli", "generated"),
+	requiredPaths := []string{
 		filepath.Join(repoRoot, "pkg", "transports", "cli", "climanifestgen"),
+		filepath.Join(repoRoot, "pkg", "transports", "cli", "climanifestcobra"),
+		filepath.Join(repoRoot, "pkg", "transports", "cli", "generated"),
 		filepath.Join(repoRoot, "pkg", "transports", "cli", "commandregistry"),
 	}
-	for _, path := range forbiddenPaths {
-		if _, err := os.Stat(path); err == nil {
-			t.Fatalf("generated CLI cutover path must not exist yet: %s", path)
+	for _, path := range requiredPaths {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("generator infrastructure path must exist: %s", path)
+		}
+	}
+}
+
+func assertProductionRepresentativeCutoverWired(t *testing.T, repoRoot string) {
+	t.Helper()
+	rootWorkGo := filepath.Join(repoRoot, "pkg", "transports", "cli", "root_work.go")
+	contents, err := os.ReadFile(rootWorkGo)
+	if err != nil {
+		t.Fatalf("read %s: %v", rootWorkGo, err)
+	}
+	text := string(contents)
+	requiredMarkers := []string{
+		"useGeneratedRepresentativeFamily = true",
+		"newRootCommandWithGeneratedRepresentativeFamily",
+		"climanifestcobra.NewRepresentativeFamilyComponents",
+	}
+	for _, marker := range requiredMarkers {
+		if !strings.Contains(text, marker) {
+			t.Fatalf("%s must wire production representative-family cutover via %q", rootWorkGo, marker)
 		}
 	}
 }
@@ -68,7 +93,7 @@ func assertNoForbiddenCLIGeneratorMarkers(t *testing.T, repoRoot string) {
 		}
 		if entry.IsDir() {
 			switch entry.Name() {
-			case "climanifest", "climanifestparity", "cliinputs", "commandidentity", "baseline":
+			case "climanifest", "climanifestparity", "climanifestgen", "climanifestcobra", "cliinputs", "commandidentity", "commandregistry", "baseline", "generated":
 				return filepath.SkipDir
 			}
 			return nil
