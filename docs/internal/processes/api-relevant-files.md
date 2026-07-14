@@ -4,21 +4,8 @@ Use this map when changing the public REST contract.
 
 - Work-list filtering, ordering, and validation policy belongs in `pkg/work/query`; `pkg/api/handlers_work_read.go` maps generated `ListWorkBySessionIdParams` and `Work` values into that domain projection, while `pkg/cli/work/list.go` maps normalized query options into URL parameters. Keep generated OpenAPI types and URL encoding at those transport boundaries, and prove policy with pure query tests plus route-level API and CLI request tests.
 
-## Raw contract npm package
+## Package staging artifacts
 
-- `packages/api/package.json` owns the public raw-artifact npm subpaths for
-  `@you-agent-factory/api`; keep the package data-only with no JavaScript entry
-  point, executable, dependency surface, or runtime integration.
-- `packages/api/README.md` documents supported resolution and the data-only
-  consumer contract. Authored contract inputs and `api/openapi.yaml` remain
-  canonical; `packages/api/generated/` is a generated publication projection,
-  not an authoring source.
-- `scripts/api-package-contract.test.mjs` verifies the exact export map and
-  absence of executable or runtime dependency metadata.
-- `packages/api/package.json#files` is the positive npm publication allowlist;
-  `scripts/api-package-pack.mjs` verifies the complete real tarball inventory,
-  and `make api-package-pack-smoke` covers deterministic closure and forbidden
-  leakage diagnostics without changing package staging.
 - `internal/contractstaging` owns joined generation, the reviewed raw
   source-to-package projection map, the Factory JSON Schema projection from the
   canonical bundled OpenAPI `Factory` component graph, and the package contract
@@ -60,14 +47,6 @@ Use this map when changing the public REST contract.
   mutate authored OpenAPI or generated Go/TypeScript clients; `make
   contracts-smoke` runs the same generate/check loop twice at the Makefile
   layer.
-- `scripts/api-package-consumer.mjs` installs the real tarball offline into an
-  isolated temporary consumer and resolves concrete named exports plus every
-  packaged wildcard match from that installation. Keep resolution rooted in
-  the consumer, require targets to remain inside the installed package, and
-  read JSON/YAML as data rather than importing package artifacts as code. The
-  consumer smoke also verifies manifest metadata/hashes and configuration
-  schema semantics so parseable inventory fixtures cannot masquerade as the
-  promised artifact kinds.
 
 ## REST operation identity inventory
 
