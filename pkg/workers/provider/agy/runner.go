@@ -2,7 +2,6 @@ package agy
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
@@ -68,7 +67,7 @@ func (r PTYRunner) Run(
 	}
 	if result.TimedOut {
 		commandResult.ExitCode = 124
-		return commandResult, fmt.Errorf("agypty: session timed out")
+		return commandResult, fmt.Errorf("%w", agypty.ErrSessionTimedOut)
 	}
 	if len(commandResult.Stdout) > 0 {
 		if observeErr := observe(adapter.Observation{Stream: adapter.OutputStreamStdout, Chunk: commandResult.Stdout}); observeErr != nil {
@@ -76,7 +75,7 @@ func (r PTYRunner) Run(
 		}
 	}
 	if commandResult.ExitCode != 0 {
-		return commandResult, errors.New("agy execution failed")
+		return commandResult, fmt.Errorf("%w: exit code %d", agypty.ErrNonzeroExit, commandResult.ExitCode)
 	}
 	return commandResult, err
 }

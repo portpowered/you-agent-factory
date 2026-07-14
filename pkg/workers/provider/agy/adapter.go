@@ -144,7 +144,7 @@ func (a *Adapter) resolveExecutable() (string, error) {
 		return executable, nil
 	}
 	if os.IsNotExist(err) {
-		return "", fmt.Errorf("agy: executable not found: %s", executable)
+		return "", fmt.Errorf("%w: %s", ErrMissingExecutable, executable)
 	}
 	return "", fmt.Errorf("agy: resolve executable: %w", err)
 }

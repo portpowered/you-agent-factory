@@ -410,6 +410,12 @@ func (p *ScriptWrapProvider) executeAgy(
 		return interfaces.InferenceResponse{}, providerErr
 	}
 	if executeErr != nil {
+		if orchestrated := agyadapter.ClassifyOrchestrationError(executeErr); orchestrated.Failure != nil {
+			providerErr := providerErrorFromAdapterFailure(orchestrated.Failure, executeErr, diagnostics)
+			logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result.Command, duration)...)
+			p.publishAgyFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
+			return interfaces.InferenceResponse{}, providerErr
+		}
 		providerErr := normalizeProviderExecutionError(req.ModelProvider, result.Command, executeErr, result.Response.ProviderSession, diagnostics)
 		p.publishAgyFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
 		return interfaces.InferenceResponse{}, providerErr
