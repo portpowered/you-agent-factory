@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -124,7 +124,6 @@ func TestProviderErrorSmoke_CodexAndTimeoutFailuresNormalizeThroughWorkerPool(t 
 func assertCodexCapacityFailureNormalizesThroughWorkerPool(t *testing.T, capacityEntry workers.ProviderErrorCorpusEntry) {
 	t.Helper()
 
-	conciseError := providerErrorCorpusLastErrorLine(t, capacityEntry)
 	smokeHarness := testutil.NewProviderErrorSmokeHarness(
 		t,
 		support.LegacyFixtureDir(t, "worktree_passthrough"),
@@ -156,7 +155,10 @@ func assertCodexCapacityFailureNormalizesThroughWorkerPool(t *testing.T, capacit
 	if dispatch.FailureMetadata.Type != capacityEntry.ExpectedType {
 		t.Fatalf("failure metadata type = %s, want %s", dispatch.FailureMetadata.Type, capacityEntry.ExpectedType)
 	}
-	assertContainsAll(t, dispatch.Reason, []string{"provider error: " + string(capacityEntry.ExpectedType), conciseError})
+	assertContainsAll(t, dispatch.Reason, []string{
+		"provider error: " + string(capacityEntry.ExpectedType),
+		"Codex is temporarily unavailable due to usage or capacity limits.",
+	})
 	for _, reject := range capacityEntry.RejectMessageContains {
 		if strings.Contains(dispatch.Reason, reject) {
 			t.Fatalf("dispatch reason retained rejected cleanup-noise substring %q: %q", reject, dispatch.Reason)
@@ -167,7 +169,6 @@ func assertCodexCapacityFailureNormalizesThroughWorkerPool(t *testing.T, capacit
 func assertCodexTimeoutFailureNormalizesThroughWorkerPool(t *testing.T, timeoutEntry workers.ProviderErrorCorpusEntry) {
 	t.Helper()
 
-	conciseError := providerErrorCorpusLastErrorLine(t, timeoutEntry)
 	smokeHarness := testutil.NewProviderErrorSmokeHarness(
 		t,
 		support.LegacyFixtureDir(t, "worktree_passthrough"),
@@ -195,7 +196,7 @@ func assertCodexTimeoutFailureNormalizesThroughWorkerPool(t *testing.T, timeoutE
 	if dispatch.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
 		t.Fatalf("failure metadata family = %s, want %s", dispatch.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
 	}
-	assertContainsAll(t, dispatch.Reason, []string{"provider error: timeout", conciseError})
+	assertContainsAll(t, dispatch.Reason, []string{"provider error: timeout", "Codex request timed out."})
 	for _, reject := range timeoutEntry.RejectMessageContains {
 		if strings.Contains(dispatch.Reason, reject) {
 			t.Fatalf("dispatch reason retained rejected cleanup-noise substring %q: %q", reject, dispatch.Reason)
@@ -287,7 +288,10 @@ func TestProviderErrorSmoke_CodexWindowsExitCode4294967295RequeuesAndSurfacesRet
 	assertRetryableInternalServerRequeueOutcome(t, smokeHarness.ProviderRunner(), outcome, work)
 
 	dispatch := outcome.Dispatches[0]
-	assertContainsAll(t, dispatch.Reason, []string{"provider error: internal_server_error", "4294967295"})
+	assertContainsAll(t, dispatch.Reason, []string{
+		"provider error: internal_server_error",
+		"Codex encountered a temporary server error.",
+	})
 	assertNoAuthRemediationText(t, dispatch.Reason)
 
 	events, err := h.GetFactoryEvents(context.Background())
@@ -318,7 +322,7 @@ func TestProviderErrorSmoke_CodexWindowsExitCode4294967295RequeuesAndSurfacesRet
 	assertContainsAll(
 		t,
 		completion.FailureDetail.Message,
-		[]string{"internal_server_error", "4294967295"},
+		[]string{"internal_server_error", "Codex encountered a temporary server error."},
 	)
 	assertNoAuthRemediationText(t, completion.FailureDetail.Message)
 }

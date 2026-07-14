@@ -1,23 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { FactoryEvent } from "../../../api/events";
-import {
-  recordSessionPersistenceInvalidation,
-  silentReplayRecoveryDiagnostic,
-} from "../public";
+import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import {
   clearTimelineCheckpoint,
   type FactoryTimelineCheckpoint,
+  normalizeStreamDerivedCacheIdentity,
   persistTimelineCheckpoint,
   readFactoryTimelineDebugOptions,
   reconnectCursorFromCheckpoint,
   type TimelineCheckpointStreamIdentity,
   useFactoryTimelineStore,
 } from "../../timeline/public";
-import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
 import { useDashboardSession } from "../session/dashboard-session-provider";
-import { useDashboardCheckpointPreflight } from "./preflight/use-dashboard-checkpoint-preflight";
 import { useFactoryEventStream } from "./event-stream/useFactoryEventStream";
+import { useDashboardCheckpointPreflight } from "./preflight/use-dashboard-checkpoint-preflight";
 import { useDashboardSessionLifecycle } from "./useDashboardSessionLifecycle";
 import { useDashboardTimelineMemoryDebug } from "./useDashboardTimelineMemoryDebug";
 import { useDashboardWorldView } from "./useDashboardWorldView";
@@ -27,7 +24,37 @@ export interface UseDashboardSnapshotOptions {
   refreshToken?: number;
 }
 
+export interface DashboardSnapshotResult {
+  error: Error | null;
+  isInitialLoading: boolean;
+  preflightRecovery: ReturnType<
+    typeof useDashboardCheckpointPreflight
+  >["preflightRecovery"];
+  preflightStatus: DashboardPreflightStatus;
+  snapshot: ReturnType<typeof useDashboardWorldView>["snapshot"] | null;
+  streamState: ReturnType<typeof useDashboardWorldView>["streamState"];
+  workOutcomeStreamIdentity?: TimelineCheckpointStreamIdentity | null;
+}
+
 type DashboardPreflightStatus = "loading" | "non-recoverable" | "success";
+
+interface PendingTimelineCheckpoint {
+  checkpoint: FactoryTimelineCheckpoint;
+  indexedDB: IDBFactory;
+  streamIdentity: TimelineCheckpointStreamIdentity;
+  streamKey: string;
+}
+
+function timelineCheckpointStreamKey(
+  identity: TimelineCheckpointStreamIdentity,
+): string {
+  return JSON.stringify([
+    identity.backendScopeID,
+    identity.factorySessionID,
+    identity.logicalSessionKeyID,
+    identity.streamGenerationID,
+  ]);
+}
 
 function usePersistedTimelineCheckpoint({
   checkpoint,
@@ -40,42 +67,154 @@ function usePersistedTimelineCheckpoint({
   streamIdentity: TimelineCheckpointStreamIdentity | null;
   syncIdentity?: FactoryTimelineCheckpoint["syncIdentity"];
 }) {
+  const pendingCheckpointRef = useRef<PendingTimelineCheckpoint | null>(null);
+  const persistHandleRef = useRef<number | null>(null);
+  const backendScopeID = streamIdentity?.backendScopeID;
+  const factorySessionID = streamIdentity?.factorySessionID;
+  const logicalSessionKeyID = streamIdentity?.logicalSessionKeyID;
+  const streamGenerationID = streamIdentity?.streamGenerationID;
+  const normalizedStreamIdentity = useMemo(
+    () =>
+      normalizeStreamDerivedCacheIdentity({
+        backendScopeID,
+        factorySessionID,
+        logicalSessionKeyID,
+        streamGenerationID,
+      }),
+    [backendScopeID, factorySessionID, logicalSessionKeyID, streamGenerationID],
+  );
+  const streamKey = normalizedStreamIdentity
+    ? timelineCheckpointStreamKey(normalizedStreamIdentity)
+    : null;
+
+  const detachPendingCheckpoint = useCallback(
+    (expectedStreamKey?: string): PendingTimelineCheckpoint | null => {
+      const pending = pendingCheckpointRef.current;
+      if (
+        !pending ||
+        (expectedStreamKey && pending.streamKey !== expectedStreamKey)
+      ) {
+        return null;
+      }
+      pendingCheckpointRef.current = null;
+      if (persistHandleRef.current !== null) {
+        window.clearTimeout(persistHandleRef.current);
+        persistHandleRef.current = null;
+      }
+      return pending;
+    },
+    [],
+  );
+
+  const flushPendingCheckpoint = useCallback(
+    (expectedStreamKey?: string) => {
+      const pending = detachPendingCheckpoint(expectedStreamKey);
+      if (!pending) {
+        return;
+      }
+      void persistTimelineCheckpoint(
+        pending.indexedDB,
+        pending.checkpoint,
+        pending.streamIdentity,
+      );
+    },
+    [detachPendingCheckpoint],
+  );
+
   useEffect(() => {
-    if (typeof window === "undefined" || checkpointsDisabled) {
+    if (
+      typeof window === "undefined" ||
+      checkpointsDisabled ||
+      !checkpoint ||
+      !normalizedStreamIdentity ||
+      !streamKey
+    ) {
+      detachPendingCheckpoint();
       return;
     }
-    const persistHandle = window.setTimeout(() => {
-      void persistTimelineCheckpoint(
-        window.indexedDB,
-        checkpoint
-          ? {
-              ...checkpoint,
-              ...(syncIdentity ? { syncIdentity } : {}),
-            }
-          : undefined,
-        streamIdentity,
-      );
+
+    detachPendingCheckpoint();
+    const pending = {
+      checkpoint: {
+        ...checkpoint,
+        ...(syncIdentity ? { syncIdentity } : {}),
+      },
+      indexedDB: window.indexedDB,
+      streamIdentity: normalizedStreamIdentity,
+      streamKey,
+    } satisfies PendingTimelineCheckpoint;
+    pendingCheckpointRef.current = pending;
+    persistHandleRef.current = window.setTimeout(() => {
+      if (pendingCheckpointRef.current !== pending) {
+        return;
+      }
+      flushPendingCheckpoint(pending.streamKey);
     }, 750);
+  }, [
+    checkpoint,
+    checkpointsDisabled,
+    detachPendingCheckpoint,
+    flushPendingCheckpoint,
+    normalizedStreamIdentity,
+    streamKey,
+    syncIdentity,
+  ]);
+
+  useEffect(() => {
+    if (!streamKey) {
+      return;
+    }
     return () => {
-      window.clearTimeout(persistHandle);
+      flushPendingCheckpoint(streamKey);
     };
-  }, [checkpoint, checkpointsDisabled, streamIdentity, syncIdentity]);
+  }, [flushPendingCheckpoint, streamKey]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof document === "undefined") {
+      return;
+    }
+
+    const handlePageHide = () => {
+      flushPendingCheckpoint();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        flushPendingCheckpoint();
+      }
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      flushPendingCheckpoint();
+    };
+  }, [flushPendingCheckpoint]);
 }
 
 // biome-ignore lint/complexity/noExcessiveLinesPerFunction: snapshot composition keeps preflight, checkpoint hydration, and stream wiring in one hook.
 export function useDashboardSnapshot({
   locale,
   refreshToken = 0,
-}: UseDashboardSnapshotOptions = {}) {
+}: UseDashboardSnapshotOptions = {}): DashboardSnapshotResult {
+  const activateTimelineEntry = useFactoryTimelineStore(
+    (state) => state.activateEntry,
+  );
   const appendEvents = useFactoryTimelineStore((state) => state.appendEvents);
+  const appendEventsForEntry = useFactoryTimelineStore(
+    (state) => state.appendEventsForEntry,
+  );
   const currentReplayCheckpoint = useFactoryTimelineStore(
     (state) => state.currentReplayCheckpoint,
   );
   const eventCount = useFactoryTimelineStore((state) => state.events.length);
-  const restoreCheckpoint = useFactoryTimelineStore(
-    (state) => state.restoreCheckpoint,
+  const restoreCheckpointForEntry = useFactoryTimelineStore(
+    (state) => state.restoreCheckpointForEntry,
   );
-  const resetTimeline = useFactoryTimelineStore((state) => state.reset);
+  const resetTimelineEntry = useFactoryTimelineStore(
+    (state) => state.resetEntry,
+  );
   const { error, isInitialLoading, snapshot, streamState } =
     useDashboardWorldView();
   const { isPaused, rawSessionID } = useDashboardSession();
@@ -87,14 +226,10 @@ export function useDashboardSnapshot({
   const reconnectCursorInvalidatedRef = useRef(false);
   const [reconnectCursorRevision, setReconnectCursorRevision] = useState(0);
   const defaultRuntimeSessionIDRef = useRef<string | null>(null);
-  const lastPersistedCheckpointRef =
-    useRef<FactoryTimelineCheckpoint | null>(null);
+  const lastPersistedCheckpointRef = useRef<FactoryTimelineCheckpoint | null>(
+    null,
+  );
   const lastSessionIDRef = useRef<string | null>(null);
-  const queuedAppendRef =
-    useRef<(events: FactoryEvent[]) => void>(appendEvents);
-
-  queuedAppendRef.current = appendEvents;
-
   useDashboardSessionLifecycle({
     locale,
     refreshToken,
@@ -103,6 +238,7 @@ export function useDashboardSnapshot({
 
   const {
     checkpointHydrated,
+    cursorFreeReplayCorrelationToken,
     initialReconnectCursor: preflightReconnectCursor,
     preflightError,
     preflightRecovery,
@@ -115,8 +251,14 @@ export function useDashboardSnapshot({
     checkpointsDisabled: debugOptions.disableTimelineCheckpoint,
     rawSessionID,
     refreshToken,
-    restoreCheckpoint,
+    restoreCheckpoint: restoreCheckpointForEntry,
   });
+
+  useEffect(() => {
+    if (streamIdentity) {
+      activateTimelineEntry(streamIdentity);
+    }
+  }, [activateTimelineEntry, streamIdentity]);
 
   const effectiveSessionID = resolvedSessionID ?? rawSessionID;
 
@@ -157,26 +299,21 @@ export function useDashboardSnapshot({
         ? undefined
         : (preflightReconnectCursor ??
           reconnectCursorFromCheckpoint(persistedCheckpoint)),
-    [persistedCheckpoint, preflightReconnectCursor, reconnectCursorRevision, refreshToken],
+    [
+      persistedCheckpoint,
+      preflightReconnectCursor,
+      reconnectCursorRevision,
+      refreshToken,
+    ],
   );
 
   const handleInvalidReconnectCursor = useCallback(() => {
     reconnectCursorInvalidatedRef.current = true;
-    if (streamIdentity && rawSessionID) {
-      recordSessionPersistenceInvalidation(
-        silentReplayRecoveryDiagnostic(
-          {
-            backendScopeID: streamIdentity.backendScopeID,
-            factorySessionID: streamIdentity.factorySessionID,
-            streamGenerationID: streamIdentity.streamGenerationID,
-          },
-          rawSessionID,
-        ),
-      );
+    if (streamIdentity) {
+      resetTimelineEntry(streamIdentity);
     }
-    resetTimeline();
     void clearTimelineCheckpoint(window.indexedDB, streamIdentity);
-  }, [rawSessionID, resetTimeline, streamIdentity]);
+  }, [resetTimelineEntry, streamIdentity]);
 
   const checkpointSyncIdentity = useMemo(() => {
     if (
@@ -206,13 +343,30 @@ export function useDashboardSnapshot({
     syncIdentity: checkpointSyncIdentity,
   });
 
-  const handleStreamEvent = useCallback((event: FactoryEvent) => {
-    queuedAppendRef.current([event]);
-  }, []);
+  const appendStreamEvents = useCallback(
+    (events: FactoryEvent[]) => {
+      if (streamIdentity) {
+        appendEventsForEntry(streamIdentity, events);
+        return;
+      }
+      if (debugOptions.disableTimelineCheckpoint) {
+        appendEvents(events);
+      }
+    },
+    [
+      appendEvents,
+      appendEventsForEntry,
+      debugOptions.disableTimelineCheckpoint,
+      streamIdentity,
+    ],
+  );
 
-  const handleStreamEvents = useCallback((events: FactoryEvent[]) => {
-    queuedAppendRef.current(events);
-  }, []);
+  const handleStreamEvent = useCallback(
+    (event: FactoryEvent) => {
+      appendStreamEvents([event]);
+    },
+    [appendStreamEvents],
+  );
 
   useFactoryEventStream({
     enabled:
@@ -222,9 +376,10 @@ export function useDashboardSnapshot({
       effectiveSessionID != null &&
       !isPaused,
     initialReconnectCursor,
+    initialCursorFreeReplayCorrelationToken: cursorFreeReplayCorrelationToken,
     locale,
     onEvent: handleStreamEvent,
-    onEvents: handleStreamEvents,
+    onEvents: appendStreamEvents,
     onInvalidReconnectCursor: handleInvalidReconnectCursor,
     refreshToken,
     sessionID: effectiveSessionID,
@@ -246,13 +401,12 @@ export function useDashboardSnapshot({
     () => ({
       error: preflightRecovery != null ? null : (preflightError ?? error),
       isInitialLoading:
-        preflightRecovery == null &&
-        preflightError == null &&
-        isInitialLoading,
+        preflightRecovery == null && preflightError == null && isInitialLoading,
       preflightRecovery,
       preflightStatus,
       snapshot: preflightRecovery ? null : snapshot,
       streamState,
+      workOutcomeStreamIdentity: streamIdentity,
     }),
     [
       error,
@@ -262,6 +416,7 @@ export function useDashboardSnapshot({
       preflightStatus,
       snapshot,
       streamState,
+      streamIdentity,
     ],
   );
 }

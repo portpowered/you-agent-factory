@@ -36,6 +36,10 @@ var builtInRunnerStatus = map[string]RunnerStatus{
 		Metadata:  mustBuiltInRunnerMetadata(interfaces.RunnerIDOpenCode),
 		Available: true,
 	},
+	interfaces.RunnerIDPi: {
+		Metadata:  mustBuiltInRunnerMetadata(interfaces.RunnerIDPi),
+		Available: true,
+	},
 }
 
 var lookPath = exec.LookPath
@@ -83,6 +87,8 @@ func builtInRunnerCommand(id string) string {
 		return string(interfaces.ModelProviderCursor)
 	case interfaces.RunnerIDOpenCode:
 		return string(interfaces.ModelProviderOpenCode)
+	case interfaces.RunnerIDPi:
+		return string(interfaces.ModelProviderPi)
 	default:
 		return ""
 	}

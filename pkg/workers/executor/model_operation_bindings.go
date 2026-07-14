@@ -2,7 +2,7 @@ package executor
 
 import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
+	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
 )
 
 func resolveModelOperationBindings(
@@ -10,5 +10,5 @@ func resolveModelOperationBindings(
 	workerDef *interfaces.WorkerConfig,
 	inputTokens []interfaces.Token,
 ) ([]interfaces.ResolvedModelOperationBinding, error) {
-	return invocations.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
+	return workerinference.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
 }

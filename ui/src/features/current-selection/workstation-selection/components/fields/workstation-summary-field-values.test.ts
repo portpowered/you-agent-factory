@@ -31,7 +31,7 @@ const readyEditableConfigurationState = {
     factoryRunnerName: null,
     prompt: "Review",
     runnerName: null,
-    runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+    runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode", "pi"],
     runnerSelectionSource: "default",
     resolvedRunnerSelection: {
       runnerId: "codex",

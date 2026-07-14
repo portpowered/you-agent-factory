@@ -17,11 +17,91 @@ interface ControlledRequest<T> {
   result: () => T;
 }
 
+interface ControlledTransaction {
+  commitActions: Array<() => void>;
+  transaction: IDBTransaction;
+}
+
+function createTransactionControls(pending: ControlledTransaction[]) {
+  function take(ordinal = 0): ControlledTransaction {
+    const controlled = pending[ordinal];
+    if (!controlled) throw new Error("no pending IndexedDB transaction");
+    pending.splice(ordinal, 1);
+    return controlled;
+  }
+
+  return {
+    abort(error?: Error, ordinal = 0): void {
+      const { transaction } = take(ordinal);
+      Object.defineProperty(transaction, "error", {
+        configurable: true,
+        value: error ?? null,
+      });
+      transaction.onabort?.({} as Event);
+    },
+    complete(ordinal = 0): void {
+      const controlled = take(ordinal);
+      for (const commit of controlled.commitActions) commit();
+      controlled.transaction.oncomplete?.({} as Event);
+    },
+    fail(error: Error, ordinal = 0): void {
+      const { transaction } = take(ordinal);
+      Object.defineProperty(transaction, "error", {
+        configurable: true,
+        value: error,
+      });
+      transaction.onerror?.({} as Event);
+    },
+  };
+}
+
+function createRequestControls(pending: ControlledRequest<unknown>[]) {
+  function take(
+    operation: ControlledIndexedDBOperation,
+    ordinal = 0,
+  ): ControlledRequest<unknown> {
+    const matchingIndexes = pending.flatMap((request, index) =>
+      request.operation === operation ? [index] : [],
+    );
+    const index = matchingIndexes[ordinal] ?? -1;
+    const controlled = pending[index];
+    if (index < 0 || !controlled) {
+      throw new Error(`no pending IndexedDB ${operation} request`);
+    }
+    pending.splice(index, 1);
+    return controlled;
+  }
+
+  return {
+    fail(operation: ControlledIndexedDBOperation, error: Error, ordinal = 0) {
+      const controlled = take(operation, ordinal);
+      Object.defineProperty(controlled.request, "error", {
+        configurable: true,
+        value: error,
+      });
+      controlled.request.onerror?.({} as Event);
+    },
+    succeed(operation: ControlledIndexedDBOperation, ordinal = 0): void {
+      const controlled = take(operation, ordinal);
+      if (!controlled.isAborted()) controlled.beforeSuccess?.();
+      Object.defineProperty(controlled.request, "result", {
+        configurable: true,
+        value: controlled.result(),
+      });
+      controlled.request.onsuccess?.({} as Event);
+    },
+  };
+}
+
 export function createControlledIndexedDBTestDouble<
   RecordType extends StoredRecord,
 >() {
   const records = new Map<string, RecordType>();
   const pending: ControlledRequest<unknown>[] = [];
+  const pendingTransactions: ControlledTransaction[] = [];
+  const requestControls = createRequestControls(pending);
+  const transactionControls = createTransactionControls(pendingTransactions);
+  let closedDatabaseCount = 0;
 
   function controlledRequest<T>(
     operation: ControlledIndexedDBOperation,
@@ -47,13 +127,20 @@ export function createControlledIndexedDBTestDouble<
   }
 
   const database = {
-    close: () => {},
+    close: () => {
+      closedDatabaseCount += 1;
+    },
     objectStoreNames: {
       contains: () => true,
     },
-    transaction: () => {
+    transaction: (_storeName: string, mode?: IDBTransactionMode) => {
       let aborted = false;
-      return {
+      const commitActions: Array<() => void> = [];
+      const transaction = {
+        error: null,
+        onabort: null,
+        oncomplete: null,
+        onerror: null,
         abort: () => {
           aborted = true;
         },
@@ -84,67 +171,41 @@ export function createControlledIndexedDBTestDouble<
               "put",
               () => value.storageKey ?? "",
               () => {
-                if (value.storageKey) {
-                  records.set(value.storageKey, value);
-                }
+                commitActions.push(() => {
+                  if (value.storageKey) {
+                    records.set(value.storageKey, value);
+                  }
+                });
               },
               () => aborted,
             ),
         }),
-      };
+      } as unknown as IDBTransaction;
+      if (mode === "readwrite") {
+        pendingTransactions.push({ commitActions, transaction });
+      }
+      return transaction;
     },
   };
 
-  function take(
-    operation: ControlledIndexedDBOperation,
-    ordinal = 0,
-  ): ControlledRequest<unknown> {
-    const matchingIndexes = pending.flatMap((request, index) =>
-      request.operation === operation ? [index] : [],
-    );
-    const index = matchingIndexes[ordinal] ?? -1;
-    const controlled = pending[index];
-    if (index < 0 || !controlled) {
-      throw new Error(`no pending IndexedDB ${operation} request`);
-    }
-    pending.splice(index, 1);
-    return controlled;
-  }
-
-  function succeed(operation: ControlledIndexedDBOperation, ordinal = 0): void {
-    const controlled = take(operation, ordinal);
-    if (!controlled.isAborted()) {
-      controlled.beforeSuccess?.();
-    }
-    Object.defineProperty(controlled.request, "result", {
-      configurable: true,
-      value: controlled.result(),
-    });
-    controlled.request.onsuccess?.({} as Event);
-  }
-
-  function fail(
-    operation: ControlledIndexedDBOperation,
-    error: Error,
-    ordinal = 0,
-  ): void {
-    const controlled = take(operation, ordinal);
-    Object.defineProperty(controlled.request, "error", {
-      configurable: true,
-      value: error,
-    });
-    controlled.request.onerror?.({} as Event);
-  }
+  const createIndexedDBContext = () =>
+    ({
+      open: () => controlledRequest("open", () => database),
+    }) as unknown as IDBFactory;
 
   return {
     controls: {
-      fail,
+      abortTransaction: transactionControls.abort,
+      closedDatabaseCount: () => closedDatabaseCount,
+      completeTransaction: transactionControls.complete,
+      fail: requestControls.fail,
+      failTransaction: transactionControls.fail,
       pendingOperations: () => pending.map(({ operation }) => operation),
-      succeed,
+      pendingTransactionCount: () => pendingTransactions.length,
+      succeed: requestControls.succeed,
     },
-    indexedDB: {
-      open: () => controlledRequest("open", () => database),
-    } as unknown as IDBFactory,
+    createIndexedDBContext,
+    indexedDB: createIndexedDBContext(),
     records,
   };
 }

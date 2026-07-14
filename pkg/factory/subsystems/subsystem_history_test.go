@@ -7,7 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 func TestHistorySubsystem_Execute_MergesHistoryFromDispatchConsumedTokens(t *testing.T) {
@@ -92,11 +92,13 @@ func TestHistorySubsystem_Execute_MergesHistoryFromDispatchConsumedTokens(t *tes
 func TestBuildHistory_MergesSharedLineageVisitCountsWithMaxNotSum(t *testing.T) {
 	consumed := []interfaces.Token{
 		{
+			Color: interfaces.TokenColor{WorkID: "task-1", WorkTypeID: "task"},
 			History: interfaces.TokenHistory{
 				TotalVisits: map[string]int{"process": 3, "review": 2},
 			},
 		},
 		{
+			Color: interfaces.TokenColor{WorkID: "review-1", WorkTypeID: "review", ParentID: "task-1"},
 			History: interfaces.TokenHistory{
 				TotalVisits: map[string]int{"process": 3, "review": 1},
 			},
@@ -106,7 +108,7 @@ func TestBuildHistory_MergesSharedLineageVisitCountsWithMaxNotSum(t *testing.T) 
 	history := buildHistory(consumed, &interfaces.WorkResult{
 		TransitionID: "review",
 		Outcome:      interfaces.OutcomeContinue,
-	})
+	}, "task-1")
 
 	if got := history.TotalVisits["process"]; got != 3 {
 		t.Fatalf("TotalVisits[process] = %d, want 3", got)
@@ -116,12 +118,77 @@ func TestBuildHistory_MergesSharedLineageVisitCountsWithMaxNotSum(t *testing.T) 
 	}
 }
 
+func TestBuildHistory_ExcludesDifferentWorkOnSharedTrace(t *testing.T) {
+	const sharedTrace = "batch-trace"
+	consumed := []interfaces.Token{
+		{
+			Color:   interfaces.TokenColor{WorkID: "task-a", WorkTypeID: "task", CurrentChainingTraceID: sharedTrace},
+			History: interfaces.TokenHistory{TotalVisits: map[string]int{"process": 1, "review": 0}},
+		},
+		{
+			Color:   interfaces.TokenColor{WorkID: "review-b", WorkTypeID: "review", ParentID: "task-b", CurrentChainingTraceID: sharedTrace},
+			History: interfaces.TokenHistory{TotalVisits: map[string]int{"process": 7, "review": 6}},
+		},
+	}
+
+	history := buildHistory(consumed, &interfaces.WorkResult{
+		TransitionID: "review",
+		Outcome:      interfaces.OutcomeRejected,
+	}, "task-a")
+
+	if got := history.TotalVisits["process"]; got != 1 {
+		t.Fatalf("TotalVisits[process] = %d, want 1 from task-a only", got)
+	}
+	if got := history.TotalVisits["review"]; got != 1 {
+		t.Fatalf("TotalVisits[review] = %d, want first review visit for task-a", got)
+	}
+}
+
+func TestBuildHistory_AccumulatesRepeatedCandidateCycles(t *testing.T) {
+	consumed := []interfaces.Token{{
+		Color:   interfaces.TokenColor{WorkID: "task-a", WorkTypeID: "task"},
+		History: interfaces.TokenHistory{TotalVisits: map[string]int{"process": 2, "review": 3}},
+	}}
+
+	history := buildHistory(consumed, &interfaces.WorkResult{
+		TransitionID: "review",
+		Outcome:      interfaces.OutcomeRejected,
+	}, "task-a")
+
+	if got := history.TotalVisits["process"]; got != 2 {
+		t.Fatalf("TotalVisits[process] = %d, want 2", got)
+	}
+	if got := history.TotalVisits["review"]; got != 4 {
+		t.Fatalf("TotalVisits[review] = %d, want 4", got)
+	}
+}
+
+func TestCandidateWorkID_UsesAuthoredInputOrderInsteadOfDispatchTokenOrder(t *testing.T) {
+	net := &state.Net{Transitions: map[string]*petri.Transition{
+		"review": {
+			ID: "review",
+			InputArcs: []petri.Arc{
+				{PlaceID: "task:in-review"},
+				{PlaceID: "review:init"},
+			},
+		},
+	}}
+	consumed := []interfaces.Token{
+		{PlaceID: "review:init", Color: interfaces.TokenColor{WorkID: "review-b", ParentID: "task-b"}},
+		{PlaceID: "task:in-review", Color: interfaces.TokenColor{WorkID: "task-a"}},
+	}
+
+	if got := candidateWorkID(net, "review", consumed); got != "task-a" {
+		t.Fatalf("candidateWorkID() = %q, want task-a", got)
+	}
+}
+
 func TestBuildHistory_WhenDispatchLookupMissing_UsesOnlyCurrentResult(t *testing.T) {
 	history := buildHistory(nil, &interfaces.WorkResult{
 		DispatchID:   "dispatch-missing",
 		TransitionID: "transition-review",
 		Outcome:      interfaces.OutcomeAccepted,
-	})
+	}, "")
 
 	if got := history.TotalVisits["transition-review"]; got != 1 {
 		t.Fatalf("TotalVisits[transition-review] = %d, want 1", got)

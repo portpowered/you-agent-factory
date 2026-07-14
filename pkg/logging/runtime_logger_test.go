@@ -262,6 +262,28 @@ func assertRotatedRuntimeLogMatches(t *testing.T, basePath string, matches []str
 	}
 }
 
+func TestBuildRuntimeLoggerCreatesDatedDirectoriesOnFreshRoot(t *testing.T) {
+	logDir := t.TempDir()
+	assertRuntimeArtifactRootLacksCalendarDirectories(t, logDir)
+	before := time.Now().UTC()
+
+	sink, err := BuildRuntimeLogger(zap.NewNop(), "runtime-fresh-root", logDir, RuntimeLogConfig{})
+	if err != nil {
+		t.Fatalf("BuildRuntimeLogger: %v", err)
+	}
+	defer sink.Close()
+	after := time.Now().UTC()
+
+	assertRuntimeArtifactDatedDirPresent(t, filepath.Dir(sink.Path()))
+	assertPathUsesPlatformSeparators(t, sink.Path())
+	assertRuntimeLogPathFormat(t, sink.Path(), logDir, "runtime-fresh-root", before, after)
+
+	sink.Logger().Info("fresh root runtime log")
+	if _, err := os.Stat(sink.Path()); err != nil {
+		t.Fatalf("active runtime log file %q should remain open after write: %v", sink.Path(), err)
+	}
+}
+
 func TestBuildRuntimeLoggerCreatesUTCSeparatedPathUnderConfiguredRoot(t *testing.T) {
 	logDir := t.TempDir()
 	before := time.Now().UTC()
@@ -448,24 +470,24 @@ func assertRuntimeLogPathFormat(t *testing.T, path, rootDir, runtimeInstanceID s
 		t.Fatalf("runtime log path %q is not below root %q: %v", path, rootDir, err)
 	}
 	parts := strings.Split(rel, string(os.PathSeparator))
-	if len(parts) != 3 {
-		t.Fatalf("runtime log relative path = %q, want <yyyy-mm>/<yyyy-mm-dd>/<time-id-unique>.log", rel)
+	if len(parts) != 4 {
+		t.Fatalf("runtime log relative path = %q, want <yyyy>/<mm>/<dd>/<time-id-unique>.log", rel)
 	}
-	if ok, err := regexp.MatchString(`^\d{4}-\d{2}$`, parts[0]); err != nil || !ok {
-		t.Fatalf("month directory = %q, want yyyy-mm", parts[0])
+	if ok, err := regexp.MatchString(`^\d{4}$`, parts[0]); err != nil || !ok {
+		t.Fatalf("year directory = %q, want yyyy", parts[0])
 	}
-	if ok, err := regexp.MatchString(`^\d{4}-\d{2}-\d{2}$`, parts[1]); err != nil || !ok {
-		t.Fatalf("date directory = %q, want yyyy-mm-dd", parts[1])
+	if ok, err := regexp.MatchString(`^\d{2}$`, parts[1]); err != nil || !ok {
+		t.Fatalf("month directory = %q, want mm", parts[1])
 	}
-	filenamePattern := regexp.MustCompile(`^(\d{6}\.\d{9})-` + regexp.QuoteMeta(runtimeInstanceID) + `-[A-Za-z0-9_.-]+\.log$`)
-	matches := filenamePattern.FindStringSubmatch(parts[2])
+	if ok, err := regexp.MatchString(`^\d{2}$`, parts[2]); err != nil || !ok {
+		t.Fatalf("day directory = %q, want dd", parts[2])
+	}
+	filenamePattern := regexp.MustCompile(`^(\d{6}\.\d{9})-runtime-log-` + regexp.QuoteMeta(runtimeInstanceID) + `-[A-Za-z0-9_.-]+\.log$`)
+	matches := filenamePattern.FindStringSubmatch(parts[3])
 	if matches == nil {
-		t.Fatalf("runtime log filename = %q, want sortable UTC time, runtime ID, and uniqueness suffix", parts[2])
+		t.Fatalf("runtime log filename = %q, want sortable UTC time, runtime ID, and uniqueness suffix", parts[3])
 	}
-	if parts[0] != parts[1][:7] {
-		t.Fatalf("month directory = %q, want prefix of date directory %q", parts[0], parts[1])
-	}
-	startedAt, err := time.ParseInLocation("2006-01-02 150405.000000000", parts[1]+" "+matches[1], time.UTC)
+	startedAt, err := time.ParseInLocation("2006 01 02 150405.000000000", parts[0]+" "+parts[1]+" "+parts[2]+" "+matches[1], time.UTC)
 	if err != nil {
 		t.Fatalf("parse runtime log timestamp from %q: %v", rel, err)
 	}
@@ -477,7 +499,7 @@ func assertRuntimeLogPathFormat(t *testing.T, path, rootDir, runtimeInstanceID s
 func assertPathContainsRuntimeInstanceID(t *testing.T, path, runtimeInstanceID string) {
 	t.Helper()
 
-	if !strings.Contains(filepath.Base(path), "-"+runtimeInstanceID+"-") {
+	if !strings.Contains(filepath.Base(path), "-runtime-log-"+runtimeInstanceID+"-") {
 		t.Fatalf("runtime log path %q does not include runtime instance ID %q", path, runtimeInstanceID)
 	}
 }

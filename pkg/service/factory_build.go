@@ -3,7 +3,9 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -14,9 +16,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
@@ -26,23 +25,97 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recording"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recordingreplay"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	providerstructured "github.com/portpowered/infinite-you/pkg/workers/provider/structured"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
+	"github.com/portpowered/infinite-you/pkg/workers/skippermissions"
 	"go.uber.org/zap"
 )
+
+// FactoryConfigLoadResult carries factory config load outputs needed before runtime construction.
+type FactoryConfigLoadResult struct {
+	LoadedFactoryCfg *factoryconfig.LoadedFactoryConfig
+	ReplayArtifact   *interfaces.ReplayArtifact
+	RecordingReplay  *recordingreplay.RecordingReplayProjection
+	SessionLogger    *zap.Logger
+}
+
+// LoadFactoryConfigForCompose loads factory.json or a portable recording for wire composition.
+func LoadFactoryConfigForCompose(cfg *FactoryServiceConfig, root FactoryServiceRoot) (FactoryConfigLoadResult, error) {
+	logger := runtimebuild.NewSessionLogger(root.BaseLogger, defaultFactorySessionID, root.FactoryRootDir, cfg.Dir)
+	if result, portable, err := portableReplayLoadResult(cfg, FactoryConfigLoadResult{SessionLogger: logger}); portable {
+		return result, err
+	}
+	loaded, artifact, err := loadFactoryConfigForService(cfg, logger)
+	if err != nil {
+		return FactoryConfigLoadResult{}, err
+	}
+	return FactoryConfigLoadResult{LoadedFactoryCfg: loaded, ReplayArtifact: artifact, SessionLogger: logger}, nil
+}
+
+func portableReplayLoadResult(cfg *FactoryServiceConfig, result FactoryConfigLoadResult) (FactoryConfigLoadResult, bool, error) {
+	if cfg.ReplayPath == "" {
+		return result, false, nil
+	}
+	projection, portable, err := loadPortableRecordingReplay(cfg.ReplayPath)
+	if err != nil {
+		return FactoryConfigLoadResult{}, true, fmt.Errorf("load portable replay: %w", err)
+	}
+	result.RecordingReplay = projection
+	return result, portable, nil
+}
+
+func loadPortableRecordingReplay(path string) (*recordingreplay.RecordingReplayProjection, bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false, fmt.Errorf("read replay recording: %w", err)
+	}
+	var header struct {
+		RecordingKind string `json:"recordingKind"`
+	}
+	if err := json.Unmarshal(data, &header); err != nil || header.RecordingKind != recording.KindJavaScriptFactorySession {
+		return nil, false, nil
+	}
+	value, err := recording.DecodeAndValidate(bytes.NewReader(data))
+	if err != nil {
+		return nil, true, err
+	}
+	projection, err := recordingreplay.ReplayRecording(value)
+	if err != nil {
+		return nil, true, err
+	}
+	return &projection, true, nil
+}
+
+func composePortableReplayCore(cfg *FactoryServiceConfig, root FactoryServiceRoot, collaborators FactoryServiceCollaborators, load FactoryConfigLoadResult, clock factory.Clock, hosted hostedworkers.Config) (*FactoryCore, bool) {
+	if load.RecordingReplay == nil {
+		return nil, false
+	}
+	return &FactoryCore{
+		cfg: cfg, root: root, collaborators: collaborators, hostedWorkers: hosted,
+		clock: clock, logger: load.SessionLogger, modelAssets: collaborators.LocalModels.Assets,
+		durableExecution: recordingreplay.NewService(*load.RecordingReplay),
+	}, true
+}
 
 // NewWorkersSchedulerService constructs the worker-sidecar owner at the
 // runtime composition boundary. Watcher paths must only use this initialized
@@ -492,6 +565,7 @@ func loadRuntimeBundleWorkerOptions(
 		runtimeWorkflowContext(input.loadedFactoryCfg.FactoryConfig(), input.sessionID),
 		logging.NewZapLogger(logger, input.cfg.Verbose),
 		input.cfg.SkipBuiltInRunnerPrerequisiteValidation,
+		input.cfg.InvocationSkipPermissionsOverride,
 		input.providerOverride,
 		input.inferenceProgressPublisher,
 		wrapProviderCommandRunnerForProgress(input, input.providerCommandRunner),
@@ -652,6 +726,7 @@ func loadWorkersFromConfig(
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
 	skipBuiltInRunnerPrerequisiteValidation bool,
+	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
@@ -671,7 +746,7 @@ func loadWorkersFromConfig(
 	preflight := runnerSelectionPreflight{
 		skipCommandAvailability: providerOverride != nil || providerCommandRunner != nil || skipBuiltInRunnerPrerequisiteValidation,
 	}
-	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryRunnerID, runtimeCfg, preflight); err != nil {
+	if err := validateWorkerLoadPreflight(factoryCfg, factoryRunnerID, runtimeCfg, preflight, invocationSkipPermissionsOverride); err != nil {
 		return nil, err
 	}
 	for _, workerCfg := range factoryCfg.Workers {
@@ -682,7 +757,7 @@ func loadWorkersFromConfig(
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workerexecutor.NoopExecutor{}))
 			continue
 		}
-		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, providerOverride, inferenceProgressPublisher, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, agentRunRecorder, now, modelDomain)
+		executor := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher, providerCommandRunner, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, agentRunRecorder, now, modelDomain)
 		if executor != nil {
 			logger.Info("loaded worker", "worker", workerCfg.Name)
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, executor))
@@ -711,6 +786,19 @@ func loadWorkersFromConfig(
 	return opts, nil
 }
 
+func validateWorkerLoadPreflight(
+	factoryCfg *interfaces.FactoryConfig,
+	factoryRunnerID string,
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	preflight runnerSelectionPreflight,
+	invocationSkipPermissionsOverride *bool,
+) error {
+	if err := validateConfiguredWorkstationRunners(factoryCfg, factoryRunnerID, runtimeCfg, preflight); err != nil {
+		return err
+	}
+	return skippermissions.ValidateInvocationSkipPermissionsWorkers(factoryCfg, runtimeCfg, invocationSkipPermissionsOverride)
+}
+
 func configuredWorkstationExecutor(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	factoryRunnerID string,
@@ -737,6 +825,7 @@ func buildWorkerExecutor(
 	factoryRunnerID string,
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
+	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
@@ -762,6 +851,7 @@ func buildWorkerExecutor(
 			factoryRunnerID,
 			workflowContext,
 			logger,
+			invocationSkipPermissionsOverride,
 			providerOverride,
 			inferenceProgressPublisher,
 			providerCommandRunner,
@@ -795,6 +885,7 @@ func buildProviderBackedWorkerExecutor(
 	factoryRunnerID string,
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
+	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
@@ -805,8 +896,10 @@ func buildProviderBackedWorkerExecutor(
 	modelDomain localModelDomain,
 ) workers.WorkerExecutor {
 	runner := providerBackedRunner(
+		runtimeCfg,
 		def,
 		logger,
+		invocationSkipPermissionsOverride,
 		providerOverride,
 		inferenceProgressPublisher,
 		providerCommandRunner,
@@ -837,15 +930,17 @@ func buildProviderBackedWorkerExecutor(
 }
 
 func providerBackedRunner(
+	runtimeCfg interfaces.RuntimeConfigLookup,
 	def *interfaces.WorkerConfig,
 	logger logging.Logger,
+	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	now func() time.Time,
 ) workers.Runner {
-	runner := newProviderRunner(def, logger, providerOverride, inferenceProgressPublisher, providerCommandRunner)
+	runner := newProviderRunner(runtimeCfg, def, logger, invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher, providerCommandRunner)
 	if inferenceRecorder == nil {
 		return runner
 	}
@@ -853,8 +948,10 @@ func providerBackedRunner(
 }
 
 func newProviderRunner(
+	runtimeCfg interfaces.RuntimeConfigLookup,
 	def *interfaces.WorkerConfig,
 	logger logging.Logger,
+	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
@@ -863,25 +960,41 @@ func newProviderRunner(
 		return workers.RunnerFromProvider(providerOverride)
 	}
 	return workerprovider.NewScriptWrapProvider(providerRunnerOptions(
+		runtimeCfg,
 		def,
 		logger,
+		invocationSkipPermissionsOverride,
 		inferenceProgressPublisher,
 		providerCommandRunner,
 	)...)
 }
 
 func providerRunnerOptions(
+	runtimeCfg interfaces.RuntimeConfigLookup,
 	def *interfaces.WorkerConfig,
 	logger logging.Logger,
+	invocationSkipPermissionsOverride *bool,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
 ) []workerprovider.ScriptWrapProviderOption {
 	opts := []workerprovider.ScriptWrapProviderOption{
-		workerprovider.WithSkipPermissions(def.SkipPermissions),
+		workerprovider.WithSkipPermissions(skippermissions.EffectiveSkipPermissions(
+			def.SkipPermissions,
+			def.Type,
+			invocationSkipPermissionsOverride,
+		)),
 		workerprovider.WithProviderLogger(logger),
 	}
+	if runtimeCfg != nil {
+		if factoryDir := strings.TrimSpace(runtimeCfg.FactoryDir()); factoryDir != "" {
+			opts = append(opts, workerprovider.WithAgyFactoryRoot(factoryDir))
+		}
+	}
 	if inferenceProgressPublisher != nil {
-		opts = append(opts, workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher))
+		opts = append(opts,
+			workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher),
+			workerprovider.WithResponseStreamExecutor(providerstructured.NewExecutor()),
+		)
 	}
 	if providerCommandRunner != nil {
 		opts = append(opts, workerprovider.WithProviderCommandRunner(providerCommandRunner))
@@ -1540,6 +1653,17 @@ func (b *InvocationBootstrap) InvokeFactorySession(
 		return apisurface.FactoryInvocationResult{}, fmt.Errorf("invocation bootstrap is required")
 	}
 	return b.Service.InvokeFactorySession(ctx, sessionID, request)
+}
+
+// SubscribeSessionResponseEventsFromLatest forwards canonical response-event
+// attachment through the bootstrap-owned FactoryService.
+func (b *InvocationBootstrap) SubscribeSessionResponseEventsFromLatest(
+	sessionID string,
+) (*responseeventstore.Subscription, error) {
+	if b == nil || b.Service == nil {
+		return nil, fmt.Errorf("invocation bootstrap is required")
+	}
+	return b.Service.SubscribeSessionResponseEventsFromLatest(sessionID)
 }
 
 // CloseFactorySession releases a bootstrap-owned live session through the same

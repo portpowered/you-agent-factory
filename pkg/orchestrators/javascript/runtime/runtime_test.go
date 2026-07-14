@@ -14,7 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 func TestRuntimeRecordJSON_CheckpointRoundTripPreservesTypedResumeData(t *testing.T) {
@@ -754,7 +754,7 @@ func projectPrimaryJSON(t *testing.T, sessionID string, value workflowresult.Typ
 	if err := json.Unmarshal(parts[0].JSON, &projected); err != nil {
 		t.Fatalf("unmarshal projected json: %v", err)
 	}
-	generated := workcontent.GeneratedPtrFromParts(parts)
+	generated := contentcontract.GeneratedPtrFromParts(parts)
 	if generated == nil {
 		t.Fatal("expected generated primary result content")
 	}

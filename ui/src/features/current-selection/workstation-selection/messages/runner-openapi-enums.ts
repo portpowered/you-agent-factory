@@ -12,6 +12,7 @@ export const OPENAPI_RUNNER_IDS = [
   "kiro",
   "cursor-cli",
   "opencode",
+  "pi",
 ] as const satisfies readonly ApiRunnerID[];
 
 type RunnerSelectionSourceLabelCatalog =

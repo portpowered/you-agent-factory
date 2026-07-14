@@ -16,14 +16,14 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -215,9 +215,9 @@ func TestNamedGoalRouting_StructuredUnknownDecisionRoutesToFailed(t *testing.T) 
 	writePackagedGoalCheckWorkstationReviewModeForSmoke(t, dir, goal.PackagedReviewModeStructuredLabel)
 	envelope := `{"decision":"MAYBE","feedback":"unknown structured decision"}`
 	mockWorkersPath := writePackagedGoalBuiltinTopologyMockWorkers(t, packagedGoalTopologyMockOptions{
-		checkerOutput:        "structured",
-		reviewerWorkstation:  goal.PackagedStructuredReviewWorkstationName,
-		reviewerOutput:       envelope,
+		checkerOutput:       "structured",
+		reviewerWorkstation: goal.PackagedStructuredReviewWorkstationName,
+		reviewerOutput:      envelope,
 	})
 	goalText := fmt.Sprintf("functional-smoke-goal-routing-structured-unknown-%d", time.Now().UnixNano())
 
@@ -246,7 +246,7 @@ type packagedGoalTopologyMockOptions struct {
 func materializeNamedGoalFactoryForRoutingSmoke(t *testing.T) string {
 	t.Helper()
 
-	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), goal.PackagedFactoryName, goal.BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)
 	}
@@ -422,7 +422,7 @@ func runNamedGoalRoutingInvocationCLIJSON(
 	if _, err := factoryconfig.PersistNamedFactory(
 		filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"),
 		goal.PackagedFactoryName,
-		factoryconfig.BuiltInGoalFactoryJSON,
+		goal.BuiltInFactoryJSON,
 	); err != nil {
 		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)
 	}
@@ -451,7 +451,7 @@ func runNamedGoalRoutingInvocationCLIJSON(
 		goalText,
 	)
 	cmd.Dir = t.TempDir()
-	cmd.Env = append(os.Environ(), "HOME="+homeDir)
+	cmd.Env = append(os.Environ(), "HOME="+homeDir, "USERPROFILE="+homeDir)
 
 	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
@@ -464,7 +464,7 @@ func runNamedGoalRoutingInvocationCLIJSON(
 			t.Fatalf("decode CLI invocation response: %v\nstdout:\n%s", err, stdout.String())
 		}
 	}
-	if runErr != nil && stdout.Len() == 0 && stderr.Len() > 0 {
+	if runErr != nil && stderr.Len() > 0 {
 		runErr = fmt.Errorf("%w\nstderr:\n%s", runErr, stderr.String())
 	}
 	return response, runErr

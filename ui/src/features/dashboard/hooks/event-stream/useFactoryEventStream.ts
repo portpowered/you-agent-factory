@@ -1,3 +1,4 @@
+// biome-ignore-all lint/nursery/noExcessiveLinesPerFile: stream lifecycle wiring stays colocated with its single owning hook.
 import { useQueryClient } from "@tanstack/react-query";
 import { type RefObject, useCallback, useEffect, useMemo, useRef } from "react";
 
@@ -33,6 +34,8 @@ import { useDashboardStreamStore } from "../../state/dashboardStreamStore";
 import {
   hasReconnectCursor,
   reconnectAfterStreamError,
+  recordCursorFreeReplayFallbackDiagnostic,
+  recordStaleCursorDiagnostic,
   recoveryFailedStreamState,
   useDashboardStreamConnectionRefs,
 } from "./useFactoryEventStream.recovery";
@@ -40,6 +43,7 @@ import {
 export interface UseFactoryEventStreamOptions {
   enabled: boolean;
   initialReconnectCursor?: FactoryEventReconnectCursor;
+  initialCursorFreeReplayCorrelationToken?: string | null;
   locale?: string | null;
   onEvent: (event: FactoryEvent) => void;
   onEvents?: (events: FactoryEvent[]) => void;
@@ -61,6 +65,7 @@ interface DashboardStreamConnectionOptions {
   flushHandleRef: RefObject<number | null>;
   flushQueuedEvents: () => void;
   initialReconnectCursor?: FactoryEventReconnectCursor;
+  initialCursorFreeReplayCorrelationToken?: string | null;
   locale?: string | null;
   onInvalidReconnectCursor?: () => void;
   openStream: typeof openFactoryEventStream;
@@ -109,7 +114,9 @@ function reconnectCursorFromEvent(
   };
 }
 
-function clearReconnectTimeout(reconnectTimeoutRef: { current: number | null }) {
+function clearReconnectTimeout(reconnectTimeoutRef: {
+  current: number | null;
+}) {
   if (reconnectTimeoutRef.current != null) {
     window.clearTimeout(reconnectTimeoutRef.current);
     reconnectTimeoutRef.current = null;
@@ -167,6 +174,7 @@ function useDashboardStreamConnection({
   flushHandleRef,
   flushQueuedEvents,
   initialReconnectCursor,
+  initialCursorFreeReplayCorrelationToken,
   locale,
   onInvalidReconnectCursor,
   openStream,
@@ -232,7 +240,9 @@ function useDashboardStreamConnection({
             streamSessionID,
             reconnect,
           );
-          if (validationAttempt !== refs.reconnectValidationAttemptRef.current) {
+          if (
+            validationAttempt !== refs.reconnectValidationAttemptRef.current
+          ) {
             return;
           }
           if (!validation.ok) {
@@ -242,6 +252,14 @@ function useDashboardStreamConnection({
               !invalidReconnectRecoveryUsedRef.current
             ) {
               invalidReconnectRecoveryUsedRef.current = true;
+              const correlationToken = recordStaleCursorDiagnostic(
+                streamIdentity,
+                streamSessionID,
+              );
+              refs.cursorFreeReplayPendingRef.current =
+                correlationToken != null;
+              refs.cursorFreeReplayCorrelationTokenRef.current =
+                correlationToken;
               onInvalidReconnectCursor?.();
               openDashboardStream(undefined);
               return;
@@ -266,7 +284,15 @@ function useDashboardStreamConnection({
         );
         refs.streamRef.current = stream;
         if (!stream) {
+          refs.cursorFreeReplayPendingRef.current = false;
+          refs.cursorFreeReplayCorrelationTokenRef.current = null;
           return;
+        }
+        const replayCorrelationToken =
+          refs.cursorFreeReplayCorrelationTokenRef.current;
+        if (reconnect == null && replayCorrelationToken) {
+          recordCursorFreeReplayFallbackDiagnostic(replayCorrelationToken);
+          refs.cursorFreeReplayCorrelationTokenRef.current = null;
         }
         const previousOnOpen = stream.onopen;
         stream.onopen = (openEvent) => {
@@ -311,6 +337,11 @@ function useDashboardStreamConnection({
 
     refs.staleCursorRecoveryAttemptedRef.current = false;
     refs.cursorFreeReplayPendingRef.current = false;
+    refs.cursorFreeReplayCorrelationTokenRef.current =
+      initialCursorFreeReplayCorrelationToken ?? null;
+    refs.cursorFreeReplayPendingRef.current =
+      initialReconnectCursor == null &&
+      refs.cursorFreeReplayCorrelationTokenRef.current != null;
     refs.reconnectCursorRef.current = initialReconnectCursor;
     invalidReconnectRecoveryUsedRef.current = false;
     openDashboardStream(initialReconnectCursor);
@@ -329,6 +360,7 @@ function useDashboardStreamConnection({
     flushHandleRef,
     flushQueuedEvents,
     initialReconnectCursor,
+    initialCursorFreeReplayCorrelationToken,
     locale,
     onInvalidReconnectCursor,
     openStream,
@@ -350,6 +382,7 @@ function useDashboardStreamConnection({
 export function useFactoryEventStream({
   enabled,
   initialReconnectCursor,
+  initialCursorFreeReplayCorrelationToken,
   locale,
   onEvent,
   onEvents,
@@ -362,7 +395,17 @@ export function useFactoryEventStream({
   validateReconnectCursor = validateFactoryEventReconnectCursor,
 }: UseFactoryEventStreamOptions) {
   const queryClient = useQueryClient();
-  const resetTimeline = useFactoryTimelineStore((state) => state.reset);
+  const resetAllTimelines = useFactoryTimelineStore((state) => state.reset);
+  const resetTimelineEntry = useFactoryTimelineStore(
+    (state) => state.resetEntry,
+  );
+  const resetTimeline = useCallback(() => {
+    if (streamIdentity) {
+      resetTimelineEntry(streamIdentity);
+      return;
+    }
+    resetAllTimelines();
+  }, [resetAllTimelines, resetTimelineEntry, streamIdentity]);
   const setStreamState = useDashboardStreamStore(
     (state) => state.setStreamState,
   );
@@ -417,6 +460,7 @@ export function useFactoryEventStream({
     flushHandleRef,
     flushQueuedEvents,
     initialReconnectCursor,
+    initialCursorFreeReplayCorrelationToken,
     locale,
     onInvalidReconnectCursor,
     openStream,

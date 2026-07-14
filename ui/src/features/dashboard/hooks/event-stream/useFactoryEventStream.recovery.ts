@@ -1,5 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { useMemo, useRef, type RefObject } from "react";
+import { type RefObject, useMemo, useRef } from "react";
 
 import type {
   FactoryEventReconnectCursor,
@@ -9,16 +9,18 @@ import {
   deleteTimelineCheckpoint,
   type StreamDerivedCacheIdentity,
 } from "../../../timeline/public";
-import {
-  recordSessionPersistenceInvalidation,
-  silentReplayRecoveryDiagnostic,
-} from "../../lib/session-persistence/diagnostics";
 import { recoverDashboardSessionScopedState } from "../../lib/dashboard-session-lifecycle";
+import {
+  correlationTokenForIdentityScope,
+  recordSessionPersistenceDiagnostic,
+  sessionPersistenceDiagnostic,
+} from "../../lib/session-persistence/diagnostics";
 import { getDashboardSessionLifecycleMessages } from "../../messages/dashboard-session-lifecycle";
 import type { useDashboardStreamStore } from "../../state/dashboardStreamStore";
 
 export interface DashboardStreamConnectionRefs {
   cursorFreeReplayPendingRef: RefObject<boolean>;
+  cursorFreeReplayCorrelationTokenRef: RefObject<string | null>;
   hasOpenedStreamRef: RefObject<boolean>;
   lastSessionKeyRef: RefObject<string | null>;
   reconnectValidationAttemptRef: RefObject<number>;
@@ -31,6 +33,7 @@ export interface DashboardStreamConnectionRefs {
 
 export function useDashboardStreamConnectionRefs(): DashboardStreamConnectionRefs {
   const cursorFreeReplayPendingRef = useRef(false);
+  const cursorFreeReplayCorrelationTokenRef = useRef<string | null>(null);
   const hasOpenedStreamRef = useRef(false);
   const lastSessionKeyRef = useRef<string | null>(null);
   const reconnectValidationAttemptRef = useRef(0);
@@ -45,6 +48,7 @@ export function useDashboardStreamConnectionRefs(): DashboardStreamConnectionRef
   return useMemo(
     () => ({
       cursorFreeReplayPendingRef,
+      cursorFreeReplayCorrelationTokenRef,
       hasOpenedStreamRef,
       lastSessionKeyRef,
       reconnectValidationAttemptRef,
@@ -62,6 +66,39 @@ export function hasReconnectCursor(
   cursor: FactoryEventReconnectCursor | undefined,
 ): cursor is FactoryEventReconnectCursor {
   return Boolean(cursor?.afterEventId || cursor?.afterSequence != null);
+}
+
+export function recordStaleCursorDiagnostic(
+  streamIdentity: StreamDerivedCacheIdentity | null,
+  streamSessionID: string,
+): string | null {
+  try {
+    const correlationToken = correlationTokenForIdentityScope(
+      streamIdentity ?? { factorySessionID: streamSessionID },
+    );
+    return recordSessionPersistenceDiagnostic(
+      sessionPersistenceDiagnostic("stale_cursor", correlationToken),
+    )
+      ? correlationToken
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function recordCursorFreeReplayFallbackDiagnostic(
+  correlationToken: string,
+): void {
+  try {
+    recordSessionPersistenceDiagnostic(
+      sessionPersistenceDiagnostic(
+        "cursor_free_replay_fallback",
+        correlationToken,
+      ),
+    );
+  } catch {
+    // Diagnostics are best effort and cannot affect stream recovery.
+  }
 }
 
 export function reconnectingStreamState(locale?: string | null) {
@@ -112,6 +149,7 @@ async function recoverStaleCursor({
   openDashboardStream,
   probeRecovery,
   cursorFreeReplayPendingRef,
+  cursorFreeReplayCorrelationTokenRef,
   queryClient,
   queuedEventsRef,
   reconnectCursorRef,
@@ -128,6 +166,7 @@ async function recoverStaleCursor({
   openDashboardStream: (reconnect?: FactoryEventReconnectCursor) => void;
   probeRecovery: typeof probeFactoryEventStreamRecovery;
   cursorFreeReplayPendingRef: RefObject<boolean>;
+  cursorFreeReplayCorrelationTokenRef: RefObject<string | null>;
   queryClient: QueryClient;
   queuedEventsRef: RefObject<unknown[]>;
   reconnectCursorRef: RefObject<FactoryEventReconnectCursor | undefined>;
@@ -155,11 +194,9 @@ async function recoverStaleCursor({
     cursorFreeReplayPendingRef.current = true;
     reconnectCursorRef.current = undefined;
     queuedEventsRef.current = [];
-    recordSessionPersistenceInvalidation(
-      silentReplayRecoveryDiagnostic(
-        { factorySessionID: streamSessionID },
-        streamSessionID,
-      ),
+    cursorFreeReplayCorrelationTokenRef.current = recordStaleCursorDiagnostic(
+      streamIdentity,
+      streamSessionID,
     );
     onInvalidReconnectCursor?.();
     recoverDashboardSessionScopedState(
@@ -223,6 +260,8 @@ export async function reconnectAfterStreamError({
         openDashboardStream,
         probeRecovery,
         cursorFreeReplayPendingRef: refs.cursorFreeReplayPendingRef,
+        cursorFreeReplayCorrelationTokenRef:
+          refs.cursorFreeReplayCorrelationTokenRef,
         queryClient,
         queuedEventsRef,
         reconnectCursorRef: refs.reconnectCursorRef,

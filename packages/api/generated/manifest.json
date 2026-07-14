@@ -1,0 +1,316 @@
+{
+  "exports": {
+    "generated.cli.commands": {
+      "artifactHash": "47d9d511d8253574fc95dd5800bfb9dd586d47a6f3cfc0ababbb2448362a1ed6",
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Published generated.cli.commands contract as raw JSON or YAML data.",
+            "id": "generated.cli.commands.description"
+          },
+          "title": {
+            "canonicalEnglish": "Published generated.cli.commands contract",
+            "id": "generated.cli.commands.title"
+          }
+        },
+        "examples": [
+          "generated/cli/commands.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "generated.cli.commands",
+        "sourceHash": "47d9d511d8253574fc95dd5800bfb9dd586d47a6f3cfc0ababbb2448362a1ed6",
+        "visibility": "public"
+      },
+      "family": "cli",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "generated.cli.commands",
+        "since": "0.0.0",
+        "state": "active"
+      },
+      "path": "generated/cli/commands.json"
+    },
+    "generated.javascript.runtime-api": {
+      "artifactHash": "3fbe2603cd9dded76339015d105507d3afa43d48345d2de99326e15a9b954e83",
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Published generated.javascript.runtime-api contract as raw JSON or YAML data.",
+            "id": "generated.javascript.runtime-api.description"
+          },
+          "title": {
+            "canonicalEnglish": "Published generated.javascript.runtime-api contract",
+            "id": "generated.javascript.runtime-api.title"
+          }
+        },
+        "examples": [
+          "generated/javascript/runtime-api.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "generated.javascript.runtime-api",
+        "sourceHash": "3fbe2603cd9dded76339015d105507d3afa43d48345d2de99326e15a9b954e83",
+        "visibility": "public"
+      },
+      "family": "javascript",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "generated.javascript.runtime-api",
+        "since": "0.0.0",
+        "state": "active"
+      },
+      "path": "generated/javascript/runtime-api.json"
+    },
+    "generated.joined.contracts.common.deprecations": {
+      "artifactHash": "7ce45d618efb3116525acf3acf08766a550d77bd12f4e525e0f1789dc38e17d8",
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Published generated.joined.contracts.common.deprecations contract as raw JSON or YAML data.",
+            "id": "generated.joined.contracts.common.deprecations.description"
+          },
+          "title": {
+            "canonicalEnglish": "Published generated.joined.contracts.common.deprecations contract",
+            "id": "generated.joined.contracts.common.deprecations.title"
+          }
+        },
+        "examples": [
+          "generated/joined/contracts/common/deprecations.schema.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "generated.joined.contracts.common.deprecations",
+        "sourceHash": "7ce45d618efb3116525acf3acf08766a550d77bd12f4e525e0f1789dc38e17d8",
+        "visibility": "public"
+      },
+      "family": "shared",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "generated.joined.contracts.common.deprecations",
+        "since": "0.0.0",
+        "state": "active"
+      },
+      "path": "generated/joined/contracts/common/deprecations.schema.json"
+    },
+    "generated.joined.contracts.common.documentation": {
+      "artifactHash": "8126c0a29e39b53733165db4177d486a109cb2b263839d0bd9e6f359cffa4e60",
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Published generated.joined.contracts.common.documentation contract as raw JSON or YAML data.",
+            "id": "generated.joined.contracts.common.documentation.description"
+          },
+          "title": {
+            "canonicalEnglish": "Published generated.joined.contracts.common.documentation contract",
+            "id": "generated.joined.contracts.common.documentation.title"
+          }
+        },
+        "examples": [
+          "generated/joined/contracts/common/documentation.schema.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "generated.joined.contracts.common.documentation",
+        "sourceHash": "8126c0a29e39b53733165db4177d486a109cb2b263839d0bd9e6f359cffa4e60",
+        "visibility": "public"
+      },
+      "family": "shared",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "generated.joined.contracts.common.documentation",
+        "since": "0.0.0",
+        "state": "active"
+      },
+      "path": "generated/joined/contracts/common/documentation.schema.json"
+    },
+    "generated.joined.contracts.manifest": {
+      "artifactHash": "4dae080e46652c697025016b97d82a03437cdf27f3f0c43f1485812fa271a339",
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Published generated.joined.contracts.manifest contract as raw JSON or YAML data.",
+            "id": "generated.joined.contracts.manifest.description"
+          },
+          "title": {
+            "canonicalEnglish": "Published generated.joined.contracts.manifest contract",
+            "id": "generated.joined.contracts.manifest.title"
+          }
+        },
+        "examples": [
+          "generated/joined/contracts/manifest.schema.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "generated.joined.contracts.manifest",
+        "sourceHash": "4dae080e46652c697025016b97d82a03437cdf27f3f0c43f1485812fa271a339",
+        "visibility": "public"
+      },
+      "family": "shared",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "generated.joined.contracts.manifest",
+        "since": "0.0.0",
+        "state": "active"
+      },
+      "path": "generated/joined/contracts/manifest.schema.json"
+    },
+    "generated.mcp.tools": {
+      "artifactHash": "98eff642b8b6bf442de1e150e13bdb89a6beab05c1fec3a24aa270690e9ffb33",
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Published generated.mcp.tools contract as raw JSON or YAML data.",
+            "id": "generated.mcp.tools.description"
+          },
+          "title": {
+            "canonicalEnglish": "Published generated.mcp.tools contract",
+            "id": "generated.mcp.tools.title"
+          }
+        },
+        "examples": [
+          "generated/mcp/tools.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "generated.mcp.tools",
+        "sourceHash": "98eff642b8b6bf442de1e150e13bdb89a6beab05c1fec3a24aa270690e9ffb33",
+        "visibility": "public"
+      },
+      "family": "mcp",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "generated.mcp.tools",
+        "since": "0.0.0",
+        "state": "active"
+      },
+      "path": "generated/mcp/tools.json"
+    },
+    "generated.openapi.openapi": {
+      "artifactHash": "a681459c4591ab36f249bc6a9a8b347b5e4368492a8d099ed4f88ed17e2fc774",
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Published generated.openapi.openapi contract as raw JSON or YAML data.",
+            "id": "generated.openapi.openapi.description"
+          },
+          "title": {
+            "canonicalEnglish": "Published generated.openapi.openapi contract",
+            "id": "generated.openapi.openapi.title"
+          }
+        },
+        "examples": [
+          "generated/openapi/openapi.yaml"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "generated.openapi.openapi",
+        "sourceHash": "a681459c4591ab36f249bc6a9a8b347b5e4368492a8d099ed4f88ed17e2fc774",
+        "visibility": "public"
+      },
+      "family": "openapi",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "generated.openapi.openapi",
+        "since": "0.0.0",
+        "state": "active"
+      },
+      "path": "generated/openapi/openapi.yaml"
+    },
+    "generated.schemas.factory": {
+      "artifactHash": "a533c0af09782a457e2ba787de565ffa452b5d93fa227050391bfc3ba4edfac0",
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Published generated.schemas.factory contract as raw JSON or YAML data.",
+            "id": "generated.schemas.factory.description"
+          },
+          "title": {
+            "canonicalEnglish": "Published generated.schemas.factory contract",
+            "id": "generated.schemas.factory.title"
+          }
+        },
+        "examples": [
+          "generated/schemas/factory.schema.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "generated.schemas.factory",
+        "sourceHash": "a533c0af09782a457e2ba787de565ffa452b5d93fa227050391bfc3ba4edfac0",
+        "visibility": "public"
+      },
+      "family": "config",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "generated.schemas.factory",
+        "since": "0.0.0",
+        "state": "active"
+      },
+      "path": "generated/schemas/factory.schema.json"
+    },
+    "generated.schemas.mock-workers": {
+      "artifactHash": "e74a5d08ae36ae29d870bbf337764a94393e15b1a3aa6ab53d518b8b109489f4",
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Published generated.schemas.mock-workers contract as raw JSON or YAML data.",
+            "id": "generated.schemas.mock-workers.description"
+          },
+          "title": {
+            "canonicalEnglish": "Published generated.schemas.mock-workers contract",
+            "id": "generated.schemas.mock-workers.title"
+          }
+        },
+        "examples": [
+          "generated/schemas/mock-workers.schema.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "generated.schemas.mock-workers",
+        "sourceHash": "e74a5d08ae36ae29d870bbf337764a94393e15b1a3aa6ab53d518b8b109489f4",
+        "visibility": "public"
+      },
+      "family": "config",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "generated.schemas.mock-workers",
+        "since": "0.0.0",
+        "state": "active"
+      },
+      "path": "generated/schemas/mock-workers.schema.json"
+    },
+    "generated.schemas.you-config": {
+      "artifactHash": "6f367e645304563d567ce89bf14549b94deb068c50f8ee3b45714da233360f5b",
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Published generated.schemas.you-config contract as raw JSON or YAML data.",
+            "id": "generated.schemas.you-config.description"
+          },
+          "title": {
+            "canonicalEnglish": "Published generated.schemas.you-config contract",
+            "id": "generated.schemas.you-config.title"
+          }
+        },
+        "examples": [
+          "generated/schemas/you-config.schema.json"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "generated.schemas.you-config",
+        "sourceHash": "6f367e645304563d567ce89bf14549b94deb068c50f8ee3b45714da233360f5b",
+        "visibility": "public"
+      },
+      "family": "config",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "generated.schemas.you-config",
+        "since": "0.0.0",
+        "state": "active"
+      },
+      "path": "generated/schemas/you-config.schema.json"
+    }
+  },
+  "familyFormatVersions": {
+    "cli": "1.0.0",
+    "config": "1.0.0",
+    "javascript": "1.0.0",
+    "mcp": "1.0.0",
+    "openapi": "1.0.0",
+    "shared": "1.0.0"
+  },
+  "formatVersion": "1.0.0",
+  "packageId": "you-agent-factory.api",
+  "packageVersion": "0.0.0",
+  "sourceCommit": "4cfad267abcb95d13fc0c2af20ca64ad84b846c5"
+}

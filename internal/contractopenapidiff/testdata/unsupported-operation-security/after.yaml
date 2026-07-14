@@ -1,0 +1,16 @@
+openapi: 3.0.3
+info:
+  title: Unsupported Operation Security Fixture
+  version: 1.0.0
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      responses:
+        '200':
+          description: Pet list.

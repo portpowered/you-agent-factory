@@ -12,7 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 func TestProjectInitialStructure_NilNet_ReturnsEmptyPayload(t *testing.T) {

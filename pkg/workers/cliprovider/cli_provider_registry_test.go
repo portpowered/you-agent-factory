@@ -18,6 +18,7 @@ func TestRegisteredCLIProviders_IncludeEverySupportedProvider(t *testing.T) {
 		CLIProviderIdentityKiro:     string(interfaces.ModelProviderKiro),
 		CLIProviderIdentityCursor:   string(interfaces.ModelProviderCursor),
 		CLIProviderIdentityOpenCode: string(interfaces.ModelProviderOpenCode),
+		CLIProviderIdentityPi:       string(interfaces.ModelProviderPi),
 	}
 
 	registrations := RegisteredCLIProviders()
@@ -67,6 +68,7 @@ func TestRegisteredCLIProviders_PreferenceRankOrder(t *testing.T) {
 		CLIProviderIdentityOpenCode,
 		CLIProviderIdentityGemini,
 		CLIProviderIdentityKiro,
+		CLIProviderIdentityPi,
 	}
 
 	registrations := RegisteredCLIProviders()
@@ -232,6 +234,7 @@ func fakeCLIProviderDiscoveryCases() []cliProviderDiscoveryCase {
 				string(interfaces.ModelProviderOpenCode): true,
 				string(interfaces.ModelProviderGemini):   true,
 				string(interfaces.ModelProviderKiro):     true,
+				string(interfaces.ModelProviderPi):       true,
 			},
 			wantSelected: ptrCLIProviderIdentity(CLIProviderIdentityCodex),
 			wantProbeCommands: []string{
@@ -241,6 +244,7 @@ func fakeCLIProviderDiscoveryCases() []cliProviderDiscoveryCase {
 				string(interfaces.ModelProviderOpenCode),
 				string(interfaces.ModelProviderGemini),
 				string(interfaces.ModelProviderKiro),
+				string(interfaces.ModelProviderPi),
 			},
 		},
 		{
@@ -295,6 +299,7 @@ func fakeCLIProviderDiscoveryCases() []cliProviderDiscoveryCase {
 				CLIProviderIdentityOpenCode,
 				CLIProviderIdentityGemini,
 				CLIProviderIdentityKiro,
+				CLIProviderIdentityPi,
 			},
 		},
 	}
@@ -308,6 +313,7 @@ func registeredCLIProviderProbeCommands() []string {
 		string(interfaces.ModelProviderOpenCode),
 		string(interfaces.ModelProviderGemini),
 		string(interfaces.ModelProviderKiro),
+		string(interfaces.ModelProviderPi),
 	}
 }
 
@@ -427,6 +433,7 @@ func TestProbeRegisteredCLIProviderAvailability_FakePATHReturnsRankOrder(t *test
 		string(interfaces.ModelProviderOpenCode): true,
 		string(interfaces.ModelProviderGemini):   true,
 		string(interfaces.ModelProviderKiro):     true,
+		string(interfaces.ModelProviderPi):       true,
 	}
 	lookPath = func(file string) (string, error) {
 		if presentCommands[file] {
@@ -442,6 +449,7 @@ func TestProbeRegisteredCLIProviderAvailability_FakePATHReturnsRankOrder(t *test
 		CLIProviderIdentityOpenCode,
 		CLIProviderIdentityGemini,
 		CLIProviderIdentityKiro,
+		CLIProviderIdentityPi,
 	}
 
 	got := ProbeRegisteredCLIProviderAvailability()

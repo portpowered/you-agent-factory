@@ -12,7 +12,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -311,7 +311,7 @@ func findRuntimeLogRecord(t *testing.T, path, eventName string) map[string]any {
 func requireRuntimeLogPath(t *testing.T, logDir, runtimeInstanceID string) string {
 	t.Helper()
 
-	matches, err := filepath.Glob(filepath.Join(logDir, "*", "*", "*-"+runtimeInstanceID+"-*.log"))
+	matches, err := filepath.Glob(filepath.Join(logDir, "*", "*", "*", "*-runtime-log-"+runtimeInstanceID+"-*.log"))
 	if err != nil {
 		t.Fatalf("glob runtime log path: %v", err)
 	}

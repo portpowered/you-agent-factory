@@ -9,11 +9,81 @@ import {
   type TimelineCheckpointStreamIdentity,
 } from "../../timeline/state/timelineCheckpointPersistence";
 import {
-  buildWorkOutcomeTimelineSamplesFromEvents,
-  useWorkOutcomeChart,
-} from "./useWorkOutcomeChart";
+  createMaterializedWorkOutcomeState,
+  reduceMaterializedWorkOutcomeEvents,
+  selectMaterializedWorkOutcomeSamples,
+} from "../lib/materializer/materialized-work-outcome";
+import { useWorkOutcomeChart } from "./useWorkOutcomeChart";
 
-describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
+describe("materialized work outcome chart projection", () => {
+  it("maps hydration, valid empty, malformed, and zero-valued history to explicit states", () => {
+    const emptyState = createMaterializedWorkOutcomeState();
+    const zeroSampleState = {
+      ...emptyState,
+      samples: [
+        {
+          completedCount: 0,
+          dispatchedCount: 0,
+          failedByWorkType: {},
+          failedCount: 0,
+          failedWorkLabels: [],
+          inFlightCount: 0,
+          observedAt: 0,
+          queuedCount: 0,
+          tick: 0,
+        },
+      ],
+    };
+    const { result, rerender } = renderHook(
+      ({ hydrationStatus, materializedWorkOutcomeState }) =>
+        useWorkOutcomeChart({
+          hydrationStatus,
+          materializedWorkOutcomeState,
+          selectedTimelineTick: 10,
+        }),
+      {
+        initialProps: {
+          hydrationStatus: "loading" as "loading" | "ready",
+          materializedWorkOutcomeState: zeroSampleState as unknown,
+        },
+      },
+    );
+
+    expect(result.current.chartState).toEqual({ status: "loading" });
+    expect(result.current.samples).toEqual([]);
+
+    rerender({
+      hydrationStatus: "ready",
+      materializedWorkOutcomeState: emptyState,
+    });
+    expect(result.current.chartState).toEqual({ status: "ready" });
+    expect(result.current.samples).toEqual([]);
+
+    rerender({
+      hydrationStatus: "ready",
+      materializedWorkOutcomeState: { ...zeroSampleState, version: 999 },
+    });
+    expect(result.current.chartState).toEqual({ status: "error" });
+    expect(result.current.samples).toEqual([]);
+
+    rerender({
+      hydrationStatus: "ready",
+      materializedWorkOutcomeState: {
+        ...zeroSampleState,
+        samples: [{ tick: 0 }],
+      },
+    });
+    expect(result.current.chartState).toEqual({ status: "error" });
+    expect(result.current.samples).toEqual([]);
+
+    rerender({
+      hydrationStatus: "ready",
+      materializedWorkOutcomeState: zeroSampleState,
+    });
+    expect(result.current.chartState).toEqual({ status: "ready" });
+    expect(result.current.samples).toEqual(zeroSampleState.samples);
+  });
+
   const baselineEvents = [
     event("run-started", 0, FACTORY_EVENT_TYPES.runRequest, {
       factory: {
@@ -201,8 +271,11 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
   });
 
   it("projects the exact uninterrupted customer work-outcome series", () => {
-    const samples = buildWorkOutcomeTimelineSamplesFromEvents(
-      baselineEvents,
+    const samples = selectMaterializedWorkOutcomeSamples(
+      reduceMaterializedWorkOutcomeEvents(
+        createMaterializedWorkOutcomeState(),
+        baselineEvents,
+      ),
       6,
     );
 
@@ -287,7 +360,82 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
     ]);
   });
 
-  it("characterizes checkpoint restore, tail replacement, and duplicate delivery", async () => {
+  it("clips exact, between-sample, and before-history ticks without mutating materialized state", () => {
+    const materialized = reduceMaterializedWorkOutcomeEvents(
+      createMaterializedWorkOutcomeState(),
+      baselineEvents,
+    );
+    const materializedBeforeSelection = structuredClone(materialized);
+    const samplesThroughTickFour = materialized.samples.filter(
+      (sample) => sample.tick <= 4,
+    );
+
+    expect(selectMaterializedWorkOutcomeSamples(materialized, 4)).toEqual(
+      samplesThroughTickFour,
+    );
+    expect(selectMaterializedWorkOutcomeSamples(materialized, 4.5)).toEqual(
+      samplesThroughTickFour,
+    );
+    expect(selectMaterializedWorkOutcomeSamples(materialized, -1)).toEqual([]);
+    expect(materialized).toEqual(materializedBeforeSelection);
+  });
+
+  it("keeps a historical chart pinned while live outcomes advance and restores current history", () => {
+    const store = useFactoryTimelineStore.getState();
+    act(() => store.appendEvents(baselineEvents));
+    const chart = renderHook(() => useTimelineWorkOutcomeChart());
+    const materializedBeforeSelection =
+      useFactoryTimelineStore.getState().materializedWorkOutcomeState;
+    const baselineBeforeSelection = structuredClone(
+      materializedBeforeSelection,
+    );
+
+    act(() => store.selectTick(-1));
+    expect(chart.result.current.samples).toEqual([]);
+    expect(chart.result.current.points).toEqual([]);
+
+    act(() => store.selectTick(4));
+    expect(chart.result.current.samples.map((sample) => sample.tick)).toEqual([
+      0, 1, 2, 3, 4,
+    ]);
+    expect(chart.result.current.samples.at(-1)).toMatchObject({
+      completedCount: 1,
+      failedCount: 0,
+      queuedCount: 1,
+      tick: 4,
+    });
+    expect(
+      useFactoryTimelineStore.getState().materializedWorkOutcomeState,
+    ).toBe(materializedBeforeSelection);
+    expect(materializedBeforeSelection).toEqual(baselineBeforeSelection);
+
+    act(() => store.appendEvent(tailEvent));
+    expect(chart.result.current.samples.map((sample) => sample.tick)).toEqual([
+      0, 1, 2, 3, 4,
+    ]);
+    const materializedAfterTail =
+      useFactoryTimelineStore.getState().materializedWorkOutcomeState;
+    const baselineAfterTail = structuredClone(materializedAfterTail);
+    expect(materializedAfterTail.samples.map((sample) => sample.tick)).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7,
+    ]);
+    expect(materializedAfterTail).toMatchObject({
+      counts: { completed: 1, failed: 1, queued: 1 },
+      cursor: { eventID: tailEvent.id, tick: 7 },
+    });
+
+    act(() => store.setCurrentMode());
+    expect(chart.result.current.samples.map((sample) => sample.tick)).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7,
+    ]);
+    expect(
+      useFactoryTimelineStore.getState().materializedWorkOutcomeState,
+    ).toBe(materializedAfterTail);
+    expect(materializedAfterTail).toEqual(baselineAfterTail);
+    chart.unmount();
+  });
+
+  it("preserves the restored baseline and extends it with one accepted live event", async () => {
     const { indexedDB } = createIndexedDBTestDouble();
     const streamIdentity = streamIdentityFixture();
 
@@ -296,6 +444,7 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
     expect(
       uninterrupted.result.current.samples.map((sample) => sample.tick),
     ).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    const uninterruptedBaseline = uninterrupted.result.current.samples;
 
     const baselineCheckpoint =
       useFactoryTimelineStore.getState().currentReplayCheckpoint;
@@ -321,42 +470,24 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
     });
 
     const restored = renderHook(() => useTimelineWorkOutcomeChart());
-    expect(restored.result.current.samples).toEqual([
-      {
-        completedCount: 1,
-        dispatchedCount: 2,
-        failedByWorkType: { story: 1 },
-        failedCount: 1,
-        failedWorkLabels: ["Story Two"],
-        inFlightCount: 0,
-        observedAt: 0,
-        queuedCount: 0,
-        tick: 6,
-      },
-    ]);
+    expect(restored.result.current.samples).toEqual(uninterruptedBaseline);
+    expect(
+      restored.result.current.samples.map((sample) => sample.tick),
+    ).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(restored.result.current.samples.at(-1)).toMatchObject({
+      completedCount: 1,
+      dispatchedCount: 2,
+      failedByWorkType: { story: 1 },
+      failedCount: 1,
+      failedWorkLabels: ["Story Two"],
+      tick: 6,
+    });
 
     act(() => useFactoryTimelineStore.getState().appendEvent(tailEvent));
     expect(restored.result.current.samples).toEqual([
-      {
-        completedCount: 0,
-        dispatchedCount: 0,
-        failedByWorkType: {},
-        failedCount: 0,
-        failedWorkLabels: [],
-        inFlightCount: 0,
-        observedAt: 1777464007000,
-        queuedCount: 0,
-        tick: 7,
-      },
+      ...uninterruptedBaseline,
+      expect.objectContaining({ queuedCount: 1, tick: 7 }),
     ]);
-    expect(
-      [0, 1, 2, 3, 4, 5, 6].filter(
-        (tick) =>
-          !restored.result.current.samples.some(
-            (sample) => sample.tick === tick,
-          ),
-      ),
-    ).toEqual([0, 1, 2, 3, 4, 5, 6]);
 
     const samplesAfterFirstTail = restored.result.current.samples;
     act(() => useFactoryTimelineStore.getState().appendEvent(tailEvent));
@@ -366,47 +497,19 @@ describe("buildWorkOutcomeTimelineSamplesFromEvents", () => {
         .getState()
         .events.filter((timelineEvent) => timelineEvent.id === tailEvent.id),
     ).toHaveLength(1);
-  });
-
-  it.fails("preserves the uninterrupted series across checkpoint restore and one tail event", async () => {
-    const { indexedDB } = createIndexedDBTestDouble();
-    const streamIdentity = streamIdentityFixture();
-    useFactoryTimelineStore.getState().appendEvents(baselineEvents);
-    const checkpoint =
-      useFactoryTimelineStore.getState().currentReplayCheckpoint;
-    await persistTimelineCheckpoint(indexedDB, checkpoint, streamIdentity);
-    useFactoryTimelineStore.getState().reset();
-    const restoredCheckpoint = await readTimelineCheckpoint(
-      indexedDB,
-      streamIdentity,
-    );
-    if (!restoredCheckpoint) {
-      throw new Error("expected the persisted baseline checkpoint to restore");
-    }
-    useFactoryTimelineStore.getState().restoreCheckpoint(restoredCheckpoint);
-
-    const repaired = renderHook(() => useTimelineWorkOutcomeChart());
-    act(() => useFactoryTimelineStore.getState().appendEvent(tailEvent));
-    act(() => useFactoryTimelineStore.getState().appendEvent(tailEvent));
-
-    const uninterruptedThroughTail = buildWorkOutcomeTimelineSamplesFromEvents(
-      [...baselineEvents, tailEvent],
-      7,
-    );
-    expect(repaired.result.current.samples).toEqual(uninterruptedThroughTail);
+    uninterrupted.unmount();
+    restored.unmount();
   });
 });
 
 function useTimelineWorkOutcomeChart() {
-  const events = useFactoryTimelineStore((state) => state.events);
-  const selectedTick = useFactoryTimelineStore((state) => state.selectedTick);
-  const worldViewCache = useFactoryTimelineStore(
-    (state) => state.worldViewCache,
+  const materializedWorkOutcomeState = useFactoryTimelineStore(
+    (state) => state.materializedWorkOutcomeState,
   );
+  const selectedTick = useFactoryTimelineStore((state) => state.selectedTick);
   return useWorkOutcomeChart({
+    materializedWorkOutcomeState,
     selectedTimelineTick: selectedTick,
-    timelineEvents: events,
-    worldViewCache,
   });
 }
 
@@ -446,17 +549,26 @@ function createIndexedDBTestDouble() {
     createObjectStore: () => {},
     deleteObjectStore: () => {},
     objectStoreNames: { contains: () => true },
-    transaction: () => ({
-      objectStore: () => ({
-        delete: (key: string) =>
-          indexedDBRequest(undefined, () => records.delete(key)),
-        get: (key: string) => indexedDBRequest(records.get(key)),
-        put: (value: { storageKey: string }) =>
-          indexedDBRequest(value.storageKey, () =>
-            records.set(value.storageKey, value),
-          ),
-      }),
-    }),
+    transaction: () => {
+      const transaction = {
+        oncomplete: null,
+        objectStore: () => ({
+          delete: (key: string) =>
+            indexedDBRequest(undefined, () => records.delete(key)),
+          get: (key: string) => indexedDBRequest(records.get(key)),
+          put: (value: { storageKey: string }) =>
+            indexedDBRequest(
+              value.storageKey,
+              () => records.set(value.storageKey, value),
+              () =>
+                (
+                  transaction.oncomplete as ((event: Event) => void) | null
+                )?.({} as Event),
+            ),
+        }),
+      };
+      return transaction;
+    },
   };
 
   return {
@@ -466,7 +578,11 @@ function createIndexedDBTestDouble() {
   };
 }
 
-function indexedDBRequest<T>(result: T, beforeSuccess?: () => void) {
+function indexedDBRequest<T>(
+  result: T,
+  beforeSuccess?: () => void,
+  afterSuccess?: () => void,
+) {
   const request = {
     error: null,
     onblocked: null,
@@ -478,6 +594,7 @@ function indexedDBRequest<T>(result: T, beforeSuccess?: () => void) {
   queueMicrotask(() => {
     beforeSuccess?.();
     request.onsuccess?.({} as Event);
+    afterSuccess?.();
   });
   return request;
 }

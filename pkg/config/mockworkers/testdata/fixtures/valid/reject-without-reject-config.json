@@ -1,0 +1,8 @@
+{
+  "mockWorkers": [
+    {
+      "id": "reject-minimal",
+      "runType": "reject"
+    }
+  ]
+}

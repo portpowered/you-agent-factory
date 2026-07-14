@@ -75,14 +75,7 @@ describe("timeline storeState helpers", () => {
 
     const next = appendTimelineEvents(current, [], deps);
 
-    expect(next).toEqual({
-      events: current.events,
-      latestTick: current.latestTick,
-      mode: current.mode,
-      receivedEventIDs: current.receivedEventIDs,
-      selectedTick: current.selectedTick,
-      worldViewCache: current.worldViewCache,
-    });
+    expect(next).toBe(current);
   });
 
   it("returns current state when all appended events are duplicates", () => {
@@ -98,14 +91,7 @@ describe("timeline storeState helpers", () => {
 
     const next = appendTimelineEvents(current, [event], deps);
 
-    expect(next).toEqual({
-      events: current.events,
-      latestTick: current.latestTick,
-      mode: current.mode,
-      receivedEventIDs: current.receivedEventIDs,
-      selectedTick: current.selectedTick,
-      worldViewCache: current.worldViewCache,
-    });
+    expect(next).toBe(current);
   });
 
   it("keeps selected tick in fixed mode when appending events", () => {
@@ -171,7 +157,7 @@ describe("timeline storeState helpers", () => {
     const first = timelineEvent("replace-1", 1);
     const second = timelineEvent("replace-2", 2);
 
-    const next = replaceTimelineEvents([second, first], deps);
+    const next = replaceTimelineEvents([second, first, second], deps);
 
     expect(next.mode).toBe("current");
     expect(next.events.map((event) => event.id)).toEqual([
@@ -182,6 +168,16 @@ describe("timeline storeState helpers", () => {
     expect(next.selectedTick).toBe(2);
     expect(next.receivedEventIDs).toEqual(["replace-1", "replace-2"]);
     expect(next.worldViewCache[2]).toEqual(snapshotForTick(2));
+    expect(next.currentReplayCheckpoint).toMatchObject({
+      afterEventId: "replace-2",
+      afterSequence: 2,
+      selectedTick: 2,
+    });
+    expect(next.materializedWorkOutcomeState).toMatchObject({
+      accumulator: { appliedEventCount: 2 },
+      cursor: { eventID: "replace-2", sequence: 2, tick: 2 },
+      version: 1,
+    });
   });
 
   it("cacheWithSnapshot leaves cache unchanged when tick is already cached", () => {

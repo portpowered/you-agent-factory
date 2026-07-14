@@ -1,0 +1,11 @@
+{
+  "recordingKind": "you.factory-session.javascript.recording",
+  "schemaVersion": "2",
+  "replayCompatibilityVersion": "1",
+  "session": {"id": "session-js-bad", "status": "COMPLETED", "orchestratorKind": "JAVASCRIPT"},
+  "source": {"ref": "workflow/bad.js", "hash": "sha256:not-a-digest"},
+  "argumentsDigest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+  "policyHash": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+  "artifacts": [], "events": [],
+  "redaction": {"runtimeStateOmitted": true, "checkpointBodiesOmitted": true, "providerTranscriptsOmitted": true, "childDispatchesOmitted": true, "secretsRedacted": 0}
+}

@@ -5,10 +5,11 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig, error) {
@@ -668,8 +669,8 @@ func workstationOperationBindingsInternalFromAPI(bindings *[]factoryapi.Workstat
 		values[i] = interfaces.ModelOperationBinding{
 			Slot:           binding.Slot,
 			Selector:       workstationOperationBindingSelectorInternalFromAPI(binding.Selector),
-			Config:         workcontent.PartsFromGenerated(binding.Config),
-			DefaultContent: workcontent.PartsFromGenerated(binding.DefaultContent),
+			Config:         contentcontract.PartsFromGenerated(binding.Config),
+			DefaultContent: contentcontract.PartsFromGenerated(binding.DefaultContent),
 		}
 	}
 	return values

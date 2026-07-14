@@ -29,6 +29,10 @@ const BUILT_IN_RUNNER_METADATA: Record<ApiRunnerID, RunnerMetadata> = {
     displayName: "OpenCode",
     id: "opencode",
   },
+  pi: {
+    displayName: "Pi",
+    id: "pi",
+  },
 };
 
 export const BUILT_IN_RUNNER_IDS: ApiRunnerID[] = [...OPENAPI_RUNNER_IDS];

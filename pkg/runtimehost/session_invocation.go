@@ -5,15 +5,18 @@ import (
 	"sort"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+
+	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"
 )
 
@@ -27,11 +30,11 @@ func (fs *Host) InvokeFactorySession(
 	return fs.sessionInvocationOwner().InvokeFactorySession(ctx, sessionID, request)
 }
 
-func (fs *Host) sessionInvocationOwner() invocations.SessionInvoker {
+func (fs *Host) sessionInvocationOwner() sessioninvocation.SessionInvoker {
 	if fs.sessionInvoker != nil {
 		return fs.sessionInvoker
 	}
-	return invocations.NewSessionOwner(invocations.SessionOwnerDependencies{
+	return sessioninvocation.NewSessionOwner(sessioninvocation.SessionOwnerDependencies{
 		FactoryConfig: fs.sessionInvocationFactoryConfig,
 		SubmitWork:    fs.submitOwnedSessionInvocationWork,
 		Observe:       fs.observeSessionInvocation,
@@ -40,13 +43,13 @@ func (fs *Host) sessionInvocationOwner() invocations.SessionInvoker {
 	})
 }
 
-func (fs *Host) sessionInvocationTelemetry() invocations.SessionInvocationTelemetry {
-	return invocations.NewSessionInvocationTelemetry(invocations.SessionInvocationTelemetryDependencies{
-		RecordMetric: func(metric invocations.SessionInvocationMetric) {
+func (fs *Host) sessionInvocationTelemetry() sessioninvocation.SessionInvocationTelemetry {
+	return sessioninvocation.NewSessionInvocationTelemetry(sessioninvocation.SessionInvocationTelemetryDependencies{
+		RecordMetric: func(metric sessioninvocation.SessionInvocationMetric) {
 			fs.recordInvocationMetric(metric.Name, metric.Labels)
 		},
 		RecordLog: fs.recordSessionInvocationLog,
-		Packaged: &invocations.PackagedInvocationTelemetry{
+		Packaged: &sessioninvocation.PackagedInvocationTelemetry{
 			Active: tts.IsPackagedFactory, FactoryName: tts.PackagedFactoryName, Backend: tts.BackendRuntimeLabel(),
 			AttemptsMetric: tts.MetricPackagedFactoryAttempts, SuccessMetric: tts.MetricPackagedFactorySuccess,
 			FailureMetric: tts.MetricPackagedFactoryFailure, NotReadyMetric: tts.MetricPackagedFactoryNotReady,
@@ -55,7 +58,7 @@ func (fs *Host) sessionInvocationTelemetry() invocations.SessionInvocationTeleme
 	})
 }
 
-func (fs *Host) recordSessionInvocationLog(record invocations.SessionInvocationLogRecord) {
+func (fs *Host) recordSessionInvocationLog(record sessioninvocation.SessionInvocationLogRecord) {
 	if fs == nil || fs.logger == nil {
 		return
 	}
@@ -85,16 +88,16 @@ func (fs *Host) submitOwnedSessionInvocationWork(ctx context.Context, sessionID 
 	return fs.SubmitWorkRequestForSession(ctx, sessionID, factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{request}))
 }
 
-func (fs *Host) observeSessionInvocation(ctx context.Context, sessionID string, input invocations.SessionInvocationWaitInput) (invocations.SessionInvocationObservation, error) {
+func (fs *Host) observeSessionInvocation(ctx context.Context, sessionID string, input sessioninvocation.SessionInvocationWaitInput) (sessioninvocation.SessionInvocationObservation, error) {
 	snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, sessionID)
 	if err != nil {
-		return invocations.SessionInvocationObservation{}, err
+		return sessioninvocation.SessionInvocationObservation{}, err
 	}
 	worldState, err := fs.sessionInvocationWorldState(ctx, sessionID, snapshot.TickCount)
 	if err != nil {
-		return invocations.SessionInvocationObservation{}, err
+		return sessioninvocation.SessionInvocationObservation{}, err
 	}
-	return invocations.SessionInvocationObservation{
+	return sessioninvocation.SessionInvocationObservation{
 		WorldState: worldState, FactoryState: snapshot.FactoryState,
 		ActiveWork:           snapshotHasActiveWork(snapshot),
 		MissingPrimaryResult: classifyInvocationMissingPrimaryResultFromSnapshot(sessionID, snapshot, input),
@@ -107,12 +110,12 @@ func (hostSessionInvocationSpecialCase) Active(cfg *interfaces.FactoryConfig) bo
 	return tts.IsPackagedFactory(cfg)
 }
 
-func (hostSessionInvocationSpecialCase) TerminalFailure(worldState interfaces.FactoryWorldState, requestID string) *invocations.SessionInvocationSpecialFailure {
+func (hostSessionInvocationSpecialCase) TerminalFailure(worldState interfaces.FactoryWorldState, requestID string) *sessioninvocation.SessionInvocationSpecialFailure {
 	_, failure := tts.ClassifyInvocationWait(worldState, requestID, false)
 	if failure == nil {
 		return nil
 	}
-	return &invocations.SessionInvocationSpecialFailure{ErrorCode: failure.ErrorCode, Message: failure.Message, FailureClass: failure.FailureClass}
+	return &sessioninvocation.SessionInvocationSpecialFailure{ErrorCode: failure.ErrorCode, Message: failure.Message, FailureClass: failure.FailureClass}
 }
 
 func (fs *Host) sessionInvocationWorldState(
@@ -141,8 +144,8 @@ func (fs *Host) recordInvocationMetric(name string, labels map[string]string) {
 func classifyInvocationMissingPrimaryResultFromSnapshot(
 	sessionID string,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	input invocations.SessionInvocationWaitInput,
-) *invocations.PrimaryResultError {
+	input sessioninvocation.SessionInvocationWaitInput,
+) *workinvocation.PrimaryResultError {
 	if snapshot == nil || strings.TrimSpace(input.RequestID) == "" {
 		return nil
 	}
@@ -171,7 +174,7 @@ func classifyInvocationMissingPrimaryResultFromSnapshot(
 			if strings.TrimSpace(token.Color.RequestID) != strings.TrimSpace(input.RequestID) || tokenStateName(token.PlaceID) != wantState {
 				continue
 			}
-			return invocations.ClassifyMissingPrimaryResultWorkItem(input.RequestID, input.InvocationReturn, interfaces.FactoryWorkItem{
+			return workinvocation.ClassifyMissingPrimaryResultWorkItem(input.RequestID, input.InvocationReturn, interfaces.FactoryWorkItem{
 				ID: token.Color.WorkID, WorkTypeID: token.Color.WorkTypeID,
 				DisplayName: token.Color.Name, PlaceID: token.PlaceID,
 			}, sessionID)

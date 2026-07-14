@@ -18,18 +18,19 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
@@ -343,7 +344,7 @@ Review.
 		},
 	)
 
-	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, nil, nil, localModelDomain{})
+	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, localModelDomain{})
 	if err == nil || !strings.Contains(err.Error(), `unknown runner "mystery-runner"`) {
 		t.Fatalf("loadWorkersFromConfig error = %v, want unknown runner", err)
 	}
@@ -367,7 +368,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableGeminiFactoryRunner(t *testing.T)
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDGemini, cfg, nil, logging.NoopLogger{}, false, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDGemini, cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available gemini runner", err)
 	}
 }
@@ -390,7 +391,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableKiroFactoryRunner(t *testing.T) {
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDKiro, cfg, nil, logging.NoopLogger{}, false, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDKiro, cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available kiro runner", err)
 	}
 }
@@ -413,7 +414,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableCursorFactoryRunner(t *testing.T)
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDCursorCLI, cfg, nil, logging.NoopLogger{}, false, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDCursorCLI, cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available cursor runner", err)
 	}
 }
@@ -436,7 +437,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableOpenCodeFactoryRunner(t *testing.
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDOpenCode, cfg, nil, logging.NoopLogger{}, false, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDOpenCode, cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available opencode runner", err)
 	}
 }
@@ -465,7 +466,7 @@ You are a helpful assistant.
 		},
 	)
 
-	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "mystery-runner", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, nil, nil, localModelDomain{})
+	_, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), "mystery-runner", cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, localModelDomain{})
 	if err == nil || !strings.Contains(err.Error(), `unknown runner "mystery-runner"`) {
 		t.Fatalf("loadWorkersFromConfig error = %v, want unknown runner", err)
 	}
@@ -1385,7 +1386,7 @@ func TestInvocationBootstrap_InvokeFactorySessionForwardsToCanonicalOwner(t *tes
 
 	requestID := "request-1"
 	request := factoryapi.InvocationRequest{RequestId: &requestID, Args: &map[string]any{"input": "hello"}}
-	wantResult := invocations.FactoryInvocationResult{
+	wantResult := sessioninvocation.FactoryInvocationResult{
 		RequestID: "result-request",
 		TraceID:   "trace-1",
 		Status:    factoryapi.InvocationTerminalStatusCompleted,
@@ -1497,5 +1498,702 @@ func writeInvocationBootstrapWorkstationAgentsMD(t *testing.T, factoryDir, works
 	content := "---\ntype: MODEL_WORKSTATION\n---\nDo the work.\n"
 	if err := os.WriteFile(filepath.Join(workstationDir, "AGENTS.md"), []byte(content), 0o644); err != nil {
 		t.Fatalf("write workstation AGENTS.md: %v", err)
+	}
+}
+
+func TestLoadWorkersFromConfig_InvocationSkipPermissionsOverridePropagatesToAgentProviderCommand(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "agent-a", `---
+type: AGENT_WORKER
+model: claude-sonnet-4-20250514
+modelProvider: claude
+stopToken: COMPLETE
+skipPermissions: false
+---
+You are a helpful agent.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workers:      []interfaces.WorkerConfig{{Name: "agent-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"agent-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &providerCommandRunnerRecorder{
+		result: workers.CommandResult{Stdout: []byte("done COMPLETE")},
+	}
+	override := true
+	opts, err := loadWorkersFromConfig(
+		cfg.FactoryDir(),
+		cfg.FactoryConfig(),
+		"",
+		cfg,
+		nil,
+		logging.NoopLogger{},
+		false,
+		&override,
+		nil,
+		nil,
+		runner,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		time.Now,
+		LocalModelDomain{},
+	)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	executeProviderBackedWorker(t, opts, "agent-a", runner)
+	assertProviderArgsContain(t, runner.Requests(), "--dangerously-skip-permissions")
+}
+
+func TestLoadWorkersFromConfig_InvocationSkipPermissionsOverrideDoesNotApplyToModelWorker(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "model-a", `---
+type: MODEL_WORKER
+model: claude-sonnet-4-20250514
+modelProvider: claude
+stopToken: COMPLETE
+skipPermissions: false
+---
+You are a helpful assistant.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workers:      []interfaces.WorkerConfig{{Name: "model-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"model-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "model-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &providerCommandRunnerRecorder{
+		result: workers.CommandResult{Stdout: []byte("done COMPLETE")},
+	}
+	override := true
+	opts, err := loadWorkersFromConfig(
+		cfg.FactoryDir(),
+		cfg.FactoryConfig(),
+		"",
+		cfg,
+		nil,
+		logging.NoopLogger{},
+		false,
+		&override,
+		nil,
+		nil,
+		runner,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		time.Now,
+		LocalModelDomain{},
+	)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	executeProviderBackedWorker(t, opts, "model-a", runner)
+	assertProviderArgsDoNotContain(t, runner.Requests(), "--dangerously-skip-permissions")
+}
+
+func TestLoadWorkersFromConfig_PersistedSkipPermissionsTrueWithoutInvocationOverride(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "agent-a", `---
+type: AGENT_WORKER
+model: claude-sonnet-4-20250514
+modelProvider: claude
+stopToken: COMPLETE
+skipPermissions: true
+---
+You are a helpful agent.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workers:      []interfaces.WorkerConfig{{Name: "agent-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"agent-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &providerCommandRunnerRecorder{
+		result: workers.CommandResult{Stdout: []byte("done COMPLETE")},
+	}
+	opts, err := loadWorkersFromConfig(
+		cfg.FactoryDir(),
+		cfg.FactoryConfig(),
+		"",
+		cfg,
+		nil,
+		logging.NoopLogger{},
+		false,
+		nil,
+		nil,
+		nil,
+		runner,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		time.Now,
+		LocalModelDomain{},
+	)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	executeProviderBackedWorker(t, opts, "agent-a", runner)
+	assertProviderArgsContain(t, runner.Requests(), "--dangerously-skip-permissions")
+}
+
+func executeProviderBackedWorker(
+	t *testing.T,
+	opts []factory.FactoryOption,
+	workerName string,
+	runner *providerCommandRunnerRecorder,
+) {
+	t.Helper()
+
+	fc := &factory.FactoryConfig{}
+	for _, opt := range opts {
+		opt(fc)
+	}
+
+	exec, ok := fc.WorkerExecutors[workerName]
+	if !ok {
+		t.Fatalf("expected %q executor to be registered", workerName)
+	}
+	wsExec, ok := exec.(*workers.WorkstationExecutor)
+	if !ok {
+		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
+	}
+
+	if _, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+		DispatchID:      "dispatch-skip-permissions",
+		TransitionID:    "transition-skip-permissions",
+		WorkerType:      workerName,
+		WorkstationName: "review",
+		InputTokens: workers.InputTokens(interfaces.Token{
+			ID: "token-skip-permissions",
+			Color: interfaces.TokenColor{
+				WorkID:  "work-skip-permissions",
+				Payload: []byte("helpful input"),
+			},
+		}),
+	}); err != nil {
+		t.Fatalf("execute worker: %v", err)
+	}
+	if len(runner.Requests()) != 1 {
+		t.Fatalf("provider command count = %d, want 1", len(runner.Requests()))
+	}
+}
+
+func assertProviderArgsContain(t *testing.T, requests []workers.CommandRequest, want string) {
+	t.Helper()
+	if len(requests) == 0 {
+		t.Fatal("expected provider command requests")
+	}
+	joined := strings.Join(requests[0].Args, " ")
+	if !strings.Contains(joined, want) {
+		t.Fatalf("provider args = %q, want substring %q", joined, want)
+	}
+}
+
+func assertProviderArgsDoNotContain(t *testing.T, requests []workers.CommandRequest, unwanted string) {
+	t.Helper()
+	if len(requests) == 0 {
+		t.Fatal("expected provider command requests")
+	}
+	joined := strings.Join(requests[0].Args, " ")
+	if strings.Contains(joined, unwanted) {
+		t.Fatalf("provider args = %q, want to omit %q", joined, unwanted)
+	}
+}
+
+func TestLoadWorkersFromConfig_InvocationSkipPermissionsOverrideFailsForUnsupportedAgentProvider(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "agent-a", `---
+type: AGENT_WORKER
+model: custom-model
+modelProvider: acme
+stopToken: COMPLETE
+skipPermissions: false
+---
+You are a helpful agent.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workers:      []interfaces.WorkerConfig{{Name: "agent-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"agent-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &providerCommandRunnerRecorder{
+		result: workers.CommandResult{Stdout: []byte("done COMPLETE")},
+	}
+	override := true
+	_, err := loadWorkersFromConfig(
+		cfg.FactoryDir(),
+		cfg.FactoryConfig(),
+		"",
+		cfg,
+		nil,
+		logging.NoopLogger{},
+		false,
+		&override,
+		nil,
+		nil,
+		runner,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		time.Now,
+		LocalModelDomain{},
+	)
+	if err == nil {
+		t.Fatal("expected loadWorkersFromConfig to fail for unsupported provider with --skip-permissions")
+	}
+	if !strings.Contains(err.Error(), "skip-permissions") {
+		t.Fatalf("error = %q, want skip-permissions failure", err.Error())
+	}
+	if !strings.Contains(err.Error(), "acme") {
+		t.Fatalf("error = %q, want unsupported provider detail", err.Error())
+	}
+	if len(runner.Requests()) != 0 {
+		t.Fatalf("provider command count = %d, want 0 before dispatch", len(runner.Requests()))
+	}
+}
+
+func TestLoadWorkersFromConfig_InvocationSkipPermissionsOverrideFailsForLocalManagedAgentWorker(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "agent-a", `---
+type: AGENT_WORKER
+model: OMNIVOICE_Q4_K_M
+modelProvider: claude
+stopToken: COMPLETE
+skipPermissions: false
+---
+You are a helpful agent.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workers: []interfaces.WorkerConfig{{
+			Name:          "agent-a",
+			ModelLocality: interfaces.ModelLocalityLocal,
+		}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"agent-a": func() *interfaces.WorkerConfig {
+				worker := mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a"))
+				worker.ModelLocality = interfaces.ModelLocalityLocal
+				return worker
+			}(),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &providerCommandRunnerRecorder{
+		result: workers.CommandResult{Stdout: []byte("done COMPLETE")},
+	}
+	override := true
+	_, err := loadWorkersFromConfig(
+		cfg.FactoryDir(),
+		cfg.FactoryConfig(),
+		"",
+		cfg,
+		nil,
+		logging.NoopLogger{},
+		false,
+		&override,
+		nil,
+		nil,
+		runner,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		time.Now,
+		LocalModelDomain{},
+	)
+	if err == nil {
+		t.Fatal("expected loadWorkersFromConfig to fail for local managed agent worker with --skip-permissions")
+	}
+	if !strings.Contains(err.Error(), "local managed model workers cannot honor CLI skip-permissions") {
+		t.Fatalf("error = %q, want local managed model failure detail", err.Error())
+	}
+	if len(runner.Requests()) != 0 {
+		t.Fatalf("provider command count = %d, want 0 before dispatch", len(runner.Requests()))
+	}
+}
+
+func TestLoadWorkersFromConfig_InvocationSkipPermissionsOverrideFailsWhenFactoryHasUnsupportedAgentPeer(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "agent-supported", `---
+type: AGENT_WORKER
+model: claude-sonnet-4-20250514
+modelProvider: claude
+stopToken: COMPLETE
+skipPermissions: false
+---
+You are a helpful agent.
+`)
+	writeWorkerAgentsMDWithContent(t, dir, "agent-unsupported", `---
+type: AGENT_WORKER
+model: custom-model
+modelProvider: acme
+stopToken: COMPLETE
+skipPermissions: false
+---
+You are another agent.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workers: []interfaces.WorkerConfig{
+			{Name: "agent-supported"},
+			{Name: "agent-unsupported"},
+		},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"agent-supported":   mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-supported")),
+			"agent-unsupported": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-unsupported")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &providerCommandRunnerRecorder{
+		result: workers.CommandResult{Stdout: []byte("done COMPLETE")},
+	}
+	override := true
+	_, err := loadWorkersFromConfig(
+		cfg.FactoryDir(),
+		cfg.FactoryConfig(),
+		"",
+		cfg,
+		nil,
+		logging.NoopLogger{},
+		false,
+		&override,
+		nil,
+		nil,
+		runner,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		time.Now,
+		LocalModelDomain{},
+	)
+	if err == nil {
+		t.Fatal("expected mixed factory to fail when --skip-permissions is set and any agent worker is unsupported")
+	}
+	if !strings.Contains(err.Error(), "agent-unsupported") {
+		t.Fatalf("error = %q, want unsupported worker name", err.Error())
+	}
+	if len(runner.Requests()) != 0 {
+		t.Fatalf("provider command count = %d, want 0 before dispatch", len(runner.Requests()))
+	}
+}
+
+func TestLoadWorkersFromConfig_UnsupportedAgentProviderWithoutInvocationOverrideDoesNotFail(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "agent-a", `---
+type: AGENT_WORKER
+model: custom-model
+modelProvider: acme
+stopToken: COMPLETE
+skipPermissions: false
+---
+You are a helpful agent.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workers:      []interfaces.WorkerConfig{{Name: "agent-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"agent-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &providerCommandRunnerRecorder{
+		result: workers.CommandResult{Stdout: []byte("done COMPLETE")},
+	}
+	opts, err := loadWorkersFromConfig(
+		cfg.FactoryDir(),
+		cfg.FactoryConfig(),
+		"",
+		cfg,
+		nil,
+		logging.NoopLogger{},
+		false,
+		nil,
+		nil,
+		nil,
+		runner,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		time.Now,
+		LocalModelDomain{},
+	)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig without override: %v", err)
+	}
+
+	executeProviderBackedWorker(t, opts, "agent-a", runner)
+	assertProviderArgsDoNotContain(t, runner.Requests(), "--dangerously-skip-permissions")
+}
+
+func TestS14AbsentOverrideUsesPersistedFalseOnly(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "agent-a", `---
+type: AGENT_WORKER
+model: claude-sonnet-4-20250514
+modelProvider: claude
+stopToken: COMPLETE
+skipPermissions: false
+---
+You are a helpful agent.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workers:      []interfaces.WorkerConfig{{Name: "agent-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"agent-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &providerCommandRunnerRecorder{
+		result: workers.CommandResult{Stdout: []byte("done COMPLETE")},
+	}
+	opts, err := loadWorkersFromConfig(
+		cfg.FactoryDir(),
+		cfg.FactoryConfig(),
+		"",
+		cfg,
+		nil,
+		logging.NoopLogger{},
+		false,
+		nil,
+		nil,
+		nil,
+		runner,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		time.Now,
+		LocalModelDomain{},
+	)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	executeProviderBackedWorker(t, opts, "agent-a", runner)
+	assertProviderArgsDoNotContain(t, runner.Requests(), "--dangerously-skip-permissions")
+}
+
+func TestS14InvocationSkipPermissionsDoesNotMutateWorkerAgentsFrontmatter(t *testing.T) {
+	dir := t.TempDir()
+
+	agentsPath := filepath.Join(dir, "workers", "agent-a", "AGENTS.md")
+	agentsContent := `---
+type: AGENT_WORKER
+model: claude-sonnet-4-20250514
+modelProvider: claude
+stopToken: COMPLETE
+skipPermissions: false
+---
+You are a helpful agent.
+`
+	writeWorkerAgentsMDWithContent(t, dir, "agent-a", agentsContent)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	before, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("read AGENTS.md before load: %v", err)
+	}
+
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workers:      []interfaces.WorkerConfig{{Name: "agent-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"agent-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &providerCommandRunnerRecorder{
+		result: workers.CommandResult{Stdout: []byte("done COMPLETE")},
+	}
+	override := true
+	opts, err := loadWorkersFromConfig(
+		cfg.FactoryDir(),
+		cfg.FactoryConfig(),
+		"",
+		cfg,
+		nil,
+		logging.NoopLogger{},
+		false,
+		&override,
+		nil,
+		nil,
+		runner,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		time.Now,
+		LocalModelDomain{},
+	)
+	if err != nil {
+		t.Fatalf("loadWorkersFromConfig: %v", err)
+	}
+
+	executeProviderBackedWorker(t, opts, "agent-a", runner)
+	assertProviderArgsContain(t, runner.Requests(), "--dangerously-skip-permissions")
+
+	after, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("read AGENTS.md after load: %v", err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("AGENTS.md changed after invocation override:\nbefore=%q\nafter=%q", before, after)
+	}
+	if !strings.Contains(string(after), "skipPermissions: false") {
+		t.Fatalf("AGENTS.md = %q, want persisted skipPermissions:false unchanged", string(after))
+	}
+	if strings.Contains(string(after), "skipPermissions: true") {
+		t.Fatalf("AGENTS.md = %q, want skipPermissions not persisted as true", string(after))
+	}
+}
+
+func TestS14UnsupportedProviderFailsBeforeDispatchEvidence(t *testing.T) {
+	dir := t.TempDir()
+
+	writeWorkerAgentsMDWithContent(t, dir, "agent-a", `---
+type: AGENT_WORKER
+model: custom-model
+modelProvider: acme
+stopToken: COMPLETE
+skipPermissions: false
+---
+You are a helpful agent.
+`)
+	writeWorkstationAgentsMD(t, dir, "review")
+
+	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
+		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
+		Workers:      []interfaces.WorkerConfig{{Name: "agent-a"}},
+	},
+		map[string]*interfaces.WorkerConfig{
+			"agent-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a")),
+		},
+		map[string]*interfaces.FactoryWorkstationConfig{
+			"review": mustLoadWorkstationConfig(t, filepath.Join(dir, "workstations", "review")),
+		},
+	)
+
+	runner := &providerCommandRunnerRecorder{
+		result: workers.CommandResult{Stdout: []byte("done COMPLETE")},
+	}
+	override := true
+	_, err := loadWorkersFromConfig(
+		cfg.FactoryDir(),
+		cfg.FactoryConfig(),
+		"",
+		cfg,
+		nil,
+		logging.NoopLogger{},
+		false,
+		&override,
+		nil,
+		nil,
+		runner,
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+		time.Now,
+		LocalModelDomain{},
+	)
+	if err == nil {
+		t.Fatal("expected unsupported provider to fail before dispatch when --skip-permissions is set")
+	}
+	if !strings.Contains(err.Error(), "skip-permissions") {
+		t.Fatalf("error = %q, want skip-permissions failure", err.Error())
+	}
+	if len(runner.Requests()) != 0 {
+		t.Fatalf("provider command count = %d, want 0 before dispatch", len(runner.Requests()))
 	}
 }

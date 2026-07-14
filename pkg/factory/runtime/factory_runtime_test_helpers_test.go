@@ -7,15 +7,15 @@ import (
 	"testing"
 	"time"
 
-	factoryboundary "github.com/portpowered/infinite-you/pkg/api"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryboundary "github.com/portpowered/infinite-you/pkg/transports/http"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -660,10 +660,10 @@ func sliceValueForRuntimeTest[T any](values *[]T) []T {
 }
 
 type serviceModeRunHarness struct {
-	t      *testing.T
+	t       *testing.T
 	Factory factory.Factory
-	cancel context.CancelFunc
-	errCh  chan error
+	cancel  context.CancelFunc
+	errCh   chan error
 }
 
 func startServiceModeRunHarness(t *testing.T, opts ...factory.FactoryOption) *serviceModeRunHarness {

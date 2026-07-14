@@ -29,10 +29,10 @@ HTTP transport redesign, multi-host parity matrices, or generic CLI resume smoke
 
 | Surface | MCP wiring | Proof |
 |---------|------------|-------|
-| Interrupted-to-resumed success | `pkg/mcp/factorysession/control.go`, `pkg/cli/mcp/serve.go` | `pkg/cli/mcp/serve_runtime_resume_smoke_test.go` (`TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl`) |
-| Resume continuity without replay | `pkg/mcp/factorysession/list_dispatches.go` | `pkg/cli/mcp/serve_runtime_resume_smoke_test.go` (`TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDispatchesWithoutReplay`) |
-| Typed invalid resume outcomes | `pkg/mcp/factorysession/control.go` | `pkg/cli/mcp/serve_runtime_resume_smoke_test.go` (`TestRunServe_RuntimeResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead`, `TestRunServe_RuntimeResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead`) |
-| Additive non-resume MCP serve regression | existing fixture/runtime stdio serve paths | `pkg/cli/mcp/serve_runtime_resume_non_regression_test.go` |
+| Interrupted-to-resumed success | `pkg/transports/mcp/factorysession/control.go`, `pkg/transports/cli/mcp/serve.go` | `pkg/transports/cli/mcp/serve_runtime_resume_smoke_test.go` (`TestRunServe_RuntimeResumeSmoke_InterruptedSessionResumesThroughMCPControl`) |
+| Resume continuity without replay | `pkg/transports/mcp/factorysession/list_dispatches.go` | `pkg/transports/cli/mcp/serve_runtime_resume_smoke_test.go` (`TestRunServe_RuntimeResumeSmoke_DispatchContinuityPreservesCompletedChildDispatchesWithoutReplay`) |
+| Typed invalid resume outcomes | `pkg/transports/mcp/factorysession/control.go` | `pkg/transports/cli/mcp/serve_runtime_resume_smoke_test.go` (`TestRunServe_RuntimeResumeSmoke_TerminalSessionResumeReturnsTypedRejectionAndPreservesSessionRead`, `TestRunServe_RuntimeResumeSmoke_RunningSessionResumeReturnsTypedNoOpAndPreservesSessionRead`) |
+| Additive non-resume MCP serve regression | existing fixture/runtime stdio serve paths | `pkg/transports/cli/mcp/serve_runtime_resume_non_regression_test.go` |
 | Shared durable backend ownership | `pkg/factorysessionexecution` resume helpers consumed by MCP tool handlers | runtime-backed MCP harness in `serve_runtime_resume_smoke_test.go` |
 
 ## Deferred Follow-Up Cells
@@ -58,7 +58,7 @@ implementing website, API, and CLI resume smokes here.
 
 ## Transport-Neutral Boundary
 
-MCP resume and dispatch inspection route through the shared `pkg/mcp/factorysession`
+MCP resume and dispatch inspection route through the shared `pkg/transports/mcp/factorysession`
 tool handlers backed by `factorysessionexecution.Service`. Tool responses use
 generated API shapes (`FactorySessionDurableReadModel`, `ListFactorySessionDispatchesResponse`,
 `FactorySessionLifecycleControlResponse`) rather than workflow-only MCP fields.
@@ -69,8 +69,8 @@ canonical `you.factory_session.*` surface only.
 
 | Artifact | Purpose |
 |----------|---------|
-| `pkg/cli/mcp/serve_runtime_resume_smoke_test.go` | Successful resume, continuity/no-replay, and invalid resume MCP proof |
-| `pkg/cli/mcp/serve_runtime_resume_non_regression_test.go` | Non-resume MCP serve regression and shared-surface scope guard |
+| `pkg/transports/cli/mcp/serve_runtime_resume_smoke_test.go` | Successful resume, continuity/no-replay, and invalid resume MCP proof |
+| `pkg/transports/cli/mcp/serve_runtime_resume_non_regression_test.go` | Non-resume MCP serve regression and shared-surface scope guard |
 | `docs/internal/processes/api-relevant-files.md` | Maintainer map and focused verification commands |
 | `follow-up-cell-cli-resume-smoke-deferred.md` | Explicit CLI resume-smoke boundary (completed separately) |
 | `follow-up-cell-real-backend-api-session-parity-deferred.md` | Explicit API parity deferral |

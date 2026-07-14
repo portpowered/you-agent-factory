@@ -8,6 +8,7 @@ import {
   persistTimelineCheckpoint,
   type TimelineCheckpointStreamIdentity,
 } from "../features/timeline/state/timelineCheckpointPersistence";
+import { createMaterializedWorkOutcomeState } from "../features/work-outcome/public/materializer";
 import type { RenderAppFetchOverride } from "./app-shell-fetch-test-utils";
 import { APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID } from "./app-shell-session-preflight-test-utils";
 import { MockEventSource } from "./app-shell-session-stream-test-utils";
@@ -43,7 +44,11 @@ export interface QuietCheckpointReloadFixture {
   waitForStreamCreation: () => Promise<MockEventSource>;
 }
 
-function indexedDBRequest<T>(result: T, beforeSuccess?: () => void) {
+function indexedDBRequest<T>(
+  result: T,
+  beforeSuccess?: () => void,
+  afterSuccess?: () => void,
+) {
   const request = {
     error: null,
     onblocked: null,
@@ -58,6 +63,7 @@ function indexedDBRequest<T>(result: T, beforeSuccess?: () => void) {
   queueMicrotask(() => {
     beforeSuccess?.();
     request.onsuccess?.({} as Event);
+    afterSuccess?.();
   });
   return request;
 }
@@ -69,20 +75,40 @@ function createIndexedDBTestDouble(): IDBFactory {
     createObjectStore: () => undefined,
     deleteObjectStore: () => undefined,
     objectStoreNames: { contains: () => true },
-    transaction: () => ({
-      objectStore: () => ({
-        delete: (key: string) =>
-          indexedDBRequest(undefined, () => records.delete(key)),
-        get: (key: string) => indexedDBRequest(records.get(key)),
-        getAll: () => indexedDBRequest([...records.values()]),
-        put: (value: StoredCheckpointEnvelope) =>
-          indexedDBRequest(value.storageKey ?? "", () => {
-            if (value.storageKey) {
-              records.set(value.storageKey, value);
-            }
-          }),
-      }),
-    }),
+    transaction: () => {
+      const transaction = {
+        onabort: null,
+        oncomplete: null,
+        onerror: null,
+        objectStore: () => ({
+          delete: (key: string) =>
+            indexedDBRequest(
+              undefined,
+              () => records.delete(key),
+              () =>
+                (transaction.oncomplete as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                ),
+            ),
+          get: (key: string) => indexedDBRequest(records.get(key)),
+          getAll: () => indexedDBRequest([...records.values()]),
+          put: (value: StoredCheckpointEnvelope) =>
+            indexedDBRequest(
+              value.storageKey ?? "",
+              () => {
+                if (value.storageKey) {
+                  records.set(value.storageKey, value);
+                }
+              },
+              () =>
+                (transaction.oncomplete as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                ),
+            ),
+        }),
+      };
+      return transaction;
+    },
   };
 
   return {
@@ -96,7 +122,14 @@ function createIndexedDBTestDouble(): IDBFactory {
   } as unknown as IDBFactory;
 }
 
-function preflightResponse(checkpoint: FactoryTimelineCheckpoint): Response {
+function preflightResponse(path: string): Response {
+  const requestedSessionId = decodeURIComponent(
+    path.match(/^\/factory-sessions\/([^/]+)\/sync-preflight/)?.[1] ?? "",
+  );
+  const searchParams = new URLSearchParams(path.split("?")[1] ?? "");
+  const afterEventId = searchParams.get("after_event_id") ?? undefined;
+  const afterSequence = searchParams.get("after_sequence");
+  const cursorProvided = afterEventId != null || afterSequence != null;
   return new Response(
     JSON.stringify({
       backendScopeId: BACKEND_SCOPE_ID,
@@ -105,12 +138,15 @@ function preflightResponse(checkpoint: FactoryTimelineCheckpoint): Response {
       logicalSessionKeyId: LOGICAL_SESSION_KEY_ID,
       reasonCode: "ok",
       reconnectCursor: {
-        afterEventId: checkpoint.afterEventId,
-        afterSequence: checkpoint.afterSequence,
-        provided: true,
+        afterEventId,
+        afterSequence:
+          afterSequence == null
+            ? undefined
+            : Number.parseInt(afterSequence, 10),
+        provided: cursorProvided,
         validForStreamGeneration: true,
       },
-      requestedSessionId: "~default",
+      requestedSessionId,
       streamGenerationId: STREAM_GENERATION_ID,
     }),
     { headers: { "Content-Type": "application/json" } },
@@ -127,6 +163,7 @@ export function createQuietCheckpointReloadFixture(
   const checkpoint: FactoryTimelineCheckpoint = {
     afterEventId: `quiet-checkpoint-event-${tick}`,
     afterSequence: tick,
+    materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
     replayState,
     selectedTick: tick,
     syncIdentity: {
@@ -160,7 +197,7 @@ export function createQuietCheckpointReloadFixture(
     if (method === "GET" && path.includes("/sync-preflight")) {
       await preflightGate;
       observed.preflightCompleted = true;
-      return preflightResponse(checkpoint);
+      return preflightResponse(path);
     }
     if (
       method === "GET" &&

@@ -1,0 +1,14 @@
+name: kind
+in: query
+required: false
+description: >-
+  Return FactoryResponseEvent records matching any requested public kind. The
+  parameter may be repeated, for example kind=MESSAGE&kind=TOOL. Invalid or
+  empty kind values return the typed bad-request response.
+style: form
+explode: true
+schema:
+  type: array
+  minItems: 1
+  items:
+    $ref: '../schemas/response-events/FactoryResponseEventKind.yaml'

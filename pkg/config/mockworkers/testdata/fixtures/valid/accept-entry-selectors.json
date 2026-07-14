@@ -1,0 +1,21 @@
+{
+  "mockWorkers": [
+    {
+      "id": "accept-reviewer",
+      "workerName": "reviewer",
+      "workstationName": "review",
+      "workInputs": [
+        {
+          "workId": "work-1",
+          "workType": "story",
+          "state": "in-review",
+          "inputName": "story",
+          "traceId": "trace-1",
+          "channel": "default",
+          "payloadHash": "sha256:test"
+        }
+      ],
+      "runType": "accept"
+    }
+  ]
+}

@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/subagent"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const packagedSubagentMockWorkerAcceptedSummary = "mock worker accepted"
@@ -43,7 +43,7 @@ func TestNamedSubagentResponseStream_RealCLICompletesWithPrimaryResult(t *testin
 	}
 }
 
-func TestNamedSubagentResponseStream_JSONModeEmitsPrimaryResultRecord(t *testing.T) {
+func TestNamedSubagentResponseStream_JSONModeEmitsInvocationResultRecord(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow CLI named @you/subagent JSON response-stream smoke")
 	}
@@ -65,8 +65,8 @@ func TestNamedSubagentResponseStream_JSONModeEmitsPrimaryResultRecord(t *testing
 	if err != nil {
 		t.Fatalf("parse JSON response-stream stdout: %v\nstdout:\n%s", err, stdout)
 	}
-	if finalRecord.RecordType != namedGoalResponseStreamJSONRecordPrimary {
-		t.Fatalf("final record type = %q, want %q", finalRecord.RecordType, namedGoalResponseStreamJSONRecordPrimary)
+	if finalRecord.RecordType != namedGoalResponseStreamJSONRecordInvocation {
+		t.Fatalf("final record type = %q, want %q", finalRecord.RecordType, namedGoalResponseStreamJSONRecordInvocation)
 	}
 	if finalRecord.Invocation.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("final record status = %q, want COMPLETED", finalRecord.Invocation.Status)
@@ -109,9 +109,9 @@ func TestNamedSubagentResponseStream_PrimaryOnlyAndResponseStreamAgreeOnTerminal
 	assertNamedGoalInvocationTerminalOutcomeParity(t, primaryResponse, streamTerminal)
 }
 
-func TestNamedSubagentResponseStream_JSONModeEmitsExactlyOnePrimaryResultRecord(t *testing.T) {
+func TestNamedSubagentResponseStream_JSONModeEmitsExactlyOneInvocationResultRecord(t *testing.T) {
 	if testing.Short() {
-		t.Skip("slow CLI named @you/subagent JSON response-stream primary_result count smoke")
+		t.Skip("slow CLI named @you/subagent JSON response-stream invocation_result count smoke")
 	}
 
 	requestText := fmt.Sprintf("functional-smoke-subagent-response-stream-json-count-%d", time.Now().UnixNano())
@@ -126,17 +126,17 @@ func TestNamedSubagentResponseStream_JSONModeEmitsExactlyOnePrimaryResultRecord(
 	if err != nil {
 		t.Fatalf("parse JSON response-stream stdout: %v\nstdout:\n%s", err, stdout)
 	}
-	primaryCount := 0
+	invocationCount := 0
 	for _, record := range records {
-		if record.RecordType == namedGoalResponseStreamJSONRecordPrimary {
-			primaryCount++
+		if record.RecordType == namedGoalResponseStreamJSONRecordInvocation {
+			invocationCount++
 		}
 	}
-	if primaryCount != 1 {
-		t.Fatalf("primary_result record count = %d, want exactly 1", primaryCount)
+	if invocationCount != 1 {
+		t.Fatalf("invocation_result record count = %d, want exactly 1", invocationCount)
 	}
-	if records[len(records)-1].RecordType != namedGoalResponseStreamJSONRecordPrimary {
-		t.Fatalf("final record type = %q, want %q", records[len(records)-1].RecordType, namedGoalResponseStreamJSONRecordPrimary)
+	if records[len(records)-1].RecordType != namedGoalResponseStreamJSONRecordInvocation {
+		t.Fatalf("final record type = %q, want %q", records[len(records)-1].RecordType, namedGoalResponseStreamJSONRecordInvocation)
 	}
 }
 
@@ -160,7 +160,7 @@ func TestNamedSubagentResponseStream_JSONModeUsesCanonicalCLIStreamRecordVocabul
 	assertNamedGoalResponseStreamJSONRecordsUseCanonicalVocabulary(t, records)
 }
 
-func TestNamedSubagentResponseStream_HumanModeUsesCanonicalProgressPrefixNotLegacyDialect(t *testing.T) {
+func TestNamedSubagentResponseStream_HumanModeUsesCanonicalHumanFormatNotLegacyDialect(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow CLI named @you/subagent human response-stream vocabulary smoke")
 	}
@@ -174,21 +174,7 @@ func TestNamedSubagentResponseStream_HumanModeUsesCanonicalProgressPrefixNotLega
 	}
 
 	assertNamedGoalHumanResponseStreamAvoidsLegacyDialect(t, stdout)
-	if strings.Contains(stdout, namedGoalResponseStreamHumanProgressPrefix) {
-		for _, line := range strings.Split(stdout, "\n") {
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" || trimmed == "--- primary result ---" {
-				continue
-			}
-			if strings.HasPrefix(trimmed, namedGoalResponseStreamHumanProgressPrefix) {
-				continue
-			}
-			if trimmed == packagedSubagentMockWorkerAcceptedSummary {
-				continue
-			}
-			t.Fatalf("unexpected human response-stream line %q outside canonical progress/primary-result contract", trimmed)
-		}
-	} else if got := strings.TrimSpace(stdout); got != packagedSubagentMockWorkerAcceptedSummary {
+	if got := strings.TrimSpace(stdout); got != packagedSubagentMockWorkerAcceptedSummary {
 		t.Fatalf("stdout = %q, want primary result %q when no live progress arrived", got, packagedSubagentMockWorkerAcceptedSummary)
 	}
 }
@@ -228,7 +214,7 @@ func runNamedSubagentPrimaryOnlyInvocationCLI(
 	if _, err := factoryconfig.PersistNamedFactory(
 		filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"),
 		subagent.PackagedFactoryName,
-		factoryconfig.BuiltInSubagentFactoryJSON,
+		subagent.BuiltInFactoryJSON,
 	); err != nil {
 		t.Fatalf("PersistNamedFactory(@you/subagent): %v", err)
 	}
@@ -278,7 +264,7 @@ func runNamedSubagentResponseStreamInvocationCLI(
 	if _, err := factoryconfig.PersistNamedFactory(
 		filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"),
 		subagent.PackagedFactoryName,
-		factoryconfig.BuiltInSubagentFactoryJSON,
+		subagent.BuiltInFactoryJSON,
 	); err != nil {
 		t.Fatalf("PersistNamedFactory(@you/subagent): %v", err)
 	}

@@ -47,7 +47,7 @@ Distinct backend scopes, workspace folders, named targets, or provider
 boundaries produce distinct ids. The backend does not maintain a mutable
 allocation table for logical keys.
 
-Implementation lives in `pkg/factorysessions/logicaltarget/`; service wiring
+Implementation lives in `pkg/factory/sessions/logicaltarget/`; service wiring
 derives keys in `pkg/service/runtime_sessions.go`
 (`factorySessionLogicalSessionKeyID`).
 
@@ -137,6 +137,16 @@ Stream identity on session reads uses the same fields through
 Before opening SSE with a persisted cursor, the dashboard calls sync preflight
 with logical identity hints read from the persisted checkpoint.
 
+`ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.ts`
+is the single production decision boundary for checkpoint reuse, logical
+session remap, stale-cursor rejection, and non-recoverable recovery.
+`ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.ts`
+owns the guarded application of those decisions: checkpoint cleanup or
+restore, selected-session remap, cache recovery, and publication of the
+validated reconnect cursor. App event-stream work waits for that hook to
+finish, so a reusable checkpoint is restored before a quiet stream opens and
+the stream receives only the reconnect cursor approved by preflight.
+
 ### Preserved on logical remap
 
 When identity resolves to a different `factorySessionID` or
@@ -170,6 +180,12 @@ When preflight returns `ok` with the same `factorySessionID` and
 cursor for that stream generation, the dashboard may restore the persisted
 cursor and timeline checkpoint.
 
+The existing sync-preflight response and reconnect-cursor fields are sufficient
+for this recovery path, including a quiet stream with no new event. This
+convergence does not add an OpenAPI field or explicit event-stream head marker.
+Add a public head marker only if a separate quiet-stream experiment demonstrates
+that the current contract cannot establish the required ordering or identity.
+
 ### Unresolved recovery
 
 When preflight returns `session_not_found` or `invalid_target_reference`, the
@@ -183,18 +199,20 @@ remap, or default-alias behavior.
 
 | Area | Primary packages / tests |
 | --- | --- |
-| Target normalization | `pkg/factorysessions/logicaltarget/normalize_test.go`, `derive_key_test.go`, `api_target_test.go` |
-| Key derivation stability | `pkg/factorysessions/logicaltarget/derive_key_test.go`, `pkg/service/runtime_session_runtime_test.go` (logical key assertions) |
+| Target normalization | `pkg/factory/sessions/logicaltarget/normalize_test.go`, `derive_key_test.go`, `api_target_test.go` |
+| Key derivation stability | `pkg/factory/sessions/logicaltarget/derive_key_test.go`, `pkg/service/runtime_session_runtime_test.go` (logical key assertions) |
 | API resolution / sync preflight | `pkg/service/runtime_session_runtime_test.go` (resolved, remapped, unresolved, wrong-scope, invalid-key, default alias cases), `pkg/api/contracttests/openapi_contract_surface_test.go` |
 | Public contract fields | `api/components/schemas/api/FactorySessionLogicalTarget.yaml`, `FactorySessionStreamIdentity.yaml`, `FactorySessionSyncPreflight*.yaml`; regenerate with `make generate-api` |
-| Dashboard remap and cursor drop | `ui/src/features/dashboard/lib/dashboard-session-sync-preflight.ts` tests, `ui/src/features/dashboard/hooks/useDashboardCheckpointPreflight.ts`, `useDashboardSnapshot.test.tsx` |
-| Default alias to UUID runtime identity | `pkg/factorysessions/session_identity_test.go`, dashboard preflight tests proving SSE opens on resolved UUID not `~default` |
+| Dashboard preflight decisions | `ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.test.ts`, `dashboard-session-sync-preflight.test.ts` |
+| Guarded checkpoint restore, remap, and recovery | `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.test.tsx`, `ui/src/features/dashboard/hooks/useDashboardSnapshot.test.tsx` |
+| Quiet reload and App reconnect ordering | `ui/src/App.session-stream.test.tsx`, `ui/src/testing/quiet-checkpoint-reload-test-utils.test.ts` |
+| Default alias to UUID runtime identity | `pkg/factory/sessions/session_identity_test.go`, dashboard preflight tests proving SSE opens on resolved UUID not `~default` |
 | Maintainer file map | `docs/internal/processes/api-relevant-files.md` (logical session and sync-preflight entries) |
 
 Focused backend verification:
 
 ```bash
-go test ./pkg/factorysessions/logicaltarget/... ./pkg/service/... -count=1
+go test ./pkg/factory/sessions/logicaltarget/... ./pkg/service/... -count=1
 ```
 
 Focused frontend verification:

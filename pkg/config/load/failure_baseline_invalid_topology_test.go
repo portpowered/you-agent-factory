@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config/load"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 )
 
 // Hermetic S02 failure-baseline fixtures for invalid @you/goal-shaped factory
@@ -44,7 +45,28 @@ func TestFailureBaseline_InvalidTopology_GoalShapedCanonicalJSONRejectsGraphRefe
 	if !strings.Contains(err.Error(), "invalid graph references") {
 		t.Fatalf("error = %q, want invalid graph references guidance", err.Error())
 	}
-	if !strings.Contains(err.Error(), "blocking validation targets") {
-		t.Fatalf("error = %q, want blocking validation target count", err.Error())
+	loadErr, ok := load.AsBlockingFactoryLoadError(err)
+	if !ok {
+		t.Fatalf("error = %v, want BlockingFactoryLoadError", err)
 	}
+	if len(loadErr.Targets) == 0 {
+		t.Fatal("expected structured blocking validation targets")
+	}
+	for _, target := range loadErr.Targets {
+		if strings.TrimSpace(target.Message) == "" {
+			t.Fatalf("target = %#v, want non-empty message", target)
+		}
+	}
+	if !containsTargetCode(loadErr.Targets, factoryvalidation.CodeDanglingPlaceReference) {
+		t.Fatalf("targets = %#v, want dangling place reference code", loadErr.Targets)
+	}
+}
+
+func containsTargetCode(targets []factoryvalidation.Target, code string) bool {
+	for _, target := range targets {
+		if target.Code == code {
+			return true
+		}
+	}
+	return false
 }

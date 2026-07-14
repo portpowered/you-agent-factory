@@ -29,24 +29,42 @@ var canonicalEventOwnerCalls = map[string]struct{}{
 	"MapCanonicalRuntimeSessionEvents":   {},
 }
 
+var applicationCompositionCalls = map[string]struct{}{
+	"BuildInvocationBootstrap":           {},
+	"NewExecutionService":                {},
+	"NewFakeServiceFromContractFixtures": {},
+	"ProjectPersistence":                 {},
+}
+
+var approvedApplicationCompositionFiles = map[string]struct{}{
+	"pkg/wire/process.go":                                   {},
+	"pkg/wire/model_invocation.go":                          {},
+	"pkg/wire/session_execution.go":                         {},
+	"pkg/factory/sessions/execution/service.go":             {},
+	"pkg/factory/sessions/execution/testharness/harness.go": {},
+	// Batch 008 moves remaining legacy composition roots behind pkg/wire.
+	"pkg/composebridge/core.go": {},
+	"pkg/service/factory.go":    {},
+}
+
 var javascriptLiveChildRoots = []string{
-	"pkg/factorysessionexecution/livechild/",
+	"pkg/factory/sessions/execution/livechild/",
 	"pkg/orchestrators/javascript/",
 }
 
 var approvedRuntimeConstructorFiles = map[string]struct{}{
-	"pkg/factorysessionexecution/service.go":             {},
-	"pkg/factorysessionexecution/testharness/harness.go": {},
+	"pkg/factory/sessions/execution/service.go":             {},
+	"pkg/factory/sessions/execution/testharness/harness.go": {},
 }
 
 var approvedPersistenceCompositionFiles = map[string]struct{}{
-	"pkg/api/servertests/server_durable_session_execution_test.go": {},
-	"pkg/cli/mcp/serve_runtime_resume_smoke_test.go":               {},
-	"pkg/cli/session/smoke/resume_smoke_test.go":                   {},
-	"pkg/factorysessionexecution/service.go":                       {},
-	"pkg/factorysessionexecution/runtimepersist/store.go":          {},
-	"pkg/factorysessionexecution/testharness/harness.go":           {},
-	"pkg/mcp/factorysession/execution_test.go":                     {},
+	"pkg/transports/http/servertests/server_durable_session_execution_test.go": {},
+	"pkg/transports/cli/mcp/serve_runtime_resume_smoke_test.go":                {},
+	"pkg/transports/cli/session/smoke/resume_smoke_test.go":                    {},
+	"pkg/factory/sessions/execution/service.go":                                {},
+	"pkg/factory/sessions/execution/runtimepersist/store.go":                   {},
+	"pkg/factory/sessions/execution/testharness/harness.go":                    {},
+	"pkg/transports/mcp/factorysession/execution_test.go":                      {},
 }
 
 type config struct{ root string }
@@ -131,10 +149,16 @@ func scan(root string) ([]string, error) {
 			switch value := node.(type) {
 			case *ast.CallExpr:
 				name := calledName(value.Fun)
-				if _, canonicalOwnerCall := canonicalEventOwnerCalls[name]; canonicalOwnerCall &&
-					!strings.HasPrefix(relative, "pkg/factorysessionexecution/") {
+				if _, applicationConstructor := applicationCompositionCalls[name]; applicationConstructor &&
+					!strings.HasSuffix(relative, "_test.go") &&
+					!approved(relative, approvedApplicationCompositionFiles) {
 					appendFinding(&findings, fileSet, value.Pos(), relative, name,
-						"route canonical Factory Events through the pkg/factorysessionexecution recorder and persistence owner")
+						"construct application collaborators in pkg/wire and inject them into the transport")
+				}
+				if _, canonicalOwnerCall := canonicalEventOwnerCalls[name]; canonicalOwnerCall &&
+					!strings.HasPrefix(relative, "pkg/factory/sessions/execution/") {
+					appendFinding(&findings, fileSet, value.Pos(), relative, name,
+						"route canonical Factory Events through the pkg/factory/sessions/execution recorder and persistence owner")
 				}
 				if name == providerInferenceName && isJavaScriptLiveChildFile(relative) {
 					appendFinding(&findings, fileSet, value.Pos(), relative, name,
@@ -201,7 +225,7 @@ func appendFinding(findings *[]string, fileSet *token.FileSet, position token.Po
 }
 
 func isTransportTest(relative string) bool {
-	for _, root := range []string{"pkg/api/", "pkg/cli/", "pkg/mcp/"} {
+	for _, root := range []string{"pkg/transports/"} {
 		if strings.HasPrefix(relative, root) {
 			return true
 		}

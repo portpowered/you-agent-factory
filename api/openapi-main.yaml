@@ -269,14 +269,74 @@ paths:
         - Runtime
       operationId: getEventsBySessionId
       summary: Stream factory events for one session
-      description: Canonical event stream for dashboard, Factory Session, and durable replay traffic. Streams factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. When the request asks for application/json, the same route acts as a reconnect probe and returns a structured recovery outcome instead of opening Server-Sent Events. Probe responses classify cursor_stale separately from unknown-session failures and tell the dashboard when the next retry must omit after_event_id and after_sequence. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+      x-doc-id: agent-factory/api/factory-session-events
+      description: >-
+        Canonical FactoryEvent Server-Sent Events stream for dashboard, Factory
+        Session, and durable replay traffic scoped to one explicitly selected
+        session_id. OpenAPI 3.0.3 cannot structurally declare SSE event ids,
+        comment keepalives, or per-connection ordering guarantees, so the
+        lifecycle rules below are documented in operation prose rather than as
+        unsupported response fields.
+
+        Event ordering: the server sends retained history first in ascending tick
+        order, then continues on the same connection with live FactoryEvent
+        records. Each text/event-stream data frame is serialized JSON matching
+        the FactoryEvent union referenced by x-event-schema.
+
+        Reconnect cursors: pass after_event_id or after_sequence to receive only
+        events recorded after the acknowledged point. When both are present,
+        after_event_id wins. For session-scoped streams, after_sequence prefers
+        FactoryEvent.context.sessionSequence when that field is present;
+        otherwise it falls back to FactoryEvent.context.sequence. Omitting both
+        cursors starts replay from the beginning of the session's currently
+        retained history.
+
+        Replay bounds: live sessions replay only events retained for the current
+        stream generation of the targeted Factory Session. Durable execution
+        session identifiers replay persisted canonical records for that session
+        without crossing into another session. Cursors that no longer match the
+        retained history boundary return typed invalid-cursor handling (400 on
+        SSE open, cursor_stale on JSON reconnect probe) rather than silently
+        skipping events.
+
+        Identity handshake before reconnect: compare the response headers
+        X-Factory-Session-Backend-Scope-Id,
+        X-Factory-Session-Logical-Session-Key-Id,
+        X-Factory-Session-Factory-Session-Id, and
+        X-Factory-Session-Stream-Generation-Id with the latest sync-preflight or
+        session-read identity set before reusing a persisted reconnect cursor or
+        stream-derived cache. A changed streamGenerationId means the current
+        stream generation invalidates prior cursors even when factorySessionId is
+        unchanged.
+
+        Keepalives: successful SSE responses use Connection keep-alive. Idle
+        periods may occur while the Factory Session is waiting for new canonical
+        events; clients must treat these as normal waiting state rather than
+        terminal stream completion unless the HTTP connection closes.
+
+        Expired-cursor recovery: when Accept includes application/json, the same
+        route acts as a reconnect probe and returns
+        FactorySessionEventStreamRecovery instead of opening Server-Sent Events.
+        cursor_stale outcomes tell clients to retry with omitAfterEventId and
+        omitAfterSequence set so the next open omits stale cursors.
+        UNKNOWN_SESSION means the selector does not resolve to a live or durable
+        session and never falls back to the default session.
+
+        Unknown session identifiers return NOT_FOUND instead of falling back to
+        the default session.
       parameters:
         - $ref: '#/components/parameters/SessionID'
         - $ref: '#/components/parameters/AfterEventId'
         - $ref: '#/components/parameters/AfterSequence'
       responses:
         '200':
-          description: Factory event stream for the targeted session, or a JSON reconnect recovery probe result when Accept includes application/json.
+          description: >-
+            Retained catch-up in ascending tick order followed by live
+            FactoryEvent records for the targeted session when Accept requests
+            text/event-stream, or a JSON FactorySessionEventStreamRecovery
+            reconnect probe result when Accept includes application/json.
+            Successful SSE responses use Connection keep-alive and may remain
+            idle until the next canonical FactoryEvent is recorded.
           headers:
             X-Factory-Session-Backend-Scope-Id:
               description: Stable backend scope identifier for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `backendScopeId` values before reusing reconnect cursors or stream-derived projections.
@@ -307,6 +367,51 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /factory-sessions/{session_id}/response-events:
+    get:
+      tags:
+        - Runtime
+      operationId: getFactoryResponseEventsBySessionId
+      summary: Stream ephemeral response events for one Factory Session
+      description: >-
+        Streams ephemeral FactoryResponseEvent observation records for the
+        explicitly selected Factory Session. These records are outside
+        canonical FactoryEvent replay and never derive canonical Factory state.
+        The connection first sends retained matching records in ascending
+        response sequence and then continues with live matching records. Each
+        SSE id is the decimal FactoryResponseEvent.sequence so reconnect clients
+        can acknowledge it with after_sequence. Omitting after_sequence starts
+        at the beginning of retained history. When a cursor predates retained
+        history, the first emitted record is STREAM_GAP and describes the lost
+        range rather than silently skipping it. An unknown session_id returns a
+        typed 404 and never falls back to the current or default session.
+      parameters:
+        - $ref: '#/components/parameters/SessionID'
+        - $ref: '#/components/parameters/ResponseEventAfterSequence'
+        - $ref: '#/components/parameters/ResponseEventDispatchID'
+        - $ref: '#/components/parameters/ResponseEventKind'
+      responses:
+        '200':
+          description: >-
+            Retained catch-up followed by live Factory Response Event records
+            for the explicitly targeted session.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: >-
+                  Server-Sent Events where each data record is serialized JSON
+                  matching FactoryResponseEvent and each id is its decimal
+                  response sequence.
+              x-event-schema: '#/components/schemas/FactoryResponseEvent'
+        '400':
+          $ref: '#/components/responses/ResponseEventBadRequest'
+        '404':
+          $ref: '#/components/responses/ResponseEventSessionNotFound'
+        '410':
+          $ref: '#/components/responses/ResponseEventStreamExpired'
         '500':
           $ref: '#/components/responses/InternalError'
   /factory-sessions/{session_id}/sync-preflight:
@@ -1446,6 +1551,12 @@ components:
       $ref: './components/parameters/AfterEventId.yaml'
     AfterSequence:
       $ref: './components/parameters/AfterSequence.yaml'
+    ResponseEventAfterSequence:
+      $ref: './components/parameters/ResponseEventAfterSequence.yaml'
+    ResponseEventDispatchID:
+      $ref: './components/parameters/ResponseEventDispatchID.yaml'
+    ResponseEventKind:
+      $ref: './components/parameters/ResponseEventKind.yaml'
     BackendScopeId:
       $ref: './components/parameters/BackendScopeId.yaml'
     LogicalSessionKeyId:
@@ -1473,6 +1584,12 @@ components:
       $ref: './components/responses/FactorySessionLifecycleControlConflict.yaml'
     InternalError:
       $ref: './components/responses/InternalError.yaml'
+    ResponseEventBadRequest:
+      $ref: './components/responses/ResponseEventBadRequest.yaml'
+    ResponseEventSessionNotFound:
+      $ref: './components/responses/ResponseEventSessionNotFound.yaml'
+    ResponseEventStreamExpired:
+      $ref: './components/responses/ResponseEventStreamExpired.yaml'
   schemas:
     SubmitWorkRequest:
       $ref: './components/schemas/api/SubmitWorkRequest.yaml'
@@ -1980,6 +2097,72 @@ components:
       $ref: './components/schemas/events/AgentRunTranscriptEntry.yaml'
     WallClock:
       $ref: './components/schemas/events/WallClock.yaml'
+
+    # ==== Public factory response-event schemas =======
+    FactoryResponseEvent:
+      $ref: './components/schemas/response-events/FactoryResponseEvent.yaml'
+    FactoryResponseEventKind:
+      $ref: './components/schemas/response-events/FactoryResponseEventKind.yaml'
+    FactoryResponseEventPhase:
+      $ref: './components/schemas/response-events/FactoryResponseEventPhase.yaml'
+    FactoryResponseEventProvenance:
+      $ref: './components/schemas/response-events/FactoryResponseEventProvenance.yaml'
+    FactoryResponseEventProvenanceDelivery:
+      $ref: './components/schemas/response-events/FactoryResponseEventProvenanceDelivery.yaml'
+    FactoryResponseEventProvenanceRepresentation:
+      $ref: './components/schemas/response-events/FactoryResponseEventProvenanceRepresentation.yaml'
+    FactoryResponseEventProvenanceFidelity:
+      $ref: './components/schemas/response-events/FactoryResponseEventProvenanceFidelity.yaml'
+    FactoryResponseEventCapabilities:
+      $ref: './components/schemas/response-events/FactoryResponseEventCapabilities.yaml'
+    FactoryResponseEventPayload:
+      $ref: './components/schemas/response-events/FactoryResponseEventPayload.yaml'
+    FactoryResponseEventContentBlock:
+      $ref: './components/schemas/response-events/FactoryResponseEventContentBlock.yaml'
+    FactoryResponseEventContentBlockKind:
+      $ref: './components/schemas/response-events/FactoryResponseEventContentBlockKind.yaml'
+    FactoryResponseEventTextContentBlock:
+      $ref: './components/schemas/response-events/content-blocks/FactoryResponseEventTextContentBlock.yaml'
+    FactoryResponseEventReasoningSummaryContentBlock:
+      $ref: './components/schemas/response-events/content-blocks/FactoryResponseEventReasoningSummaryContentBlock.yaml'
+    FactoryResponseEventToolRequestContentBlock:
+      $ref: './components/schemas/response-events/content-blocks/FactoryResponseEventToolRequestContentBlock.yaml'
+    FactoryResponseEventImageRefContentBlock:
+      $ref: './components/schemas/response-events/content-blocks/FactoryResponseEventImageRefContentBlock.yaml'
+    FactoryResponseEventResourceRefContentBlock:
+      $ref: './components/schemas/response-events/content-blocks/FactoryResponseEventResourceRefContentBlock.yaml'
+    FactoryResponseEventStructuredOutputContentBlock:
+      $ref: './components/schemas/response-events/content-blocks/FactoryResponseEventStructuredOutputContentBlock.yaml'
+    FactoryResponseEventSessionPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventSessionPayload.yaml'
+    FactoryResponseEventRunPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventRunPayload.yaml'
+    FactoryResponseEventTurnPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventTurnPayload.yaml'
+    FactoryResponseEventMessagePayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventMessagePayload.yaml'
+    FactoryResponseEventMessageDeltaPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventMessageDeltaPayload.yaml'
+    FactoryResponseEventReasoningPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventReasoningPayload.yaml'
+    FactoryResponseEventToolPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventToolPayload.yaml'
+    FactoryResponseEventToolDeltaPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventToolDeltaPayload.yaml'
+    FactoryResponseEventFileChangePayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventFileChangePayload.yaml'
+    FactoryResponseEventPlanPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventPlanPayload.yaml'
+    FactoryResponseEventPlanStep:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventPlanStep.yaml'
+    FactoryResponseEventProgressPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventProgressPayload.yaml'
+    FactoryResponseEventUsagePayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventUsagePayload.yaml'
+    FactoryResponseEventErrorPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventErrorPayload.yaml'
+    FactoryResponseEventStreamGapPayload:
+      $ref: './components/schemas/response-events/payloads/FactoryResponseEventStreamGapPayload.yaml'
 
     # ==== Raw data schemas for a factor =======
     FactorySaveMode:

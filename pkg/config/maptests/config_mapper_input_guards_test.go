@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 // --- per-input guard tests ---
@@ -716,4 +716,3 @@ func TestConfigMapping_PerInputGuard_SameTraceIDBuildsConsumeGuardAgainstPeerInp
 		t.Fatalf("same-trace guard binding = %q, want %q", guard.MatchBinding, planArc.Name)
 	}
 }
-

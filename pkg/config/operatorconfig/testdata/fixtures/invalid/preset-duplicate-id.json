@@ -1,0 +1,12 @@
+{
+  "workerPresets": [
+    {
+      "id": "build",
+      "modelProvider": "codex"
+    },
+    {
+      "id": " build ",
+      "modelProvider": "claude"
+    }
+  ]
+}

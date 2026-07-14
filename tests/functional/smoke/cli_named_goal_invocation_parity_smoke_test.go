@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
 	"github.com/portpowered/infinite-you/pkg/service"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -79,7 +79,7 @@ func TestNamedGoalInvocationParity_NamedFactoryCLIAndAPIShareSuccessOutcome(t *t
 
 	homeDir := t.TempDir()
 	globalRoot := filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories")
-	factoryDir, err := factoryconfig.PersistNamedFactory(globalRoot, goal.PackagedFactoryName, factoryconfig.BuiltInGoalFactoryJSON)
+	factoryDir, err := factoryconfig.PersistNamedFactory(globalRoot, goal.PackagedFactoryName, goal.BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)
 	}
@@ -442,6 +442,12 @@ func assertNamedGoalInvocationParity(
 	}
 	if cliResponse.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("CLI status = %q, want COMPLETED", cliResponse.Status)
+	}
+	if strings.TrimSpace(apiResponse.RequestId) == "" || strings.TrimSpace(apiResponse.TraceId) == "" {
+		t.Fatalf("API submission identity = request %q trace %q, want non-empty invocation scope", apiResponse.RequestId, apiResponse.TraceId)
+	}
+	if strings.TrimSpace(cliResponse.RequestId) == "" || strings.TrimSpace(cliResponse.TraceId) == "" {
+		t.Fatalf("CLI submission identity = request %q trace %q, want non-empty invocation scope", cliResponse.RequestId, cliResponse.TraceId)
 	}
 
 	apiText := invocationPrimaryResultText(t, apiResponse)

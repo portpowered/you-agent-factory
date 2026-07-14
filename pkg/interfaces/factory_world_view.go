@@ -3,7 +3,7 @@ package interfaces
 import (
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // FactoryWorldView is a presentation projection derived from
@@ -62,13 +62,13 @@ type FactoryWorldWorkstationEdge struct {
 }
 
 type FactoryWorldJavaScriptProjection struct {
-	Phase               string                                `json:"phase,omitempty"`
-	Phases              []string                              `json:"phases,omitempty"`
-	ArgsDigest          string                                `json:"argsDigest,omitempty"`
-	Checkpoints         []FactorySessionJavaScriptCheckpointRef `json:"checkpoints,omitempty"`
-	ScriptStatus        string                                `json:"scriptStatus,omitempty"`
+	Phase               string                                    `json:"phase,omitempty"`
+	Phases              []string                                  `json:"phases,omitempty"`
+	ArgsDigest          string                                    `json:"argsDigest,omitempty"`
+	Checkpoints         []FactorySessionJavaScriptCheckpointRef   `json:"checkpoints,omitempty"`
+	ScriptStatus        string                                    `json:"scriptStatus,omitempty"`
 	ChildDispatchCounts FactoryWorldJavaScriptChildDispatchCounts `json:"childDispatchCounts,omitempty"`
-	Artifacts           []FactorySessionArtifactState         `json:"artifacts,omitempty"`
+	Artifacts           []FactorySessionArtifactState             `json:"artifacts,omitempty"`
 }
 
 // FactoryWorldJavaScriptChildDispatchCounts summarizes JavaScript child dispatch
@@ -147,14 +147,14 @@ type FactoryWorldWorkItemRef struct {
 }
 
 type FactoryWorldSessionRuntime struct {
-	HasData              bool                                `json:"has_data"`
-	DispatchedCount      int                                 `json:"dispatched_count"`
-	CompletedCount       int                                 `json:"completed_count"`
-	FailedCount          int                                 `json:"failed_count"`
-	DispatchHistory      []FactoryWorldDispatchCompletion    `json:"dispatch_history,omitempty"`
-	ProviderSessions     []FactoryWorldProviderSessionRecord `json:"provider_sessions,omitempty"`
-	DispatchedByWorkType map[string]int                      `json:"dispatched_by_work_type,omitempty"`
-	CompletedByWorkType  map[string]int                      `json:"completed_by_work_type,omitempty"`
-	FailedByWorkType     map[string]int                      `json:"failed_by_work_type,omitempty"`
+	HasData              bool                                  `json:"has_data"`
+	DispatchedCount      int                                   `json:"dispatched_count"`
+	CompletedCount       int                                   `json:"completed_count"`
+	FailedCount          int                                   `json:"failed_count"`
+	DispatchHistory      []FactoryWorldDispatchCompletion      `json:"dispatch_history,omitempty"`
+	ProviderSessions     []FactoryWorldProviderSessionRecord   `json:"provider_sessions,omitempty"`
+	DispatchedByWorkType map[string]int                        `json:"dispatched_by_work_type,omitempty"`
+	CompletedByWorkType  map[string]int                        `json:"completed_by_work_type,omitempty"`
+	FailedByWorkType     map[string]int                        `json:"failed_by_work_type,omitempty"`
 	Bracket              *FactoryWorldSessionBracketProjection `json:"bracket,omitempty"`
 }

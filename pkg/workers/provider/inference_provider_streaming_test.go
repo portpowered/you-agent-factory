@@ -1,7 +1,10 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -10,8 +13,307 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/logging"
+	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
+
+func TestScriptWrapProvider_OpenCodeNegotiatedAdapterPublishesProductionStream(t *testing.T) {
+	privatePrompt := "private production prompt"
+	stdout, err := os.ReadFile("adapter/opencode/testdata/structured-success.jsonl")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	runner := &recordingProviderExec{result: CommandResult{Stdout: stdout}}
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(runner),
+		WithOpenCodeCapabilityResolver(openCodeResolverForTest(t, opencodeadapter.ModeStructured)),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
+
+	response, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: privatePrompt,
+		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-opencode-production"},
+	})
+	if err != nil {
+		t.Fatalf("Infer() error = %v", err)
+	}
+	if response.Content != "Hello world" || response.ProviderSession == nil || response.ProviderSession.ID != "ses_open_42" {
+		t.Fatalf("response = %#v", response)
+	}
+	if runner.request.Command != "opencode" || !reflect.DeepEqual(runner.request.Args, []string{"run", "--format", "json", privatePrompt}) {
+		t.Fatalf("production command = %#v", runner.request)
+	}
+	if len(published) < 2 || published[0].Metadata["selected_mode"] != "structured" || published[0].Metadata["fidelity"] != "normalized" {
+		t.Fatalf("capability publication = %#v", published)
+	}
+	assertPublishedOpenCodeDraft(t, published, responseevents.KindMessage, responseevents.PhaseCompleted)
+	assertPublishedOpenCodeDraft(t, published, responseevents.KindTool, responseevents.PhaseCompleted)
+	assertPublishedOpenCodeDraft(t, published, responseevents.KindUsage, responseevents.PhaseUpdated)
+	for _, fragment := range published {
+		if strings.Contains(fragment.Payload, "private prompt") || strings.Contains(fragment.Payload, "PRIVATE.md") || strings.Contains(fragment.Payload, "private result") {
+			t.Fatalf("published sensitive provider data: %#v", fragment)
+		}
+	}
+}
+
+func TestScriptWrapProvider_OpenCodeProductionProgressRunnerUsesCanonicalAdapterStream(t *testing.T) {
+	stdout, err := os.ReadFile("adapter/opencode/testdata/structured-success.jsonl")
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+	executable := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "opencode"), stdout, nil, 0)
+	var rawPublished []InferenceProgressFragment
+	progressRunner := NewInferenceProgressPublishingCommandRunner(func(fragment InferenceProgressFragment) {
+		rawPublished = append(rawPublished, fragment)
+	}, nil)
+	var canonicalPublished []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(progressRunner),
+		WithOpenCodeCapabilityResolver(openCodeResolverForExecutable(t, opencodeadapter.ModeStructured, executable)),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			canonicalPublished = append(canonicalPublished, fragment)
+		}),
+	)
+
+	response, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: "private production prompt",
+		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-opencode-production-runner"},
+	})
+	if err != nil {
+		t.Fatalf("Infer() error = %v", err)
+	}
+	if response.Content != "Hello world" {
+		t.Fatalf("response = %#v", response)
+	}
+	if len(rawPublished) != 0 {
+		t.Fatalf("legacy publisher received raw OpenCode output: %#v", rawPublished)
+	}
+	assertPublishedOpenCodeDraft(t, canonicalPublished, responseevents.KindMessage, responseevents.PhaseCompleted)
+}
+
+func TestScriptWrapProvider_OpenCodePublishesSafeProductionFallback(t *testing.T) {
+	privatePrompt := "private fallback prompt"
+	rejection := "private rejection: unknown option '--format'"
+	runner := &sequenceProviderRunner{results: []CommandResult{
+		{Stderr: []byte(rejection), ExitCode: 2},
+		{Stdout: []byte("fallback answer")},
+	}}
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(runner),
+		WithOpenCodeCapabilityResolver(openCodeResolverForTest(t, opencodeadapter.ModeStructured)),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) { published = append(published, fragment) }),
+	)
+
+	response, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: privatePrompt,
+		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-opencode-fallback"},
+	})
+	if err != nil || response.Content != "fallback answer" {
+		t.Fatalf("Infer() = %#v, %v", response, err)
+	}
+	if len(runner.requests) != 2 ||
+		!reflect.DeepEqual(runner.requests[0].Args, []string{"run", "--format", "json", privatePrompt}) ||
+		!reflect.DeepEqual(runner.requests[1].Args, []string{"run", privatePrompt}) {
+		t.Fatalf("fallback requests = %#v", runner.requests)
+	}
+	var degraded *InferenceProgressFragment
+	for index := range published {
+		if published[index].Metadata["selected_mode"] == "final_only" && published[index].Metadata["downgrade_reason"] == "unsupported_format" {
+			degraded = &published[index]
+		}
+	}
+	if degraded == nil || !strings.Contains(degraded.Payload, "structured_mode_degraded") && degraded.ExternalEventType != "structured_mode_degraded" {
+		t.Fatalf("degradation publication = %#v", published)
+	}
+	if strings.Contains(degraded.Payload, rejection) || strings.Contains(degraded.Payload, privatePrompt) {
+		t.Fatalf("degradation exposed private input: %#v", degraded)
+	}
+}
+
+func TestScriptWrapProvider_OpenCodeRejectsUnsupportedRequiredCapabilitiesBeforeExecution(t *testing.T) {
+	for _, capability := range []interfaces.RunnerOptionalCapability{
+		interfaces.RunnerOptionalCapabilityImageInput,
+		interfaces.RunnerOptionalCapabilityWorktree,
+	} {
+		t.Run(string(capability), func(t *testing.T) {
+			runner := &recordingProviderExec{result: CommandResult{Stdout: []byte("must not execute")}}
+			provider := NewScriptWrapProvider(
+				WithProviderCommandRunner(runner),
+				WithOpenCodeCapabilityResolver(openCodeResolverForTest(t, opencodeadapter.ModeStructured)),
+			)
+
+			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+				ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: "private prompt",
+				RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{capability},
+			})
+			assertOpenCodePermanentBadRequest(t, err)
+			if runner.calls != 0 {
+				t.Fatalf("runner calls = %d, want 0", runner.calls)
+			}
+		})
+	}
+}
+
+func TestScriptWrapProvider_OpenCodeRejectsRequiredStructuredOutputWhenKnownFinalOnly(t *testing.T) {
+	runner := &recordingProviderExec{result: CommandResult{Stdout: []byte("must not execute")}}
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(runner),
+		WithOpenCodeCapabilityResolver(openCodeResolverForTest(t, opencodeadapter.ModeFinalOnly)),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) { published = append(published, fragment) }),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: "private prompt",
+		Dispatch:                     interfaces.WorkDispatch{DispatchID: "dispatch-required-final-only"},
+		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{interfaces.RunnerOptionalCapabilityStructuredOutput},
+	})
+	assertOpenCodePermanentBadRequest(t, err)
+	if runner.calls != 0 {
+		t.Fatalf("runner calls = %d, want 0", runner.calls)
+	}
+	if len(published) < 2 || published[0].Metadata["selected_mode"] != "final_only" || published[len(published)-1].Kind != FailedFragmentKind {
+		t.Fatalf("published capability and failure = %#v", published)
+	}
+}
+
+func TestScriptWrapProvider_OpenCodeRequiredStructuredOutputProhibitsStaleFallback(t *testing.T) {
+	resolver := openCodeResolverForTest(t, opencodeadapter.ModeStructured)
+	runner := &sequenceProviderRunner{results: []CommandResult{{
+		Stderr: []byte("unknown option '--format'"), ExitCode: 2,
+	}}}
+	provider := NewScriptWrapProvider(
+		WithProviderCommandRunner(runner),
+		WithOpenCodeCapabilityResolver(resolver),
+	)
+
+	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderOpenCode), UserMessage: "private prompt",
+		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{interfaces.RunnerOptionalCapabilityStructuredOutput},
+	})
+	assertOpenCodePermanentBadRequest(t, err)
+	if len(runner.requests) != 1 || !reflect.DeepEqual(runner.requests[0].Args, []string{"run", "--format", "json", "private prompt"}) {
+		t.Fatalf("runner requests = %#v, want one structured attempt", runner.requests)
+	}
+	decision, resolveErr := resolver.Resolve(context.Background(), string(interfaces.ModelProviderOpenCode))
+	if resolveErr != nil || decision.Mode != opencodeadapter.ModeStructured {
+		t.Fatalf("cached decision = %#v, %v; required stream must not downgrade", decision, resolveErr)
+	}
+}
+
+func assertOpenCodePermanentBadRequest(t *testing.T, err error) {
+	t.Helper()
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) || providerErr.Type != interfaces.WorkFailureTypePermanentBadRequest {
+		t.Fatalf("error = %T %v, want permanent bad request", err, err)
+	}
+}
+
+type sequenceProviderRunner struct {
+	results  []CommandResult
+	requests []CommandRequest
+}
+
+func (r *sequenceProviderRunner) Run(_ context.Context, request CommandRequest) (CommandResult, error) {
+	r.requests = append(r.requests, request)
+	if len(r.results) == 0 {
+		return CommandResult{}, errors.New("unexpected provider invocation")
+	}
+	result := r.results[0]
+	r.results = r.results[1:]
+	return result, nil
+}
+
+func assertPublishedOpenCodeDraft(t *testing.T, fragments []InferenceProgressFragment, kind responseevents.Kind, phase responseevents.Phase) {
+	t.Helper()
+	for _, fragment := range fragments {
+		draft, ok := fragment.CanonicalDraft.(responseevents.Draft)
+		if ok && draft.Kind == kind && draft.Phase == phase {
+			return
+		}
+	}
+	t.Fatalf("missing canonical draft %s/%s: %#v", kind, phase, fragments)
+}
+
+func TestScriptWrapProvider_CursorDiagnosticsUseInjectedDispatchLogger(t *testing.T) {
+	var injectedOutput bytes.Buffer
+	var unrelatedOutput bytes.Buffer
+	encoderConfig := zap.NewProductionEncoderConfig()
+	newCore := func(output *bytes.Buffer) zapcore.Core {
+		return zapcore.NewCore(zapcore.NewJSONEncoder(encoderConfig), zapcore.AddSync(output), zapcore.DebugLevel)
+	}
+	unrelatedUndo := zap.ReplaceGlobals(zap.New(newCore(&unrelatedOutput)))
+	t.Cleanup(unrelatedUndo)
+
+	base := zap.New(newCore(&injectedOutput)).With(
+		zap.String("runtime_instance_id", "runtime-cursor-1"),
+		zap.String("session_id", "factory-session-cursor-1"),
+	)
+	request := interfaces.ProviderInferenceRequest{
+		ModelProvider: string(interfaces.ModelProviderCursor), Model: "cursor-model", WorkerType: "agent",
+		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-cursor-1", WorkerType: "agent", WorkstationName: "implementation"},
+	}
+
+	for _, tc := range []struct {
+		name      string
+		result    CommandResult
+		wantError bool
+		wantID    string
+	}{
+		{name: "success", result: CommandResult{Stdout: []byte(`{"type":"result","subtype":"success","is_error":false,"result":"done","session_id":"cursor-success-session"}` + "\n")}, wantID: "cursor-success-session"},
+		{name: "failure", result: CommandResult{ExitCode: 1, Stderr: []byte("private cursor failure output"), Stdout: []byte(`{"type":"result","subtype":"timeout","is_error":true,"result":"Request timed out","session_id":"cursor-failure-session"}` + "\n")}, wantError: true, wantID: "cursor-failure-session"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			injectedOutput.Reset()
+			unrelatedOutput.Reset()
+			provider := NewScriptWrapProvider(WithProviderLogger(logging.NewZapLogger(base, false)), WithProviderCommandRunner(&recordingProviderExec{result: tc.result}))
+			_, err := provider.Infer(context.Background(), request)
+			if (err != nil) != tc.wantError {
+				t.Fatalf("Infer error = %v, wantError %v", err, tc.wantError)
+			}
+			if unrelatedOutput.Len() != 0 {
+				t.Fatalf("Cursor diagnostics leaked to unrelated global sink: %s", unrelatedOutput.String())
+			}
+			record := cursorTerminalLogRecord(t, injectedOutput.String(), tc.wantError)
+			for key, want := range map[string]any{"runtime_instance_id": "runtime-cursor-1", "session_id": "factory-session-cursor-1", "dispatch_id": "dispatch-cursor-1", "provider": "cursor", "provider_session_id": tc.wantID} {
+				if record[key] != want {
+					t.Fatalf("%s = %#v, want %#v; record = %#v", key, record[key], want, record)
+				}
+			}
+			if strings.Contains(injectedOutput.String(), "private cursor failure output") {
+				t.Fatalf("Cursor diagnostics leaked command output: %s", injectedOutput.String())
+			}
+		})
+	}
+}
+
+func cursorTerminalLogRecord(t *testing.T, logs string, failure bool) map[string]any {
+	t.Helper()
+	wantMessage := "inferencer: request completed"
+	if failure {
+		wantMessage = "provider failure normalized"
+	}
+	for _, line := range strings.Split(strings.TrimSpace(logs), "\n") {
+		var record map[string]any
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatalf("decode Cursor diagnostic: %v", err)
+		}
+		if record["msg"] == wantMessage {
+			return record
+		}
+	}
+	t.Fatalf("terminal Cursor diagnostic %q absent: %s", wantMessage, logs)
+	return nil
+}
 
 func TestScriptWrapProvider_Infer_CursorErrorFlaggedSuccessPublishesOnlyCanonicalFailure(t *testing.T) {
 	scriptDir := t.TempDir()
@@ -592,5 +894,71 @@ func assertEquivalentCommandDiagnostic(t *testing.T, got, want *interfaces.Comma
 		got.TimedOut != want.TimedOut ||
 		got.WorkingDir != want.WorkingDir {
 		t.Fatalf("command diagnostics = %#v, want %#v", got, want)
+	}
+}
+
+func TestScriptWrapProviderExecuteAgyTimeoutWithPartialDoesNotReturnSuccessOrCompletedRun(t *testing.T) {
+	t.Parallel()
+
+	factoryRoot := t.TempDir()
+	mock := &agyInferenceStubAllocator{result: agypty.SessionResult{
+		ExitCode: 124, TimedOut: true, CleanedText: "partial answer before timeout",
+	}}
+	var published []InferenceProgressFragment
+	provider := NewScriptWrapProvider(
+		WithAgyFactoryRoot(factoryRoot),
+		WithAgyPTYAllocator(mock),
+		WithInferenceProgressPublisher(func(fragment InferenceProgressFragment) {
+			published = append(published, fragment)
+		}),
+	)
+	_, err := provider.Execute(context.Background(), interfaces.RunnerExecutionRequest{
+		Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-agy-timeout"},
+		ModelProvider:    string(interfaces.ModelProviderAgy),
+		WorkingDirectory: ".",
+		UserMessage:      "plan the goal",
+	})
+	if err == nil {
+		t.Fatal("Execute() error = nil, want timeout failure")
+	}
+	for _, fragment := range published {
+		if fragment.Kind == CompletedFragmentKind {
+			t.Fatalf("published completed fragment on timeout: %#v", published)
+		}
+		if fragment.Kind == FailedFragmentKind && !fragment.CanonicalEventAlreadyPublished {
+			t.Fatalf("published duplicate legacy failure after canonical timeout drafts: %#v", published)
+		}
+	}
+	if !agyTimeoutPartialDraftPublished(published) {
+		t.Fatalf("published fragments = %#v, want partial timeout canonical draft", published)
+	}
+}
+
+func TestScriptWrapProviderExecuteAgyUsesPTYAdapterPath(t *testing.T) {
+	t.Parallel()
+
+	factoryRoot := t.TempDir()
+	mock := &agyInferenceStubAllocator{result: agypty.SessionResult{ExitCode: 0, CleanedText: "final answer"}}
+	provider := NewScriptWrapProvider(
+		WithAgyFactoryRoot(factoryRoot),
+		WithAgyPTYAllocator(mock),
+	)
+	response, err := provider.Execute(context.Background(), interfaces.RunnerExecutionRequest{
+		Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-agy-cli"},
+		ModelProvider:    string(interfaces.ModelProviderAgy),
+		WorkingDirectory: ".",
+		UserMessage:      "plan the goal",
+	})
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+	if response.Content != "final answer" {
+		t.Fatalf("content = %q, want final answer", response.Content)
+	}
+	if len(mock.sessions) != 1 {
+		t.Fatalf("pty sessions = %d, want 1", len(mock.sessions))
+	}
+	if err := agypty.ValidateArgv(mock.sessions[0].launch.Argv); err != nil {
+		t.Fatalf("ValidateArgv() error = %v", err)
 	}
 }

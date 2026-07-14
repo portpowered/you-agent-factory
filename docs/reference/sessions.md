@@ -1,6 +1,6 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-07-12
+last-modified: 2026-07-14
 doc-id: agent-factory/guides/sessions
 ---
 
@@ -9,11 +9,10 @@ doc-id: agent-factory/guides/sessions
 Use this guide when you need to discover live factory sessions, confirm a
 service is listening, inspect the active factory on a running host, read session
 status from the API, or route submit and work commands to a non-default session.
-It also owns the operator path for the currently supported durable JavaScript
-`FactorySession` slice: validate source, start a durable session, inspect
-status, result, dispatches, artifacts, and `FactoryEvent` history, confirm the
-same session in the website detail surface, and apply lifecycle controls where
-the current surface supports them.
+For the end-to-end JavaScript workflow task—select or author source, validate,
+start, inspect, and recover—use `you docs javascript-workflows`. This page owns
+general Factory Session discovery, lifecycle controls, routing, and runtime
+inspection shared by every orchestrator kind.
 
 Each live session owns its own runtime state. The service coordinates and
 routes requests between sessions, but runtime state such as loaded factory,
@@ -25,7 +24,11 @@ loop), see `you docs agents`. For submitted-work contracts
 after the factory is running, see `you docs work`. For `factory.json` topology,
 see `you docs config`.
 
-## Canonical JavaScript Factory Session Path
+## JavaScript Factory Session Model
+
+The task procedure and complete CLI/API/MCP command sequence live in
+`you docs javascript-workflows`. The material here only maps that procedure to
+the shared Factory Session model used by the rest of this session reference.
 
 A JavaScript execution is a `FactorySession` whose `orchestratorKind` is
 `JAVASCRIPT`. It is not a workflow run or another resource alongside a Factory
@@ -49,6 +52,7 @@ currently shipped pause and resume controls.
 | Inspect dispatches | `GET /factory-sessions/{session_id}/dispatches` | `you session dispatches {session_id}` | `you.factory_session.list_dispatches` | Factory Session detail dispatches |
 | Inspect artifacts | `GET /factory-sessions/{session_id}/artifacts` | `you session show {session_id}` exposes artifact refs | `you.factory_session.list_artifacts` | Factory Session detail artifacts |
 | Read ordered events | `GET /factory-sessions/{session_id}/events` | No Factory Session-named spelling; use the API or MCP path | `you.factory_session.read_events` | Factory Session detail live updates and history |
+| Observe ephemeral response events | `GET /factory-sessions/{session_id}/response-events` | No Factory Session-named spelling; use the API path | No Factory Session-named spelling; use the API path | No dashboard-owned response-event stream today |
 | Control lifecycle | `POST /factory-sessions/{session_id}/{pause\|resume\|cancel\|terminate}` | `you session pause {session_id}`, `you session resume {session_id}` | `you.factory_session.control` | Available actions on Factory Session detail |
 
 The start response supplies `{session_id}`. Keep that exact id for every later
@@ -156,7 +160,7 @@ durable-session slice instead of building a one-off harness:
 
 | Surface proved | Existing artifact | Command |
 |----------------|-------------------|---------|
-| Validate-first source readiness | CLI workflow validation package tests | `go test ./pkg/cli/workflow -run 'TestValidate_(ValidWorkflowNameHumanOutput|JSONOutputMatchesCanonicalValidationResult)' -count=1 -timeout 300s` |
+| Validate-first source readiness | CLI workflow validation package tests | `go test ./pkg/transports/cli/workflow -run 'TestValidate_(ValidWorkflowNameHumanOutput|JSONOutputMatchesCanonicalValidationResult)' -count=1 -timeout 300s` |
 | Durable lifecycle-control outcome and canonical lifecycle events | Service durable-session lifecycle tests | `go test ./pkg/service -run 'TestFactoryService_(CancelDurableFactorySession_RuntimeBackedSession|LiveSessionPauseResume_HTTPReturnsTypedLifecycleControl|LiveSessionPauseResume_HTTPEmitsSessionLifecycleControlEvents)' -count=1 -timeout 300s` |
 | Website Factory Session detail against a real backend durable session | Browser-backed dashboard integration using the existing harness plus durable workflow fixtures | `cd ui && bun vitest run integration/durable-session-real-backend.integration.test.mjs` |
 
@@ -188,8 +192,8 @@ you use this proof for closeout review.
 
 | Need | Use |
 |------|-----|
-| Validate JavaScript source before durable execution | [Canonical JavaScript Factory Session Path](#canonical-javascript-factory-session-path) and `you docs orchestrators` |
-| Recover a stopped `@you/goal` run through existing session and work controls | [Stopped goal inspect and recovery](#stopped-goal-inspect-and-recovery) and `you docs packaged-goal` |
+| Validate JavaScript source before durable execution | [JavaScript Factory Session model](#javascript-factory-session-model) and `you docs javascript-workflows` |
+| Recover a stopped `@you/goal` run through existing session and work controls | [Stopped goal inspect and recovery](#stopped-goal-inspect-and-recovery) and `you docs run` |
 | Confirm anything is listening before `you submit` or `POST /factory-sessions/{session_id}/work` | [Session list](#session-list) |
 | Read the active factory name and directory on a live host | [Factory query](#factory-query) |
 | Inspect lifecycle phase, engine activity, and token buckets | [Session status API](#session-status-api) |
@@ -198,6 +202,7 @@ you use this proof for closeout review.
 | Target a non-default session on submit or work commands | [`--server` and `--session`](#server-and-session-routing) |
 | Choose a run mode that stays up for later submissions | [Run modes](#run-modes) |
 | Pause or resume a live Factory Session without losing buffered work | [Session pause and resume](#session-pause-and-resume) |
+| Reconnect to ephemeral invocation response events over SSE | [Response-event stream lifecycle and reconnect](#response-event-stream-lifecycle-and-reconnect) |
 
 ## Session list
 
@@ -241,8 +246,9 @@ yet — start or attach a factory before submitting work.
 ### Unreachable host
 
 **Connection refused** or **endpoint not reachable** means nothing is listening on
-the configured host and port. Start the factory with `you`, `you run --continuously`,
-or `you run --dir <factory>` before retrying.
+the configured host and port. Start the Factory with explicit Work, such as
+`you run --continuously --work ./docs/examples/startup-work.json`, before
+retrying.
 
 ### Discover session ids
 
@@ -302,8 +308,8 @@ surfaces.
 | Needs-human `Work` | The human input, approval, or artifact review required for that work item. | Existing human-input, approval, or repair step in the current workflow |
 | Interrupted `Dispatch` or session | Interruption status and latest dispatch or result summary. | Existing dispatch retry, work repair, or session workflow controls |
 
-For the `@you/goal` packaged-factory examples and invocation-specific failure
-codes, use `you docs packaged-goal`.
+For named-Factory inputs and output modes, use `you docs run`. The inspection
+and recovery controls remain on this page.
 
 ## Session pause and resume
 
@@ -719,9 +725,118 @@ events remain on the same stream so reconnect replay can rebuild phase, dispatch
 counts, artifact refs, and terminal outcomes without waiting for only
 `SESSION_COMPLETED`.
 
+## Response-event stream lifecycle and reconnect
+
+Use this route when you need **ephemeral invocation observation** for one live
+Factory Session — incremental message, tool, progress, and related public
+`FactoryResponseEvent` records while work is running. These records are
+**outside canonical `FactoryEvent` replay** and never derive canonical Factory
+state. They are not a substitute for durable session history.
+
+Open the session-scoped route with the resolved Factory Session UUID:
+
+`GET /factory-sessions/{session_id}/response-events`
+
+For CLI one-shot invocation output modes (primary result, human
+response-stream, and NDJSON automation), see `you docs run`. The API route
+below is the session-owned SSE counterpart for consumers that attach to a
+running Factory Session instead of parsing `you run` stdout.
+
+### How this differs from canonical Factory events
+
+| Stream | Route | What it carries | Replay role |
+|--------|-------|-----------------|-------------|
+| Canonical Factory events | `GET /factory-sessions/{session_id}/events` | Ordered `FactoryEvent` history for lifecycle, dispatches, artifacts, and replay projections | Durable session history for dashboard timeline, status derivation, and reconnect replay within the session's retained event history |
+| Ephemeral response events | `GET /factory-sessions/{session_id}/response-events` | Ordered `FactoryResponseEvent` observation records for invocation progress | Session-scoped retained catch-up, then live continuation only while the session retains response-event history |
+
+Do not treat response events as canonical Factory events. Dashboard timeline
+replay, `SESSION_LIFECYCLE_CONTROL` derivation, and durable JavaScript session
+inspection belong on the Factory event stream above.
+
+### Copy-paste example
+
+Replace `{session_id}` with the live Factory Session UUID from
+`you session list` or a session start response. Omit `after_sequence` to begin
+at the start of the session's **currently retained** response-event history.
+
+```bash
+curl -s -N \
+  "http://localhost:7437/factory-sessions/{session_id}/response-events?after_sequence=12"
+```
+
+Each Server-Sent Events `id` is the decimal `FactoryResponseEvent.sequence`.
+After you process a record, pass that sequence as `after_sequence` on the next
+connection so the server resumes after the last acknowledged point.
+
+### Retained catch-up, live continuation, and gaps
+
+The connection first sends **retained matching records in ascending response
+sequence**, then continues with **live matching records** on the same
+connection.
+
+| Cursor | Behavior |
+|--------|----------|
+| `after_sequence` omitted | Start at the beginning of retained response-event history for the selected session |
+| `after_sequence` set to the last acknowledged `FactoryResponseEvent.sequence` | Send only retained records with a greater sequence, then continue live |
+| `after_sequence` predates retained history | The first emitted record is `STREAM_GAP` with `fromSequence`, `toSequence`, and `firstAvailableSequence` describing the lost range instead of silently skipping unavailable sequences |
+
+When you see `STREAM_GAP`, treat the described sequence range as unavailable.
+Reconnect from `firstAvailableSequence` (or omit the cursor to replay from the
+start of retained history) and reconcile your consumer state against the gap
+payload rather than assuming contiguous observation.
+
+Optional query filters such as `dispatch_id` and `kind` narrow which retained
+and live records are delivered. Invalid cursor or filter values return typed
+`400` responses before the stream opens.
+
+### Typed HTTP outcomes before the stream opens
+
+Response-event streaming **never falls back** to the current or default session.
+Use the explicit `session_id` you intend to observe.
+
+| Case | HTTP | Stable code |
+|------|------|-------------|
+| Unknown `session_id` | `404` | `RESPONSE_EVENT_SESSION_NOT_FOUND` |
+| Retained response-event history has expired for the session | `410` | `RESPONSE_EVENT_STREAM_EXPIRED` |
+| Invalid `after_sequence` or filter | `400` | `INVALID_RESPONSE_EVENT_CURSOR` or related bad-request codes |
+
+These outcomes are distinct from Factory event reconnect probes on
+`GET /factory-sessions/{session_id}/events`, which use `after_event_id` or
+`after_sequence` against canonical `FactoryEvent` cursors and different typed
+not-found or stale-cursor handling.
+
+### Retention limits and non-promises
+
+Response-event history is **session-scoped and ephemeral**. The service retains
+only a bounded window while the Factory Session is live and for a limited time
+after completion. Consumers must handle `STREAM_GAP`, stream expiration, and
+sparse observation without assuming durable restart replay of response events
+beyond that retention window.
+
+The service does **not** promise:
+
+- durable process-restart replay of response events after retained history
+  expires,
+- byte-identical provider transcripts on the public response stream, or
+- that response-event observation replaces canonical `FactoryEvent` history for
+  lifecycle, dispatch, or artifact facts.
+
+Authoritative invocation success still comes from `primaryResult` on invocation
+responses and from terminal work or session facts on canonical Factory events.
+See `you docs run` for CLI output-mode contracts and `you docs workers` for
+provider fidelity variability.
+
+### Maintainer verification
+
+After editing this reference topic, run `make docs-reference-smoke` from the
+repository root and review the generated OpenAPI operation description for
+`GET /factory-sessions/{session_id}/response-events` so packaged wording stays
+aligned with the authored contract.
+
 ## Related Topics
 
 - `you docs orchestrators` — Factory, FactoryOrchestrator, FactorySession, Dispatch, FactoryArtifact, FactoryEvent, and dynamic workflow aliases
+- `you docs run` — CLI primary-result, human response-stream, and NDJSON invocation output modes
 - `you docs agents` — agent orientation, operator loop, and topic router
 - `you docs work` — `you submit`, `POST /factory-sessions/{session_id}/work`, and verification commands
 - `you docs config` — `factory.json` topology and portability

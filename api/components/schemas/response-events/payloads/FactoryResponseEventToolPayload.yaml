@@ -1,0 +1,26 @@
+type: object
+additionalProperties: false
+description: Tool lifecycle metadata with bounded argument and result summaries.
+required:
+  - toolCallId
+  - toolName
+properties:
+  toolCallId:
+    type: string
+    description: Stable tool call identifier within the run.
+  toolName:
+    type: string
+    description: Declared tool name for the invocation.
+  status:
+    type: string
+    description: Tool lifecycle status when applicable.
+  argumentsSummary:
+    type: object
+    description: >-
+      Bounded summary of tool arguments. Not a raw provider protocol payload.
+    additionalProperties: true
+  resultSummary:
+    type: object
+    description: >-
+      Bounded summary of tool results. Not a raw provider protocol payload.
+    additionalProperties: true

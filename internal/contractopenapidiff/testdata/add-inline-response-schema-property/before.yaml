@@ -1,0 +1,20 @@
+openapi: 3.0.3
+info:
+  title: Add Inline Response Schema Property Fixture
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      responses:
+        '200':
+          description: Pet list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - id
+                properties:
+                  id:
+                    type: string

@@ -1,0 +1,23 @@
+type: string
+description: Identifies one provider-neutral message content block kind.
+x-enum-varnames:
+  - FactoryResponseEventContentBlockKindText
+  - FactoryResponseEventContentBlockKindReasoningSummary
+  - FactoryResponseEventContentBlockKindToolRequest
+  - FactoryResponseEventContentBlockKindImageRef
+  - FactoryResponseEventContentBlockKindResourceRef
+  - FactoryResponseEventContentBlockKindStructuredOutput
+enum:
+  - TEXT
+  - REASONING_SUMMARY
+  - TOOL_REQUEST
+  - IMAGE_REF
+  - RESOURCE_REF
+  - STRUCTURED_OUTPUT
+x-enum-descriptions:
+  - Inline assistant or user-visible text content.
+  - Reasoning summary text exposed to consumers.
+  - Tool invocation request with bounded argument summary.
+  - Reference to an image artifact or URL.
+  - Reference to a factory resource or artifact.
+  - Structured JSON output block.

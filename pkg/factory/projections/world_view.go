@@ -4,8 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // BuildFactoryWorldView projects generic reconstructed world state into a thin
@@ -287,7 +287,6 @@ func workstationMatchesPause(
 	provider := firstNonEmpty(worker.ModelProvider, worker.Provider)
 	return strings.EqualFold(provider, pause.Provider) && worker.Model == pause.Model
 }
-
 
 func workItemRefsForIDs(
 	lineage interfaces.WorkPayloadLineageProjection,

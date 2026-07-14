@@ -1,0 +1,14 @@
+{
+  "name": "layout-factory",
+  "layout": {
+    "nodes": [{"id": "workstation:review", "position": {"x": 420, "y": 180}}]
+  },
+  "workTypes": [{"name": "task", "states": [{"name": "ready", "type": "INITIAL"}, {"name": "done", "type": "TERMINAL"}]}],
+  "workers": [{"name": "writer", "type": "MODEL_WORKER"}],
+  "workstations": [{
+    "name": "review",
+    "worker": "writer",
+    "inputs": [{"workType": "task", "state": "ready"}],
+    "outputs": [{"workType": "task", "state": "done"}]
+  }]
+}

@@ -11,18 +11,11 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
-	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
+	"github.com/portpowered/infinite-you/pkg/work/content"
+	"github.com/portpowered/infinite-you/pkg/work/materialize"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
-
-const (
-	codexErrorLineScanBytes            = 64 * 1024
-	codexWindowsProcessFailureExitCode = 4294967295
-)
-
-const codexHighDemandTemporaryErrorsNeedle = "we're currently experiencing high demand, which may cause temporary errors."
 
 // Cursor is commonly installed through a Windows command shim whose practical
 // command-line limit is lower than CreateProcess' documented maximum. Keep the
@@ -91,6 +84,11 @@ type openCodeProviderBehavior struct {
 	logger logging.Logger
 }
 
+type piProviderBehavior struct {
+	sharedNonCodexProviderBehavior
+	logger logging.Logger
+}
+
 func providerBehaviorFor(provider string, logger logging.Logger) providerBehavior {
 	switch provider {
 	case string(interfaces.ModelProviderCodex):
@@ -103,6 +101,8 @@ func providerBehaviorFor(provider string, logger logging.Logger) providerBehavio
 		return cursorProviderBehavior{logger: logger}
 	case string(interfaces.ModelProviderOpenCode):
 		return openCodeProviderBehavior{logger: logger}
+	case string(interfaces.ModelProviderPi):
+		return piProviderBehavior{logger: logger}
 	default:
 		return claudeProviderBehavior{logger: logger}
 	}
@@ -176,6 +176,27 @@ func (b codexProviderBehavior) BuildCommandRequest(req interfaces.ProviderInfere
 	// over stdin instead of passed as a positional argument.
 	commandReq.Stdin = []byte(req.UserMessage)
 	return commandReq
+}
+
+// BuildCodexStructuredCommand applies the established Codex command and image
+// materialization policy for a typed adapter invocation. Cleanup must run after
+// the subprocess attempt so dispatch-scoped image files remain available.
+func BuildCodexStructuredCommand(
+	ctx context.Context,
+	req interfaces.ProviderInferenceRequest,
+	skipPermissions bool,
+	materializeOpts *materialize.Options,
+) (CommandRequest, func(), error) {
+	buildCtx := &ProviderBuildContext{ContentCache: materialize.NewDispatchCache(), MaterializeOpts: materializeOpts}
+	cleanup := func() { buildCtx.release() }
+	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
+	args, err := behavior.BuildArgs(ctx, req, skipPermissions, buildCtx)
+	if err != nil {
+		cleanup()
+		return CommandRequest{}, nil, err
+	}
+	args = append(args[:1], append([]string{"--json"}, args[1:]...)...)
+	return behavior.BuildCommandRequest(req, args), cleanup, nil
 }
 
 func (b geminiProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, skipPermissions bool, _ *ProviderBuildContext) ([]string, error) {
@@ -317,6 +338,23 @@ func (b openCodeProviderBehavior) BuildArgs(_ context.Context, req interfaces.Pr
 	return args, nil
 }
 
+func (b piProviderBehavior) BuildArgs(_ context.Context, req interfaces.ProviderInferenceRequest, _ bool, _ *ProviderBuildContext) ([]string, error) {
+	logger := logging.EnsureLogger(b.logger)
+	args := []string{"--print", "--mode", "json", "--approve"}
+	if req.Model != "" {
+		args = append(args, "--model", req.Model)
+	}
+	if req.SessionID != "" {
+		logger.Info("inferencer: resuming pi session")
+		args = append(args, "--session", req.SessionID)
+	}
+	if req.SystemPrompt != "" {
+		args = append(args, "--system-prompt", req.SystemPrompt)
+	}
+	args = append(args, req.UserMessage)
+	return args, nil
+}
+
 func validateGeminiOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
 	unsupported := map[interfaces.RunnerOptionalCapability]string{
 		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the gemini runner in v1",
@@ -379,9 +417,8 @@ func validateCursorOptionalCapabilities(req interfaces.ProviderInferenceRequest)
 
 func validateOpenCodeOptionalCapabilities(req interfaces.ProviderInferenceRequest) error {
 	unsupported := map[interfaces.RunnerOptionalCapability]string{
-		interfaces.RunnerOptionalCapabilityImageInput:       "image input is not supported by the opencode runner in v1",
-		interfaces.RunnerOptionalCapabilityStructuredOutput: "structured output is not supported by the opencode runner in v1",
-		interfaces.RunnerOptionalCapabilityWorktree:         "worktree selection is not supported by the opencode runner in v1",
+		interfaces.RunnerOptionalCapabilityImageInput: "image input is not supported by the opencode runner in v1",
+		interfaces.RunnerOptionalCapabilityWorktree:   "worktree selection is not supported by the opencode runner in v1",
 	}
 	for _, capability := range req.RequiredOptionalCapabilities {
 		if message, blocked := unsupported[capability]; blocked {
@@ -430,32 +467,6 @@ func formatCombinedProviderOutput(result CommandResult) string {
 	}, "\n")
 }
 
-func extractCodexErrorLine(result CommandResult) (string, bool) {
-	combined := strings.Join([]string{
-		tailForCodexErrorScan(result.Stderr),
-		tailForCodexErrorScan(result.Stdout),
-	}, "\n")
-
-	var match string
-	for _, line := range strings.Split(combined, "\n") {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "ERROR:") {
-			match = trimmed
-		}
-	}
-	if match == "" {
-		return "", false
-	}
-	return match, true
-}
-
-func tailForCodexErrorScan(output []byte) string {
-	if len(output) <= codexErrorLineScanBytes {
-		return string(output)
-	}
-	return string(output[len(output)-codexErrorLineScanBytes:])
-}
-
 func codexImageArgs(ctx context.Context, req interfaces.ProviderInferenceRequest, buildCtx *ProviderBuildContext) ([]string, error) {
 	tokens := cloneInputTokens(req.InputTokens)
 	if len(tokens) == 0 {
@@ -479,7 +490,7 @@ func codexImageArgs(ctx context.Context, req interfaces.ProviderInferenceRequest
 			if err != nil {
 				return nil, fmt.Errorf("input_tokens[%d].color.content[%d].url: %w", tokenIndex, partIndex, err)
 			}
-			resolvedURL, err := workcontent.ResolveDispatchContentURL(req.WorkingDirectory, contentURL)
+			resolvedURL, err := content.ResolveDispatchContentURL(req.WorkingDirectory, contentURL)
 			if err != nil {
 				return nil, fmt.Errorf("input_tokens[%d].color.content[%d].url: %w", tokenIndex, partIndex, err)
 			}
@@ -498,7 +509,7 @@ func codexImageContentURL(part interfaces.WorkContentPart) (string, error) {
 		return part.URL, nil
 	}
 	if strings.TrimSpace(part.File) != "" {
-		return workcontent.FilesystemPathToContentURL(part.File)
+		return content.FilesystemPathToContentURL(part.File)
 	}
 	return "", fmt.Errorf("codex image content url is required")
 }
@@ -600,3 +611,80 @@ func providerErrorFamilyForType(errorType interfaces.WorkFailureType) interfaces
 
 // WorkFailureMetadataFromError projects a provider-shaped execution error onto
 // the in-process failure contract carried on WorkResult.FailureMetadata.
+// FailureSignalTier orders competing invocation failure signals. Lower tiers
+// outrank higher tiers when multiple candidates are present for one outcome.
+type FailureSignalTier int
+
+const (
+	FailureSignalTierCancelTimeout FailureSignalTier = iota
+	FailureSignalTierStructured
+	FailureSignalTierStderr
+	FailureSignalTierExit
+)
+
+// ProviderFailureResolution is the winning provider failure outcome plus a
+// bounded internal cause excerpt from the selected signal.
+type ProviderFailureResolution struct {
+	Result        ProviderFailureResult
+	InternalCause string
+}
+
+// CompetingFailureSignal is one candidate outcome before shared precedence
+// selection. Recognized marks whether the tier produced a known failure class
+// rather than an unknown fallback excerpt.
+type CompetingFailureSignal struct {
+	Tier          FailureSignalTier
+	Recognized    bool
+	Result        ProviderFailureResult
+	InternalCause string
+}
+
+// SelectFailureByPrecedence collapses competing signals to one authoritative
+// outcome using the shared precedence model:
+//
+//  1. cancellation and timeout
+//  2. recognized structured provider errors
+//  3. recognized stderr classification
+//  4. unrecognized structured provider errors
+//  5. unrecognized stderr classification
+//  6. generic process-exit fallback
+func SelectFailureByPrecedence(signals []CompetingFailureSignal) (ProviderFailureResolution, bool) {
+	if len(signals) == 0 {
+		return ProviderFailureResolution{}, false
+	}
+	if selected, ok := selectFailureForTier(signals, FailureSignalTierCancelTimeout, false); ok {
+		return selected, true
+	}
+	if selected, ok := selectFailureForTier(signals, FailureSignalTierStructured, true); ok {
+		return selected, true
+	}
+	if selected, ok := selectFailureForTier(signals, FailureSignalTierStderr, true); ok {
+		return selected, true
+	}
+	if selected, ok := selectFailureForTier(signals, FailureSignalTierStructured, false); ok {
+		return selected, true
+	}
+	if selected, ok := selectFailureForTier(signals, FailureSignalTierStderr, false); ok {
+		return selected, true
+	}
+	return selectFailureForTier(signals, FailureSignalTierExit, false)
+}
+
+func selectFailureForTier(signals []CompetingFailureSignal, tier FailureSignalTier, recognizedOnly bool) (ProviderFailureResolution, bool) {
+	var selected ProviderFailureResolution
+	var found bool
+	for _, signal := range signals {
+		if signal.Tier != tier {
+			continue
+		}
+		if recognizedOnly && !signal.Recognized {
+			continue
+		}
+		selected = ProviderFailureResolution{
+			Result:        signal.Result,
+			InternalCause: signal.InternalCause,
+		}
+		found = true
+	}
+	return selected, found
+}

@@ -1,0 +1,19 @@
+type: object
+additionalProperties: false
+description: Message snapshot payload with typed content blocks.
+required:
+  - role
+  - contentBlocks
+properties:
+  role:
+    type: string
+    description: Message role such as assistant or user.
+  contentBlocks:
+    type: array
+    minItems: 1
+    description: Ordered typed content blocks for the message snapshot.
+    items:
+      $ref: ../FactoryResponseEventContentBlock.yaml
+  partial:
+    type: boolean
+    description: When true, the snapshot carries bounded timeout or cancellation capture and must not be treated as an authoritative final response.

@@ -1,6 +1,6 @@
 package runtimehost
 
-import "github.com/portpowered/infinite-you/pkg/invocations"
+import sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 
 // InvocationMetric records one emitted runtime counter together with its
 // low-cardinality dimensions.
@@ -95,16 +95,16 @@ const (
 )
 
 const (
-	InvocationMetricNormalizationAttempts = invocations.InvocationMetricNormalizationAttempts
-	InvocationMetricNormalizationSuccess  = invocations.InvocationMetricNormalizationSuccess
-	InvocationMetricNormalizationFailure  = invocations.InvocationMetricNormalizationFailure
-	InvocationMetricInterpolationFailure  = invocations.InvocationMetricInterpolationFailure
-	InvocationMetricAttempts              = invocations.InvocationMetricAttempts
-	InvocationMetricSuccess               = invocations.InvocationMetricSuccess
-	InvocationMetricFailure               = invocations.InvocationMetricFailure
-	InvocationMetricUnresolvedPrimary     = invocations.InvocationMetricUnresolvedPrimary
-	InvocationMetricFallbackPolicyUsed    = invocations.InvocationMetricFallbackPolicyUsed
-	InvocationMetricResultType            = invocations.InvocationMetricResultType
+	InvocationMetricNormalizationAttempts = sessioninvocation.InvocationMetricNormalizationAttempts
+	InvocationMetricNormalizationSuccess  = sessioninvocation.InvocationMetricNormalizationSuccess
+	InvocationMetricNormalizationFailure  = sessioninvocation.InvocationMetricNormalizationFailure
+	InvocationMetricInterpolationFailure  = sessioninvocation.InvocationMetricInterpolationFailure
+	InvocationMetricAttempts              = sessioninvocation.InvocationMetricAttempts
+	InvocationMetricSuccess               = sessioninvocation.InvocationMetricSuccess
+	InvocationMetricFailure               = sessioninvocation.InvocationMetricFailure
+	InvocationMetricUnresolvedPrimary     = sessioninvocation.InvocationMetricUnresolvedPrimary
+	InvocationMetricFallbackPolicyUsed    = sessioninvocation.InvocationMetricFallbackPolicyUsed
+	InvocationMetricResultType            = sessioninvocation.InvocationMetricResultType
 )
 
 const (

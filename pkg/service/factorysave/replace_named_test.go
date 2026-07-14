@@ -8,13 +8,12 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestSaveNamedCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
@@ -40,7 +39,7 @@ func TestSaveNamedCurrentFactoryForSession_PersistsSplitLayout(t *testing.T) {
 			},
 		},
 	}
-	svc := New(sessionRoot, factory.RealClock{}, func() factoryconfig.WorkstationLoader { return nil }, host)
+	svc := New(host)
 
 	replacement := factoryapi.Factory{
 		Name: "alpha",
@@ -126,7 +125,7 @@ func TestSaveNamedCurrentFactoryForSession_CoercesDriftedPayloadName(t *testing.
 			},
 		},
 	}
-	svc := New(sessionRoot, factory.RealClock{}, func() factoryconfig.WorkstationLoader { return nil }, host)
+	svc := New(host)
 
 	replacement := factoryapi.Factory{
 		Name: "imported-factory",
@@ -269,20 +268,13 @@ func (h *splitLayoutNamedSaveHost) PreparePersistedFactoryPayload(
 	return preparePersistedFactoryPayload(segment, factory, version)
 }
 
-func (h *splitLayoutNamedSaveHost) SaveReplaceCurrentForSession(
+func (h *splitLayoutNamedSaveHost) SaveFactoryForSession(
 	ctx context.Context,
 	sessionID string,
+	mode factoryapi.FactorySaveMode,
 	request factoryapi.Factory,
 ) (factoryapi.Factory, error) {
-	return saveReplaceCurrentThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
-}
-
-func (h *splitLayoutNamedSaveHost) SaveUpsertNamedAndActivateForSession(
-	ctx context.Context,
-	sessionID string,
-	request factoryapi.Factory,
-) (factoryapi.Factory, error) {
-	return saveUpsertNamedThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
+	return saveFactoryThroughDefinition(h.sessionRootDir, h, ctx, sessionID, mode, request)
 }
 
 func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testing.T) {
@@ -298,7 +290,7 @@ func TestSaveUpsertNamedAndActivateForSession_PersistsChosenTargetName(t *testin
 			},
 		},
 	}
-	svc := New(sessionRoot, factory.RealClock{}, func() factoryconfig.WorkstationLoader { return nil }, host)
+	svc := New(host)
 
 	imported := factoryapi.Factory{
 		Name: "imported-target",
@@ -458,18 +450,11 @@ func (h *upsertNamedSaveHost) PreparePersistedFactoryPayload(
 	return preparePersistedFactoryPayload(segment, factory, version)
 }
 
-func (h *upsertNamedSaveHost) SaveReplaceCurrentForSession(
+func (h *upsertNamedSaveHost) SaveFactoryForSession(
 	ctx context.Context,
 	sessionID string,
+	mode factoryapi.FactorySaveMode,
 	request factoryapi.Factory,
 ) (factoryapi.Factory, error) {
-	return saveReplaceCurrentThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
-}
-
-func (h *upsertNamedSaveHost) SaveUpsertNamedAndActivateForSession(
-	ctx context.Context,
-	sessionID string,
-	request factoryapi.Factory,
-) (factoryapi.Factory, error) {
-	return saveUpsertNamedThroughDefinition(h.sessionRootDir, h, ctx, sessionID, request)
+	return saveFactoryThroughDefinition(h.sessionRootDir, h, ctx, sessionID, mode, request)
 }

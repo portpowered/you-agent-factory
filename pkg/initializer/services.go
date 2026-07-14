@@ -1,12 +1,19 @@
+// Package initializer is the canonical composition root for factory config loading
+// and domain service construction. It assembles session, factory-definition, model,
+// worker, and runtime-host collaborators without constructing root pkg/service
+// FactoryService at transport composition boundaries. API, CLI local in-process,
+// and MCP serve paths consume initializer-produced transport bundles. Process
+// startup graphs are constructed by pkg/wire and handed here only for lifecycle
+// execution.
 package initializer
 
 import (
 	"context"
 
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 )
 
 // Services exposes initializer-produced domain collaborators for in-process callers.

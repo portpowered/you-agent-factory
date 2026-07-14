@@ -1,0 +1,72 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.docs": {
+      "id": "example.factory.docs",
+      "name": "docs",
+      "path": "example factory docs",
+      "aliases": [],
+      "groupId": "factory",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.docs",
+        "documentation": {
+          "title": {
+            "id": "example.factory.docs.title",
+            "canonicalEnglish": "Show factory documentation topics"
+          },
+          "description": {
+            "id": "example.factory.docs.description",
+            "canonicalEnglish": "Shows packaged documentation topics for the factory CLI."
+          }
+        },
+        "examples": [
+          "example factory docs"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.docs",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "suggestion": {
+        "minimumDistance": 2,
+        "disableDefaultCmd": false,
+        "validArgs": []
+      },
+      "usage": {
+        "line": "docs [topic]",
+        "example": "  example factory docs agents"
+      },
+      "arguments": {
+        "example.factory.docs.arg.topic": {
+          "id": "example.factory.docs.arg.topic",
+          "name": "topic",
+          "position": 0,
+          "kind": "positional",
+          "valueType": "string",
+          "required": false,
+          "minCardinality": 0,
+          "maxCardinality": 1,
+          "variadic": false,
+          "enum": [
+            "agents",
+            "run"
+          ],
+          "pattern": "",
+          "completion": "static",
+          "channels": [
+            "cli"
+          ],
+          "doubleDash": "terminates-flags"
+        }
+      }
+    }
+  }
+}

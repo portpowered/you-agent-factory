@@ -6,7 +6,7 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/subagent"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
 )
 
 func TestNamedGoalResponseStream_APIInvocationMatchesCLIResponseStreamTerminal(t *testing.T) {
@@ -70,7 +70,7 @@ func TestNamedSubagentResponseStream_APIInvocationMatchesCLIResponseStreamTermin
 func materializeNamedSubagentFactoryForSmoke(t *testing.T) string {
 	t.Helper()
 
-	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), subagent.PackagedFactoryName, factoryconfig.BuiltInSubagentFactoryJSON)
+	dir, err := factoryconfig.PersistNamedFactory(t.TempDir(), subagent.PackagedFactoryName, subagent.BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("PersistNamedFactory(@you/subagent): %v", err)
 	}

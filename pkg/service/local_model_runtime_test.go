@@ -11,15 +11,15 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -300,6 +300,7 @@ func TestLoadWorkersFromConfig_LocalModelWorkerDetachesClonedWorkerRequestsFromL
 		nil,
 		nil,
 		nil,
+		nil,
 		LocalModelDomain{
 			Resources: newLocalModelResourceLimiter(),
 			Assets:    staticModelAssetPuller{cache: cache},
@@ -451,6 +452,7 @@ func localModelManagedRuntimeWorkerExecutor(t *testing.T, provider *providerCall
 		nil,
 		logging.NoopLogger{},
 		true,
+		nil,
 		provider,
 		nil,
 		nil,
@@ -516,7 +518,7 @@ func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*wor
 		},
 	})
 	history := factoryevents.NewFactoryEventHistory(nil, func() time.Time { return eventTime }, runtimeCfg)
-	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, nil, logging.NoopLogger{}, true, nil, nil, nil, nil, nil, nil, history.RecordModelEvent, nil, func() time.Time { return eventTime }, LocalModelDomain{
+	opts, err := loadWorkersFromConfig("", factoryCfg, "", runtimeCfg, nil, logging.NoopLogger{}, true, nil, nil, nil, nil, nil, nil, nil, history.RecordModelEvent, nil, func() time.Time { return eventTime }, LocalModelDomain{
 		Resources: newLocalModelResourceLimiter(),
 		Assets:    staticModelAssetPuller{cache: cache},
 		Runtime:   runtime,

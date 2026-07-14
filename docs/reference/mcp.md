@@ -1,65 +1,37 @@
 ---
 author: Agent Factory Team
-last-modified: 2026-06-17
+last-modified: 2026-07-13
 doc-id: agent-factory/guides/mcp
 ---
 
-# MCP Install Path For Factory Preview Tools
+# MCP Host Setup
 
-Use this guide when you need the recovery-lane preview install scope boundary
-for `you mcp serve`. For the current full host setup guide, practical host
-examples, and automated install smoke for validate plus async Factory Session
-tools, start with `you docs mcp-hosts`.
+Use this guide to install `you` in an MCP host, choose a backing mode, and
+verify the Factory Session tools. `you docs mcp` is the only packaged MCP setup
+topic.
 
-The serve command exposes Factory preview validation for JavaScript orchestrator
-sources before Factory Session execution. The default stdio server also registers
-the broader Factory Session MCP catalog through the mock-backed fixture service
-documented in `you docs mcp-hosts`.
+## Start The Stdio Server
 
-For canonical `Factory`, `FactoryOrchestrator`, `FactorySession`, `Dispatch`,
-`FactoryArtifact`, and `FactoryEvent` vocabulary, see `you docs orchestrators`.
-Dynamic workflow wording in this guide is JavaScript orchestrator shorthand
-only; it does not introduce a standalone workflow-run resource.
-
-## Canonical Serve Command
-
-The repository exposes one canonical MCP serve entrypoint:
+An MCP host must launch `you` as a child process:
 
 ```bash
 you mcp serve
 ```
 
-The command runs over stdio using newline-delimited JSON. MCP hosts should
-spawn it as a child process and keep stdin/stdout dedicated to the MCP
-transport. Do not run it as an interactive terminal command.
+The server speaks MCP JSON-RPC over stdin and stdout. Keep stdout reserved for
+protocol messages; process diagnostics use stderr. HTTP and SSE MCP transports
+are not supported, and neither documented mode connects to a live Factory HTTP
+server.
 
-## Copyable Host Configuration
+Configure these three host fields explicitly:
 
-Point your MCP host at the installed `you` binary, pass `mcp serve` as the only
-arguments, and set `cwd` to the JavaScript workflow project root whose sources
-you want `you.factory_session.validate_source` to resolve.
+| Field | Value |
+|-------|-------|
+| Executable | `you` on the host `PATH`, or an absolute path to the installed binary |
+| Arguments | `mcp`, `serve` |
+| Working directory | Absolute project root used to find workflow sources or the fixture catalog |
 
-No additional environment variables are required for the current preview-only
-serve path. The `you` executable must be on the host `PATH`, or you must use an
-absolute executable path.
-
-### Generic MCP host JSON
-
-```json
-{
-  "mcpServers": {
-    "you-agent-factory": {
-      "command": "you",
-      "args": ["mcp", "serve"],
-      "cwd": "/absolute/path/to/your-workflow-project"
-    }
-  }
-}
-```
-
-### Absolute executable path
-
-Use this shape when `you` is not on the host `PATH`:
+No extra environment variables are required. A generic host configuration is:
 
 ```json
 {
@@ -67,111 +39,150 @@ Use this shape when `you` is not on the host `PATH`:
     "you-agent-factory": {
       "command": "/absolute/path/to/you",
       "args": ["mcp", "serve"],
-      "cwd": "/absolute/path/to/your-workflow-project"
+      "cwd": "/absolute/path/to/project"
     }
   }
 }
 ```
 
-| Field | Required value | Why |
-|-------|----------------|-----|
-| `command` | Installed `you` binary (`you` on `PATH` or an absolute path) | Canonical CLI entrypoint for the repo-owned MCP server |
-| `args` | `["mcp", "serve"]` | Starts the preview-only stdio MCP server |
-| `cwd` | Absolute path to the workflow project root | Resolves `WORKFLOW_NAME` and related JavaScript orchestrator sources the same way CLI preview does |
-| `env` | Omit for the current serve path | Preview validation does not require factory-service or dashboard environment overrides |
+For Cursor, save that object in project `.cursor/mcp.json` or global
+`~/.cursor/mcp.json`, then reload the window. Codex, OpenCode, Kiro, Gemini, and
+other stdio MCP hosts use the same executable, arguments, and working-directory
+contract in their MCP settings. Restart or reload the host after changing it so
+the host respawns the child process.
 
-Replace `/absolute/path/to/your-workflow-project` with the directory that
-contains your workflow sources (for example a repository root with
-`.claude/workflows/` or `factory/workflows/`). Tool calls still accept an
-explicit `projectRoot` in the Factory preview request when the host needs a
-different resolution root than `cwd`.
+## Choose A Backing Mode
 
-## What This Batch Covers
+Both modes expose the same canonical `you.factory_session.*` tools. They differ
+only in how Factory Sessions execute.
 
-This recovery lane proves one installable MCP path for:
+| Mode | Host arguments | Use it for |
+|------|----------------|------------|
+| Fixture-backed (default) | `["mcp", "serve"]` | Deterministic install smoke and offline fixture scenarios |
+| Runtime-backed | `["mcp", "serve", "--runtime"]` | Live durable JavaScript workflow execution |
 
-1. **Tool discovery** over the owned stdio transport.
-2. **Factory preview validation** through `you.factory_session.validate_source`.
-
-Preview validation uses the canonical `FactoryPreviewRequest` /
-`FactoryPreviewResult` contract (`POST /factories/preview` vocabulary) to
-validate JavaScript orchestrator source and policy before Factory Session
-execution.
-
-### Preview tools exposed by `you mcp serve`
-
-| MCP tool | Purpose |
-|----------|---------|
-| `you.factory_session.validate_source` | Validate JavaScript orchestrator factory source through the canonical Factory preview contract |
-
-### Fixture-backed Factory Session tools
-
-The default serve path also exposes async Factory Session tools such as
-`you.factory_session.start_async`, `you.factory_session.get`, and
-`you.factory_session.get_result` through the fixture-backed service documented
-in `you docs mcp-hosts`. See that guide for the full catalog, host examples,
-and automated install smoke matrix.
-
-### Runtime-backed Factory Session tools
-
-Use `you mcp serve --runtime` when the host should exercise live durable
-JavaScript Factory Session execution through the shared runtime service instead
-of the deterministic fixture catalog. Runtime mode keeps the same
-`you.factory_session.*` tool catalog and Factory Session vocabulary; only the
-backing execution service changes.
-
-| Mode | Command | Backing service | When to use |
-|------|---------|-----------------|-------------|
-| Fixture-backed (default) | `you mcp serve` | Durable session fixture catalog | Host install smoke, offline deterministic scenarios, and fixture-driven async polling |
-| Runtime-backed | `you mcp serve --runtime` | Shared durable JavaScript runtime service | Live workflow execution, real INLINE_WORKFLOW sources, and terminal result reads against the runtime path |
-
-Runtime mode accepts optional `--project-root` when workflow sources should
-resolve from a directory other than the MCP host working directory. Do not
-combine `--runtime` with `--fixture-catalog`.
-
-## Automation-Backed In Repo
-
-The repository already proves the following without manual host UI smoke:
-
-| Check | Where it lives |
-|-------|----------------|
-| CLI registration for `you mcp serve` | `pkg/cli/root.go` and `pkg/cli/mcp/serve.go` |
-| Factory Session MCP catalog | `pkg/mcp/factorysession/registry.go` (`DiscoverTools`) |
-| Shared fixture-backed stdio install smoke for validate plus async polling | `pkg/cli/mcp/serve_smoke_test.go` |
-| Runtime-backed stdio install smoke for async start, status, and result | `pkg/cli/mcp/serve_runtime_smoke_test.go` |
-| Runtime-backed stdio resume smoke for interrupted-to-resumed continuity | `pkg/cli/mcp/serve_runtime_resume_smoke_test.go` |
-| Additive non-resume MCP serve regression after resume smoke | `pkg/cli/mcp/serve_runtime_resume_non_regression_test.go` |
-| Packaged recovery scope and serve-mode boundaries | `tests/functional/smoke/cli_docs_smoke_test.go` |
-
-Run focused verification locally:
+The equivalent runtime-backed child-process command is:
 
 ```bash
-go test ./pkg/cli/mcp/... ./pkg/mcp/...
-go test ./tests/functional/smoke -run 'TestDocsCommandSmoke|TestRunServe_InstallSmoke|TestRunServe_RuntimeSmoke'
+you mcp serve --runtime
 ```
 
-## Serve Mode Scope Boundaries
+Fixture-backed mode searches upward from the working directory for
+`pkg/transports/http/testdata/durable-session-contract-fixtures.json`.
+When the catalog is elsewhere, pass its path explicitly:
 
-This lane proves live runtime-backed stdio MCP serve only. It does not widen
-into website inspection, HTTP/SSE transport, or a broader host-matrix expansion.
+```json
+"args": ["mcp", "serve", "--fixture-catalog", "/absolute/path/to/durable-session-contract-fixtures.json"]
+```
 
-| Behavior | Status |
-|----------|--------|
-| Default fixture-backed `you mcp serve` install smoke | **Automated in-repo** via `serve_smoke_test.go` |
-| Runtime-backed `you mcp serve --runtime` async start/status/result smoke | **Automated in-repo** via `serve_runtime_smoke_test.go` |
-| Runtime-backed interrupted-to-resumed MCP resume smoke | **Automated in-repo** via `serve_runtime_resume_smoke_test.go` |
-| Additive fixture/runtime MCP serve regression after resume smoke | **Automated in-repo** via `serve_runtime_resume_non_regression_test.go` |
-| Multi-host parity matrices across every MCP client UI | Out of scope for this lane |
-| HTTP or SSE MCP transport | Unsupported; `you mcp serve` is stdio-only |
-| Dashboard or website inspection of MCP sessions | Out of scope for this lane |
-| Live factory HTTP runtime backing | Distinct from runtime-backed MCP serve; not required for stdio host setup |
+Runtime-backed mode resolves workflow sources from `cwd`. To use a different
+source root, add `--project-root`:
 
-The fixture-backed and runtime-backed serve paths are additive. Existing
-fixture-backed smoke continues to prove the default install path without
-depending on runtime mode.
+```json
+{
+  "command": "/absolute/path/to/you",
+  "args": ["mcp", "serve", "--runtime", "--project-root", "/absolute/path/to/project"],
+  "cwd": "/absolute/path/to/project"
+}
+```
+
+Do not combine `--runtime` with `--fixture-catalog`. Use runtime mode for real
+`INLINE_WORKFLOW` or named-source execution; the default mode resolves only the
+deterministic catalog scenarios.
+
+## Use Canonical Factory Session Tools
+
+Tool discovery exposes this primary catalog:
+
+| Tool | Task |
+|------|------|
+| `you.factory_session.list` | List durable Factory Sessions |
+| `you.factory_session.validate_source` | Validate JavaScript orchestrator source without execution |
+| `you.factory_session.start_sync` | Start a Factory Session and wait for a terminal or timeout result |
+| `you.factory_session.start_async` | Start a Factory Session for later polling |
+| `you.factory_session.get` | Read status and progress for one Factory Session |
+| `you.factory_session.get_result` | Read a partial, terminal, or not-ready result |
+| `you.factory_session.list_dispatches` | Inspect child dispatches |
+| `you.factory_session.list_artifacts` | Inspect durable artifact metadata |
+| `you.factory_session.read_events` | Read ordered Factory Session events |
+| `you.factory_session.control` | Pause, resume, cancel, or terminate a Factory Session |
+
+Some hosts may also discover compatibility-only `you.workflow.*` aliases. Use
+the canonical names above in new prompts and automation. The aliases call the
+same Factory Session handlers and do not define a separate workflow-run
+resource.
+
+Source validation uses either the host working directory or an explicit
+`projectRoot`. After starting, preserve the caller-supplied `requestId`, the
+returned `sessionId`, and the last processed event id or session sequence.
+Status, dispatch, artifact, event, control, and result calls must keep using
+that same Factory Session id; reconnecting is not a reason to submit duplicate
+Work.
+
+## Run The First-Host Smoke
+
+After saving the host configuration:
+
+1. Reload the host and confirm it starts `you mcp serve` as a child process.
+2. Discover tools and confirm the canonical `you.factory_session.*` catalog.
+3. Call `you.factory_session.validate_source` for a known source under the
+   configured project root.
+4. Call `you.factory_session.start_async` with a unique `requestId` and a
+   source supported by the selected mode.
+5. Keep the returned `sessionId`; poll `you.factory_session.get`, then
+   `you.factory_session.get_result` until it is terminal.
+6. When the workflow creates child Work, inspect dispatches, artifacts, and
+   ordered events using the same `sessionId`.
+
+For the repository fixture catalog, workflow `release-train` with request id
+`req-js-run-n-001` is the published asynchronous smoke scenario. A not-ready
+result while its status is running is expected and proves that polling stays on
+the original Factory Session.
+
+## Know What Is Proven
+
+The repository automates the shared server behavior that every host depends on:
+
+| Check | Automated proof |
+|-------|-----------------|
+| Fixture-backed initialize, discovery, validate, async start, status, and not-ready result | `pkg/transports/cli/mcp/serve_smoke_test.go` |
+| Runtime-backed async start, status, and result | `pkg/transports/cli/mcp/serve_runtime_smoke_test.go` |
+| Runtime-backed resume and dispatch continuity | `pkg/transports/cli/mcp/serve_runtime_resume_smoke_test.go` |
+| Additive fixture/runtime regression after resume | `pkg/transports/cli/mcp/serve_runtime_resume_non_regression_test.go` |
+
+These tests prove the stdio protocol and Factory Session tool behavior, not a
+specific host UI or configuration parser. Manually confirm that the selected
+host reloads its configuration, spawns the child, discovers the tools, and can
+complete the first-host smoke. They also do not prove HTTP/SSE transport,
+dashboard inspection, or live Factory HTTP backing.
+
+Run the shared automated checks from the repository root:
+
+```bash
+go test ./pkg/transports/cli/mcp/... ./pkg/transports/mcp/...
+go test ./tests/functional/smoke -run TestDocsCommandSmoke
+```
+
+## Troubleshoot Setup And Calls
+
+| Symptom or outcome | Action |
+|--------------------|--------|
+| Host cannot start `you` | Use an absolute executable path, confirm it is executable, and keep `args` as separate `mcp` and `serve` values. |
+| No tools appear | Reload the host, inspect child-process stderr, and confirm stdout is not receiving logs or shell banners. |
+| `fixture catalog not found` | Start from the repository/project root that contains the catalog or pass an absolute `--fixture-catalog` path. |
+| Named workflow or source is not found | Set `cwd` to the project root or use runtime mode with an explicit `--project-root`; confirm the source exists under a supported source location. |
+| `cannot combine --runtime with --fixture-catalog` | Choose exactly one backing mode and remove the other mode's flag. |
+| `factory_session.result.not_ready` with `retryable: true` | Keep the same `sessionId` and poll status/result with backoff; do not start duplicate Work. |
+| `factory_session.session.not_found` | Stop polling the bad id and restore the exact `sessionId` returned by start; reconnecting does not create a replacement session. |
+| Event reconnect cursor is not found | Keep the same Factory Session, restore a known event id or sequence, and do not assume missed events were processed. |
+| `factory_session.start.request_id_conflict` | Reuse a request id only with its original source and arguments; use a new id for a genuinely different request. |
+| `factory_session.service.unavailable` | Restore or respawn the selected fixture/runtime service, then retry the same safe read or idempotent start tuple. |
+| Host expects an HTTP URL | Configure a stdio child process instead; HTTP and SSE are unsupported. |
 
 ## Related Topics
 
-- `you docs orchestrators` — Factory Session, Dispatch, FactoryArtifact, and dynamic workflow aliases
-- `you docs sessions` — live Factory Session discovery and CLI inspection
-- `you docs config` — `factory.json` topology and portability
+- `you docs javascript-workflows` — author, validate, execute, and inspect
+  JavaScript workflows
+- `you docs orchestrators` — Factory Session, dispatch, artifact, and event
+  vocabulary
+- `you docs sessions` — inspect live Factory Sessions from the CLI

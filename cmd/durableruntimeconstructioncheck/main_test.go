@@ -32,9 +32,9 @@ func TestScanRejectsImplicitPersistenceConstruction(t *testing.T) {
 
 func TestScanAcceptsApplicationCompositionAndApprovedHarness(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/factorysessionexecution/service.go":             "testdata/approved_composition.go.txt",
-		"pkg/factorysessionexecution/testharness/harness.go": "testdata/approved_harness.go.txt",
-		"pkg/api/transport_test.go":                          "testdata/approved_transport_test.go.txt",
+		"pkg/factory/sessions/execution/service.go":             "testdata/approved_composition.go.txt",
+		"pkg/factory/sessions/execution/testharness/harness.go": "testdata/approved_harness.go.txt",
+		"pkg/transports/http/transport_test.go":                 "testdata/approved_transport_test.go.txt",
 	})
 
 	findings, err := scan(root)
@@ -46,9 +46,30 @@ func TestScanAcceptsApplicationCompositionAndApprovedHarness(t *testing.T) {
 	}
 }
 
+func TestScanRejectsTransportApplicationComposition(t *testing.T) {
+	root := fixtureRepository(t, map[string]string{
+		"pkg/transports/cli/run/compose.go": "testdata/prohibited_transport_composition.go.txt",
+	})
+
+	findings, err := scan(root)
+	if err != nil {
+		t.Fatalf("scan fixture: %v", err)
+	}
+	for _, prohibited := range []string{
+		"BuildInvocationBootstrap",
+		"NewExecutionService",
+		"NewFakeServiceFromContractFixtures",
+		"ProjectPersistence",
+	} {
+		if !containsFinding(findings, prohibited) {
+			t.Errorf("findings %#v do not report %s", findings, prohibited)
+		}
+	}
+}
+
 func TestScanRejectsJavaScriptSpecificLiveProviderPath(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/factorysessionexecution/livechild/provider.go": "testdata/prohibited_live_child_provider.go.txt",
+		"pkg/factory/sessions/execution/livechild/provider.go": "testdata/prohibited_live_child_provider.go.txt",
 	})
 
 	findings, err := scan(root)
@@ -65,8 +86,8 @@ func TestScanRejectsJavaScriptSpecificLiveProviderPath(t *testing.T) {
 
 func TestScanAllowsLiveChildSharedBoundaryAndTestDoubles(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/factorysessionexecution/livechild/provider.go":      "testdata/approved_live_child_boundary.go.txt",
-		"pkg/factorysessionexecution/livechild/provider_test.go": "testdata/prohibited_live_child_provider.go.txt",
+		"pkg/factory/sessions/execution/livechild/provider.go":      "testdata/approved_live_child_boundary.go.txt",
+		"pkg/factory/sessions/execution/livechild/provider_test.go": "testdata/prohibited_live_child_provider.go.txt",
 	})
 
 	findings, err := scan(root)

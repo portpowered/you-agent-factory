@@ -2,327 +2,131 @@ package subsystems_test
 
 import (
 	"context"
-	"encoding/json"
-	"strings"
 	"testing"
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 )
 
-func TestTransitioner_PackagedGoalReviewClassifierRoutesPlainDecisionLabels(t *testing.T) {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
+func TestBuiltInGoalFactoryJSON_ExecuteRepeaterConsumesLoopInput(t *testing.T) {
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(goal.BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
 
-	mapper := &factoryconfig.ConfigMapper{}
-	net, err := mapper.Map(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("ConfigMapper.Map: %v", err)
+	execute, ok := findPackagedGoalWorkstation(cfg.Workstations, goal.PackagedExecuteWorkstationName)
+	if !ok {
+		t.Fatalf("missing workstation %q", goal.PackagedExecuteWorkstationName)
+	}
+	if execute.Kind != interfaces.WorkstationKindRepeater {
+		t.Fatalf("execute workstation kind = %q, want %q", execute.Kind, interfaces.WorkstationKindRepeater)
 	}
 
-	reviewTransition := findTransitionByWorkstationName(t, net, goal.PackagedReviewWorkstationName)
-	workstations := workstationLookupFromConfig(cfg.Workstations)
-
-	cases := []struct {
-		label     string
-		wantPlace string
-	}{
-		{label: "accepted", wantPlace: "goal:complete"},
-		{label: "needs_changes", wantPlace: "goal:plan"},
-		{label: "tests_failed", wantPlace: "goal:plan"},
-		{label: "needs_human", wantPlace: "goal:needs-human"},
-		{label: "blocked", wantPlace: "goal:blocked"},
-		{label: "interrupted", wantPlace: "goal:interrupted"},
-		{label: "failed", wantPlace: "goal:failed"},
+	if len(execute.Inputs) != 1 {
+		t.Fatalf("execute inputs = %#v, want one loop input", execute.Inputs)
 	}
+	if input := execute.Inputs[0]; input.WorkTypeName != goal.PackagedGoalWorkTypeName || input.StateName != "init" {
+		t.Fatalf("execute input = %#v, want goal:init", input)
+	}
+}
 
-	for _, tc := range cases {
-		t.Run(tc.label, func(t *testing.T) {
-			now := time.Date(2026, time.June, 20, 12, 0, 0, 0, time.UTC)
-			transitioner := subsystems.NewTransitioner(
-				net,
-				nil,
-				subsystems.WithTransitionerClock(func() time.Time { return now }),
-				subsystems.WithTransitionerRuntimeConfig(runtimefixtures.RuntimeWorkstationLookupFixture{
-					Workstations: workstations,
-				}),
-			)
-			snapshot := packagedGoalReviewClassifierSnapshot(now, reviewTransition.ID, tc.label)
+func TestTransitioner_BuiltInGoalRepeaterContinueAndRejectRepeat(t *testing.T) {
+	net, workstation, transition := builtInGoalRepeaterFixture(t)
+	now := time.Date(2026, time.July, 13, 12, 0, 0, 0, time.UTC)
 
-			result, err := transitioner.Execute(context.Background(), snapshot)
-			if err != nil {
-				t.Fatalf("Execute: %v", err)
-			}
-			if result == nil || len(result.Mutations) != 1 {
-				t.Fatalf("mutations = %#v, want one routed classifier mutation", result)
-			}
-			if result.Mutations[0].ToPlace != tc.wantPlace {
-				t.Fatalf("routed place = %q, want %q", result.Mutations[0].ToPlace, tc.wantPlace)
-			}
-			if len(result.CompletedDispatches) != 1 {
-				t.Fatalf("completed dispatches = %#v, want 1", result.CompletedDispatches)
-			}
-			completed := result.CompletedDispatches[0]
-			if completed.Outcome != interfaces.OutcomeAccepted {
-				t.Fatalf("completed outcome = %s, want ACCEPTED", completed.Outcome)
-			}
-			if completed.SelectedClassificationLabel != tc.label {
-				t.Fatalf("selected classification label = %q, want %q", completed.SelectedClassificationLabel, tc.label)
-			}
+	for _, outcome := range []interfaces.WorkOutcome{
+		interfaces.OutcomeContinue,
+		interfaces.OutcomeRejected,
+	} {
+		t.Run(string(outcome), func(t *testing.T) {
+			result := executeBuiltInGoalRepeaterResult(t, net, workstation, transition, now, "goal:init", outcome)
+			assertSingleGoalMutationAtPlace(t, result, "goal:init")
+			assertTransitionConsumesPlace(t, transition, result.Mutations[0].NewToken.PlaceID)
 		})
 	}
 }
 
-func TestTransitioner_PackagedGoalReviewClassifierUnknownLabelRoutesToFailed(t *testing.T) {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
+func TestTransitioner_BuiltInGoalRepeaterFailureRoutesToFailed(t *testing.T) {
+	net, workstation, transition := builtInGoalRepeaterFixture(t)
+	now := time.Date(2026, time.July, 13, 12, 0, 0, 0, time.UTC)
+
+	result := executeBuiltInGoalRepeaterResult(t, net, workstation, transition, now, "goal:init", interfaces.OutcomeFailed)
+	assertSingleGoalMutationAtPlace(t, result, "goal:failed")
+}
+
+func builtInGoalRepeaterFixture(t *testing.T) (*state.Net, *interfaces.FactoryWorkstationConfig, *petri.Transition) {
+	t.Helper()
+
+	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(goal.BuiltInFactoryJSON)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
-
-	mapper := &factoryconfig.ConfigMapper{}
-	net, err := mapper.Map(context.Background(), cfg)
+	net, err := (&factoryconfig.ConfigMapper{}).Map(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("ConfigMapper.Map: %v", err)
 	}
+	workstation, ok := findPackagedGoalWorkstation(cfg.Workstations, goal.PackagedExecuteWorkstationName)
+	if !ok {
+		t.Fatalf("missing workstation %q", goal.PackagedExecuteWorkstationName)
+	}
+	return net, &workstation, findTransitionByName(t, net, goal.PackagedExecuteWorkstationName)
+}
 
-	reviewTransition := findTransitionByWorkstationName(t, net, goal.PackagedReviewWorkstationName)
-	workstations := workstationLookupFromConfig(cfg.Workstations)
+func executeBuiltInGoalRepeaterResult(
+	t *testing.T,
+	net *state.Net,
+	workstation *interfaces.FactoryWorkstationConfig,
+	transition *petri.Transition,
+	now time.Time,
+	inputPlace string,
+	outcome interfaces.WorkOutcome,
+) *interfaces.TickResult {
+	t.Helper()
 
-	now := time.Date(2026, time.June, 20, 15, 0, 0, 0, time.UTC)
 	transitioner := subsystems.NewTransitioner(
 		net,
 		nil,
 		subsystems.WithTransitionerClock(func() time.Time { return now }),
 		subsystems.WithTransitionerRuntimeConfig(runtimefixtures.RuntimeWorkstationLookupFixture{
-			Workstations: workstations,
+			Workstations: map[string]*interfaces.FactoryWorkstationConfig{workstation.Name: workstation},
 		}),
 	)
-	snapshot := packagedGoalReviewClassifierSnapshot(now, reviewTransition.ID, "MAYBE")
-
-	result, err := transitioner.Execute(context.Background(), snapshot)
+	result, err := transitioner.Execute(context.Background(), builtInGoalRepeaterSnapshot(now, transition.ID, inputPlace, outcome))
 	if err != nil {
-		t.Fatalf("Execute: %v", err)
+		t.Fatalf("Execute(%s): %v", outcome, err)
 	}
-	if result == nil || len(result.Mutations) != 1 {
-		t.Fatalf("mutations = %#v, want one failure mutation", result)
-	}
-	if result.Mutations[0].ToPlace != "goal:failed" {
-		t.Fatalf("routed place = %q, want goal:failed", result.Mutations[0].ToPlace)
-	}
-	if len(result.CompletedDispatches) != 1 {
-		t.Fatalf("completed dispatches = %#v, want 1", result.CompletedDispatches)
-	}
-	completed := result.CompletedDispatches[0]
-	if completed.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("completed outcome = %s, want FAILED", completed.Outcome)
-	}
-	if completed.SelectedClassificationLabel != "" {
-		t.Fatalf("selected classification label = %q, want empty on unknown classifier label", completed.SelectedClassificationLabel)
-	}
-	if !strings.Contains(completed.Reason, `classifier label "MAYBE" did not match any authored classification route`) {
-		t.Fatalf("completed reason = %q, want unknown classifier label explanation", completed.Reason)
-	}
+	return result
 }
 
-func TestTransitioner_PackagedGoalStructuredReviewEnvelopeRoutesParsedDecisions(t *testing.T) {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
-	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
-	}
-
-	mapper := &factoryconfig.ConfigMapper{}
-	net, err := mapper.Map(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("ConfigMapper.Map: %v", err)
-	}
-
-	reviewTransition := findTransitionByWorkstationName(t, net, goal.PackagedStructuredReviewWorkstationName)
-	workstations := workstationLookupFromConfig(cfg.Workstations)
-
-	cases := []struct {
-		decision  string
-		wantPlace string
-		wantLabel string
-	}{
-		{decision: "accepted", wantPlace: "goal:complete", wantLabel: "accepted"},
-		{decision: "needs-changes", wantPlace: "goal:plan", wantLabel: "needs_changes"},
-		{decision: "tests_failed", wantPlace: "goal:plan", wantLabel: "tests_failed"},
-		{decision: "needs-human", wantPlace: "goal:needs-human", wantLabel: "needs_human"},
-		{decision: "blocked", wantPlace: "goal:blocked", wantLabel: "blocked"},
-		{decision: "interrupted", wantPlace: "goal:interrupted", wantLabel: "interrupted"},
-		{decision: "failed", wantPlace: "goal:failed", wantLabel: "failed"},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.decision, func(t *testing.T) {
-			now := time.Date(2026, time.June, 20, 14, 0, 0, 0, time.UTC)
-			transitioner := subsystems.NewTransitioner(
-				net,
-				nil,
-				subsystems.WithTransitionerClock(func() time.Time { return now }),
-				subsystems.WithTransitionerRuntimeConfig(runtimefixtures.RuntimeWorkstationLookupFixture{
-					Workstations: workstations,
-				}),
-			)
-			snapshot, result := packagedGoalStructuredReviewEnvelopeSnapshot(t, now, reviewTransition.ID, tc.decision)
-
-			tickResult, err := transitioner.Execute(context.Background(), snapshot)
-			if err != nil {
-				t.Fatalf("Execute: %v", err)
-			}
-			if tickResult == nil || len(tickResult.Mutations) != 1 {
-				t.Fatalf("mutations = %#v, want one routed envelope mutation", tickResult)
-			}
-			if tickResult.Mutations[0].ToPlace != tc.wantPlace {
-				t.Fatalf("routed place = %q, want %q", tickResult.Mutations[0].ToPlace, tc.wantPlace)
-			}
-			if len(tickResult.CompletedDispatches) != 1 {
-				t.Fatalf("completed dispatches = %#v, want 1", tickResult.CompletedDispatches)
-			}
-			completed := tickResult.CompletedDispatches[0]
-			if completed.Outcome != interfaces.OutcomeAccepted {
-				t.Fatalf("completed outcome = %s, want ACCEPTED", completed.Outcome)
-			}
-			if completed.SelectedClassificationLabel != tc.wantLabel {
-				t.Fatalf("selected classification label = %q, want %q", completed.SelectedClassificationLabel, tc.wantLabel)
-			}
-			if result.Feedback != "reviewer notes for "+tc.decision {
-				t.Fatalf("result feedback = %q, want reviewer notes preserved", result.Feedback)
-			}
-			if result.Output != "summary for "+tc.decision {
-				t.Fatalf("result output = %q, want envelope output preserved", result.Output)
-			}
-			if len(result.RecordedOutputWork) != 1 || result.RecordedOutputWork[0].ID != "work-"+tc.decision {
-				t.Fatalf("recorded output work = %#v, want mapped work item preserved", result.RecordedOutputWork)
-			}
-		})
-	}
-}
-
-func TestTransitioner_PackagedGoalStructuredReviewEnvelopeRejectsMalformedAndUnknownDecisions(t *testing.T) {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(factoryconfig.BuiltInGoalFactoryJSON)
-	if err != nil {
-		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
-	}
-
-	mapper := &factoryconfig.ConfigMapper{}
-	net, err := mapper.Map(context.Background(), cfg)
-	if err != nil {
-		t.Fatalf("ConfigMapper.Map: %v", err)
-	}
-
-	reviewTransition := findTransitionByWorkstationName(t, net, goal.PackagedStructuredReviewWorkstationName)
-	workstations := workstationLookupFromConfig(cfg.Workstations)
-
-	cases := []struct {
-		name       string
-		raw        string
-		wantErr    string
-		wantFeedbk string
-	}{
-		{
-			name:    "malformed json",
-			raw:     `not-json`,
-			wantErr: "invalid JSON",
-		},
-		{
-			name:       "unknown decision",
-			raw:        `{"decision":"MAYBE","feedback":"needs another pass"}`,
-			wantErr:    `unknown decision "MAYBE"`,
-			wantFeedbk: "needs another pass",
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			now := time.Date(2026, time.June, 20, 15, 30, 0, 0, time.UTC)
-			transitioner := subsystems.NewTransitioner(
-				net,
-				nil,
-				subsystems.WithTransitionerClock(func() time.Time { return now }),
-				subsystems.WithTransitionerRuntimeConfig(runtimefixtures.RuntimeWorkstationLookupFixture{
-					Workstations: workstations,
-				}),
-			)
-			snapshot := packagedGoalStructuredReviewMalformedEnvelopeSnapshot(t, now, reviewTransition.ID, tc.raw)
-			if tc.wantFeedbk != "" {
-				if len(snapshot.Results) != 1 || snapshot.Results[0].Feedback != tc.wantFeedbk {
-					t.Fatalf("result feedback = %q, want %q preserved for inspection", snapshot.Results[0].Feedback, tc.wantFeedbk)
-				}
-			}
-
-			tickResult, err := transitioner.Execute(context.Background(), snapshot)
-			if err != nil {
-				t.Fatalf("Execute: %v", err)
-			}
-			if tickResult == nil || len(tickResult.Mutations) != 1 {
-				t.Fatalf("mutations = %#v, want one failure mutation", tickResult)
-			}
-			if tickResult.Mutations[0].ToPlace != "goal:failed" {
-				t.Fatalf("routed place = %q, want goal:failed", tickResult.Mutations[0].ToPlace)
-			}
-			if len(tickResult.CompletedDispatches) != 1 {
-				t.Fatalf("completed dispatches = %#v, want 1", tickResult.CompletedDispatches)
-			}
-			completed := tickResult.CompletedDispatches[0]
-			if completed.Outcome != interfaces.OutcomeFailed {
-				t.Fatalf("completed outcome = %s, want FAILED", completed.Outcome)
-			}
-			if completed.SelectedClassificationLabel != "" {
-				t.Fatalf("selected classification label = %q, want empty on malformed envelope", completed.SelectedClassificationLabel)
-			}
-			if !strings.Contains(completed.Reason, tc.wantErr) {
-				t.Fatalf("completed reason = %q, want %q", completed.Reason, tc.wantErr)
-			}
-		})
-	}
-}
-
-func findTransitionByWorkstationName(t *testing.T, net *state.Net, workstationName string) *petri.Transition {
-	t.Helper()
-
-	for _, transition := range net.Transitions {
-		if transition != nil && transition.Name == workstationName {
-			return transition
-		}
-	}
-	t.Fatalf("missing transition for workstation %q", workstationName)
-	return nil
-}
-
-func workstationLookupFromConfig(workstations []interfaces.FactoryWorkstationConfig) map[string]*interfaces.FactoryWorkstationConfig {
-	lookup := make(map[string]*interfaces.FactoryWorkstationConfig, len(workstations))
-	for i := range workstations {
-		workstation := workstations[i]
-		lookup[workstation.Name] = &workstation
-	}
-	return lookup
-}
-
-func packagedGoalReviewClassifierSnapshot(now time.Time, transitionID, label string) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+func builtInGoalRepeaterSnapshot(
+	now time.Time,
+	transitionID string,
+	inputPlace string,
+	outcome interfaces.WorkOutcome,
+) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+	dispatchID := "dispatch-" + string(outcome)
 	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 		Dispatches: map[string]*interfaces.DispatchEntry{
-			"d-review": {
-				DispatchID:      "d-review",
+			dispatchID: {
+				DispatchID:      dispatchID,
 				TransitionID:    transitionID,
-				WorkstationName: goal.PackagedReviewWorkstationName,
+				WorkstationName: goal.PackagedExecuteWorkstationName,
 				StartTime:       now.Add(-time.Second),
 				ConsumedTokens: []interfaces.Token{{
-					ID:        "tok-review",
-					PlaceID:   "goal:review",
+					ID:        "goal-token",
+					PlaceID:   inputPlace,
 					CreatedAt: now.Add(-time.Hour),
 					EnteredAt: now.Add(-time.Hour),
 					Color: interfaces.TokenColor{
-						WorkID:     "work-goal-1",
+						WorkID:     "goal-work",
 						WorkTypeID: goal.PackagedGoalWorkTypeName,
+						Payload:    []byte("finish the repository change"),
 					},
 					History: interfaces.TokenHistory{
 						TotalVisits:         map[string]int{},
@@ -333,106 +137,59 @@ func packagedGoalReviewClassifierSnapshot(now time.Time, transitionID, label str
 			},
 		},
 		Results: []interfaces.WorkResult{{
-			DispatchID:   "d-review",
+			DispatchID:   dispatchID,
 			TransitionID: transitionID,
-			Outcome:      interfaces.OutcomeAccepted,
-			Output:       label,
+			Outcome:      outcome,
+			Output:       "agent pass output",
+			Feedback:     "another pass is required",
+			Error:        "agent failed",
 		}},
 	}
 }
 
-func packagedGoalStructuredReviewMalformedEnvelopeSnapshot(
-	t *testing.T,
-	now time.Time,
-	transitionID string,
-	raw string,
-) *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
+func assertSingleGoalMutationAtPlace(t *testing.T, result *interfaces.TickResult, wantPlace string) {
 	t.Helper()
 
-	result := goal.WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed("d-structured-review", transitionID, raw)
-
-	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Dispatches: map[string]*interfaces.DispatchEntry{
-			"d-structured-review": {
-				DispatchID:      "d-structured-review",
-				TransitionID:    transitionID,
-				WorkstationName: goal.PackagedStructuredReviewWorkstationName,
-				StartTime:       now.Add(-time.Second),
-				ConsumedTokens: []interfaces.Token{{
-					ID:        "tok-structured-review",
-					PlaceID:   "goal:structured-review",
-					CreatedAt: now.Add(-time.Hour),
-					EnteredAt: now.Add(-time.Hour),
-					Color: interfaces.TokenColor{
-						WorkID:     "work-goal-structured-1",
-						WorkTypeID: goal.PackagedGoalWorkTypeName,
-					},
-					History: interfaces.TokenHistory{
-						TotalVisits:         map[string]int{},
-						ConsecutiveFailures: map[string]int{},
-						PlaceVisits:         map[string]int{},
-					},
-				}},
-			},
-		},
-		Results: []interfaces.WorkResult{result},
+	if result == nil || len(result.Mutations) != 1 {
+		t.Fatalf("mutations = %#v, want one mutation to %s", result, wantPlace)
+	}
+	mutation := result.Mutations[0]
+	if mutation.ToPlace != wantPlace || mutation.NewToken.PlaceID != wantPlace {
+		t.Fatalf("mutation = %#v, want destination %s", mutation, wantPlace)
+	}
+	if mutation.NewToken.Color.WorkID != "goal-work" {
+		t.Fatalf("routed work ID = %q, want goal-work", mutation.NewToken.Color.WorkID)
 	}
 }
 
-func packagedGoalStructuredReviewEnvelopeSnapshot(
-	t *testing.T,
-	now time.Time,
-	transitionID string,
-	decision string,
-) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], interfaces.WorkResult) {
+func assertTransitionConsumesPlace(t *testing.T, transition *petri.Transition, placeID string) {
 	t.Helper()
 
-	raw, err := json.Marshal(map[string]any{
-		"decision": decision,
-		"feedback": "reviewer notes for " + decision,
-		"output":   "summary for " + decision,
-		"recorded_output_work": []map[string]string{
-			{
-				"id":         "work-" + decision,
-				"workTypeId": goal.PackagedGoalWorkTypeName,
-				"state":      "execute",
-				"traceId":    "trace-envelope-" + decision,
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("marshal envelope: %v", err)
+	for _, arc := range transition.InputArcs {
+		if arc.PlaceID == placeID {
+			return
+		}
 	}
+	t.Fatalf("transition %q does not consume routed place %q", transition.Name, placeID)
+}
 
-	result, err := goal.WorkResultFromGoalRoutingDecisionEnvelopeJSON("d-structured-review", transitionID, string(raw))
-	if err != nil {
-		t.Fatalf("WorkResultFromGoalRoutingDecisionEnvelopeJSON: %v", err)
+func findTransitionByName(t *testing.T, net *state.Net, name string) *petri.Transition {
+	t.Helper()
+
+	for _, transition := range net.Transitions {
+		if transition != nil && transition.Name == name {
+			return transition
+		}
 	}
+	t.Fatalf("missing transition %q", name)
+	return nil
+}
 
-	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Dispatches: map[string]*interfaces.DispatchEntry{
-			"d-structured-review": {
-				DispatchID:      "d-structured-review",
-				TransitionID:    transitionID,
-				WorkstationName: goal.PackagedStructuredReviewWorkstationName,
-				StartTime:       now.Add(-time.Second),
-				ConsumedTokens: []interfaces.Token{{
-					ID:        "tok-structured-review",
-					PlaceID:   "goal:structured-review",
-					CreatedAt: now.Add(-time.Hour),
-					EnteredAt: now.Add(-time.Hour),
-					Color: interfaces.TokenColor{
-						WorkID:     "work-goal-structured-1",
-						WorkTypeID: goal.PackagedGoalWorkTypeName,
-					},
-					History: interfaces.TokenHistory{
-						TotalVisits:         map[string]int{},
-						ConsecutiveFailures: map[string]int{},
-						PlaceVisits:         map[string]int{},
-					},
-				}},
-			},
-		},
-		Results: []interfaces.WorkResult{result},
-	}, result
+func findPackagedGoalWorkstation(workstations []interfaces.FactoryWorkstationConfig, name string) (interfaces.FactoryWorkstationConfig, bool) {
+	for _, workstation := range workstations {
+		if workstation.Name == name {
+			return workstation, true
+		}
+	}
+	return interfaces.FactoryWorkstationConfig{}, false
 }

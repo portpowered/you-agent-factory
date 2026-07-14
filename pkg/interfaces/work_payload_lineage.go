@@ -650,6 +650,8 @@ const (
 	RunnerIDKiro      = "kiro"
 	RunnerIDCursorCLI = "cursor-cli"
 	RunnerIDOpenCode  = "opencode"
+	RunnerIDPi        = "pi"
+	RunnerIDAgy       = "agy"
 )
 
 // RunnerSelectionSource reports which configuration layer supplied the runner
@@ -718,6 +720,28 @@ var builtInRunnerMetadata = map[string]RunnerMetadata{
 	RunnerIDOpenCode: {
 		ID:          RunnerIDOpenCode,
 		DisplayName: "OpenCode",
+		Capabilities: NewRunnerCapabilities(
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityImageInput, Status: RunnerOptionalCapabilityStatusUnsupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilitySessionResume, Status: RunnerOptionalCapabilityStatusSupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityStructuredOutput, Status: RunnerOptionalCapabilityStatusUnsupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorkingDirectory, Status: RunnerOptionalCapabilityStatusSupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorktree, Status: RunnerOptionalCapabilityStatusUnsupported},
+		),
+	},
+	RunnerIDPi: {
+		ID:          RunnerIDPi,
+		DisplayName: "Pi",
+		Capabilities: NewRunnerCapabilities(
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityImageInput, Status: RunnerOptionalCapabilityStatusUnsupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilitySessionResume, Status: RunnerOptionalCapabilityStatusSupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityStructuredOutput, Status: RunnerOptionalCapabilityStatusSupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorkingDirectory, Status: RunnerOptionalCapabilityStatusSupported},
+			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityWorktree, Status: RunnerOptionalCapabilityStatusUnsupported},
+		),
+	},
+	RunnerIDAgy: {
+		ID:          RunnerIDAgy,
+		DisplayName: "Agy",
 		Capabilities: NewRunnerCapabilities(
 			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilityImageInput, Status: RunnerOptionalCapabilityStatusUnsupported},
 			RunnerOptionalCapabilitySupport{Capability: RunnerOptionalCapabilitySessionResume, Status: RunnerOptionalCapabilityStatusSupported},

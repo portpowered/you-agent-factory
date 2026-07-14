@@ -11,18 +11,16 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/goal"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/ndjsoncontract"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const (
-	namedGoalResponseStreamJSONRecordProgress   = "progress"
-	namedGoalResponseStreamJSONRecordStreamGap  = "stream_gap"
-	namedGoalResponseStreamJSONRecordCompaction = "compaction"
-	namedGoalResponseStreamJSONRecordPrimary    = "primary_result"
-
-	namedGoalResponseStreamHumanProgressPrefix = "[you:progress] "
+	namedGoalResponseStreamJSONRecordResponseEvent = "response_event"
+	namedGoalResponseStreamJSONRecordInvocation    = "invocation_result"
 )
 
 func TestNamedGoalResponseStream_RealCLICompletesWithPrimaryResult(t *testing.T) {
@@ -52,7 +50,7 @@ func TestNamedGoalResponseStream_RealCLICompletesWithPrimaryResult(t *testing.T)
 	}
 }
 
-func TestNamedGoalResponseStream_JSONModeEmitsPrimaryResultRecord(t *testing.T) {
+func TestNamedGoalResponseStream_JSONModeEmitsInvocationResultRecord(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow CLI named @you/goal JSON response-stream smoke")
 	}
@@ -76,8 +74,8 @@ func TestNamedGoalResponseStream_JSONModeEmitsPrimaryResultRecord(t *testing.T) 
 	if err != nil {
 		t.Fatalf("parse JSON response-stream stdout: %v\nstdout:\n%s", err, stdout)
 	}
-	if finalRecord.RecordType != namedGoalResponseStreamJSONRecordPrimary {
-		t.Fatalf("final record type = %q, want %q", finalRecord.RecordType, namedGoalResponseStreamJSONRecordPrimary)
+	if finalRecord.RecordType != namedGoalResponseStreamJSONRecordInvocation {
+		t.Fatalf("final record type = %q, want %q", finalRecord.RecordType, namedGoalResponseStreamJSONRecordInvocation)
 	}
 	if finalRecord.Invocation.Status != factoryapi.InvocationTerminalStatusCompleted {
 		t.Fatalf("final record status = %q, want COMPLETED", finalRecord.Invocation.Status)
@@ -122,9 +120,9 @@ func TestNamedGoalResponseStream_PrimaryOnlyAndResponseStreamAgreeOnTerminalOutc
 	assertNamedGoalInvocationTerminalOutcomeParity(t, primaryResponse, streamTerminal)
 }
 
-func TestNamedGoalResponseStream_JSONModeEmitsExactlyOnePrimaryResultRecord(t *testing.T) {
+func TestNamedGoalResponseStream_JSONModeEmitsExactlyOneInvocationResultRecord(t *testing.T) {
 	if testing.Short() {
-		t.Skip("slow CLI named @you/goal JSON response-stream primary_result count smoke")
+		t.Skip("slow CLI named @you/goal JSON response-stream invocation_result count smoke")
 	}
 
 	goalText := fmt.Sprintf("functional-smoke-goal-response-stream-json-count-%d", time.Now().UnixNano())
@@ -141,17 +139,17 @@ func TestNamedGoalResponseStream_JSONModeEmitsExactlyOnePrimaryResultRecord(t *t
 	if err != nil {
 		t.Fatalf("parse JSON response-stream stdout: %v\nstdout:\n%s", err, stdout)
 	}
-	primaryCount := 0
+	invocationCount := 0
 	for _, record := range records {
-		if record.RecordType == namedGoalResponseStreamJSONRecordPrimary {
-			primaryCount++
+		if record.RecordType == namedGoalResponseStreamJSONRecordInvocation {
+			invocationCount++
 		}
 	}
-	if primaryCount != 1 {
-		t.Fatalf("primary_result record count = %d, want exactly 1", primaryCount)
+	if invocationCount != 1 {
+		t.Fatalf("invocation_result record count = %d, want exactly 1", invocationCount)
 	}
-	if records[len(records)-1].RecordType != namedGoalResponseStreamJSONRecordPrimary {
-		t.Fatalf("final record type = %q, want %q", records[len(records)-1].RecordType, namedGoalResponseStreamJSONRecordPrimary)
+	if records[len(records)-1].RecordType != namedGoalResponseStreamJSONRecordInvocation {
+		t.Fatalf("final record type = %q, want %q", records[len(records)-1].RecordType, namedGoalResponseStreamJSONRecordInvocation)
 	}
 }
 
@@ -177,7 +175,7 @@ func TestNamedGoalResponseStream_JSONModeUsesCanonicalCLIStreamRecordVocabulary(
 	assertNamedGoalResponseStreamJSONRecordsUseCanonicalVocabulary(t, records)
 }
 
-func TestNamedGoalResponseStream_HumanModeUsesCanonicalProgressPrefixNotLegacyDialect(t *testing.T) {
+func TestNamedGoalResponseStream_HumanModeUsesCanonicalHumanFormatNotLegacyDialect(t *testing.T) {
 	if testing.Short() {
 		t.Skip("slow CLI named @you/goal human response-stream vocabulary smoke")
 	}
@@ -193,22 +191,21 @@ func TestNamedGoalResponseStream_HumanModeUsesCanonicalProgressPrefixNotLegacyDi
 	}
 
 	assertNamedGoalHumanResponseStreamAvoidsLegacyDialect(t, stdout)
-	if strings.Contains(stdout, namedGoalResponseStreamHumanProgressPrefix) {
-		for _, line := range strings.Split(stdout, "\n") {
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" || trimmed == "--- primary result ---" {
-				continue
-			}
-			if strings.HasPrefix(trimmed, namedGoalResponseStreamHumanProgressPrefix) {
-				continue
-			}
-			if trimmed == packagedGoalMockWorkerAcceptedSummary {
-				continue
-			}
-			t.Fatalf("unexpected human response-stream line %q outside canonical progress/primary-result contract", trimmed)
+	for _, line := range strings.Split(stdout, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || trimmed == "--- primary result ---" {
+			continue
 		}
-	} else if got := strings.TrimSpace(stdout); got != packagedGoalMockWorkerAcceptedSummary {
-		t.Fatalf("stdout = %q, want primary result %q when no live progress arrived", got, packagedGoalMockWorkerAcceptedSummary)
+		if strings.HasPrefix(trimmed, "progress:") ||
+			strings.HasPrefix(trimmed, "reasoning:") ||
+			strings.HasPrefix(trimmed, "tool:") ||
+			strings.HasPrefix(trimmed, "stream gap:") {
+			continue
+		}
+		if trimmed == packagedGoalMockWorkerAcceptedSummary {
+			continue
+		}
+		t.Fatalf("unexpected human response-stream line %q outside canonical response-event contract", trimmed)
 	}
 }
 
@@ -240,25 +237,21 @@ func TestNamedGoalResponseStream_DurableFactoryEventsOmitInternalStreamTerms(t *
 	assertNamedGoalDurableEventsOmitInternalResponseStreamTerms(t, string(encoded))
 }
 
-type namedGoalResponseStreamJSONPrimaryResultRecord struct {
+type namedGoalResponseStreamJSONInvocationResultRecord struct {
 	RecordType string                        `json:"recordType"`
 	Invocation factoryapi.InvocationResponse `json:"invocation"`
 }
 
-type namedGoalResponseStreamJSONProgressRecord struct {
-	RecordType string  `json:"recordType"`
-	Sequence   int64   `json:"sequence,omitempty"`
-	DispatchID *string `json:"dispatchId,omitempty"`
-	Kind       string  `json:"kind"`
-	EventType  string  `json:"eventType"`
-	Payload    string  `json:"payload"`
+type namedGoalResponseStreamJSONResponseEventRecord struct {
+	RecordType string                            `json:"recordType"`
+	Event      responseevents.FactoryResponseEvent `json:"event"`
 }
 
 type namedGoalResponseStreamParsedRecord struct {
 	RecordType string
 	Raw        json.RawMessage
 	Invocation factoryapi.InvocationResponse
-	Progress   namedGoalResponseStreamJSONProgressRecord
+	Event      responseevents.FactoryResponseEvent
 }
 
 func runNamedGoalPrimaryOnlyInvocationCLI(
@@ -272,7 +265,7 @@ func runNamedGoalPrimaryOnlyInvocationCLI(
 	if _, err := factoryconfig.PersistNamedFactory(
 		filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"),
 		goal.PackagedFactoryName,
-		factoryconfig.BuiltInGoalFactoryJSON,
+		goal.BuiltInFactoryJSON,
 	); err != nil {
 		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)
 	}
@@ -322,7 +315,7 @@ func runNamedGoalResponseStreamInvocationCLI(
 	if _, err := factoryconfig.PersistNamedFactory(
 		filepath.Join(homeDir, ".you-agent-factory", "you-agent-factories"),
 		goal.PackagedFactoryName,
-		factoryconfig.BuiltInGoalFactoryJSON,
+		goal.BuiltInFactoryJSON,
 	); err != nil {
 		t.Fatalf("PersistNamedFactory(@you/goal): %v", err)
 	}
@@ -363,17 +356,17 @@ func runNamedGoalResponseStreamInvocationCLI(
 	return stdoutBuf.String(), stderrBuf.String(), runErr
 }
 
-func namedGoalResponseStreamFinalJSONRecord(stdout string) (namedGoalResponseStreamJSONPrimaryResultRecord, error) {
+func namedGoalResponseStreamFinalJSONRecord(stdout string) (namedGoalResponseStreamJSONInvocationResultRecord, error) {
 	records, err := parseNamedGoalResponseStreamNDJSONRecords(stdout)
 	if err != nil {
-		return namedGoalResponseStreamJSONPrimaryResultRecord{}, err
+		return namedGoalResponseStreamJSONInvocationResultRecord{}, err
 	}
 	terminal, err := namedGoalResponseStreamTerminalInvocation(records)
 	if err != nil {
-		return namedGoalResponseStreamJSONPrimaryResultRecord{}, err
+		return namedGoalResponseStreamJSONInvocationResultRecord{}, err
 	}
-	return namedGoalResponseStreamJSONPrimaryResultRecord{
-		RecordType: namedGoalResponseStreamJSONRecordPrimary,
+	return namedGoalResponseStreamJSONInvocationResultRecord{
+		RecordType: namedGoalResponseStreamJSONRecordInvocation,
 		Invocation: terminal,
 	}, nil
 }
@@ -396,25 +389,33 @@ func parseNamedGoalResponseStreamNDJSONRecords(stdout string) ([]namedGoalRespon
 		if err := json.Unmarshal([]byte(line), &envelope); err != nil {
 			return nil, fmt.Errorf("decode line %q: %w", line, err)
 		}
+		recordType := strings.TrimSpace(envelope.RecordType)
+		if err := ndjsoncontract.RejectRetiredPrivateRecordType(recordType); err != nil {
+			return nil, err
+		}
+		if !ndjsoncontract.IsSupportedRecordType(recordType) {
+			return nil, fmt.Errorf("unsupported recordType %q in line %q", recordType, line)
+		}
 		record := namedGoalResponseStreamParsedRecord{
-			RecordType: strings.TrimSpace(envelope.RecordType),
+			RecordType: recordType,
 			Raw:        json.RawMessage(line),
 		}
-		switch record.RecordType {
-		case namedGoalResponseStreamJSONRecordPrimary:
-			var primary namedGoalResponseStreamJSONPrimaryResultRecord
-			if err := json.Unmarshal([]byte(line), &primary); err != nil {
-				return nil, fmt.Errorf("decode primary_result line %q: %w", line, err)
+		switch recordType {
+		case namedGoalResponseStreamJSONRecordInvocation:
+			var invocation namedGoalResponseStreamJSONInvocationResultRecord
+			if err := json.Unmarshal([]byte(line), &invocation); err != nil {
+				return nil, fmt.Errorf("decode invocation_result line %q: %w", line, err)
 			}
-			record.Invocation = primary.Invocation
-		case namedGoalResponseStreamJSONRecordProgress:
-			if err := json.Unmarshal([]byte(line), &record.Progress); err != nil {
-				return nil, fmt.Errorf("decode progress line %q: %w", line, err)
+			record.Invocation = invocation.Invocation
+		case namedGoalResponseStreamJSONRecordResponseEvent:
+			var responseEvent namedGoalResponseStreamJSONResponseEventRecord
+			if err := json.Unmarshal([]byte(line), &responseEvent); err != nil {
+				return nil, fmt.Errorf("decode response_event line %q: %w", line, err)
 			}
-		case namedGoalResponseStreamJSONRecordStreamGap, namedGoalResponseStreamJSONRecordCompaction:
-			// Canonical gap/compaction records only need recordType validation here.
-		default:
-			return nil, fmt.Errorf("unsupported recordType %q in line %q", record.RecordType, line)
+			if err := responseevents.ValidateEvent(responseEvent.Event); err != nil {
+				return nil, fmt.Errorf("validate response_event line %q: %w", line, err)
+			}
+			record.Event = responseEvent.Event
 		}
 		records = append(records, record)
 	}
@@ -430,11 +431,11 @@ func namedGoalResponseStreamTerminalInvocation(
 	if len(records) == 0 {
 		return factoryapi.InvocationResponse{}, fmt.Errorf("no records")
 	}
-	if records[len(records)-1].RecordType != namedGoalResponseStreamJSONRecordPrimary {
+	if records[len(records)-1].RecordType != namedGoalResponseStreamJSONRecordInvocation {
 		return factoryapi.InvocationResponse{}, fmt.Errorf(
 			"final record type = %q, want %q",
 			records[len(records)-1].RecordType,
-			namedGoalResponseStreamJSONRecordPrimary,
+			namedGoalResponseStreamJSONRecordInvocation,
 		)
 	}
 	return records[len(records)-1].Invocation, nil
@@ -475,18 +476,16 @@ func assertNamedGoalResponseStreamJSONRecordsUseCanonicalVocabulary(
 
 	for _, record := range records {
 		switch record.RecordType {
-		case namedGoalResponseStreamJSONRecordProgress:
-			if record.Progress.Kind == "" || record.Progress.EventType == "" {
-				t.Fatalf("progress record missing canonical kind/eventType: %#v", record.Progress)
+		case namedGoalResponseStreamJSONRecordResponseEvent:
+			if record.Event.Kind == "" || record.Event.Phase == "" {
+				t.Fatalf("response_event record missing canonical kind/phase: %#v", record.Event)
 			}
 			if strings.Contains(string(record.Raw), "PROGRESS_FRAGMENT") ||
 				strings.Contains(string(record.Raw), "RESPONSE_FRAGMENT") ||
 				strings.Contains(string(record.Raw), "response.output_text.delta") {
-				t.Fatalf("progress record uses legacy fragment dialect: %s", string(record.Raw))
+				t.Fatalf("response_event record uses legacy fragment dialect: %s", string(record.Raw))
 			}
-		case namedGoalResponseStreamJSONRecordStreamGap, namedGoalResponseStreamJSONRecordCompaction:
-			continue
-		case namedGoalResponseStreamJSONRecordPrimary:
+		case namedGoalResponseStreamJSONRecordInvocation:
 			continue
 		default:
 			t.Fatalf("unsupported recordType %q", record.RecordType)
@@ -505,6 +504,11 @@ func assertNamedGoalHumanResponseStreamAvoidsLegacyDialect(t *testing.T, stdout 
 		"response.failed",
 		"SessionResponseStream",
 		"--- invocation outcome ---",
+		`"recordType":"progress"`,
+		`"recordType":"primary_result"`,
+		`"recordType":"stream_gap"`,
+		`"recordType":"compaction"`,
+		"[you:progress] ",
 	}
 	for _, forbidden := range forbiddenTerms {
 		if strings.Contains(stdout, forbidden) {
@@ -537,4 +541,3 @@ func assertNamedGoalDurableEventsOmitInternalResponseStreamTerms(t *testing.T, t
 		}
 	}
 }
-

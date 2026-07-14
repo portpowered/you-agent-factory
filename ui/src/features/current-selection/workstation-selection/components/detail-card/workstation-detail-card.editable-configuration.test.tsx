@@ -248,7 +248,7 @@ function buildReadyEditableConfigurationState(overrides?: {
         source: "workstation",
       },
       runnerName: "gemini",
-      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode"],
+      runnerOptions: ["codex", "gemini", "kiro", "cursor-cli", "opencode", "pi"],
       runnerSelectionSource: "workstation",
       workerModelProvider: null,
       sharedWorkerWorkstationNamesByWorkerName: {

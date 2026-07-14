@@ -1,0 +1,82 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.alpha": {
+      "id": "example.factory.alpha",
+      "name": "alpha",
+      "path": "example factory alpha",
+      "aliases": [],
+      "groupId": "factory",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.alpha",
+        "documentation": {
+          "title": {
+            "id": "example.factory.shared.title",
+            "canonicalEnglish": "Alpha factory command"
+          },
+          "description": {
+            "id": "example.factory.alpha.description",
+            "canonicalEnglish": "First command that reuses a documentation title identity."
+          }
+        },
+        "examples": [
+          "example factory alpha"
+        ],
+        "visibility": "public",
+        "sourceHash": "1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.alpha",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "alpha",
+        "example": "  example factory alpha"
+      }
+    },
+    "example.factory.beta": {
+      "id": "example.factory.beta",
+      "name": "beta",
+      "path": "example factory beta",
+      "aliases": [],
+      "groupId": "factory",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.beta",
+        "documentation": {
+          "title": {
+            "id": "example.factory.shared.title",
+            "canonicalEnglish": "Beta factory command"
+          },
+          "description": {
+            "id": "example.factory.beta.description",
+            "canonicalEnglish": "Second command that reuses the same documentation title identity."
+          }
+        },
+        "examples": [
+          "example factory beta"
+        ],
+        "visibility": "public",
+        "sourceHash": "2222333344445555666677778888999900001111aaaabbbbccccddddeeeeffff"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.beta",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "beta",
+        "example": "  example factory beta"
+      }
+    }
+  }
+}

@@ -66,7 +66,7 @@ not reinterpret:
   artifact URI conventions, structured JSON result constraints.
 - **Shared execution service seams** (PR #776): `factorysessionexecution.Service`,
   deterministic fake service, apisurface mappers, durable session contract
-  fixtures in `pkg/api/testdata/durable-session-contract-fixtures.json`.
+  fixtures in `pkg/transports/http/testdata/durable-session-contract-fixtures.json`.
 
 Batch 001 intentionally landed **contracts and projections**, not full transport
 wiring or real runtime execution. Handlers may still return `501 NotImplemented`
@@ -94,7 +94,7 @@ names.
 **Contract repair kernel (merged 2026-06-11 UTC):** Branch
 `dynamic-workflows-contract-repair-kernel-resubmit` closed blocking inventory
 items B1–B12 at the contract-kernel layer. Evidence: canonical `POST
-/factories/preview` (`pkg/apisurface/factory_preview.go`,
+/factories/preview` (`pkg/transports/mapping/factory_preview.go`,
 `pkg/orchestrators/javascript/preview`), orchestrator-owned JavaScript helpers
 under `pkg/orchestrators/javascript/{source,validation,policy,preview,result,store}`,
 durable event/result enum alignment (`SessionCompletedEventPayload.finalStatus`,
@@ -128,16 +128,16 @@ Scoped active-surface verification (2026-06-11 UTC):
 ```bash
 rg -n "workflow-previews|WorkflowPreview|pkg/workflow" \
   api/openapi-main.yaml api/components pkg/api pkg/apisurface pkg/cli pkg/mcp \
-  pkg/factorysessionexecution pkg/factorysessions pkg/orchestrators/javascript ui/src
+  pkg/factorysessionexecution pkg/factory/sessions pkg/orchestrators/javascript ui/src
 ```
 
 Remaining hits are **only** generated compatibility aliases
-(`pkg/api/generated/server.gen.go`, `ui/src/api/generated/openapi.ts`),
+(`pkg/transports/http/generated/server.gen.go`, `ui/src/api/generated/openapi.ts`),
 deprecated OpenAPI compatibility routes/schemas (`api/openapi-main.yaml`,
 `WorkflowPreviewRequest.yaml` / `WorkflowPreviewResult.yaml`),
-obsolete compatibility handlers/tests (`pkg/api/handlers_factory.go`,
-`pkg/api/contracttests/openapi_contract_factory_validation_test.go`,
-`pkg/api/servertests/server_factory_preview_test.go`), and explicit
+obsolete compatibility handlers/tests (`pkg/transports/http/handlers_factory.go`,
+`pkg/transports/http/contracttests/openapi_contract_factory_validation_test.go`,
+`pkg/transports/http/servertests/server_factory_preview_test.go`), and explicit
 compatibility UI wrappers (`ui/src/api/workflow-preview/`,
 `ui/src/features/workflow-preview/`). No scoped path imports root `pkg/workflow*`
 as a final owner.
@@ -147,7 +147,7 @@ Focused verification:
 ```bash
 make generate-api
 go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface \
-  ./pkg/apisurface/factorysession ./pkg/factorysessionexecution ./pkg/factorysessions \
+  ./pkg/apisurface/factorysession ./pkg/factorysessionexecution ./pkg/factory/sessions \
   ./pkg/mcp/workflow ./pkg/cli/workflow
 npm --prefix ui run typecheck
 ```
@@ -170,14 +170,14 @@ Scoped residual import verification (2026-06-11 UTC):
 
 ```bash
 rg -n "github.com/portpowered/infinite-you/pkg/workflow(preview|source|validation|policy|result)" \
-  pkg/api pkg/apisurface pkg/cli pkg/mcp pkg/factorysessionexecution pkg/factorysessions \
+  pkg/api pkg/apisurface pkg/cli pkg/mcp pkg/factorysessionexecution pkg/factory/sessions \
   --glob '!**/generated/**'
 rg -n "/workflow-previews|WorkflowPreview" \
-  api/openapi-main.yaml api/components pkg/api pkg/apisurface pkg/cli pkg/mcp ui/src \
+  api/openapi-main.yaml api/components pkg/transports/http pkg/transports/mapping pkg/transports/cli pkg/transports/mcp ui/src \
   --glob '!**/generated/**'
 find pkg/orchestrators/javascript -maxdepth 2 -type f | sort
-go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface \
-  ./pkg/mcp/workflow ./pkg/cli/workflow ./pkg/cli/workflowsource
+go test ./pkg/transports/http/contracttests ./pkg/transports/http/servertests ./pkg/transports/mapping \
+  ./pkg/transports/mcp/workflow ./pkg/transports/cli/workflow ./pkg/transports/cli/workflowsource
 npm --prefix ui run typecheck
 ```
 
@@ -266,8 +266,8 @@ Status key:
 | Result, dispatch, artifact read routes | ✅ | OpenAPI defines `GET /factory-sessions/{session_id}/result(s)`, dispatch list/get, and artifact list/get shapes including status enums and link refs. |
 | Lifecycle control routes (approve, pause, resume, cancel, terminate, retry-dispatch) | ✅ | Request/response schemas and error shapes are specified; control semantics reference canonical session/dispatch projections. |
 | Workflow source resolution contract | ✅ | `WORKFLOW_FILE` / `WORKFLOW_NAME` lookup order (project → user → package → built-in → explicit factory) is documented on durable start routes. |
-| Generated contracts and fixture hooks | ✅ | `pkg/api/generated/` and UI generated types refreshed; contract tests can bind to OpenAPI examples. |
-| Durable route handlers | 🔌 | `StartDurableFactorySessionAsync`, `StartDurableFactorySessionSync`, durable result/dispatch/artifact reads, and lifecycle controls in `pkg/api/handlers_factory.go` return **`501 NotImplemented`**. |
+| Generated contracts and fixture hooks | ✅ | `pkg/transports/http/generated/` and UI generated types refreshed; contract tests can bind to OpenAPI examples. |
+| Durable route handlers | 🔌 | `StartDurableFactorySessionAsync`, `StartDurableFactorySessionSync`, durable result/dispatch/artifact reads, and lifecycle controls in `pkg/transports/http/handlers_factory.go` return **`501 NotImplemented`**. |
 | Persisted listing rows | 🔌 | `ListFactorySessions` with `scope=persisted` or `scope=all` returns **`durableSessions: []`** (empty) until a persistence backend is wired. |
 | Live-session compatibility routes | ✅ | `POST /factory-sessions` (open), `GET /factory-sessions/{id}`, live result/partial-result reads, and live `scope=live` listing remain wired through `sessionRuntime` for existing Petri workspace flows. |
 
@@ -295,7 +295,7 @@ Status key:
 | Ordered source lookup contract | ✅ | `FACTORY_ID`, `FACTORY_INLINE`, `WORKFLOW_FILE`, `WORKFLOW_NAME`, and `INLINE_WORKFLOW` kinds share one resolution order across API normalization surfaces. |
 | Read-only effective policy defaults | ✅ | Default mode `READ_ONLY`, bounded child limits, stable policy hashes, and fail-closed denied-capability diagnostics before runtime side effects. |
 | Structured JSON result and artifact URI rules | ✅ | JSON-compatible primary results via `WorkContent`; large/binary outputs use artifact refs or `you-artifact://sessions/{session_id}/artifacts/{artifact_id}` URIs. |
-| `POST /workflow-previews` handler (**stale Batch 001**) | ✅ (compatibility only) | **Closed by active-surface repair:** `PreviewWorkflow` remains a deprecated alias of canonical `POST /factories/preview` in `pkg/api/handlers_factory.go`. Primary preview semantics live under `pkg/orchestrators/javascript/preview` and `pkg/apisurface/factory_preview.go`. |
+| `POST /workflow-previews` handler (**stale Batch 001**) | ✅ (compatibility only) | **Closed by active-surface repair:** `PreviewWorkflow` remains a deprecated alias of canonical `POST /factories/preview` in `pkg/transports/http/handlers_factory.go`. Primary preview semantics live under `pkg/orchestrators/javascript/preview` and `pkg/transports/mapping/factory_preview.go`. |
 | Durable start-time validation wiring | 🔌 | Validation/policy contracts exist; **`POST /factory-sessions/async|sync`** handlers still return **`501`** so start-time enforcement awaits Batch 002 service injection. |
 
 ### PR #776 — shared execution service, fake service, mappers, and fixtures
@@ -306,8 +306,8 @@ Status key:
 |------|--------|------------------|
 | `factorysessionexecution.Service` interface | ✅ | Start (async/sync), read/status, result/dispatch/artifact projection, lifecycle controls, listing scopes, and idempotency are defined in `pkg/factorysessionexecution/`. |
 | Deterministic fake service | ✅ | Injectable fake implements the same contract with stable scenario ids, JavaScript orchestrator projections, dispatch lists, result states, artifact refs, and event sequences (`fake_service.go`, `fake_fixture.go`). |
-| `apisurface` mappers | ✅ | `pkg/apisurface/factorysession/` round-trips OpenAPI execution requests/responses, session records, results, dispatches, artifacts, and lifecycle payloads. |
-| Durable session contract fixtures | ✅ | `pkg/api/testdata/durable-session-contract-fixtures.json` covers Petri and JavaScript scenarios (running, partial, final, failed-with-partial, canceled, timed-out, interrupted, multi-dispatch). |
+| `apisurface` mappers | ✅ | `pkg/transports/mapping/factorysession/` round-trips OpenAPI execution requests/responses, session records, results, dispatches, artifacts, and lifecycle payloads. |
+| Durable session contract fixtures | ✅ | `pkg/transports/http/testdata/durable-session-contract-fixtures.json` covers Petri and JavaScript scenarios (running, partial, final, failed-with-partial, canceled, timed-out, interrupted, multi-dispatch). |
 | Projection/event consistency checks | ✅ | Service tests assert result status aligns with latest `SESSION_RESULT_UPDATED` events where fixtures include an event stream. |
 | API handler injection of fake/real service | 🔌 | Handlers do not yet delegate durable routes to `factorysessionexecution.Service`; Batch 002 skeleton work wires transport → service → mappers. |
 | Persisted listing backend | 🔌 | Service defines `scope=persisted|all` semantics; API listing returns empty durable rows until persistence lane or fake listing injection lands. |
@@ -337,7 +337,7 @@ Classification key:
 | **Non-blocking** | Documented drift or incomplete coverage that can ship with Batch 002 skeleton work if tracked explicitly |
 | **Stubbed transport** | Handler or backend wiring gap already accounted for in the Batch 001 checklist; not a contract conflict |
 
-Evidence sources: `api/openapi.yaml`, `pkg/factorysessionexecution/`, `pkg/apisurface/factorysession/`, `pkg/api/testdata/durable-session-contract-fixtures.json`, `pkg/api/contracttests/`, and `pkg/api/handlers_factory.go`.
+Evidence sources: `api/openapi.yaml`, `pkg/factorysessionexecution/`, `pkg/transports/mapping/factorysession/`, `pkg/transports/http/testdata/durable-session-contract-fixtures.json`, `pkg/transports/http/contracttests/`, and `pkg/transports/http/handlers_factory.go`.
 
 ### OpenAPI (`api/openapi.yaml`)
 
@@ -371,7 +371,7 @@ Evidence sources: `api/openapi.yaml`, `pkg/factorysessionexecution/`, `pkg/apisu
 
 **Aligned:** Full `Service` interface (start async/sync, get, controls, result, dispatch/artifact reads, events, listing), durable lifecycle model (12 statuses, control kinds/outcomes), start and control idempotency helpers, listing scope (`live`/`persisted`/`all`) with filters and dedup, projection consistency validators, and deterministic `FakeService` with fixture-backed scenarios.
 
-### apisurface mappers (`pkg/apisurface/factorysession/`)
+### apisurface mappers (`pkg/transports/mapping/factorysession/`)
 
 | Gap | Class | Notes |
 |-----|-------|-------|
@@ -399,7 +399,7 @@ Evidence sources: `api/openapi.yaml`, `pkg/factorysessionexecution/`, `pkg/apisu
 
 **Aligned:** Canonical `FactoryEvent` envelope (`schemaVersion`, `id`, `type`, `context`, `payload`), `FactoryEventContext` reconnect fields, durable session event type vocabulary in OpenAPI, `SessionProjectionEventKinds` list, and live SSE route contract on session events.
 
-### Contract fixtures (`pkg/api/testdata/durable-session-contract-fixtures.json`)
+### Contract fixtures (`pkg/transports/http/testdata/durable-session-contract-fixtures.json`)
 
 | Gap | Class | Notes |
 |-----|-------|-------|
@@ -457,12 +457,12 @@ packages as the primary preview or JavaScript orchestration owner.
 Focused verification passes:
 
 - `make generate-api` (generated artifacts synchronized)
-- `go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface ./pkg/apisurface/factorysession ./pkg/factorysessionexecution ./pkg/factorysessions ./pkg/mcp/workflow ./pkg/cli/workflow`
+- `go test ./pkg/api/contracttests ./pkg/api/servertests ./pkg/apisurface ./pkg/apisurface/factorysession ./pkg/factorysessionexecution ./pkg/factory/sessions ./pkg/mcp/workflow ./pkg/cli/workflow`
 - `go test ./pkg/factory/projections/projectiontests ./pkg/factory/events ./pkg/factory/validation`
 - `npm --prefix ui run typecheck`
 - Scoped `rg` verification over `api/openapi-main.yaml`, `api/components`, `pkg/api`,
   `pkg/apisurface`, `pkg/cli`, `pkg/mcp`, `pkg/factorysessionexecution`,
-  `pkg/factorysessions`, `pkg/orchestrators/javascript`, and `ui/src` reports only
+  `pkg/factory/sessions`, `pkg/orchestrators/javascript`, and `ui/src` reports only
   generated compatibility aliases, deprecated OpenAPI compatibility routes/schemas,
   and explicit obsolete/compatibility tests or UI wrappers.
 
@@ -594,16 +594,16 @@ on 2026-06-09 shows:
 
 - `factorysessionexecution.Service`, deterministic fake scenarios, OpenAPI
   durable route shapes, generated Go/TypeScript types, and mapper packages exist.
-- Durable API handlers in `pkg/api/handlers_factory.go` still return `501` for
+- Durable API handlers in `pkg/transports/http/handlers_factory.go` still return `501` for
   async/sync start, results, dispatches, artifacts, lifecycle controls, and
   durable events; `scope=persisted|all` returns empty durable rows.
-- `pkg/mcp/workflow/` exposes preview/start-validation through the canonical Factory
+- `pkg/transports/mcp/workflow/` exposes preview/start-validation through the canonical Factory
   preview seam; session/dispatch/artifact MCP tools depend on deferred Batch 002
   skeleton wiring.
 - `ui/src/api/factory-sessions/api.ts` and the current factory-session detail
   panel are live-session oriented; generated durable types are present for
   fixture-backed adapters and components before HTTP wiring exists.
-- `pkg/api/testdata/durable-session-contract-fixtures.json` now includes canonical
+- `pkg/transports/http/testdata/durable-session-contract-fixtures.json` now includes canonical
   `events[]` arrays and an `AWAITING_APPROVAL` scenario from contract-repair kernel
   work; remaining event/control tranches are Batch 002 skeleton wiring targets.
 
@@ -847,5 +847,5 @@ require Batch 002 skeleton wiring.
 - `docs/reference/orchestrators.md` — canonical nouns and dynamic-workflow aliases
 - `docs/reference/sessions.md` — live session discovery and CLI routing
 - `pkg/factorysessionexecution/` — shared durable session execution service
-- `pkg/apisurface/factorysession/` — OpenAPI ↔ service mappers
-- `pkg/api/testdata/durable-session-contract-fixtures.json` — contract fixtures
+- `pkg/transports/mapping/factorysession/` — OpenAPI ↔ service mappers
+- `pkg/transports/http/testdata/durable-session-contract-fixtures.json` — contract fixtures

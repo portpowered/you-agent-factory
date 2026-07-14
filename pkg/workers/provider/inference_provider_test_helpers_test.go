@@ -15,10 +15,54 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/workcontent"
-	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
+	interfaceresponseevents "github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work/content"
+	"github.com/portpowered/infinite-you/pkg/work/materialize"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
 )
+
+type fixedOpenCodeIdentifier struct{ executable string }
+
+func (i fixedOpenCodeIdentifier) Identify(context.Context, string) (opencodeadapter.Installation, error) {
+	executable := i.executable
+	if executable == "" {
+		executable = "opencode"
+	}
+	return opencodeadapter.Installation{Executable: executable, Fingerprint: "test-installation"}, nil
+}
+
+type fixedOpenCodeDiscoverer struct{ mode opencodeadapter.Mode }
+
+func (d fixedOpenCodeDiscoverer) Discover(context.Context, opencodeadapter.Installation) (opencodeadapter.Decision, error) {
+	return opencodeadapter.Decision{Version: "1.2.3", Mode: d.mode}, nil
+}
+
+func openCodeResolverForTest(t *testing.T, mode opencodeadapter.Mode) *opencodeadapter.Resolver {
+	return openCodeResolverForExecutable(t, mode, "")
+}
+
+func openCodeResolverForExecutable(t *testing.T, mode opencodeadapter.Mode, executable string) *opencodeadapter.Resolver {
+	t.Helper()
+	resolver, err := opencodeadapter.NewResolver(opencodeadapter.ResolverOptions{
+		Identifier: fixedOpenCodeIdentifier{executable: executable}, Discoverer: fixedOpenCodeDiscoverer{mode: mode},
+	})
+	if err != nil {
+		t.Fatalf("NewResolver() error = %v", err)
+	}
+	return resolver
+}
+
+func newScriptWrapProviderForTest(t *testing.T, runner CommandRunner, modelProvider string) *ScriptWrapProvider {
+	t.Helper()
+	options := []ScriptWrapProviderOption{WithProviderCommandRunner(runner)}
+	if modelProvider == string(interfaces.ModelProviderOpenCode) {
+		options = append(options, WithOpenCodeCapabilityResolver(openCodeResolverForTest(t, opencodeadapter.ModeFinalOnly)))
+	}
+	return NewScriptWrapProvider(options...)
+}
 
 func InputTokens(tokens ...interfaces.Token) []any {
 	if len(tokens) == 0 {
@@ -404,11 +448,11 @@ func TestScriptWrapProvider_Infer_CodexImageContentEmitsOrderedImageArgs(t *test
 	if err := os.WriteFile(imageTwoPath, []byte("image-two"), 0o644); err != nil {
 		t.Fatalf("write second image: %v", err)
 	}
-	imageOneURL, err := workcontent.FilesystemPathToContentURL(imageOne)
+	imageOneURL, err := content.FilesystemPathToContentURL(imageOne)
 	if err != nil {
 		t.Fatalf("image one url: %v", err)
 	}
-	imageTwoURL, err := workcontent.FilesystemPathToContentURL(imageTwo)
+	imageTwoURL, err := content.FilesystemPathToContentURL(imageTwo)
 	if err != nil {
 		t.Fatalf("image two url: %v", err)
 	}
@@ -482,7 +526,7 @@ func TestScriptWrapProvider_Infer_CodexMissingImageFailsBeforeRunner(t *testing.
 	fakeExec := &recordingProviderExec{result: CommandResult{Stdout: []byte("codex output")}}
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
 
-	missingURL, err := workcontent.FilesystemPathToContentURL("fixtures/missing.png")
+	missingURL, err := content.FilesystemPathToContentURL("fixtures/missing.png")
 	if err != nil {
 		t.Fatalf("missing url: %v", err)
 	}
@@ -639,7 +683,7 @@ func TestScriptWrapProvider_Infer_CodexBatchLocalAndRemoteImageURLs(t *testing.T
 	if err := os.WriteFile(localPath, []byte("local-image"), 0o644); err != nil {
 		t.Fatalf("write local image: %v", err)
 	}
-	localURL, err := workcontent.FilesystemPathToContentURL(localPath)
+	localURL, err := content.FilesystemPathToContentURL(localPath)
 	if err != nil {
 		t.Fatalf("local content url: %v", err)
 	}
@@ -805,18 +849,33 @@ func TestInferenceProgressPublishingCommandRunner_CursorPublishesDiagnosticsAndL
 	if len(published) != 4 {
 		t.Fatalf("published fragments = %#v, want 4 ordered fragments; result=%#v", published, result)
 	}
-	assertInferenceProgressFragment(t, published[0], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored malformed JSON record", nil)
-	assertInferenceProgressFragment(t, published[1], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored unknown event type \"mystery\"", nil)
-	assertInferenceProgressFragment(t, published[2], "dispatch-stream-cursor", ResponseFragmentKind, "Plan ", &interfaces.ProviderSessionMetadata{
-		Provider: "cursor",
-		Kind:     "session_id",
-		ID:       "cursor-session-123",
-	})
-	assertInferenceProgressFragment(t, published[3], "dispatch-stream-cursor", ResponseFragmentKind, "done", &interfaces.ProviderSessionMetadata{
-		Provider: "cursor",
-		Kind:     "session_id",
-		ID:       "cursor-session-123",
-	})
+	var diagnostics []InferenceProgressFragment
+	var drafts []responseevents.Draft
+	for _, fragment := range published {
+		if fragment.CanonicalDraft == nil {
+			diagnostics = append(diagnostics, fragment)
+			continue
+		}
+		draft, ok := fragment.CanonicalDraft.(responseevents.Draft)
+		if !ok {
+			t.Fatalf("canonical draft type = %T, want responseevents.Draft", fragment.CanonicalDraft)
+		}
+		drafts = append(drafts, draft)
+	}
+	if len(diagnostics) != 2 || len(drafts) != 2 {
+		t.Fatalf("published fragments = %#v, want two diagnostics and two structured drafts", published)
+	}
+	assertInferenceProgressFragment(t, diagnostics[0], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored a malformed JSON record", nil)
+	assertInferenceProgressFragment(t, diagnostics[1], "dispatch-stream-cursor", ProgressFragmentKind, "Cursor stream ignored an unknown record type", nil)
+	for index, wantPhase := range []responseevents.Phase{responseevents.PhaseDelta, responseevents.PhaseCompleted} {
+		draft := drafts[index]
+		if draft.Kind != responseevents.KindMessage || draft.Phase != wantPhase || draft.DispatchID != "dispatch-stream-cursor" {
+			t.Fatalf("drafts[%d] = %#v, want MESSAGE/%s for dispatch", index, draft, wantPhase)
+		}
+		if draft.ProviderSessionRef != "cursor-session-123" || draft.Provenance.Provider != "cursor" {
+			t.Fatalf("drafts[%d] correlation = %#v, want Cursor session", index, draft)
+		}
+	}
 }
 
 func TestInferenceProgressPublishingCommandRunner_WithoutPublisherPreservesExecBehavior(t *testing.T) {
@@ -870,4 +929,43 @@ func assertInferenceProgressFragment(
 	if *fragment.ProviderSessionRef != *wantSession {
 		t.Fatalf("provider session = %#v, want %#v", fragment.ProviderSessionRef, wantSession)
 	}
+}
+
+func agyTimeoutPartialDraftPublished(published []InferenceProgressFragment) bool {
+	for _, fragment := range published {
+		draft, ok := fragment.CanonicalDraft.(interfaceresponseevents.Draft)
+		if !ok || draft.Kind != interfaceresponseevents.KindMessage || draft.Phase != interfaceresponseevents.PhaseCompleted {
+			continue
+		}
+		var payload interfaceresponseevents.MessagePayload
+		if err := json.Unmarshal(draft.Payload, &payload); err != nil || !payload.Partial {
+			continue
+		}
+		if len(payload.ContentBlocks) == 1 && payload.ContentBlocks[0].Text == "partial answer before timeout" {
+			return true
+		}
+	}
+	return false
+}
+
+type agyInferenceStubSession struct {
+	launch agypty.ProcessLaunch
+	result agypty.SessionResult
+}
+
+func (s *agyInferenceStubSession) Run(context.Context) (agypty.SessionResult, error) {
+	return s.result, nil
+}
+
+func (s *agyInferenceStubSession) Close() error { return nil }
+
+type agyInferenceStubAllocator struct {
+	sessions []*agyInferenceStubSession
+	result   agypty.SessionResult
+}
+
+func (a *agyInferenceStubAllocator) Allocate(_ context.Context, launch agypty.ProcessLaunch, _ agypty.SessionConfig) (agypty.PTYSession, error) {
+	session := &agyInferenceStubSession{launch: launch, result: a.result}
+	a.sessions = append(a.sessions, session)
+	return session, nil
 }

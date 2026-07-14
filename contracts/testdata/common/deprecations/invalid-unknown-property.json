@@ -1,0 +1,7 @@
+{
+  "formatVersion": "1.0.0",
+  "itemId": "example.widget.create",
+  "state": "active",
+  "since": "1.0.0",
+  "runtimeCallable": true
+}

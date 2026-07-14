@@ -1,0 +1,16 @@
+openapi: 3.0.3
+info:
+  title: Remove Path Parameter Fixture
+  version: 1.0.0
+paths:
+  /pets:
+    parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+    get:
+      operationId: listPets
+      responses:
+        '200':
+          description: Pet list.

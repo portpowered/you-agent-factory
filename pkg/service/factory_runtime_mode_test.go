@@ -15,24 +15,24 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessionservice "github.com/portpowered/infinite-you/pkg/factory/sessions/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
-	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
@@ -2417,6 +2417,10 @@ func waitForSnapshotMatch(
 	for time.Now().Before(deadline) {
 		snap, err := svc.GetEngineStateSnapshot(context.Background())
 		if err != nil {
+			if strings.Contains(err.Error(), "runtime is not available") {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
 			t.Fatalf("GetEngineStateSnapshot during %s: %v", phase, err)
 		}
 		last = snap
@@ -2907,41 +2911,16 @@ func TestFactoryService_PausedSessionBufferedWorkerResult_DoesNotAffectOtherSess
 		release:     make(chan struct{}),
 	}
 
-	rootDir := t.TempDir()
 	secondDir := t.TempDir()
-	writeFactoryJSON(t, rootDir, minimalFactoryConfig())
 	writeFactoryJSON(t, secondDir, minimalFactoryConfig())
 
-	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
-		Dir:               rootDir,
-		RuntimeMode:       interfaces.RuntimeModeService,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		ExtraOptions: []factory.FactoryOption{
+	harness := startRunningSessionService(t, runningSessionServiceOptions{
+		rootConfig: minimalFactoryConfig(),
+		extraOptions: []factory.FactoryOption{
 			factory.WithWorkerExecutor("worker-a", blocking),
 		},
 	})
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-
-	runCtx, cancelRun := context.WithCancel(context.Background())
-	runErrCh := make(chan error, 1)
-	go func() {
-		runErrCh <- svc.Run(runCtx)
-	}()
-	defer func() {
-		cancelRun()
-		select {
-		case err := <-runErrCh:
-			if err != nil {
-				t.Fatalf("Run after cancellation: %v", err)
-			}
-		case <-time.After(time.Second):
-			t.Fatal("timed out waiting for service shutdown")
-		}
-	}()
-
-	waitForSessionRuntimeStatus(t, svc, defaultFactorySessionID, interfaces.RuntimeStatusIdle, time.Second, "default runtime")
+	svc := harness.svc
 	openResult, err := svc.OpenFactorySessionFromFolder(context.Background(), secondDir, nil, false, false)
 	if err != nil {
 		t.Fatalf("OpenFactorySessionFromFolder: %v", err)

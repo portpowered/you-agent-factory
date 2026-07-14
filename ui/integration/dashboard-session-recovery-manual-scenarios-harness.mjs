@@ -1,4 +1,5 @@
 import {
+  emptyMaterializedWorkOutcomeState,
   initialEditableFactoryDefinitionVersion,
   resolvedDefaultFactorySessionID,
   timelineCheckpointDBVersion,
@@ -42,6 +43,7 @@ export function checkpointStorageKey(identity) {
   return [
     identity.backendScopeID,
     identity.factorySessionID,
+    identity.logicalSessionKeyID,
     identity.streamGenerationID,
   ].join("::");
 }
@@ -84,7 +86,10 @@ export function emptyReplayWorldState(tick) {
   };
 }
 
-export function replayWorldStateWithProviderSessionRef(tick, providerSessionRef) {
+export function replayWorldStateWithProviderSessionRef(
+  tick,
+  providerSessionRef,
+) {
   return {
     ...emptyReplayWorldState(tick),
     providerSessions: [
@@ -97,6 +102,7 @@ export function replayWorldStateWithProviderSessionRef(tick, providerSessionRef)
 }
 
 export async function installNetworkCapture(page) {
+  const captureLimit = 32;
   const captured = {
     eventStreamURLs: [],
     factorySessionReads: [],
@@ -108,6 +114,10 @@ export async function installNetworkCapture(page) {
     const OriginalEventSource = window.EventSource;
     window.EventSource = function EventSourceCapture(url, configuration) {
       window.__capturedEventStreamURLs.push(String(url));
+      window.__capturedEventStreamURLs.splice(
+        0,
+        Math.max(0, window.__capturedEventStreamURLs.length - 32),
+      );
       return new OriginalEventSource(url, configuration);
     };
     window.EventSource.prototype = OriginalEventSource.prototype;
@@ -120,13 +130,13 @@ export async function installNetworkCapture(page) {
       request.method() === "GET" &&
       /\/factory-sessions\/[^/]+$/.test(new URL(url).pathname)
     ) {
-      captured.factorySessionReads.push(url);
+      pushBounded(captured.factorySessionReads, url, captureLimit);
     }
     if (
       request.method() === "GET" &&
       /\/factory-sessions\/[^/]+\/sync-preflight/.test(new URL(url).pathname)
     ) {
-      captured.syncPreflightReads.push(url);
+      pushBounded(captured.syncPreflightReads, url, captureLimit);
     }
     await route.continue();
   });
@@ -141,6 +151,11 @@ export async function installNetworkCapture(page) {
       });
     },
   };
+}
+
+function pushBounded(values, value, limit) {
+  values.push(value);
+  values.splice(0, Math.max(0, values.length - limit));
 }
 
 export async function clearTimelineCheckpoints(page) {
@@ -205,6 +220,9 @@ export async function seedTimelineCheckpoint(page, identity, cursor) {
         checkpoint: {
           afterEventId: cursor.afterEventId,
           afterSequence: cursor.afterSequence,
+          materializedWorkOutcomeState:
+            cursor.materializedWorkOutcomeState ??
+            emptyMaterializedWorkOutcomeState(cursor),
           replayState,
           selectedTick: cursor.selectedTick,
         },
@@ -224,7 +242,5 @@ export function eventStreamHasCursor(url, afterEventId) {
 }
 
 export function eventStreamOmitsCursor(url) {
-  return (
-    !url.includes("after_event_id=") && !url.includes("after_sequence=")
-  );
+  return !url.includes("after_event_id=") && !url.includes("after_sequence=");
 }

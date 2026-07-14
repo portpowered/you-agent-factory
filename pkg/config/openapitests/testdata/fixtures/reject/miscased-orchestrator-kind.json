@@ -1,0 +1,9 @@
+{
+  "name": "miscased-orchestrator-factory",
+  "orchestrator": {
+    "kind": "javascript",
+    "javascript": {
+      "sourceRef": "factory/workflows/review.js"
+    }
+  }
+}

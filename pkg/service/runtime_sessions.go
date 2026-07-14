@@ -4,6 +4,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,31 +14,35 @@ import (
 	"strings"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
-	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/events"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/controlplane"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/logicaltarget"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
+	factorysessionservice "github.com/portpowered/infinite-you/pkg/factory/sessions/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/controlplane"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/logicaltarget"
-	"github.com/portpowered/infinite-you/pkg/factorysessions/responsestream"
-	factorysessionservice "github.com/portpowered/infinite-you/pkg/factorysessions/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/internal/metrics"
-	"github.com/portpowered/infinite-you/pkg/invocations"
-	"github.com/portpowered/infinite-you/pkg/packagedfactories/tts"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/sessionpersistence"
+	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
@@ -218,7 +223,7 @@ func (fs *FactoryService) registerLiveSession(
 		sessionID == defaultFactorySessionID,
 		registration.project,
 	)
-	factorysessions.EnsureRuntimeFactorySessionID(session)
+	factorysessions.BindResponseEventCompletion(session, handle.Bundle.EventHistory.AddGeneratedRecorder)
 	fs.sessions.Upsert(session, selectSession)
 }
 
@@ -354,6 +359,80 @@ func (fs *FactoryService) MoveWork(ctx context.Context, workID, stateName string
 
 func (fs *FactoryService) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
 	return fs.requireCoordinator().SubscribeFactoryEventsForSession(ctx, sessionID, reconnect)
+}
+
+func (fs *FactoryService) SubscribeFactoryResponseEventsForSession(ctx context.Context, sessionID string, afterSequence int64, dispatchID string) (apisurface.FactoryResponseEventSubscription, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	session := fs.responseEventSession(sessionID)
+	if session == nil {
+		return nil, fmt.Errorf("%w: %s", apisurface.ErrFactorySessionNotFound, sessionID)
+	}
+	if session.ResponseEvents == nil {
+		return nil, fmt.Errorf("response event store unavailable for factory session %q", sessionID)
+	}
+	options := []responseeventstore.SubscribeOption{}
+	if strings.TrimSpace(dispatchID) != "" {
+		options = append(options, responseeventstore.WithDispatchFilter(dispatchID))
+	}
+	subscription, err := session.ResponseEvents.Subscribe(afterSequence, options...)
+	if err != nil {
+		if errors.Is(err, responseeventstore.ErrStoreExpired) {
+			return nil, fmt.Errorf("%w: %s", apisurface.ErrFactoryResponseEventStreamExpired, sessionID)
+		}
+		return nil, err
+	}
+	return &factoryResponseEventSubscription{subscription: subscription}, nil
+}
+
+type factoryResponseEventSubscription struct {
+	subscription *responseeventstore.Subscription
+}
+
+func (s *factoryResponseEventSubscription) Next(ctx context.Context) ([]apisurface.FactoryResponseEventRecord, error) {
+	events, err := s.subscription.Next(ctx)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]apisurface.FactoryResponseEventRecord, 0, len(events))
+	for _, event := range events {
+		data, err := json.Marshal(event)
+		if err != nil {
+			return nil, fmt.Errorf("serialize factory response event: %w", err)
+		}
+		records = append(records, apisurface.FactoryResponseEventRecord{Sequence: event.Sequence, Kind: string(event.Kind), Data: data})
+	}
+	return records, nil
+}
+
+func (s *factoryResponseEventSubscription) Detach() {
+	if s != nil && s.subscription != nil {
+		s.subscription.Detach()
+	}
+}
+
+func (fs *FactoryService) responseEventSession(sessionID string) *factorysessions.LiveSession {
+	if fs == nil || fs.sessions == nil {
+		return nil
+	}
+	requestedID := strings.TrimSpace(sessionID)
+	if requestedID == "" {
+		return nil
+	}
+	if requestedID == factorysessions.DefaultSessionID {
+		return fs.sessions.DefaultSession()
+	}
+	if session := fs.sessions.Get(requestedID); session != nil {
+		return session
+	}
+	for _, registeredID := range fs.sessions.IDs() {
+		session := fs.sessions.Get(registeredID)
+		if factorysessions.CanonicalFactorySessionID(session) == requestedID {
+			return session
+		}
+	}
+	return nil
 }
 
 func (c *runtimeFactoryCoordinator) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
@@ -660,7 +739,10 @@ func (c *runtimeFactoryCoordinator) replaceSessionRuntime(
 		session.Project,
 	)
 	replacementSession.RuntimeFactorySessionID = session.RuntimeFactorySessionID
-	factorysessions.EnsureRuntimeFactorySessionID(replacementSession)
+	replacementSession.ResponseEvents = factorysessions.NewSessionResponseEventStore(
+		factorysessions.CanonicalFactorySessionID(replacementSession),
+	)
+	factorysessions.BindResponseEventCompletion(replacementSession, replacement.EventHistory.AddGeneratedRecorder)
 	fs.sessions.Upsert(replacementSession, isActiveSession)
 	if isActiveSession {
 		fs.setRunState(serviceCtx, session.ID, replacementHandle)
@@ -1066,7 +1148,7 @@ func (fs *FactoryService) buildSessionProjectionContext(
 		checkpointStore = fs.requireSessionGateway().JavaScriptCheckpointStore(session)
 		projectionCtx.JavaScriptCheckpoints = checkpointStore.List()
 	}
-	projectionCtx.JavaScript, err = fs.projectJavaScriptRuntimeState(session, checkpointStore, snapshot.TickCount)
+	projectionCtx.JavaScript, projectionCtx.JavaScriptSession, err = fs.projectJavaScriptRuntimeState(session, checkpointStore, snapshot.TickCount)
 	if err != nil {
 		return factorysessions.ProjectionContext{}, err
 	}
@@ -1080,17 +1162,19 @@ func (fs *FactoryService) projectJavaScriptRuntimeState(
 	session *factorysessions.LiveSession,
 	checkpointStore *factorysessions.JavaScriptCheckpointStore,
 	selectedTick int,
-) (*interfaces.FactorySessionJavaScriptRuntimeState, error) {
+) (*interfaces.FactorySessionJavaScriptRuntimeState, *interfaces.FactoryWorldSessionBracketState, error) {
 	state := (*interfaces.FactorySessionJavaScriptRuntimeState)(nil)
+	bracket := (*interfaces.FactoryWorldSessionBracketState)(nil)
 	handle := liveSessionHandle(session)
 	if handle != nil && handle.Bundle != nil && handle.Bundle.EventHistory != nil {
 		worldState, err := projections.ReconstructFactoryWorldState(handle.Bundle.EventHistory.Events(), selectedTick)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		state = worldState.JavaScriptRuntime
+		bracket = worldState.SessionBracket
 	}
-	return factorysessions.JavaScriptRuntimeStateFromCheckpoints(checkpointStore, state), nil
+	return factorysessions.JavaScriptRuntimeStateFromCheckpoints(checkpointStore, state), bracket, nil
 }
 
 func (fs *FactoryService) GetFactorySessionResult(ctx context.Context, sessionID string) (factoryapi.FactorySessionLiveResult, error) {
@@ -1153,6 +1237,7 @@ func (fs *FactoryService) closeSessionResponseStreams(session *factorysessions.L
 }
 
 func (fs *FactoryService) closeSessionResponseStreamsDirect(session *factorysessions.LiveSession) {
+	session.CloseResponseEvents()
 	streams := fs.sessionResponseStreams(session)
 	if streams == nil {
 		return
@@ -1181,6 +1266,22 @@ func (fs *FactoryService) SubscribeSessionResponseStream(
 
 func (fs *FactoryService) SessionResponseStreamDispatchIDs(sessionID string) ([]string, error) {
 	return fs.requireSessionGateway().SessionResponseStreamDispatchIDs(sessionID)
+}
+
+// SubscribeSessionResponseEventsFromLatest attaches to canonical response
+// events published after the call begins. This keeps one-shot CLI invocations
+// from replaying observation records left by earlier work in the live session.
+func (fs *FactoryService) SubscribeSessionResponseEventsFromLatest(
+	sessionID string,
+) (*responseeventstore.Subscription, error) {
+	session, err := fs.requireSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if session.ResponseEvents == nil {
+		return nil, fmt.Errorf("factory session %q response-event stream is unavailable", sessionID)
+	}
+	return session.ResponseEvents.Subscribe(session.ResponseEvents.LatestSequence())
 }
 
 func (fs *FactoryService) newSessionResponseStreamInstance() *factorysessions.SessionResponseStream {
@@ -1350,7 +1451,6 @@ func (fs *FactoryService) observeResponseStreamCompaction(
 	emitSessionResponseStreamMetric(session, sessionID, runtimeMetricSessionResponseStreamCompacted, fields)
 	if handle := liveSessionHandle(session); handle != nil && handle.Bundle != nil && handle.Bundle.Logger != nil {
 		handle.Bundle.Logger.Warn("session response stream compacted internal provider progress",
-			zap.String("session_id", sessionID),
 			zap.String("dispatch_id", dispatchID),
 			zap.String("compaction_reason", string(summary.Reason)),
 			zap.Int("dropped_sequence_count", summary.DroppedSequenceCount),
@@ -2022,8 +2122,8 @@ func (l sessionPersistenceZapLogger) Info(msg string, fields map[string]string) 
 }
 
 // InvocationMetricNormalizationAttempts remains an exported compatibility
-// alias while metric-name ownership lives in pkg/invocations.
-const InvocationMetricNormalizationAttempts = invocations.InvocationMetricNormalizationAttempts
+// alias while metric-name ownership lives in pkg/factory/sessions/invocation.
+const InvocationMetricNormalizationAttempts = sessioninvocation.InvocationMetricNormalizationAttempts
 
 // InvocationMetric records one emitted runtime counter together with its
 // low-cardinality dimensions.
@@ -2055,11 +2155,11 @@ func (fs *FactoryService) InvokeFactorySession(
 	return fs.sessionInvocationOwner().InvokeFactorySession(ctx, sessionID, request)
 }
 
-func (fs *FactoryService) sessionInvocationOwner() invocations.SessionInvoker {
+func (fs *FactoryService) sessionInvocationOwner() sessioninvocation.SessionInvoker {
 	if fs.sessionInvoker != nil {
 		return fs.sessionInvoker
 	}
-	return invocations.NewSessionOwner(invocations.SessionOwnerDependencies{
+	return sessioninvocation.NewSessionOwner(sessioninvocation.SessionOwnerDependencies{
 		FactoryConfig: fs.sessionInvocationFactoryConfig,
 		SubmitWork:    fs.submitSessionInvocationWork,
 		Observe:       fs.observeSessionInvocation,
@@ -2068,13 +2168,13 @@ func (fs *FactoryService) sessionInvocationOwner() invocations.SessionInvoker {
 	})
 }
 
-func (fs *FactoryService) sessionInvocationTelemetry() invocations.SessionInvocationTelemetry {
-	return invocations.NewSessionInvocationTelemetry(invocations.SessionInvocationTelemetryDependencies{
-		RecordMetric: func(metric invocations.SessionInvocationMetric) {
+func (fs *FactoryService) sessionInvocationTelemetry() sessioninvocation.SessionInvocationTelemetry {
+	return sessioninvocation.NewSessionInvocationTelemetry(sessioninvocation.SessionInvocationTelemetryDependencies{
+		RecordMetric: func(metric sessioninvocation.SessionInvocationMetric) {
 			fs.recordInvocationMetric(metric.Name, metric.Labels)
 		},
 		RecordLog: fs.recordSessionInvocationLog,
-		Packaged: &invocations.PackagedInvocationTelemetry{
+		Packaged: &sessioninvocation.PackagedInvocationTelemetry{
 			Active: tts.IsPackagedFactory, FactoryName: tts.PackagedFactoryName, Backend: tts.BackendRuntimeLabel(),
 			AttemptsMetric: tts.MetricPackagedFactoryAttempts, SuccessMetric: tts.MetricPackagedFactorySuccess,
 			FailureMetric: tts.MetricPackagedFactoryFailure, NotReadyMetric: tts.MetricPackagedFactoryNotReady,
@@ -2083,7 +2183,7 @@ func (fs *FactoryService) sessionInvocationTelemetry() invocations.SessionInvoca
 	})
 }
 
-func (fs *FactoryService) recordSessionInvocationLog(record invocations.SessionInvocationLogRecord) {
+func (fs *FactoryService) recordSessionInvocationLog(record sessioninvocation.SessionInvocationLogRecord) {
 	if fs == nil || fs.logger == nil {
 		return
 	}
@@ -2124,17 +2224,17 @@ func (fs *FactoryService) submitSessionInvocationWork(
 func (fs *FactoryService) observeSessionInvocation(
 	ctx context.Context,
 	sessionID string,
-	input invocations.SessionInvocationWaitInput,
-) (invocations.SessionInvocationObservation, error) {
+	input sessioninvocation.SessionInvocationWaitInput,
+) (sessioninvocation.SessionInvocationObservation, error) {
 	snapshot, err := fs.GetEngineStateSnapshotForSession(ctx, sessionID)
 	if err != nil {
-		return invocations.SessionInvocationObservation{}, err
+		return sessioninvocation.SessionInvocationObservation{}, err
 	}
 	worldState, err := fs.sessionInvocationWorldState(ctx, sessionID, snapshot.TickCount)
 	if err != nil {
-		return invocations.SessionInvocationObservation{}, err
+		return sessioninvocation.SessionInvocationObservation{}, err
 	}
-	return invocations.SessionInvocationObservation{
+	return sessioninvocation.SessionInvocationObservation{
 		WorldState: worldState, FactoryState: snapshot.FactoryState,
 		ActiveWork:           snapshotHasActiveWork(snapshot),
 		MissingPrimaryResult: classifyInvocationMissingPrimaryResultFromSnapshot(sessionID, snapshot, input),
@@ -2147,12 +2247,12 @@ func (serviceSessionInvocationSpecialCase) Active(cfg *interfaces.FactoryConfig)
 	return tts.IsPackagedFactory(cfg)
 }
 
-func (serviceSessionInvocationSpecialCase) TerminalFailure(worldState interfaces.FactoryWorldState, requestID string) *invocations.SessionInvocationSpecialFailure {
+func (serviceSessionInvocationSpecialCase) TerminalFailure(worldState interfaces.FactoryWorldState, requestID string) *sessioninvocation.SessionInvocationSpecialFailure {
 	_, failure := tts.ClassifyInvocationWait(worldState, requestID, false)
 	if failure == nil {
 		return nil
 	}
-	return &invocations.SessionInvocationSpecialFailure{ErrorCode: failure.ErrorCode, Message: failure.Message, FailureClass: failure.FailureClass}
+	return &sessioninvocation.SessionInvocationSpecialFailure{ErrorCode: failure.ErrorCode, Message: failure.Message, FailureClass: failure.FailureClass}
 }
 
 func (fs *FactoryService) sessionInvocationWorldState(
@@ -2181,8 +2281,8 @@ func (fs *FactoryService) recordInvocationMetric(name string, labels map[string]
 func classifyInvocationMissingPrimaryResultFromSnapshot(
 	sessionID string,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	input invocations.SessionInvocationWaitInput,
-) *invocations.PrimaryResultError {
+	input sessioninvocation.SessionInvocationWaitInput,
+) *workinvocation.PrimaryResultError {
 	if snapshot == nil || strings.TrimSpace(input.RequestID) == "" {
 		return nil
 	}
@@ -2211,7 +2311,7 @@ func classifyInvocationMissingPrimaryResultFromSnapshot(
 			if strings.TrimSpace(token.Color.RequestID) != strings.TrimSpace(input.RequestID) || tokenStateName(token.PlaceID) != wantState {
 				continue
 			}
-			return invocations.ClassifyMissingPrimaryResultWorkItem(input.RequestID, input.InvocationReturn, interfaces.FactoryWorkItem{
+			return workinvocation.ClassifyMissingPrimaryResultWorkItem(input.RequestID, input.InvocationReturn, interfaces.FactoryWorkItem{
 				ID: token.Color.WorkID, WorkTypeID: token.Color.WorkTypeID,
 				DisplayName: token.Color.Name, PlaceID: token.PlaceID,
 			}, sessionID)

@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	runcli "github.com/portpowered/infinite-you/pkg/cli/run"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
@@ -229,8 +229,11 @@ func assertMockWorkersSmokeRecordedOutcomes(t *testing.T, artifact *interfaces.R
 	if rejectResult.FailureDetail == nil || rejectResult.FailureDetail.Reason == "" {
 		t.Fatal("reject-process result missing failure reason")
 	}
-	if !strings.Contains(stringPointerValue(rejectResult.Error), "exited with code 13") {
-		t.Fatalf("reject-process error = %q, want exit-code failure", stringPointerValue(rejectResult.Error))
+	if string(rejectResult.FailureDetail.Reason) != string(interfaces.WorkFailureTypeUnknown) {
+		t.Fatalf("reject-process failure reason = %q, want stable %q", rejectResult.FailureDetail.Reason, interfaces.WorkFailureTypeUnknown)
+	}
+	if !strings.Contains(stringPointerValue(rejectResult.Error), "provider error: unknown: Codex reported a terminal error.") {
+		t.Fatalf("reject-process error = %q, want stable unknown code with audited message", stringPointerValue(rejectResult.Error))
 	}
 	scriptResult := outcomes["script-process"]
 	if scriptResult.Outcome != factoryapi.WorkOutcome(interfaces.OutcomeAccepted) {

@@ -5,13 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"hash"
+	"os/exec"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
@@ -107,16 +106,14 @@ func providerArgIsSensitivePositional(provider string, args []string, index int)
 }
 
 func providerPreparedLogFields(ctx context.Context, req interfaces.ProviderInferenceRequest, execReq CommandRequest) []any {
-	fields := workLogFields(req.Dispatch.Execution,
+	fields := providerLogFields(req,
 		"event_name", ProviderInvocationPrepared,
-		"provider", strings.ToLower(strings.TrimSpace(req.ModelProvider)),
 		"model", providerModelForLog(req.Model),
 		"command", execReq.Command,
 		"args", sanitizeProviderArgs(req.ModelProvider, execReq.Args),
 		"working_dir", execReq.WorkDir,
 		"stdin_bytes", len(execReq.Stdin),
-		"stdin_sha256", sha256Hex(execReq.Stdin),
-		"dispatch_id", req.Dispatch.DispatchID)
+		"stdin_sha256", sha256Hex(execReq.Stdin))
 	if deadline, ok := ctx.Deadline(); ok {
 		fields = append(fields, "deadline", deadline.UTC().Format(time.RFC3339Nano))
 	}
@@ -130,15 +127,14 @@ func providerFailureLogFields(
 	duration time.Duration,
 ) []any {
 	decision := WorkFailureDecisionFromProviderError(providerErr)
-	fields := workLogFields(req.Dispatch.Execution,
+	fields := providerLogFields(req,
 		"event_name", ProviderFailureNormalized,
-		"provider", strings.ToLower(strings.TrimSpace(req.ModelProvider)),
 		"model", providerModelForLog(req.Model),
 		"failure_reason", providerErr.Type,
 		"failure_message", safeProviderFailureLogMessage(req.ModelProvider, providerErr),
 		"retryable", decision.Retryable,
-		"duration_ms", duration.Milliseconds(),
-		"dispatch_id", req.Dispatch.DispatchID)
+		"duration_ms", duration.Milliseconds())
+	fields = appendProviderSessionLogFields(fields, providerErr.ProviderSession)
 	if result.ExitCode != 0 {
 		fields = append(fields, "exit_code", result.ExitCode)
 	}
@@ -149,7 +145,7 @@ func safeProviderFailureLogMessage(provider string, providerErr *ProviderError) 
 	// Codex exit failures are parsed into bounded, audited messages. Execution
 	// errors retain raw command diagnostics in the returned error, so they must
 	// use the same fixed reason-based messages as the other providers.
-	if strings.EqualFold(strings.TrimSpace(provider), string(interfaces.ModelProviderCodex)) && providerErr.Cause == nil {
+	if strings.EqualFold(strings.TrimSpace(provider), string(interfaces.ModelProviderCodex)) && !isProviderExecutionCause(providerErr.Cause) {
 		return providerErr.Message
 	}
 	switch providerErr.Type {
@@ -172,6 +168,17 @@ func safeProviderFailureLogMessage(provider string, providerErr *ProviderError) 
 	default:
 		return "Provider execution failed."
 	}
+}
+
+func isProviderExecutionCause(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, exec.ErrNotFound) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+	var execErr *exec.Error
+	return errors.As(err, &execErr)
 }
 
 // SafeProviderFailureDetail returns the allowlisted public diagnostic for a
@@ -288,6 +295,25 @@ func workLogFields(metadata interfaces.ExecutionMetadata, keysAndValues ...any) 
 		"work_ids", cloneWorkIDs(metadata.WorkIDs),
 	}
 	return append(fields, keysAndValues...)
+}
+
+func providerLogFields(req interfaces.ProviderInferenceRequest, keysAndValues ...any) []any {
+	fields := workLogFields(req.Dispatch.Execution,
+		"dispatch_id", req.Dispatch.DispatchID,
+		"provider", interfaces.CanonicalProviderSessionProvider(req.ModelProvider),
+		"worker_type", firstNonEmpty(req.WorkerType, req.Dispatch.WorkerType),
+		"workstation", req.Dispatch.WorkstationName)
+	return append(fields, keysAndValues...)
+}
+
+func appendProviderSessionLogFields(fields []any, session *interfaces.ProviderSessionMetadata) []any {
+	if session == nil {
+		return fields
+	}
+	return append(fields,
+		"provider_session_provider", interfaces.CanonicalProviderSessionProvider(session.Provider),
+		"provider_session_kind", session.Kind,
+		"provider_session_id", session.ID)
 }
 
 func primaryWorkID(workIDs []string) string {
@@ -554,61 +580,6 @@ func hashText(value string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func looksLikeStructuredCodexPayload(raw string, fallbackEventType string) bool {
-	if strings.TrimSpace(fallbackEventType) != "" {
-		return true
-	}
-	trimmed := strings.TrimSpace(raw)
-	return strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[")
-}
-
-func malformedCodexStructuredEvent(raw string, fallbackEventType string, diagnosticClass string, hasher hash.Hash) InferenceProgressFragment {
-	return InferenceProgressFragment{
-		Kind:              ProgressFragmentKind,
-		Type:              NormalizedEventTypeUnknown,
-		Payload:           "codex event omitted",
-		ExternalEventType: strings.TrimSpace(fallbackEventType),
-		Metadata:          codexRawDiagnosticMetadata(raw, diagnosticClass, hasher),
-	}
-}
-
-func annotateBoundedPayloadMetadata(metadata map[string]string, original string, bounded string) map[string]string {
-	trimmedOriginal := strings.TrimSpace(original)
-	if trimmedOriginal == "" {
-		return metadata
-	}
-	annotated := cloneStringMap(metadata)
-	if annotated == nil {
-		annotated = map[string]string{}
-	}
-	annotated[codexMetadataTextBytesKey] = strconv.Itoa(len([]byte(trimmedOriginal)))
-	if len([]byte(bounded)) < len([]byte(trimmedOriginal)) {
-		annotated[codexMetadataTruncatedKey] = "true"
-	}
-	return annotated
-}
-
-func codexRawDiagnosticMetadata(raw string, diagnosticClass string, hasher hash.Hash) map[string]string {
-	metadata := map[string]string{
-		codexMetadataDiagnosticKey: strings.TrimSpace(diagnosticClass),
-	}
-	trimmed := strings.TrimSpace(raw)
-	if trimmed != "" {
-		metadata[codexMetadataRawBytesKey] = strconv.Itoa(len([]byte(trimmed)))
-		metadata[codexMetadataRawSHA256Key] = sha256Digest(trimmed, hasher)
-	}
-	return metadata
-}
-
-func sha256Digest(raw string, hasher hash.Hash) string {
-	if hasher == nil {
-		hasher = sha256.New()
-	}
-	hasher.Reset()
-	_, _ = hasher.Write([]byte(raw))
-	return fmt.Sprintf("%x", hasher.Sum(nil))
-}
-
 func workerEventExitCode(exitCode int, present bool, includeZero bool) *int {
 	if !present {
 		return nil
@@ -620,338 +591,3 @@ func workerEventExitCode(exitCode int, present bool, includeZero bool) *int {
 	return &exitCodeCopy
 }
 
-func lastSafeOpenCodeUnknownExcerpt(streams []string) (string, bool) {
-	var last string
-	for _, stream := range streams {
-		for _, line := range strings.Split(stream, "\n") {
-			trimmed := strings.TrimSpace(line)
-			if failure, ok := decodeOpenCodeStructuredFailure(trimmed); ok {
-				if excerpt, safe := safeOpenCodeFailureDetail(failure.Message); safe {
-					last = excerpt
-				}
-				continue
-			}
-			if !openCodeErrorTextLine(trimmed) {
-				continue
-			}
-			if excerpt, safe := safeOpenCodeFailureDetail(trimmed); safe {
-				last = excerpt
-			}
-		}
-	}
-	return last, last != ""
-}
-
-func lastOpenCodeStructuredFailure(streams []string) (ProviderFailureResult, bool) {
-	var last ProviderFailureResult
-	var found bool
-	for _, stream := range streams {
-		for _, line := range strings.Split(stream, "\n") {
-			failure, ok := decodeOpenCodeStructuredFailure(strings.TrimSpace(line))
-			if !ok {
-				continue
-			}
-			reason, recognized := classifyOpenCodeStructuredFailure(failure)
-			if !recognized {
-				continue
-			}
-			last = ProviderFailureResult{
-				Reason:  reason,
-				Message: openCodeFailureMessage(reason, failure.Message),
-			}
-			found = true
-		}
-	}
-	return last, found
-}
-
-func decodeOpenCodeStructuredFailure(line string) (opencodeStructuredFailure, bool) {
-	if !strings.HasPrefix(line, "{") {
-		return opencodeStructuredFailure{}, false
-	}
-	var envelope struct {
-		Type       string `json:"type"`
-		Name       string `json:"name"`
-		Code       string `json:"code"`
-		Status     int    `json:"status"`
-		StatusCode int    `json:"statusCode"`
-		Message    string `json:"message"`
-		Error      *struct {
-			Type       string `json:"type"`
-			Name       string `json:"name"`
-			Code       string `json:"code"`
-			Status     int    `json:"status"`
-			StatusCode int    `json:"statusCode"`
-			Message    string `json:"message"`
-			Data       *struct {
-				Code       string `json:"code"`
-				Status     int    `json:"status"`
-				StatusCode int    `json:"statusCode"`
-				Message    string `json:"message"`
-			} `json:"data"`
-		} `json:"error"`
-	}
-	if err := json.Unmarshal([]byte(line), &envelope); err != nil {
-		return opencodeStructuredFailure{}, false
-	}
-
-	failure := opencodeStructuredFailure{
-		Name:       envelope.Name,
-		Type:       envelope.Type,
-		Code:       envelope.Code,
-		StatusCode: firstNonZero(envelope.StatusCode, envelope.Status),
-		Message:    envelope.Message,
-	}
-	if envelope.Error != nil {
-		failure.Name = firstNonEmpty(envelope.Error.Name, failure.Name)
-		failure.Type = firstNonEmpty(envelope.Error.Type, failure.Type)
-		failure.Code = firstNonEmpty(envelope.Error.Code, failure.Code)
-		failure.StatusCode = firstNonZero(envelope.Error.StatusCode, envelope.Error.Status, failure.StatusCode)
-		failure.Message = firstNonEmpty(envelope.Error.Message, failure.Message)
-		if envelope.Error.Data != nil {
-			failure.Code = firstNonEmpty(envelope.Error.Data.Code, failure.Code)
-			failure.StatusCode = firstNonZero(envelope.Error.Data.StatusCode, envelope.Error.Data.Status, failure.StatusCode)
-			failure.Message = firstNonEmpty(envelope.Error.Data.Message, failure.Message)
-		}
-	}
-	if envelope.Error == nil && !strings.EqualFold(envelope.Type, "error") {
-		return opencodeStructuredFailure{}, false
-	}
-	return failure, true
-}
-
-func firstNonZero(values ...int) int {
-	for _, value := range values {
-		if value != 0 {
-			return value
-		}
-	}
-	return 0
-}
-
-func classifyOpenCodeStructuredFailure(failure opencodeStructuredFailure) (interfaces.WorkFailureType, bool) {
-	signal := strings.ToLower(strings.Join([]string{failure.Name, failure.Type, failure.Code}, " "))
-	switch {
-	case containsAny(signal, "providerautherror", "authentication_error", "permission_error", "unauthorized", "forbidden"):
-		return interfaces.WorkFailureTypeAuthFailure, true
-	case containsAny(signal, "invalid_request_error", "badrequesterror", "invalidrequesterror"):
-		return interfaces.WorkFailureTypePermanentBadRequest, true
-	case containsAny(signal, "ratelimiterror", "rate_limit_error", "overloaded_error", "quotaexceeded"):
-		return interfaces.WorkFailureTypeThrottled, true
-	case containsAny(signal, "timeouterror", "timeout_error", "etimedout"):
-		return interfaces.WorkFailureTypeTimeout, true
-	case containsAny(signal, "server_error", "internalservererror"):
-		return interfaces.WorkFailureTypeInternalServerError, true
-	}
-	switch {
-	case failure.StatusCode == 401 || failure.StatusCode == 403:
-		return interfaces.WorkFailureTypeAuthFailure, true
-	case failure.StatusCode == 400 || failure.StatusCode == 422:
-		return interfaces.WorkFailureTypePermanentBadRequest, true
-	case failure.StatusCode == 408:
-		return interfaces.WorkFailureTypeTimeout, true
-	case failure.StatusCode == 429:
-		return interfaces.WorkFailureTypeThrottled, true
-	case failure.StatusCode >= 500 && failure.StatusCode <= 599:
-		return interfaces.WorkFailureTypeInternalServerError, true
-	default:
-		return interfaces.WorkFailureTypeUnknown, false
-	}
-}
-
-func lastOpenCodeTextFailure(streams []string, exitCode int) (ProviderFailureResult, bool) {
-	var last ProviderFailureResult
-	var found bool
-	for _, stream := range streams {
-		for _, line := range strings.Split(stream, "\n") {
-			trimmed := strings.TrimSpace(line)
-			if !openCodeErrorTextLine(trimmed) {
-				continue
-			}
-			if failure, ok := recognizedOpenCodeTextFailure(trimmed, exitCode); ok {
-				last, found = failure, true
-			}
-		}
-	}
-	if found {
-		return last, true
-	}
-	for _, stream := range streams {
-		trimmed := strings.TrimSpace(stream)
-		if trimmed == "" || strings.Contains(trimmed, "\n") {
-			continue
-		}
-		if failure, ok := recognizedOpenCodeTextFailure(trimmed, exitCode); ok {
-			last, found = failure, true
-		}
-	}
-	return last, found
-}
-
-func openCodeErrorTextLine(line string) bool {
-	normalized := strings.ToLower(line)
-	return strings.HasPrefix(normalized, "error:") || strings.HasPrefix(normalized, "api error:")
-}
-
-func recognizedOpenCodeTextFailure(message string, exitCode int) (ProviderFailureResult, bool) {
-	normalized := strings.ToLower(strings.TrimSpace(message))
-	var reason interfaces.WorkFailureType
-	switch {
-	case exitCode == 124 || containsAny(normalized, "deadline exceeded", "request timed out", "timed out", "timeout"):
-		reason = interfaces.WorkFailureTypeTimeout
-	case containsAny(normalized, "authentication", "login required", "not authenticated", "unauthorized", "forbidden", "api key"):
-		reason = interfaces.WorkFailureTypeAuthFailure
-	case containsAny(normalized, "invalid request", "bad request", "invalid argument", "model not found"):
-		reason = interfaces.WorkFailureTypePermanentBadRequest
-	case containsAny(normalized, "rate limit", "too many requests", "usage limit", "at capacity", "status 429"):
-		reason = interfaces.WorkFailureTypeThrottled
-	case containsAny(normalized, "internal server error", "server error", "status 500", "status 502", "status 503", "status 504"):
-		reason = interfaces.WorkFailureTypeInternalServerError
-	default:
-		return ProviderFailureResult{}, false
-	}
-	return ProviderFailureResult{Reason: reason, Message: openCodeFailureMessage(reason, message)}, true
-}
-
-func openCodeFailureMessage(reason interfaces.WorkFailureType, detail string) string {
-	if reason == interfaces.WorkFailureTypeAuthFailure || reason == interfaces.WorkFailureTypePermanentBadRequest {
-		if sanitized, ok := safeOpenCodeFailureDetail(detail); ok {
-			return sanitized
-		}
-	}
-	switch reason {
-	case interfaces.WorkFailureTypeAuthFailure:
-		return opencodeAuthFailureMessage
-	case interfaces.WorkFailureTypePermanentBadRequest:
-		return opencodeBadRequestFailureMessage
-	case interfaces.WorkFailureTypeThrottled:
-		return opencodeThrottleFailureMessage
-	case interfaces.WorkFailureTypeTimeout:
-		return opencodeTimeoutFailureMessage
-	case interfaces.WorkFailureTypeInternalServerError:
-		return opencodeServerFailureMessage
-	default:
-		return ""
-	}
-}
-
-func safeOpenCodeFailureDetail(detail string) (string, bool) {
-	detail = strings.ToValidUTF8(strings.Join(strings.Fields(detail), " "), "")
-	normalized := strings.ToLower(detail)
-	if detail == "" || containsAny(normalized,
-		"authorization:", "bearer ", "api_key=", "api-key=", `"token":`, "secret=", "sk-", "prompt:", "transcript:",
-	) {
-		return "", false
-	}
-	if len(detail) <= opencodeFailureMessageBytes {
-		return detail, true
-	}
-	end := opencodeFailureMessageBytes
-	for end > 0 && detail[end]&0xc0 == 0x80 {
-		end--
-	}
-	return detail[:end], true
-}
-
-func safeGeminiTextCandidate(line string) string {
-	message := sanitizeGeminiMessage(line)
-	if message == "" || strings.HasPrefix(message, "{") {
-		return ""
-	}
-	normalized := strings.ToLower(message)
-	if isRejectedGeminiMessage(normalized) || !isGeminiErrorSignal(normalized) {
-		return ""
-	}
-	return message
-}
-
-func isGeminiErrorSignal(normalized string) bool {
-	if strings.HasPrefix(normalized, "error:") ||
-		strings.HasPrefix(normalized, "gemini error:") ||
-		strings.HasPrefix(normalized, "fatal") ||
-		strings.HasPrefix(normalized, "failed") ||
-		strings.HasPrefix(normalized, "failure:") ||
-		strings.HasPrefix(normalized, "cannot ") ||
-		strings.HasPrefix(normalized, "could not ") {
-		return true
-	}
-	return containsAny(normalized,
-		"http 4", "http 5", "status 4", "status 5",
-		"unauthenticated", "permission_denied", "resource_exhausted", "resource exhausted",
-		"deadline_exceeded", "timed out", "timeout", "permission denied",
-		"rate limit exceeded", "quota exceeded", "too many requests",
-		"invalid request", "bad request", "service unavailable", "upstream unavailable")
-}
-
-func geminiFailureResult(reason interfaces.WorkFailureType, upstreamMessage string) ProviderFailureResult {
-	message := geminiFixedFailureMessage(reason)
-	if reason == interfaces.WorkFailureTypeAuthFailure || reason == interfaces.WorkFailureTypePermanentBadRequest {
-		if safe := safeGeminiStructuredMessage(upstreamMessage); safe != "" {
-			message = safe
-		}
-	}
-	return ProviderFailureResult{Reason: reason, Message: message}
-}
-
-func geminiFixedFailureMessage(reason interfaces.WorkFailureType) string {
-	switch reason {
-	case interfaces.WorkFailureTypeAuthFailure:
-		return geminiAuthFailureMessage
-	case interfaces.WorkFailureTypePermanentBadRequest:
-		return geminiBadRequestMessage
-	case interfaces.WorkFailureTypeThrottled:
-		return geminiThrottleFailureMessage
-	case interfaces.WorkFailureTypeTimeout:
-		return geminiTimeoutFailureMessage
-	case interfaces.WorkFailureTypeInternalServerError:
-		return geminiServerFailureMessage
-	default:
-		return ""
-	}
-}
-
-func safeGeminiStructuredMessage(message string) string {
-	message = sanitizeGeminiMessage(message)
-	if message == "" {
-		return ""
-	}
-	normalized := strings.ToLower(message)
-	if isRejectedGeminiMessage(normalized) {
-		return ""
-	}
-	return message
-}
-
-func sanitizeGeminiMessage(message string) string {
-	message = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
-			return ' '
-		}
-		return r
-	}, message)
-	message = strings.Join(strings.Fields(message), " ")
-	runes := []rune(message)
-	if len(runes) > geminiFailureMessageRunes {
-		message = string(runes[:geminiFailureMessageRunes])
-	}
-	return message
-}
-
-func isRejectedGeminiMessage(normalized string) bool {
-	if strings.HasPrefix(normalized, "at ") || strings.HasPrefix(normalized, "goroutine ") {
-		return true
-	}
-	return containsAny(normalized,
-		"authorization:", "basic ", "bearer ", "api_key=", "api-key=", "password=", "token=", "secret=", "sk-",
-		"api key:", "credential=", "aiza", "ya29.", "-----begin private key",
-		"customer prompt", "user prompt", "prompt:", "model response", "transcript:",
-		"[debug]", "debug:", "[progress]", "progress:", "traceback", "stack trace",
-		"error report", "report written", "cleanup", "cleaning up", "/tmp/", "/var/tmp/", ".gemini/tmp/")
-}
-
-func tailForGeminiFailureScan(output []byte) string {
-	if len(output) <= geminiFailureScanBytes {
-		return string(output)
-	}
-	return string(output[len(output)-geminiFailureScanBytes:])
-}

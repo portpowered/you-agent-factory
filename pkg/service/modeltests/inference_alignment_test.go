@@ -5,10 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
 	"github.com/portpowered/infinite-you/pkg/service"
+	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
 )
 
 func TestInvokeModel_UsesSharedInferenceBindingAndOutputShaping(t *testing.T) {
@@ -40,7 +41,7 @@ func TestInvokeModel_UsesSharedInferenceBindingAndOutputShaping(t *testing.T) {
 			ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
 		}},
 	}
-	shaped, err := invocations.WorkContentFromInferenceOutput(providerRaw, operation)
+	shaped, err := workerinference.WorkContentFromInferenceOutput(providerRaw, operation)
 	if err != nil {
 		t.Fatalf("WorkContentFromInferenceOutput: %v", err)
 	}
@@ -65,15 +66,15 @@ func TestInvokeModel_InferenceAndLegacyBindingFixturesStayAligned(t *testing.T) 
 		},
 	}}
 
-	inferenceBindings, err := invocations.ResolveInferenceOperationBindings(
-		invocations.DirectInferenceWorkstationConfig("TTS", nil),
+	inferenceBindings, err := workerinference.ResolveInferenceOperationBindings(
+		workerinference.DirectInferenceWorkstationConfig("TTS", nil),
 		worker,
 		inputTokens,
 	)
 	if err != nil {
 		t.Fatalf("ResolveInferenceOperationBindings inference run: %v", err)
 	}
-	legacyBindings, err := invocations.ResolveInferenceOperationBindings(
+	legacyBindings, err := workerinference.ResolveInferenceOperationBindings(
 		&interfaces.FactoryWorkstationConfig{
 			Type:      interfaces.WorkstationTypeInvoke,
 			Operation: "TTS",

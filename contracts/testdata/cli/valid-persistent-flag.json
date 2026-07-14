@@ -1,0 +1,69 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.debug": {
+      "id": "example.factory.debug",
+      "name": "debug",
+      "path": "example factory debug",
+      "aliases": [],
+      "groupId": "factory",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.debug",
+        "documentation": {
+          "title": {
+            "id": "example.factory.debug.title",
+            "canonicalEnglish": "Enable factory debug output"
+          },
+          "description": {
+            "id": "example.factory.debug.description",
+            "canonicalEnglish": "Runs a factory command with persistent debug diagnostics enabled."
+          }
+        },
+        "examples": [
+          "example factory debug --debug"
+        ],
+        "visibility": "public",
+        "sourceHash": "1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.debug",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "debug",
+        "example": "  example factory debug --debug"
+      },
+      "flags": {
+        "example.factory.debug.flag.debug": {
+          "id": "example.factory.debug.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "persistent",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.factory.debug.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      }
+    }
+  }
+}

@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestFactoryEventHistory_RecordOrchestratorProgress_EmitsReconstructablePhaseAndCheckpointSequence(t *testing.T) {
@@ -15,15 +15,15 @@ func TestFactoryEventHistory_RecordOrchestratorProgress_EmitsReconstructablePhas
 	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })
 	kind := factoryapi.JAVASCRIPT
 	history.RecordOrchestratorPhaseChanged(OrchestratorPhaseChangedInput{
-		SessionID:         "session-js",
-		OrchestratorKind:  kind,
-		PhaseID:           "phase-plan",
-		PhaseName:         "plan",
-		Source:            "runtime",
-		Tick:              1,
-		PhaseStatus:       factoryapi.ACTIVE,
-		StartedAt:         &phaseStartedAt,
-		ProgressSummary:   "Planning workflow",
+		SessionID:        "session-js",
+		OrchestratorKind: kind,
+		PhaseID:          "phase-plan",
+		PhaseName:        "plan",
+		Source:           "runtime",
+		Tick:             1,
+		PhaseStatus:      factoryapi.ACTIVE,
+		StartedAt:        &phaseStartedAt,
+		ProgressSummary:  "Planning workflow",
 	}, phaseStartedAt)
 	history.RecordOrchestratorPhaseChanged(OrchestratorPhaseChangedInput{
 		SessionID:         "session-js",

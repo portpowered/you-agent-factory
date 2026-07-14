@@ -8,37 +8,39 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/portpowered/infinite-you/pkg/api"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
-	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
-	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
-	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
-	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/factory"
+	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/logging"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
+	api "github.com/portpowered/infinite-you/pkg/transports/http"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 // recordModeServiceRunTimeout allows full runtime startup under Windows CI load.
@@ -1059,6 +1061,7 @@ func TestBuildFactoryService_RecordModeCopiesScriptDiagnosticsToArtifact(t *test
 	recordPath := filepath.Join(t.TempDir(), "recording.json")
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:                   dir,
+		RuntimeMode:           interfaces.RuntimeModeService,
 		Logger:                zap.NewNop(),
 		RecordPath:            recordPath,
 		WorkFile:              workFile,
@@ -1068,11 +1071,7 @@ func TestBuildFactoryService_RecordModeCopiesScriptDiagnosticsToArtifact(t *test
 		t.Fatalf("BuildFactoryService: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	if err := svc.Run(ctx); err != nil {
-		t.Fatalf("Run: %v", err)
-	}
+	runServiceUntilDispatchCompletion(t, svc)
 
 	artifact, err := replay.Load(recordPath)
 	if err != nil {
@@ -1089,6 +1088,48 @@ func TestBuildFactoryService_RecordModeCopiesScriptDiagnosticsToArtifact(t *test
 	completion := completions[0].Payload
 	if serviceStringValue(completion.Output) != "script done" {
 		t.Fatalf("recorded script output = %q", serviceStringValue(completion.Output))
+	}
+}
+
+func runServiceUntilDispatchCompletion(t *testing.T, svc *FactoryService) {
+	t.Helper()
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- svc.Run(runCtx)
+	}()
+
+	deadline := time.NewTimer(serviceStreamedRecordingTimeout)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer deadline.Stop()
+	defer ticker.Stop()
+	for {
+		select {
+		case runErr := <-errCh:
+			t.Fatalf("Run returned before dispatch completion: %v", runErr)
+		case <-deadline.C:
+			t.Fatalf("worker did not publish a dispatch completion within %s", serviceStreamedRecordingTimeout)
+		case <-ticker.C:
+			events, err := svc.GetFactoryEvents(context.Background())
+			if err != nil {
+				t.Fatalf("GetFactoryEvents: %v", err)
+			}
+			if slices.ContainsFunc(events, func(event factoryapi.FactoryEvent) bool {
+				return event.Type == factoryapi.FactoryEventTypeDispatchResponse
+			}) {
+				cancelRun()
+				select {
+				case runErr := <-errCh:
+					if runErr != nil {
+						t.Fatalf("Run after cancellation: %v", runErr)
+					}
+				case <-time.After(time.Second):
+					t.Fatal("timed out waiting for service-mode factory service to stop")
+				}
+				return
+			}
+		}
 	}
 }
 
@@ -1508,6 +1549,7 @@ func executeModelWorkerProgressPublisherServiceTest(
 		logging.NoopLogger{},
 		false,
 		nil,
+		nil,
 		progressPublisher,
 		runner,
 		nil,
@@ -1694,6 +1736,7 @@ func modelInvokeWorkstationExecutorForLocalManagedRuntime(
 		nil,
 		logging.NoopLogger{},
 		true,
+		nil,
 		provider,
 		nil,
 		nil,
@@ -2356,6 +2399,7 @@ func loadWorkersFromConfigForServiceTest(
 		nil,
 		logging.NoopLogger{},
 		false,
+		nil,
 		providerOverride,
 		nil,
 		providerCommandRunner,
@@ -2682,6 +2726,7 @@ func taxonomyOmniVoiceInferenceWorkstationExecutorWithEvents(
 		nil,
 		nil,
 		nil,
+		nil,
 		history.RecordModelEvent,
 		nil,
 		func() time.Time { return eventTime },
@@ -2877,6 +2922,7 @@ func TestLoadWorkersFromConfig_InferenceWorkerUsesModelHostLeases(t *testing.T) 
 		nil,
 		logging.NoopLogger{},
 		true,
+		nil,
 		nil,
 		nil,
 		nil,
@@ -3144,6 +3190,7 @@ func taxonomyOmniVoiceInferenceWorkstationExecutorWithModelHost(
 		nil,
 		logging.NoopLogger{},
 		true,
+		nil,
 		nil,
 		nil,
 		nil,

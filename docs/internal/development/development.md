@@ -15,10 +15,12 @@ This checkout is operated from the repository root that contains `go.mod`, `Make
 - `cmd/factory/` is the CLI binary entrypoint.
 - `api/` contains the authored OpenAPI sources, bundling configuration, and published contract artifact used by generation and smoke checks.
 - `factory/` contains the checked-in operator workflow surfaces, including starter guidance, workstation prompts, and the live idea or batch inbox directories under `factory/inputs/`.
-- `pkg/cli/` owns Cobra routing, command-specific packages (`run`, `config`, `submit`, `default`, and `init`), and the CLI dashboard read models in `dashboard`.
+- `pkg/transports/cli/` temporarily owns Cobra root routing and the MCP command adapter;
+  command-specific adapters, shared server/startup helpers, and CLI dashboard
+  read models live under `pkg/transports/cli/`.
 - `pkg/factory/` owns runtime engine behavior, scheduling, markings, transitions, resources, and engine state snapshots.
 - `pkg/service/` wires the runtime, configuration, API server, replay, logging, and worker construction.
-- `pkg/api/` serves runtime HTTP endpoints and the embedded dashboard shell.
+- `pkg/transports/http/` serves runtime HTTP endpoints and the embedded dashboard shell.
 - `pkg/workers/` owns worker execution contracts, provider calls, script command execution, and work-scoped metadata.
 - `pkg/replay/` owns record/replay artifact construction, side-effect matching, and deterministic replay behavior.
 - `ui/` is the Vite dashboard source. `ui/dist/` is generated local build output, and `make ui-build` refreshes the ignored embed registration that wires those assets into Go builds.
@@ -132,9 +134,11 @@ Use `make dashboard-verify` for dashboard review readiness after UI source chang
 
 `make typecheck` is the root-level dashboard typecheck command and should stay aligned with the CI `bun run tsc` step.
 
-`make backend-size` is the direct maintainer command for the repo-owned backend size gate. It runs `go run ./cmd/backendsizecheck` and fails when maintained backend Go files exceed 1000 lines or maintained backend Go functions exceed 100 lines under the scanner's explicit owned-source rules. When a legacy oversized surface must stay intact temporarily, use an inline `backendsizecheck:ignore-file` or `backendsizecheck:ignore-function` comment with a concrete justification at the owning file or function instead of adding shell-only allowlists.
+`make backend-size` is the direct maintainer command for the repo-owned backend size gate. It runs `go run ./cmd/backendsizecheck` and fails when maintained backend Go files exceed 1000 lines or maintained backend Go functions exceed 100 lines under the scanner's explicit owned-source rules. When a legacy oversized surface must stay intact temporarily, use an inline `backendsizecheck:ignore-file` or `backendsizecheck:ignore-function` comment with a concrete justification at the owning file or function instead of adding shell-only allowlists. Register the exact rule and reported file or `file#Function` target in the sorted root `backend-exemption-budget.json`, including a non-empty accountable `owner` and an actionable `removalReason`; the command rejects an unregistered directive or incomplete entry. Production validation defines an actionable removal reason as at least 20 characters that names a concrete removal action such as split, extract, refactor, replace, reduce, move, migrate, simplify, remove, or delete.
 
-`make pkg-maint` is the stable maintainer and reviewer command path for the handwritten `pkg/` maintainability lane. It runs `go run ./cmd/pkgmaintcheck ./pkg`, scans only owned `pkg/` Go source, excludes generated artifacts and `testdata` through the same repo-owned path rules as the backend size gate, and reports `file-lines`, `function-lines`, and `cyclomatic-complexity` violations with actual values and configured limits. The current thresholds are 1000 file lines, 100 function lines, and cyclomatic complexity 15. Use rule-scoped inline directives only when a later maintainability story needs a narrow exception tied to a concrete runtime, boundary, or generated-artifact constraint: `pkgmaintcheck:ignore-file-lines`, `pkgmaintcheck:ignore-function-lines`, or `pkgmaintcheck:ignore-cyclomatic-complexity`, each paired with a reviewer-readable justification comment.
+`make pkg-maint` is the stable maintainer and reviewer command path for the handwritten `pkg/` maintainability lane. It runs `go run ./cmd/pkgmaintcheck -root .`, scans only owned `pkg/` Go source, excludes generated artifacts and `testdata` through the same repo-owned path rules as the backend size gate, and reports `file-lines`, `function-lines`, and `cyclomatic-complexity` violations with actual values and configured limits. The current thresholds are 1000 file lines, 100 function lines, and cyclomatic complexity 15. Use rule-scoped inline directives only when a later maintainability story needs a narrow exception tied to a concrete runtime, boundary, or generated-artifact constraint: `pkgmaintcheck:ignore-file-lines`, `pkgmaintcheck:ignore-function-lines`, or `pkgmaintcheck:ignore-cyclomatic-complexity`, each paired with a reviewer-readable justification comment and a matching accountable entry in `backend-exemption-budget.json`.
+
+Burn down an exemption by removing both the inline directive and its matching `backend-exemption-budget.json` entry in the same change, then run `make backend-size` and `make pkg-maint`. Removing only the directive leaves a stale entry and fails the applicable command; removing both lowers the checked baseline without requiring cleanup of unrelated exemptions. The exemption budget covers only these size and complexity directives. Root package-family and migration-shim policy remains exclusively owned by `make pkg-boundary`.
 
 `make lint` runs the UI Biome lint, the UI Knip dead-code baseline gate, `go vet ./...`, `make backend-size`, `make pkg-maint`, and the pinned Go deadcode analyzer. The frontend deadcode step writes a normalized current report to `bin/frontend-deadcode-current.json` and compares it with `docs/internal/development/frontend-deadcode-baseline.json`. The backend deadcode step writes a normalized current report to `bin/deadcode-current.txt` and compares it with `docs/internal/development/deadcode-baseline.txt`. Review any drift before updating either baseline.
 
@@ -157,7 +161,7 @@ The classifier is what decides whether the three downstream required test lanes 
 | `docs-only` | `docs/**` plus root-level docs or text files such as `README.md`, `*.md`, `*.mdx`, and `*.txt` | skip `UI Coverage`, skip `UI Browser Integration`, skip `Backend Verification` | No downstream lane rerun is expected; if the change was misclassified, rerun the classifier logic through `go run ./cmd/ciclassify ...` or use the full path with `make verify-pr`. |
 | `ui-only` | `ui/**` plus optional documentation companions under `docs/**` or root-level `*.md`, `*.mdx`, and `*.txt` files | run `UI Coverage`, run `UI Browser Integration`, skip `Backend Verification` | `make run-sharded-ui-coverage` and `make ui-integration-test` |
 | `backend-only` | `cmd/**`, `pkg/**`, or `tests/**` plus optional documentation companions under `docs/**` or root-level `*.md`, `*.mdx`, and `*.txt` files | skip `UI Coverage`, skip `UI Browser Integration`, run `Backend Verification` | `make test-backend-verification` |
-| `shared-risk` | mixed product areas or explicit shared surfaces such as `.github/workflows/**`, `api/**`, `pkg/api/**`, `pkg/apisurface/**`, `Makefile`, `go.mod`, or `go.sum` | run `UI Coverage`, run `UI Browser Integration`, run `Backend Verification` | `make verify-pr` |
+| `shared-risk` | mixed product areas or explicit shared surfaces such as `.github/workflows/**`, `api/**`, `pkg/transports/http/**`, `pkg/transports/mapping/**`, `Makefile`, `go.mod`, or `go.sum` | run `UI Coverage`, run `UI Browser Integration`, run `Backend Verification` | `make verify-pr` |
 
 The workflow publishes this routing decision twice in GitHub Actions: the `Classify PR Impact` job summary shows the overall classification, changed-file count, touched areas, and the full required rerun command, and each downstream lane summary shows its own `run` versus `skip` decision together with the specific local rerun command and the short reason emitted by `cmd/ciclassify`.
 
@@ -375,7 +379,13 @@ This uses the repository-supported Redocly CLI from the root `api/` workspace an
 make generate-api
 ```
 
-`make generate-api` rebundles `api/openapi.yaml`, then runs `go generate -tags=interfaces ./pkg/api`, which uses `api/codegen_config/server.yaml` and writes `pkg/api/generated/server.gen.go`. It also runs `go generate -tags=interfaces ./pkg/generatedclient`, which uses `api/codegen_config/client.yaml` and writes `pkg/generatedclient/client.gen.go`, and then runs the dashboard UI OpenAPI generator to refresh `ui/src/api/generated/openapi.ts`.
+`make generate-api` rebundles `api/openapi.yaml`, then runs the server and
+client directives from `pkg/transports/http/generate.go`. Those directives use
+`api/codegen_config/server.yaml` and `api/codegen_config/client.yaml` to write
+`pkg/transports/http/generated/server.gen.go` and
+`pkg/transports/http/client/client.gen.go`, respectively. The target then runs
+the dashboard UI OpenAPI generator to refresh
+`ui/src/api/generated/openapi.ts`.
 
 4. Prove regeneration is stable when the authored sources are unchanged:
 
@@ -383,23 +393,28 @@ make generate-api
 make api-smoke
 ```
 
-`make api-smoke` validates `api/openapi-main.yaml`, runs `make generate-api` twice from the split-source tree, verifies `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, `pkg/generatedclient/client.gen.go`, and `ui/src/api/generated/openapi.ts` are clean with `git diff --exit-code`, runs the focused bundled event-contract completeness guard from `pkg/api/openapi_contract_test.go`, and then runs the generated-contract live API smoke test across supported work, status, event, and generated-client current-factory surfaces without requiring live LLM provider credentials.
+`make api-smoke` validates `api/openapi-main.yaml`, runs `make generate-api` twice from the split-source tree, verifies `api/openapi.yaml`, `pkg/transports/http/generated/server.gen.go`, `pkg/transports/http/client/client.gen.go`, and `ui/src/api/generated/openapi.ts` are clean with `git diff --exit-code`, runs the focused bundled event-contract completeness guard from `pkg/transports/http/openapi_contract_test.go`, and then runs the generated-contract live API smoke test across supported work, status, event, and generated-client current-factory surfaces without requiring live LLM provider credentials.
 
 5. Run the focused API and package checks that cover the contract boundary:
 
 ```bash
-go test ./pkg/api -count=1
+go test ./pkg/transports/http -count=1
 make test
 make lint
 ```
 
-Review any generated diff together with the authored OpenAPI change. Do not hand-edit `api/openapi.yaml`, `pkg/api/generated/server.gen.go`, or `ui/src/api/generated/openapi.ts`; change `api/openapi-main.yaml` or a referenced fragment, then regenerate.
+Review any generated diff together with the authored OpenAPI change. Do not
+hand-edit `api/openapi.yaml`,
+`pkg/transports/http/generated/server.gen.go`,
+`pkg/transports/http/client/client.gen.go`, or
+`ui/src/api/generated/openapi.ts`; change `api/openapi-main.yaml` or a
+referenced fragment, then regenerate.
 
 ## Factory CLI Wire Composition
 
 `google/wire` is limited to `cmd/factory/compose/`. Production `you run` builds
 `*service.FactoryService` through the generated `InjectFactoryService` entry;
-`cmd/factory/main.go` may register that builder through `pkg/cli/run` before
+`cmd/factory/main.go` may register that builder through `pkg/transports/cli/run` before
 CLI execution. HTTP serving uses the same wired instance via
 `compose.ServeAPIServer`. See [cmd-factory-wire-composition.md](cmd-factory-wire-composition.md)
 and [factory-cli-wire-composition.md](factory-cli-wire-composition.md) for the full
@@ -420,7 +435,7 @@ go generate ./cmd/factory/compose/...
 
 ```bash
 go build ./cmd/factory/...
-go test ./cmd/factory/compose/... ./pkg/cli/run/... -count=1
+go test ./cmd/factory/compose/... ./pkg/transports/cli/run/... -count=1
 ```
 
 CI and `make verify-build-contracts` also run `make wire-smoke`, which
@@ -505,7 +520,7 @@ Cron behavior crosses service tick production, Petri-net guards, dispatcher iden
 Use these focused checks before the broader package gates when changing cron behavior:
 
 ```bash
-go test ./pkg/config ./pkg/timework ./pkg/service ./pkg/factory/scheduler ./pkg/factory/subsystems ./pkg/factory/projections -count=1
+go test ./pkg/config ./pkg/work/timework ./pkg/service ./pkg/factory/scheduler ./pkg/factory/subsystems ./pkg/factory/projections -count=1
 make cron-time-work-smoke CRON_TIME_WORK_SMOKE_COUNT=1
 make test-full GO_TEST_TIMEOUT=300s
 ```
@@ -553,7 +568,7 @@ behavior explicit inside the test that needs it.
 
 - Embedded dashboard builds are generated local artifacts. Rebuild `ui/dist/` with `make ui-build` or `make dashboard-verify` after dashboard source changes so Go picks up the refreshed embed registration.
 - Do not run `ui-build` in parallel with Go vet, build, or test commands; Vite rotates hashed files under `ui/dist/assets`.
-- Treat `factory.json` as a generated-schema boundary: normalize legacy key styles first, then decode through `pkg/api/generated.Factory` with unknown-field rejection enabled. Keep any compatibility exceptions explicit and narrow instead of falling back to permissive handwritten DTOs.
+- Treat `factory.json` as a generated-schema boundary: normalize legacy key styles first, then decode through `pkg/transports/http/generated.Factory` with unknown-field rejection enabled. Keep any compatibility exceptions explicit and narrow instead of falling back to permissive handwritten DTOs.
 - Apply that same generated-schema boundary to replay and event-carried factory config: when `RUN_REQUEST.payload.factory` is decoded back from JSON, route the nested factory payload through `config.GeneratedFactoryFromOpenAPIJSON(...)` instead of relying on permissive struct unmarshalling.
 - Browser-side PNG export should load the authored payload from `GET /factory-sessions/{session_id}/factory` and treat that canonical `Factory` response as the only source of truth for embedded sharing metadata. The detailed boundary and wrapper shape are documented in [Named Factory API Contract Data Model](named-factory-api-contract-data-model.md).
 - Browser-side sharing roundtrip coverage should exercise `writeFactoryExportPng(...)`, `readFactoryImportPng(...)`, and `useFactoryImportActivation(...)` together so tests prove the same canonical `Factory` reaches `POST /factories` without dashboard-only reshaping.
@@ -585,10 +600,10 @@ behavior explicit inside the test that needs it.
 - Inference-event consumers should treat `FactoryEvent.context.dispatchId` as the canonical dispatch identity. Generated inference payloads no longer restate `dispatchId` or `transitionId`, so projections should recover the transition from the matching dispatch request and only keep a narrow legacy-payload fallback for older recorded fixtures.
 - Compatibility dashboard projections should derive from `GetEngineStateSnapshot(...)` or canonical event world state instead of recombining primitive getters in handlers.
 - Runtime log policy is service-configured, but each live session should own its own runtime log sink and emitted records. Initialize file-backed structured logging through `pkg/service.BuildFactoryService(...)` and pass work identity through `workers.ExecutionMetadata`.
-- Runtime metrics CLI wiring should mirror the runtime-log pattern: add flags on `you run`, pass root/config through `pkg/cli/run.RunConfig` into `service.FactoryServiceConfig`, and expose the selected metrics path through startup diagnostics rather than teaching CLI packages about metrics file layout details.
+- Runtime metrics CLI wiring should mirror the runtime-log pattern: add flags on `you run`, pass root/config through `pkg/transports/cli/run.RunConfig` into `service.FactoryServiceConfig`, and expose the selected metrics path through startup diagnostics rather than teaching CLI packages about metrics file layout details.
 - Multi-session runtime ownership should follow `docs/architecture/session-runtime-ownership.md`: the service is the coordinator and router, while session runtime config, execution base, event history, and active runtime state belong to the addressed live session rather than mutable service-global config.
 - Worktree-backed tests must locate the repository root by searching upward for `go.mod` instead of assuming fixed `../../..` traversal from package directories. Nested `.claude/worktrees/...` layouts break hard-coded relative root calculations.
-- Keep behavior-oriented package tests on package-local or paired replay fixtures. Repository-root generated artifacts and dashboard fixture sweeps belong in release-surface smoke coverage instead of `pkg/api`, `pkg/config`, or `pkg/replay` behavior tests.
+- Keep behavior-oriented package tests on package-local or paired replay fixtures. Repository-root generated artifacts and dashboard fixture sweeps belong in release-surface smoke coverage instead of `pkg/transports/http`, `pkg/config`, or `pkg/replay` behavior tests.
 - Provider-error and lane-isolation smoke tests should use `pkg/testutil` harness helpers instead of open-coded fixture scaffolding and polling loops.
 - Shared Codex, Cursor-family, and Claude provider-failure fixtures live in `pkg/workers/testdata/provider_error_corpus.json`; extend that corpus and load it through `provider.LoadProviderErrorCorpus()` from `pkg/workers/provider` before adding new inline raw provider payloads to worker or functional tests.
 - Shared provider-error smoke scenarios should assert `CompletedDispatch.FailureMetadata` type and family from the corpus entry they use, so normalization and runtime routing stay aligned through the full worker-pool path instead of only through final token placement.

@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../../api/session-routing";
 import {
+  indexedDBErrorTestRequest,
+  indexedDBTestRequest,
+} from "../../../../testing/timeline-checkpoint-indexeddb-test-utils";
+import {
   readSessionPersistenceInvalidationRecords,
   resetSessionPersistenceInvalidationRecords,
 } from "../../../dashboard/public/session-persistence-diagnostics";
+import { createMaterializedWorkOutcomeState } from "../../../work-outcome/public/materializer";
 import { emptyReplayWorldState } from "../timeline/replayWorldStateSupport";
 import type { FactoryTimelineCheckpoint } from "../timeline/storeState";
 import {
@@ -19,6 +24,9 @@ interface StoredCheckpointEnvelope {
   checkpoint?: {
     afterEventId?: string;
     afterSequence?: number;
+    materializedWorkOutcomeState?: ReturnType<
+      typeof createMaterializedWorkOutcomeState
+    >;
     replayState?: ReturnType<typeof emptyReplayWorldState>;
     selectedTick: number;
   };
@@ -46,36 +54,60 @@ function createIndexedDBTestDouble(
     objectStoreNames: {
       contains: () => options.storeExists ?? true,
     },
-    transaction: () => ({
-      objectStore: () => ({
-        delete: (key: string) =>
-          indexedDBRequest(undefined, () => {
-            records.delete(key);
-          }),
-        get: (key: string) => indexedDBRequest(records.get(key)),
-        getAll: () => indexedDBRequest(Array.from(records.values())),
-        put: (value: StoredCheckpointEnvelope) =>
-          options.failPut
-            ? indexedDBErrorRequest<string>(new Error("put failed"))
-            : indexedDBRequest(value.storageKey ?? "", () => {
-                if (value.storageKey) {
-                  records.set(value.storageKey, value);
-                }
-              }),
-      }),
-    }),
+    transaction: () => {
+      const transaction = {
+        onabort: null,
+        oncomplete: null,
+        onerror: null,
+        objectStore: () => ({
+          delete: (key: string) =>
+            indexedDBTestRequest(
+              undefined,
+              () => {
+                records.delete(key);
+              },
+              () =>
+                (transaction.oncomplete as ((event: Event) => void) | null)?.(
+                  {} as Event,
+                ),
+            ),
+          get: (key: string) => indexedDBTestRequest(records.get(key)),
+          getAll: () => indexedDBTestRequest(Array.from(records.values())),
+          put: (value: StoredCheckpointEnvelope) =>
+            options.failPut
+              ? indexedDBErrorTestRequest<string>(new Error("put failed"), () =>
+                  (transaction.onabort as ((event: Event) => void) | null)?.(
+                    {} as Event,
+                  ),
+                )
+              : indexedDBTestRequest(
+                  value.storageKey ?? "",
+                  () => {
+                    if (value.storageKey) {
+                      records.set(value.storageKey, value);
+                    }
+                  },
+                  () =>
+                    (
+                      transaction.oncomplete as ((event: Event) => void) | null
+                    )?.({} as Event),
+                ),
+        }),
+      };
+      return transaction;
+    },
   };
 
   return {
     indexedDB: {
       open: () => {
         if (options.failOpen) {
-          return indexedDBErrorRequest<typeof database>(
+          return indexedDBErrorTestRequest<typeof database>(
             new Error("open failed"),
           );
         }
 
-        const request = indexedDBRequest(database);
+        const request = indexedDBTestRequest(database);
         queueMicrotask(() =>
           request.onupgradeneeded?.({} as IDBVersionChangeEvent),
         );
@@ -85,47 +117,6 @@ function createIndexedDBTestDouble(
     createObjectStore,
     records,
   };
-}
-
-function indexedDBRequest<T>(result: T, beforeSuccess?: () => void) {
-  const request = {
-    error: null,
-    onblocked: null,
-    onerror: null,
-    onsuccess: null,
-    onupgradeneeded: null,
-    result,
-  } as unknown as IDBRequest<T> & {
-    onblocked?: ((event: Event) => void) | null;
-    onupgradeneeded?: ((event: IDBVersionChangeEvent) => void) | null;
-  };
-
-  queueMicrotask(() => {
-    beforeSuccess?.();
-    request.onsuccess?.({} as Event);
-  });
-
-  return request;
-}
-
-function indexedDBErrorRequest<T>(error: Error) {
-  const request = {
-    error,
-    onblocked: null,
-    onerror: null,
-    onsuccess: null,
-    onupgradeneeded: null,
-    result: undefined,
-  } as unknown as IDBRequest<T> & {
-    onblocked?: ((event: Event) => void) | null;
-    onupgradeneeded?: ((event: IDBVersionChangeEvent) => void) | null;
-  };
-
-  queueMicrotask(() => {
-    request.onerror?.({} as Event);
-  });
-
-  return request;
 }
 
 function checkpointFixture(): FactoryTimelineCheckpoint {
@@ -138,13 +129,14 @@ function checkpointFixture(): FactoryTimelineCheckpoint {
   return {
     afterEventId: "event-7",
     afterSequence: 42,
+    materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
     replayState,
     selectedTick: 7,
     syncIdentity: {
-      backendScopeId: "backend-a",
+      backendScopeId: "backend-scope-a",
       factorySessionId: RESOLVED_SESSION_UUID,
-      logicalSessionKeyId: "logical-a",
-      streamGenerationId: "stream-a",
+      logicalSessionKeyId: "logical-default",
+      streamGenerationId: "2026-06-26T00:00:00Z",
     },
   };
 }
@@ -164,6 +156,7 @@ function checkpointStorageKey(
   return [
     identity.backendScopeID,
     identity.factorySessionID,
+    identity.logicalSessionKeyID,
     identity.streamGenerationID,
   ].join("::");
 }
@@ -189,16 +182,16 @@ describe("timeline checkpoint persistence", () => {
     );
     expect(restored?.replayState.textBlobsByID.long.length).toBeLessThan(600);
     expect(restored?.syncIdentity).toEqual({
-      backendScopeId: "backend-a",
+      backendScopeId: "backend-scope-a",
       factorySessionId: RESOLVED_SESSION_UUID,
-      logicalSessionKeyId: "logical-a",
-      streamGenerationId: "stream-a",
+      logicalSessionKeyId: "logical-default",
+      streamGenerationId: "2026-06-26T00:00:00Z",
     });
   });
 });
 
 describe("timeline checkpoint persistence diagnostics", () => {
-  it("records user-initiated checkpoint clears through session persistence diagnostics", async () => {
+  it("does not force user-initiated clears into the closed recovery outcome vocabulary", async () => {
     resetSessionPersistenceInvalidationRecords();
     const { indexedDB, records } = createIndexedDBTestDouble();
     const streamIdentity = streamIdentityFixture();
@@ -208,24 +201,14 @@ describe("timeline checkpoint persistence diagnostics", () => {
       checkpointFixture(),
       streamIdentity,
     );
+    resetSessionPersistenceInvalidationRecords();
     await clearTimelineCheckpoint(indexedDB, streamIdentity, {
       requestedSessionID: streamIdentity.factorySessionID,
       userInitiated: true,
     });
 
     expect(records.has(checkpointStorageKey(streamIdentity))).toBe(false);
-    expect(readSessionPersistenceInvalidationRecords()).toEqual([
-      {
-        reason: "user_cleared_sessions",
-        recoveryAction: "clear_checkpoint",
-        requestedSessionID: streamIdentity.factorySessionID,
-        scope: {
-          backendScopeID: streamIdentity.backendScopeID,
-          factorySessionID: streamIdentity.factorySessionID,
-          streamGenerationID: streamIdentity.streamGenerationID,
-        },
-      },
-    ]);
+    expect(readSessionPersistenceInvalidationRecords()).toEqual([]);
   });
 
   it("records identity mismatch diagnostics when stored checkpoint scope drifts", async () => {
@@ -236,7 +219,7 @@ describe("timeline checkpoint persistence diagnostics", () => {
 
     records.set(storageKey, {
       checkpoint: checkpointFixture(),
-      schemaVersion: 3,
+      schemaVersion: 4,
       storageKey,
       streamIdentity: {
         ...streamIdentity,
@@ -250,9 +233,9 @@ describe("timeline checkpoint persistence diagnostics", () => {
     expect(records.has(storageKey)).toBe(false);
     expect(readSessionPersistenceInvalidationRecords()).toEqual([
       expect.objectContaining({
-        reason: "stream_generation_changed",
-        recoveryAction: "clear_stream_derived_state",
-        requestedSessionID: streamIdentity.factorySessionID,
+        outcome: "identity_rejected",
+        recoveryAction: "discard_rejected_checkpoint",
+        detail: "stream_generation_mismatch",
       }),
     ]);
   });
@@ -408,21 +391,57 @@ describe("timeline checkpoint guard migration", () => {
   it.each([
     ["backend scope", { backendScopeID: "backend-scope-b" }],
     ["logical session key", { logicalSessionKeyID: "logical-other" }],
-    ["factory session id", { factorySessionID: "session-other" }],
+    [
+      "factory session id",
+      { factorySessionID: "b1b2c3d4-e5f6-4789-a012-3456789abcde" },
+    ],
     ["stream generation", { streamGenerationID: "2026-06-27T00:00:00Z" }],
   ] as const)("fails closed for a %s mismatch", async (_label, mismatch) => {
-    const { indexedDB } = createIndexedDBTestDouble();
+    resetSessionPersistenceInvalidationRecords();
+    const { indexedDB, records } = createIndexedDBTestDouble();
     const checkpoint = checkpointFixture();
-    const persistedIdentity = streamIdentityFixture();
+    const expectedIdentity = streamIdentityFixture();
+    const affectedStorageKey = checkpointStorageKey(expectedIdentity);
+    const unaffectedIdentity = {
+      backendScopeID: "backend-scope-unaffected",
+      factorySessionID: "c1b2c3d4-e5f6-4789-a012-3456789abcde",
+      logicalSessionKeyID: "logical-unaffected",
+      streamGenerationID: "2026-06-28T00:00:00Z",
+    } satisfies TimelineCheckpointStreamIdentity;
 
-    await persistTimelineCheckpoint(indexedDB, checkpoint, persistedIdentity);
+    records.set(affectedStorageKey, {
+      checkpoint,
+      schemaVersion: 4,
+      storageKey: affectedStorageKey,
+      streamIdentity: { ...expectedIdentity, ...mismatch },
+    });
+    await persistTimelineCheckpoint(
+      indexedDB,
+      {
+        ...checkpoint,
+        syncIdentity: {
+          backendScopeId: unaffectedIdentity.backendScopeID,
+          factorySessionId: unaffectedIdentity.factorySessionID,
+          logicalSessionKeyId: unaffectedIdentity.logicalSessionKeyID,
+          streamGenerationId: unaffectedIdentity.streamGenerationID,
+        },
+      },
+      unaffectedIdentity,
+    );
+    resetSessionPersistenceInvalidationRecords();
 
+    const restored = await readTimelineCheckpoint(indexedDB, expectedIdentity);
+
+    expect(restored).toBeNull();
+    expect(reconnectCursorFromCheckpoint(restored)).toBeUndefined();
+    expect(records.has(affectedStorageKey)).toBe(false);
     await expect(
-      readTimelineCheckpoint(indexedDB, {
-        ...persistedIdentity,
-        ...mismatch,
-      }),
-    ).resolves.toBe(null);
+      readTimelineCheckpoint(indexedDB, unaffectedIdentity),
+    ).resolves.toMatchObject({
+      afterEventId: checkpoint.afterEventId,
+      afterSequence: checkpoint.afterSequence,
+    });
+    expect(readSessionPersistenceInvalidationRecords()).toHaveLength(1);
   });
 });
 
@@ -431,6 +450,7 @@ describe("timeline checkpoint reconnect cursors", () => {
     expect(reconnectCursorFromCheckpoint(null)).toBeUndefined();
     expect(
       reconnectCursorFromCheckpoint({
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
         replayState: emptyReplayWorldState(1),
         selectedTick: 1,
       }),
@@ -443,6 +463,7 @@ describe("timeline checkpoint reconnect cursors", () => {
     expect(
       reconnectCursorFromCheckpoint({
         afterSequence: 9,
+        materializedWorkOutcomeState: createMaterializedWorkOutcomeState(),
         replayState: emptyReplayWorldState(9),
         selectedTick: 9,
       }),

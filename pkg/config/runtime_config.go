@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/config/factoryerrors"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -82,6 +83,33 @@ func LoadFromFactoryDir(factoryDir string, workstationLoader WorkstationLoader) 
 	if err != nil {
 		return nil, fmt.Errorf("materialize portable bundled files: %w", err)
 	}
+	loaded, err := loadFactoryConfigFromDisk(factoryDir, factoryCfg, workstationLoader)
+	if err != nil {
+		return nil, err
+	}
+	loaded.portableBundledReplacements = clonePortableBundledFileReplacements(replacements)
+	return loaded, nil
+}
+
+// ValidateFactoryDirReadOnly validates one concrete factory directory without
+// materializing, repairing, or normalizing files on disk.
+func ValidateFactoryDirReadOnly(factoryDir string, workstationLoader WorkstationLoader) error {
+	factoryCfg, err := loadFactoryConfig(factoryDir)
+	if err != nil {
+		return err
+	}
+	if err := validatePortableBundledFileWrites(factoryDir, factoryCfg); err != nil {
+		return fmt.Errorf("validate portable bundled files: %w", err)
+	}
+	_, err = loadFactoryConfigFromDisk(factoryDir, factoryCfg, workstationLoader)
+	return err
+}
+
+func loadFactoryConfigFromDisk(
+	factoryDir string,
+	factoryCfg *interfaces.FactoryConfig,
+	workstationLoader WorkstationLoader,
+) (*LoadedFactoryConfig, error) {
 	if err := ApplySupportedPortableBundledFiles(factoryDir, factoryCfg, false, false); err != nil {
 		return nil, fmt.Errorf("collect portable bundled files: %w", err)
 	}
@@ -101,7 +129,6 @@ func LoadFromFactoryDir(factoryDir string, workstationLoader WorkstationLoader) 
 	if err != nil {
 		return nil, err
 	}
-	loaded.portableBundledReplacements = clonePortableBundledFileReplacements(replacements)
 	return loaded, nil
 }
 
@@ -693,7 +720,7 @@ var ErrNamedFactoryAlreadyExists = errors.New("named factory already exists")
 
 // ErrInvalidNamedFactory reports that the submitted named-factory payload could
 // not be normalized into a runnable named-factory layout.
-var ErrInvalidNamedFactory = errors.New("invalid named factory")
+var ErrInvalidNamedFactory = factoryerrors.ErrInvalidNamedFactory
 
 // ValidateNamedFactoryName applies the canonical safe directory-segment rules
 // used by the named-factory on-disk layout.

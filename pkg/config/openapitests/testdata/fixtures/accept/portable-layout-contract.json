@@ -1,0 +1,20 @@
+{
+  "name": "layout-factory",
+  "layout": {
+    "schemaVersion": 1,
+    "nodes": [{"id": "workstation:review", "position": {"x": 420, "y": 180}, "size": {"width": 156, "height": 196}, "locked": false}],
+    "edges": [{"id": "workstation-output:workstation:review->work-state:task:done", "waypoints": [{"x": 540, "y": 220}], "labelPosition": {"x": 590, "y": 204}}],
+    "groups": [{"id": "review-lane", "label": "Review", "bounds": {"x": 360, "y": 120, "width": 520, "height": 360}, "nodeIds": ["workstation:review"], "parentGroupId": null, "color": "blue", "locked": false}],
+    "viewport": {"x": 0, "y": 0, "zoom": 1},
+    "preferences": {"direction": "RIGHT"}
+  },
+  "workTypes": [{"id": "task", "name": "task", "states": [{"id": "ready", "name": "ready", "type": "INITIAL"}, {"id": "done", "name": "done", "type": "TERMINAL"}]}],
+  "workers": [{"id": "writer", "name": "writer", "type": "MODEL_WORKER"}],
+  "workstations": [{
+    "id": "review",
+    "name": "review",
+    "worker": "writer",
+    "inputs": [{"workType": "task", "state": "ready"}],
+    "outputs": [{"workType": "task", "state": "done"}]
+  }]
+}

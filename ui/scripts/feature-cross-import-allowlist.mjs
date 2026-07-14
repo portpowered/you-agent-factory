@@ -55,10 +55,7 @@ export const allowlistedCrossFeatureBoundaryViolations = [
   {
     relativeFilePath:
       "src/features/bento/hooks/use-dashboard-bento-snapshot.ts",
-    importSpecifiers: [
-      "../../current-selection/hooks/core/useCurrentSelection",
-      "../../timeline/state/factoryTimelineStore",
-    ],
+    importSpecifiers: ["../../current-selection/hooks/core/useCurrentSelection"],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
   },
@@ -1350,12 +1347,6 @@ export const allowlistedCrossFeatureBoundaryViolations = [
     importSpecifiers: [
       "../../factory-graph-editor/lib/draft/factory-graph-draft-types",
     ],
-    reason:
-      "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
-  },
-  {
-    relativeFilePath: "src/features/work-outcome/hooks/useWorkOutcomeChart.ts",
-    importSpecifiers: ["../../timeline/state/factoryTimelineStore"],
     reason:
       "Legacy cross-feature internal import. Route reuse through the target feature public/ boundary or relocate shared behavior.",
   },

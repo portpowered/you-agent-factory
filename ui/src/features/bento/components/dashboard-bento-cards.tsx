@@ -344,6 +344,7 @@ function buildDuplicateCapableWidgetCard({
         widgetType: layoutItem.widgetType,
         children: (
           <WorkOutcomeWidget
+            chartState={workChartModel.chartState}
             headerAction={headerAction}
             locale={locale}
             model={workChartModel}

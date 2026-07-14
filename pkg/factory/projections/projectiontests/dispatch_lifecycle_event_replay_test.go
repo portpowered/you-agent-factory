@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestReconstructFactoryWorldState_JavaScriptDispatchLifecycleReconstructsQueueInterruptReconcileAndArtifact(t *testing.T) {
@@ -116,6 +116,162 @@ func TestReconstructFactoryWorldState_PetriDispatchRequestResponseRemainsReprese
 	}
 	if worldState.JavaScriptRuntime != nil {
 		t.Fatalf("javascript runtime = %#v, want nil for Petri replay", worldState.JavaScriptRuntime)
+	}
+}
+
+func TestReconstructFactoryWorldState_ContinueDispatchReplaysNextTurnContent(t *testing.T) {
+	t0 := time.Date(2026, 7, 12, 19, 0, 0, 0, time.UTC)
+	input := interfaces.FactoryWorkItem{
+		ID:          "work-1",
+		WorkTypeID:  "task",
+		DisplayName: "draft",
+		TraceID:     "trace-1",
+		PlaceID:     "task:init",
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "input-content",
+		}},
+	}
+	continued := interfaces.FactoryWorkItem{
+		ID:          "work-1",
+		WorkTypeID:  "task",
+		DisplayName: "draft",
+		TraceID:     "trace-1",
+		PlaceID:     "task:init",
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "next-turn-output",
+		}},
+	}
+	outputWork := []factoryapi.Work{generatedLineageWorkForProjectionTest(t, continued, "")}
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workInputEvent(1, t0.Add(time.Second), input),
+		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
+			DispatchID:   "dispatch-continue",
+			TransitionID: "t-review",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
+			Inputs: []interfaces.WorkstationInput{{
+				TokenID:  "work-1",
+				PlaceID:  "task:init",
+				WorkItem: &input,
+			}},
+		}),
+		generatedProjectionEvent(
+			factoryapi.FactoryEventTypeDispatchResponse,
+			"response/dispatch-continue",
+			2,
+			t0.Add(3*time.Second),
+			factoryapi.FactoryEventContext{
+				DispatchId: stringPtrForProjectionTest("dispatch-continue"),
+				TraceIds:   stringSlicePtrForProjectionTest([]string{"trace-1"}),
+				WorkIds:    stringSlicePtrForProjectionTest([]string{"work-1"}),
+			},
+			factoryapi.DispatchResponseEventPayload{
+				TransitionId: "t-review",
+				Outcome:      factoryapi.WorkOutcomeContinue,
+				OutputWork:   &outputWork,
+			},
+		),
+	}
+
+	worldState, err := ReconstructFactoryWorldState(events, 2)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	if len(worldState.CompletedDispatches) != 1 {
+		t.Fatalf("completed dispatches = %#v, want one continue dispatch", worldState.CompletedDispatches)
+	}
+	dispatch := worldState.CompletedDispatches[0]
+	if dispatch.Result.Outcome != string(interfaces.OutcomeContinue) {
+		t.Fatalf("dispatch outcome = %s, want CONTINUE", dispatch.Result.Outcome)
+	}
+	if len(dispatch.OutputWorkItems) != 1 {
+		t.Fatalf("output work items = %#v, want one continued work item", dispatch.OutputWorkItems)
+	}
+	if len(dispatch.OutputWorkItems[0].Content) != 1 || dispatch.OutputWorkItems[0].Content[0].Text != "next-turn-output" {
+		t.Fatalf("output work content = %#v, want next-turn-output", dispatch.OutputWorkItems[0].Content)
+	}
+	if dispatch.OutputWorkItems[0].Content[0].Text == "input-content" {
+		t.Fatalf("projection echoed submitted request content on continue")
+	}
+}
+
+func TestReconstructFactoryWorldState_FailedDispatchReplaysRequestContent(t *testing.T) {
+	t0 := time.Date(2026, 7, 12, 20, 0, 0, 0, time.UTC)
+	input := interfaces.FactoryWorkItem{
+		ID:          "work-1",
+		WorkTypeID:  "task",
+		DisplayName: "draft",
+		TraceID:     "trace-1",
+		PlaceID:     "task:init",
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "input-content",
+		}},
+	}
+	failed := interfaces.FactoryWorkItem{
+		ID:          "work-1",
+		WorkTypeID:  "task",
+		DisplayName: "draft",
+		TraceID:     "trace-1",
+		PlaceID:     "task:failed",
+		Content: []interfaces.WorkContentPart{{
+			Type: interfaces.WorkContentPartTypeText,
+			Text: "input-content",
+		}},
+	}
+	outputWork := []factoryapi.Work{generatedLineageWorkForProjectionTest(t, failed, "")}
+	events := []factoryapi.FactoryEvent{
+		initialStructureEvent(t0),
+		workInputEvent(1, t0.Add(time.Second), input),
+		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
+			DispatchID:   "dispatch-failed",
+			TransitionID: "t-execute",
+			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-execute", Name: "Execute"},
+			Inputs: []interfaces.WorkstationInput{{
+				TokenID:  "work-1",
+				PlaceID:  "task:init",
+				WorkItem: &input,
+			}},
+		}),
+		generatedProjectionEvent(
+			factoryapi.FactoryEventTypeDispatchResponse,
+			"response/dispatch-failed",
+			2,
+			t0.Add(3*time.Second),
+			factoryapi.FactoryEventContext{
+				DispatchId: stringPtrForProjectionTest("dispatch-failed"),
+				TraceIds:   stringSlicePtrForProjectionTest([]string{"trace-1"}),
+				WorkIds:    stringSlicePtrForProjectionTest([]string{"work-1"}),
+			},
+			factoryapi.DispatchResponseEventPayload{
+				TransitionId: "t-execute",
+				Outcome:      factoryapi.WorkOutcomeFailed,
+				OutputWork:   &outputWork,
+			},
+		),
+	}
+
+	worldState, err := ReconstructFactoryWorldState(events, 2)
+	if err != nil {
+		t.Fatalf("ReconstructFactoryWorldState: %v", err)
+	}
+	if len(worldState.FailedDispatches) != 1 {
+		t.Fatalf("failed dispatches = %#v, want one failed dispatch", worldState.FailedDispatches)
+	}
+	dispatch := worldState.FailedDispatches[0]
+	if dispatch.Result.Outcome != string(interfaces.OutcomeFailed) {
+		t.Fatalf("dispatch outcome = %s, want FAILED", dispatch.Result.Outcome)
+	}
+	if len(dispatch.OutputWorkItems) != 1 {
+		t.Fatalf("output work items = %#v, want one failed work item", dispatch.OutputWorkItems)
+	}
+	if len(dispatch.OutputWorkItems[0].Content) != 1 || dispatch.OutputWorkItems[0].Content[0].Text != "input-content" {
+		t.Fatalf("output work content = %#v, want preserved request content", dispatch.OutputWorkItems[0].Content)
+	}
+	if _, ok := worldState.FailedWorkItemsByID["work-1"]; !ok {
+		t.Fatalf("FailedWorkItemsByID = %#v, want work-1", worldState.FailedWorkItemsByID)
 	}
 }
 

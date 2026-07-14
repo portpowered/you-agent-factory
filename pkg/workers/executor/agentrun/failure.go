@@ -5,17 +5,17 @@ import (
 	"errors"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 const (
 	DiagnosticExecutionBehavior = "execution_behavior"
 	ExecutionBehaviorAgentRun   = "agent_run"
 
-	DiagnosticFailureClass = "failure_class"
+	DiagnosticFailureClass   = "failure_class"
 	DiagnosticRecoveryAction = "recovery_action"
 
 	FailureClassHarnessRuntime = "agent_run_harness_failure"

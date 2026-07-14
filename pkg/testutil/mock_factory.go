@@ -7,17 +7,19 @@ import (
 	"strings"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 type MockFactory struct {
@@ -35,6 +37,8 @@ type MockFactory struct {
 	FactoryEvents                     []factoryapi.FactoryEvent
 	FactoryEventStream                *interfaces.FactoryEventStream
 	FactoryEventStreamCtx             context.Context
+	ResponseEventStore                *responseeventstore.SessionResponseEventStore
+	ResponseEventSubscribeErr         error
 	EngineStateSnapshotCalls          int
 	CreatedFactories                  []factoryapi.Factory
 	SaveFactoryForSessionErr          error
@@ -594,9 +598,12 @@ func (m *MockFactory) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 	}
 	if m.FactoryEventStream != nil {
 		return &interfaces.FactoryEventStream{
-			StreamGenerationID: m.FactoryEventStream.StreamGenerationID,
-			History:            history,
-			Events:             m.FactoryEventStream.Events,
+			BackendScopeID:      m.FactoryEventStream.BackendScopeID,
+			LogicalSessionKeyID: m.FactoryEventStream.LogicalSessionKeyID,
+			FactorySessionID:    m.FactoryEventStream.FactorySessionID,
+			StreamGenerationID:  m.FactoryEventStream.StreamGenerationID,
+			History:             history,
+			Events:              m.FactoryEventStream.Events,
 		}, nil
 	}
 	ch := make(chan factoryapi.FactoryEvent)
@@ -857,84 +864,4 @@ func mockLiveLifecycleControl(
 		Status:    resultStatus,
 		Links:     factorysession.LiveLifecycleControlLinksForSession(sessionID),
 	}, nil
-}
-
-func (m *MockFactory) WaitToComplete() <-chan struct{} {
-	ch := make(chan struct{})
-	return ch
-}
-
-func (m *MockFactory) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
-	session, err := m.sessionFactory(sessionID)
-	if err != nil {
-		return interfaces.WorkRequestSubmitResult{}, err
-	}
-	return session.SubmitWorkRequest(ctx, request)
-}
-
-func (m *MockFactory) SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error) {
-	session, err := m.sessionFactory(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return session.SubscribeFactoryEvents(ctx, reconnect, interfaces.FactoryEventReconnectScope{SessionID: sessionID})
-}
-
-func (m *MockFactory) GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
-	session, err := m.sessionFactory(sessionID)
-	if err != nil {
-		return nil, err
-	}
-	return session.GetEngineStateSnapshot(ctx)
-}
-
-func (m *MockFactory) GetCurrentFactoryForSession(ctx context.Context, sessionID string) (factoryapi.Factory, error) {
-	session, err := m.sessionFactory(sessionID)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	return session.GetCurrentFactory(ctx)
-}
-
-func (m *MockFactory) InvokeFactorySession(_ context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
-	if m.InvokeFactoryErr != nil {
-		return apisurface.FactoryInvocationResult{}, m.InvokeFactoryErr
-	}
-	if _, err := m.sessionFactory(sessionID); err != nil {
-		return apisurface.FactoryInvocationResult{}, err
-	}
-	m.InvokedFactorySessionIDs = append(m.InvokedFactorySessionIDs, sessionID)
-	m.InvokedFactorySessions = append(m.InvokedFactorySessions, request)
-	return m.InvokeFactoryResult, nil
-}
-
-func (m *MockFactory) SaveCurrentFactoryForSession(
-	ctx context.Context,
-	sessionID string,
-	request factoryapi.Factory,
-) (factoryapi.Factory, error) {
-	return m.SaveFactoryForSession(ctx, sessionID, factoryapi.FactorySaveModeReplaceCurrent, request)
-}
-
-func (m *MockFactory) sessionFactory(sessionID string) (*MockFactory, error) {
-	if m == nil {
-		return nil, apisurface.ErrFactorySessionNotFound
-	}
-	if sessionID == "" || sessionID == "~default" {
-		if m.SessionFactories == nil {
-			return m, nil
-		}
-		if session, ok := m.SessionFactories["~default"]; ok && session != nil {
-			return session, nil
-		}
-		return m, nil
-	}
-	if m.SessionFactories == nil {
-		return nil, apisurface.ErrFactorySessionNotFound
-	}
-	session, ok := m.SessionFactories[sessionID]
-	if !ok || session == nil {
-		return nil, apisurface.ErrFactorySessionNotFound
-	}
-	return session, nil
 }

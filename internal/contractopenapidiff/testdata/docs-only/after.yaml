@@ -1,0 +1,60 @@
+openapi: 3.0.3
+info:
+  title: Docs Only Fixture
+  version: 1.0.0
+  description: After API description.
+tags:
+  - name: pets
+    description: Pet operations after.
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List pets after
+      description: Returns pets after.
+      tags:
+        - pets
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          description: Page size after.
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        description: Optional filter body after.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PetFilter'
+      responses:
+        '200':
+          description: Pet list after.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Pet'
+components:
+  schemas:
+    Pet:
+      title: Pet after
+      description: A pet after.
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          description: Pet identifier after.
+        name:
+          type: string
+          description: Pet name after.
+    PetFilter:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Filter by name after.

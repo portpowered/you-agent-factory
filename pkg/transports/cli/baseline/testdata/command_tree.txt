@@ -1,0 +1,49 @@
+you	you	
+you config	config	you
+you config init	init	you config
+you docs	docs [topic]	you
+you factory	factory	you
+you factory config	config	you factory
+you factory config expand	expand <factory.json>	you factory config
+you factory config flatten	flatten <factory-path>	you factory config
+you factory config validate	validate <factory-path>	you factory config
+you factory create	create <name>	you factory
+you factory delete	delete <name>	you factory
+you factory list	list	you factory
+you factory query	query	you factory
+you factory replace-current	replace-current	you factory
+you factory update	update <name>	you factory
+you init	init	you
+you mcp	mcp	you
+you mcp serve	serve	you mcp
+you models	models	you
+you models inspect	inspect <model-name>	you models
+you models invoke	invoke <model-name>	you models
+you models list	list	you models
+you models pull	pull <model-name>	you models
+you run	run	you
+you session	session	you
+you session create	create	you session
+you session delete	delete <session-id>	you session
+you session dispatches	dispatches [session-id]	you session
+you session list	list	you session
+you session pause	pause [session-id]	you session
+you session resume	resume [session-id]	you session
+you session show	show [session-id]	you session
+you submit	submit	you
+you submit batch	batch [path|-|<inline-json>]	you submit
+you work	work	you
+you work list	list	you work
+you work move	move <work-id> <state-name>	you work
+you work show	show <work-id>	you work
+you work visualize	visualize <batch-file.json>	you work
+you workflow	workflow	you
+you workflow artifacts	artifacts [session-id]	you workflow
+you workflow dispatches	dispatches [session-id]	you workflow
+you workflow events	events [session-id]	you workflow
+you workflow preview	preview	you workflow
+you workflow result	result [session-id]	you workflow
+you workflow run	run	you workflow
+you workflow start	start	you workflow
+you workflow status	status [session-id]	you workflow
+you workflow validate	validate	you workflow

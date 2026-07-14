@@ -1,0 +1,14 @@
+description: >-
+  The explicitly selected Factory Session does not exist. Response-event
+  streaming never falls back to the current or default session.
+content:
+  application/json:
+    schema:
+      $ref: '../schemas/api/ErrorResponse.yaml'
+    examples:
+      unknownSession:
+        summary: The explicit Factory Session identifier was not found.
+        value:
+          message: Factory Session was not found.
+          family: NOT_FOUND
+          code: RESPONSE_EVENT_SESSION_NOT_FOUND

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "agent-factory.response-event.v1",
+  "eventId": "evt-usage-001",
+  "sequence": 47,
+  "recordedAt": "2026-07-13T12:00:05Z",
+  "factorySessionId": "session-fixture-001",
+  "runId": "run-fixture-001",
+  "kind": "USAGE",
+  "phase": "UPDATED",
+  "provenance": {
+    "provider": "example-provider",
+    "nativeEventType": "usage.updated",
+    "delivery": "NATIVE_FINAL",
+    "representation": "NOTIFICATION",
+    "fidelity": "LOSSLESS"
+  },
+  "payload": {
+    "inputTokens": 1024,
+    "outputTokens": 256,
+    "totalTokens": 1280,
+    "model": "example-model-v1"
+  },
+  "dispatchId": "dispatch-001"
+}

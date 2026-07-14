@@ -12,6 +12,8 @@ import (
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	providerstructured "github.com/portpowered/infinite-you/pkg/workers/provider/structured"
+	"github.com/portpowered/infinite-you/pkg/workers/skippermissions"
 )
 
 func wrapLocalModelRunner(
@@ -50,6 +52,7 @@ func buildWorkerExecutor(
 	factoryRunnerID string,
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
+	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
@@ -75,6 +78,7 @@ func buildWorkerExecutor(
 			factoryRunnerID,
 			workflowContext,
 			logger,
+			invocationSkipPermissionsOverride,
 			providerOverride,
 			inferenceProgressPublisher,
 			providerCommandRunner,
@@ -108,6 +112,7 @@ func buildProviderBackedWorkerExecutor(
 	factoryRunnerID string,
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
+	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
@@ -120,6 +125,7 @@ func buildProviderBackedWorkerExecutor(
 	runner := providerBackedRunner(
 		def,
 		logger,
+		invocationSkipPermissionsOverride,
 		providerOverride,
 		inferenceProgressPublisher,
 		providerCommandRunner,
@@ -152,13 +158,14 @@ func buildProviderBackedWorkerExecutor(
 func providerBackedRunner(
 	def *interfaces.WorkerConfig,
 	logger logging.Logger,
+	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	now func() time.Time,
 ) workers.Runner {
-	runner := newProviderRunner(def, logger, providerOverride, inferenceProgressPublisher, providerCommandRunner)
+	runner := newProviderRunner(def, logger, invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher, providerCommandRunner)
 	if inferenceRecorder == nil {
 		return runner
 	}
@@ -168,6 +175,7 @@ func providerBackedRunner(
 func newProviderRunner(
 	def *interfaces.WorkerConfig,
 	logger logging.Logger,
+	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
@@ -178,6 +186,7 @@ func newProviderRunner(
 	return workerprovider.NewScriptWrapProvider(providerRunnerOptions(
 		def,
 		logger,
+		invocationSkipPermissionsOverride,
 		inferenceProgressPublisher,
 		providerCommandRunner,
 	)...)
@@ -186,15 +195,23 @@ func newProviderRunner(
 func providerRunnerOptions(
 	def *interfaces.WorkerConfig,
 	logger logging.Logger,
+	invocationSkipPermissionsOverride *bool,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
 	providerCommandRunner workers.CommandRunner,
 ) []workerprovider.ScriptWrapProviderOption {
 	opts := []workerprovider.ScriptWrapProviderOption{
-		workerprovider.WithSkipPermissions(def.SkipPermissions),
+		workerprovider.WithSkipPermissions(skippermissions.EffectiveSkipPermissions(
+			def.SkipPermissions,
+			def.Type,
+			invocationSkipPermissionsOverride,
+		)),
 		workerprovider.WithProviderLogger(logger),
 	}
 	if inferenceProgressPublisher != nil {
-		opts = append(opts, workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher))
+		opts = append(opts,
+			workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher),
+			workerprovider.WithResponseStreamExecutor(providerstructured.NewExecutor()),
+		)
 	}
 	if providerCommandRunner != nil {
 		opts = append(opts, workerprovider.WithProviderCommandRunner(providerCommandRunner))

@@ -6,19 +6,19 @@ import (
 	"strings"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
-	"go.uber.org/zap"
+	"github.com/portpowered/infinite-you/pkg/workers/skippermissions"
 )
 
 func (fs *Host) requireModelService() apisurface.ModelAPI {
@@ -89,21 +89,22 @@ func wireModelServiceCollaborator(fs *Host, cfg *Config) apisurface.ModelAPI {
 		return modelsservice.New(modelsservice.Dependencies{})
 	}
 	return modelsservice.New(modelsservice.Dependencies{
-		RuntimeConfig:    fs.currentRuntimeConfig,
-		ModelHost:        fs.modelHost,
-		ModelAssetPuller: fs.modelAssetPuller,
-		Logger:           func() *zap.Logger { return fs.logger },
-		Clock:            fs.modelServiceClock,
-		ModelPullMetrics: func() modelsservice.PullMetricsRecorder {
-			recorder := fs.modelPullMetricsRecorder()
-			if recorder == nil {
-				return nil
-			}
-			return modelPullMetricsHostAdapter{inner: recorder}
-		},
+		RuntimeConfig:           fs.currentRuntimeConfig,
+		ModelHost:               fs.modelHost(),
+		ModelAssetPuller:        fs.modelAssetPuller(),
+		Logger:                  fs.logger,
+		Clock:                   fs.modelServiceClock,
+		ModelPullMetrics:        modelPullMetricsRecorderForService(fs.modelPullMetricsRecorder()),
 		ModelInvocationExecutor: fs.modelInvocationExecutor,
-		FactoryRunnerID:         fs.factoryRunnerID,
+		FactoryRunnerID:         fs.factoryRunnerID(),
 	})
+}
+
+func modelPullMetricsRecorderForService(recorder ModelPullMetricsRecorder) modelsservice.PullMetricsRecorder {
+	if recorder == nil {
+		return nil
+	}
+	return modelPullMetricsHostAdapter{inner: recorder}
 }
 
 func (fs *Host) modelServiceClock() time.Time {
@@ -117,6 +118,31 @@ func (fs *Host) modelServiceClock() time.Time {
 // compatibility methods on Host.
 func (fs *Host) ModelService() apisurface.ModelAPI {
 	return fs.requireModelService()
+}
+
+// AttachModelServiceCollaborator assigns the explicitly composed model-domain collaborator.
+func AttachModelServiceCollaborator(shell HostShell, modelAPI apisurface.ModelAPI) *Host {
+	if shell.Host != nil {
+		shell.Host.modelService = modelAPI
+	}
+	return shell.Host
+}
+
+// CurrentModelRuntimeConfig returns the active runtime configuration used by
+// model catalog and invocation operations. The callback remains dynamic so a
+// factory switch is visible without reconstructing the model service.
+func (fs *Host) CurrentModelRuntimeConfig() *factoryconfig.LoadedFactoryConfig {
+	return fs.currentRuntimeConfig()
+}
+
+// BuildModelInvocationExecutor constructs the worker execution collaborator
+// used by one direct model invocation.
+func (fs *Host) BuildModelInvocationExecutor(
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	factoryCfg *interfaces.FactoryConfig,
+	workerName string,
+) (workers.WorkstationRequestExecutor, error) {
+	return fs.modelInvocationExecutor(runtimeCfg, factoryCfg, workerName)
 }
 
 func (fs *Host) modelHost() modelhost.Host {
@@ -139,6 +165,13 @@ func (fs *Host) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryC
 		return nil, fmt.Errorf("runtime config is required")
 	}
 	logger := logging.NewZapLogger(fs.logger, fs != nil && fs.coordinatorPolicy().verbose)
+	workerDef, ok := runtimeCfg.Worker(workerName)
+	if !ok || workerDef == nil {
+		return nil, fmt.Errorf("worker %q is not configured", workerName)
+	}
+	if err := skippermissions.ValidateInvocationSkipPermissionsForWorker(workerDef, fs.invocationSkipPermissionsOverride()); err != nil {
+		return nil, fmt.Errorf("worker %q: %w", workerName, err)
+	}
 	bundle := fs.currentRuntimeBundle()
 	var modelDomain localModelDomain
 	var workflowContext *factory_context.FactoryContext
@@ -160,6 +193,7 @@ func (fs *Host) modelInvocationExecutor(runtimeCfg *factoryconfig.LoadedFactoryC
 		fs.factoryRunnerID(),
 		workflowContext,
 		logger,
+		fs.invocationSkipPermissionsOverride(),
 		fs.providerOverride(),
 		nil,
 		fs.providerCommandRunnerOverride(),
@@ -204,4 +238,11 @@ func (fs *Host) commandRunnerOverride() workers.CommandRunner {
 		return nil
 	}
 	return fs.coordinatorPolicy().commandRunnerOverride
+}
+
+func (fs *Host) invocationSkipPermissionsOverride() *bool {
+	if fs == nil || fs.cfg == nil {
+		return nil
+	}
+	return fs.cfg.InvocationSkipPermissionsOverride
 }

@@ -9,32 +9,67 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recording"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recordingreplay"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 
 	"go.uber.org/zap"
 )
+
+func portableRecordingArtifacts(artifacts []factoryapi.FactoryArtifact, checkpoint *recording.CanonicalCheckpoint) []recording.CanonicalArtifact {
+	result := make([]recording.CanonicalArtifact, 0, len(artifacts))
+	artifactIndex := make(map[string]int, len(artifacts))
+	for _, artifact := range artifacts {
+		candidate := portableRecordingArtifact(artifact, checkpoint)
+		if index, exists := artifactIndex[candidate.ID]; exists {
+			result[index] = candidate
+			continue
+		}
+		artifactIndex[candidate.ID] = len(result)
+		result = append(result, candidate)
+	}
+	return result
+}
+
+func portableRecordingArtifact(artifact factoryapi.FactoryArtifact, checkpoint *recording.CanonicalCheckpoint) recording.CanonicalArtifact {
+	createdAt, secrets := time.Time{}, int64(0)
+	if artifact.CaptureMetadata != nil && artifact.CaptureMetadata.CapturedAt != nil {
+		createdAt = *artifact.CaptureMetadata.CapturedAt
+	}
+	if createdAt.IsZero() && checkpoint != nil && artifact.Id == checkpoint.ArtifactID {
+		createdAt = checkpoint.Timestamp
+	}
+	if artifact.RedactionCounts != nil && artifact.RedactionCounts.Secrets != nil {
+		secrets = int64(*artifact.RedactionCounts.Secrets)
+	}
+	return recording.CanonicalArtifact{
+		ID: artifact.Id, Kind: string(artifact.Kind), Visibility: string(artifact.Visibility), Label: stringPointerValue(artifact.Label),
+		ContentHash: stringPointerValue(artifact.ContentHash), SizeBytes: int64PointerValue(artifact.SizeBytes), CreatedAt: createdAt, SecretsRedacted: secrets,
+	}
+}
 
 // SimpleDashboardRenderInput carries the low-level engine snapshot that powers
 // runtime diagnostics together with the dedicated event-first render DTO used
@@ -97,9 +132,9 @@ type serviceRunState struct {
 // concerns: file watcher, dashboard, API server. It owns the full lifecycle
 // so that CLI and other entry points remain thin wrappers.
 //
-// Extracted domains are composed explicitly: pkg/factorysessions owns the live
-// session registry, pkg/localmodels owns managed model runtime wiring, and
-// pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
+// Extracted domains are composed explicitly: pkg/factory/sessions owns the live
+// session registry, pkg/models/local owns managed model runtime wiring, and
+// pkg/workers/hosted owns hosted poller supervision invoked from poller_watcher.
 type FactoryService struct {
 	runtimeMu        sync.RWMutex
 	activationMu     sync.RWMutex
@@ -125,7 +160,7 @@ type FactoryService struct {
 	modelAssets              modelAssetPuller
 	modelService             apisurface.ModelAPI
 	durableExecutionAPI      apisurface.DurableSessionAPI
-	sessionInvoker           invocations.SessionInvoker
+	sessionInvoker           sessioninvocation.SessionInvoker
 	coordinator              FactoryCoordinator
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
@@ -306,6 +341,10 @@ type FactoryServiceConfig struct {
 	// MockWorkersConfig is the normalized mock-worker run configuration loaded
 	// by the CLI when --with-mock-workers is enabled.
 	MockWorkersConfig *factoryconfig.MockWorkersConfig
+	// InvocationSkipPermissionsOverride, when non-nil, requests an
+	// invocation-scoped skip-permissions override for agent workers in this
+	// run. It does not mutate persisted factory worker configuration.
+	InvocationSkipPermissionsOverride *bool
 	// RecordFlushInterval controls how often dirty record-mode artifacts are
 	// flushed during execution. Empty uses replay.DefaultRecordFlushInterval.
 	RecordFlushInterval time.Duration
@@ -389,7 +428,7 @@ type FactoryServiceConfig struct {
 	// without running the full save orchestration pipeline.
 	FactorySave factorySaveSaver
 	// SessionGateway, when non-nil, replaces the default
-	// factorysessions/service gateway collaborator. Tests use this to assert
+	// factory/sessions/service gateway collaborator. Tests use this to assert
 	// OpenFactorySession delegates without running the full open pipeline.
 	SessionGateway sessionGateway
 	// ModelAPI, when non-nil, replaces the default pkg/models/service collaborator.
@@ -521,6 +560,9 @@ func (fs *FactoryService) replacementExecutionBaseDir(folderPath string, factory
 // It blocks until ctx is cancelled or the factory reaches a terminal state.
 // portos:func-length-exception owner=agent-factory reason=legacy-service-run-loop review=2026-07-18 removal=split-sidecar-startup-recording-and-engine-shutdown-before-next-service-run-change
 func (fs *FactoryService) Run(ctx context.Context) error {
+	if _, ok := fs.durableExecution.(*recordingreplay.Service); ok {
+		return ctx.Err()
+	}
 	runCtx, cancelRunSidecars := context.WithCancel(ctx)
 	var sidecars sync.WaitGroup
 	var currentRuntime *liveRuntimeHandle
@@ -552,6 +594,7 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 
 	err = fs.waitForActiveRuntime(ctx)
 	currentRuntime = fs.currentLiveRuntime()
+	recordingErr := fs.writeJavaScriptFactorySessionRecording(ctx, defaultFactorySessionID)
 	if stopErr := fs.stopLiveRuntime(currentRuntime); stopErr != nil && !errors.Is(stopErr, context.Canceled) && err == nil {
 		err = stopErr
 	}
@@ -565,11 +608,19 @@ func (fs *FactoryService) Run(ctx context.Context) error {
 	if fs.cfg.SimpleDashboardRenderer != nil {
 		fs.renderDashboard(ctx)
 	}
+	err = preferRunError(err, recordingErr)
 
 	if err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("factory run: %w", err)
 	}
 	return nil
+}
+
+func preferRunError(runErr, recordingErr error) error {
+	if runErr != nil {
+		return runErr
+	}
+	return recordingErr
 }
 
 func (fs *FactoryService) startRunRuntime(

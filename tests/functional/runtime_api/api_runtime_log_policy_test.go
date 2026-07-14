@@ -8,11 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -83,7 +83,8 @@ func TestFunctionalAPIServer_CanOptIntoRuntimeFileLogging(t *testing.T) {
 	if diagnostics.Path == "" {
 		t.Fatal("RuntimeLogDiagnostics().Path = empty, want runtime log path when file logging is enabled")
 	}
-	if filepath.Dir(filepath.Dir(filepath.Dir(diagnostics.Path))) != logDir {
+	rel, err := filepath.Rel(logDir, diagnostics.Path)
+	if err != nil || strings.HasPrefix(rel, "..") {
 		t.Fatalf("runtime log path = %q, want path under %q", diagnostics.Path, logDir)
 	}
 

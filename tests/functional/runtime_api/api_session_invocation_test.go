@@ -9,10 +9,10 @@ import (
 	"sync"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
@@ -41,8 +41,8 @@ func TestSessionInvocationAPI_ReturnsPrimaryResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("primaryResult[0] as text part: %v", err)
 	}
-	if part.Text != "invoke this" {
-		t.Fatalf("primaryResult text = %q, want %q", part.Text, "invoke this")
+	if part.Text != "primary result COMPLETE" {
+		t.Fatalf("primaryResult text = %q, want %q", part.Text, "primary result COMPLETE")
 	}
 
 	submitted := observedLogs.FilterMessage("factory session invocation submitted").All()

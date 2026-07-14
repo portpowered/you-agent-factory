@@ -1,0 +1,20 @@
+openapi: 3.0.3
+info:
+  title: Unsupported Parameter Style Fixture
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      parameters:
+        - name: tags
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        '200':
+          description: Pet list.

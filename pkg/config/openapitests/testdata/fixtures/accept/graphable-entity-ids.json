@@ -1,0 +1,22 @@
+{
+  "name": "stable-id-factory",
+  "workTypes": [
+    {
+      "id": "work-type-story",
+      "name": "story",
+      "states": [
+        {"id": "state-ready", "name": "ready", "type": "INITIAL"},
+        {"id": "state-done", "name": "done", "type": "TERMINAL"}
+      ]
+    }
+  ],
+  "resources": [{"id": "resource-agent-slot", "name": "agent-slot", "capacity": 2}],
+  "workers": [{"id": "worker-executor", "name": "executor", "type": "MODEL_WORKER"}],
+  "workstations": [{
+    "id": "workstation-execute-story",
+    "name": "execute-story",
+    "worker": "executor",
+    "inputs": [{"workType": "story", "state": "ready"}],
+    "outputs": [{"workType": "story", "state": "done"}]
+  }]
+}

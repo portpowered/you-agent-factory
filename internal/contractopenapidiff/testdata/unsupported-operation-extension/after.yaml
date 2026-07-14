@@ -1,0 +1,12 @@
+openapi: 3.0.3
+info:
+  title: Unsupported Operation Extension Fixture
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      x-internal: true
+      responses:
+        '200':
+          description: Pet list.

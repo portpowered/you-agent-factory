@@ -2,21 +2,14 @@
 package main
 
 import (
-	"context"
+	"os"
 
-	"github.com/portpowered/infinite-you/cmd/factory/compose"
-	"github.com/portpowered/infinite-you/pkg/cli"
-	"github.com/portpowered/infinite-you/pkg/cli/run"
-	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/root"
 )
 
-var executeCLI = cli.Execute
+var runProcess = root.Main
+var exitProcess = os.Exit
 
 func main() {
-	run.SetBuildFactoryService(buildCLIRunner)
-	executeCLI()
-}
-
-func buildCLIRunner(ctx context.Context, cfg *service.FactoryServiceConfig) (run.RuntimeRunner, error) {
-	return compose.InjectCLIRunner(ctx, cfg)
+	exitProcess(runProcess())
 }

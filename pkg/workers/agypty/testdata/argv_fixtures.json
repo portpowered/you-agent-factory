@@ -1,0 +1,49 @@
+{
+  "fixtures": [
+    {
+      "name": "headless_prompt_separate_element",
+      "spec": {
+        "executable": "/usr/local/bin/agy",
+        "subcommand": ["chat"],
+        "flags": ["--headless"],
+        "prompt": "explain foo"
+      },
+      "want_argv": ["/usr/local/bin/agy", "chat", "--headless", "explain foo"]
+    },
+    {
+      "name": "metacharacters_preserved_in_argv",
+      "spec": {
+        "executable": "/bin/agy",
+        "subcommand": [],
+        "flags": [],
+        "prompt": "run; rm -rf / | cat"
+      },
+      "want_argv": ["/bin/agy", "run; rm -rf / | cat"]
+    },
+    {
+      "name": "flags_without_prompt",
+      "spec": {
+        "executable": "C:\\Program Files\\Agy\\agy.exe",
+        "subcommand": ["version"],
+        "flags": ["--json"],
+        "prompt": ""
+      },
+      "want_argv": ["C:\\Program Files\\Agy\\agy.exe", "version", "--json"]
+    },
+    {
+      "name": "reject_sh_c_wrapper",
+      "argv": ["/bin/sh", "-c", "agy chat"],
+      "want_error": "shell wrapper"
+    },
+    {
+      "name": "reject_cmd_c_wrapper",
+      "argv": ["cmd.exe", "/C", "agy chat"],
+      "want_error": "shell wrapper"
+    },
+    {
+      "name": "reject_powershell_command_wrapper",
+      "argv": ["powershell", "-Command", "agy chat"],
+      "want_error": "shell wrapper"
+    }
+  ]
+}

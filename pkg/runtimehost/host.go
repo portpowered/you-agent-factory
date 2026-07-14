@@ -21,26 +21,27 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/apisurface"
-	"github.com/portpowered/infinite-you/pkg/apisurface/factorysession"
-	"github.com/portpowered/infinite-you/pkg/cli/dashboardrender"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/factorysessions"
-	"github.com/portpowered/infinite-you/pkg/hostedworkers"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/invocations"
-	"github.com/portpowered/infinite-you/pkg/localmodels"
 	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 
 	"go.uber.org/zap"
 )
@@ -107,9 +108,9 @@ type hostRunState struct {
 // concerns: file watcher, dashboard, API server. It owns the full lifecycle
 // so that CLI and other entry points remain thin wrappers.
 //
-// Extracted domains are composed explicitly: pkg/factorysessions owns the live
-// session registry, pkg/localmodels owns managed model runtime wiring, and
-// pkg/hostedworkers owns hosted poller supervision invoked from poller_watcher.
+// Extracted domains are composed explicitly: pkg/factory/sessions owns the live
+// session registry, pkg/models/local owns managed model runtime wiring, and
+// pkg/workers/hosted owns hosted poller supervision invoked from poller_watcher.
 // pkg/workers/service owns poller and cron supervision invoked from poller_watcher.
 type Host struct {
 	runtimeMu        sync.RWMutex
@@ -136,7 +137,7 @@ type Host struct {
 	modelAssets              modelAssetPuller
 	modelService             apisurface.ModelAPI
 	durableExecutionAPI      apisurface.DurableSessionAPI
-	sessionInvoker           invocations.SessionInvoker
+	sessionInvoker           sessioninvocation.SessionInvoker
 	coordinator              FactoryCoordinator
 	definitions              FactoryDefinitionService
 	newSessionResponseStream func() *factorysessions.SessionResponseStream
@@ -263,6 +264,10 @@ type Config struct {
 	// MockWorkersConfig is the normalized mock-worker run configuration loaded
 	// by the CLI when --with-mock-workers is enabled.
 	MockWorkersConfig *factoryconfig.MockWorkersConfig
+	// InvocationSkipPermissionsOverride, when non-nil, requests an
+	// invocation-scoped skip-permissions override for agent workers in this
+	// run. It does not mutate persisted factory worker configuration.
+	InvocationSkipPermissionsOverride *bool
 	// RecordFlushInterval controls how often dirty record-mode artifacts are
 	// flushed during execution. Empty uses replay.DefaultRecordFlushInterval.
 	RecordFlushInterval time.Duration
@@ -337,12 +342,16 @@ type Config struct {
 	// supported LOCAL model workers. Package tests use this to exercise the
 	// load/invoke/reuse path without a live embedded backend.
 	LocalModelRuntimeOverride localModelRuntime
+	// ModelHostOverride replaces the default catalog model host wired into
+	// runtime bundles. Tests use this to inject supervised hosts with fake
+	// process launchers for hermetic local-model bootstrap invoke coverage.
+	ModelHostOverride modelhost.Host
 	// FactorySave, when non-nil, replaces the default factorysave.Service
 	// collaborator. Tests use this to assert SaveFactoryForSession delegates
 	// without running the full save orchestration pipeline.
 	FactorySave FactorySaveSaver
 	// SessionGateway, when non-nil, replaces the default
-	// factorysessions/service gateway collaborator. Tests use this to assert
+	// factory/sessions/service gateway collaborator. Tests use this to assert
 	// OpenFactorySession delegates without running the full open pipeline.
 	SessionGateway SessionGateway
 	// ModelAPI, when non-nil, replaces the default pkg/models/service collaborator.

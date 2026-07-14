@@ -1,0 +1,18 @@
+openapi: 3.0.3
+info:
+  title: Unsupported Operation Callbacks Fixture
+  version: 1.0.0
+paths:
+  /pets:
+    post:
+      operationId: createPet
+      callbacks:
+        onData:
+          '{$request.body#/callbackUrl}':
+            post:
+              responses:
+                '200':
+                  description: Callback accepted.
+      responses:
+        '200':
+          description: Created.

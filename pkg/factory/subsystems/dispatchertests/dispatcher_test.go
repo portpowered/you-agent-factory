@@ -12,7 +12,7 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
-	"github.com/portpowered/infinite-you/pkg/petri"
+	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -641,24 +641,33 @@ func newSingleTransitionDispatchFixture() (*subsystems.DispatcherSubsystem, *int
 	return dispatcher, snapshot
 }
 
-// pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the full dispatch mutation contract together for transition-level assertions.
 func assertSingleTransitionDispatchResult(t *testing.T, result *interfaces.TickResult) {
 	t.Helper()
 	if result == nil {
 		t.Fatal("expected non-nil result")
 	}
-	if len(result.Mutations) != 1 {
-		t.Fatalf("expected 1 mutation, got %d", len(result.Mutations))
+	assertSingleTransitionMutation(t, result.Mutations)
+	assertSingleTransitionDispatchRecord(t, result.Dispatches)
+}
+
+func assertSingleTransitionMutation(t *testing.T, mutations []interfaces.MarkingMutation) {
+	t.Helper()
+	if len(mutations) != 1 {
+		t.Fatalf("expected 1 mutation, got %d", len(mutations))
 	}
-	mutation := result.Mutations[0]
+	mutation := mutations[0]
 	if mutation.Type != interfaces.MutationConsume || mutation.TokenID != "tok1" || mutation.FromPlace != "p-init" {
 		t.Fatalf("consume mutation = %#v, want tok1 from p-init", mutation)
 	}
-	if len(result.Dispatches) != 1 {
-		t.Fatalf("expected 1 dispatch record, got %d", len(result.Dispatches))
+}
+
+func assertSingleTransitionDispatchRecord(t *testing.T, records []interfaces.DispatchRecord) {
+	t.Helper()
+	if len(records) != 1 {
+		t.Fatalf("expected 1 dispatch record, got %d", len(records))
 	}
 
-	record := result.Dispatches[0]
+	record := records[0]
 	dispatch := record.Dispatch
 	input := firstInputToken(dispatch.InputTokens)
 	if dispatch.DispatchID == "" || dispatch.TransitionID != "t1" || len(dispatch.InputTokens) != 1 || input.ID != "tok1" {
@@ -676,8 +685,13 @@ func assertSingleTransitionDispatchResult(t *testing.T, result *interfaces.TickR
 	if strings.Join(dispatch.Execution.WorkIDs, ",") != "w1" || dispatch.Execution.ReplayKey != "t1/trace-1/w1" {
 		t.Fatalf("dispatch execution IDs = %#v, want work ID w1 and stable replay key", dispatch.Execution)
 	}
-	if len(record.Mutations) != 1 || record.Mutations[0].Type != interfaces.MutationConsume || record.Mutations[0].TokenID != "tok1" {
-		t.Fatalf("dispatch record mutations = %#v, want paired consume for tok1", record.Mutations)
+	assertSingleTransitionRecordMutation(t, record.Mutations)
+}
+
+func assertSingleTransitionRecordMutation(t *testing.T, mutations []interfaces.MarkingMutation) {
+	t.Helper()
+	if len(mutations) != 1 || mutations[0].Type != interfaces.MutationConsume || mutations[0].TokenID != "tok1" {
+		t.Fatalf("dispatch record mutations = %#v, want paired consume for tok1", mutations)
 	}
 }
 

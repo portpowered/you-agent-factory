@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/modelhost"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 )
 
 type staticInferencer struct {
@@ -352,7 +352,7 @@ func TestEvaluateAgentRunOutcome_StopTokenAndContinueSemantics(t *testing.T) {
 	if got := evaluateAgentRunOutcome("still working <CONTINUE>", worker); got != interfaces.OutcomeContinue {
 		t.Fatalf("continue outcome = %s, want CONTINUE", got)
 	}
-	if got := evaluateAgentRunOutcome("needs revision", worker); got != interfaces.OutcomeRejected {
+	if got := evaluateAgentRunOutcome("review cannot proceed <REJECTED>", worker); got != interfaces.OutcomeRejected {
 		t.Fatalf("rejected outcome = %s, want REJECTED", got)
 	}
 	if got := evaluateAgentRunOutcome("plain output", nil); got != interfaces.OutcomeAccepted {
@@ -362,10 +362,10 @@ func TestEvaluateAgentRunOutcome_StopTokenAndContinueSemantics(t *testing.T) {
 
 type spyLogger struct{}
 
-func (spyLogger) Debug(string, ...any) {}
-func (spyLogger) Info(string, ...any)  {}
-func (spyLogger) Warn(string, ...any)  {}
-func (spyLogger) Error(string, ...any) {}
+func (spyLogger) Debug(string, ...any)   {}
+func (spyLogger) Info(string, ...any)    {}
+func (spyLogger) Warn(string, ...any)    {}
+func (spyLogger) Error(string, ...any)   {}
 func (spyLogger) Verbose(string, ...any) {}
 
 func TestWithAgentRunLogger_ConfiguresExecutor(t *testing.T) {

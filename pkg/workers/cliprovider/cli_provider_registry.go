@@ -27,6 +27,7 @@ const (
 	CLIProviderIdentityOpenCode CLIProviderIdentity = "opencode"
 	CLIProviderIdentityGemini   CLIProviderIdentity = "gemini"
 	CLIProviderIdentityKiro     CLIProviderIdentity = "kiro"
+	CLIProviderIdentityPi       CLIProviderIdentity = "pi"
 )
 
 // CLIProviderRegistration describes one supported agent CLI provider in the
@@ -75,6 +76,11 @@ var registeredCLIProviders = []CLIProviderRegistration{
 		Identity:       CLIProviderIdentityKiro,
 		Command:        string(interfaces.ModelProviderKiro),
 		PreferenceRank: 60,
+	},
+	{
+		Identity:       CLIProviderIdentityPi,
+		Command:        string(interfaces.ModelProviderPi),
+		PreferenceRank: 65,
 	},
 }
 

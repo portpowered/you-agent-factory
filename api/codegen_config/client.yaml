@@ -1,5 +1,5 @@
 package: generatedclient
-output: client.gen.go
+output: client/client.gen.go
 generate:
   models: true
   client: true
@@ -8,4 +8,5 @@ output-options:
     - getEditableCurrentFactoryDefinition
     - getCurrentFactory
     - saveEditableCurrentFactoryDefinition
+    - getFactoryResponseEventsBySessionId
   response-type-suffix: ClientResponse

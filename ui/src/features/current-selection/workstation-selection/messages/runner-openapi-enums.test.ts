@@ -14,6 +14,7 @@ describe("runner OpenAPI enum localization", () => {
       "kiro",
       "cursor-cli",
       "opencode",
+      "pi",
     ]);
   });
 
@@ -33,6 +34,8 @@ describe("runner OpenAPI enum localization", () => {
   it("validates built-in RunnerID membership", () => {
     expect(isOpenApiRunnerID("cursor-cli")).toBe(true);
     expect(isOpenApiRunnerID(" CURSOR-CLI ")).toBe(true);
+    expect(isOpenApiRunnerID("pi")).toBe(true);
+    expect(isOpenApiRunnerID(" PI ")).toBe(true);
     expect(isOpenApiRunnerID("claude")).toBe(false);
   });
 

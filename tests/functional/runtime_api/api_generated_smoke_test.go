@@ -9,16 +9,15 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	submitcli "github.com/portpowered/infinite-you/pkg/cli/submit"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
+	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -328,43 +327,18 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubm
 	work := waitForGeneratedWorkComplete(t, server.URL(), traceID, 10*time.Second)
 	item := requireGeneratedWorkByTrace(t, work, traceID)
 	content := item.Content
-	if content == nil || len(*content) != 2 {
-		t.Fatalf("GET /work content = %#v, want ordered text and image content parts", content)
+	if content == nil || len(*content) != 1 {
+		t.Fatalf("GET /work content = %#v, want one accepted response content part", content)
 	}
 	textPart, err := (*content)[0].AsWorkTextContentPart()
 	if err != nil {
 		t.Fatalf("decode projected text content: %v", err)
 	}
-	imagePart, err := (*content)[1].AsWorkImageContentPart()
-	if err != nil {
-		t.Fatalf("decode projected image content: %v", err)
+	if textPart.Text != "Done. COMPLETE" {
+		t.Fatalf("projected text part = %#v, want worker response content", textPart)
 	}
-	if textPart.Text != "Review this screenshot." {
-		t.Fatalf("projected text part = %#v, want authored text", textPart)
-	}
-	if stringPointerValue(imagePart.ContentType) != "image/png" {
-		t.Fatalf("projected image part = %#v, want staged image reference and media type", imagePart)
-	}
-	imagePath := string(imagePart.Url)
-	if imagePart.File != nil && string(*imagePart.File) != "" {
-		imagePath = string(*imagePart.File)
-	} else if strings.HasPrefix(imagePath, "file://") {
-		parsed, parseErr := url.Parse(imagePath)
-		if parseErr != nil {
-			t.Fatalf("parse staged image URL: %v", parseErr)
-		}
-		imagePath = parsed.Path
-		if runtime.GOOS == "windows" && len(imagePath) >= 3 && imagePath[0] == '/' && imagePath[2] == ':' {
-			imagePath = imagePath[1:]
-		}
-		imagePath = filepath.FromSlash(imagePath)
-	}
-	imageContent, err := os.ReadFile(imagePath)
-	if err != nil {
-		t.Fatalf("read staged image content: %v", err)
-	}
-	if string(imageContent) != "png-bytes" {
-		t.Fatalf("staged image content = %q, want png-bytes", imageContent)
+	if textPart.Text == "Review this screenshot." {
+		t.Fatalf("terminal work echoed submitted request text instead of response content")
 	}
 }
 

@@ -2,17 +2,20 @@ package provider
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
-	"hash"
-	"path/filepath"
-	"strconv"
+	"errors"
 	"strings"
+	"time"
 
+	factoryresponseevents "github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaceresponseevents "github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
-	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
+	agyadapter "github.com/portpowered/infinite-you/pkg/workers/provider/agy"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
+	codexprogress "github.com/portpowered/infinite-you/pkg/workers/provider/codex/progress"
+	cursorprogress "github.com/portpowered/infinite-you/pkg/workers/provider/cursor/progress"
 )
 
 const (
@@ -30,23 +33,24 @@ const (
 )
 
 const (
-	codexRetainedTextBytes      = 4096
-	codexRetainedProgressBytes  = 1024
-	codexMetadataRunnerIDKey    = "runner_id"
-	codexMetadataWorkIDKey      = "work_id"
-	codexMetadataWorkstationKey = "workstation_name"
-	codexMetadataTextBytesKey   = "text_bytes"
-	codexMetadataTruncatedKey   = "payload_truncated"
-	codexMetadataRawBytesKey    = "raw_bytes"
-	codexMetadataRawSHA256Key   = "raw_sha256"
-	codexMetadataDiagnosticKey  = "diagnostic_class"
+	codexRetainedTextBytes      = codexprogress.ProgressRetainedTextBytes
+	codexRetainedProgressBytes  = codexprogress.ProgressRetainedProgressBytes
+	codexMetadataRunnerIDKey    = codexprogress.ProgressMetadataRunnerIDKey
+	codexMetadataWorkIDKey      = codexprogress.ProgressMetadataWorkIDKey
+	codexMetadataWorkstationKey = codexprogress.ProgressMetadataWorkstationKey
+	codexMetadataTextBytesKey   = codexprogress.ProgressMetadataTextBytesKey
+	codexMetadataTruncatedKey   = codexprogress.ProgressMetadataTruncatedKey
+	codexMetadataRawBytesKey    = codexprogress.ProgressMetadataRawBytesKey
+	codexMetadataRawSHA256Key   = codexprogress.ProgressMetadataRawSHA256Key
+	codexMetadataDiagnosticKey  = codexprogress.ProgressMetadataDiagnosticKey
+	codexDiagnosticUnknownEvent  = codexprogress.ProgressDiagnosticUnknownEvent
+	codexDiagnosticMalformedJSON = codexprogress.ProgressDiagnosticMalformedJSON
+	codexDiagnosticIncompleteSSE = codexprogress.ProgressDiagnosticIncompleteSSE
 )
 
-const (
-	codexDiagnosticUnknownEvent  = "unknown_event"
-	codexDiagnosticMalformedJSON = "malformed_json"
-	codexDiagnosticIncompleteSSE = "incomplete_event_stream"
-)
+func isCodexCommand(command string) bool {
+	return codexprogress.IsCommand(command)
+}
 
 // InferenceProgressFragment is the provider-boundary shape for transient internal
 // session progress that must not enter canonical factory event history.
@@ -58,6 +62,19 @@ type InferenceProgressFragment struct {
 	ProviderSessionRef *interfaces.ProviderSessionMetadata
 	ExternalEventType  string
 	Metadata           map[string]string
+	CanonicalDraft     any
+	// CanonicalEventAlreadyPublished keeps a compatibility terminal marker
+	// from projecting a second canonical failure after a native terminal draft.
+	CanonicalEventAlreadyPublished bool
+}
+
+// CanonicalDraftFragment carries one provider-native canonical response draft
+// to the session-owned publisher without flattening it into a legacy fragment.
+func CanonicalDraftFragment(dispatchID string, draft any) InferenceProgressFragment {
+	return InferenceProgressFragment{
+		DispatchID:     strings.TrimSpace(dispatchID),
+		CanonicalDraft: draft,
+	}
 }
 
 // InferenceProgressPublisher receives provider progress fragments for one live
@@ -105,12 +122,25 @@ func FailedFragment(dispatchID string, providerSession *interfaces.ProviderSessi
 	}
 }
 
+// StructuredResponseEvent carries one provider-neutral draft to the
+// session-owned response-event publisher without converting it to a legacy
+// response or progress fragment.
+func StructuredResponseEvent(draft factoryresponseevents.Draft) InferenceProgressFragment {
+	cloned := draft
+	cloned.Payload = append(json.RawMessage(nil), draft.Payload...)
+	return CanonicalDraftFragment(draft.DispatchID, cloned)
+}
+
 // InferenceProgressPublishingCommandRunner publishes internal response-stream
 // fragments while provider subprocess stdout/stderr grow.
 type InferenceProgressPublishingCommandRunner struct {
 	Publisher InferenceProgressPublisher
 	Logger    logging.Logger
 }
+
+// SupportsResponseStreaming reports that the runner observes subprocess output
+// incrementally and can therefore consume native streaming protocols.
+func (InferenceProgressPublishingCommandRunner) SupportsResponseStreaming() bool { return true }
 
 // Run executes the provider subprocess and publishes incremental stdout/stderr
 // fragments into the configured internal session response stream.
@@ -119,27 +149,12 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 		return workerprocess.ExecCommandRunner{}.Run(ctx, req)
 	}
 	dispatchID := strings.TrimSpace(req.DispatchID)
-	var cursorStream *cursorpkg.StreamParser
-	if strings.TrimSpace(req.Command) == string(interfaces.ModelProviderCursor) {
-		cursorStream = cursorpkg.NewStreamParser(req.Command, func(fragment cursorpkg.StreamFragment) {
-			switch fragment.Kind {
-			case cursorpkg.StreamFragmentKindResponse:
-				r.Publisher(ResponseFragment(dispatchID, fragment.ProviderSession, fragment.Payload))
-			case cursorpkg.StreamFragmentKindProgress:
-				r.Publisher(ProgressFragment(dispatchID, fragment.ProviderSession, fragment.Payload))
-			}
-		})
-	}
-	normalizer := newCommandOutputNormalizer(req, r.Publisher)
+	progressStream := newProgressStreamObserver(req, r.Publisher, r.Logger)
 	observer := func(stream string, chunk []byte) {
 		if len(chunk) == 0 {
 			return
 		}
-		if cursorStream != nil && stream == workerprocess.OutputStreamStdout {
-			cursorStream.Consume(chunk)
-			return
-		}
-		if normalizer != nil && normalizer.Observe(stream, chunk) {
+		if progressStream != nil && progressStream.observe(ctx, stream, chunk) {
 			return
 		}
 		payload := string(chunk)
@@ -154,410 +169,10 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 		Observer: observer,
 		Logger:   logging.EnsureLogger(r.Logger),
 	}.Run(ctx, req)
-	if cursorStream != nil {
-		cursorStream.Flush()
-	}
-	if normalizer != nil {
-		normalizer.Flush()
+	if progressStream != nil {
+		progressStream.flush(ctx, result, err)
 	}
 	return result, err
-}
-
-type commandOutputNormalizer interface {
-	Observe(stream string, chunk []byte) bool
-	Flush()
-}
-
-func newCommandOutputNormalizer(req CommandRequest, publisher InferenceProgressPublisher) commandOutputNormalizer {
-	if !isCodexCommand(req.Command) {
-		return nil
-	}
-	return &codexCommandOutputNormalizer{
-		req:       interfaces.CloneSubprocessExecutionRequest(req),
-		publisher: publisher,
-		hasher:    sha256.New(),
-	}
-}
-
-type codexCommandOutputNormalizer struct {
-	req       CommandRequest
-	publisher InferenceProgressPublisher
-
-	stdoutBuffer string
-	stderrBuffer string
-
-	pendingSSEEvent string
-	pendingSSEData  []string
-	providerSession *interfaces.ProviderSessionMetadata
-	hasher          hash.Hash
-}
-
-func (n *codexCommandOutputNormalizer) Observe(stream string, chunk []byte) bool {
-	switch stream {
-	case workerprocess.OutputStreamStdout:
-		n.stdoutBuffer += string(chunk)
-		n.drainLines(&n.stdoutBuffer, n.handleStdoutLine)
-	case workerprocess.OutputStreamStderr:
-		n.stderrBuffer += string(chunk)
-		n.drainLines(&n.stderrBuffer, n.handleStderrLine)
-	default:
-		return false
-	}
-	return true
-}
-
-func (n *codexCommandOutputNormalizer) Flush() {
-	if trimmed := strings.TrimSpace(n.stdoutBuffer); trimmed != "" {
-		n.handleStdoutLine(trimmed)
-	}
-	if trimmed := strings.TrimSpace(n.stderrBuffer); trimmed != "" {
-		n.handleStderrLine(trimmed)
-	}
-	n.flushPendingSSEEvent()
-}
-
-func (n *codexCommandOutputNormalizer) drainLines(buffer *string, handle func(string)) {
-	for {
-		index := strings.IndexByte(*buffer, '\n')
-		if index < 0 {
-			return
-		}
-		line := strings.TrimRight((*buffer)[:index], "\r")
-		*buffer = (*buffer)[index+1:]
-		handle(line)
-	}
-}
-
-func (n *codexCommandOutputNormalizer) handleStdoutLine(line string) {
-	trimmed := strings.TrimSpace(line)
-	if trimmed == "" {
-		n.flushPendingSSEEvent()
-		return
-	}
-	if strings.HasPrefix(trimmed, "event:") {
-		n.flushPendingSSEEvent()
-		n.pendingSSEEvent = strings.TrimSpace(strings.TrimPrefix(trimmed, "event:"))
-		return
-	}
-	if strings.HasPrefix(trimmed, "data:") {
-		n.pendingSSEData = append(n.pendingSSEData, strings.TrimSpace(strings.TrimPrefix(trimmed, "data:")))
-		return
-	}
-	n.flushPendingSSEEvent()
-	if n.publishStructuredCodexEvent(trimmed, "") {
-		return
-	}
-	n.publishResponseEvent(NormalizedEventTypeTextDelta, "", trimmed, nil)
-}
-
-func (n *codexCommandOutputNormalizer) handleStderrLine(line string) {
-	trimmed := strings.TrimSpace(line)
-	if trimmed == "" {
-		return
-	}
-	if n.publishStructuredCodexEvent(trimmed, "") {
-		return
-	}
-	n.publishProgressEvent(NormalizedEventTypeProgress, "", trimmed, nil)
-}
-
-func (n *codexCommandOutputNormalizer) publishStructuredCodexEvent(raw string, fallbackEventType string) bool {
-	normalized, status := normalizeCodexStructuredEvent(raw, fallbackEventType, n.hasher)
-	if status == codexStructuredEventStatusNotStructured {
-		return false
-	}
-	if normalized.ProviderSessionRef != nil {
-		n.providerSession = interfaces.CloneProviderSessionMetadata(normalized.ProviderSessionRef)
-	}
-	if normalized.ProviderSessionRef == nil {
-		normalized.ProviderSessionRef = interfaces.CloneProviderSessionMetadata(n.providerSession)
-	}
-	normalized.DispatchID = strings.TrimSpace(n.req.DispatchID)
-	normalized.Metadata = mergeStringMaps(baseFragmentMetadata(n.req), normalized.Metadata)
-	n.publisher(normalized)
-	return true
-}
-
-func (n *codexCommandOutputNormalizer) flushPendingSSEEvent() {
-	if n.pendingSSEEvent == "" && len(n.pendingSSEData) == 0 {
-		return
-	}
-	raw := strings.Join(n.pendingSSEData, "\n")
-	n.publishStructuredCodexEvent(raw, strings.TrimSpace(n.pendingSSEEvent))
-	n.pendingSSEEvent = ""
-	n.pendingSSEData = nil
-}
-
-type codexStructuredEventStatus string
-
-const (
-	codexStructuredEventStatusNotStructured codexStructuredEventStatus = "NOT_STRUCTURED"
-	codexStructuredEventStatusNormalized    codexStructuredEventStatus = "NORMALIZED"
-	codexStructuredEventStatusMalformed     codexStructuredEventStatus = "MALFORMED"
-)
-
-func normalizeCodexStructuredEvent(raw string, fallbackEventType string, hasher hash.Hash) (InferenceProgressFragment, codexStructuredEventStatus) {
-	trimmedRaw := strings.TrimSpace(raw)
-	trimmedFallback := strings.TrimSpace(fallbackEventType)
-	if trimmedRaw == "" && trimmedFallback == "" {
-		return InferenceProgressFragment{}, codexStructuredEventStatusNotStructured
-	}
-	if !looksLikeStructuredCodexPayload(trimmedRaw, trimmedFallback) {
-		return InferenceProgressFragment{}, codexStructuredEventStatusNotStructured
-	}
-	var payload map[string]any
-	if trimmedRaw == "" {
-		return malformedCodexStructuredEvent(trimmedRaw, trimmedFallback, codexDiagnosticIncompleteSSE, hasher), codexStructuredEventStatusMalformed
-	}
-	if err := json.Unmarshal([]byte(trimmedRaw), &payload); err != nil {
-		return malformedCodexStructuredEvent(trimmedRaw, trimmedFallback, codexDiagnosticMalformedJSON, hasher), codexStructuredEventStatusMalformed
-	}
-	externalEventType := firstNonEmptyString(
-		stringValue(payload["event"]),
-		stringValue(payload["type"]),
-		trimmedFallback,
-	)
-	normalizedType, kind := classifyCodexStructuredEvent(externalEventType)
-	fragment := InferenceProgressFragment{
-		Kind:               kind,
-		Type:               normalizedType,
-		ExternalEventType:  externalEventType,
-		ProviderSessionRef: providerSessionFromStructuredCodexEvent(payload),
-		Metadata:           codexStructuredEventMetadata(payload),
-	}
-	switch normalizedType {
-	case NormalizedEventTypeStarted:
-		original := firstNonEmptyString(
-			stringValue(payload["message"]),
-			externalEventType,
-		)
-		fragment.Payload = boundedCodexPayload(original, codexRetainedProgressBytes)
-		fragment.Metadata = annotateBoundedPayloadMetadata(fragment.Metadata, original, fragment.Payload)
-	case NormalizedEventTypeProgress:
-		original := firstNonEmptyString(
-			stringValue(payload["message"]),
-			stringValue(payload["status"]),
-			externalEventType,
-		)
-		fragment.Payload = boundedCodexPayload(original, codexRetainedProgressBytes)
-		fragment.Metadata = annotateBoundedPayloadMetadata(fragment.Metadata, original, fragment.Payload)
-	case NormalizedEventTypeTextDelta, NormalizedEventTypeFinalText:
-		original := extractCodexEventText(payload)
-		fragment.Payload = boundedCodexPayload(original, codexRetainedTextBytes)
-		fragment.Metadata = annotateBoundedPayloadMetadata(fragment.Metadata, original, fragment.Payload)
-	case NormalizedEventTypeFailed, NormalizedEventTypeCanceled:
-		original := firstNonEmptyString(
-			stringValue(payload["message"]),
-			stringValue(payload["error"]),
-			stringValue(payload["status"]),
-			externalEventType,
-		)
-		fragment.Payload = boundedCodexPayload(original, codexRetainedProgressBytes)
-		fragment.Metadata = annotateBoundedPayloadMetadata(fragment.Metadata, original, fragment.Payload)
-	default:
-		fragment.Payload = "codex event omitted"
-		fragment.Metadata = mergeStringMaps(fragment.Metadata, codexRawDiagnosticMetadata(trimmedRaw, codexDiagnosticUnknownEvent, hasher))
-	}
-	return fragment, codexStructuredEventStatusNormalized
-}
-
-func classifyCodexStructuredEvent(externalEventType string) (string, string) {
-	normalized := strings.ToLower(strings.TrimSpace(externalEventType))
-	switch normalized {
-	case "session.created", "response.created", "response.started", "turn.started":
-		return NormalizedEventTypeStarted, ProgressFragmentKind
-	case "response.output_text.delta", "response.delta", "message.delta", "output_text.delta":
-		return NormalizedEventTypeTextDelta, ResponseFragmentKind
-	case "response.completed", "response.output_text.done", "message.completed", "output.completed":
-		return NormalizedEventTypeFinalText, ResponseFragmentKind
-	case "response.failed", "response.error", "error":
-		return NormalizedEventTypeFailed, ProgressFragmentKind
-	case "response.canceled", "response.cancelled", "session.canceled", "session.cancelled":
-		return NormalizedEventTypeCanceled, ProgressFragmentKind
-	case "response.progress", "progress", "response.updated":
-		return NormalizedEventTypeProgress, ProgressFragmentKind
-	}
-	switch {
-	case strings.Contains(normalized, "cancel"):
-		return NormalizedEventTypeCanceled, ProgressFragmentKind
-	case strings.Contains(normalized, "fail"), strings.Contains(normalized, "error"):
-		return NormalizedEventTypeFailed, ProgressFragmentKind
-	case strings.Contains(normalized, "delta"):
-		return NormalizedEventTypeTextDelta, ResponseFragmentKind
-	case strings.Contains(normalized, "complete"), strings.Contains(normalized, "final"), strings.Contains(normalized, "done"):
-		return NormalizedEventTypeFinalText, ResponseFragmentKind
-	case strings.Contains(normalized, "start"), strings.Contains(normalized, "created"), strings.Contains(normalized, "begin"):
-		return NormalizedEventTypeStarted, ProgressFragmentKind
-	case strings.Contains(normalized, "progress"), strings.Contains(normalized, "update"):
-		return NormalizedEventTypeProgress, ProgressFragmentKind
-	default:
-		return NormalizedEventTypeUnknown, ProgressFragmentKind
-	}
-}
-
-func providerSessionFromStructuredCodexEvent(payload map[string]any) *interfaces.ProviderSessionMetadata {
-	candidates := []struct {
-		kind  string
-		value string
-	}{
-		{kind: providerSessionKindSessionID, value: firstNonEmptyString(stringValue(payload["session_id"]), stringValue(payload["sessionId"]))},
-		{kind: providerSessionKindResponseID, value: firstNonEmptyString(stringValue(payload["response_id"]), stringValue(payload["responseId"]))},
-		{kind: providerSessionKindConversationID, value: firstNonEmptyString(stringValue(payload["conversation_id"]), stringValue(payload["conversationId"]))},
-	}
-	for _, candidate := range candidates {
-		if strings.TrimSpace(candidate.value) == "" {
-			continue
-		}
-		return &interfaces.ProviderSessionMetadata{
-			Provider: interfaces.CanonicalProviderSessionProvider(string(interfaces.ModelProviderCodex)),
-			Kind:     candidate.kind,
-			ID:       strings.TrimSpace(candidate.value),
-		}
-	}
-	return nil
-}
-
-func codexStructuredEventMetadata(payload map[string]any) map[string]string {
-	metadata := map[string]string{}
-	for _, key := range []string{"session_id", "response_id", "conversation_id"} {
-		if value := stringValue(payload[key]); value != "" {
-			metadata[key] = value
-		}
-	}
-	if text := extractCodexEventText(payload); text != "" {
-		metadata[codexMetadataTextBytesKey] = strconv.Itoa(len([]byte(text)))
-	}
-	if len(metadata) == 0 {
-		return nil
-	}
-	return metadata
-}
-
-func extractCodexEventText(payload map[string]any) string {
-	if delta := stringValue(payload["delta"]); strings.TrimSpace(delta) != "" {
-		return delta
-	}
-	if text := stringValue(payload["text"]); strings.TrimSpace(text) != "" {
-		return text
-	}
-	return strings.TrimSpace(collectCodexText(payload))
-}
-
-func collectCodexText(value any) string {
-	switch typed := value.(type) {
-	case map[string]any:
-		if strings.EqualFold(stringValue(typed["type"]), "output_text") {
-			if text := stringValue(typed["text"]); text != "" {
-				return text
-			}
-		}
-		parts := make([]string, 0, 4)
-		for _, nestedKey := range []string{"response", "output", "content", "item", "message"} {
-			if nested, ok := typed[nestedKey]; ok {
-				if text := collectCodexText(nested); text != "" {
-					parts = append(parts, text)
-				}
-			}
-		}
-		return strings.Join(parts, "")
-	case []any:
-		parts := make([]string, 0, len(typed))
-		for _, item := range typed {
-			if text := collectCodexText(item); text != "" {
-				parts = append(parts, text)
-			}
-		}
-		return strings.Join(parts, "")
-	default:
-		return ""
-	}
-}
-
-func boundedCodexPayload(payload string, limit int) string {
-	trimmed := strings.TrimSpace(payload)
-	if limit <= 0 || len([]byte(trimmed)) <= limit {
-		return trimmed
-	}
-	bytes := []byte(trimmed)
-	return strings.TrimSpace(string(bytes[:limit]))
-}
-
-func baseFragmentMetadata(req CommandRequest) map[string]string {
-	metadata := map[string]string{
-		codexMetadataRunnerIDKey: string(interfaces.ModelProviderCodex),
-	}
-	if workID := primaryWorkID(req.Execution.WorkIDs); workID != "" {
-		metadata[codexMetadataWorkIDKey] = workID
-	}
-	if workstation := strings.TrimSpace(req.WorkstationName); workstation != "" {
-		metadata[codexMetadataWorkstationKey] = workstation
-	}
-	return metadata
-}
-
-func mergeStringMaps(base, overlay map[string]string) map[string]string {
-	switch {
-	case len(base) == 0 && len(overlay) == 0:
-		return nil
-	case len(base) == 0:
-		return cloneStringMap(overlay)
-	case len(overlay) == 0:
-		return cloneStringMap(base)
-	}
-	merged := cloneStringMap(base)
-	for key, value := range overlay {
-		merged[key] = value
-	}
-	return merged
-}
-
-func cloneStringMap(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	clone := make(map[string]string, len(values))
-	for key, value := range values {
-		clone[key] = value
-	}
-	return clone
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
-}
-
-func stringValue(value any) string {
-	text, _ := value.(string)
-	return text
-}
-
-func (n *codexCommandOutputNormalizer) publishResponseEvent(eventType string, externalEventType string, payload string, metadata map[string]string) {
-	n.publisher(InferenceProgressFragment{
-		DispatchID:         strings.TrimSpace(n.req.DispatchID),
-		Kind:               ResponseFragmentKind,
-		Type:               eventType,
-		Payload:            boundedCodexPayload(payload, codexRetainedTextBytes),
-		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(n.providerSession),
-		ExternalEventType:  strings.TrimSpace(externalEventType),
-		Metadata:           mergeStringMaps(baseFragmentMetadata(n.req), metadata),
-	})
-}
-
-func (n *codexCommandOutputNormalizer) publishProgressEvent(eventType string, externalEventType string, payload string, metadata map[string]string) {
-	n.publisher(InferenceProgressFragment{
-		DispatchID:         strings.TrimSpace(n.req.DispatchID),
-		Kind:               ProgressFragmentKind,
-		Type:               eventType,
-		Payload:            boundedCodexPayload(payload, codexRetainedProgressBytes),
-		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(n.providerSession),
-		ExternalEventType:  strings.TrimSpace(externalEventType),
-		Metadata:           mergeStringMaps(baseFragmentMetadata(n.req), metadata),
-	})
 }
 
 // NewInferenceProgressPublishingCommandRunner constructs a provider command
@@ -575,11 +190,162 @@ func NewInferenceProgressPublishingCommandRunner(
 	}
 }
 
-func isCodexCommand(command string) bool {
-	base := filepath.Base(strings.ReplaceAll(strings.TrimSpace(command), `\`, "/"))
-	extension := strings.ToLower(filepath.Ext(base))
-	if extension == ".exe" || extension == ".cmd" || extension == ".bat" {
-		base = strings.TrimSuffix(base, filepath.Ext(base))
+func (p *ScriptWrapProvider) executeAgy(
+	ctx context.Context,
+	req interfaces.ProviderInferenceRequest,
+	logger logging.Logger,
+) (interfaces.InferenceResponse, error) {
+	factoryRoot := strings.TrimSpace(p.agyFactoryRoot)
+	if factoryRoot == "" {
+		return interfaces.InferenceResponse{}, p.agyRequestValidationError(req, errors.New("Agy factory root is unavailable"))
 	}
-	return strings.EqualFold(base, string(interfaces.ModelProviderCodex))
+	opts := []agyadapter.Option{}
+	if p.agyAllocator != nil {
+		opts = append(opts, agyadapter.WithAllocator(p.agyAllocator))
+	}
+	providerAdapter := agyadapter.NewAdapter(factoryRoot, opts...)
+	registry, err := adapter.NewRegistry(providerAdapter)
+	if err != nil {
+		return interfaces.InferenceResponse{}, p.agyRequestValidationError(req, err)
+	}
+	runner, err := providerAdapter.PTYRunner()
+	if err != nil {
+		return interfaces.InferenceResponse{}, p.agyRequestValidationError(req, err)
+	}
+	started := time.Now()
+	result, executeErr := adapter.Execute(ctx, registry, runner, adapter.ExecuteInput{
+		Provider: providerAdapter.Identity(),
+		Command:  adapter.CommandContext{Request: req, SkipPermissions: p.SkipPermissions, MaterializeOptions: p.MaterializeOptions},
+		Decoder:  adapter.DecoderContext{RunID: req.Dispatch.DispatchID, DispatchID: req.Dispatch.DispatchID},
+		ObserveDraft: func(draft interfaceresponseevents.Draft) {
+			if p.progressPublisher != nil {
+				p.progressPublisher(CanonicalDraftFragment(draft.DispatchID, draft))
+			}
+		},
+	})
+	duration := time.Since(started)
+	diagnostics := commandDiagnostics(result.Request, result.Command, duration, result.Outcome == adapter.CommandOutcomeCanceled)
+	if result.Failure != nil {
+		providerErr := providerErrorFromAdapterFailure(result.Failure, executeErr, diagnostics)
+		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result.Command, duration)...)
+		p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
+		return interfaces.InferenceResponse{}, providerErr
+	}
+	if executeErr != nil {
+		if orchestrated := agyadapter.ClassifyOrchestrationError(executeErr); orchestrated.Failure != nil {
+			providerErr := providerErrorFromAdapterFailure(orchestrated.Failure, executeErr, diagnostics)
+			logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result.Command, duration)...)
+			p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
+			return interfaces.InferenceResponse{}, providerErr
+		}
+		providerErr := normalizeProviderExecutionError(req.ModelProvider, result.Command, executeErr, result.Response.ProviderSession, diagnostics)
+		p.publishOpenCodeFailure(req.Dispatch.DispatchID, providerErr, len(result.Drafts) > 0)
+		return interfaces.InferenceResponse{}, providerErr
+	}
+	response := result.Response
+	response.Diagnostics = diagnostics
+	logger.Info("inferencer: request completed",
+		appendProviderSessionLogFields(providerLogFields(req, "output_len", len(response.Content)), response.ProviderSession)...)
+	p.publishOpenCodeCompleted(req.Dispatch.DispatchID, response.ProviderSession, len(result.Drafts) > 0)
+	return response, nil
+}
+
+func (p *ScriptWrapProvider) agyRequestValidationError(req interfaces.ProviderInferenceRequest, err error) *ProviderError {
+	providerErr := newProviderErrorWithDiagnostics(
+		interfaces.WorkFailureTypePermanentBadRequest,
+		err.Error(),
+		err,
+		nil,
+		workDiagnosticsForInferenceRequest(req),
+	)
+	p.publishFailureFragment(req.Dispatch.DispatchID, nil, providerErr)
+	return providerErr
+}
+
+type progressStreamObserver interface {
+	observe(ctx context.Context, stream string, chunk []byte) bool
+	flush(ctx context.Context, result CommandResult, err error)
+}
+
+func progressStreamIdentity(command string) adapter.Identity {
+	if cursorprogress.IsCommand(command) {
+		return adapter.Identity(interfaces.ModelProviderCursor)
+	}
+	if codexprogress.IsCommand(command) {
+		return adapter.Identity(interfaces.ModelProviderCodex)
+	}
+	return adapter.NormalizeIdentity(adapter.Identity(command))
+}
+
+func newProgressStreamObserver(
+	req CommandRequest,
+	publisher InferenceProgressPublisher,
+	logger logging.Logger,
+) progressStreamObserver {
+	dispatchID := strings.TrimSpace(req.DispatchID)
+	switch progressStreamIdentity(req.Command) {
+	case adapter.Identity(interfaces.ModelProviderCursor):
+		return &cursorProgressObserver{
+			stream: cursorprogress.NewResponseEventStream(dispatchID, func(fragment cursorprogress.ProgressFragment) {
+				publisher(inferenceProgressFragmentFromCursor(fragment))
+			}, logger),
+		}
+	case adapter.Identity(interfaces.ModelProviderCodex):
+		return &codexProgressObserver{
+			stream: codexprogress.NewProgressStream(req, func(fragment codexprogress.ProgressFragment) {
+				publisher(inferenceProgressFragmentFromCodex(fragment))
+			}),
+		}
+	default:
+		return nil
+	}
+}
+
+type cursorProgressObserver struct {
+	stream *cursorprogress.ResponseEventStream
+}
+
+func (o *cursorProgressObserver) observe(ctx context.Context, stream string, chunk []byte) bool {
+	o.stream.Observe(ctx, stream, chunk)
+	return true
+}
+
+func (o *cursorProgressObserver) flush(ctx context.Context, result CommandResult, err error) {
+	o.stream.Flush(ctx, cursorprogress.FlushReason(ctx, result.ExitCode, err))
+}
+
+type codexProgressObserver struct {
+	stream *codexprogress.ProgressStream
+}
+
+func (o *codexProgressObserver) observe(_ context.Context, stream string, chunk []byte) bool {
+	return o.stream.Observe(stream, chunk)
+}
+
+func (o *codexProgressObserver) flush(_ context.Context, _ CommandResult, _ error) {
+	o.stream.Flush()
+}
+
+func inferenceProgressFragmentFromCursor(fragment cursorprogress.ProgressFragment) InferenceProgressFragment {
+	if fragment.HasCanonicalDraft {
+		return StructuredResponseEvent(fragment.CanonicalDraft)
+	}
+	return InferenceProgressFragment{
+		DispatchID:        fragment.DispatchID,
+		Kind:              fragment.Kind,
+		Payload:           fragment.Payload,
+		ExternalEventType: fragment.ExternalEventType,
+	}
+}
+
+func inferenceProgressFragmentFromCodex(fragment codexprogress.ProgressFragment) InferenceProgressFragment {
+	return InferenceProgressFragment{
+		DispatchID:         fragment.DispatchID,
+		Kind:               fragment.Kind,
+		Type:               fragment.Type,
+		Payload:            fragment.Payload,
+		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(fragment.ProviderSessionRef),
+		ExternalEventType:  fragment.ExternalEventType,
+		Metadata:           fragment.Metadata,
+	}
 }
