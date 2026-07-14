@@ -18,7 +18,11 @@ import (
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/commandenv"
+	claudeexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/claude/exitfailure"
+	codexexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/codex/exitfailure"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
+	geminipkg "github.com/portpowered/infinite-you/pkg/workers/provider/gemini"
+	kiropkg "github.com/portpowered/infinite-you/pkg/workers/provider/kiro"
 )
 
 // Provider abstracts LLM inference calls. Implementations handle the
@@ -683,19 +687,38 @@ func parseProviderExitFailure(provider string, result CommandResult) parsedProvi
 	normalizedProvider := strings.ToLower(strings.TrimSpace(provider))
 	switch normalizedProvider {
 	case string(interfaces.ModelProviderClaude):
-		return parsedProviderFailure{failure: ParseClaudeProviderFailure(result)}
+		failure := claudeexitfailure.ParseProviderFailure(claudeexitfailure.FailureInput{
+			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+		})
+		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
 	case string(interfaces.ModelProviderCodex):
-		resolved, ok := ResolveCodexProviderFailure(result, CodexFailureResolutionInput{})
+		resolved, ok := codexexitfailure.ResolveFailure(exitFailureInputFromCommand(result), codexexitfailure.ResolutionInput{})
 		if ok {
-			return parsedProviderFailure{failure: resolved.Result, internalCause: resolved.InternalCause}
+			return parsedProviderFailure{
+				failure:       ProviderFailureResult{Reason: resolved.Result.Reason, Message: resolved.Result.Message},
+				internalCause: resolved.InternalCause,
+			}
 		}
-		return parsedProviderFailure{failure: codexProcessExitFallback(result.ExitCode), internalCause: codexExitInternalCause(result.ExitCode)}
+		parsed := codexexitfailure.ParseExitFailure(exitFailureInputFromCommand(result))
+		return parsedProviderFailure{
+			failure:       ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message},
+			internalCause: codexexitfailure.ExitInternalCause(result.ExitCode),
+		}
 	case string(interfaces.ModelProviderKiro):
-		return parsedProviderFailure{failure: ParseKiroProviderFailure(result)}
+		failure := kiropkg.ParseProviderFailure(kiropkg.FailureInput{
+			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+		})
+		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
 	case string(interfaces.ModelProviderOpenCode):
-		return parsedProviderFailure{failure: ParseOpenCodeProviderFailure(result)}
+		failure := opencodeadapter.ParseProviderFailure(opencodeadapter.FailureInput{
+			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+		})
+		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
 	case string(interfaces.ModelProviderGemini):
-		return parsedProviderFailure{failure: ParseGeminiProviderFailure(result)}
+		failure := geminipkg.ParseProviderFailure(geminipkg.FailureInput{
+			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+		})
+		return parsedProviderFailure{failure: ProviderFailureResult{Reason: failure.Reason, Message: failure.Message}}
 	case string(interfaces.ModelProviderCursor):
 		failure := cursorpkg.ParseProviderFailure(cursorpkg.FailureInput{
 			Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
@@ -800,9 +823,9 @@ func parseProviderTimeoutFailure(provider string, result CommandResult) Provider
 			message = codexError
 		}
 	case string(interfaces.ModelProviderGemini):
-		message = geminiTimeoutFailureMessage
+		message = geminipkg.TimeoutFailureMessage
 	case string(interfaces.ModelProviderKiro):
-		message = kiroTimeoutFailureMessage
+		message = kiropkg.TimeoutFailureMessage
 	}
 	return ProviderFailureResult{
 		Reason:  interfaces.WorkFailureTypeTimeout,

@@ -28,6 +28,10 @@ type ExitFailureResult struct {
 
 const AuthFailureMessage = "Codex authentication failed."
 
+const UnknownFailureMessage = "Codex reported a terminal error."
+
+const GPT56SolUpgradeMessage = "The 'gpt-5.6-sol' model requires a newer version of Codex. Please upgrade to the latest app or CLI and try again."
+
 const (
 	codexAuthFailureMessage       = "Codex authentication failed."
 	codexBadRequestFailureMessage = "Codex rejected the request as invalid."
@@ -313,4 +317,53 @@ func classifyCodexStructuredSignal(errorType string, status int) (interfaces.Wor
 }
 func codexExitFailureMessage(exitCode int) string {
 	return fmt.Sprintf("codex exited with code %d", exitCode)
+}
+
+func processExitFallback(exitCode int) ExitFailureResult {
+	reason := classifyCodexExitFailure(exitCode)
+	if message := codexTextFailureMessage(reason); message != "" {
+		return ExitFailureResult{Reason: reason, Message: message}
+	}
+	return ExitFailureResult{Reason: reason, Message: UnknownFailureMessage}
+}
+
+func isRecognizedFailureType(failureType interfaces.WorkFailureType) bool {
+	return failureType != "" && failureType != interfaces.WorkFailureTypeUnknown
+}
+
+// ProcessExitFailureLayers exposes structured ERROR-record, stderr-classified,
+// and generic exit outcomes without applying structured-stream precedence.
+func ProcessExitFailureLayers(input ExitFailureInput) (
+	structured ExitFailureResult,
+	hasStructured bool,
+	stderr ExitFailureResult,
+	hasStderr bool,
+	exit ExitFailureResult,
+) {
+	streams := []string{
+		tailForErrorScan(input.Stderr),
+		tailForErrorScan(input.Stdout),
+	}
+	if failure, ok := lastCodexStructuredFailure(streams); ok {
+		structured = failure
+		hasStructured = true
+	}
+	if failure, ok := lastCodexTextFailure(streams, input.ExitCode); ok {
+		stderr = failure
+		hasStderr = true
+	}
+	exit = processExitFallback(input.ExitCode)
+	return structured, hasStructured, stderr, hasStderr, exit
+}
+
+// ParseFailureLayers returns structured or stderr-classified outcomes without cross-signal precedence.
+func ParseFailureLayers(input ExitFailureInput) ExitFailureResult {
+	structured, hasStructured, stderr, hasStderr, exit := ProcessExitFailureLayers(input)
+	if hasStructured {
+		return structured
+	}
+	if hasStderr {
+		return stderr
+	}
+	return exit
 }

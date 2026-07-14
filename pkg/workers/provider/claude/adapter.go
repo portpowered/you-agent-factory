@@ -14,6 +14,7 @@ import (
 	provider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/commandenv"
+	claudeexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/claude/exitfailure"
 )
 
 const (
@@ -121,13 +122,15 @@ func (*Adapter) ClassifyFailure(_ context.Context, input adapter.FailureContext)
 		failure := retryErr.failure
 		return adapter.FailureResult{Failure: &failure}
 	}
-	result := provider.ParseClaudeProviderFailure(provider.CommandResult{
+	result := claudeexitfailure.ParseProviderFailure(claudeexitfailure.FailureInput{
 		ExitCode: input.CommandResult.ExitCode,
 		Stdout:   input.CommandResult.Stdout,
 		Stderr:   input.CommandResult.Stderr,
 	})
 	cause := errors.Join(input.CommandError, input.DecodeError, input.FlushError, input.ParseError)
-	providerErr := provider.NewProviderErrorFromResult(result, cause)
+	providerErr := provider.NewProviderErrorFromResult(provider.ProviderFailureResult{
+		Reason: result.Reason, Message: result.Message,
+	}, cause)
 	decision := provider.WorkFailureDecisionFromProviderError(providerErr)
 	return adapter.FailureResult{Failure: &adapter.FailureFacts{
 		Family:  providerErr.Family,

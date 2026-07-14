@@ -1,4 +1,4 @@
-package claude_test
+package exitfailure_test
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	claudepkg "github.com/portpowered/infinite-you/pkg/workers/provider/claude"
+	claudepkg "github.com/portpowered/infinite-you/pkg/workers/provider/claude/exitfailure"
 )
 
 const (

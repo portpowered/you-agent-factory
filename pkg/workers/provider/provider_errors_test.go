@@ -7,7 +7,101 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	claudeexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/claude/exitfailure"
+	codexexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/codex/exitfailure"
+	geminipkg "github.com/portpowered/infinite-you/pkg/workers/provider/gemini"
+	kiropkg "github.com/portpowered/infinite-you/pkg/workers/provider/kiro"
+	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
 )
+
+const (
+	claudeThrottleFailureMessage   = claudeexitfailure.ThrottleFailureMessage
+	claudeTimeoutFailureMessage    = claudeexitfailure.TimeoutFailureMessage
+	claudeAuthFailureMessage       = "Claude authentication failed."
+	claudeBadRequestFailureMessage = "Claude rejected the request as invalid."
+	claudeConfigFailureMessage     = "Claude is not configured correctly."
+	claudeFailureScanBytes         = 64 * 1024
+	geminiThrottleFailureMessage   = "The provider is rate limited; retry after capacity becomes available."
+	geminiTimeoutFailureMessage      = geminipkg.TimeoutFailureMessage
+	codexGPT56SolUpgradeMessage      = codexexitfailure.GPT56SolUpgradeMessage
+	codexUnknownFailureMessage       = codexexitfailure.UnknownFailureMessage
+	codexAuthFailureMessage          = codexexitfailure.AuthFailureMessage
+	codexThrottleFailureMessage      = "Codex is temporarily unavailable due to usage or capacity limits."
+	codexServerFailureMessage        = "Codex encountered a temporary server error."
+	codexTimeoutFailureMessage       = "Codex request timed out."
+	codexWindowsProcessFailureExitCode = 4294967295
+	opencodeThrottleFailureMessage   = opencodeadapter.ThrottleFailureMessage
+	opencodeTimeoutFailureMessage    = opencodeadapter.TimeoutFailureMessage
+	opencodeServerFailureMessage     = "OpenCode encountered a temporary server error."
+	opencodeBadRequestFailureMessage = opencodeadapter.BadRequestFailureMessage
+	opencodeFailureMessageBytes      = 512
+	codexBadRequestFailureMessage    = "Codex rejected the request as invalid."
+	codexErrorLineScanBytes          = 64 * 1024
+	codexFailureMessageBytes         = 1024
+	codexHighDemandTemporaryErrorsNeedle = codexexitfailure.HighDemandTemporaryErrorsNeedle
+)
+
+func codexTextFailureMessage(reason interfaces.WorkFailureType) string {
+	switch reason {
+	case interfaces.WorkFailureTypeAuthFailure:
+		return codexAuthFailureMessage
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		return codexBadRequestFailureMessage
+	case interfaces.WorkFailureTypeThrottled:
+		return codexThrottleFailureMessage
+	case interfaces.WorkFailureTypeInternalServerError:
+		return codexServerFailureMessage
+	case interfaces.WorkFailureTypeTimeout:
+		return codexTimeoutFailureMessage
+	default:
+		return ""
+	}
+}
+
+func knownKiroFailure(reason interfaces.WorkFailureType) ProviderFailureResult {
+	message := ""
+	switch reason {
+	case interfaces.WorkFailureTypeAuthFailure:
+		message = "Kiro authentication failed. Sign in again and retry."
+	case interfaces.WorkFailureTypePermanentBadRequest:
+		message = "Kiro rejected the request as invalid."
+	case interfaces.WorkFailureTypeThrottled:
+		message = "Kiro is temporarily unavailable due to usage or capacity limits."
+	case interfaces.WorkFailureTypeTimeout:
+		message = kiropkg.TimeoutFailureMessage
+	case interfaces.WorkFailureTypeInternalServerError:
+		message = "Kiro encountered a temporary service error."
+	}
+	return ProviderFailureResult{Reason: reason, Message: message}
+}
+
+func ParseClaudeProviderFailure(result CommandResult) ProviderFailureResult {
+	parsed := claudeexitfailure.ParseProviderFailure(claudeexitfailure.FailureInput{
+		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+	})
+	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
+}
+
+func ParseGeminiProviderFailure(result CommandResult) ProviderFailureResult {
+	parsed := geminipkg.ParseProviderFailure(geminipkg.FailureInput{
+		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+	})
+	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
+}
+
+func ParseKiroProviderFailure(result CommandResult) ProviderFailureResult {
+	parsed := kiropkg.ParseProviderFailure(kiropkg.FailureInput{
+		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+	})
+	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
+}
+
+func ParseOpenCodeProviderFailure(result CommandResult) ProviderFailureResult {
+	parsed := opencodeadapter.ParseProviderFailure(opencodeadapter.FailureInput{
+		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
+	})
+	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
+}
 
 func loadProviderErrorCorpusForTest(t *testing.T) ProviderErrorCorpus {
 	t.Helper()
