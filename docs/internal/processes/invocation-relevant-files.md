@@ -415,9 +415,11 @@ primary-result behavior.
   `TestRun_NamedSubagentNoServerBootstrap_TextPrimaryResultIsAgentResponse`,
   `TestRun_NamedSubagentNoServerBootstrap_SuccessJSONMatchesAPIProjection`,
   `TestNoServerNamedSubagentInvocationIntegrationAndEquivalenceProof`), using the
-  real shared bootstrap path with mock workers and a TCP probe port to assert no
-  factory API/dashboard listener is bound and exactly one agent-response
-  `primaryResult` is returned.
+  real shared bootstrap path with mock workers and deterministic API-server
+  starter guards to assert no factory API/dashboard listener is served and
+  exactly one agent-response `primaryResult` is returned. Do not use a
+  close-and-rebind TCP probe for this assertion: another package test or process
+  can claim the released port and make the proof nondeterministic.
 - `pkg/cli/run/factory_invocation_help.go` owns the factory-aware help renderer
   for `you run --named <factory> --help` and `you run --factory <factory.json> --help`.
   Keep usage lines, parameter descriptions, defaults, accepted values, output
@@ -463,8 +465,10 @@ primary-result behavior.
 - Hermetic no-server named `@you/goal` package proof lives in
   `pkg/cli/run/run_invocation_test.go`
   (`TestRun_NamedGoalHermeticInvocationSucceedsWithoutListeningServer`), using
-  the real shared bootstrap path with mock workers and a TCP probe port to
-  assert no factory API/dashboard listener is bound.
+  the real shared bootstrap path with mock workers and deterministic API-server
+  starter guards to assert no factory API/dashboard listener is served.
+  `run.BuildApplication` must also skip listener reservation entirely in
+  invocation mode rather than briefly binding and then discarding a listener.
 - No-server bootstrap CLI/API invocation-equivalence proof lives in
   `pkg/cli/run/run_invocation_test.go`
   (`TestRun_NoServerBootstrap_PositionalInputMatchesAPIContract`,

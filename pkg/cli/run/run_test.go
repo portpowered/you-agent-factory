@@ -62,6 +62,7 @@ func preserveRunGlobals(t *testing.T) {
 	originalOpener := dashboardOpener
 	originalInteractive := interactiveOutput
 	originalStartAPIServer := startAPIServer
+	originalServeFactoryAPIServer := serveFactoryAPIServer
 	t.Cleanup(func() {
 		buildFactoryService = originalBuilder
 		buildInvocationBootstrap = originalInvocationBootstrap
@@ -69,6 +70,7 @@ func preserveRunGlobals(t *testing.T) {
 		dashboardOpener = originalOpener
 		interactiveOutput = originalInteractive
 		startAPIServer = originalStartAPIServer
+		serveFactoryAPIServer = originalServeFactoryAPIServer
 	})
 }
 
