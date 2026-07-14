@@ -19,6 +19,21 @@ func TestTransportParity_PartialStreamCLIAndAPIAgree(t *testing.T) {
 	assertTransportParityForFixture(t, parityfixtures.FixturePartialStreamCodex)
 }
 
+func TestTransportParity_SnapshotOnlyCLIAndAPIAgree(t *testing.T) {
+	t.Parallel()
+	assertTransportParityForFixture(t, parityfixtures.FixtureSnapshotOnlyOpenCode)
+}
+
+func TestTransportParity_FinalOnlyOpenCodeCLIAndAPIAgree(t *testing.T) {
+	t.Parallel()
+	assertTransportParityForFixture(t, parityfixtures.FixtureFinalOnlyOpenCode)
+}
+
+func TestTransportParity_AgyFinalOnlyCLIAndAPIAgree(t *testing.T) {
+	t.Parallel()
+	assertTransportParityForFixture(t, parityfixtures.FixtureAgyFinalOnly)
+}
+
 func TestTransportParity_SSEFramesMatchAPIRecordDecoding(t *testing.T) {
 	t.Parallel()
 

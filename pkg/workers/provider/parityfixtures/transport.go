@@ -208,8 +208,12 @@ func AssertTruthfulStreamingFidelity(fixture Fixture, outcome TransportParityOut
 		return assertFullStreamFidelity(outcome)
 	case FidelityPartialStream:
 		return assertPartialStreamFidelity(outcome)
+	case FidelitySnapshotOnly:
+		return assertSnapshotOnlyFidelity(outcome)
+	case FidelityFinalOnly:
+		return assertFinalOnlyFidelity(outcome)
 	default:
-		return nil
+		return fmt.Errorf("unsupported fidelity class %q", fixture.FidelityClass)
 	}
 }
 
@@ -316,6 +320,67 @@ func assertFullStreamFidelity(outcome TransportParityOutcome) error {
 	}
 	if messageDeltaCount == 0 {
 		return fmt.Errorf("full-stream fixture produced no message delta events")
+	}
+	return nil
+}
+
+func assertSnapshotOnlyFidelity(outcome TransportParityOutcome) error {
+	capabilities := outcome.Terminal.Capabilities
+	if !capabilities.NativeStreaming || !capabilities.MessageSnapshots {
+		return fmt.Errorf("capabilities = %#v, want native streaming with message snapshots", capabilities)
+	}
+	if capabilities.MessageDeltas {
+		return fmt.Errorf("snapshot-only adapter must not claim message deltas")
+	}
+	if capabilities.FinalOnly {
+		return fmt.Errorf("snapshot-only adapter must not claim final-only capabilities")
+	}
+	var messageSnapshotCount int
+	for _, event := range outcome.Events {
+		if event.Kind != responseevents.KindMessage {
+			continue
+		}
+		switch event.Phase {
+		case responseevents.PhaseDelta:
+			return fmt.Errorf("snapshot-only fixture emitted message delta: %#v", event)
+		case responseevents.PhaseCompleted:
+			messageSnapshotCount++
+			if event.Provenance.Fidelity == responseevents.FidelityFinalOnly {
+				return fmt.Errorf("message snapshot claims final-only fidelity: %#v", event)
+			}
+		}
+	}
+	if messageSnapshotCount == 0 {
+		return fmt.Errorf("snapshot-only fixture produced no completed message snapshots")
+	}
+	return nil
+}
+
+func assertFinalOnlyFidelity(outcome TransportParityOutcome) error {
+	capabilities := outcome.Terminal.Capabilities
+	if capabilities.NativeStreaming || capabilities.MessageDeltas || !capabilities.MessageSnapshots || !capabilities.FinalOnly {
+		return fmt.Errorf("capabilities = %#v, want final-only without native streaming", capabilities)
+	}
+	var messageFinalCount int
+	for _, event := range outcome.Events {
+		if event.Kind != responseevents.KindMessage {
+			continue
+		}
+		switch event.Phase {
+		case responseevents.PhaseDelta:
+			return fmt.Errorf("final-only fixture emitted message delta: %#v", event)
+		case responseevents.PhaseCompleted:
+			messageFinalCount++
+			if event.Provenance.Fidelity != responseevents.FidelityFinalOnly {
+				return fmt.Errorf("completed message fidelity = %q, want %q: %#v", event.Provenance.Fidelity, responseevents.FidelityFinalOnly, event)
+			}
+			if event.Provenance.Delivery != responseevents.DeliveryNativeFinal {
+				return fmt.Errorf("completed message delivery = %q, want %q: %#v", event.Provenance.Delivery, responseevents.DeliveryNativeFinal, event)
+			}
+		}
+	}
+	if messageFinalCount == 0 {
+		return fmt.Errorf("final-only fixture produced no completed message events")
 	}
 	return nil
 }

@@ -274,8 +274,9 @@ primary-result behavior.
   inventing parallel fixture trees. Use `parityfixtures.RunTransportParity`
   plus `AssertCLIAPITransportParity` and `AssertTruthfulStreamingFidelity` to
   compare decoded CLI NDJSON and API SSE `FactoryResponseEvent` values and
-  terminal `InvocationResponse` outcomes for streaming fidelity classes before
-  adding new transport parity tests. While legacy response-stream
+  terminal `InvocationResponse` outcomes for every fidelity class (full-stream,
+  partial-stream, snapshot-only, and final-only including Agy) before adding new
+  transport parity tests. While legacy response-stream
   consumers remain supported, carry an exact draft beside the compatibility
   fragment and let `pkg/factory/sessions/stream/manager.go` publish that draft
   directly; do not remap it through the lossy legacy fragment mapper. Keep the
