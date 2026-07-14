@@ -37,37 +37,46 @@ func TestProductionManifestParsingParity_RootAndSessionShow(t *testing.T) {
 		t.Fatalf("CommandByID(you.session.show) error = %v", err)
 	}
 
-	cases := productionManifestParsingParityCases(rootRecord, sessionShowRecord)
+	runProductionManifestParsingParityCases(t, manifest, productionManifestParsingParityCases(rootRecord, sessionShowRecord))
+}
+
+func runProductionManifestParsingParityCases(t *testing.T, manifest climanifest.Manifest, cases []parsingParityCase) {
+	t.Helper()
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			record, err := manifest.CommandByID(tc.commandID)
-			if err != nil {
-				t.Fatalf("CommandByID(%q) error = %v", tc.commandID, err)
-			}
-
-			leaf, positionals, parseErr := cli.ParseArgvForCLIInputsInventory(tc.argv)
-			if tc.wantParseErr {
-				if parseErr == nil {
-					t.Fatalf("ParseArgvForCLIInputsInventory(%v) error = nil, want parse failure", tc.argv)
-				}
-				if tc.errContains != "" && !strings.Contains(parseErr.Error(), tc.errContains) {
-					t.Fatalf("parse error = %q, want substring %q", parseErr.Error(), tc.errContains)
-				}
-				if tc.verify != nil {
-					tc.verify(t, manifest, record, leaf, positionals)
-				}
-				return
-			}
-			if parseErr != nil {
-				t.Fatalf("ParseArgvForCLIInputsInventory(%v) error = %v", tc.argv, parseErr)
-			}
-			if mismatch := climanifestparity.AssertLeafCommandPath(record.ID, record.Path, leaf); mismatch != nil {
-				t.Fatal(mismatch.Error())
-			}
-			if tc.verify != nil {
-				tc.verify(t, manifest, record, leaf, positionals)
-			}
+			assertProductionManifestParsingCase(t, manifest, tc)
 		})
+	}
+}
+
+func assertProductionManifestParsingCase(t *testing.T, manifest climanifest.Manifest, tc parsingParityCase) {
+	t.Helper()
+	record, err := manifest.CommandByID(tc.commandID)
+	if err != nil {
+		t.Fatalf("CommandByID(%q) error = %v", tc.commandID, err)
+	}
+
+	leaf, positionals, parseErr := cli.ParseArgvForCLIInputsInventory(tc.argv)
+	if tc.wantParseErr {
+		if parseErr == nil {
+			t.Fatalf("ParseArgvForCLIInputsInventory(%v) error = nil, want parse failure", tc.argv)
+		}
+		if tc.errContains != "" && !strings.Contains(parseErr.Error(), tc.errContains) {
+			t.Fatalf("parse error = %q, want substring %q", parseErr.Error(), tc.errContains)
+		}
+		if tc.verify != nil {
+			tc.verify(t, manifest, record, leaf, positionals)
+		}
+		return
+	}
+	if parseErr != nil {
+		t.Fatalf("ParseArgvForCLIInputsInventory(%v) error = %v", tc.argv, parseErr)
+	}
+	if mismatch := climanifestparity.AssertLeafCommandPath(record.ID, record.Path, leaf); mismatch != nil {
+		t.Fatal(mismatch.Error())
+	}
+	if tc.verify != nil {
+		tc.verify(t, manifest, record, leaf, positionals)
 	}
 }
 
@@ -104,37 +113,7 @@ func TestProductionManifestParsingParity_ModelsFamily(t *testing.T) {
 	}
 
 	cases := productionManifestModelsParsingParityCases(rootRecord, modelsRecord, listRecord, inspectRecord, invokeRecord, pullRecord)
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			record, err := manifest.CommandByID(tc.commandID)
-			if err != nil {
-				t.Fatalf("CommandByID(%q) error = %v", tc.commandID, err)
-			}
-
-			leaf, positionals, parseErr := cli.ParseArgvForCLIInputsInventory(tc.argv)
-			if tc.wantParseErr {
-				if parseErr == nil {
-					t.Fatalf("ParseArgvForCLIInputsInventory(%v) error = nil, want parse failure", tc.argv)
-				}
-				if tc.errContains != "" && !strings.Contains(parseErr.Error(), tc.errContains) {
-					t.Fatalf("parse error = %q, want substring %q", parseErr.Error(), tc.errContains)
-				}
-				if tc.verify != nil {
-					tc.verify(t, manifest, record, leaf, positionals)
-				}
-				return
-			}
-			if parseErr != nil {
-				t.Fatalf("ParseArgvForCLIInputsInventory(%v) error = %v", tc.argv, parseErr)
-			}
-			if mismatch := climanifestparity.AssertLeafCommandPath(record.ID, record.Path, leaf); mismatch != nil {
-				t.Fatal(mismatch.Error())
-			}
-			if tc.verify != nil {
-				tc.verify(t, manifest, record, leaf, positionals)
-			}
-		})
-	}
+	runProductionManifestParsingParityCases(t, manifest, cases)
 }
 
 func productionManifestModelsParsingParityCases(
@@ -664,77 +643,93 @@ func productionManifestDocsParsingParityCases(rootRecord, docsRecord climanifest
 }
 
 func docsTopicPositionalCases(docsRecord climanifest.Command) []parsingParityCase {
-	return []parsingParityCase{
-		{
-			name:      "docs optional topic accepts omission",
-			commandID: docsRecord.ID,
-			argv:      []string{"docs"},
-			verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, _ *cobra.Command, positionals []string) {
-				t.Helper()
-				arg, err := record.RequireArgumentAt(0)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if arg.Required || arg.MaxCardinality != 1 || arg.Variadic || arg.Name != "topic" {
-					t.Fatalf("contract arg = %+v, want optional single topic positional", arg)
-				}
-				if mismatch := climanifestparity.CompareArgumentCardinality(record.ID, arg, positionals); mismatch != nil {
-					t.Fatal(mismatch.Error())
-				}
-				if len(positionals) != 0 {
-					t.Fatalf("positionals = %v, want empty", positionals)
-				}
-			},
+	cases := make([]parsingParityCase, 0, 4)
+	cases = append(cases, docsTopicOmissionCase(docsRecord))
+	cases = append(cases, docsTopicSingleValueCase(docsRecord))
+	cases = append(cases, docsTopicExcessPositionalCase(docsRecord))
+	cases = append(cases, docsTopicEnumCase(docsRecord))
+	return cases
+}
+
+func docsTopicOmissionCase(docsRecord climanifest.Command) parsingParityCase {
+	return parsingParityCase{
+		name:      "docs optional topic accepts omission",
+		commandID: docsRecord.ID,
+		argv:      []string{"docs"},
+		verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, _ *cobra.Command, positionals []string) {
+			t.Helper()
+			arg, err := record.RequireArgumentAt(0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if arg.Required || arg.MaxCardinality != 1 || arg.Variadic || arg.Name != "topic" {
+				t.Fatalf("contract arg = %+v, want optional single topic positional", arg)
+			}
+			if mismatch := climanifestparity.CompareArgumentCardinality(record.ID, arg, positionals); mismatch != nil {
+				t.Fatal(mismatch.Error())
+			}
+			if len(positionals) != 0 {
+				t.Fatalf("positionals = %v, want empty", positionals)
+			}
 		},
-		{
-			name:      "docs optional topic accepts one value",
-			commandID: docsRecord.ID,
-			argv:      []string{"docs", "config"},
-			verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, _ *cobra.Command, positionals []string) {
-				t.Helper()
-				arg, err := record.RequireArgumentAt(0)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if mismatch := climanifestparity.CompareArgumentCardinality(record.ID, arg, positionals); mismatch != nil {
-					t.Fatal(mismatch.Error())
-				}
-				if len(positionals) != 1 || positionals[0] != "config" {
-					t.Fatalf("positionals = %v, want [config]", positionals)
-				}
-			},
+	}
+}
+
+func docsTopicSingleValueCase(docsRecord climanifest.Command) parsingParityCase {
+	return parsingParityCase{
+		name:      "docs optional topic accepts one value",
+		commandID: docsRecord.ID,
+		argv:      []string{"docs", "config"},
+		verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, _ *cobra.Command, positionals []string) {
+			t.Helper()
+			arg, err := record.RequireArgumentAt(0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mismatch := climanifestparity.CompareArgumentCardinality(record.ID, arg, positionals); mismatch != nil {
+				t.Fatal(mismatch.Error())
+			}
+			if len(positionals) != 1 || positionals[0] != "config" {
+				t.Fatalf("positionals = %v, want [config]", positionals)
+			}
 		},
-		{
-			name:         "docs rejects excess positionals",
-			commandID:    docsRecord.ID,
-			argv:         []string{"docs", "config", "extra"},
-			wantParseErr: true,
-			errContains:  "accepts at most 1 arg",
-			verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, _ *cobra.Command, _ []string) {
-				t.Helper()
-				arg, err := record.RequireArgumentAt(0)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if arg.MaxCardinality != 1 {
-					t.Fatalf("contract maxCardinality = %d, want 1", arg.MaxCardinality)
-				}
-			},
+	}
+}
+
+func docsTopicExcessPositionalCase(docsRecord climanifest.Command) parsingParityCase {
+	return parsingParityCase{
+		name:         "docs rejects excess positionals",
+		commandID:    docsRecord.ID,
+		argv:         []string{"docs", "config", "extra"},
+		wantParseErr: true,
+		errContains:  "accepts at most 1 arg",
+		verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, _ *cobra.Command, _ []string) {
+			t.Helper()
+			arg, err := record.RequireArgumentAt(0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if arg.MaxCardinality != 1 {
+				t.Fatalf("contract maxCardinality = %d, want 1", arg.MaxCardinality)
+			}
 		},
-		{
-			name:      "docs topic enum matches live ValidArgs",
-			commandID: docsRecord.ID,
-			argv:      []string{"docs", "agents"},
-			verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, leaf *cobra.Command, _ []string) {
-				t.Helper()
-				arg, err := record.RequireArgumentAt(0)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if mismatch := climanifestparity.CompareArgumentEnum(record.ID, arg, leaf.ValidArgs); mismatch != nil {
-					t.Fatal(mismatch.Error())
-				}
-			},
+	}
+}
+
+func docsTopicEnumCase(docsRecord climanifest.Command) parsingParityCase {
+	return parsingParityCase{
+		name:      "docs topic enum matches live ValidArgs",
+		commandID: docsRecord.ID,
+		argv:      []string{"docs", "agents"},
+		verify: func(t *testing.T, _ climanifest.Manifest, record climanifest.Command, leaf *cobra.Command, _ []string) {
+			t.Helper()
+			arg, err := record.RequireArgumentAt(0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mismatch := climanifestparity.CompareArgumentEnum(record.ID, arg, leaf.ValidArgs); mismatch != nil {
+				t.Fatal(mismatch.Error())
+			}
 		},
 	}
 }

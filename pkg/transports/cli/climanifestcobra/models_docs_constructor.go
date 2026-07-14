@@ -214,43 +214,54 @@ func registerModelsLocalFlags(
 	includeInvokeLocalFlags bool,
 ) error {
 	var deprecatedPort int
-	flags := sortedFlags(record.Flags)
-	for _, flag := range flags {
+	for _, flag := range sortedFlags(record.Flags) {
 		if flag.Scope != "local" {
 			continue
 		}
-		switch flag.Long {
-		case "port":
-			registerDeprecatedPortFlag(cmd, &deprecatedPort)
-			if err := applyFlagContract(cmd.Flags().Lookup("port"), flag); err != nil {
-				return fmt.Errorf("apply port flag contract: %w", err)
-			}
-		case "operation":
-			if !includeInvokeLocalFlags || invokeFlags.Operation == nil {
-				return fmt.Errorf("missing operation binding for invoke flag %q", flag.Long)
-			}
-			if err := registerStringLocalFlag(cmd, flag, invokeFlags.Operation, invokeFlags.FlagUsages[flag.Long]); err != nil {
-				return err
-			}
-		case "text":
-			if !includeInvokeLocalFlags || invokeFlags.Text == nil {
-				return fmt.Errorf("missing text binding for invoke flag %q", flag.Long)
-			}
-			if err := registerStringLocalFlag(cmd, flag, invokeFlags.Text, invokeFlags.FlagUsages[flag.Long]); err != nil {
-				return err
-			}
-		case "output":
-			if !includeInvokeLocalFlags || invokeFlags.OutputPath == nil {
-				return fmt.Errorf("missing output binding for invoke flag %q", flag.Long)
-			}
-			if err := registerStringLocalFlag(cmd, flag, invokeFlags.OutputPath, invokeFlags.FlagUsages[flag.Long]); err != nil {
-				return err
-			}
-		default:
-			return fmt.Errorf("unsupported local flag %q for models/docs constructor", flag.Long)
+		if err := registerOneModelsLocalFlag(cmd, flag, invokeFlags, includeInvokeLocalFlags, &deprecatedPort); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func registerOneModelsLocalFlag(
+	cmd *cobra.Command,
+	flag climanifest.Flag,
+	invokeFlags ModelsInvokeFlagBindings,
+	includeInvokeLocalFlags bool,
+	deprecatedPort *int,
+) error {
+	switch flag.Long {
+	case "port":
+		registerDeprecatedPortFlag(cmd, deprecatedPort)
+		if err := applyFlagContract(cmd.Flags().Lookup("port"), flag); err != nil {
+			return fmt.Errorf("apply port flag contract: %w", err)
+		}
+	case "operation":
+		return registerInvokeStringLocalFlag(cmd, flag, invokeFlags, includeInvokeLocalFlags, invokeFlags.Operation, "operation")
+	case "text":
+		return registerInvokeStringLocalFlag(cmd, flag, invokeFlags, includeInvokeLocalFlags, invokeFlags.Text, "text")
+	case "output":
+		return registerInvokeStringLocalFlag(cmd, flag, invokeFlags, includeInvokeLocalFlags, invokeFlags.OutputPath, "output")
+	default:
+		return fmt.Errorf("unsupported local flag %q for models/docs constructor", flag.Long)
+	}
+	return nil
+}
+
+func registerInvokeStringLocalFlag(
+	cmd *cobra.Command,
+	flag climanifest.Flag,
+	invokeFlags ModelsInvokeFlagBindings,
+	includeInvokeLocalFlags bool,
+	target *string,
+	flagName string,
+) error {
+	if !includeInvokeLocalFlags || target == nil {
+		return fmt.Errorf("missing %s binding for invoke flag %q", flagName, flag.Long)
+	}
+	return registerStringLocalFlag(cmd, flag, target, invokeFlags.FlagUsages[flag.Long])
 }
 
 func registerStringLocalFlag(cmd *cobra.Command, contract climanifest.Flag, target *string, usage string) error {
