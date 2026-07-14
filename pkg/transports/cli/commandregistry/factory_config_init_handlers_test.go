@@ -2,10 +2,13 @@ package commandregistry_test
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	"github.com/spf13/cobra"
@@ -60,6 +63,7 @@ func TestFactoryQueryRunEUsesHandwrittenServicePath(t *testing.T) {
 	}
 
 	cmd := &cobra.Command{Use: "query"}
+	cmd.SetArgs([]string{})
 	if err := registry.AttachRunE(cmd, "you.factory.query"); err != nil {
 		t.Fatalf("AttachRunE() error = %v", err)
 	}
@@ -129,5 +133,224 @@ func factoryConfigInitNoopHandlers() commandregistry.FactoryConfigInitHandlers {
 		FactoryConfigExpandRunE:   noopRunE,
 		ConfigInitRunE:            noopRunE,
 		InitRunE:                  noopRunE,
+	}
+}
+
+func TestFactoryListRunEMapsBindings(t *testing.T) {
+	dir := "my-factory"
+	json := true
+	runE := commandregistry.FactoryListRunE(commandregistry.FactoryListBinding{
+		Dir:  &dir,
+		JSON: &json,
+		List: func(cfg factorycli.ListConfig) error {
+			if cfg.Dir != dir || !cfg.JSON {
+				t.Fatalf("list config = %+v, want dir=%q json=true", cfg, dir)
+			}
+			return nil
+		},
+	})
+	cmd := &cobra.Command{Use: "list"}
+	if err := runE(cmd, nil); err != nil {
+		t.Fatalf("RunE() error = %v", err)
+	}
+}
+
+func TestFactoryCreateRunEMapsBindings(t *testing.T) {
+	dir := "factory"
+	from := "./factory.json"
+	setCurrent := true
+	json := true
+	runE := commandregistry.FactoryCreateRunE(commandregistry.FactoryCreateBinding{
+		Dir:        &dir,
+		From:       &from,
+		SetCurrent: &setCurrent,
+		JSON:       &json,
+		Create: func(cfg factorycli.CreateFromFileConfig) error {
+			if cfg.Name != "staging" || cfg.Dir != dir || cfg.From != from || !cfg.SetCurrent || !cfg.JSON {
+				t.Fatalf("create config = %+v", cfg)
+			}
+			return nil
+		},
+	})
+	cmd := &cobra.Command{Use: "create"}
+	if err := runE(cmd, []string{"staging"}); err != nil {
+		t.Fatalf("RunE() error = %v", err)
+	}
+}
+
+func TestFactoryUpdateRunEMapsBindings(t *testing.T) {
+	dir := "factory"
+	from := "./factory.json"
+	runE := commandregistry.FactoryUpdateRunE(commandregistry.FactoryUpdateBinding{
+		Dir:  &dir,
+		From: &from,
+		Update: func(cfg factorycli.UpdateFromFileConfig) error {
+			if cfg.Name != "staging" || cfg.Dir != dir || cfg.From != from {
+				t.Fatalf("update config = %+v", cfg)
+			}
+			return nil
+		},
+	})
+	cmd := &cobra.Command{Use: "update"}
+	if err := runE(cmd, []string{"staging"}); err != nil {
+		t.Fatalf("RunE() error = %v", err)
+	}
+}
+
+func TestFactoryDeleteRunEMapsBindings(t *testing.T) {
+	dir := "factory"
+	runE := commandregistry.FactoryDeleteRunE(commandregistry.FactoryDeleteBinding{
+		Dir: &dir,
+		Delete: func(cfg factorycli.DeleteConfig) error {
+			if cfg.Name != "staging" || cfg.Dir != dir {
+				t.Fatalf("delete config = %+v", cfg)
+			}
+			return nil
+		},
+	})
+	cmd := &cobra.Command{Use: "delete"}
+	if err := runE(cmd, []string{"staging"}); err != nil {
+		t.Fatalf("RunE() error = %v", err)
+	}
+}
+
+func TestFactoryReplaceCurrentRunEMapsBindings(t *testing.T) {
+	server := "http://127.0.0.1:8080"
+	sessionID := "session-beta"
+	verbose := true
+	var diagnostic bytes.Buffer
+	runE := commandregistry.FactoryReplaceCurrentRunE(commandregistry.FactoryReplaceCurrentBinding{
+		Server:    &server,
+		SessionID: &sessionID,
+		Verbose:   func() bool { return verbose },
+		DiagnosticsWriter: func(cmd *cobra.Command) io.Writer {
+			return &diagnostic
+		},
+		ReplaceCurrent: func(cfg factorycli.ReplaceCurrentConfig) error {
+			if cfg.Server != server || cfg.SessionID != sessionID || !cfg.Verbose || cfg.Diagnostics != &diagnostic {
+				t.Fatalf("replace-current config = %+v", cfg)
+			}
+			return nil
+		},
+	})
+	cmd := &cobra.Command{Use: "replace-current"}
+	if err := runE(cmd, nil); err != nil {
+		t.Fatalf("RunE() error = %v", err)
+	}
+}
+
+func TestFactoryConfigValidateRunEMapsBindings(t *testing.T) {
+	json := true
+	runE := commandregistry.FactoryConfigValidateRunE(commandregistry.FactoryConfigValidateBinding{
+		JSON: &json,
+		Validate: func(cfg factorycli.ValidateConfig) error {
+			if cfg.Path != "./factory.json" || !cfg.JSON {
+				t.Fatalf("validate config = %+v", cfg)
+			}
+			return nil
+		},
+	})
+	cmd := &cobra.Command{Use: "validate"}
+	if err := runE(cmd, []string{"./factory.json"}); err != nil {
+		t.Fatalf("RunE() error = %v", err)
+	}
+}
+
+func TestFactoryConfigFlattenRunEMapsBindings(t *testing.T) {
+	debug := true
+	var diagnostic bytes.Buffer
+	runE := commandregistry.FactoryConfigFlattenRunE(commandregistry.FactoryConfigFlattenBinding{
+		Debug:   &debug,
+		Verbose: func() bool { return true },
+		DiagnosticsWriter: func(cmd *cobra.Command) io.Writer {
+			return &diagnostic
+		},
+		Flatten: func(cfg configcli.FactoryConfigFlattenConfig) error {
+			if cfg.Path != "./factory" || !cfg.Verbose || !cfg.Debug || cfg.Diagnostics != &diagnostic {
+				t.Fatalf("flatten config = %+v", cfg)
+			}
+			return nil
+		},
+	})
+	cmd := &cobra.Command{Use: "flatten"}
+	if err := runE(cmd, []string{"./factory"}); err != nil {
+		t.Fatalf("RunE() error = %v", err)
+	}
+}
+
+func TestFactoryConfigExpandRunEMapsBindings(t *testing.T) {
+	debug := true
+	runE := commandregistry.FactoryConfigExpandRunE(commandregistry.FactoryConfigExpandBinding{
+		Debug:   &debug,
+		Verbose: func() bool { return true },
+		Expand: func(cfg configcli.FactoryConfigExpandConfig) error {
+			if cfg.Path != "./factory.json" || !cfg.Verbose || !cfg.Debug {
+				t.Fatalf("expand config = %+v", cfg)
+			}
+			return nil
+		},
+	})
+	cmd := &cobra.Command{Use: "expand"}
+	if err := runE(cmd, []string{"./factory.json"}); err != nil {
+		t.Fatalf("RunE() error = %v", err)
+	}
+}
+
+func TestConfigInitRunEPropagatesHomeDirError(t *testing.T) {
+	runE := commandregistry.ConfigInitRunE(commandregistry.ConfigInitBinding{
+		HomeDir: func() (string, error) {
+			return "", errors.New("home dir unavailable")
+		},
+		Init: func(configinitcmd.InitConfig) error {
+			t.Fatal("Init must not run when HomeDir fails")
+			return nil
+		},
+	})
+	cmd := &cobra.Command{Use: "init"}
+	if err := runE(cmd, nil); err == nil {
+		t.Fatal("RunE() error = nil, want home dir failure")
+	}
+}
+
+func TestInitRunEMapsBindings(t *testing.T) {
+	dir := "factory"
+	scaffoldType := "ralph"
+	executor := "codex"
+	debug := true
+	runE := commandregistry.InitRunE(commandregistry.InitBinding{
+		Dir:      &dir,
+		Type:     &scaffoldType,
+		Executor: &executor,
+		Debug:    &debug,
+		Verbose:  func() bool { return true },
+		Init: func(cfg initcmd.InitConfig) error {
+			if cfg.Dir != dir || cfg.Type != scaffoldType || cfg.Executor != executor || !cfg.Debug || !cfg.Verbose {
+				t.Fatalf("init config = %+v", cfg)
+			}
+			return nil
+		},
+	})
+	cmd := &cobra.Command{Use: "init"}
+	if err := runE(cmd, nil); err != nil {
+		t.Fatalf("RunE() error = %v", err)
+	}
+}
+
+func TestFactoryQueryRunEMapsVerboseAndDebugBindings(t *testing.T) {
+	verbose := true
+	debug := true
+	runE := commandregistry.FactoryQueryRunE(commandregistry.FactoryQueryBinding{
+		Verbose: func() bool { return verbose },
+		Debug:   &debug,
+		Query: func(cfg factorycli.QueryConfig) error {
+			if !cfg.Verbose || !cfg.Debug {
+				t.Fatalf("query config = %+v, want verbose and debug", cfg)
+			}
+			return nil
+		},
+	})
+	cmd := &cobra.Command{Use: "query"}
+	if err := runE(cmd, nil); err != nil {
+		t.Fatalf("RunE() error = %v", err)
 	}
 }

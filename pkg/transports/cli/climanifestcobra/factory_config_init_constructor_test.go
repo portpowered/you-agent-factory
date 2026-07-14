@@ -67,6 +67,16 @@ func TestNewFactoryConfigInitFamilyComponentsRejectsMissingHandler(t *testing.T)
 	}
 }
 
+func TestNewFactoryConfigInitFamilyComponentsRejectsIncompleteBindings(t *testing.T) {
+	registry, err := commandregistry.NewFactoryConfigInitRegistry(factoryConfigInitNoopHandlers())
+	if err != nil {
+		t.Fatalf("NewFactoryConfigInitRegistry() error = %v", err)
+	}
+	if _, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(registry, climanifestcobra.FactoryConfigInitFlagBindings{}); err == nil {
+		t.Fatal("NewFactoryConfigInitFamilyComponents() incomplete bindings = nil, want error")
+	}
+}
+
 func TestNewFactoryConfigInitFamilyComponentsExposesOnlyFactoryConfigInitFamily(t *testing.T) {
 	components, _ := mustFactoryConfigInitFamilyComponents(t)
 	for _, id := range climanifestgen.FactoryConfigInitFamilyCommandIDs {
@@ -75,6 +85,49 @@ func TestNewFactoryConfigInitFamilyComponentsExposesOnlyFactoryConfigInitFamily(
 		if _, err := climanifestparity.FindCommandByPath(root, path); err != nil {
 			t.Fatalf("path for %q missing: %v", id, err)
 		}
+	}
+}
+
+func TestFactoryConfigInitFamilyReplaceCurrentRejectsPositionals(t *testing.T) {
+	components, _ := mustFactoryConfigInitFamilyComponents(t)
+	replaceCurrent, err := climanifestparity.FindCommandByPath(components.Factory, "factory replace-current")
+	if err != nil {
+		t.Fatalf("FindCommandByPath(factory replace-current) error = %v", err)
+	}
+	if replaceCurrent.Args == nil {
+		t.Fatal("replace-current Args must reject positionals")
+	}
+	if err := replaceCurrent.Args(replaceCurrent, []string{"extra"}); err == nil {
+		t.Fatal("replace-current must reject unexpected positional args")
+	}
+}
+
+func TestFactoryConfigInitFamilyQueryRejectsDeprecatedPort(t *testing.T) {
+	components, _ := mustFactoryConfigInitFamilyComponents(t)
+	query, err := climanifestparity.FindCommandByPath(components.Factory, "factory query")
+	if err != nil {
+		t.Fatalf("FindCommandByPath(factory query) error = %v", err)
+	}
+	if query.PreRunE == nil {
+		t.Fatal("factory query must wire deprecated --port PreRunE")
+	}
+	if err := query.ParseFlags([]string{"--port", "7437"}); err != nil {
+		t.Fatalf("ParseFlags(--port) error = %v", err)
+	}
+	if err := query.PreRunE(query, nil); err == nil {
+		t.Fatal("PreRunE(--port) error = nil, want deprecated flag rejection")
+	} else if !strings.Contains(err.Error(), "--server") {
+		t.Fatalf("PreRunE error = %v, want deprecated --port guidance", err)
+	}
+}
+
+func TestFactoryConfigInitConfigParentRejectsUnknownSubcommand(t *testing.T) {
+	components, _ := mustFactoryConfigInitFamilyComponents(t)
+	if components.Config.RunE == nil {
+		t.Fatal("you config group parent must wire unknown-subcommand guard RunE")
+	}
+	if err := components.Config.RunE(components.Config, []string{"nosuch"}); err == nil {
+		t.Fatal("config parent must reject unknown subcommands")
 	}
 }
 
