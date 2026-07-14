@@ -40,6 +40,15 @@ Use this map when changing the public REST contract.
   staged bytes in `internal/contractstaging/openapi_test.go`; prove
   `make generate-api` and Go/UI generator inputs still reference
   `api/openapi.yaml` rather than the staged package path in the same test file.
+- Publication manifest generation lives in `internal/contractstaging/manifest.go`
+  (`generateManifest`, `resolveSourceCommit`, `SourceIdentityPaths`). The emitted
+  `packages/api/generated/manifest.json` validates against the joined manifest
+  contract, records SHA-256 digests for every staged artifact except itself, and
+  sets `sourceCommit` from `git rev-list -1 HEAD --` over the package source
+  identity paths. Prove digest coverage, stability, source-change propagation,
+  and rejected tampered hashes in `internal/contractstaging/manifest_test.go`;
+  prove accepted/rejected manifest schema fixtures in
+  `contracts/manifest_schema_test.go`.
 - `scripts/api-package-consumer.mjs` installs the real tarball offline into an
   isolated temporary consumer and resolves concrete named exports plus every
   packaged wildcard match from that installation. Keep resolution rooted in
