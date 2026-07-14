@@ -1,0 +1,69 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.watch": {
+      "id": "example.factory.watch",
+      "name": "watch",
+      "path": "example factory watch",
+      "aliases": [],
+      "groupId": "factory",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.watch",
+        "documentation": {
+          "title": {
+            "id": "example.factory.watch.title",
+            "canonicalEnglish": "Watch factory session output"
+          },
+          "description": {
+            "id": "example.factory.watch.description",
+            "canonicalEnglish": "Streams factory session events with inherited verbose diagnostics."
+          }
+        },
+        "examples": [
+          "example factory watch --verbose"
+        ],
+        "visibility": "public",
+        "sourceHash": "2222333344445555666677778888999900001111aaaabbbbccccddddeeeeffff"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.watch",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "watch",
+        "example": "  example factory watch --verbose"
+      },
+      "flags": {
+        "example.factory.watch.flag.verbose": {
+          "id": "example.factory.watch.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.factory.watch.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      }
+    }
+  }
+}

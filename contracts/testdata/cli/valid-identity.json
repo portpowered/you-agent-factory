@@ -1,0 +1,51 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.list": {
+      "id": "example.factory.list",
+      "name": "list",
+      "path": "example factory list",
+      "aliases": [
+        "ls"
+      ],
+      "groupId": "factory",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.list",
+        "documentation": {
+          "title": {
+            "id": "example.factory.list.title",
+            "canonicalEnglish": "List named factories"
+          },
+          "description": {
+            "id": "example.factory.list.description",
+            "canonicalEnglish": "Lists persisted named factories under a factory root."
+          }
+        },
+        "examples": [
+          "example factory list"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.list",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "suggestion": {
+        "minimumDistance": 2,
+        "disableDefaultCmd": false,
+        "validArgs": []
+      },
+      "usage": {
+        "line": "list",
+        "example": "  example factory list"
+      }
+    }
+  }
+}

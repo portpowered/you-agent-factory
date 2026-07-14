@@ -1,0 +1,101 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.resolve": {
+      "id": "example.factory.resolve",
+      "name": "resolve",
+      "path": "example factory resolve",
+      "aliases": [],
+      "groupId": "factory",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.resolve",
+        "documentation": {
+          "title": {
+            "id": "example.factory.resolve.title",
+            "canonicalEnglish": "Resolve factory inputs"
+          },
+          "description": {
+            "id": "example.factory.resolve.description",
+            "canonicalEnglish": "Resolves factory invocation inputs using an explicit precedence order."
+          }
+        },
+        "examples": [
+          "example factory resolve --config ./factory.json"
+        ],
+        "visibility": "public",
+        "sourceHash": "aaaa1111bbbb2222cccc3333dddd4444eeee5555ffff66667777888899990000"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.resolve",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "resolve",
+        "example": "  example factory resolve --config ./factory.json"
+      },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "example.factory.resolve.output.result": {
+          "id": "example.factory.resolve.output.result",
+          "channel": "stdout",
+          "format": "json"
+        }
+      },
+      "exits": {
+        "example.factory.resolve.exit.success": {
+          "id": "example.factory.resolve.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "example.factory.resolve.exit.usage": {
+          "id": "example.factory.resolve.exit.usage",
+          "code": 2,
+          "kind": "usage"
+        }
+      },
+      "sideEffects": {
+        "example.factory.resolve.side-effect.config": {
+          "id": "example.factory.resolve.side-effect.config",
+          "kind": "config"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      }
+    }
+  }
+}
