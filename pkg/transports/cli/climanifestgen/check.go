@@ -24,10 +24,11 @@ func (drift Drift) Empty() bool {
 func Check(repositoryRoot string) (Drift, error) {
 	expected := map[string][]byte{
 		RepresentativeFamilyJSONPath:              nil,
-		RepresentativeFamilyCommandIDsPath:        representativeCommandIDsSource(),
+		WorkFamilyJSONPath:                        nil,
 		FactoryConfigInitFamilyJSONPath:           nil,
-		FactoryConfigInitFamilyCommandIDsPath:     factoryConfigInitCommandIDsSource(),
 		ModelsDocsFamilyJSONPath:                  nil,
+		RepresentativeFamilyCommandIDsPath:        representativeAndWorkCommandIDsSource(),
+		FactoryConfigInitFamilyCommandIDsPath:     factoryConfigInitCommandIDsSource(),
 		ModelsDocsFamilyCommandIDsPath:            modelsDocsCommandIDsSource(),
 	}
 
@@ -36,6 +37,12 @@ func Check(repositoryRoot string) (Drift, error) {
 		return Drift{}, err
 	}
 	expected[RepresentativeFamilyJSONPath] = representativePayload
+
+	workPayload, err := WorkArtifact(repositoryRoot)
+	if err != nil {
+		return Drift{}, err
+	}
+	expected[WorkFamilyJSONPath] = workPayload
 
 	factoryConfigInitPayload, err := FactoryConfigInitFamilyArtifact(repositoryRoot)
 	if err != nil {

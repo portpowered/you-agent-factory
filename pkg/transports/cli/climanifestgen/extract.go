@@ -9,19 +9,25 @@ import (
 // ExtractRepresentativeFamily returns manifest metadata for exactly the
 // representative root/session-show command IDs declared in commands.json.
 func ExtractRepresentativeFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
-	return extractFamily(manifest, RepresentativeFamilyCommandIDs, "representative-family")
+	return extractFamily(manifest, "representative", RepresentativeFamilyCommandIDs)
+}
+
+// ExtractWorkFamily returns manifest metadata for exactly the work
+// inspection/control command IDs declared in commands.json.
+func ExtractWorkFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
+	return extractFamily(manifest, "work", WorkFamilyCommandIDs)
 }
 
 // ExtractFactoryConfigInitFamily returns manifest metadata for exactly the
 // factory/config/init command IDs declared in commands.json.
 func ExtractFactoryConfigInitFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
-	return extractFamily(manifest, FactoryConfigInitFamilyCommandIDs, "factory/config/init family")
+	return extractFamily(manifest, "factory/config/init", FactoryConfigInitFamilyCommandIDs)
 }
 
 func extractFamily(
 	manifest climanifest.Manifest,
-	commandIDs []string,
 	familyLabel string,
+	commandIDs []string,
 ) (climanifest.Manifest, error) {
 	if manifest.RootPath == "" {
 		return climanifest.Manifest{}, fmt.Errorf("CLI command manifest missing rootPath")
@@ -34,7 +40,11 @@ func extractFamily(
 	for _, id := range commandIDs {
 		record, ok := manifest.Commands[id]
 		if !ok {
-			return climanifest.Manifest{}, fmt.Errorf("production manifest missing %s command %q", familyLabel, id)
+			return climanifest.Manifest{}, fmt.Errorf(
+				"production manifest missing %s-family command %q",
+				familyLabel,
+				id,
+			)
 		}
 		commands[id] = record
 	}

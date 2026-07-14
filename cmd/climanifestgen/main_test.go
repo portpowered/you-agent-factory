@@ -6,18 +6,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 )
 
 func TestRunGeneratesCLIFamilyArtifacts(t *testing.T) {
-	repoRoot := testutil.MustRepoPath(t, ".")
 	root := t.TempDir()
-	manifestSource := filepath.Join(repoRoot, climanifestgen.ProductionManifestPath)
-	manifestTarget := filepath.Join(root, climanifestgen.ProductionManifestPath)
-	if err := copyTestFile(manifestSource, manifestTarget); err != nil {
-		t.Fatalf("copy production manifest: %v", err)
-	}
+	writeProductionManifestFixture(t, root)
 
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	if status := run(root, false, stdout, stderr); status != 0 {
@@ -36,17 +30,6 @@ func TestRunGeneratesCLIFamilyArtifacts(t *testing.T) {
 	}
 }
 
-func copyTestFile(source, target string) error {
-	payload, err := os.ReadFile(source)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(target, payload, 0o644)
-}
-
 func TestRunCheckFailsOnStaleArtifact(t *testing.T) {
 	root := t.TempDir()
 	manifestPath := filepath.Join(root, filepath.FromSlash(climanifestgen.RepresentativeFamilyJSONPath))
@@ -60,5 +43,20 @@ func TestRunCheckFailsOnStaleArtifact(t *testing.T) {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	if status := run(root, true, stdout, stderr); status == 0 {
 		t.Fatalf("run(check) = 0, want failure; stderr = %q", stderr.String())
+	}
+}
+
+func writeProductionManifestFixture(t *testing.T, root string) {
+	t.Helper()
+	manifest, err := os.ReadFile(filepath.Join("testdata", "production_manifest.json"))
+	if err != nil {
+		t.Fatalf("read production manifest fixture: %v", err)
+	}
+	manifestPath := filepath.Join(root, filepath.FromSlash(climanifestgen.ProductionManifestPath))
+	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+		t.Fatalf("create manifest directory: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
+		t.Fatalf("write manifest: %v", err)
 	}
 }

@@ -22,6 +22,7 @@ func assertHandwrittenRootSessionConstructors(t *testing.T, repoRoot string) {
 	t.Helper()
 	rootGo := filepath.Join(repoRoot, "pkg", "transports", "cli", "root.go")
 	rootWorkGo := filepath.Join(repoRoot, "pkg", "transports", "cli", "root_work.go")
+	rootWorkflowGo := filepath.Join(repoRoot, "pkg", "transports", "cli", "root_workflow.go")
 	for _, path := range []string{rootGo, rootWorkGo} {
 		contents, err := os.ReadFile(path)
 		if err != nil {
@@ -34,13 +35,25 @@ func assertHandwrittenRootSessionConstructors(t *testing.T, repoRoot string) {
 				t.Fatalf("%s must keep handwritten NewRootCommand constructor", path)
 			}
 		case "root_work.go":
-			if !strings.Contains(text, "func newSessionShowCommand(") {
-				t.Fatalf("%s must keep handwritten newSessionShowCommand constructor for rollback", path)
-			}
 			if !strings.Contains(text, "func newLegacyRootCommandWithOptions(") {
 				t.Fatalf("%s must keep legacy rollback constructor", path)
 			}
 		}
+	}
+	sessionConstructorFiles := []string{rootWorkGo, rootWorkflowGo}
+	foundSessionShow := false
+	for _, path := range sessionConstructorFiles {
+		contents, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		if strings.Contains(string(contents), "func newSessionShowCommand(") {
+			foundSessionShow = true
+			break
+		}
+	}
+	if !foundSessionShow {
+		t.Fatalf("handwritten newSessionShowCommand must remain in %s or %s for rollback", rootWorkGo, rootWorkflowGo)
 	}
 }
 

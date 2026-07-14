@@ -9,3 +9,13 @@ var RepresentativeFamilyCommandIDs = []string{
 	"you.session",
 	"you.session.show",
 }
+
+// WorkFamilyCommandIDs lists the stable command IDs emitted from
+// contracts/cli/commands.json for the work inspection/control family.
+var WorkFamilyCommandIDs = []string{
+	"you.work",
+	"you.work.list",
+	"you.work.show",
+	"you.work.move",
+	"you.work.visualize",
+}

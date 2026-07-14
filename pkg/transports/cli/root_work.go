@@ -3,18 +3,14 @@ package cli
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
-	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
-	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
 )
@@ -387,10 +383,94 @@ func runCommandExamples() string {
 		"  " + cliBinaryName + " run --named @you/goal --output response-stream \"Ship the login bugfix\""
 }
 
+// NewLegacyWorkFamilyCommand builds the isolated handwritten
+// you work → list/show/move/visualize tree used by generator-vs-legacy parity.
+func NewLegacyWorkFamilyCommand() *cobra.Command {
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	return newWorkCommand(globals, diagnostics)
+}
+
+// NewLegacyWorkFamilyRootForParity builds an isolated you → work tree with shared
+// persistent globals for generator-vs-legacy parity tests.
+func NewLegacyWorkFamilyRootForParity() *cobra.Command {
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	root.AddCommand(newWorkCommand(globals, diagnostics))
+	return root
+}
+
+// NewWorkFamilyParityRoots builds matching legacy and generated you → work parity
+// roots that share one persistent globals shell.
+func NewWorkFamilyParityRoots(
+	registry *commandregistry.Registry,
+	bindings climanifestcobra.WorkFamilyBindings,
+) (legacyRoot, generatedRoot *cobra.Command, err error) {
+	if registry == nil {
+		return nil, nil, fmt.Errorf("build work family parity roots: registry is required")
+	}
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+
+	legacyRoot = newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	legacyRoot.AddCommand(newWorkCommand(globals, diagnostics))
+
+	generatedWork, err := climanifestcobra.NewWorkFamilyCommand(registry, bindings)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build work family parity roots: %w", err)
+	}
+	generatedRoot = newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	generatedRoot.AddCommand(generatedWork)
+	return legacyRoot, generatedRoot, nil
+}
+
+// NewWorkFamilyParityRootsWithProductionHandlers builds legacy and generated
+// parity roots wired with production work handler bindings.
+func NewWorkFamilyParityRootsWithProductionHandlers() (legacyRoot, generatedRoot *cobra.Command, err error) {
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+
+	legacyRoot = newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	legacyRoot.AddCommand(newWorkCommand(globals, diagnostics))
+
+	registry, bindings, err := newWorkHandlerRegistry(globals, diagnostics)
+	if err != nil {
+		return nil, nil, err
+	}
+	generatedWork, err := climanifestcobra.NewWorkFamilyCommand(registry, bindings)
+	if err != nil {
+		return nil, nil, err
+	}
+	generatedRoot = newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	generatedRoot.AddCommand(generatedWork)
+	return legacyRoot, generatedRoot, nil
+}
+
 func newWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	workCmd := &cobra.Command{
 		Use:   "work",
 		Short: "Inspect work from a running factory",
+		Long: "Inspect and control work on a running you-agent-factory service.\n\n" +
+			"Subcommands:\n" +
+			"  list       list work from GET /factory-sessions/{session_id}/work with optional filters and pagination\n" +
+			"  show       show one work item from GET /factory-sessions/{session_id}/work/{work_id}\n" +
+			"  move       move one work item to another authored state through POST /factory-sessions/{session_id}/work/{work_id}/move\n" +
+			"  visualize  read a local FACTORY_REQUEST_BATCH JSON file and render its dependency graph to stdout\n\n" +
+			"API-backed list, show, and move commands target the default compatibility session unless --session is set. " +
+			"Use global --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
+		Example: "  # List work on the default compatibility session.\n" +
+			"  " + cliBinaryName + " work list\n\n" +
+			"  # Show one work item after submit.\n" +
+			"  " + cliBinaryName + " work show work-123\n\n" +
+			"  # Render a local batch dependency graph.\n" +
+			"  " + cliBinaryName + " work visualize batch.json > graph.mermaid",
 	}
 	workCmd.AddCommand(newWorkListCommand(globals, diagnostics))
 	workCmd.AddCommand(newWorkShowCommand(globals, diagnostics))
@@ -449,6 +529,8 @@ func newWorkListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 			"--work-type-name matches workTypeName exactly. " +
 			"--trace-id matches traceId or currentChainingTraceId exactly. " +
 			"Combine filters with --max-results and --next-token to page through the filtered result set.",
+		Example: "  " + cliBinaryName + " work list\n\n" +
+			"  " + cliBinaryName + " work list --name startup --max-results 25",
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Server = globals.server
@@ -486,6 +568,8 @@ func newWorkShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 			"Run " + cliBinaryName + " session list to discover live session ids.\n\n" +
 			"After submit, use " + cliBinaryName + " work list --name <name> to find work ids, " +
 			"then " + cliBinaryName + " work show <work-id> to verify one item without JSON pagination.",
+		Example: "  " + cliBinaryName + " work show work-123\n\n" +
+			"  " + cliBinaryName + " --json work show work-123",
 		Args:    cobra.ExactArgs(1),
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -517,6 +601,8 @@ func newWorkMoveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 			"Run " + cliBinaryName + " session list to discover live session ids.\n\n" +
 			"Moves are rejected while the work item is in an active dispatch. " +
 			"Repeating the same --request-id after a successful move returns 409 without a second mutation.",
+		Example: "  " + cliBinaryName + " work move work-123 ready\n\n" +
+			"  " + cliBinaryName + " work move work-123 ready --request-id op-1",
 		Args:    cobra.ExactArgs(2),
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -538,88 +624,81 @@ func newWorkMoveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 	return cmd
 }
 
-func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, options RootCommandOptions) *cobra.Command {
-	sessionCmd := legacySessionParentCommand()
-	sessionCmd.AddCommand(handwrittenSessionSubcommands(globals, diagnostics, options, newSessionShowCommand(globals, diagnostics))...)
-	return sessionCmd
+func newWorkFamilyBindings(globals *cliGlobalOptions) (climanifestcobra.WorkFamilyBindings, *string) {
+	listCfg := workcli.ListConfig{Server: globals.server}
+	showCfg := workcli.ShowConfig{Server: globals.server}
+	moveCfg := workcli.MoveConfig{Server: globals.server}
+	var visualizeFormat string
+	return climanifestcobra.WorkFamilyBindings{
+		ListConfig:      &listCfg,
+		ShowConfig:      &showCfg,
+		MoveConfig:      &moveCfg,
+		VisualizeFormat: &visualizeFormat,
+		FlagUsages:      workFamilyFlagUsages(),
+	}, &visualizeFormat
 }
 
-func legacySessionParentCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "session",
-		Short: "List, open, and close factory sessions on a running host",
-		Long: "Manage factory sessions on a running you-agent-factory service.\n\n" +
-			"Subcommands:\n" +
-			"  list       list live workspace sessions or durable Factory Sessions with --scope live|persisted|all\n" +
-			"  show       show one live or durable Factory Session from GET /factory-sessions/{session_id}\n" +
-			"  dispatches list durable Factory Session dispatches from GET /factory-sessions/{session_id}/dispatches\n" +
-			"  pause      pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause\n" +
-			"  resume     resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume\n" +
-			"  create     open another live session from a folder path\n" +
-			"  delete     close a live session by session id\n\n" +
-			"Durable list output uses Factory Session status, source identity, result availability, " +
-			"progress, and action availability. Session commands use the same default --port as work list. " +
-			"Use --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose " +
-			"or --debug is set.",
-		Example: "  # List live sessions on the default local port.\n" +
-			"  " + cliBinaryName + " session list\n\n" +
-			"  # Show orchestrator-aware runtime for one live session.\n" +
-			"  " + cliBinaryName + " session show session-beta\n\n" +
-			"  # Pause and resume the default compatibility session.\n" +
-			"  " + cliBinaryName + " session pause\n" +
-			"  " + cliBinaryName + " session resume\n\n" +
-			"  # Pause and resume one named or durable Factory Session.\n" +
-			"  " + cliBinaryName + " session pause session-beta\n" +
-			"  " + cliBinaryName + " session resume dur-sess-js-run-n-001\n\n" +
-			"  # Emit API-shaped JSON for automation.\n" +
-			"  " + cliBinaryName + " session list --json\n\n" +
-			"  # Open and close sessions on a non-default port.\n" +
-			"  " + cliBinaryName + " session create --dir /workspace/fleet --port 9090\n" +
-			"  " + cliBinaryName + " session delete session-beta --port 9090 --json\n\n" +
-			"  # Pause and resume the default compatibility session.\n" +
-			"  " + cliBinaryName + " session pause\n" +
-			"  " + cliBinaryName + " session resume\n\n" +
-			"  # Target a different service port for list output.\n" +
-			"  " + cliBinaryName + " session list --port 9090",
+func workFamilyFlagUsages() map[string]string {
+	return map[string]string{
+		"state-name":     "filter by current state name",
+		"state-type":     "filter by current state type (INITIAL, PROCESSING, TERMINAL, FAILED)",
+		"name":           "filter by case-insensitive substring of work name (applied before pagination)",
+		"work-type-name": "filter by exact workTypeName (applied before pagination)",
+		"trace-id":       "filter by exact traceId or currentChainingTraceId (applied before pagination)",
+		"sort-by":        "sort returned work by field (state.type)",
+		"max-results":    "maximum work items to return per page after server-side filters",
+		"next-token":     "pagination cursor returned by a previous work list response",
+		"session":        "target one live factory session; omit to use the default compatibility session",
+		"request-id":     "optional client idempotency key for operator moves",
+		"format":         "output format: mermaid or markdown-mermaid",
 	}
 }
 
-func newSessionShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := sessioncli.ShowConfig{Server: globals.server}
-
-	cmd := &cobra.Command{
-		Use:   "show [session-id]",
-		Short: "Show one live factory session",
-		Long: "Show one live factory session from GET /factory-sessions/{session_id}.\n\n" +
-			"Human output uses FactorySession as the canonical runtime noun and prints orchestrator " +
-			"kind plus Petri or JavaScript runtime projections. Dynamic workflow wording appears only " +
-			"as JavaScript shorthand. Omit session-id to target the default compatibility session " +
-			"(~default). Use global --json for the API-shaped FactorySession payload and global " +
-			"--server to target the same factory API base URI as work list and factory query.",
-		Example: "  # Show the default compatibility factory session.\n" +
-			"  " + cliBinaryName + " session show\n\n" +
-			"  # Show one named live session with orchestrator-aware runtime fields.\n" +
-			"  " + cliBinaryName + " session show session-beta\n\n" +
-			"  # Emit API-shaped JSON for automation.\n" +
-			"  " + cliBinaryName + " --json session show session-beta",
-		Args:    cobra.MaximumNArgs(1),
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 1 {
-				cfg.SessionID = args[0]
-			}
-			cfg.Server = globals.server
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return showSession(cfg)
-		},
+func newWorkHandlerRegistry(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+) (*commandregistry.Registry, climanifestcobra.WorkFamilyBindings, error) {
+	bindings, visualizeFormatPtr := newWorkFamilyBindings(globals)
+	listCfg := bindings.ListConfig
+	showCfg := bindings.ShowConfig
+	moveCfg := bindings.MoveConfig
+	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
+		ListRunE: commandregistry.ListRunE(commandregistry.ListBinding{
+			Config:            listCfg,
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			ListWork:          listWork,
+		}),
+		ShowRunE: commandregistry.ShowRunE(commandregistry.ShowBinding{
+			Config:            showCfg,
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			ShowWork:          showWork,
+		}),
+		MoveRunE: commandregistry.MoveRunE(commandregistry.MoveBinding{
+			Config:            moveCfg,
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			MoveWork:          moveWork,
+		}),
+		VisualizeRunE: commandregistry.VisualizeRunE(commandregistry.VisualizeBinding{
+			Format:    visualizeFormatPtr,
+			Visualize: visualizeWork,
+		}),
+	})
+	if err != nil {
+		return nil, climanifestcobra.WorkFamilyBindings{}, err
 	}
-
-	registerDeprecatedPortFlag(cmd)
-	return cmd
+	return registry, bindings, nil
 }
 
 func newRepresentativeHandlerRegistry(
@@ -645,222 +724,4 @@ func newRepresentativeHandlerRegistry(
 			ShowSession:       showSession,
 		}),
 	})
-}
-
-func newSessionDispatchesCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := sessioncli.DispatchesConfig{Server: globals.server}
-
-	cmd := &cobra.Command{
-		Use:   "dispatches [session-id]",
-		Short: "List durable Factory Session dispatches",
-		Long: "List durable Factory Session dispatches from GET /factory-sessions/{session_id}/dispatches.\n\n" +
-			"Human output uses FactorySession, Dispatch, and FactoryArtifact vocabulary for dispatch id, status, " +
-			"kind, label, and output artifact ids. The command requires a durable dur-sess-* session id. Use global " +
-			"--json for the API-shaped ListFactorySessionDispatchesResponse and global --server to target the same " +
-			"factory API base URI as session show and session resume.",
-		Example: "  # List dispatches for one interrupted durable Factory Session.\n" +
-			"  " + cliBinaryName + " session dispatches dur-sess-js-interrupted-001\n\n" +
-			"  # Emit API-shaped JSON for automation.\n" +
-			"  " + cliBinaryName + " --json session dispatches dur-sess-js-interrupted-001",
-		Args:    cobra.ExactArgs(1),
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.SessionID = args[0]
-			cfg.Server = globals.server
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return listSessionDispatches(cfg)
-		},
-	}
-
-	registerDeprecatedPortFlag(cmd)
-	cmd.Flags().StringVar(&cfg.Phase, "phase", "", "filter by exact Dispatch phase")
-	cmd.Flags().StringVar(&cfg.Status, "status", "", "filter by canonical Dispatch status")
-	return cmd
-}
-
-func newSessionPauseCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := sessioncli.LifecycleControlConfig{Server: globals.server}
-
-	cmd := &cobra.Command{
-		Use:   "pause [session-id]",
-		Short: "Pause one live or durable Factory Session",
-		Long: "Pause one live or durable Factory Session through POST /factory-sessions/{session_id}/pause.\n\n" +
-			"Human output reports paused, already-paused, invalid-state, not-found, or unreachable-host " +
-			"outcomes using Factory Session terminology. Omit session-id to target the default compatibility " +
-			"session (~default), pass a named live session id such as session-beta, or pass a durable " +
-			"session id from `you session list --scope all`. Use global --json for the API-shaped " +
-			"FactorySessionLifecycleControlResponse and global --server to target the same factory API base URI " +
-			"as workflow status and session show.",
-		Example: "  # Pause the default compatibility Factory Session.\n" +
-			"  " + cliBinaryName + " session pause\n\n" +
-			"  # Pause one named live Factory Session.\n" +
-			"  " + cliBinaryName + " session pause session-beta\n\n" +
-			"  # Pause one running durable Factory Session.\n" +
-			"  " + cliBinaryName + " session pause dur-sess-js-run-n-001\n\n" +
-			"  # Emit API-shaped JSON for automation.\n" +
-			"  " + cliBinaryName + " --json session pause session-beta",
-		Args:    cobra.MaximumNArgs(1),
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 1 {
-				cfg.SessionID = args[0]
-			}
-			cfg.Server = globals.server
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return pauseSession(cfg)
-		},
-	}
-
-	registerDeprecatedPortFlag(cmd)
-	return cmd
-}
-
-func newSessionResumeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := sessioncli.LifecycleControlConfig{Server: globals.server}
-
-	cmd := &cobra.Command{
-		Use:   "resume [session-id]",
-		Short: "Resume one paused live or durable Factory Session",
-		Long: "Resume one paused live or durable Factory Session through POST /factory-sessions/{session_id}/resume.\n\n" +
-			"Human output reports resumed, already-running, invalid-state, not-found, or unreachable-host " +
-			"outcomes using Factory Session terminology. Omit session-id to target the default compatibility " +
-			"session (~default), pass a named live session id such as session-beta, or pass a durable " +
-			"session id from `you session list --scope all`. Use global --json for the API-shaped " +
-			"FactorySessionLifecycleControlResponse and global --server to target the same factory API base URI " +
-			"as workflow status and session show.",
-		Example: "  # Resume the default compatibility Factory Session.\n" +
-			"  " + cliBinaryName + " session resume\n\n" +
-			"  # Resume one named live Factory Session.\n" +
-			"  " + cliBinaryName + " session resume session-beta\n\n" +
-			"  # Resume one paused durable Factory Session.\n" +
-			"  " + cliBinaryName + " session resume dur-sess-js-run-n-001\n\n" +
-			"  # Emit API-shaped JSON for automation.\n" +
-			"  " + cliBinaryName + " --json session resume session-beta",
-		Args:    cobra.MaximumNArgs(1),
-		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) == 1 {
-				cfg.SessionID = args[0]
-			}
-			cfg.Server = globals.server
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return resumeSession(cfg)
-		},
-	}
-
-	registerDeprecatedPortFlag(cmd)
-	return cmd
-}
-
-func newSessionListCommand(diagnostics *cliDiagnosticsOptions, options RootCommandOptions) *cobra.Command {
-	cfg := sessioncli.ListConfig{Port: defaultcmd.FactoryPort, Scope: "live"}
-
-	cmd := &cobra.Command{
-		Use:   "list",
-		Short: "List live and durable factory sessions",
-		Long: "List factory sessions for the requested scope.\n\n" +
-			"live returns workspace sessions kept open by the running host. persisted returns durable " +
-			"Factory Sessions from the deterministic provider loopback. all returns both live workspace " +
-			"sessions and durable Factory Sessions.\n\n" +
-			"Human output prints the legacy live-session table for workspace rows and a durable Factory " +
-			"Session table with status, source identity, result availability, progress, and actions. " +
-			"Use --json to emit ListFactorySessionsResponse on stdout.",
-		Example: "  " + cliBinaryName + " session list\n\n" +
-			"  " + cliBinaryName + " session list --scope persisted\n\n" +
-			"  " + cliBinaryName + " session list --scope all --json",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			scope := fse.SessionListScope(strings.TrimSpace(cfg.Scope))
-			if scope == fse.SessionListScopePersisted || scope == fse.SessionListScopeAll {
-				service, err := buildWorkflowExecutionService(cmd.Context(), options, sessionexecutioncli.ExecutionBackendConfig{Provider: string(fse.ExecutionProviderFake)}, "", "")
-				if err != nil {
-					return err
-				}
-				cfg.DurableLister = service.ListSessions
-			}
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return listSessions(cfg)
-		},
-	}
-
-	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
-	cmd.Flags().StringVar(&cfg.Scope, "scope", cfg.Scope, "session list scope: live, persisted, or all")
-	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API list-factory-sessions JSON response")
-	return cmd
-}
-
-func newSessionCreateCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := sessioncli.CreateConfig{Port: defaultcmd.FactoryPort}
-
-	cmd := &cobra.Command{
-		Use:   "create",
-		Short: "Open a live factory session from a folder",
-		Long: "Open another live factory session from a folder path via POST /factory-sessions.\n\n" +
-			"Use --dir to provide the folder path. Optional --init-new-factory and --validate-only " +
-			"map to the API request fields and are mutually exclusive. Use --target-kind and --target-name " +
-			"when the folder exposes multiple runnable targets. Use --json to emit OpenFactorySessionResponse " +
-			"on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
-		Example: "  # Open a session for an existing factory folder.\n" +
-			"  " + cliBinaryName + " session create --dir /workspace/fleet\n\n" +
-			"  # Validate a folder without opening a live session.\n" +
-			"  " + cliBinaryName + " session create --dir /workspace/fleet --validate-only\n\n" +
-			"  # Open a named target inside a multi-factory folder.\n" +
-			"  " + cliBinaryName + " session create --dir /workspace/fleet --target-kind named --target-name beta",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return createSession(cfg)
-		},
-	}
-
-	cmd.Flags().StringVar(&cfg.Dir, "dir", "", "folder path to open as a live factory session")
-	cmd.Flags().BoolVar(&cfg.InitNewFactory, "init-new-factory", false, "write the default init scaffold at --dir and open a live session")
-	cmd.Flags().BoolVar(&cfg.ValidateOnly, "validate-only", false, "validate the folder and optional target without creating a live session")
-	cmd.Flags().StringVar(&cfg.TargetKind, "target-kind", "", "target kind when disambiguating runnable factories (default or named)")
-	cmd.Flags().StringVar(&cfg.TargetName, "target-name", "", "named target when --target-kind is named")
-	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
-	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit the API open-factory-session JSON response")
-	_ = cmd.MarkFlagRequired("dir")
-	cmd.MarkFlagsMutuallyExclusive("init-new-factory", "validate-only")
-	return cmd
-}
-
-func newSessionDeleteCommand(diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	cfg := sessioncli.DeleteConfig{Port: defaultcmd.FactoryPort}
-
-	cmd := &cobra.Command{
-		Use:   "delete <session-id>",
-		Short: "Close a live factory session",
-		Long: "Close one live factory session via DELETE /factory-sessions/{session_id}.\n\n" +
-			"Use the same --port selection as session list. Use --json to emit a JSON confirmation on stdout.",
-		Args: cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.SessionID = args[0]
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return deleteSession(cfg)
-		},
-	}
-
-	cmd.Flags().IntVar(&cfg.Port, "port", cfg.Port, "HTTP server port")
-	cmd.Flags().BoolVar(&cfg.JSON, "json", false, "emit a JSON confirmation after the session closes")
-	return cmd
 }

@@ -11,6 +11,9 @@ import (
 //go:embed representative_family.json
 var representativeFamilyJSON []byte
 
+//go:embed work_family.json
+var workFamilyJSON []byte
+
 //go:embed factory_config_init_family.json
 var factoryConfigInitFamilyJSON []byte
 
@@ -20,13 +23,19 @@ var modelsDocsFamilyJSON []byte
 // RepresentativeFamilyManifest returns generated §4.3 metadata for the
 // representative root/session-show command family.
 func RepresentativeFamilyManifest() (climanifest.Manifest, error) {
-	return parseFamilyManifest(representativeFamilyJSON, "representative-family")
+	return parseFamilyManifest(representativeFamilyJSON, "representative")
+}
+
+// WorkFamilyManifest returns generated §4.3 metadata for the work
+// inspection/control command family.
+func WorkFamilyManifest() (climanifest.Manifest, error) {
+	return parseFamilyManifest(workFamilyJSON, "work")
 }
 
 // FactoryConfigInitFamilyManifest returns generated §4.3 metadata for the
 // factory/config/init command family.
 func FactoryConfigInitFamilyManifest() (climanifest.Manifest, error) {
-	return parseFamilyManifest(factoryConfigInitFamilyJSON, "factory/config/init family")
+	return parseFamilyManifest(factoryConfigInitFamilyJSON, "factory/config/init")
 }
 
 // ModelsDocsFamilyManifest returns generated §4.3 metadata for the models/docs
@@ -52,6 +61,15 @@ func parseFamilyManifest(payload []byte, familyLabel string) (climanifest.Manife
 // CommandByID returns one generated representative-family command record.
 func CommandByID(id string) (climanifest.Command, error) {
 	manifest, err := RepresentativeFamilyManifest()
+	if err != nil {
+		return climanifest.Command{}, err
+	}
+	return manifest.CommandByID(id)
+}
+
+// WorkCommandByID returns one generated work-family command record.
+func WorkCommandByID(id string) (climanifest.Command, error) {
+	manifest, err := WorkFamilyManifest()
 	if err != nil {
 		return climanifest.Command{}, err
 	}

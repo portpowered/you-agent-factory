@@ -13,6 +13,21 @@ const (
 	SessionShowOperationID = "getFactorySession"
 	SessionShowHTTPMethod  = "GET"
 	SessionShowHTTPPath    = "/factory-sessions/{session_id}"
+
+	WorkListHandlerID    = "you.work.list.handler"
+	WorkListOperationID  = "listWorkBySessionId"
+	WorkListHTTPMethod   = "GET"
+	WorkListHTTPPath     = "/factory-sessions/{session_id}/work"
+
+	WorkShowHandlerID   = "you.work.show.handler"
+	WorkShowOperationID = "getWorkBySessionId"
+	WorkShowHTTPMethod  = "GET"
+	WorkShowHTTPPath    = "/factory-sessions/{session_id}/work/{id}"
+
+	WorkMoveHandlerID   = "you.work.move.handler"
+	WorkMoveOperationID = "moveWorkBySessionId"
+	WorkMoveHTTPMethod  = "POST"
+	WorkMoveHTTPPath    = "/factory-sessions/{session_id}/work/{id}/move"
 )
 
 // CompareDeclaredHandler asserts contracted handler identity and optional OpenAPI operationId.
