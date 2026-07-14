@@ -683,11 +683,45 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`,
   proving real CLI `--output response-stream` still returns the packaged
   `primaryResult`, JSON response-stream NDJSON contains canonical `response_event`
-  records and ends with an `invocation_result` record, durable `FactoryEvent`
+  records wrapping public `FactoryResponseEvent` values and ends with exactly one
+  `invocation_result` record, primary-only and response-stream terminal
+  `InvocationResponse` outcomes match for the same successful fixture, JSON
+  NDJSON rejects retired private `recordType` values (`progress`, `stream_gap`,
+  `compaction`, `primary_result`), human stdout uses canonical response-event
+  formatting and avoids legacy provider fragment dialect, durable `FactoryEvent`
   history omits internal response-stream terms,
   and generated public API artifacts stay internal-only. Reuse
   `writePackagedGoalBuiltinTopologyMockWorkers`, `materializeNamedGoalFactoryForRoutingSmoke`,
   and `support.StartFunctionalAPIServer` when extending boundary verification.
+  Stream-responses gate audit intake and blocking residuals are recorded in
+  `docs/internal/development/plans/you-goal/stream-responses-final-audit.md`.
+  Story-002 goal stream integration evidence is recorded in
+  `docs/internal/development/plans/you-goal/goal-response-stream-integration.md`.
+- Named `@you/subagent` response-stream boundary smoke coverage lives in
+  `tests/functional/smoke/cli_named_subagent_response_stream_smoke_test.go`,
+  proving real CLI `--output response-stream` on the one-pass subagent factory
+  reuses the shared canonical response-stream renderer contract proven for
+  `@you/goal`: human stdout uses canonical response-event formatting and avoids
+  legacy fragment dialect, JSON NDJSON uses `response_event` and
+  `invocation_result` records with validated `FactoryResponseEvent` values,
+  exactly one terminal `invocation_result` wraps the shared `InvocationResponse`,
+  and primary-only versus response-stream terminal outcomes match for the same
+  successful fixture. Reuse `writePackagedSubagentMockWorkers` and the goal
+  stream NDJSON helpers when extending subagent stream verification.
+  Story-003 subagent stream integration evidence is recorded in
+  `docs/internal/development/plans/you-goal/subagent-response-stream-integration.md`.
+- API/CLI response-stream terminal parity smoke coverage lives in
+  `tests/functional/smoke/cli_named_response_stream_api_parity_smoke_test.go`,
+  proving live session `POST /factory-sessions/{session_id}/invocations`
+  `InvocationResponse` outcomes match CLI JSON response-stream terminal
+  `primary_result` records for the same successful `@you/goal` and
+  `@you/subagent` fixtures. Reuse `materializeNamedGoalFactoryForRoutingSmoke`,
+  `materializeNamedSubagentFactoryForSmoke`, `startNamedGoalRoutingAPIServer`,
+  `postNamedGoalRoutingInvocationOnServer`, and the goal/subagent response-stream
+  CLI helpers when extending API/CLI stream parity verification. Story-004 gate
+  evidence for canonical `FactoryResponseEvent` SSE payload encoding parity and
+  terminal outcome parity is recorded in
+  `docs/internal/development/plans/you-goal/api-cli-response-stream-parity.md`.
 - `tests/functional/smoke/cli_run_mode_compat_smoke_test.go` holds focused
   regression coverage for adjacent `you run` modes after packaged-goal changes:
   operator-oriented continuous startup output without `--quiet`, factory text
