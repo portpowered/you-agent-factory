@@ -311,6 +311,34 @@ func TestSessionsDocumentation_ResponseEventStreamAlignsWithOpenAPI(t *testing.T
 	}
 }
 
+func TestWorkersDocumentation_ProviderFidelityAlignsWithPublicContract(t *testing.T) {
+	doc, err := docscli.Markdown("workers")
+	if err != nil {
+		t.Fatalf("Markdown(workers) error = %v", err)
+	}
+	for _, marker := range []string{
+		"## Response-stream provider fidelity",
+		"Provider Session",
+		"Factory Session",
+		"FactoryResponseEvent",
+		"Native streaming",
+		"Final-only",
+		"STREAM_GAP",
+		"firstAvailableSequence",
+		"primaryResult",
+		"byte-identical provider transcripts",
+		"durable process-restart replay",
+		"`you docs run`",
+		"`you docs sessions`",
+		"GET /factory-sessions/{session_id}/response-events",
+		"GET /factory-sessions/{session_id}/events",
+	} {
+		if !strings.Contains(doc, marker) {
+			t.Fatalf("packaged workers guide missing provider-fidelity marker %q", marker)
+		}
+	}
+}
+
 func executeDocumentedRunExample(t *testing.T, args []string) {
 	t.Helper()
 	root := NewRootCommand()

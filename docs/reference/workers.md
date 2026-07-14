@@ -506,6 +506,57 @@ create/list commands and profile management.
 Workstations can override the worker default. See `you docs workstations`
 for precedence and workstation-level examples.
 
+## Response-stream provider fidelity
+
+Model-backed workers run through a **Provider Session** while a **Factory
+Session** owns the public observation stream. Response-stream fidelity varies by
+provider capability. Do not assume every provider emits the same incremental
+`FactoryResponseEvent` shape or survives retention pressure without gaps.
+
+### Native streaming vs final-only providers
+
+| Fidelity class | What consumers observe on the public stream | When it applies |
+|----------------|---------------------------------------------|-----------------|
+| Native streaming | Incremental public `FactoryResponseEvent` records such as message snapshots, text deltas, tool lifecycle updates, and related progress while work is running | Providers whose runner and adapter expose structured native streaming |
+| Final-only | Terminal semantic snapshots only — for example one completed message snapshot and run completion or failure records — without incremental deltas between start and finish | Providers whose adapter declares final-only output, including headless Agy execution and OpenCode runs that select final-only mode |
+
+Provider-native transcript formats, spinner repaint bytes, and private parser
+fields stay inside the Provider Session boundary. The Factory Session publishes
+only the neutral public `FactoryResponseEvent` vocabulary on CLI stdout and on
+`GET /factory-sessions/{session_id}/response-events`.
+
+### Observable degradation consumers must handle
+
+Plan for sparse or interrupted observation even when invocation succeeds:
+
+| Case | What you see | What stays authoritative |
+|------|--------------|--------------------------|
+| Retention pressure | A `STREAM_GAP` record with `fromSequence`, `toSequence`, and `firstAvailableSequence` instead of silently skipped sequences | Reconnect from `firstAvailableSequence` or omit `after_sequence`; reconcile consumer state against the gap payload. See `you docs sessions`. |
+| Final-only providers | No incremental message or tool deltas between dispatch start and the terminal snapshot | `primaryResult` on invocation responses and terminal work or session facts on canonical `FactoryEvent` history |
+| Slow or lossy stdout or SSE consumers | Live records may lag publication; retained history can expire | Invocation success still comes from `primaryResult` and canonical Factory events, not from observing every intermediate record |
+
+Authoritative invocation success does **not** require byte-for-byte replay of
+every intermediate provider event. A final-only provider can complete
+successfully while the public stream shows only terminal semantic snapshots.
+
+### Non-promises
+
+The runtime does **not** promise:
+
+- unsupported provider-native streaming fidelity beyond the public
+  `FactoryResponseEvent` contract,
+- byte-identical provider transcripts on the public response stream,
+- or durable process-restart replay of ephemeral response events beyond the
+  Factory Session retention window described in `you docs sessions`.
+
+### Related invocation and session surfaces
+
+- `you docs run` — CLI primary-result, human response-stream, and NDJSON
+  automation output modes for one-shot invocations
+- `you docs sessions` — ephemeral `GET /factory-sessions/{session_id}/response-events`
+  SSE reconnect, `after_sequence`, retention limits, and separation from
+  canonical `GET /factory-sessions/{session_id}/events` Factory event replay
+
 ## Related
 
 - `docs/reference/README.md`
@@ -514,4 +565,6 @@ for precedence and workstation-level examples.
 - `you docs workstations`
 - `you docs config`
 - `you docs work`
+- `you docs run`
+- `you docs sessions`
 - `docs/reference/authoring-agents-md.md`
