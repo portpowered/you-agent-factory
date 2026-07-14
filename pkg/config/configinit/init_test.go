@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -289,6 +290,58 @@ func TestInit_InvalidExistingPackagedFactoryFailsWithoutReplacement(t *testing.T
 	}
 
 	assertDirectorySnapshotUnchanged(t, factoryDir, beforeSnapshot)
+}
+
+func TestInit_RejectsExistingPackageWithBundledFileLinkEscapeWithoutWrites(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	first, err := Init(homeDir)
+	if err != nil {
+		t.Fatalf("first Init() error = %v", err)
+	}
+
+	goalDir := goalFactoryDir(t, first.PackagedFactories)
+	writeCustomerEditedInlineBundledFile(t, goalDir)
+	linkPath := filepath.Join(goalDir, "scripts")
+	if err := os.RemoveAll(linkPath); err != nil {
+		t.Fatalf("RemoveAll(bundled file directory): %v", err)
+	}
+	outsideDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outsideDir, "customer-owned.txt"), []byte("preserve external content\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(external customer content): %v", err)
+	}
+	if err := os.Symlink(outsideDir, linkPath); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skip("Windows symlink privilege unavailable; junctions do not exercise symlink resolution semantics")
+		}
+		t.Fatalf("Symlink(%s -> %s): %v", linkPath, outsideDir, err)
+	}
+
+	beforeFactory := snapshotDirectoryContents(t, goalDir)
+	beforeOutside := snapshotDirectoryContents(t, outsideDir)
+
+	result, err := Init(homeDir)
+	if err == nil {
+		t.Fatal("expected filesystem-link-invalid packaged factory to fail init")
+	}
+	if len(result.PackagedFactories) != 0 {
+		t.Fatalf("packaged factory results = %#v, want no skipped result on failure", result.PackagedFactories)
+	}
+	for _, want := range []string{
+		"install packaged factory",
+		"@you/goal",
+		"existing target",
+		"factory/scripts/customer-owned.sh",
+		"cannot escape the expand target through filesystem links",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want substring %q", err, want)
+		}
+	}
+
+	assertDirectorySnapshotUnchanged(t, goalDir, beforeFactory)
+	assertDirectorySnapshotUnchanged(t, outsideDir, beforeOutside)
 }
 
 func TestInit_CreatesMissingPackagedDefaultsWithoutTouchingExisting(t *testing.T) {
@@ -601,6 +654,7 @@ func seedLegacyEncodedGoalFactory(t *testing.T, factoriesRoot string) string {
 
 type directoryEntrySnapshot struct {
 	Contents []byte
+	Link     string
 	Mode     fs.FileMode
 	IsDir    bool
 }
@@ -625,7 +679,12 @@ func snapshotDirectoryContents(t *testing.T, root string) map[string]directoryEn
 			Mode:  info.Mode(),
 			IsDir: entry.IsDir(),
 		}
-		if !entry.IsDir() {
+		if info.Mode()&os.ModeSymlink != 0 {
+			entrySnapshot.Link, err = os.Readlink(path)
+			if err != nil {
+				return err
+			}
+		} else if info.Mode().IsRegular() {
 			entrySnapshot.Contents, err = os.ReadFile(path)
 			if err != nil {
 				return err

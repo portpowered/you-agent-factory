@@ -98,6 +98,9 @@ func ValidateFactoryDirReadOnly(factoryDir string, workstationLoader Workstation
 	if err != nil {
 		return err
 	}
+	if err := validatePortableBundledFileWrites(factoryDir, factoryCfg); err != nil {
+		return fmt.Errorf("validate portable bundled files: %w", err)
+	}
 	_, err = loadFactoryConfigFromDisk(factoryDir, factoryCfg, workstationLoader)
 	return err
 }
