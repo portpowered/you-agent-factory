@@ -1,11 +1,11 @@
 import { FACTORY_EVENT_TYPES, type FactoryEvent } from "../../../../api/events";
-import type { StreamDerivedCacheIdentity } from "../../lib/stream-derived-cache-identity";
 import { createTimelineCheckpointIndexedDBTestDouble } from "../../../../testing/timeline-checkpoint-indexeddb-test-utils";
 import {
   correlationTokenForIdentityScope,
   readSessionPersistenceDiagnosticRecords,
   resetSessionPersistenceDiagnosticRecords,
 } from "../../../dashboard/public/session-persistence-diagnostics";
+import type { StreamDerivedCacheIdentity } from "../../lib/stream-derived-cache-identity";
 import { useFactoryTimelineStore } from "../factoryTimelineStore";
 import {
   persistTimelineCheckpoint,
@@ -222,6 +222,7 @@ describe("factory timeline persisted append continuation", () => {
     }
     const { indexedDB } = createTimelineCheckpointIndexedDBTestDouble();
     await persistTimelineCheckpoint(indexedDB, checkpoint, identity);
+    resetSessionPersistenceDiagnosticRecords();
 
     store.resetEntry(identity);
     const restored = await readTimelineCheckpoint(indexedDB, identity);

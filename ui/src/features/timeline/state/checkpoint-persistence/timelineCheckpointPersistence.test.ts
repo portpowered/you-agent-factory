@@ -201,6 +201,7 @@ describe("timeline checkpoint persistence diagnostics", () => {
       checkpointFixture(),
       streamIdentity,
     );
+    resetSessionPersistenceInvalidationRecords();
     await clearTimelineCheckpoint(indexedDB, streamIdentity, {
       requestedSessionID: streamIdentity.factorySessionID,
       userInitiated: true,
@@ -427,6 +428,7 @@ describe("timeline checkpoint guard migration", () => {
       },
       unaffectedIdentity,
     );
+    resetSessionPersistenceInvalidationRecords();
 
     const restored = await readTimelineCheckpoint(indexedDB, expectedIdentity);
 
