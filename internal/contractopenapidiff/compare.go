@@ -34,10 +34,7 @@ func CompareDocuments(before, after *openapi3.T) (Result, error) {
 	changes := append(structuralChanges, collectDocumentationChanges(before, after)...)
 	sortChanges(changes)
 
-	classification := ClassificationPatch
-	if len(structuralChanges) > 0 {
-		classification = ClassificationMinor
-	}
+	classification := classifyStructuralChanges(structuralChanges)
 
 	return Result{
 		Classification: classification,
@@ -73,6 +70,26 @@ func appendDocChange(changes []Change, code, path string) []Change {
 
 func appendMinorChange(changes []Change, code, path string) []Change {
 	return append(changes, Change{Code: code, Path: path})
+}
+
+func appendMajorChange(changes []Change, code, path string) []Change {
+	return append(changes, Change{Code: code, Path: path})
+}
+
+func classifyStructuralChanges(structuralChanges []Change) Classification {
+	for _, change := range structuralChanges {
+		if isMajorChangeCode(change.Code) {
+			return ClassificationMajor
+		}
+	}
+	if len(structuralChanges) > 0 {
+		return ClassificationMinor
+	}
+	return ClassificationPatch
+}
+
+func isMajorChangeCode(code string) bool {
+	return strings.HasPrefix(code, "openapi.remove.") || strings.HasPrefix(code, "openapi.narrow.")
 }
 
 func stringPtrEqual(before, after *string) bool {

@@ -83,8 +83,8 @@ Use this map when changing the public REST contract.
   title) classify as `patch` when structural surfaces match. Compatible
   additions (new operations, optional parameters, optional schema properties,
   widened enums) classify as `minor` with `openapi.add.*` change codes.
-  Removals and narrowing still fail closed until later comparator stories
-  extend classification.
+  Removals and narrowing classify as `major` with `openapi.remove.*` and
+  `openapi.narrow.*` change codes; major wins over minor and patch.
 - Focused fixtures live under
   `internal/contractopenapidiff/testdata/`; prove end-to-end outcomes in
   `internal/contractopenapidiff/compare_test.go` and include the package in

@@ -134,13 +134,18 @@ func collectPathChanges(before, after *openapi3.Paths) ([]Change, error) {
 	beforePaths := before.Map()
 	afterPaths := after.Map()
 
+	var changes []Change
 	for path := range beforePaths {
-		if _, ok := afterPaths[path]; !ok {
+		if afterItem, ok := afterPaths[path]; !ok {
+			for method := range beforePaths[path].Operations() {
+				changes = appendMajorChange(changes, CodeOperationRemoved, operationPath(method, path))
+			}
+			continue
+		} else if beforePaths[path] == nil || afterItem == nil {
 			return nil, unsupportedStructuralDiff("paths." + path)
 		}
 	}
 
-	var changes []Change
 	for path, afterItem := range afterPaths {
 		beforeItem, ok := beforePaths[path]
 		if !ok {
@@ -165,13 +170,13 @@ func collectPathItemChanges(path string, before, after *openapi3.PathItem) ([]Ch
 	beforeOps := before.Operations()
 	afterOps := after.Operations()
 
+	var changes []Change
 	for method := range beforeOps {
 		if after.GetOperation(method) == nil {
-			return nil, unsupportedStructuralDiff(operationPath(method, path))
+			changes = appendMajorChange(changes, CodeOperationRemoved, operationPath(method, path))
 		}
 	}
 
-	var changes []Change
 	for method, afterOperation := range afterOps {
 		beforeOperation := before.GetOperation(method)
 		if beforeOperation == nil {
@@ -221,37 +226,55 @@ func collectParameterChanges(opPath string, before, after openapi3.Parameters) (
 	beforeByKey := parametersByKey(before)
 	afterByKey := parametersByKey(after)
 
+	var changes []Change
 	for key := range beforeByKey {
 		if _, ok := afterByKey[key]; !ok {
-			return nil, unsupportedStructuralDiff(opPath + ".parameters[" + key + "]")
+			changes = appendMajorChange(changes, CodeParameterRemoved, opPath+".parameters["+key+"]")
 		}
 	}
 
-	var changes []Change
 	for key, afterParameter := range afterByKey {
 		beforeParameter, ok := beforeByKey[key]
 		if !ok {
 			if afterParameter.Required {
-				return nil, unsupportedStructuralDiff(opPath + ".parameters[" + key + "]")
+				changes = appendMajorChange(changes, CodeParameterRequiredNarrowed, opPath+".parameters["+key+"]")
+			} else {
+				changes = appendMinorChange(changes, CodeParameterAdded, opPath+".parameters["+key+"]")
 			}
-			changes = appendMinorChange(changes, CodeParameterAdded, opPath+".parameters["+key+"]")
 			continue
 		}
-		if err := compareParameterStructural(opPath+".parameters["+key+"]", beforeParameter, afterParameter); err != nil {
+		paramChanges, err := collectParameterPairChanges(opPath+".parameters["+key+"]", beforeParameter, afterParameter)
+		if err != nil {
 			return nil, err
 		}
+		changes = append(changes, paramChanges...)
 	}
 	return changes, nil
 }
 
-func compareParameterStructural(path string, before, after *openapi3.Parameter) error {
+func collectParameterPairChanges(path string, before, after *openapi3.Parameter) ([]Change, error) {
 	if before == nil || after == nil {
-		return unsupportedStructuralDiff(path)
+		return nil, unsupportedStructuralDiff(path)
 	}
-	if before.Name != after.Name || before.In != after.In || before.Required != after.Required {
-		return unsupportedStructuralDiff(path)
+	if before.Name != after.Name || before.In != after.In {
+		return nil, unsupportedStructuralDiff(path)
 	}
-	return compareSchemaRefStructural(path+".schema", before.Schema, after.Schema)
+	var changes []Change
+	if before.Required != after.Required {
+		if after.Required && !before.Required {
+			changes = appendMajorChange(changes, CodeParameterRequiredNarrowed, path)
+		}
+	}
+	schemaChanges, err := collectSchemaRefChanges(path+".schema", before.Schema, after.Schema)
+	if err != nil {
+		return nil, err
+	}
+	return append(changes, schemaChanges...), nil
+}
+
+func compareParameterStructural(path string, before, after *openapi3.Parameter) error {
+	_, err := collectParameterPairChanges(path, before, after)
+	return err
 }
 
 func compareRequestBodyStructural(opPath string, before, after *openapi3.RequestBodyRef) error {
@@ -316,13 +339,13 @@ func collectComponentChanges(before, after *openapi3.Components) ([]Change, erro
 		return nil, unsupportedStructuralDiff("components")
 	}
 
+	var changes []Change
 	for name := range before.Schemas {
 		if _, ok := after.Schemas[name]; !ok {
-			return nil, unsupportedStructuralDiff("components.schemas." + name)
+			changes = appendMajorChange(changes, CodeSchemaRemoved, "components.schemas."+name)
 		}
 	}
 
-	var changes []Change
 	for name, afterSchemaRef := range after.Schemas {
 		beforeSchemaRef, ok := before.Schemas[name]
 		if !ok {
@@ -363,20 +386,17 @@ func collectSchemaChanges(path string, before, after *openapi3.Schema) ([]Change
 	if before == nil || after == nil {
 		return nil, unsupportedStructuralDiff(path)
 	}
+	var changes []Change
 	if !typesEqual(before.Type, after.Type) {
-		return nil, unsupportedStructuralDiff(path + ".type")
+		changes = appendMajorChange(changes, CodeSchemaTypeNarrowed, path+".type")
 	}
 	if before.Format != after.Format {
-		return nil, unsupportedStructuralDiff(path + ".format")
+		changes = appendMajorChange(changes, CodeSchemaTypeNarrowed, path+".format")
 	}
-	if !reflect.DeepEqual(before.Required, after.Required) {
-		return nil, unsupportedStructuralDiff(path + ".required")
-	}
+	changes = append(changes, collectRequiredNarrowingChanges(path, before.Required, after.Required)...)
 	if !externalDocsStructuralEqual(before.ExternalDocs, after.ExternalDocs) {
 		return nil, unsupportedStructuralDiff(path + ".externalDocs")
 	}
-
-	var changes []Change
 	enumChanges, err := collectEnumChanges(path, before.Enum, after.Enum)
 	if err != nil {
 		return nil, err
@@ -385,16 +405,17 @@ func collectSchemaChanges(path string, before, after *openapi3.Schema) ([]Change
 
 	for propertyName := range before.Properties {
 		if _, ok := after.Properties[propertyName]; !ok {
-			return nil, unsupportedStructuralDiff(path + ".properties." + propertyName)
+			changes = appendMajorChange(changes, CodeSchemaPropertyRemoved, path+".properties."+propertyName)
 		}
 	}
 	for propertyName, afterPropertyRef := range after.Properties {
 		beforePropertyRef, ok := before.Properties[propertyName]
 		if !ok {
 			if slices.Contains(after.Required, propertyName) {
-				return nil, unsupportedStructuralDiff(path + ".properties." + propertyName)
+				changes = appendMajorChange(changes, CodeSchemaRequiredNarrowed, path+".properties."+propertyName)
+			} else {
+				changes = appendMinorChange(changes, CodeSchemaPropertyAdded, path+".properties."+propertyName)
 			}
-			changes = appendMinorChange(changes, CodeSchemaPropertyAdded, path+".properties."+propertyName)
 			continue
 		}
 		propertyChanges, err := collectSchemaRefChanges(path+".properties."+propertyName, beforePropertyRef, afterPropertyRef)
@@ -424,12 +445,12 @@ func compareSchemaStructural(path string, before, after *openapi3.Schema) error 
 func collectEnumChanges(path string, before, after []any) ([]Change, error) {
 	beforeValues := enumValueSet(before)
 	afterValues := enumValueSet(after)
+	var changes []Change
 	for value := range beforeValues {
 		if _, ok := afterValues[value]; !ok {
-			return nil, unsupportedStructuralDiff(path + ".enum")
+			changes = appendMajorChange(changes, CodeEnumValueRemoved, path+".enum."+enumValuePath(value))
 		}
 	}
-	var changes []Change
 	for value := range afterValues {
 		if _, ok := beforeValues[value]; ok {
 			continue
@@ -437,6 +458,26 @@ func collectEnumChanges(path string, before, after []any) ([]Change, error) {
 		changes = appendMinorChange(changes, CodeEnumValueAdded, path+".enum."+enumValuePath(value))
 	}
 	return changes, nil
+}
+
+func collectRequiredNarrowingChanges(path string, beforeRequired, afterRequired []string) []Change {
+	beforeSet := stringSet(beforeRequired)
+	var changes []Change
+	for _, name := range afterRequired {
+		if _, ok := beforeSet[name]; ok {
+			continue
+		}
+		changes = appendMajorChange(changes, CodeSchemaRequiredNarrowed, path+".required."+name)
+	}
+	return changes
+}
+
+func stringSet(values []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		out[value] = struct{}{}
+	}
+	return out
 }
 
 func enumValueSet(values []any) map[string]struct{} {

@@ -153,15 +153,136 @@ func TestCompareYAML_WidenEnumFixture_ClassifiesMinor(t *testing.T) {
 	}
 }
 
-func TestCompareYAML_RemovedOperationFailsClosed(t *testing.T) {
+func TestCompareYAML_RemoveRouteFixture_ClassifiesMajor(t *testing.T) {
 	t.Parallel()
 
-	before := readFixture(t, "add-route", "after.yaml")
-	after := readFixture(t, "add-route", "before.yaml")
+	before := readFixture(t, "remove-route", "before.yaml")
+	after := readFixture(t, "remove-route", "after.yaml")
 
-	_, err := contractopenapidiff.CompareYAML(before, after)
-	if err == nil {
-		t.Fatal("expected removed operation to fail closed")
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err != nil {
+		t.Fatalf("CompareYAML() error = %v", err)
+	}
+	if result.Classification != contractopenapidiff.ClassificationMajor {
+		t.Fatalf("Classification = %q, want %q", result.Classification, contractopenapidiff.ClassificationMajor)
+	}
+
+	wantChanges := []contractopenapidiff.Change{
+		{Code: contractopenapidiff.CodeOperationRemoved, Path: "POST /pets"},
+	}
+	if !slices.Equal(result.Changes, wantChanges) {
+		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
+	}
+}
+
+func TestCompareYAML_RemoveParameterFixture_ClassifiesMajor(t *testing.T) {
+	t.Parallel()
+
+	before := readFixture(t, "remove-parameter", "before.yaml")
+	after := readFixture(t, "remove-parameter", "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err != nil {
+		t.Fatalf("CompareYAML() error = %v", err)
+	}
+	if result.Classification != contractopenapidiff.ClassificationMajor {
+		t.Fatalf("Classification = %q, want %q", result.Classification, contractopenapidiff.ClassificationMajor)
+	}
+
+	wantChanges := []contractopenapidiff.Change{
+		{Code: contractopenapidiff.CodeParameterRemoved, Path: "GET /pets.parameters[query:offset]"},
+	}
+	if !slices.Equal(result.Changes, wantChanges) {
+		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
+	}
+}
+
+func TestCompareYAML_RemoveSchemaPropertyFixture_ClassifiesMajor(t *testing.T) {
+	t.Parallel()
+
+	before := readFixture(t, "remove-schema-property", "before.yaml")
+	after := readFixture(t, "remove-schema-property", "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err != nil {
+		t.Fatalf("CompareYAML() error = %v", err)
+	}
+	if result.Classification != contractopenapidiff.ClassificationMajor {
+		t.Fatalf("Classification = %q, want %q", result.Classification, contractopenapidiff.ClassificationMajor)
+	}
+
+	wantChanges := []contractopenapidiff.Change{
+		{Code: contractopenapidiff.CodeSchemaPropertyRemoved, Path: "components.schemas.Pet.properties.nickname"},
+	}
+	if !slices.Equal(result.Changes, wantChanges) {
+		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
+	}
+}
+
+func TestCompareYAML_NarrowEnumFixture_ClassifiesMajor(t *testing.T) {
+	t.Parallel()
+
+	before := readFixture(t, "narrow-enum", "before.yaml")
+	after := readFixture(t, "narrow-enum", "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err != nil {
+		t.Fatalf("CompareYAML() error = %v", err)
+	}
+	if result.Classification != contractopenapidiff.ClassificationMajor {
+		t.Fatalf("Classification = %q, want %q", result.Classification, contractopenapidiff.ClassificationMajor)
+	}
+
+	wantChanges := []contractopenapidiff.Change{
+		{Code: contractopenapidiff.CodeEnumValueRemoved, Path: "components.schemas.Pet.properties.status.enum.pending"},
+	}
+	if !slices.Equal(result.Changes, wantChanges) {
+		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
+	}
+}
+
+func TestCompareYAML_NarrowTypeFixture_ClassifiesMajor(t *testing.T) {
+	t.Parallel()
+
+	before := readFixture(t, "narrow-type", "before.yaml")
+	after := readFixture(t, "narrow-type", "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err != nil {
+		t.Fatalf("CompareYAML() error = %v", err)
+	}
+	if result.Classification != contractopenapidiff.ClassificationMajor {
+		t.Fatalf("Classification = %q, want %q", result.Classification, contractopenapidiff.ClassificationMajor)
+	}
+
+	wantChanges := []contractopenapidiff.Change{
+		{Code: contractopenapidiff.CodeSchemaTypeNarrowed, Path: "components.schemas.Pet.properties.age.type"},
+	}
+	if !slices.Equal(result.Changes, wantChanges) {
+		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
+	}
+}
+
+func TestCompareYAML_MajorWinsMixedFixture_ClassifiesMajor(t *testing.T) {
+	t.Parallel()
+
+	before := readFixture(t, "major-wins-mixed", "before.yaml")
+	after := readFixture(t, "major-wins-mixed", "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err != nil {
+		t.Fatalf("CompareYAML() error = %v", err)
+	}
+	if result.Classification != contractopenapidiff.ClassificationMajor {
+		t.Fatalf("Classification = %q, want %q", result.Classification, contractopenapidiff.ClassificationMajor)
+	}
+
+	wantChanges := []contractopenapidiff.Change{
+		{Code: contractopenapidiff.CodeParameterAdded, Path: "GET /pets.parameters[query:offset]"},
+		{Code: contractopenapidiff.CodeOperationRemoved, Path: "POST /pets"},
+	}
+	if !slices.Equal(result.Changes, wantChanges) {
+		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
 	}
 }
 
