@@ -106,6 +106,16 @@
           "additionalProperties": {
             "$ref": "#/$defs/argument"
           }
+        },
+        "flags": {
+          "description": "Flag records keyed by stable flag identifiers. Object keys make duplicate flag IDs structurally unrepresentable.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/flag"
+          }
         }
       }
     },
@@ -275,6 +285,168 @@
               "required": [
                 "maxCardinality"
               ]
+            }
+          }
+        }
+      ]
+    },
+    "flag": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "long",
+        "shorthand",
+        "aliases",
+        "scope",
+        "valueType",
+        "required",
+        "default",
+        "changedDefault",
+        "noOptionDefault",
+        "repeatable",
+        "normalization",
+        "completion",
+        "binding",
+        "visibility",
+        "lifecycle"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "long": {
+          "description": "The primary long flag name without leading dashes.",
+          "type": "string",
+          "minLength": 1
+        },
+        "shorthand": {
+          "description": "Optional single-character shorthand. Use an empty string when no shorthand is exposed.",
+          "type": "string",
+          "maxLength": 1
+        },
+        "aliases": {
+          "description": "Alternate long flag spellings accepted for this flag.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "scope": {
+          "description": "Whether the flag is local to one command, persistent on a subtree, or inherited from an ancestor.",
+          "enum": [
+            "local",
+            "persistent",
+            "inherited"
+          ]
+        },
+        "valueType": {
+          "description": "The scalar or collection type accepted for one flag value.",
+          "enum": [
+            "bool",
+            "string",
+            "int",
+            "int64",
+            "stringArray"
+          ]
+        },
+        "required": {
+          "description": "Whether the flag must be supplied before invocation proceeds.",
+          "type": "boolean"
+        },
+        "default": {
+          "description": "Serialized default value for the flag when it is omitted.",
+          "type": "string"
+        },
+        "changedDefault": {
+          "description": "Whether the effective default differs from the originally authored default.",
+          "type": "boolean"
+        },
+        "noOptionDefault": {
+          "description": "Serialized value applied when a boolean flag is present without an explicit option value. Use an empty string when no-option defaults are unsupported.",
+          "type": "string"
+        },
+        "repeatable": {
+          "description": "Whether the flag may be supplied multiple times on one invocation line.",
+          "type": "boolean"
+        },
+        "normalization": {
+          "description": "Optional value normalization applied after parsing. Use an empty string when no normalization is configured.",
+          "type": "string",
+          "enum": [
+            "",
+            "lowercase",
+            "trim",
+            "lowercase-trim"
+          ]
+        },
+        "completion": {
+          "description": "How shell completion values are sourced for this flag.",
+          "enum": [
+            "none",
+            "static",
+            "dynamic"
+          ]
+        },
+        "binding": {
+          "description": "Optional binding target for this flag. Use an empty string when the flag is not bound to another input surface.",
+          "type": "string"
+        },
+        "visibility": {
+          "description": "Whether the flag is shown in default help output.",
+          "enum": [
+            "visible",
+            "hidden"
+          ]
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "noOptionDefault": {
+                "minLength": 1
+              }
+            },
+            "required": [
+              "noOptionDefault"
+            ]
+          },
+          "then": {
+            "properties": {
+              "valueType": {
+                "const": "bool"
+              },
+              "noOptionDefault": {
+                "enum": [
+                  "true",
+                  "false"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "repeatable": {
+                "const": true
+              }
+            },
+            "required": [
+              "repeatable"
+            ]
+          },
+          "then": {
+            "properties": {
+              "valueType": {
+                "const": "stringArray"
+              }
             }
           }
         }

@@ -117,6 +117,9 @@ func CLIRegistry() Registry {
 			{Path: "contracts/testdata/cli/valid-identity.json", SchemaID: commandManifestID},
 			{Path: "contracts/testdata/cli/valid-optional-argument.json", SchemaID: commandManifestID},
 			{Path: "contracts/testdata/cli/valid-variadic-argument.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-persistent-flag.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-inherited-flag.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-no-option-flag.json", SchemaID: commandManifestID},
 		},
 	})
 }
