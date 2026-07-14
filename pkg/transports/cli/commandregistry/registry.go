@@ -2,7 +2,6 @@ package commandregistry
 
 import (
 	"fmt"
-	"slices"
 
 	"github.com/spf13/cobra"
 )
@@ -62,17 +61,4 @@ func (r *Registry) AttachRunE(cmd *cobra.Command, commandID string) error {
 	}
 	cmd.RunE = handler
 	return nil
-}
-
-// RegisteredCommandIDs returns the stable command IDs with handlers in sorted order.
-func (r *Registry) RegisteredCommandIDs() []string {
-	if r == nil || len(r.handlers) == 0 {
-		return nil
-	}
-	ids := make([]string, 0, len(r.handlers))
-	for id := range r.handlers {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
-	return ids
 }
