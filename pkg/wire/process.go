@@ -5,23 +5,83 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/service"
-	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 )
 
+// MCPExecutionRequest contains the transport inputs that select the durable
+// Factory Session execution collaborator used by MCP serve.
+type MCPExecutionRequest struct {
+	FixtureCatalogPath string
+	RuntimeBacked      bool
+	ProjectRoot        string
+}
+
+// MCPExecutionBuilder constructs an MCP durable execution collaborator before
+// the initializer starts the stdio transport.
+type MCPExecutionBuilder func(context.Context, MCPExecutionRequest) (factorysessionexecution.Service, error)
+
+// BuildMCPExecutionService constructs the durable execution collaborator
+// selected by MCP command inputs. Protocol parsing remains in the transport;
+// persistence and runtime construction remain in wire.
+func BuildMCPExecutionService(
+	_ context.Context,
+	request MCPExecutionRequest,
+) (factorysessionexecution.Service, error) {
+	if request.RuntimeBacked {
+		projectRoot, err := resolveSessionExecutionProjectRoot(request.ProjectRoot)
+		if err != nil {
+			return nil, err
+		}
+		persistence, err := factorysessionexecution.ProjectPersistence(projectRoot)
+		if err != nil {
+			return nil, fmt.Errorf("initialize runtime-backed persistence: %w", err)
+		}
+		service, err := factorysessionexecution.NewExecutionService(
+			factorysessionexecution.ExecutionProviderJavaScriptRuntime,
+			factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot, Persistence: persistence},
+		)
+		if err != nil {
+			return nil, fmt.Errorf("initialize runtime-backed execution service: %w", err)
+		}
+		return service, nil
+	}
+	catalogPath, err := resolveSessionExecutionFixtureCatalog(request.FixtureCatalogPath)
+	if err != nil {
+		return nil, err
+	}
+	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(catalogPath)
+	if err != nil {
+		return nil, fmt.Errorf("load durable session fixture catalog: %w", err)
+	}
+	return service, nil
+}
+
 // BuildProcessGraph constructs the concrete application graph selected by the
 // process root without starting transports, sidecars, or runtime loops.
 func BuildProcessGraph(ctx context.Context, request startupcli.Request, policy initializer.ProcessPolicy) (*initializer.ProcessGraph, error) {
+	return BuildProcessGraphWithMCPBuilder(ctx, request, policy, BuildMCPExecutionService)
+}
+
+// BuildProcessGraphWithMCPBuilder constructs a process graph with an explicit
+// MCP execution collaborator builder. The root uses this seam to make all
+// production transport dependencies visible before lifecycle startup.
+func BuildProcessGraphWithMCPBuilder(
+	ctx context.Context,
+	request startupcli.Request,
+	policy initializer.ProcessPolicy,
+	buildMCP MCPExecutionBuilder,
+) (*initializer.ProcessGraph, error) {
 	return buildProcessGraph(ctx, request, policy, func(
 		buildCtx context.Context,
 		cfg *service.FactoryServiceConfig,
 		mode initializer.Mode,
 	) (runcli.RuntimeRunner, error) {
 		return buildApplicationRunner(buildCtx, cfg, mode)
-	})
+	}, buildMCP)
 }
 
 type processRunnerBuilder func(
@@ -35,6 +95,7 @@ func buildProcessGraph(
 	request startupcli.Request,
 	policy initializer.ProcessPolicy,
 	buildRunner processRunnerBuilder,
+	buildMCP MCPExecutionBuilder,
 	invocationBuilders ...runcli.InvocationBootstrapBuilder,
 ) (*initializer.ProcessGraph, error) {
 	switch request.Kind {
@@ -65,36 +126,44 @@ func buildProcessGraph(
 		}
 		return &initializer.ProcessGraph{Policy: policy, Run: application}, nil
 	case startupcli.KindMCPServe:
-		if policy.Mode != initializer.ProcessModeMCPServe || policy.Sidecars != (initializer.SidecarPolicy{}) {
-			return nil, fmt.Errorf("construct MCP graph: incompatible process policy %+v", policy)
-		}
-		execution, err := mcpcli.ResolveServeService(mcpcli.ServeConfig{
-			FixtureCatalogPath: request.MCP.FixtureCatalogPath,
-			RuntimeBacked:      request.MCP.RuntimeBacked,
-			ProjectRoot:        request.MCP.ProjectRoot,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("construct MCP graph: %w", err)
-		}
-		graph, err := Build(ctx, Inputs{
-			MCPExecution: execution,
-			MCPInput:     request.MCP.Stdin,
-			MCPOutput:    request.MCP.Stdout,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("construct MCP graph: %w", err)
-		}
-		application, err := initializer.NewApplication(initializer.ModeMCP, graph)
-		if err != nil {
-			if cleanupErr := graph.Close(); cleanupErr != nil {
-				return nil, errors.Join(err, fmt.Errorf("close rejected MCP application graph: %w", cleanupErr))
-			}
-			return nil, fmt.Errorf("construct MCP graph: %w", err)
-		}
-		return &initializer.ProcessGraph{Policy: policy, MCP: application}, nil
+		return buildMCPProcessGraph(ctx, request.MCP, policy, buildMCP)
 	default:
 		return nil, fmt.Errorf("construct process graph: unsupported startup kind %q", request.Kind)
 	}
+}
+
+func buildMCPProcessGraph(
+	ctx context.Context,
+	intent startupcli.MCPIntent,
+	policy initializer.ProcessPolicy,
+	buildMCP MCPExecutionBuilder,
+) (*initializer.ProcessGraph, error) {
+	if policy.Mode != initializer.ProcessModeMCPServe || policy.Sidecars != (initializer.SidecarPolicy{}) {
+		return nil, fmt.Errorf("construct MCP graph: incompatible process policy %+v", policy)
+	}
+	if buildMCP == nil {
+		return nil, fmt.Errorf("construct MCP graph: execution service builder is required")
+	}
+	execution, err := buildMCP(ctx, MCPExecutionRequest{
+		FixtureCatalogPath: intent.FixtureCatalogPath,
+		RuntimeBacked:      intent.RuntimeBacked,
+		ProjectRoot:        intent.ProjectRoot,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("construct MCP graph: %w", err)
+	}
+	graph, err := Build(ctx, Inputs{MCPExecution: execution, MCPInput: intent.Stdin, MCPOutput: intent.Stdout})
+	if err != nil {
+		return nil, fmt.Errorf("construct MCP graph: %w", err)
+	}
+	application, err := initializer.NewApplication(initializer.ModeMCP, graph)
+	if err != nil {
+		if cleanupErr := graph.Close(); cleanupErr != nil {
+			return nil, errors.Join(err, fmt.Errorf("close rejected MCP application graph: %w", cleanupErr))
+		}
+		return nil, fmt.Errorf("construct MCP graph: %w", err)
+	}
+	return &initializer.ProcessGraph{Policy: policy, MCP: application}, nil
 }
 
 func buildInvocationRunner(

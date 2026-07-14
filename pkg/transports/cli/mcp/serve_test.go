@@ -2,7 +2,6 @@ package mcpcli
 
 import (
 	"bytes"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -27,42 +26,24 @@ func TestNewServeCommand_HelpRoutesToCanonicalMCPTopic(t *testing.T) {
 	}
 }
 
-func TestResolveServeService_RuntimeBackedSelectsJavaScriptRuntimeService(t *testing.T) {
-	projectRoot := t.TempDir()
-	service, err := resolveServeService(ServeConfig{
-		RuntimeBacked: true,
-		ProjectRoot:   projectRoot,
-	})
-	if err != nil {
-		t.Fatalf("resolveServeService: %v", err)
+func TestBuildServeApplicationRequiresInjectedService(t *testing.T) {
+	application, err := BuildServeApplication(ServeConfig{})
+	if err == nil || application != nil {
+		t.Fatalf("BuildServeApplication() = (%+v, %v), want missing-service error", application, err)
 	}
-	if _, ok := service.(*factorysessionexecution.JavaScriptRuntimeService); !ok {
-		t.Fatalf("service type = %T, want *factorysessionexecution.JavaScriptRuntimeService", service)
+	if !strings.Contains(err.Error(), "durable execution service is required") {
+		t.Fatalf("BuildServeApplication() error = %q, want actionable missing-service error", err)
 	}
 }
 
-func TestResolveServeService_DefaultSelectsFixtureService(t *testing.T) {
-	path := filepath.Join("..", "..", "http", "testdata", "durable-session-contract-fixtures.json")
-	service, err := resolveServeService(ServeConfig{FixtureCatalogPath: path})
-	if err != nil {
-		t.Fatalf("resolveServeService: %v", err)
-	}
-	if _, ok := service.(*factorysessionexecution.FakeService); !ok {
-		t.Fatalf("service type = %T, want *factorysessionexecution.FakeService", service)
-	}
-}
-
-func TestResolveServeService_InjectedServiceTakesPrecedence(t *testing.T) {
+func TestBuildServeApplicationAcceptsInjectedService(t *testing.T) {
 	injected := factorysessionexecution.NewFakeService()
-	service, err := resolveServeService(ServeConfig{
-		RuntimeBacked: true,
-		Service:       injected,
-	})
+	application, err := BuildServeApplication(ServeConfig{Service: injected})
 	if err != nil {
-		t.Fatalf("resolveServeService: %v", err)
+		t.Fatalf("BuildServeApplication() error = %v", err)
 	}
-	if service != injected {
-		t.Fatalf("service = %p, want injected %p", service, injected)
+	if application == nil {
+		t.Fatal("BuildServeApplication() = nil, want constructed application")
 	}
 }
 

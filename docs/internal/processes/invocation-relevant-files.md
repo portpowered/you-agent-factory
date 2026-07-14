@@ -148,6 +148,7 @@ primary-result behavior.
   transport package tests use test-only builders and must not restore a
   package-global production construction fallback.
 - Transport-convergence correction for one-shot `you run --factory`: `pkg/wire/process.go` owns the `service.BuildInvocationBootstrap` call and passes the resulting builder into `run.BuildApplication`. `pkg/transports/cli/run` must fail construction when that builder is absent and must not retain a service-building fallback; this supersedes the older same-line wording above that located bootstrap construction in `factory_invocation_input.go`.
+- Transport-convergence correction for MCP serve: `pkg/wire/process.go` owns fixture discovery, project persistence, and durable execution service construction. `pkg/root` carries its typed builder into process graph construction; `pkg/transports/cli/mcp` must require the resulting service and retain only flag normalization, stdio adaptation, and protocol lifecycle use.
 - `pkg/transports/cli/run/run.go` resolves positional versus non-TTY stdin through the
   shared `pkg/invocations` contract, then runs the local service in
   invocation-only service mode so stdout stays reserved for primary-result

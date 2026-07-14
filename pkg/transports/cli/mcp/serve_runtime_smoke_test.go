@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
@@ -53,6 +54,17 @@ func startRunServeRuntimeSmokeServer(
 	projectRoot string,
 ) (*stdioMCPClient, func(), <-chan error) {
 	t.Helper()
+	persistence, err := factorysessionexecution.ProjectPersistence(projectRoot)
+	if err != nil {
+		t.Fatalf("ProjectPersistence: %v", err)
+	}
+	service, err := factorysessionexecution.NewExecutionService(
+		factorysessionexecution.ExecutionProviderJavaScriptRuntime,
+		factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot, Persistence: persistence},
+	)
+	if err != nil {
+		t.Fatalf("NewExecutionService: %v", err)
+	}
 	stdinRead, stdinWrite, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("stdin pipe: %v", err)
@@ -73,10 +85,9 @@ func startRunServeRuntimeSmokeServer(
 	serveErr := make(chan error, 1)
 	go func() {
 		serveErr <- mcpcli.RunServe(ctx, mcpcli.ServeConfig{
-			RuntimeBacked: true,
-			ProjectRoot:   projectRoot,
-			Stdin:         stdinRead,
-			Stdout:        stdoutWrite,
+			Service: service,
+			Stdin:   stdinRead,
+			Stdout:  stdoutWrite,
 		})
 	}()
 

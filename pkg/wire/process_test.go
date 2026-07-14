@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -59,6 +60,7 @@ func TestBuildProcessGraphUsesInjectedInvocationBuilder(t *testing.T) {
 			t.Fatal("runtime builder called for one-shot invocation")
 			return nil, nil
 		},
+		BuildMCPExecutionService,
 		func(context.Context, *service.FactoryServiceConfig) (runcli.InvocationRunner, error) {
 			calls++
 			return nil, wantErr
@@ -106,6 +108,75 @@ func TestBuildProcessGraphConstructsMCPBeforeLifecycle(t *testing.T) {
 	}
 	if output.Len() != 0 {
 		t.Fatal("MCP graph construction started serving before initializer activation")
+	}
+}
+
+func TestBuildMCPExecutionServiceSelectsRequestedBackingService(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name        string
+		request     MCPExecutionRequest
+		wantRuntime bool
+	}{
+		{
+			name: "fixture",
+			request: MCPExecutionRequest{FixtureCatalogPath: testutil.MustRepoPath(
+				t, "pkg/transports/http/testdata/durable-session-contract-fixtures.json",
+			)},
+		},
+		{
+			name: "runtime", request: MCPExecutionRequest{RuntimeBacked: true, ProjectRoot: t.TempDir()},
+			wantRuntime: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service, err := BuildMCPExecutionService(context.Background(), test.request)
+			if err != nil {
+				t.Fatalf("BuildMCPExecutionService() error = %v", err)
+			}
+			if test.wantRuntime {
+				if _, ok := service.(*factorysessionexecution.JavaScriptRuntimeService); !ok {
+					t.Fatalf("service type = %T, want runtime service", service)
+				}
+			} else if _, ok := service.(*factorysessionexecution.FakeService); !ok {
+				t.Fatalf("service type = %T, want fixture service", service)
+			}
+		})
+	}
+}
+
+func TestBuildProcessGraphUsesExactInjectedMCPExecutionService(t *testing.T) {
+	t.Parallel()
+	injected := factorysessionexecution.NewFakeService()
+	var output bytes.Buffer
+	calls := 0
+	graph, err := BuildProcessGraphWithMCPBuilder(context.Background(), startupcli.Request{
+		Kind: startupcli.KindMCPServe,
+		MCP:  startupcli.MCPIntent{RuntimeBacked: true, ProjectRoot: t.TempDir(), Stdin: strings.NewReader(""), Stdout: &output},
+	}, initializer.ProcessPolicy{Mode: initializer.ProcessModeMCPServe}, func(_ context.Context, request MCPExecutionRequest) (factorysessionexecution.Service, error) {
+		calls++
+		if !request.RuntimeBacked || strings.TrimSpace(request.ProjectRoot) == "" {
+			t.Fatalf("MCP execution request = %+v, want runtime-backed project root", request)
+		}
+		return injected, nil
+	})
+	if err != nil {
+		t.Fatalf("BuildProcessGraphWithMCPBuilder() error = %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("MCP execution builder calls = %d, want 1", calls)
+	}
+	application, ok := graph.MCP.(*initializer.Application)
+	if !ok {
+		t.Fatalf("MCP application type = %T, want initializer application", graph.MCP)
+	}
+	wired, ok := application.Graph().(*Graph)
+	if !ok || wired.DurableExecution != injected || wired.Transport.DurableExecution != injected {
+		t.Fatalf("wired MCP execution = %+v, want exact injected service %p", wired, injected)
+	}
+	if err := initializer.RunProcess(context.Background(), graph); err != nil {
+		t.Fatalf("RunProcess() error = %v", err)
 	}
 }
 
@@ -168,7 +239,7 @@ func TestBuildProcessGraphAppliesRootPolicyBeforeConstructionAndLifecycle(t *tes
 				built = cfg
 				builtMode = mode
 				return processRunnerFunc(func(context.Context) error { return nil }), nil
-			})
+			}, BuildMCPExecutionService)
 			if err != nil {
 				t.Fatalf("buildProcessGraph() error = %v", err)
 			}

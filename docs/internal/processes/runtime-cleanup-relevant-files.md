@@ -171,6 +171,11 @@ must name the unfinished story and be removed with that story.
 Model invocation composition is owned by `pkg/wire/model_invocation.go`; its
 typed builder flows through `pkg/root` into the CLI models adapter, and the
 construction guard intentionally grants no model-transport exception.
+MCP durable execution composition is owned by `pkg/wire/process.go`; the
+typed builder flows through the root-owned production graph builder into
+`pkg/wire/process.go`, and `pkg/transports/cli/mcp` accepts only the resulting
+service. Production-composition tests should execute the real root command and
+also assert that the wire graph retains the exact injected service instance.
 
 Package tests, `testdata`
 fixtures, generated code, dependencies, coverage, and build artifacts are not

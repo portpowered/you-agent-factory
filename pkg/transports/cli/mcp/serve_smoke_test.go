@@ -322,7 +322,7 @@ func asyncRunningExecutionRequest() factoryapi.FactorySessionExecutionRequest {
 	}
 }
 
-func TestRunServe_InstallSmoke_RejectsMissingFixtureCatalogWithoutInjectedService(t *testing.T) {
+func TestRunServe_InstallSmoke_RejectsMissingInjectedService(t *testing.T) {
 	stdinRead, stdinWrite, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("stdin pipe: %v", err)
@@ -346,7 +346,7 @@ func TestRunServe_InstallSmoke_RejectsMissingFixtureCatalogWithoutInjectedServic
 	if err == nil {
 		t.Fatal("RunServe: expected fixture catalog load failure")
 	}
-	if !strings.Contains(err.Error(), "fixture catalog") && !strings.Contains(err.Error(), "missing-fixtures.json") {
-		t.Fatalf("RunServe error = %q, want fixture catalog failure", err)
+	if !strings.Contains(err.Error(), "durable execution service is required") {
+		t.Fatalf("RunServe error = %q, want missing injected service failure", err)
 	}
 }

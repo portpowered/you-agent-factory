@@ -6,12 +6,10 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
 
 	"github.com/portpowered/infinite-you/pkg/factorysessionexecution"
-	"github.com/portpowered/infinite-you/pkg/factorysessionexecution/fixtures"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
@@ -49,11 +47,10 @@ type ServeApplication struct {
 // BuildServeApplication constructs the MCP service, client, and server without
 // starting stdio processing.
 func BuildServeApplication(cfg ServeConfig) (*ServeApplication, error) {
-	service, err := ResolveServeService(cfg)
-	if err != nil {
-		return nil, err
+	if cfg.Service == nil {
+		return nil, fmt.Errorf("build MCP serve application: durable execution service is required")
 	}
-	client := mcpfactorysession.NewClientWithService(service)
+	client := mcpfactorysession.NewClientWithService(cfg.Service)
 	server, err := mcpserver.New(mcpserver.Options{Client: client})
 	if err != nil {
 		return nil, err
@@ -70,13 +67,6 @@ func BuildServeApplication(cfg ServeConfig) (*ServeApplication, error) {
 	return &ServeApplication{server: server, stdin: stdin, stdout: stdout}, nil
 }
 
-// ResolveServeService constructs the durable Factory Session execution
-// collaborator selected by MCP command inputs without starting stdio serving.
-// Production composition passes this exact instance into the application graph.
-func ResolveServeService(cfg ServeConfig) (factorysessionexecution.Service, error) {
-	return resolveServeService(cfg)
-}
-
 // Run starts stdio handling for an MCP graph that has already been built.
 func (application *ServeApplication) Run(ctx context.Context) error {
 	if application == nil || application.server == nil {
@@ -85,77 +75,6 @@ func (application *ServeApplication) Run(ctx context.Context) error {
 	ctx, stop := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return application.server.ServeStdio(ctx, application.stdin, application.stdout)
-}
-
-func resolveServeService(cfg ServeConfig) (factorysessionexecution.Service, error) {
-	if cfg.Service != nil {
-		return cfg.Service, nil
-	}
-	if cfg.RuntimeBacked {
-		projectRoot, err := resolveProjectRoot(cfg.ProjectRoot)
-		if err != nil {
-			return nil, err
-		}
-		persistence, err := factorysessionexecution.ProjectPersistence(projectRoot)
-		if err != nil {
-			return nil, fmt.Errorf("initialize runtime-backed persistence: %w", err)
-		}
-		service, err := factorysessionexecution.NewExecutionService(
-			factorysessionexecution.ExecutionProviderJavaScriptRuntime,
-			factorysessionexecution.ServiceConfig{ProjectRoot: projectRoot, Persistence: persistence},
-		)
-		if err != nil {
-			return nil, fmt.Errorf("initialize runtime-backed execution service: %w", err)
-		}
-		return service, nil
-	}
-	catalogPath, err := resolveFixtureCatalogPath(cfg.FixtureCatalogPath)
-	if err != nil {
-		return nil, err
-	}
-	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(catalogPath)
-	if err != nil {
-		return nil, fmt.Errorf("load durable session fixture catalog: %w", err)
-	}
-	return service, nil
-}
-
-func resolveProjectRoot(explicit string) (string, error) {
-	if trimmed := strings.TrimSpace(explicit); trimmed != "" {
-		return trimmed, nil
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("resolve current working directory: %w", err)
-	}
-	return cwd, nil
-}
-
-func resolveFixtureCatalogPath(explicit string) (string, error) {
-	if trimmed := strings.TrimSpace(explicit); trimmed != "" {
-		return trimmed, nil
-	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", fmt.Errorf("resolve current working directory: %w", err)
-	}
-	relative := filepath.FromSlash(fixtures.ContractFixtureCatalogRelativePath)
-	dir := cwd
-	for {
-		candidate := filepath.Join(dir, relative)
-		if _, statErr := os.Stat(candidate); statErr == nil {
-			return candidate, nil
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	return "", fmt.Errorf(
-		"fixture catalog not found; run from the repository root or set --fixture-catalog to %s",
-		fixtures.ContractFixtureCatalogRelativePath,
-	)
 }
 
 // NewServeCommand constructs `you mcp serve`.

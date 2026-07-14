@@ -18,6 +18,7 @@ import (
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/wire"
 )
 
 func TestNormalizeSnapshotsArgumentsAndEnvironment(t *testing.T) {
@@ -259,6 +260,30 @@ func TestExecuteModelsInvokeUsesInjectedModelCollaborator(t *testing.T) {
 	}
 	if !strings.Contains(output.String(), `"modelName":"OMNIVOICE_Q4_K_M"`) {
 		t.Fatalf("models invoke output = %q, want sentinel result", output.String())
+	}
+}
+
+func TestExecuteMCPServeUsesInjectedExecutionCollaborator(t *testing.T) {
+	t.Parallel()
+	injected := factorysessionexecution.NewFakeService()
+	var requests []wire.MCPExecutionRequest
+	var output bytes.Buffer
+	err := ExecuteWithDependencies(Input{
+		Args: []string{"you", "mcp", "serve", "--runtime", "--project-root", t.TempDir()},
+		Env:  homeEnvironment(t.TempDir()), Stdin: strings.NewReader(""), Stdout: &output,
+		Context: context.Background(),
+	}, Dependencies{BuildMCPExecution: func(_ context.Context, request wire.MCPExecutionRequest) (factorysessionexecution.Service, error) {
+		requests = append(requests, request)
+		return injected, nil
+	}})
+	if err != nil {
+		t.Fatalf("ExecuteWithDependencies(mcp serve) error = %v", err)
+	}
+	if len(requests) != 1 || !requests[0].RuntimeBacked || strings.TrimSpace(requests[0].ProjectRoot) == "" {
+		t.Fatalf("MCP execution requests = %+v, want one normalized runtime-backed request", requests)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("MCP output = %q, want no protocol output for closed stdin", output.String())
 	}
 }
 

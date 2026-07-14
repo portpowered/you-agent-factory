@@ -45,9 +45,6 @@ var approvedApplicationCompositionFiles = map[string]struct{}{
 	// Batch 008 moves remaining legacy composition roots behind pkg/wire.
 	"pkg/composebridge/core.go": {},
 	"pkg/service/factory.go":    {},
-	// converge-transport-family story 007 moves the remaining MCP constructors
-	// into pkg/wire.
-	"pkg/transports/cli/mcp/serve.go": {},
 }
 
 var javascriptLiveChildRoots = []string{

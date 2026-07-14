@@ -57,6 +57,7 @@ type Dependencies struct {
 	Initializer           Initializer
 	BuildSessionExecution sessionexecutioncli.ServiceBuilder
 	BuildModelInvocation  modelscli.InvocationBuilder
+	BuildMCPExecution     wire.MCPExecutionBuilder
 }
 
 func executeStartup(ctx context.Context, request startupcli.Request, dependencies Dependencies) error {
@@ -102,8 +103,11 @@ func selectMode(request startupcli.Request) (Mode, SidecarPolicy, error) {
 }
 
 func normalizeDependencies(dependencies Dependencies) Dependencies {
+	if dependencies.BuildMCPExecution == nil {
+		dependencies.BuildMCPExecution = wire.BuildMCPExecutionService
+	}
 	if dependencies.GraphBuilder == nil {
-		dependencies.GraphBuilder = productionGraphBuilder{}
+		dependencies.GraphBuilder = productionGraphBuilder{buildMCP: dependencies.BuildMCPExecution}
 	}
 	if dependencies.Initializer == nil {
 		dependencies.Initializer = productionInitializer{}
