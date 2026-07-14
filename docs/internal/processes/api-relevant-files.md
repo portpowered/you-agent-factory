@@ -83,8 +83,11 @@ Use this map when changing the public REST contract.
   title) classify as `patch` when structural surfaces match. Compatible
   additions (new operations, optional parameters, optional schema properties,
   widened enums) classify as `minor` with `openapi.add.*` change codes.
-  Removals and narrowing classify as `major` with `openapi.remove.*` and
-  `openapi.narrow.*` change codes; major wins over minor and patch. Unsupported
+  Compatible requiredness relaxations (parameter `required: true` to `false`,
+  removing a name from `schema.required`) classify as `minor` with
+  `openapi.relax.*` change codes. Removals and narrowing classify as `major`
+  with `openapi.remove.*` and `openapi.narrow.*` change codes; major wins over
+  minor and patch. Unsupported
   or ambiguous structural deltas fail closed via `UnsupportedDiffError` with an
   operation or schema path instead of returning a guessed classification.
 - Focused fixtures live under

@@ -44,7 +44,6 @@ func IsUnsupportedDiff(err error) bool {
 // Stable documentation-only change codes.
 const (
 	CodeInfoDescriptionChanged        = "openapi.doc.info.description"
-	CodeInfoSummaryChanged            = "openapi.doc.info.summary"
 	CodeInfoExternalDocsChanged       = "openapi.doc.info.external_docs"
 	CodeOperationSummaryChanged       = "openapi.doc.operation.summary"
 	CodeOperationDescriptionChanged   = "openapi.doc.operation.description"
@@ -78,4 +77,10 @@ const (
 	CodeSchemaTypeNarrowed      = "openapi.narrow.schema.type"
 	CodeSchemaRequiredNarrowed  = "openapi.narrow.schema.required"
 	CodeParameterRequiredNarrowed = "openapi.narrow.parameter.required"
+)
+
+// Stable compatible-relaxation change codes.
+const (
+	CodeParameterRequiredRelaxed = "openapi.relax.parameter.required"
+	CodeSchemaRequiredRelaxed    = "openapi.relax.schema.required"
 )

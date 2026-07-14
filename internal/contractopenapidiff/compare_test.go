@@ -154,6 +154,50 @@ func TestCompareYAML_WidenEnumFixture_ClassifiesMinor(t *testing.T) {
 	}
 }
 
+func TestCompareYAML_RelaxParameterRequiredFixture_ClassifiesMinor(t *testing.T) {
+	t.Parallel()
+
+	before := readFixture(t, "relax-parameter-required", "before.yaml")
+	after := readFixture(t, "relax-parameter-required", "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err != nil {
+		t.Fatalf("CompareYAML() error = %v", err)
+	}
+	if result.Classification != contractopenapidiff.ClassificationMinor {
+		t.Fatalf("Classification = %q, want %q", result.Classification, contractopenapidiff.ClassificationMinor)
+	}
+
+	wantChanges := []contractopenapidiff.Change{
+		{Code: contractopenapidiff.CodeParameterRequiredRelaxed, Path: "GET /pets.parameters[query:limit]"},
+	}
+	if !slices.Equal(result.Changes, wantChanges) {
+		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
+	}
+}
+
+func TestCompareYAML_RelaxSchemaRequiredFixture_ClassifiesMinor(t *testing.T) {
+	t.Parallel()
+
+	before := readFixture(t, "relax-schema-required", "before.yaml")
+	after := readFixture(t, "relax-schema-required", "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err != nil {
+		t.Fatalf("CompareYAML() error = %v", err)
+	}
+	if result.Classification != contractopenapidiff.ClassificationMinor {
+		t.Fatalf("Classification = %q, want %q", result.Classification, contractopenapidiff.ClassificationMinor)
+	}
+
+	wantChanges := []contractopenapidiff.Change{
+		{Code: contractopenapidiff.CodeSchemaRequiredRelaxed, Path: "components.schemas.Pet.required.name"},
+	}
+	if !slices.Equal(result.Changes, wantChanges) {
+		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
+	}
+}
+
 func TestCompareYAML_RemoveRouteFixture_ClassifiesMajor(t *testing.T) {
 	t.Parallel()
 

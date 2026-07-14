@@ -261,8 +261,11 @@ func collectParameterPairChanges(path string, before, after *openapi3.Parameter)
 	}
 	var changes []Change
 	if before.Required != after.Required {
-		if after.Required && !before.Required {
+		switch {
+		case after.Required && !before.Required:
 			changes = appendMajorChange(changes, CodeParameterRequiredNarrowed, path)
+		case before.Required && !after.Required:
+			changes = appendMinorChange(changes, CodeParameterRequiredRelaxed, path)
 		}
 	}
 	schemaChanges, err := collectSchemaRefChanges(path+".schema", before.Schema, after.Schema)
@@ -270,11 +273,6 @@ func collectParameterPairChanges(path string, before, after *openapi3.Parameter)
 		return nil, err
 	}
 	return append(changes, schemaChanges...), nil
-}
-
-func compareParameterStructural(path string, before, after *openapi3.Parameter) error {
-	_, err := collectParameterPairChanges(path, before, after)
-	return err
 }
 
 func compareRequestBodyStructural(opPath string, before, after *openapi3.RequestBodyRef) error {
@@ -393,7 +391,7 @@ func collectSchemaChanges(path string, before, after *openapi3.Schema) ([]Change
 	if before.Format != after.Format {
 		changes = appendMajorChange(changes, CodeSchemaTypeNarrowed, path+".format")
 	}
-	changes = append(changes, collectRequiredNarrowingChanges(path, before.Required, after.Required)...)
+	changes = append(changes, collectRequiredChanges(path, before.Required, after.Required)...)
 	if !externalDocsStructuralEqual(before.ExternalDocs, after.ExternalDocs) {
 		return nil, unsupportedStructuralDiff(path + ".externalDocs")
 	}
@@ -437,11 +435,6 @@ func collectSchemaChanges(path string, before, after *openapi3.Schema) ([]Change
 	return changes, nil
 }
 
-func compareSchemaStructural(path string, before, after *openapi3.Schema) error {
-	_, err := collectSchemaChanges(path, before, after)
-	return err
-}
-
 func collectEnumChanges(path string, before, after []any) ([]Change, error) {
 	beforeValues := enumValueSet(before)
 	afterValues := enumValueSet(after)
@@ -460,14 +453,21 @@ func collectEnumChanges(path string, before, after []any) ([]Change, error) {
 	return changes, nil
 }
 
-func collectRequiredNarrowingChanges(path string, beforeRequired, afterRequired []string) []Change {
+func collectRequiredChanges(path string, beforeRequired, afterRequired []string) []Change {
 	beforeSet := stringSet(beforeRequired)
+	afterSet := stringSet(afterRequired)
 	var changes []Change
 	for _, name := range afterRequired {
 		if _, ok := beforeSet[name]; ok {
 			continue
 		}
 		changes = appendMajorChange(changes, CodeSchemaRequiredNarrowed, path+".required."+name)
+	}
+	for _, name := range beforeRequired {
+		if _, ok := afterSet[name]; ok {
+			continue
+		}
+		changes = appendMinorChange(changes, CodeSchemaRequiredRelaxed, path+".required."+name)
 	}
 	return changes
 }

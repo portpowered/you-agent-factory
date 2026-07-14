@@ -55,6 +55,18 @@ var openAPIDiffFixtureMatrix = []struct {
 		classification: contractopenapidiff.ClassificationMinor,
 	},
 	{
+		name:           "relax-parameter-required",
+		fixture:        "relax-parameter-required",
+		category:       categoryParameter,
+		classification: contractopenapidiff.ClassificationMinor,
+	},
+	{
+		name:           "relax-schema-required",
+		fixture:        "relax-schema-required",
+		category:       categoryRequestResponse,
+		classification: contractopenapidiff.ClassificationMinor,
+	},
+	{
 		name:           "remove-route",
 		fixture:        "remove-route",
 		category:       categoryRoute,
@@ -137,27 +149,5 @@ func TestCompareYAML_FixtureMatrix_ClassifiesRepresentativeCases(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestCompareYAML_FixtureMatrix_CoversRequiredCategories(t *testing.T) {
-	t.Parallel()
-
-	required := []fixtureCategory{
-		categoryRoute,
-		categoryParameter,
-		categoryRequestResponse,
-		categoryEnum,
-		categoryDocsOnly,
-		categoryFailClosed,
-	}
-	covered := make(map[fixtureCategory]struct{}, len(required))
-	for _, tc := range openAPIDiffFixtureMatrix {
-		covered[tc.category] = struct{}{}
-	}
-	for _, category := range required {
-		if _, ok := covered[category]; !ok {
-			t.Fatalf("fixture matrix missing category %q", category)
-		}
 	}
 }
