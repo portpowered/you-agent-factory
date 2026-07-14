@@ -373,31 +373,44 @@ func positionalArgsFromManifest(record climanifest.Command) cobra.PositionalArgs
 	}
 	sort.Slice(args, func(i, j int) bool { return args[i].Position < args[j].Position })
 
-	maxCardinality := 0
-	minCardinality := 0
 	variadic := false
+	totalMin := 0
+	totalMax := 0
+	unboundedMax := false
 	for _, arg := range args {
-		if arg.MaxCardinality > maxCardinality {
-			maxCardinality = arg.MaxCardinality
-		}
-		if arg.MinCardinality > minCardinality {
-			minCardinality = arg.MinCardinality
-		}
 		if arg.Variadic {
 			variadic = true
 		}
+		totalMin += arg.MinCardinality
+		if arg.MaxCardinality < 0 {
+			unboundedMax = true
+			continue
+		}
+		if arg.MaxCardinality == 0 {
+			continue
+		}
+		totalMax += arg.MaxCardinality
 	}
 	if variadic {
-		if minCardinality > 0 {
-			return cobra.MinimumNArgs(minCardinality)
+		if totalMin > 0 {
+			return cobra.MinimumNArgs(totalMin)
 		}
 		return cobra.ArbitraryArgs
 	}
-	if maxCardinality > 0 && minCardinality == maxCardinality {
-		return cobra.ExactArgs(maxCardinality)
+	if unboundedMax {
+		if totalMin > 0 {
+			return cobra.MinimumNArgs(totalMin)
+		}
+		return cobra.ArbitraryArgs
 	}
-	if maxCardinality > 0 {
-		return cobra.MaximumNArgs(maxCardinality)
+	if totalMax > 0 && totalMin == totalMax {
+		return cobra.ExactArgs(totalMin)
+	}
+	if totalMax > 0 {
+		return cobra.MaximumNArgs(totalMax)
+	}
+	if totalMin > 0 {
+		return cobra.MinimumNArgs(totalMin)
 	}
 	return nil
 }

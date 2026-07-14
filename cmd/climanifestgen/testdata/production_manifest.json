@@ -1,0 +1,212 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "you",
+  "commands": {
+    "you": {
+      "id": "you",
+      "name": "you",
+      "path": "you",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "root"},
+          "description": {"canonicalEnglish": "root"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "you"}
+    },
+    "you.session": {
+      "id": "you.session",
+      "name": "session",
+      "path": "you session",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "session"},
+          "description": {"canonicalEnglish": "session"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": false,
+      "usage": {"line": "session"}
+    },
+    "you.session.show": {
+      "id": "you.session.show",
+      "name": "show",
+      "path": "you session show",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "show"},
+          "description": {"canonicalEnglish": "show"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "show [session-id]"},
+      "handler": {"id": "you.session.show.handler", "operationId": "getFactorySession"}
+    },
+    "you.work": {
+      "id": "you.work",
+      "name": "work",
+      "path": "you work",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "work"},
+          "description": {"canonicalEnglish": "work"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": false,
+      "usage": {"line": "work"}
+    },
+    "you.work.list": {
+      "id": "you.work.list",
+      "name": "list",
+      "path": "you work list",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "list"},
+          "description": {"canonicalEnglish": "list"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "list"},
+      "handler": {"id": "you.work.list.handler", "operationId": "listWorkBySessionId"}
+    },
+    "you.work.show": {
+      "id": "you.work.show",
+      "name": "show",
+      "path": "you work show",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "show"},
+          "description": {"canonicalEnglish": "show"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "show [work-id]"},
+      "handler": {"id": "you.work.show.handler", "operationId": "getWorkBySessionId"}
+    },
+    "you.work.move": {
+      "id": "you.work.move",
+      "name": "move",
+      "path": "you work move",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "move"},
+          "description": {"canonicalEnglish": "move"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "move [work-id] [state-name]"},
+      "handler": {"id": "you.work.move.handler", "operationId": "moveWorkBySessionId"}
+    },
+    "you.work.visualize": {
+      "id": "you.work.visualize",
+      "name": "visualize",
+      "path": "you work visualize",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "visualize"},
+          "description": {"canonicalEnglish": "visualize"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "visualize [batch-path]"},
+      "handler": {"id": "you.work.visualize.handler"}
+    },
+    "you.docs": {
+      "id": "you.docs",
+      "name": "docs",
+      "path": "you docs",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "docs"},
+          "description": {"canonicalEnglish": "docs"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "docs [topic]"},
+      "handler": {"id": "you.docs.handler"}
+    },
+    "you.models": {
+      "id": "you.models",
+      "name": "models",
+      "path": "you models",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "models"},
+          "description": {"canonicalEnglish": "models"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": false,
+      "usage": {"line": "models"}
+    },
+    "you.models.list": {
+      "id": "you.models.list",
+      "name": "list",
+      "path": "you models list",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "list"},
+          "description": {"canonicalEnglish": "list"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "list"},
+      "handler": {"id": "you.models.list.handler", "operationId": "listModels"}
+    },
+    "you.models.inspect": {
+      "id": "you.models.inspect",
+      "name": "inspect",
+      "path": "you models inspect",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "inspect"},
+          "description": {"canonicalEnglish": "inspect"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "inspect <model-name>"},
+      "handler": {"id": "you.models.inspect.handler", "operationId": "getModel"}
+    },
+    "you.models.invoke": {
+      "id": "you.models.invoke",
+      "name": "invoke",
+      "path": "you models invoke",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "invoke"},
+          "description": {"canonicalEnglish": "invoke"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "invoke <model-name>"},
+      "handler": {"id": "you.models.invoke.handler", "operationId": "invokeModel"}
+    },
+    "you.models.pull": {
+      "id": "you.models.pull",
+      "name": "pull",
+      "path": "you models pull",
+      "documentation": {
+        "documentation": {
+          "title": {"canonicalEnglish": "pull"},
+          "description": {"canonicalEnglish": "pull"}
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {"line": "pull <model-name>"},
+      "handler": {"id": "you.models.pull.handler", "operationId": "pullModel"}
+    }
+  }
+}

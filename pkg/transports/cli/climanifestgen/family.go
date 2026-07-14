@@ -30,3 +30,31 @@ func AssertRepresentativeFamilyCommandID(id string) error {
 		RepresentativeFamilyCommandIDs,
 	)
 }
+
+// WorkFamilyCommandIDs are the only stable command IDs the generator may emit
+// for the work inspection/control family cutover slice.
+var WorkFamilyCommandIDs = []string{
+	"you.work",
+	"you.work.list",
+	"you.work.show",
+	"you.work.move",
+	"you.work.visualize",
+}
+
+// IsWorkFamilyCommandID reports whether id belongs to the work family.
+func IsWorkFamilyCommandID(id string) bool {
+	return slices.Contains(WorkFamilyCommandIDs, id)
+}
+
+// AssertWorkFamilyCommandID returns an error when id is outside the work
+// family scope.
+func AssertWorkFamilyCommandID(id string) error {
+	if IsWorkFamilyCommandID(id) {
+		return nil
+	}
+	return fmt.Errorf(
+		"command id %q is outside the work family %v",
+		id,
+		WorkFamilyCommandIDs,
+	)
+}

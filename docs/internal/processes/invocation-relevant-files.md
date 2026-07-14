@@ -211,20 +211,30 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `contracts/testdata/baseline/cli-command-execution.json`. Handler/OpenAPI binding for
   `you.session.show` asserts `operationId` `getFactorySession` maps to
   `GET /factory-sessions/{session_id}` in `api/openapi.yaml` and matches live
-  `session.Show` JSON transport. Representative-family metadata generation lives in
-  `pkg/transports/cli/climanifestgen` (`Generate`, `Check`, `ExtractRepresentativeFamily`)
-  with `cmd/climanifestgen` and committed artifacts under
+  `session.Show` JSON transport.   Representative-family metadata generation lives in
+  `pkg/transports/cli/climanifestgen` (`Generate`, `Check`, `ExtractRepresentativeFamily`,
+  `ExtractWorkFamily`, `WorkArtifact`) with `cmd/climanifestgen` and committed artifacts under
   `pkg/transports/cli/generated` (`RepresentativeFamilyManifest`, embedded
-  `representative_family.json`). Handwritten representative-family handlers are
+  `representative_family.json`; `WorkFamilyManifest`, embedded `work_family.json`;
+  `WorkFamilyCommandIDs` in `command_ids_gen.go`). Handwritten representative-family handlers are
   registered by stable command ID in `pkg/transports/cli/commandregistry`
   (`NewRepresentativeRegistry`, `SessionShowRunE`, `AttachRunE`,
-  `VerifyRepresentativeRunnableCoverage`) and production wiring helper
-  `newRepresentativeHandlerRegistry` in `pkg/transports/cli/root_work.go`.
-  The generated representative-family constructor lives in
-  `pkg/transports/cli/climanifestcobra` (`NewRepresentativeFamilyCommand`,
+  `VerifyRepresentativeRunnableCoverage`; work-family:
+  `NewWorkRegistry`, `ListRunE`, `ShowRunE`, `MoveRunE`, `VisualizeRunE`,
+  `VerifyWorkRunnableCoverage`) and production wiring helpers
+  `newRepresentativeHandlerRegistry` and `newWorkHandlerRegistry` in
+  `pkg/transports/cli/root_work.go`. The generated representative-family constructor
+  lives in `pkg/transports/cli/climanifestcobra` (`NewRepresentativeFamilyCommand`,
   `NewRepresentativeFamilyComponents`, `NewRepresentativeFamilyCommandFromManifest`)
   and builds only `you` → `you session` → `you session show` from embedded generated
-  metadata plus registry-attached handwritten handlers. Production root cutover is
+  metadata plus registry-attached handwritten handlers. The generated work-family
+  constructor lives in the same package (`NewWorkFamilyCommand`,
+  `NewWorkFamilyComponents`, `NewWorkFamilyCommandFromManifest`) and builds
+  `you work` → `you work list|show|move|visualize` from embedded generated metadata
+  plus registry-attached handwritten handlers; isolated legacy construction for parity
+  uses `cli.NewLegacyWorkFamilyCommand` and shared-root helpers
+  `NewLegacyWorkFamilyRootForParity`, `NewWorkFamilyParityRoots`, and
+  `NewWorkFamilyParityRootsWithProductionHandlers`. Production root cutover is
   controlled by `useGeneratedRepresentativeFamily` in `pkg/transports/cli/root_work.go`
   (`newRootCommandWithGeneratedRepresentativeFamily` with
   `newLegacyRootCommandWithOptions` rollback). Generated-vs-legacy parity for the
@@ -232,7 +242,11 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   (`CompareConstructorIdentityParity`, `CompareConstructorHelpParity`,
   `CompareConstructorParseParity`, `CompareConstructorCompletionInventoryParity`,
   `TestGeneratedVsLegacyParityMatrix_RepresentativeFamily`) with isolated legacy
-  construction via `cli.NewLegacyRepresentativeFamilyCommand`.
+  construction via `cli.NewLegacyRepresentativeFamilyCommand`. Work-family parity
+  mirrors the same package (`TestGeneratedVsLegacyParityMatrix_WorkFamily`,
+  `TestProductionManifestParsingParity_WorkFamily`,
+  `TestProductionManifestOutputModeParity_WorkFamily`) using the shared-root helpers
+  above; `WorkFamilyBindings.FlagUsages` bridges handwritten local flag help text.
 - Models-family manifest parity for `you.models` and list/inspect/invoke/pull leaves lives in
   `pkg/transports/cli/climanifestparity` (`CompareModelsHelpIdentity`,
   `TestProductionManifestHelpIdentityParity_ModelsFamily`,

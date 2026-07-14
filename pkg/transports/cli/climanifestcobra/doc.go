@@ -1,3 +1,3 @@
-// Package climanifestcobra builds the representative root/session-show Cobra tree
-// from generated manifest metadata and a handwritten handler registry.
+// Package climanifestcobra builds representative and work-family Cobra trees from
+// generated manifest metadata and handwritten handler registries.
 package climanifestcobra

@@ -1,7 +1,7 @@
 {
   "exports": {
     "generated.cli.commands": {
-      "artifactHash": "47d9d511d8253574fc95dd5800bfb9dd586d47a6f3cfc0ababbb2448362a1ed6",
+      "artifactHash": "6b32edebf7ea06619c958a4723cb96eb5f7c10aa2fcc112c273bf3f809c6424c",
       "documentation": {
         "documentation": {
           "description": {
@@ -18,7 +18,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.cli.commands",
-        "sourceHash": "47d9d511d8253574fc95dd5800bfb9dd586d47a6f3cfc0ababbb2448362a1ed6",
+        "sourceHash": "6b32edebf7ea06619c958a4723cb96eb5f7c10aa2fcc112c273bf3f809c6424c",
         "visibility": "public"
       },
       "family": "cli",
@@ -312,5 +312,5 @@
   "formatVersion": "1.0.0",
   "packageId": "you-agent-factory.api",
   "packageVersion": "0.0.0",
-  "sourceCommit": "f7bdaa5b4a3c5ef3084725d31090353634bed9b1"
+  "sourceCommit": "cb22e59a990ba90bc7ef4daca6b7001eacfe0b9e"
 }
