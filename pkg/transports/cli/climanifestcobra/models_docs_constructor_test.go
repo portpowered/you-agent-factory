@@ -1,8 +1,10 @@
 package climanifestcobra_test
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity"
@@ -143,6 +145,111 @@ func testInvokeFlagBindings() climanifestcobra.ModelsInvokeFlagBindings {
 			"text":      "text input for direct invocation",
 			"output":    "output file path for streamed audio responses",
 		},
+	}
+}
+
+func TestNewModelsDocsFamilyComponentsReturnsDetachedCommands(t *testing.T) {
+	components, _ := mustModelsDocsFamilyComponents(t)
+	if components.Docs.Parent() != nil || components.Models.Parent() != nil {
+		t.Fatal("detached models/docs components must not be attached before production wiring")
+	}
+}
+
+func TestNewModelsDocsFamilyComponentsRejectsNilRegistry(t *testing.T) {
+	if _, err := climanifestcobra.NewModelsDocsFamilyComponents(nil, testInvokeFlagBindings()); err == nil {
+		t.Fatal("NewModelsDocsFamilyComponents() nil registry = nil, want error")
+	}
+}
+
+func TestRejectDeprecatedPortFlagOnModelsLeaf(t *testing.T) {
+	components, _ := mustModelsDocsFamilyComponents(t)
+	inspect, err := climanifestparity.FindCommandByPath(components.Models, "models inspect")
+	if err != nil {
+		t.Fatalf("FindCommandByPath(models inspect) error = %v", err)
+	}
+	if inspect.PreRunE == nil {
+		t.Fatal("models inspect must wire deprecated --port PreRunE")
+	}
+	if err := inspect.ParseFlags([]string{"--port", "7437"}); err != nil {
+		t.Fatalf("ParseFlags(--port) error = %v", err)
+	}
+	if err := inspect.PreRunE(inspect, nil); err == nil {
+		t.Fatal("PreRunE(--port) error = nil, want deprecated flag rejection")
+	} else if !strings.Contains(err.Error(), "--server") {
+		t.Fatalf("PreRunE error = %v, want deprecated --port guidance", err)
+	}
+}
+
+func TestNewModelsDocsFamilyComponentsFromManifestRejectsRunnableModelsParent(t *testing.T) {
+	manifest, err := generated.ModelsDocsFamilyManifest()
+	if err != nil {
+		t.Fatalf("ModelsDocsFamilyManifest() error = %v", err)
+	}
+	models := manifest.Commands["you.models"]
+	models.Runnable = true
+	manifest.Commands["you.models"] = models
+
+	registry, err := commandregistry.NewModelsDocsRegistry(commandregistry.ModelsDocsHandlers{
+		DocsRunE:          noopRunE,
+		ModelsListRunE:    noopRunE,
+		ModelsInspectRunE: noopRunE,
+		ModelsInvokeRunE:  noopRunE,
+		ModelsPullRunE:    noopRunE,
+	})
+	if err != nil {
+		t.Fatalf("NewModelsDocsRegistry() error = %v", err)
+	}
+	if _, err := climanifestcobra.NewModelsDocsFamilyComponentsFromManifest(manifest, registry, testInvokeFlagBindings()); err == nil {
+		t.Fatal("NewModelsDocsFamilyComponentsFromManifest() runnable models parent = nil, want error")
+	}
+}
+
+func TestNewModelsDocsFamilyComponentsFromManifestRejectsWrongFamilyCardinality(t *testing.T) {
+	manifest, err := generated.ModelsDocsFamilyManifest()
+	if err != nil {
+		t.Fatalf("ModelsDocsFamilyManifest() error = %v", err)
+	}
+	manifest.Commands["you.run"] = climanifest.Command{ID: "you.run", Path: "you run", Runnable: true}
+
+	registry, err := commandregistry.NewModelsDocsRegistry(commandregistry.ModelsDocsHandlers{
+		DocsRunE:          noopRunE,
+		ModelsListRunE:    noopRunE,
+		ModelsInspectRunE: noopRunE,
+		ModelsInvokeRunE:  noopRunE,
+		ModelsPullRunE:    noopRunE,
+	})
+	if err != nil {
+		t.Fatalf("NewModelsDocsRegistry() error = %v", err)
+	}
+	if _, err := climanifestcobra.NewModelsDocsFamilyComponentsFromManifest(manifest, registry, testInvokeFlagBindings()); err == nil {
+		t.Fatal("NewModelsDocsFamilyComponentsFromManifest() extra command = nil, want error")
+	}
+}
+
+func TestNewModelsDocsFamilyComponentsFromManifestBuildsDetachedTree(t *testing.T) {
+	manifest, err := generated.ModelsDocsFamilyManifest()
+	if err != nil {
+		t.Fatalf("ModelsDocsFamilyManifest() error = %v", err)
+	}
+	registry, err := commandregistry.NewModelsDocsRegistry(commandregistry.ModelsDocsHandlers{
+		DocsRunE:          noopRunE,
+		ModelsListRunE:    noopRunE,
+		ModelsInspectRunE: noopRunE,
+		ModelsInvokeRunE:  noopRunE,
+		ModelsPullRunE:    noopRunE,
+	})
+	if err != nil {
+		t.Fatalf("NewModelsDocsRegistry() error = %v", err)
+	}
+	components, err := climanifestcobra.NewModelsDocsFamilyComponentsFromManifest(manifest, registry, testInvokeFlagBindings())
+	if err != nil {
+		t.Fatalf("NewModelsDocsFamilyComponentsFromManifest() error = %v", err)
+	}
+	if components.Docs.Parent() != nil || components.Models.Parent() != nil {
+		t.Fatal("from-manifest components must remain detached")
+	}
+	if _, err := climanifestparity.FindCommandByPath(components.Models, "models pull"); err != nil {
+		t.Fatalf("generated from-manifest tree missing models pull: %v", err)
 	}
 }
 

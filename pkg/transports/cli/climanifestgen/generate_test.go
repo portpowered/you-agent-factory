@@ -250,6 +250,97 @@ func TestCheckTreatsCRLFArtifactsAsCurrent(t *testing.T) {
 	}
 }
 
+func TestExtractModelsDocsFamilyRejectsMissingCommand(t *testing.T) {
+	manifest := climanifest.Manifest{
+		RootPath: "you",
+		Commands: map[string]climanifest.Command{
+			"you.docs": {ID: "you.docs", Path: "you docs"},
+		},
+	}
+	if _, err := climanifestgen.ExtractModelsDocsFamily(manifest); err == nil {
+		t.Fatal("expected missing models/docs-family command error")
+	}
+}
+
+func TestExtractModelsDocsFamilyRejectsEmptyManifest(t *testing.T) {
+	if _, err := climanifestgen.ExtractModelsDocsFamily(climanifest.Manifest{}); err == nil {
+		t.Fatal("expected empty manifest rejection")
+	}
+}
+
+func TestModelsDocsArtifactFromProductionManifest(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	payload, err := climanifestgen.ModelsDocsArtifact(repoRoot)
+	if err != nil {
+		t.Fatalf("ModelsDocsArtifact() error = %v", err)
+	}
+	if len(bytes.TrimSpace(payload)) == 0 {
+		t.Fatal("ModelsDocsArtifact() returned empty payload")
+	}
+}
+
+func TestCheckDetectsStaleModelsDocsFamilyArtifact(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	root := t.TempDir()
+	manifestSource := filepath.Join(repoRoot, climanifest.ProductionManifestPath)
+	manifestTarget := filepath.Join(root, climanifest.ProductionManifestPath)
+	if err := copyFile(manifestSource, manifestTarget); err != nil {
+		t.Fatalf("copy production manifest: %v", err)
+	}
+	if err := climanifestgen.Generate(root); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+
+	target := filepath.Join(root, filepath.FromSlash(climanifestgen.ModelsDocsFamilyJSONPath))
+	if err := os.WriteFile(target, []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("write stale artifact: %v", err)
+	}
+	drift, err := climanifestgen.Check(root)
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if drift.Empty() {
+		t.Fatal("expected stale models/docs-family artifact drift")
+	}
+	if len(drift.Stale) != 1 || drift.Stale[0] != climanifestgen.ModelsDocsFamilyJSONPath {
+		t.Fatalf("stale drift = %#v, want %q stale", drift, climanifestgen.ModelsDocsFamilyJSONPath)
+	}
+}
+
+func TestIsModelsDocsFamilyCommandID(t *testing.T) {
+	if !climanifestgen.IsModelsDocsFamilyCommandID("you.docs") {
+		t.Fatal("expected you.docs in models/docs family")
+	}
+	if climanifestgen.IsModelsDocsFamilyCommandID("you.run") {
+		t.Fatal("expected you.run outside models/docs family")
+	}
+}
+
+func TestCheckDetectsMissingModelsDocsFamilyArtifacts(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	root := t.TempDir()
+	manifestSource := filepath.Join(repoRoot, climanifest.ProductionManifestPath)
+	manifestTarget := filepath.Join(root, climanifest.ProductionManifestPath)
+	if err := copyFile(manifestSource, manifestTarget); err != nil {
+		t.Fatalf("copy production manifest: %v", err)
+	}
+	if err := climanifestgen.Generate(root); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	jsonTarget := filepath.Join(root, filepath.FromSlash(climanifestgen.ModelsDocsFamilyJSONPath))
+	if err := os.Remove(jsonTarget); err != nil {
+		t.Fatalf("remove generated models/docs json: %v", err)
+	}
+
+	drift, err := climanifestgen.Check(root)
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if drift.Empty() || len(drift.Missing) == 0 {
+		t.Fatalf("missing drift = %#v, want missing models/docs artifacts", drift)
+	}
+}
+
 func TestCheckDetectsMissingRepresentativeFamilyArtifacts(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	root := t.TempDir()
