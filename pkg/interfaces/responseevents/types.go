@@ -167,6 +167,14 @@ type MessagePayload struct {
 	// must not be treated as authoritative final responses.
 	Partial bool `json:"partial,omitempty"`
 }
+
+// IsAuthoritativeMessageSnapshot reports whether a completed MESSAGE snapshot
+// may be treated as an authoritative final response for invocation primary-result
+// selection or final-only provider parsing. Timeout- or cancellation-captured
+// snapshots with partial=true must return false.
+func IsAuthoritativeMessageSnapshot(payload MessagePayload) bool {
+	return !payload.Partial
+}
 type MessageDeltaPayload struct {
 	ContentBlockIndex int              `json:"contentBlockIndex"`
 	ContentBlockKind  ContentBlockKind `json:"contentBlockKind"`
