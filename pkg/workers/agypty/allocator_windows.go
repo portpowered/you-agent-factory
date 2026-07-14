@@ -47,6 +47,8 @@ type conPTYAllocation struct {
 	handle  windows.Handle
 	inPipe  *os.File
 	outPipe *os.File
+	ptyIn   *os.File
+	ptyOut  *os.File
 }
 
 func allocateConPTY() (*conPTYAllocation, error) {
@@ -72,13 +74,12 @@ func allocateConPTY() (*conPTYAllocation, error) {
 		return nil, err
 	}
 
-	_ = ptyOut.Close()
-	_ = ptyIn.Close()
-
 	return &conPTYAllocation{
 		handle:  handle,
 		inPipe:  inPipeOurs,
 		outPipe: outPipeOurs,
+		ptyIn:   ptyIn,
+		ptyOut:  ptyOut,
 	}, nil
 }
 
@@ -95,6 +96,18 @@ func (c *conPTYAllocation) Close() error {
 			firstErr = err
 		}
 		c.outPipe = nil
+	}
+	if c.ptyIn != nil {
+		if err := c.ptyIn.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		c.ptyIn = nil
+	}
+	if c.ptyOut != nil {
+		if err := c.ptyOut.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+		c.ptyOut = nil
 	}
 	if c.handle != 0 {
 		windows.ClosePseudoConsole(c.handle)

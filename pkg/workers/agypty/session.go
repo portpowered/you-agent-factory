@@ -1,7 +1,6 @@
 package agypty
 
 import (
-	"context"
 	"errors"
 	"sync"
 )
@@ -15,10 +14,6 @@ type platformSession struct {
 	pty    ptyAllocation
 	mu     sync.Mutex
 	closed bool
-}
-
-func (s *platformSession) Run(context.Context) (SessionResult, error) {
-	return SessionResult{}, errSessionRunPending
 }
 
 func (s *platformSession) Close() error {

@@ -39,7 +39,7 @@ func TestAllocator_RejectsCancelledContext(t *testing.T) {
 	}
 }
 
-func TestPlatformSession_RunPendingAndClose(t *testing.T) {
+func TestPlatformSession_CloseIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	session, err := newPlatformSession(ProcessLaunch{
@@ -48,11 +48,6 @@ func TestPlatformSession_RunPendingAndClose(t *testing.T) {
 	}, DefaultSessionConfig(), PTYKindPOSIX, closeOnlyPTY{})
 	if err != nil {
 		t.Fatalf("newPlatformSession() error = %v", err)
-	}
-
-	_, runErr := session.Run(context.Background())
-	if !errors.Is(runErr, errSessionRunPending) {
-		t.Fatalf("Run() error = %v, want %v", runErr, errSessionRunPending)
 	}
 	if err := session.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
