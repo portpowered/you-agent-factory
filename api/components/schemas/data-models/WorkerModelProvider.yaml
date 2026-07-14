@@ -8,6 +8,7 @@ x-enum-varnames:
   - WorkerModelProviderKiro
   - WorkerModelProviderOpenCode
   - WorkerModelProviderPi
+  - WorkerModelProviderAgy
 enum:
   - CLAUDE
   - CODEX
@@ -16,6 +17,7 @@ enum:
   - KIRO
   - OPENCODE
   - PI
+  - AGY
 x-enum-descriptions:
   - Claude model execution routed through the `claude` provider command.
   - Codex model execution routed through the `codex` provider command.
@@ -24,3 +26,4 @@ x-enum-descriptions:
   - Kiro model execution routed through the `kiro-cli` provider command.
   - OpenCode model execution routed through the `opencode` provider command.
   - Pi model execution routed through the `pi` provider command.
+  - Agy model execution routed through the `agy` provider command.

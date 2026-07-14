@@ -7894,6 +7894,8 @@ export const WorkerModelProvider = {
   WorkerModelProviderOpenCode: "OPENCODE",
   // Pi model execution routed through the `pi` provider command.
   WorkerModelProviderPi: "PI",
+  // Agy model execution routed through the `agy` provider command.
+  WorkerModelProviderAgy: "AGY",
 } as const;
 export type WorkerModelProvider =
   (typeof WorkerModelProvider)[keyof typeof WorkerModelProvider];

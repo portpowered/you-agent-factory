@@ -1832,7 +1832,8 @@
         "GEMINI",
         "KIRO",
         "OPENCODE",
-        "PI"
+        "PI",
+        "AGY"
       ],
       "type": "string",
       "x-enum-descriptions": [
@@ -1842,7 +1843,8 @@
         "Gemini model execution routed through the `gemini` provider command.",
         "Kiro model execution routed through the `kiro-cli` provider command.",
         "OpenCode model execution routed through the `opencode` provider command.",
-        "Pi model execution routed through the `pi` provider command."
+        "Pi model execution routed through the `pi` provider command.",
+        "Agy model execution routed through the `agy` provider command."
       ],
       "x-enum-varnames": [
         "WorkerModelProviderClaude",
@@ -1851,7 +1853,8 @@
         "WorkerModelProviderGemini",
         "WorkerModelProviderKiro",
         "WorkerModelProviderOpenCode",
-        "WorkerModelProviderPi"
+        "WorkerModelProviderPi",
+        "WorkerModelProviderAgy"
       ]
     },
     "WorkerProvider": {

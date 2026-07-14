@@ -16,6 +16,7 @@ import (
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	provideradapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/commandenv"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
@@ -131,6 +132,20 @@ func WithResponseStreamExecutor(executor ResponseStreamExecutor) ScriptWrapProvi
 	}
 }
 
+// WithAgyFactoryRoot sets the factory root used for Agy workspace normalization.
+func WithAgyFactoryRoot(factoryRoot string) ScriptWrapProviderOption {
+	return func(p *ScriptWrapProvider) {
+		p.agyFactoryRoot = factoryRoot
+	}
+}
+
+// WithAgyPTYAllocator injects a mock or platform PTY allocator for Agy execution tests.
+func WithAgyPTYAllocator(allocator agypty.PTYAllocator) ScriptWrapProviderOption {
+	return func(p *ScriptWrapProvider) {
+		p.agyAllocator = allocator
+	}
+}
+
 // WithMaterializeOptions configures dispatch-time content URL materialization (used by Codex image args).
 func WithMaterializeOptions(opts *materialize.Options) ScriptWrapProviderOption {
 	return func(p *ScriptWrapProvider) {
@@ -155,6 +170,8 @@ type ScriptWrapProvider struct {
 	responseStreamExecutor ResponseStreamExecutor
 	openCodeResolver       *opencodeadapter.Resolver
 	openCodeResolverErr    error
+	agyFactoryRoot         string
+	agyAllocator           agypty.PTYAllocator
 }
 
 func (p *ScriptWrapProvider) commandExec() CommandRunner {
@@ -208,6 +225,9 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 			return interfaces.InferenceResponse{}, p.openCodeRequestValidationError(req, err)
 		}
 		return p.executeNegotiatedOpenCode(ctx, req, logger)
+	}
+	if strings.EqualFold(strings.TrimSpace(req.ModelProvider), string(interfaces.ModelProviderAgy)) {
+		return p.executeAgy(ctx, req, logger)
 	}
 	structuredResponseStream := p.progressPublisher != nil && p.responseStreamExecutor != nil && p.responseStreamExecutor.Supports(req.ModelProvider)
 	if structuredResponseStream && strings.EqualFold(strings.TrimSpace(req.ModelProvider), string(interfaces.ModelProviderCodex)) {

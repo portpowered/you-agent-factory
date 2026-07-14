@@ -862,6 +862,7 @@ const (
 
 // Defines values for WorkerModelProvider.
 const (
+	WorkerModelProviderAgy      WorkerModelProvider = "AGY"
 	WorkerModelProviderClaude   WorkerModelProvider = "CLAUDE"
 	WorkerModelProviderCodex    WorkerModelProvider = "CODEX"
 	WorkerModelProviderCursor   WorkerModelProvider = "CURSOR"

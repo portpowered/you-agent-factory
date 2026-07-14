@@ -1,6 +1,7 @@
 package agypty
 
 import (
+	"bytes"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -88,4 +89,121 @@ func isShellWrapperFlag(flag string) bool {
 	default:
 		return false
 	}
+}
+
+// CleanTerminal strips common ANSI CSI and OSC sequences plus carriage-return
+// repaint lines from raw PTY capture bytes. Story 18 may extend the cleaning
+// corpus; this function is the pure seam Story 17 calls before public emit.
+func CleanTerminal(raw []byte) string {
+	if len(raw) == 0 {
+		return ""
+	}
+
+	stripped := stripANSISequences(raw)
+	normalized := strings.ReplaceAll(string(stripped), "\r\n", "\n")
+	lines := strings.Split(normalized, "\n")
+	filtered := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if idx := strings.LastIndex(line, "\r"); idx >= 0 {
+			line = line[idx+1:]
+		}
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		filtered = append(filtered, line)
+	}
+	return strings.TrimSpace(strings.Join(filtered, "\n"))
+}
+
+func stripANSISequences(raw []byte) []byte {
+	var out bytes.Buffer
+	for i := 0; i < len(raw); {
+		if raw[i] != 0x1b {
+			out.WriteByte(raw[i])
+			i++
+			continue
+		}
+		if i+1 >= len(raw) {
+			break
+		}
+		switch raw[i+1] {
+		case '[':
+			end := i + 2
+			for end < len(raw) && !isCSITerminator(raw[end]) {
+				end++
+			}
+			if end < len(raw) {
+				i = end + 1
+				continue
+			}
+		case ']':
+			end := bytes.IndexByte(raw[i+2:], 0x07)
+			if end >= 0 {
+				i = i + 2 + end + 1
+				continue
+			}
+		}
+		i++
+	}
+	return out.Bytes()
+}
+
+func isCSITerminator(b byte) bool {
+	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
+}
+
+// ResolveWorkspaceDir normalizes and validates a workspace directory under
+// factoryRoot (T2 control in agy-pty-threat-review.md). The returned path is
+// suitable for cmd.Dir and argv path fields after Story 17 lands execution.
+func ResolveWorkspaceDir(factoryRoot, rawPath string) (string, error) {
+	factoryRoot = strings.TrimSpace(factoryRoot)
+	if factoryRoot == "" {
+		return "", fmt.Errorf("agypty: factory root is required")
+	}
+	rawPath = strings.TrimSpace(rawPath)
+	if rawPath == "" {
+		return "", fmt.Errorf("agypty: workspace path is required")
+	}
+
+	factoryRoot = filepath.Clean(factoryRoot)
+	normalized := filepath.Clean(filepath.FromSlash(rawPath))
+
+	var resolved string
+	if filepath.IsAbs(normalized) {
+		resolved = normalized
+	} else {
+		if err := rejectRelativeTraversal(normalized); err != nil {
+			return "", err
+		}
+		resolved = filepath.Clean(filepath.Join(factoryRoot, normalized))
+	}
+
+	if !pathContainedIn(factoryRoot, resolved) {
+		return "", fmt.Errorf("agypty: workspace path must remain under factory root")
+	}
+	return resolved, nil
+}
+
+func rejectRelativeTraversal(normalized string) error {
+	if normalized == ".." {
+		return fmt.Errorf("agypty: workspace path must not traverse outside factory root")
+	}
+	if strings.HasPrefix(normalized, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("agypty: workspace path must not traverse outside factory root")
+	}
+	return nil
+}
+
+func pathContainedIn(root, candidate string) bool {
+	root = filepath.Clean(root)
+	candidate = filepath.Clean(candidate)
+
+	rel, err := filepath.Rel(root, candidate)
+	if err != nil {
+		return false
+	}
+	return rel != ".." &&
+		!strings.HasPrefix(rel, ".."+string(filepath.Separator)) &&
+		!filepath.IsAbs(rel)
 }

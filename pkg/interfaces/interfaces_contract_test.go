@@ -835,6 +835,7 @@ func TestSupportedModelProviders_IncludesAllCanonicalCommands(t *testing.T) {
 		ModelProviderCursor,
 		ModelProviderOpenCode,
 		ModelProviderPi,
+		ModelProviderAgy,
 	}
 	if len(got) != len(want) {
 		t.Fatalf("supported provider count = %d, want %d", len(got), len(want))
@@ -858,6 +859,7 @@ func TestModelProviderPublicInternalMapping_RoundTripsAllSupportedProviders(t *t
 		{factoryapi.WorkerModelProviderKiro, ModelProviderKiro},
 		{factoryapi.WorkerModelProviderOpenCode, ModelProviderOpenCode},
 		{factoryapi.WorkerModelProviderPi, ModelProviderPi},
+		{factoryapi.WorkerModelProviderAgy, ModelProviderAgy},
 	}
 
 	for _, tt := range cases {
@@ -885,6 +887,9 @@ func TestGeneratedPublicFactoryWorkerModelProvider_CanonicalizesProviderAliases(
 		{"GEMINI", factoryapi.WorkerModelProviderGemini},
 		{"KIRO", factoryapi.WorkerModelProviderKiro},
 		{"OPENCODE", factoryapi.WorkerModelProviderOpenCode},
+		{"agy", factoryapi.WorkerModelProviderAgy},
+		{"AGY", factoryapi.WorkerModelProviderAgy},
+		{"antigravity", factoryapi.WorkerModelProviderAgy},
 	}
 
 	for _, tt := range cases {
@@ -898,7 +903,7 @@ func TestGeneratedPublicFactoryWorkerModelProvider_CanonicalizesProviderAliases(
 
 func TestStrictPublicFactoryWorkerModelProvider_AcceptsAllCanonicalPublicValues(t *testing.T) {
 	for _, provider := range []string{
-		"CLAUDE", "CODEX", "CURSOR", "GEMINI", "KIRO", "OPENCODE",
+		"CLAUDE", "CODEX", "CURSOR", "GEMINI", "KIRO", "OPENCODE", "PI", "AGY",
 	} {
 		if got := StrictPublicFactoryWorkerModelProvider(provider); got != provider {
 			t.Fatalf("StrictPublicFactoryWorkerModelProvider(%q) = %q, want %q", provider, got, provider)
