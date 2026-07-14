@@ -60,6 +60,9 @@ func (*Adapter) NewDecoder(_ context.Context, input adapter.DecoderContext) (ada
 
 func (*Adapter) ParseFinal(_ context.Context, input adapter.FinalParseContext) (adapter.FinalParseResult, error) {
 	if input.CommandError != nil || input.CommandResult.ExitCode != 0 {
+		if failure := piRetryFailureFromStdout(input.CommandResult.Stdout); failure != nil {
+			return adapter.FinalParseResult{}, &piRetryError{failure: *failure}
+		}
 		if failure := parseTerminalFailure(input.CommandResult.Stdout); failure != nil {
 			return adapter.FinalParseResult{}, failure
 		}
@@ -85,6 +88,14 @@ func (*Adapter) Capabilities(context.Context, adapter.CapabilityContext) (adapte
 func (*Adapter) ClassifyFailure(_ context.Context, input adapter.FailureContext) adapter.FailureResult {
 	if input.CommandError == nil && input.CommandResult.ExitCode == 0 && input.DecodeError == nil && input.FlushError == nil && input.ParseError == nil {
 		return adapter.FailureResult{}
+	}
+	if failure := piRetryFailureFromStdout(input.CommandResult.Stdout); failure != nil {
+		return adapter.FailureResult{Failure: failure}
+	}
+	var retryErr *piRetryError
+	if errors.As(input.ParseError, &retryErr) {
+		failure := retryErr.failure
+		return adapter.FailureResult{Failure: &failure}
 	}
 	if failure := parseTerminalFailure(input.CommandResult.Stdout); failure != nil {
 		return terminalFailureResult(failure)

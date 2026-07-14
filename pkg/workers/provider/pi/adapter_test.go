@@ -13,6 +13,7 @@ import (
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/testkit"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/pi"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/structured"
 )
@@ -21,6 +22,63 @@ const (
 	privateConformancePrompt = "private Pi prompt must not escape"
 	privateConformanceToken  = "sk-pi-fixture-secret"
 )
+
+func TestAdapterFullStreamConformance(t *testing.T) {
+	t.Parallel()
+
+	testkit.RunFullStream(t, testkit.FullStreamFixture{
+		NewAdapter: func() adapter.Adapter { return pi.NewAdapter() },
+		Request: interfaces.ProviderInferenceRequest{
+			Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-conformance"},
+			Model:    "anthropic/claude-sonnet-4", UserMessage: privateConformancePrompt,
+		},
+		ContentAndTools: piObservations(
+			`{"type":"agent_start"}`,
+			`{"type":"message_update","message":{"id":"msg-conformance","role":"assistant","content":[]},"assistantMessageEvent":{"type":"text_delta","delta":"Hello ","contentIndex":0}}`,
+			`{"type":"message_update","message":{"id":"msg-conformance","role":"assistant","content":[]},"assistantMessageEvent":{"type":"text_delta","delta":"world","contentIndex":0}}`,
+			`{"type":"message_end","message":{"id":"msg-conformance","role":"assistant","content":[{"type":"text","text":"Hello world"}],"stopReason":"stop"}}`,
+			`{"type":"tool_execution_start","toolCallId":"call-conformance","toolName":"weather","args":{"city":"Oslo"}}`,
+			`{"type":"tool_execution_update","toolCallId":"call-conformance","partialResult":{"temperature":12}}`,
+			`{"type":"tool_execution_end","toolCallId":"call-conformance","toolName":"weather","result":{"temperature":12}}`,
+		),
+		RetryableFailure: piObservations(
+			`{"type":"session","id":"pi-session-conformance"}`,
+			`{"type":"auto_retry_start","attempt":2,"retryDelayMs":2000,"errorStatus":429}`,
+		),
+		UnsafeAndRecovering: piObservations(
+			`{"type":` + privateConformancePrompt + `,"token":"` + privateConformanceToken + `"}`,
+			`{"type":"future_shape","prompt":"` + privateConformancePrompt + `","token":"` + privateConformanceToken + `"}`,
+			`{"type":"message_end","message":{"id":"msg-conformance","role":"assistant","content":[{"type":"text","text":"Hello world"}],"stopReason":"stop"}}`,
+		),
+		UnterminatedFinal: []adapter.Observation{{Stream: adapter.OutputStreamStdout, Chunk: []byte(
+			`{"type":"message_end","message":{"id":"msg-conformance","role":"assistant","content":[{"type":"text","text":"Hello world"}],"stopReason":"stop"}}`,
+		)}},
+		FinalResult: workerprocess.CommandResult{Stdout: []byte(strings.Join([]string{
+			`{"type":"session","id":"pi-session-conformance"}`,
+			`{"type":"message_end","message":{"id":"msg-conformance","role":"assistant","content":[{"type":"text","text":"Hello world"}],"stopReason":"stop"}}`,
+		}, "\n") + "\n")},
+		Expected: testkit.FullStreamExpected{
+			Capabilities: adapter.Capabilities{
+				NativeStreaming: true, MessageDeltas: true, MessageSnapshots: true, ReasoningSummaries: true,
+				ToolLifecycle: true, ToolOutputDeltas: true, StableItemIDs: true,
+			},
+			ProviderSession: interfaces.ProviderSessionMetadata{Provider: "pi", Kind: "session_id", ID: "pi-session-conformance"},
+			MessageItemID:   "msg-conformance",
+			ToolItemID:      "call-conformance", ToolCallID: "call-conformance",
+			MessageDeltas: []string{"Hello ", "world"}, FinalContent: "Hello world",
+			ToolOutputDelta: `{"temperature":12}`, RetryAfter: 2,
+		},
+		ForbiddenDiagnostic: []string{privateConformancePrompt, privateConformanceToken},
+	})
+}
+
+func piObservations(records ...string) []adapter.Observation {
+	observations := make([]adapter.Observation, 0, len(records))
+	for _, record := range records {
+		observations = append(observations, adapter.Observation{Stream: adapter.OutputStreamStdout, Chunk: []byte(record + "\n")})
+	}
+	return observations
+}
 
 func TestAdapterBuildCommandRequestsNonInteractiveJSONMode(t *testing.T) {
 	t.Parallel()

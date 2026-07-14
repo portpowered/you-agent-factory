@@ -64,6 +64,9 @@ type nativeEnvelope struct {
 	PartialResult          json.RawMessage        `json:"partialResult"`
 	Result                 json.RawMessage        `json:"result"`
 	IsError                bool                   `json:"isError"`
+	Attempt                *int                   `json:"attempt"`
+	RetryDelayMS           *int64                 `json:"retryDelayMs"`
+	ErrorStatus            json.RawMessage        `json:"errorStatus"`
 }
 
 func newDecoder(input adapter.DecoderContext) *decoder {
@@ -202,7 +205,15 @@ func (d *decoder) decodeRecord(raw []byte) (adapter.DecodeResult, error) {
 		return d.decodeToolUpdate(envelope)
 	case "tool_execution_end":
 		return d.decodeToolEnd(envelope)
-	case "queue_update", "compaction_start", "compaction_end", "auto_retry_start", "auto_retry_end":
+	case "queue_update":
+		return adapter.DecodeResult{}, nil
+	case "compaction_start":
+		return d.compactionObservation("compaction_start", "Pi started context compaction.")
+	case "compaction_end":
+		return d.compactionObservation("compaction_end", "Pi completed context compaction.")
+	case "auto_retry_start":
+		return d.retryObservation(envelope)
+	case "auto_retry_end":
 		return adapter.DecodeResult{}, nil
 	default:
 		return safeDiagnostic("pi_unknown_record", "Pi emitted an unsupported additive record"), nil
@@ -210,6 +221,11 @@ func (d *decoder) decodeRecord(raw []byte) (adapter.DecodeResult, error) {
 }
 
 func (d *decoder) decodeMessageUpdate(envelope nativeEnvelope) (adapter.DecodeResult, error) {
+	if envelope.Message != nil {
+		if id := stableMessageID(envelope.Message.ID, d.context); id != "" {
+			d.messageID = id
+		}
+	}
 	if envelope.AssistantMessageEvent == nil {
 		return adapter.DecodeResult{}, nil
 	}

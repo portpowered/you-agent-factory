@@ -378,6 +378,107 @@ func TestDecoderDuplicateToolUpdatesDoNotAllocateNewItems(t *testing.T) {
 	}
 }
 
+func TestDecoderMapsRemainingControlRecords(t *testing.T) {
+	t.Parallel()
+
+	drafts, diagnostics := decodePiFixture(t, "testdata/control_records.jsonl", true)
+	if len(diagnostics) != 2 || diagnostics[0].Code != "pi_unknown_record" || diagnostics[1].Code != "pi_malformed_record" {
+		t.Fatalf("diagnostics = %#v", diagnostics)
+	}
+	assertValidPiDrafts(t, drafts)
+
+	retry := findPiDraft(drafts, responseevents.KindError, responseevents.PhaseUpdated)
+	if retry == nil {
+		t.Fatalf("retry observation missing: %#v", drafts)
+	}
+	var retryPayload responseevents.ErrorPayload
+	decodePiPayload(t, *retry, &retryPayload)
+	if !retryPayload.Retryable || retryPayload.RetryAttempt == nil || *retryPayload.RetryAttempt != 2 ||
+		retryPayload.RetryAfterSeconds == nil || *retryPayload.RetryAfterSeconds != 2 {
+		t.Fatalf("retry payload = %#v", retryPayload)
+	}
+
+	compaction := piDraftsByKindAndPhase(drafts, responseevents.KindProgress, responseevents.PhaseUpdated)
+	if len(compaction) != 2 {
+		t.Fatalf("compaction observations = %d, want start and end: %#v", len(compaction), compaction)
+	}
+
+	completed := findPiDraft(drafts, responseevents.KindMessage, responseevents.PhaseCompleted)
+	if completed == nil || completed.ItemID != "msg-controls" {
+		t.Fatalf("later valid completion missing: %#v", drafts)
+	}
+
+	encoded, err := json.Marshal(struct {
+		Drafts      []responseevents.Draft `json:"drafts"`
+		Diagnostics []adapter.Diagnostic   `json:"diagnostics"`
+	}{drafts, diagnostics})
+	if err != nil {
+		t.Fatalf("marshal decoded controls: %v", err)
+	}
+	for _, forbidden := range []string{"private compacted transcript", "private future prompt", "private queued prompt", "sk-pi-fixture-secret"} {
+		if bytes.Contains(encoded, []byte(forbidden)) {
+			t.Fatalf("normalized controls leaked %q: %s", forbidden, encoded)
+		}
+	}
+}
+
+func TestDecoderExplicitlyIgnoresQueueUpdateWithoutDrafts(t *testing.T) {
+	t.Parallel()
+
+	raw := strings.Join([]string{
+		`{"type":"session","id":"pi-session-queue"}`,
+		`{"type":"queue_update","queuedPrompt":"private queued prompt must not escape","queueDepth":3}`,
+		`{"type":"message_start","message":{"id":"msg-queue","role":"assistant","content":[]}}`,
+		`{"type":"message_end","message":{"id":"msg-queue","role":"assistant","content":[{"type":"text","text":"done"}],"stopReason":"stop"}}`,
+	}, "\n") + "\n"
+	drafts, diagnostics := decodePiRawFixture(t, raw)
+	if len(diagnostics) != 0 {
+		t.Fatalf("diagnostics = %#v, want none for ignored queue_update", diagnostics)
+	}
+	for _, draft := range drafts {
+		if draft.Kind == responseevents.KindProgress && strings.Contains(string(draft.Payload), "queued") {
+			t.Fatalf("queue_update mapped to steering work item: %#v", draft)
+		}
+	}
+	encoded, err := json.Marshal(drafts)
+	if err != nil {
+		t.Fatalf("marshal drafts: %v", err)
+	}
+	if bytes.Contains(encoded, []byte("private queued prompt")) {
+		t.Fatalf("queue_update leaked prompt text: %s", encoded)
+	}
+}
+
+func TestDecoderEventMatrixCoversDocumentedLifecycleEvents(t *testing.T) {
+	t.Parallel()
+
+	drafts, diagnostics := decodePiFixture(t, "testdata/event_matrix.jsonl", false)
+	if len(diagnostics) != 0 {
+		t.Fatalf("diagnostics = %#v, want none", diagnostics)
+	}
+	assertValidPiDrafts(t, drafts)
+
+	required := []struct {
+		kind  responseevents.Kind
+		phase responseevents.Phase
+	}{
+		{responseevents.KindSession, responseevents.PhaseStarted},
+		{responseevents.KindRun, responseevents.PhaseStarted},
+		{responseevents.KindTurn, responseevents.PhaseStarted},
+		{responseevents.KindMessage, responseevents.PhaseStarted},
+		{responseevents.KindMessage, responseevents.PhaseCompleted},
+		{responseevents.KindTool, responseevents.PhaseStarted},
+		{responseevents.KindTool, responseevents.PhaseCompleted},
+		{responseevents.KindProgress, responseevents.PhaseUpdated},
+		{responseevents.KindError, responseevents.PhaseUpdated},
+	}
+	for _, want := range required {
+		if findPiDraft(drafts, want.kind, want.phase) == nil {
+			t.Fatalf("event matrix missing %s/%s: %#v", want.kind, want.phase, drafts)
+		}
+	}
+}
+
 func decodePiRawFixture(t *testing.T, raw string) ([]responseevents.Draft, []adapter.Diagnostic) {
 	t.Helper()
 	return decodePiFixtureBytes(t, []byte(raw), false)
