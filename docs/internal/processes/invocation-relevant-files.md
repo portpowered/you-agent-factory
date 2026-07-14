@@ -149,7 +149,12 @@ primary-result behavior.
   (`NewRepresentativeRegistry`, `SessionShowRunE`, `AttachRunE`,
   `VerifyRepresentativeRunnableCoverage`) and production wiring helper
   `newRepresentativeHandlerRegistry` in `pkg/transports/cli/root_work.go`.
-  Generated constructor/cutover remains deferred to later B10-CLI-GENERATOR stories.
+  The generated representative-family constructor lives in
+  `pkg/transports/cli/climanifestcobra` (`NewRepresentativeFamilyCommand`,
+  `NewRepresentativeFamilyCommandFromManifest`) and builds only `you` →
+  `you session` → `you session show` from embedded generated metadata plus
+  registry-attached handwritten handlers. Production root cutover remains
+  deferred to later B10-CLI-GENERATOR stories.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/transports/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before

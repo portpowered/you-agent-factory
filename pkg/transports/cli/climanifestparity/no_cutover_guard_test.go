@@ -44,6 +44,7 @@ func assertGeneratorInfrastructurePresent(t *testing.T, repoRoot string) {
 	t.Helper()
 	requiredPaths := []string{
 		filepath.Join(repoRoot, "pkg", "transports", "cli", "climanifestgen"),
+		filepath.Join(repoRoot, "pkg", "transports", "cli", "climanifestcobra"),
 		filepath.Join(repoRoot, "pkg", "transports", "cli", "generated"),
 		filepath.Join(repoRoot, "pkg", "transports", "cli", "commandregistry"),
 	}
@@ -79,7 +80,7 @@ func assertNoForbiddenCLIGeneratorMarkers(t *testing.T, repoRoot string) {
 		}
 		if entry.IsDir() {
 			switch entry.Name() {
-			case "climanifest", "climanifestparity", "climanifestgen", "cliinputs", "commandidentity", "commandregistry", "baseline", "generated":
+			case "climanifest", "climanifestparity", "climanifestgen", "climanifestcobra", "cliinputs", "commandidentity", "commandregistry", "baseline", "generated":
 				return filepath.SkipDir
 			}
 			return nil
