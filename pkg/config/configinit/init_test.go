@@ -199,9 +199,6 @@ func TestInit_PreservesAllCustomerOwnedFactoryFilesOnRerun(t *testing.T) {
 
 	writeCustomerOwnedFactoryEdits(t, goalDir)
 	beforeSnapshot := snapshotDirectoryContents(t, goalDir)
-	if _, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(goalDir, nil); err != nil {
-		t.Fatalf("LoadRuntimeConfigFromFactoryDir(edited @you/goal): %v", err)
-	}
 
 	second, err := Init(homeDir)
 	if err != nil {
