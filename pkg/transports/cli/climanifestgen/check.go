@@ -44,9 +44,13 @@ func Check(repositoryRoot string) (Drift, error) {
 			}
 			return Drift{}, fmt.Errorf("read %s: %w", path, err)
 		}
-		if !bytes.Equal(got, want) {
+		if !bytes.Equal(normalizeGeneratedArtifactBytes(got), normalizeGeneratedArtifactBytes(want)) {
 			drift.Stale = append(drift.Stale, path)
 		}
 	}
 	return drift, nil
+}
+
+func normalizeGeneratedArtifactBytes(payload []byte) []byte {
+	return bytes.ReplaceAll(payload, []byte("\r\n"), []byte("\n"))
 }
