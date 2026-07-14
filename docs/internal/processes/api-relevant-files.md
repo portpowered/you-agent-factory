@@ -72,6 +72,25 @@ Use this map when changing the public REST contract.
   `make api-smoke`; this inventory lane must not modify authored OpenAPI,
   generated clients, or `pkg/transports/http` handlers.
 
+## Family compatibility inventory coverage
+
+- Machine-readable API, CLI, and MCP compatibility classifications live in
+  `contracts/api/deprecated.json`, `contracts/cli/deprecated.json`, and
+  `contracts/mcp/deprecated.json` against
+  `contracts/compatibility-inventory.schema.json`.
+- Baseline scope for coverage assertions lives under
+  `contracts/testdata/baseline/` (`api-compatibility-surfaces.json`,
+  `cli-commands.json`, `mcp-aliases.json`). Add new compatibility-only surfaces
+  to the relevant baseline file and the matching family inventory in the same
+  change.
+- `contracts/compatibility_inventory_coverage_test.go`
+  (`TestCompatibilityInventoryBaselineCoverage`) loads each family inventory plus
+  its baseline and fails when any in-scope compatibility surface lacks exactly
+  one classified record or required fields (stable `itemId`, `family`,
+  `publicName`, supported `classification`, successor, evidence, lifecycle
+  versions, removal gates, approval status). Per-family schema validation stays
+  in `contracts/*_deprecated_inventory_test.go`.
+
 ## OpenAPI contract semver comparator
 
 - `internal/contractopenapidiff` owns the build-time OpenAPI comparator that
