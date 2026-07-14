@@ -96,8 +96,189 @@
         },
         "usage": {
           "$ref": "#/$defs/usage"
+        },
+        "arguments": {
+          "description": "Positional argument records keyed by stable argument identifiers. Object keys make duplicate argument IDs structurally unrepresentable.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/argument"
+          }
         }
       }
+    },
+    "argument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "position",
+        "kind",
+        "valueType",
+        "required",
+        "minCardinality",
+        "maxCardinality",
+        "variadic",
+        "enum",
+        "pattern",
+        "completion",
+        "channels",
+        "doubleDash"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "name": {
+          "description": "The positional argument name rendered in usage templates.",
+          "type": "string",
+          "minLength": 1
+        },
+        "position": {
+          "description": "Zero-based positional index within the command argument list.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "description": "How the argument is consumed during parsing.",
+          "enum": [
+            "positional"
+          ]
+        },
+        "valueType": {
+          "description": "The scalar type accepted for one positional value.",
+          "enum": [
+            "string"
+          ]
+        },
+        "required": {
+          "description": "Whether the argument must receive at least one value before invocation proceeds.",
+          "type": "boolean"
+        },
+        "minCardinality": {
+          "description": "Minimum number of values accepted for this argument.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxCardinality": {
+          "description": "Maximum number of values accepted for this argument. Use -1 for unbounded variadic overflow.",
+          "type": "integer",
+          "minimum": -1
+        },
+        "variadic": {
+          "description": "Whether the argument consumes all remaining positional values.",
+          "type": "boolean"
+        },
+        "enum": {
+          "description": "Closed set of accepted values when the argument is restricted to enumerated strings.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "pattern": {
+          "description": "Optional regular expression restricting accepted string values.",
+          "type": "string"
+        },
+        "completion": {
+          "description": "How shell completion values are sourced for this argument.",
+          "enum": [
+            "none",
+            "static",
+            "dynamic"
+          ]
+        },
+        "channels": {
+          "description": "Input channels that may supply values for this argument.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "enum": [
+              "cli",
+              "env",
+              "config",
+              "stdin"
+            ]
+          },
+          "uniqueItems": true
+        },
+        "doubleDash": {
+          "description": "How a bare -- token is interpreted relative to this command's positional arguments.",
+          "enum": [
+            "none",
+            "terminates-flags"
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "required": {
+                "const": true
+              }
+            },
+            "required": [
+              "required"
+            ]
+          },
+          "then": {
+            "properties": {
+              "minCardinality": {
+                "minimum": 1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "variadic": {
+                "const": true
+              }
+            },
+            "required": [
+              "variadic"
+            ]
+          },
+          "then": {
+            "properties": {
+              "maxCardinality": {
+                "const": -1
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "variadic": {
+                "const": false
+              }
+            },
+            "required": [
+              "variadic"
+            ]
+          },
+          "then": {
+            "not": {
+              "properties": {
+                "maxCardinality": {
+                  "const": -1
+                }
+              },
+              "required": [
+                "maxCardinality"
+              ]
+            }
+          }
+        }
+      ]
     },
     "suggestion": {
       "description": "Shell-completion and argument-suggestion metadata for one command.",
