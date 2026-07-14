@@ -69,10 +69,6 @@ async function commitCheckpoint(
   fixture.controls.succeed("open");
   await flushPromiseContinuations();
   fixture.controls.succeed("get");
-  await flushPromiseContinuations();
-  await flushPromiseContinuations();
-  fixture.controls.succeed("open");
-  await flushPromiseContinuations();
   fixture.controls.succeed("put");
   fixture.controls.completeTransaction();
   await write;
@@ -114,10 +110,6 @@ async function expectFailedReplacementRecovery(
   fixture.controls.succeed("open");
   await flushPromiseContinuations();
   fixture.controls.succeed("get");
-  await flushPromiseContinuations();
-  await flushPromiseContinuations();
-  fixture.controls.succeed("open");
-  await flushPromiseContinuations();
   expect(fixture.controls.pendingOperations()).toEqual(["put"]);
 
   await persistTimelineCheckpoint(
@@ -183,10 +175,6 @@ describe("timeline checkpoint replacement failure", () => {
     controls.succeed("open");
     await flushPromiseContinuations();
     controls.succeed("get");
-    await flushPromiseContinuations();
-    await flushPromiseContinuations();
-    controls.succeed("open");
-    await flushPromiseContinuations();
     controls.succeed("put");
     controls.completeTransaction();
     await write;

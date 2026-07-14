@@ -5,9 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factory/sessions/service"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestService_GetFactorySessionSyncPreflight_DelegatesToControlPlane(t *testing.T) {

@@ -4,20 +4,20 @@ import (
 	"context"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestValidateFactoryAPI_RoutelessCronAndLogicalMove_MissingOutputRoutesAtOutputs(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name         string
-		decode       func() (factoryapi.Factory, error)
-		workstation  string
-		profile      factoryvalidation.Profile
+		name        string
+		decode      func() (factoryapi.Factory, error)
+		workstation string
+		profile     factoryvalidation.Profile
 	}{
 		{
 			name:        "topology_routeless_cron",

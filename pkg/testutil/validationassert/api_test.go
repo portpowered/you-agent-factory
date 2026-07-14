@@ -3,7 +3,7 @@ package validationassert
 import (
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestHasTarget_MatchesCodeSubjectAndLocation(t *testing.T) {

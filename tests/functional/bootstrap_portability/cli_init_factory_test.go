@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 )
 
 var retiredInitFactoryContractFields = []string{`"work_types"`, `"work_type"`, `"on_failure"`}
@@ -116,9 +116,9 @@ func TestInitFactory_EndToEnd(t *testing.T) {
 
 	// Assert the work item reached the terminal "complete" state.
 	h.Assert().
-		HasTokenInPlace(initcmd.DefaultFactoryInputType + ":complete").
-		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":init").
-		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":failed").
+		HasTokenInPlace(initcmd.DefaultFactoryInputType+":complete").
+		HasNoTokenInPlace(initcmd.DefaultFactoryInputType+":init").
+		HasNoTokenInPlace(initcmd.DefaultFactoryInputType+":failed").
 		PlaceTokenCount(initcmd.DefaultFactoryInputType+":complete", 1).
 		PlaceTokenCount("agent-slot:available", 1)
 
@@ -165,9 +165,9 @@ func TestInitFactory_ClaudeEndToEndUsesClaudeStarterWorker(t *testing.T) {
 	h.RunUntilComplete(t, 15*time.Second)
 
 	h.Assert().
-		HasTokenInPlace(initcmd.DefaultFactoryInputType + ":complete").
-		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":init").
-		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":failed").
+		HasTokenInPlace(initcmd.DefaultFactoryInputType+":complete").
+		HasNoTokenInPlace(initcmd.DefaultFactoryInputType+":init").
+		HasNoTokenInPlace(initcmd.DefaultFactoryInputType+":failed").
 		PlaceTokenCount(initcmd.DefaultFactoryInputType+":complete", 1).
 		PlaceTokenCount("agent-slot:available", 1)
 
@@ -210,9 +210,9 @@ func TestInitFactory_FailureRouting(t *testing.T) {
 
 	// Token should end in failed state since the provider returned an error.
 	h.Assert().
-		HasTokenInPlace(initcmd.DefaultFactoryInputType + ":failed").
-		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":init").
-		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":complete").
+		HasTokenInPlace(initcmd.DefaultFactoryInputType+":failed").
+		HasNoTokenInPlace(initcmd.DefaultFactoryInputType+":init").
+		HasNoTokenInPlace(initcmd.DefaultFactoryInputType+":complete").
 		PlaceTokenCount(initcmd.DefaultFactoryInputType+":failed", 1).
 		PlaceTokenCount("agent-slot:available", 1)
 }

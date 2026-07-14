@@ -28,7 +28,7 @@ Use this map when changing terminal reviewed-lane completion through the
   cells using observable runtime and projection outcomes.
 - `pkg/testutil/service_harness.go` exposes `MoveWork` for focused operator-move
   recovery tests through the service layer.
-- `pkg/cli/work/move.go` and `pkg/service/runtime_sessions.go` are the CLI/API
+- `pkg/transports/cli/work/move.go` and `pkg/service/runtime_sessions.go` are the CLI/API
   operator-move boundaries for bounded historical cleanup.
 
 ## Bounded Historical Manual Repair

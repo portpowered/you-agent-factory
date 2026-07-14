@@ -18,11 +18,12 @@ import {
 } from "./checkpoint-persistence/identity/timelineCheckpointIdentity";
 import {
   deleteCheckpointDatabaseRecord,
+  deleteCheckpointDatabaseRecordsMatching,
   type IndexedDBLike,
   indexedDBRequestToPromise,
   openCheckpointDatabase,
   readCheckpointDatabaseRecord,
-  writeCheckpointDatabaseRecord,
+  replaceCheckpointDatabaseRecord,
 } from "./checkpoint-persistence/indexedDBCheckpointRequests";
 import {
   enqueueOrderedCheckpointClear,
@@ -187,18 +188,14 @@ export async function clearTimelineCheckpointsForSession(
   }
 
   try {
-    const envelopes = await listIndexedCheckpoints(indexedDB, options.signal);
-    if (options.signal?.aborted) {
-      return;
-    }
-    const matchingEnvelopes = envelopes.filter((envelope) =>
-      matchesStoredCheckpointFactorySessionID(envelope, normalizedSessionID),
-    );
-
-    await Promise.all(
-      matchingEnvelopes.map((envelope) =>
-        deleteRejectedEnvelope(indexedDB, envelope, options.signal),
-      ),
+    await deleteCheckpointDatabaseRecordsMatching<TimelineCheckpointEnvelope>(
+      indexedDB,
+      (envelope) =>
+        matchesStoredCheckpointFactorySessionID(
+          envelope,
+          normalizedSessionID,
+        ),
+      options.signal,
     );
   } catch {
     // Best-effort cleanup for stale reconnect state.
@@ -220,11 +217,20 @@ export async function clearTimelineCheckpoint(
   if (!indexedDB || !storageKey || !normalizedStreamIdentity) {
     return;
   }
-  if (options.userInitiated && streamIdentity && options.requestedSessionID) {
+  if (options.userInitiated) {
+    const requestedSessionID = normalizeConcreteFactorySessionID(
+      options.requestedSessionID,
+    );
+    if (
+      !requestedSessionID ||
+      requestedSessionID !== normalizedStreamIdentity.factorySessionID
+    ) {
+      return;
+    }
     recordSessionPersistenceInvalidation(
       userClearedSessionsDiagnostic(
-        persistenceScopeFromTimelineIdentity(streamIdentity),
-        options.requestedSessionID,
+        persistenceScopeFromTimelineIdentity(normalizedStreamIdentity),
+        requestedSessionID,
       ),
     );
   }
@@ -383,21 +389,30 @@ export async function persistTimelineCheckpoint(
       indexedDB,
       normalizedStreamIdentity,
       persistedCheckpoint.afterSequence,
-      async () => {
-        const committedEnvelope =
-          await readCheckpointDatabaseRecord<TimelineCheckpointEnvelope>(
-            indexedDB,
-            storageKey,
-          );
-        if (!committedEnvelope) {
-          return undefined;
-        }
-        return parseStoredCheckpoint(
-          committedEnvelope,
-          normalizedStreamIdentity,
-        )?.afterSequence;
-      },
-      () => writeCheckpointDatabaseRecord(indexedDB, envelope),
+      () =>
+        replaceCheckpointDatabaseRecord<TimelineCheckpointEnvelope>(
+          indexedDB,
+          storageKey,
+          envelope,
+          (committedEnvelope) => {
+            if (!committedEnvelope) {
+              return true;
+            }
+            const committedCheckpoint = parseStoredCheckpoint(
+              committedEnvelope,
+              normalizedStreamIdentity,
+            );
+            if (!committedCheckpoint) {
+              return true;
+            }
+            return (
+              persistedCheckpoint.afterSequence !== undefined &&
+              (committedCheckpoint.afterSequence === undefined ||
+                persistedCheckpoint.afterSequence >
+                  committedCheckpoint.afterSequence)
+            );
+          },
+        ),
     );
   } catch {
     // Preserve any previously committed checkpoint when its replacement fails.

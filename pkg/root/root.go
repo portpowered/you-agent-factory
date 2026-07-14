@@ -6,8 +6,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/cli"
-	startupcli "github.com/portpowered/infinite-you/pkg/cli/startup"
+	"github.com/portpowered/infinite-you/pkg/transports/cli"
+	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	"github.com/spf13/cobra"
 )
 
@@ -27,6 +27,8 @@ func NewCommandWithDependencies(input ProcessInput, dependencies Dependencies) *
 		Startup: func(ctx context.Context, request startupcli.Request) error {
 			return executeStartup(ctx, request, dependencies)
 		},
+		BuildSessionExecution: dependencies.BuildSessionExecution,
+		BuildModelInvocation:  dependencies.BuildModelInvocation,
 	})
 	command.SetArgs(input.Arguments())
 	command.SetIn(input.stdin)

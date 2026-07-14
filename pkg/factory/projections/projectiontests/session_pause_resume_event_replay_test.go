@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestReconstructFactoryWorldState_PauseResumeHistoryReconstructsLifecycleControlStatus(t *testing.T) {

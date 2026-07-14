@@ -96,10 +96,10 @@ generate-api: bundle-api generate-go-api generate-ui-api
 generate-go-api: generate-go-server-api generate-go-client-api
 
 generate-go-server-api:
-	$(GO) generate -tags=interfaces ./pkg/api
+	$(GO) generate -run=server -tags=interfaces ./pkg/transports/http
 
 generate-go-client-api:
-	$(GO) generate -tags=interfaces ./pkg/generatedclient
+	$(GO) generate -run=client -tags=interfaces ./pkg/transports/http
 
 generate-ui-api:
 	cd ui && node ./scripts/generate-openapi-types.mjs ../api/openapi.yaml src/api/generated/openapi.ts
@@ -118,7 +118,7 @@ api-smoke:
 	$(MAKE) generate-api
 	$(MAKE) generate-api
 	node scripts/check-api-generated-drift.js
-	$(GO) test ./pkg/api -run TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/transports/http/contracttests -run TestOpenAPIContract_BundledFactoryEventSchemasRemainComplete -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional/runtime_api -run TestGeneratedAPIIntegrationSmoke_OpenAPIGeneratedServerAndLiveRuntimeStayAligned -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 contracts-validate:
@@ -144,8 +144,8 @@ docs-reference-check:
 
 docs-reference-smoke:
 	$(MAKE) docs-reference-check
-	$(GO) test ./pkg/cli/docs/... -count=1 -timeout $(GO_TEST_TIMEOUT)
-	$(GO) test ./pkg/cli -run TestDocsCommand_ -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/transports/cli/docs/... -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/transports/cli -run TestDocsCommand_ -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test ./tests/functional/smoke -run TestDocsCommandSmoke_ -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 readme-check:
@@ -240,7 +240,7 @@ current-factory-watcher-switch-smoke:
 artifact-contract-closeout:
 	$(GO) test ./pkg/testutil -run TestArtifactContractInventory_ -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(MAKE) release-surface-smoke
-	$(GO) test ./pkg/api ./pkg/config ./pkg/replay ./tests/adhoc ./tests/functional/bootstrap_portability ./tests/functional/runtime_api -run "Test(AutomatPortabilityFixture_|GeneratedAPIIntegrationSmoke_|LegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly)" -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/transports/http ./pkg/config ./pkg/replay ./tests/adhoc ./tests/functional/bootstrap_portability ./tests/functional/runtime_api -run "Test(AutomatPortabilityFixture_|GeneratedAPIIntegrationSmoke_|LegacyUnaryRetirementSmoke_RuntimeSubmitPathsStayBatchOnly)" -count=1 -timeout $(GO_TEST_TIMEOUT)
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/replay_contracts -run "Test(ReplayEventStreamArtifactSmoke_|WorkerPublicContractSmoke_)" -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 lint:

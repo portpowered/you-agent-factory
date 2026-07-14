@@ -8,10 +8,10 @@ import (
 	"strings"
 	"unicode"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config/mockworkers"
 	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 var defaultFactoryConfigMapper = NewFactoryConfigMapper()

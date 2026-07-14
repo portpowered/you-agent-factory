@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func normalizeLeasePolicyOptions(opts Options) (idleUnloadAfter time.Duration, maxLoadedRuntimes int) {

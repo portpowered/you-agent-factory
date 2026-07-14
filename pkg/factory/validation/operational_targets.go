@@ -1,6 +1,6 @@
 package validation
 
-import factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+import factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 const (
 	CodeFactoryPayloadInvalid = "factory.payload.invalid"

@@ -3,7 +3,7 @@ package sessionpersistence
 import (
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const (
@@ -15,23 +15,23 @@ const (
 type InvalidationReason string
 
 const (
-	ReasonCursorStale              InvalidationReason = "cursor_stale"
-	ReasonSessionNotFound          InvalidationReason = "session_not_found"
-	ReasonSessionRemapped          InvalidationReason = "session_remapped"
-	ReasonStreamGenerationChanged  InvalidationReason = "stream_generation_changed"
-	ReasonBackendScopeChanged      InvalidationReason = "backend_scope_changed"
-	ReasonUserClearedSessions      InvalidationReason = "user_cleared_sessions"
+	ReasonCursorStale             InvalidationReason = "cursor_stale"
+	ReasonSessionNotFound         InvalidationReason = "session_not_found"
+	ReasonSessionRemapped         InvalidationReason = "session_remapped"
+	ReasonStreamGenerationChanged InvalidationReason = "stream_generation_changed"
+	ReasonBackendScopeChanged     InvalidationReason = "backend_scope_changed"
+	ReasonUserClearedSessions     InvalidationReason = "user_cleared_sessions"
 )
 
 // RecoveryAction describes the recovery path taken after invalidation.
 type RecoveryAction string
 
 const (
-	RecoveryClearCheckpoint          RecoveryAction = "clear_checkpoint"
-	RecoveryClearStreamDerivedState  RecoveryAction = "clear_stream_derived_state"
-	RecoveryReplayWithoutCursor      RecoveryAction = "replay_without_cursor"
-	RecoveryShowExplicitRecovery     RecoveryAction = "show_explicit_recovery"
-	RecoveryReuseCheckpoint          RecoveryAction = "reuse_checkpoint"
+	RecoveryClearCheckpoint         RecoveryAction = "clear_checkpoint"
+	RecoveryClearStreamDerivedState RecoveryAction = "clear_stream_derived_state"
+	RecoveryReplayWithoutCursor     RecoveryAction = "replay_without_cursor"
+	RecoveryShowExplicitRecovery    RecoveryAction = "show_explicit_recovery"
+	RecoveryReuseCheckpoint         RecoveryAction = "reuse_checkpoint"
 )
 
 // IdentityScope carries only safe session persistence identity fields.
@@ -209,7 +209,6 @@ func SilentReplayRecoveryDiagnostic(
 		RequestedSessionID: strings.TrimSpace(requestedSessionID),
 	}
 }
-
 
 func IdentityMismatchDiagnostic(
 	previous IdentityScope,

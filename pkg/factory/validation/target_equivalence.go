@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // CanonicalTargetSignatures returns sorted stable signatures for cross-path equivalence.

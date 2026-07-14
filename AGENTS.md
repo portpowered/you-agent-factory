@@ -80,12 +80,16 @@ the standards.
 - `examples/` contains example factory directories.
 - `factory/` contains this repository's checked-in factory scaffold and
   factory-local docs.
-- `pkg/api/` contains HTTP handlers, generated server contracts, API boundary
-  tests, OpenAPI contract tests, server tests, and API test data.
-- `pkg/apisurface/` contains mapping and normalization at the public API
-  boundary. Prefer this layer for transport-independent request/response
-  shaping.
-- `pkg/cli/` contains CLI commands and CLI adapters for shared service logic.
+- `pkg/transports/http/` contains handwritten HTTP handlers, API boundary and
+  server tests, OpenAPI contract tests, HTTP test data, and generated-only
+  server-contract and client child packages.
+- `pkg/transports/mapping/` contains transport-neutral public contracts,
+  request/response shaping, and stateless composition of explicit wired
+  collaborators into transport-facing application surfaces.
+- `pkg/transports/cli/` contains CLI commands and adapters for shared service
+  logic, including the production root command.
+- `pkg/transports/mcp/` contains Factory Session MCP tools and the stdio
+  protocol server.
 - `pkg/config/` contains factory config loading, persistence, mapping,
   validation entrypoints, built-in factory layout, and runtime config
   projections.
@@ -124,12 +128,12 @@ the standards.
   under `api/components/`.
 - Do not hand-edit generated files:
   - `api/openapi.yaml`
-  - `pkg/api/generated/server.gen.go`
-  - `pkg/generatedclient/client.gen.go`
+  - `pkg/transports/http/generated/server.gen.go`
+  - `pkg/transports/http/client/client.gen.go`
   - `ui/src/api/generated/openapi.ts`
 - Run `make generate-api` after OpenAPI changes.
-- For API surface changes, update the matching `pkg/api` handlers,
-  `pkg/apisurface` mappers/normalizers, generated clients, UI API adapters, and
+- For API surface changes, update the matching `pkg/transports/http` handlers,
+  `pkg/transports/mapping` mappers/normalizers, generated clients, UI API adapters, and
   contract tests as applicable.
 - Run `make api-smoke` for public REST contract changes when feasible.
 
