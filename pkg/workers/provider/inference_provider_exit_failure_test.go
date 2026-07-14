@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/codex/progress"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -436,11 +437,11 @@ func TestInferenceProgressPublishingCommandRunner_NormalizesCodexStructuredEvent
 
 func TestIsCodexCommand_AcceptsNativeExecutableShapes(t *testing.T) {
 	for _, command := range []string{"codex", "codex.exe", `C:\tools\codex.cmd`, "/usr/local/bin/codex"} {
-		if !isCodexCommand(command) {
-			t.Fatalf("isCodexCommand(%q) = false, want true", command)
+		if !progress.IsCommand(command) {
+			t.Fatalf("IsCommand(%q) = false, want true", command)
 		}
 	}
-	if isCodexCommand("codex-helper.exe") {
+	if progress.IsCommand("codex-helper.exe") {
 		t.Fatal("codex-helper.exe must not be classified as the Codex provider command")
 	}
 }
@@ -482,9 +483,9 @@ func TestInferenceProgressPublishingCommandRunner_MapsUnknownAndMalformedCodexEv
 	}
 
 	assertCodexStartedFragment(t, &published[0], "sess-codex-2", "work-codex-json-2")
-	assertUnknownCodexDiagnostic(t, &published[1], "response.mystery", codexDiagnosticUnknownEvent)
-	assertUnknownCodexDiagnostic(t, &published[2], "", codexDiagnosticMalformedJSON)
-	assertUnknownCodexDiagnostic(t, &published[3], "response.output_text.delta", codexDiagnosticIncompleteSSE)
+	assertUnknownCodexDiagnostic(t, &published[1], "response.mystery", progress.ProgressDiagnosticUnknownEvent)
+	assertUnknownCodexDiagnostic(t, &published[2], "", progress.ProgressDiagnosticMalformedJSON)
+	assertUnknownCodexDiagnostic(t, &published[3], "response.output_text.delta", progress.ProgressDiagnosticIncompleteSSE)
 	assertCodexResponseFragment(t, &published[4], NormalizedEventTypeTextDelta, "hello after malformed frames")
 	if published[4].ProviderSessionRef == nil || published[4].ProviderSessionRef.ID != "sess-codex-2" {
 		t.Fatalf("final provider session = %#v, want session carried across malformed frames", published[4].ProviderSessionRef)
@@ -495,11 +496,11 @@ func TestInferenceProgressPublishingCommandRunner_MapsFailureCancelAndTruncation
 	// Do not run in parallel: Linux CI can return "text file busy" when executing
 	// the freshly written shell script under heavy parallel package load.
 
-	progressPayload := strings.Repeat("p", codexRetainedProgressBytes+73)
-	deltaPayload := strings.Repeat("d", codexRetainedTextBytes+29)
-	finalPayload := strings.Repeat("f", codexRetainedTextBytes+41)
-	failurePayload := strings.Repeat("e", codexRetainedProgressBytes+17)
-	cancelPayload := strings.Repeat("c", codexRetainedProgressBytes+9)
+	progressPayload := strings.Repeat("p", progress.ProgressRetainedProgressBytes+73)
+	deltaPayload := strings.Repeat("d", progress.ProgressRetainedTextBytes+29)
+	finalPayload := strings.Repeat("f", progress.ProgressRetainedTextBytes+41)
+	failurePayload := strings.Repeat("e", progress.ProgressRetainedProgressBytes+17)
+	cancelPayload := strings.Repeat("c", progress.ProgressRetainedProgressBytes+9)
 
 	scriptPath := writeProviderOutputFixture(t, filepath.Join(t.TempDir(), "codex"), []byte(
 		"{\"event\":\"session.created\",\"session_id\":\"sess-codex-3\"}\n"+
@@ -537,11 +538,11 @@ func TestInferenceProgressPublishingCommandRunner_MapsFailureCancelAndTruncation
 	}
 
 	assertCodexStartedFragment(t, &published[0], "sess-codex-3", "work-codex-json-3")
-	assertCodexBoundedFragment(t, &published[1], ProgressFragmentKind, NormalizedEventTypeProgress, "response.progress", progressPayload, codexRetainedProgressBytes)
-	assertCodexBoundedFragment(t, &published[2], ResponseFragmentKind, NormalizedEventTypeTextDelta, "response.output_text.delta", deltaPayload, codexRetainedTextBytes)
-	assertCodexBoundedFragment(t, &published[3], ResponseFragmentKind, NormalizedEventTypeFinalText, "response.completed", finalPayload, codexRetainedTextBytes)
-	assertCodexBoundedFragment(t, &published[4], ProgressFragmentKind, NormalizedEventTypeFailed, "response.failed", failurePayload, codexRetainedProgressBytes)
-	assertCodexBoundedFragment(t, &published[5], ProgressFragmentKind, NormalizedEventTypeCanceled, "response.canceled", cancelPayload, codexRetainedProgressBytes)
+	assertCodexBoundedFragment(t, &published[1], ProgressFragmentKind, NormalizedEventTypeProgress, "response.progress", progressPayload, progress.ProgressRetainedProgressBytes)
+	assertCodexBoundedFragment(t, &published[2], ResponseFragmentKind, NormalizedEventTypeTextDelta, "response.output_text.delta", deltaPayload, progress.ProgressRetainedTextBytes)
+	assertCodexBoundedFragment(t, &published[3], ResponseFragmentKind, NormalizedEventTypeFinalText, "response.completed", finalPayload, progress.ProgressRetainedTextBytes)
+	assertCodexBoundedFragment(t, &published[4], ProgressFragmentKind, NormalizedEventTypeFailed, "response.failed", failurePayload, progress.ProgressRetainedProgressBytes)
+	assertCodexBoundedFragment(t, &published[5], ProgressFragmentKind, NormalizedEventTypeCanceled, "response.canceled", cancelPayload, progress.ProgressRetainedProgressBytes)
 
 	if published[5].ProviderSessionRef == nil || published[5].ProviderSessionRef.ID != "sess-codex-3" {
 		t.Fatalf("cancel provider session = %#v, want session propagated", published[5].ProviderSessionRef)
@@ -565,13 +566,13 @@ func assertCodexStartedFragment(t *testing.T, fragment *InferenceProgressFragmen
 	if fragment.ProviderSessionRef == nil || fragment.ProviderSessionRef.ID != sessionID {
 		t.Fatalf("start provider session = %#v, want %s", fragment.ProviderSessionRef, sessionID)
 	}
-	if got := fragment.Metadata[codexMetadataRunnerIDKey]; got != "codex" {
+	if got := fragment.Metadata[progress.ProgressMetadataRunnerIDKey]; got != "codex" {
 		t.Fatalf("start metadata runner_id = %q, want codex", got)
 	}
-	if got := fragment.Metadata[codexMetadataWorkstationKey]; got != "review" {
+	if got := fragment.Metadata[progress.ProgressMetadataWorkstationKey]; got != "review" {
 		t.Fatalf("start metadata workstation_name = %q, want review", got)
 	}
-	if got := fragment.Metadata[codexMetadataWorkIDKey]; got != workID {
+	if got := fragment.Metadata[progress.ProgressMetadataWorkIDKey]; got != workID {
 		t.Fatalf("start metadata work_id = %q, want %q", got, workID)
 	}
 }
@@ -601,10 +602,10 @@ func assertUnknownCodexDiagnostic(t *testing.T, fragment *InferenceProgressFragm
 	if fragment.Payload != "codex event omitted" || strings.Contains(fragment.Payload, "secret-token-123") {
 		t.Fatalf("unknown payload = %q, want bounded omitted diagnostic", fragment.Payload)
 	}
-	if got := fragment.Metadata[codexMetadataDiagnosticKey]; got != diagnosticClass {
+	if got := fragment.Metadata[progress.ProgressMetadataDiagnosticKey]; got != diagnosticClass {
 		t.Fatalf("diagnostic_class = %q, want %q", got, diagnosticClass)
 	}
-	if diagnosticClass == codexDiagnosticUnknownEvent && (fragment.Metadata[codexMetadataRawSHA256Key] == "" || fragment.Metadata[codexMetadataRawBytesKey] == "") {
+	if diagnosticClass == progress.ProgressDiagnosticUnknownEvent && (fragment.Metadata[progress.ProgressMetadataRawSHA256Key] == "" || fragment.Metadata[progress.ProgressMetadataRawBytesKey] == "") {
 		t.Fatalf("unknown metadata = %#v, want raw digest metadata", fragment.Metadata)
 	}
 }
@@ -634,10 +635,10 @@ func assertCodexBoundedFragment(
 	if fragment.Payload != originalPayload[:retainedBytes] {
 		t.Fatalf("payload retained wrong prefix length: got %d bytes", len([]byte(fragment.Payload)))
 	}
-	if got := fragment.Metadata[codexMetadataTextBytesKey]; got != strconv.Itoa(len([]byte(originalPayload))) {
+	if got := fragment.Metadata[progress.ProgressMetadataTextBytesKey]; got != strconv.Itoa(len([]byte(originalPayload))) {
 		t.Fatalf("text_bytes = %q, want %d", got, len([]byte(originalPayload)))
 	}
-	if got := fragment.Metadata[codexMetadataTruncatedKey]; got != "true" {
+	if got := fragment.Metadata[progress.ProgressMetadataTruncatedKey]; got != "true" {
 		t.Fatalf("payload_truncated = %q, want true", got)
 	}
 }
