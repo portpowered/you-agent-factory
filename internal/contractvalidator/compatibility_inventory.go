@@ -33,6 +33,7 @@ func CompatibilityInventoryRegistry() Registry {
 			{Path: "contracts/testdata/compatibility-inventory/valid-cli-separately-approved.json", SchemaID: compatibilityInventorySchemaID},
 			{Path: "contracts/mcp/deprecated.json", SchemaID: compatibilityInventorySchemaID},
 			{Path: "contracts/cli/deprecated.json", SchemaID: compatibilityInventorySchemaID},
+			{Path: "contracts/api/deprecated.json", SchemaID: compatibilityInventorySchemaID},
 		},
 	})
 }
