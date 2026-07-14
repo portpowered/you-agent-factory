@@ -152,6 +152,77 @@ Use this map when changing the public REST contract.
   `docs/reference/README.md`; workflow-named API/CLI/MCP aliases are not primary
   and must not be added to primary navigation or reference tables.
 
+## Session response-event SSE surface
+
+Use this lane when changing `GET /factory-sessions/{session_id}/response-events`,
+`FactoryResponseEvent` schemas, retention or `STREAM_GAP` semantics, or packaged
+session guidance for the ephemeral observation stream. This route is separate
+from canonical `GET /factory-sessions/{session_id}/events` Factory event replay;
+do not conflate reconnect parameters, retention, or error codes between them.
+
+**Authored OpenAPI and fragments**
+
+- Route and operation prose:
+  `api/openapi-main.yaml` (`getFactoryResponseEventsBySessionId` on
+  `/factory-sessions/{session_id}/response-events`)
+- Query parameters:
+  `api/components/parameters/ResponseEventAfterSequence.yaml`,
+  `ResponseEventDispatchID.yaml`, `ResponseEventKind.yaml`
+- Event schema graph:
+  `api/components/schemas/response-events/` (envelope, kind/phase/provenance,
+  payload union, content blocks)
+- Typed error responses:
+  `api/components/responses/ResponseEventSessionNotFound.yaml`,
+  `ResponseEventStreamExpired.yaml`, `ResponseEventBadRequest.yaml`; codes in
+  `api/components/schemas/api/ErrorResponse.yaml`
+
+**Generated clients** (run `make generate-api` after OpenAPI edits)
+
+- `api/openapi.yaml`
+- `pkg/transports/http/generated/server.gen.go`
+- `pkg/transports/http/client/client.gen.go`
+- `ui/src/api/generated/openapi.ts`
+
+**Runtime, handler, and mapping ownership**
+
+- HTTP SSE transport:
+  `pkg/transports/http/handlers_events.go` (`GetFactoryResponseEventsBySessionId`)
+- Transport-neutral subscription contract:
+  `pkg/transports/mapping/surface.go`, `pkg/transports/mapping/contract.go`
+  (`SubscribeFactoryResponseEventsForSession`, `FactoryResponseEventRecord`)
+- Session-owned ephemeral store and retention gaps:
+  `pkg/factory/sessions/responseeventstore/`; canonical event vocabulary in
+  `pkg/factory/sessions/responseevents/`
+- Runtime composition and typed 410 mapping:
+  `pkg/service/runtime_sessions.go`, `pkg/runtimehost/` session facades,
+  `pkg/initializer/api_transport_internal_test.go`
+
+**Packaged operator guidance**
+
+- `docs/reference/sessions.md` (`## Response-event stream lifecycle and reconnect`);
+  run `make docs-reference-smoke` after reference-topic edits
+
+**Focused contract and behavior tests**
+
+- OpenAPI authoring and generated-type parity:
+  `pkg/transports/http/contracttests/openapi_contract_response_events_test.go`,
+  `generated_contract_response_events_test.go`
+- HTTP route behavior (retained-then-live, stale cursor `STREAM_GAP`, typed
+  `404`/`410`, no default-session fallback):
+  `pkg/transports/http/server_factory_sessions_test.go`,
+  `pkg/transports/http/servertests/server_factory_session_orchestrator_test.go`
+- Packaged docs align with authored operation prose:
+  `pkg/transports/cli/root_docs_test.go`
+  (`TestSessionsDocumentation_ResponseEventStreamAlignsWithOpenAPI`) and
+  `tests/functional/smoke/cli_docs_smoke_test.go` sessions markers
+
+**Maintainer verification commands**
+
+- OpenAPI or schema edits: `make generate-api`, then `make api-smoke` when feasible
+- Packaged session guidance edits: `make docs-reference-smoke`
+- Focused HTTP lane:
+  `go test ./pkg/transports/http/... -run 'FactoryResponseEvents' -count=1`
+
 ## OpenAPI contract semver comparator
 
 - `internal/contractopenapidiff` owns the build-time OpenAPI comparator that
