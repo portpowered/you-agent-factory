@@ -4,6 +4,8 @@
   "description": "Raw JSON and YAML contract artifacts for you-agent-factory consumers.",
   "license": "MIT",
   "files": [
+    "README.md",
+    "LICENSE.md",
     "generated/manifest.json",
     "generated/openapi/openapi.yaml",
     "generated/cli/commands.json",
