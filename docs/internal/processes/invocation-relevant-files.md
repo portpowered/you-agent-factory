@@ -267,7 +267,11 @@ primary-result behavior.
   `compat/testdata/primary_result_regression/` and are asserted by
   `primary_result_regression_test.go` without wiring the mapper into selection.
   Provider-native typed adapters live under `pkg/workers/provider/<provider>`
-  and emit validated `responseevents.Draft` values. While legacy response-stream
+  and emit validated `responseevents.Draft` values. Sanitized cross-provider
+  parity transcripts and the adapter-neutral terminal harness live in
+  `pkg/workers/provider/parityfixtures` with fidelity-class fixtures under
+  `testdata/`; extend that catalog for CLI/API parity proofs instead of
+  inventing parallel fixture trees. While legacy response-stream
   consumers remain supported, carry an exact draft beside the compatibility
   fragment and let `pkg/factory/sessions/stream/manager.go` publish that draft
   directly; do not remap it through the lossy legacy fragment mapper. Keep the
