@@ -634,3 +634,29 @@ func TestFactoryQueryCommand_PortFlagRejected(t *testing.T) {
 		t.Fatalf("error = %v, want --server guidance", execErr)
 	}
 }
+
+func TestNewFactoryConfigInitHandlerRegistryWiresContractedRunnableIDs(t *testing.T) {
+	globals := &cliGlobalOptions{}
+	diagnostics := &cliDiagnosticsOptions{}
+	registry, err := newFactoryConfigInitHandlerRegistry(globals, diagnostics, RootCommandOptions{})
+	if err != nil {
+		t.Fatalf("newFactoryConfigInitHandlerRegistry() error = %v", err)
+	}
+	for _, commandID := range []string{
+		"you.factory.query",
+		"you.factory.list",
+		"you.factory.create",
+		"you.factory.update",
+		"you.factory.delete",
+		"you.factory.replace-current",
+		"you.factory.config.validate",
+		"you.factory.config.flatten",
+		"you.factory.config.expand",
+		"you.config.init",
+		"you.init",
+	} {
+		if _, lookupErr := registry.Lookup(commandID); lookupErr != nil {
+			t.Fatalf("Lookup(%q) error = %v", commandID, lookupErr)
+		}
+	}
+}

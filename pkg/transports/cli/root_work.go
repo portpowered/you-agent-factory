@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
+	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
@@ -638,6 +639,99 @@ func newRepresentativeHandlerRegistry(
 			Debug:             &diagnostics.debug,
 			DiagnosticsWriter: diagnostics.writer,
 			ShowSession:       showSession,
+		}),
+	})
+}
+
+func newFactoryConfigInitHandlerRegistry(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	rootOptions RootCommandOptions,
+) (*commandregistry.Registry, error) {
+	listDir := defaultcmd.FactoryDir
+	createDir := defaultcmd.FactoryDir
+	updateDir := defaultcmd.FactoryDir
+	deleteDir := defaultcmd.FactoryDir
+	var createFrom string
+	var createSetCurrent bool
+	var updateFrom string
+	var replaceSessionID string
+	initDir := defaultcmd.FactoryDir
+	initType := string(initcmd.DefaultScaffoldType)
+	initExecutor := initcmd.DefaultStarterExecutor
+
+	return commandregistry.NewFactoryConfigInitRegistry(commandregistry.FactoryConfigInitHandlers{
+		FactoryQueryRunE: commandregistry.FactoryQueryRunE(commandregistry.FactoryQueryBinding{
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			Query:             queryFactory,
+		}),
+		FactoryListRunE: commandregistry.FactoryListRunE(commandregistry.FactoryListBinding{
+			Dir:  &listDir,
+			JSON: &globals.json,
+			List: listFactories,
+		}),
+		FactoryCreateRunE: commandregistry.FactoryCreateRunE(commandregistry.FactoryCreateBinding{
+			Dir:        &createDir,
+			From:       &createFrom,
+			SetCurrent: &createSetCurrent,
+			JSON:       &globals.json,
+			Create:     createFactoryFromFile,
+		}),
+		FactoryUpdateRunE: commandregistry.FactoryUpdateRunE(commandregistry.FactoryUpdateBinding{
+			Dir:    &updateDir,
+			From:   &updateFrom,
+			JSON:   &globals.json,
+			Update: updateFactoryFromFile,
+		}),
+		FactoryDeleteRunE: commandregistry.FactoryDeleteRunE(commandregistry.FactoryDeleteBinding{
+			Dir:    &deleteDir,
+			JSON:   &globals.json,
+			Delete: deleteFactory,
+		}),
+		FactoryReplaceCurrentRunE: commandregistry.FactoryReplaceCurrentRunE(commandregistry.FactoryReplaceCurrentBinding{
+			Server:            &globals.server,
+			SessionID:         &replaceSessionID,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			DiagnosticsWriter: diagnostics.writer,
+			ReplaceCurrent:    replaceFactoryCurrent,
+		}),
+		FactoryConfigValidateRunE: commandregistry.FactoryConfigValidateRunE(commandregistry.FactoryConfigValidateBinding{
+			JSON:     &globals.json,
+			Validate: validateFactory,
+		}),
+		FactoryConfigFlattenRunE: commandregistry.FactoryConfigFlattenRunE(commandregistry.FactoryConfigFlattenBinding{
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			Flatten:           flattenFactoryConfig,
+		}),
+		FactoryConfigExpandRunE: commandregistry.FactoryConfigExpandRunE(commandregistry.FactoryConfigExpandBinding{
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			Expand:            expandFactoryConfig,
+		}),
+		ConfigInitRunE: commandregistry.ConfigInitRunE(commandregistry.ConfigInitBinding{
+			HomeDir:           rootOptions.HomeDir,
+			JSON:              func() bool { return globals.json },
+			DiagnosticsWriter: diagnostics.writer,
+			Verbose:           diagnostics.verboseEnabled,
+			Init:              configinitcmd.Init,
+		}),
+		InitRunE: commandregistry.InitRunE(commandregistry.InitBinding{
+			Dir:               &initDir,
+			Type:              &initType,
+			Executor:          &initExecutor,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			Init:              initFactory,
 		}),
 	})
 }
