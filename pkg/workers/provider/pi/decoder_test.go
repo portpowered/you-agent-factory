@@ -169,38 +169,7 @@ func decodePiFixture(t *testing.T, path string, keepFinalRecordUnterminated bool
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	if keepFinalRecordUnterminated {
-		fixture = bytes.TrimSuffix(fixture, []byte("\n"))
-	}
-	decoder, err := pi.NewAdapter().NewDecoder(context.Background(), adapter.DecoderContext{
-		RunID: "run-pi-lifecycle", DispatchID: "dispatch-pi-lifecycle",
-	})
-	if err != nil {
-		t.Fatalf("NewDecoder() error = %v", err)
-	}
-	var drafts []responseevents.Draft
-	var diagnostics []adapter.Diagnostic
-	for offset := 0; offset < len(fixture); {
-		size := 17
-		if remaining := len(fixture) - offset; remaining < size {
-			size = remaining
-		}
-		decoded, observeErr := decoder.Observe(context.Background(), adapter.Observation{
-			Stream: adapter.OutputStreamStdout,
-			Chunk:  fixture[offset : offset+size],
-		})
-		if observeErr != nil {
-			t.Fatalf("Observe() error = %v", observeErr)
-		}
-		drafts = append(drafts, decoded.Drafts...)
-		diagnostics = append(diagnostics, decoded.Diagnostics...)
-		offset += size
-	}
-	flushed, err := decoder.Flush(context.Background(), adapter.FlushContext{Reason: adapter.FlushReasonCompleted})
-	if err != nil {
-		t.Fatalf("Flush() error = %v", err)
-	}
-	return append(drafts, flushed.Drafts...), append(diagnostics, flushed.Diagnostics...)
+	return decodePiFixtureBytes(t, fixture, keepFinalRecordUnterminated)
 }
 
 func assertValidPiDrafts(t *testing.T, drafts []responseevents.Draft) {
@@ -256,5 +225,231 @@ func TestDecoderSubtypeDraftsDoNotCollapseToGenericProgress(t *testing.T) {
 	toolDelta := piDraftsByKindAndPhase(drafts, responseevents.KindTool, responseevents.PhaseDelta)
 	if len(toolDelta) == 0 || !strings.Contains(toolDelta[0].Provenance.NativeEventType, "delta") {
 		t.Fatalf("tool preview deltas missing: %#v", toolDelta)
+	}
+}
+
+func TestDecoderCorrelatesToolLifecycleByStableCallIdentity(t *testing.T) {
+	t.Parallel()
+
+	drafts, diagnostics := decodePiFixture(t, "testdata/tool_lifecycle_correlation.jsonl", false)
+	if len(diagnostics) != 0 {
+		t.Fatalf("diagnostics = %#v, want none", diagnostics)
+	}
+	assertValidPiDrafts(t, drafts)
+
+	started := findPiToolDraft(drafts, responseevents.PhaseStarted, "call-weather")
+	updates := piToolDraftsByCallID(drafts, responseevents.PhaseDelta, "call-weather")
+	completed := findPiToolDraft(drafts, responseevents.PhaseCompleted, "call-weather")
+	if started == nil || completed == nil {
+		t.Fatalf("tool lifecycle missing start or completion: %#v", drafts)
+	}
+	if len(updates) != 2 {
+		t.Fatalf("tool updates = %d, want two partial updates for one call identity: %#v", len(updates), updates)
+	}
+	for _, draft := range append([]responseevents.Draft{*started, *completed}, updates...) {
+		if draft.ItemID != "call-weather" {
+			t.Fatalf("tool draft changed call identity: %#v", draft)
+		}
+	}
+	assertPiToolDraft(t, *started, responseevents.PhaseStarted, "call-weather", "get_weather", "running")
+	assertPiToolDraft(t, *completed, responseevents.PhaseCompleted, "call-weather", "get_weather", "completed")
+}
+
+func TestDecoderMapsToolExecutionErrorToFailedTerminalStatus(t *testing.T) {
+	t.Parallel()
+
+	drafts, diagnostics := decodePiFixture(t, "testdata/tool_lifecycle_error.jsonl", false)
+	if len(diagnostics) != 0 {
+		t.Fatalf("diagnostics = %#v, want none", diagnostics)
+	}
+
+	started := findPiToolDraft(drafts, responseevents.PhaseStarted, "call-fail")
+	failed := findPiToolDraft(drafts, responseevents.PhaseFailed, "call-fail")
+	if started == nil || failed == nil {
+		t.Fatalf("tool error lifecycle missing: %#v", drafts)
+	}
+	assertPiToolDraft(t, *started, responseevents.PhaseStarted, "call-fail", "write_file", "running")
+	assertPiToolDraft(t, *failed, responseevents.PhaseFailed, "call-fail", "write_file", "failed")
+	if findPiToolDraft(drafts, responseevents.PhaseCompleted, "call-fail") != nil {
+		t.Fatalf("error end mapped to completed status: %#v", drafts)
+	}
+	if findPiDraft(drafts, responseevents.KindError, responseevents.PhaseFailed) != nil {
+		t.Fatalf("tool error leaked into unrelated error item: %#v", drafts)
+	}
+}
+
+func TestDecoderMissingToolCallIDEmitsDiagnosticWithoutMergingTools(t *testing.T) {
+	t.Parallel()
+
+	raw := strings.Join([]string{
+		`{"type":"message_start","message":{"id":"msg-missing-call","role":"assistant","content":[]}}`,
+		`{"type":"tool_execution_start","toolName":"orphan_tool","args":{"path":"README.md"}}`,
+		`{"type":"tool_execution_start","toolCallId":"call-valid","toolName":"read_file","args":{"path":"README.md"}}`,
+		`{"type":"tool_execution_end","toolCallId":"call-valid","toolName":"read_file","result":{"ok":true}}`,
+	}, "\n") + "\n"
+	drafts, diagnostics := decodePiRawFixture(t, raw)
+	if len(diagnostics) != 1 || diagnostics[0].Code != "pi_missing_tool_call_id" {
+		t.Fatalf("diagnostics = %#v, want one missing call identity diagnostic", diagnostics)
+	}
+	valid := piToolDraftsByCallID(drafts, responseevents.PhaseStarted, "call-valid")
+	completed := findPiToolDraft(drafts, responseevents.PhaseCompleted, "call-valid")
+	if len(valid) != 1 || completed == nil {
+		t.Fatalf("valid tool lifecycle = %#v, want isolated start/end for call-valid", drafts)
+	}
+	if findPiToolDraft(drafts, responseevents.PhaseStarted, "") != nil {
+		t.Fatal("missing toolCallId silently merged into anonymous tool item")
+	}
+}
+
+func TestDecoderToolSummariesAreBoundedAndSanitized(t *testing.T) {
+	t.Parallel()
+
+	drafts, diagnostics := decodePiFixture(t, "testdata/tool_lifecycle_correlation.jsonl", false)
+	if len(diagnostics) != 0 {
+		t.Fatalf("diagnostics = %#v", diagnostics)
+	}
+	started := findPiToolDraft(drafts, responseevents.PhaseStarted, "call-weather")
+	completed := findPiToolDraft(drafts, responseevents.PhaseCompleted, "call-weather")
+	if started == nil || completed == nil {
+		t.Fatal("tool lifecycle missing")
+	}
+	var startedPayload responseevents.ToolPayload
+	decodePiPayload(t, *started, &startedPayload)
+	var arguments map[string]string
+	if err := json.Unmarshal(startedPayload.ArgumentsSummary, &arguments); err != nil {
+		t.Fatalf("decode arguments summary: %v", err)
+	}
+	if arguments["city"] != "Oslo" || arguments["api_key"] != "<redacted>" {
+		t.Fatalf("arguments summary = %#v", arguments)
+	}
+	var completedPayload responseevents.ToolPayload
+	decodePiPayload(t, *completed, &completedPayload)
+	if !strings.Contains(string(completedPayload.ResultSummary), `"temperature":12`) ||
+		strings.Contains(string(completedPayload.ResultSummary), "sk-fixture-secret") {
+		t.Fatalf("result summary = %s", completedPayload.ResultSummary)
+	}
+	for _, draft := range piToolDraftsByCallID(drafts, responseevents.PhaseDelta, "call-weather") {
+		var delta responseevents.ToolDeltaPayload
+		decodePiPayload(t, draft, &delta)
+		if strings.Contains(delta.OutputDelta, "sk-fixture-secret") {
+			t.Fatalf("partial summary leaked credential: %q", delta.OutputDelta)
+		}
+	}
+}
+
+func TestDecoderToolNameRemainsStableAcrossLifecycle(t *testing.T) {
+	t.Parallel()
+
+	drafts, diagnostics := decodePiFixture(t, "testdata/tool_lifecycle_correlation.jsonl", false)
+	if len(diagnostics) != 0 {
+		t.Fatalf("diagnostics = %#v", diagnostics)
+	}
+	for _, draft := range piToolDraftsByCallID(drafts, "", "call-weather") {
+		var payload responseevents.ToolPayload
+		if draft.Phase == responseevents.PhaseDelta {
+			var delta responseevents.ToolDeltaPayload
+			decodePiPayload(t, draft, &delta)
+			continue
+		}
+		decodePiPayload(t, draft, &payload)
+		if payload.ToolName != "get_weather" {
+			t.Fatalf("tool name changed across lifecycle: %#v payload=%#v", draft, payload)
+		}
+	}
+}
+
+func TestDecoderDuplicateToolUpdatesDoNotAllocateNewItems(t *testing.T) {
+	t.Parallel()
+
+	raw := strings.Join([]string{
+		`{"type":"message_start","message":{"id":"msg-dedupe","role":"assistant","content":[]}}`,
+		`{"type":"tool_execution_start","toolCallId":"call-dedupe","toolName":"search","args":{"query":"docs"}}`,
+		`{"type":"tool_execution_update","toolCallId":"call-dedupe","partialResult":{"page":1}}`,
+		`{"type":"tool_execution_update","toolCallId":"call-dedupe","partialResult":{"page":1}}`,
+		`{"type":"tool_execution_end","toolCallId":"call-dedupe","toolName":"search","result":{"page":1}}`,
+	}, "\n") + "\n"
+	drafts, diagnostics := decodePiRawFixture(t, raw)
+	if len(diagnostics) != 0 {
+		t.Fatalf("diagnostics = %#v", diagnostics)
+	}
+	updates := piToolDraftsByCallID(drafts, responseevents.PhaseDelta, "call-dedupe")
+	if len(updates) != 1 {
+		t.Fatalf("duplicate partial updates allocated %d tool items, want 1: %#v", len(updates), updates)
+	}
+}
+
+func decodePiRawFixture(t *testing.T, raw string) ([]responseevents.Draft, []adapter.Diagnostic) {
+	t.Helper()
+	return decodePiFixtureBytes(t, []byte(raw), false)
+}
+
+func decodePiFixtureBytes(t *testing.T, fixture []byte, keepFinalRecordUnterminated bool) ([]responseevents.Draft, []adapter.Diagnostic) {
+	t.Helper()
+	if keepFinalRecordUnterminated {
+		fixture = bytes.TrimSuffix(fixture, []byte("\n"))
+	}
+	decoder, err := pi.NewAdapter().NewDecoder(context.Background(), adapter.DecoderContext{
+		RunID: "run-pi-lifecycle", DispatchID: "dispatch-pi-lifecycle",
+	})
+	if err != nil {
+		t.Fatalf("NewDecoder() error = %v", err)
+	}
+	var drafts []responseevents.Draft
+	var diagnostics []adapter.Diagnostic
+	for offset := 0; offset < len(fixture); {
+		size := 17
+		if remaining := len(fixture) - offset; remaining < size {
+			size = remaining
+		}
+		decoded, observeErr := decoder.Observe(context.Background(), adapter.Observation{
+			Stream: adapter.OutputStreamStdout,
+			Chunk:  fixture[offset : offset+size],
+		})
+		if observeErr != nil {
+			t.Fatalf("Observe() error = %v", observeErr)
+		}
+		drafts = append(drafts, decoded.Drafts...)
+		diagnostics = append(diagnostics, decoded.Diagnostics...)
+		offset += size
+	}
+	flushed, err := decoder.Flush(context.Background(), adapter.FlushContext{Reason: adapter.FlushReasonCompleted})
+	if err != nil {
+		t.Fatalf("Flush() error = %v", err)
+	}
+	return append(drafts, flushed.Drafts...), append(diagnostics, flushed.Diagnostics...)
+}
+
+func piToolDraftsByCallID(drafts []responseevents.Draft, phase responseevents.Phase, callID string) []responseevents.Draft {
+	var matched []responseevents.Draft
+	for _, draft := range drafts {
+		if draft.Kind != responseevents.KindTool || draft.ItemID != callID {
+			continue
+		}
+		if phase != "" && draft.Phase != phase {
+			continue
+		}
+		matched = append(matched, draft)
+	}
+	return matched
+}
+
+func findPiToolDraft(drafts []responseevents.Draft, phase responseevents.Phase, callID string) *responseevents.Draft {
+	for index := range drafts {
+		if drafts[index].Kind == responseevents.KindTool && drafts[index].Phase == phase && drafts[index].ItemID == callID {
+			return &drafts[index]
+		}
+	}
+	return nil
+}
+
+func assertPiToolDraft(t *testing.T, draft responseevents.Draft, phase responseevents.Phase, callID, name, status string) {
+	t.Helper()
+	if draft.Kind != responseevents.KindTool || draft.Phase != phase || draft.ItemID != callID {
+		t.Fatalf("tool draft = %#v, want TOOL/%s for %s", draft, phase, callID)
+	}
+	var payload responseevents.ToolPayload
+	decodePiPayload(t, draft, &payload)
+	if payload.ToolCallID != callID || payload.ToolName != name || payload.Status != status {
+		t.Fatalf("tool payload = %#v, want call=%s name=%s status=%s", payload, callID, name, status)
 	}
 }

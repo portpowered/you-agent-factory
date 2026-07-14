@@ -249,7 +249,7 @@ func (d *decoder) decodeMessageUpdate(envelope nativeEnvelope) (adapter.DecodeRe
 		if toolCallID == "" {
 			return safeDiagnostic("pi_missing_tool_call_id", "Pi tool delta omitted stable call identity"), nil
 		}
-		summary := boundedSummary(firstNonEmpty(event.PartialJSON, event.Delta))
+		summary := boundedToolSummary(firstNonEmpty(event.PartialJSON, event.Delta))
 		if summary == d.toolSummaries[toolCallID] {
 			return adapter.DecodeResult{}, nil
 		}
@@ -324,7 +324,7 @@ func (d *decoder) decodeToolUpdate(envelope nativeEnvelope) (adapter.DecodeResul
 	if name := strings.TrimSpace(envelope.ToolName); name != "" {
 		d.toolNames[toolCallID] = name
 	}
-	summary := boundedSummary(string(envelope.PartialResult))
+	summary := boundedToolSummary(string(envelope.PartialResult))
 	if summary == d.toolSummaries[toolCallID] {
 		return adapter.DecodeResult{}, nil
 	}
@@ -445,11 +445,79 @@ func safeJSONSummary(raw json.RawMessage) (string, bool) {
 	if !json.Valid(raw) {
 		return "", false
 	}
-	compact := bytes.TrimSpace(raw)
-	if len(compact) > maximumSummaryBytes {
-		compact = compact[:maximumSummaryBytes]
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", false
 	}
-	return string(compact), true
+	encoded, err := json.Marshal(sanitizeJSONValue(value, 0))
+	if err != nil {
+		return "", false
+	}
+	if len(encoded) > maximumSummaryBytes {
+		encoded = encoded[:maximumSummaryBytes]
+	}
+	return string(encoded), true
+}
+
+func boundedToolSummary(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if summary, ok := safeJSONSummary(json.RawMessage(value)); ok {
+		return summary
+	}
+	return boundedSummary(value)
+}
+
+func sanitizeJSONValue(value any, depth int) any {
+	if depth >= 3 {
+		return "<omitted>"
+	}
+	switch typed := value.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(typed))
+		for key, nested := range typed {
+			if sensitiveSummaryKey(key) {
+				result[key] = "<redacted>"
+				continue
+			}
+			result[key] = sanitizeJSONValue(nested, depth+1)
+		}
+		return result
+	case []any:
+		result := make([]any, 0, len(typed))
+		for _, item := range typed {
+			result = append(result, sanitizeJSONValue(item, depth+1))
+		}
+		return result
+	case string:
+		if sensitiveSummaryValue(typed) {
+			return "<redacted>"
+		}
+		return boundedSummary(typed)
+	default:
+		return typed
+	}
+}
+
+func sensitiveSummaryKey(key string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(key))
+	for _, marker := range []string{"token", "secret", "password", "credential", "api_key", "apikey", "authorization", "prompt"} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func sensitiveSummaryValue(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return false
+	}
+	lower := strings.ToLower(trimmed)
+	return strings.HasPrefix(lower, "sk-") || strings.Contains(lower, "bearer ")
 }
 
 func firstNonEmpty(values ...string) string {
