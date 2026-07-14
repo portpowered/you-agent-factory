@@ -9,11 +9,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
-func TestProductionCLIRootSessionFamily_NoGeneratorCutover(t *testing.T) {
+func TestProductionCLIRootSessionFamily_RepresentativeCutover(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	assertHandwrittenRootSessionConstructors(t, repoRoot)
 	assertGeneratorInfrastructurePresent(t, repoRoot)
-	assertNoForbiddenCLICutoverPaths(t, repoRoot)
+	assertProductionRepresentativeCutoverWired(t, repoRoot)
 	assertNoForbiddenCLIGeneratorMarkers(t, repoRoot)
 }
 
@@ -34,7 +34,10 @@ func assertHandwrittenRootSessionConstructors(t *testing.T, repoRoot string) {
 			}
 		case "root_work.go":
 			if !strings.Contains(text, "func newSessionShowCommand(") {
-				t.Fatalf("%s must keep handwritten newSessionShowCommand constructor", path)
+				t.Fatalf("%s must keep handwritten newSessionShowCommand constructor for rollback", path)
+			}
+			if !strings.Contains(text, "func newLegacyRootCommandWithOptions(") {
+				t.Fatalf("%s must keep legacy rollback constructor", path)
 			}
 		}
 	}
@@ -55,12 +58,22 @@ func assertGeneratorInfrastructurePresent(t *testing.T, repoRoot string) {
 	}
 }
 
-func assertNoForbiddenCLICutoverPaths(t *testing.T, repoRoot string) {
+func assertProductionRepresentativeCutoverWired(t *testing.T, repoRoot string) {
 	t.Helper()
-	forbiddenPaths := []string{}
-	for _, path := range forbiddenPaths {
-		if _, err := os.Stat(path); err == nil {
-			t.Fatalf("generated CLI cutover path must not exist yet: %s", path)
+	rootWorkGo := filepath.Join(repoRoot, "pkg", "transports", "cli", "root_work.go")
+	contents, err := os.ReadFile(rootWorkGo)
+	if err != nil {
+		t.Fatalf("read %s: %v", rootWorkGo, err)
+	}
+	text := string(contents)
+	requiredMarkers := []string{
+		"useGeneratedRepresentativeFamily = true",
+		"newRootCommandWithGeneratedRepresentativeFamily",
+		"climanifestcobra.NewRepresentativeFamilyComponents",
+	}
+	for _, marker := range requiredMarkers {
+		if !strings.Contains(text, marker) {
+			t.Fatalf("%s must wire production representative-family cutover via %q", rootWorkGo, marker)
 		}
 	}
 }

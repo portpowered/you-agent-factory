@@ -135,7 +135,7 @@ primary-result behavior.
   `pkg/transports/cli/climanifestparity` (`CompareDeclaredHandler`,
   `CompareHandlerOpenAPIBinding`, `OpenAPIOperationBinding`, `CompareLiveExitCodes`,
   `CompareBaselineSideEffects`, `CompareBaselineConstraints`, and
-  `TestProductionCLIRootSessionFamily_NoGeneratorCutover`). Approved execution metadata
+  `TestProductionCLIRootSessionFamily_RepresentativeCutover`). Approved execution metadata
   for side-effects/constraints is loaded from
   `contracts/testdata/baseline/cli-command-execution.json`. Handler/OpenAPI binding for
   `you.session.show` asserts `operationId` `getFactorySession` maps to
@@ -151,10 +151,12 @@ primary-result behavior.
   `newRepresentativeHandlerRegistry` in `pkg/transports/cli/root_work.go`.
   The generated representative-family constructor lives in
   `pkg/transports/cli/climanifestcobra` (`NewRepresentativeFamilyCommand`,
-  `NewRepresentativeFamilyCommandFromManifest`) and builds only `you` →
-  `you session` → `you session show` from embedded generated metadata plus
-  registry-attached handwritten handlers. Production root cutover remains
-  deferred to later B10-CLI-GENERATOR stories.
+  `NewRepresentativeFamilyComponents`, `NewRepresentativeFamilyCommandFromManifest`)
+  and builds only `you` → `you session` → `you session show` from embedded generated
+  metadata plus registry-attached handwritten handlers. Production root cutover is
+  controlled by `useGeneratedRepresentativeFamily` in `pkg/transports/cli/root_work.go`
+  (`newRootCommandWithGeneratedRepresentativeFamily` with
+  `newLegacyRootCommandWithOptions` rollback).
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/transports/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before

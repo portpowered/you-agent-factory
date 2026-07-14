@@ -13,15 +13,35 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// RepresentativeFamilyComponents holds detached representative-family commands
+// before the session/show subtree is attached to the generated root.
+type RepresentativeFamilyComponents struct {
+	Root    *cobra.Command
+	Session *cobra.Command
+	Show    *cobra.Command
+}
+
 // NewRepresentativeFamilyCommand builds the representative you → session → show tree
 // from generated metadata and attaches handwritten handlers by stable command ID.
 // Only contracted representative-family commands are constructed.
 func NewRepresentativeFamilyCommand(registry *commandregistry.Registry, bindings PersistentFlagBindings) (*cobra.Command, error) {
+	components, err := NewRepresentativeFamilyComponents(registry, bindings)
+	if err != nil {
+		return nil, err
+	}
+	components.Session.AddCommand(components.Show)
+	components.Root.AddCommand(components.Session)
+	return components.Root, nil
+}
+
+// NewRepresentativeFamilyComponents builds detached representative-family commands
+// so production wiring can attach additional handwritten session siblings in order.
+func NewRepresentativeFamilyComponents(registry *commandregistry.Registry, bindings PersistentFlagBindings) (RepresentativeFamilyComponents, error) {
 	manifest, err := generated.RepresentativeFamilyManifest()
 	if err != nil {
-		return nil, fmt.Errorf("build representative family command: %w", err)
+		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
 	}
-	return NewRepresentativeFamilyCommandFromManifest(manifest, registry, bindings)
+	return NewRepresentativeFamilyComponentsFromManifest(manifest, registry, bindings)
 }
 
 // NewRepresentativeFamilyCommandFromManifest builds the representative tree from one
@@ -31,68 +51,86 @@ func NewRepresentativeFamilyCommandFromManifest(
 	registry *commandregistry.Registry,
 	bindings PersistentFlagBindings,
 ) (*cobra.Command, error) {
-	if registry == nil {
-		return nil, fmt.Errorf("build representative family command: registry is required")
-	}
-	if err := validateBindings(bindings); err != nil {
+	components, err := NewRepresentativeFamilyComponentsFromManifest(manifest, registry, bindings)
+	if err != nil {
 		return nil, err
 	}
+	components.Session.AddCommand(components.Show)
+	components.Root.AddCommand(components.Session)
+	return components.Root, nil
+}
+
+// NewRepresentativeFamilyComponentsFromManifest builds detached representative-family
+// commands from one generated manifest snapshot.
+func NewRepresentativeFamilyComponentsFromManifest(
+	manifest climanifest.Manifest,
+	registry *commandregistry.Registry,
+	bindings PersistentFlagBindings,
+) (RepresentativeFamilyComponents, error) {
+	if registry == nil {
+		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: registry is required")
+	}
+	if err := validateBindings(bindings); err != nil {
+		return RepresentativeFamilyComponents{}, err
+	}
 	if err := validateRepresentativeManifest(manifest); err != nil {
-		return nil, fmt.Errorf("build representative family command: %w", err)
+		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
 	}
 	if err := registry.VerifyRepresentativeRunnableCoverage(manifest); err != nil {
-		return nil, fmt.Errorf("build representative family command: %w", err)
+		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
 	}
 
 	rootRecord, err := manifest.CommandByID("you")
 	if err != nil {
-		return nil, fmt.Errorf("build representative family command: %w", err)
+		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
 	}
 	sessionRecord, err := manifest.CommandByID("you.session")
 	if err != nil {
-		return nil, fmt.Errorf("build representative family command: %w", err)
+		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
 	}
 	showRecord, err := manifest.CommandByID("you.session.show")
 	if err != nil {
-		return nil, fmt.Errorf("build representative family command: %w", err)
+		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
 	}
 
 	root, err := buildCommandFromRecord(rootRecord)
 	if err != nil {
-		return nil, fmt.Errorf("build representative family command: %w", err)
+		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
 	}
 	root.SilenceUsage = true
 	if err := registerPersistentFlags(root, rootRecord, bindings); err != nil {
-		return nil, fmt.Errorf("build representative family command: %w", err)
+		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
 	}
 	if err := registry.AttachRunE(root, rootRecord.ID); err != nil {
-		return nil, fmt.Errorf("build representative family command: %w", err)
+		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
 	}
 
 	session, err := buildCommandFromRecord(sessionRecord)
 	if err != nil {
-		return nil, fmt.Errorf("build representative family command: %w", err)
+		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
 	}
 	if sessionRecord.Runnable {
-		return nil, fmt.Errorf("build representative family command: %q must remain non-runnable", sessionRecord.ID)
+		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %q must remain non-runnable", sessionRecord.ID)
 	}
 
 	show, err := buildCommandFromRecord(showRecord)
 	if err != nil {
-		return nil, fmt.Errorf("build representative family command: %w", err)
+		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
 	}
 	show.Args = positionalArgsFromManifest(showRecord)
 	show.PreRunE = rejectDeprecatedPortFlag
-	if err := registerLocalFlags(show, showRecord); err != nil {
-		return nil, fmt.Errorf("build representative family command: %w", err)
+	if err := registerLocalFlags(show, showRecord, bindings); err != nil {
+		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
 	}
 	if err := registry.AttachRunE(show, showRecord.ID); err != nil {
-		return nil, fmt.Errorf("build representative family command: %w", err)
+		return RepresentativeFamilyComponents{}, fmt.Errorf("build representative family command: %w", err)
 	}
 
-	session.AddCommand(show)
-	root.AddCommand(session)
-	return root, nil
+	return RepresentativeFamilyComponents{
+		Root:    root,
+		Session: session,
+		Show:    show,
+	}, nil
 }
 
 func validateRepresentativeManifest(manifest climanifest.Manifest) error {
@@ -163,7 +201,8 @@ func registerPersistentFlags(root *cobra.Command, record climanifest.Command, bi
 		if err != nil {
 			return err
 		}
-		if err := registerFlag(root.PersistentFlags(), flag, target); err != nil {
+		usage := flagUsage(bindings, flag.Long)
+		if err := registerFlag(root.PersistentFlags(), flag, target, usage); err != nil {
 			return fmt.Errorf("register root persistent flag %q: %w", flag.Long, err)
 		}
 		if err := applyFlagContract(root.PersistentFlags().Lookup(flag.Long), flag); err != nil {
@@ -173,7 +212,7 @@ func registerPersistentFlags(root *cobra.Command, record climanifest.Command, bi
 	return nil
 }
 
-func registerLocalFlags(cmd *cobra.Command, record climanifest.Command) error {
+func registerLocalFlags(cmd *cobra.Command, record climanifest.Command, bindings PersistentFlagBindings) error {
 	var deprecatedPort int
 	flags := sortedFlags(record.Flags)
 	for _, flag := range flags {
@@ -191,7 +230,8 @@ func registerLocalFlags(cmd *cobra.Command, record climanifest.Command) error {
 		if err != nil {
 			return err
 		}
-		if err := registerFlag(cmd.Flags(), flag, target); err != nil {
+		usage := flagUsage(bindings, flag.Long)
+		if err := registerFlag(cmd.Flags(), flag, target, usage); err != nil {
 			return fmt.Errorf("register local flag %q: %w", flag.Long, err)
 		}
 		if err := applyFlagContract(cmd.Flags().Lookup(flag.Long), flag); err != nil {
@@ -199,6 +239,13 @@ func registerLocalFlags(cmd *cobra.Command, record climanifest.Command) error {
 		}
 	}
 	return nil
+}
+
+func flagUsage(bindings PersistentFlagBindings, longName string) string {
+	if bindings.FlagUsages == nil {
+		return ""
+	}
+	return bindings.FlagUsages[longName]
 }
 
 type flagTarget struct {
@@ -240,7 +287,7 @@ func localBindingTarget(flag climanifest.Flag) (flagTarget, error) {
 	}
 }
 
-func registerFlag(flagSet *pflag.FlagSet, contract climanifest.Flag, target flagTarget) error {
+func registerFlag(flagSet *pflag.FlagSet, contract climanifest.Flag, target flagTarget, usage string) error {
 	switch contract.ValueType {
 	case "bool":
 		if target.boolValue == nil {
@@ -251,9 +298,9 @@ func registerFlag(flagSet *pflag.FlagSet, contract climanifest.Flag, target flag
 			return fmt.Errorf("parse default for flag %q: %w", contract.Long, err)
 		}
 		if contract.Shorthand != "" {
-			flagSet.BoolVarP(target.boolValue, contract.Long, contract.Shorthand, defaultValue, "")
+			flagSet.BoolVarP(target.boolValue, contract.Long, contract.Shorthand, defaultValue, usage)
 		} else {
-			flagSet.BoolVar(target.boolValue, contract.Long, defaultValue, "")
+			flagSet.BoolVar(target.boolValue, contract.Long, defaultValue, usage)
 		}
 	case "string":
 		if target.stringValue == nil {
@@ -262,7 +309,7 @@ func registerFlag(flagSet *pflag.FlagSet, contract climanifest.Flag, target flag
 		if contract.Shorthand != "" {
 			return fmt.Errorf("string flag %q does not support shorthand in generated constructor", contract.Long)
 		}
-		flagSet.StringVar(target.stringValue, contract.Long, contract.Default, "")
+		flagSet.StringVar(target.stringValue, contract.Long, contract.Default, usage)
 	case "int":
 		if target.intValue == nil {
 			return fmt.Errorf("missing int binding for flag %q", contract.Long)
@@ -271,7 +318,7 @@ func registerFlag(flagSet *pflag.FlagSet, contract climanifest.Flag, target flag
 		if err != nil {
 			return fmt.Errorf("parse default for flag %q: %w", contract.Long, err)
 		}
-		flagSet.IntVar(target.intValue, contract.Long, defaultValue, "")
+		flagSet.IntVar(target.intValue, contract.Long, defaultValue, usage)
 	default:
 		return fmt.Errorf("unsupported flag value type %q for %q", contract.ValueType, contract.Long)
 	}

@@ -9,4 +9,7 @@ type PersistentFlagBindings struct {
 	JSON                       *bool
 	DefaultWorkerModelProvider *string
 	DefaultWorkerModel         *string
+	// FlagUsages supplies Cobra help text for persistent flags when the manifest
+	// does not yet carry per-flag usage descriptions.
+	FlagUsages map[string]string
 }

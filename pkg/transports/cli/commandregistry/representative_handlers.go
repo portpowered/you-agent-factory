@@ -46,10 +46,10 @@ func NewRepresentativeRegistry(handlers RepresentativeHandlers) (*Registry, erro
 
 // SessionShowBinding supplies handwritten session show execution dependencies.
 type SessionShowBinding struct {
-	Server            string
-	JSON              bool
-	Verbose           bool
-	Debug             bool
+	Server            *string
+	JSON              *bool
+	Verbose           func() bool
+	Debug             *bool
 	DiagnosticsWriter func(cmd *cobra.Command) io.Writer
 	ShowSession       func(sessioncli.ShowConfig) error
 }
@@ -61,18 +61,26 @@ func SessionShowRunE(binding SessionShowBinding) RunE {
 		showSession = sessioncli.Show
 	}
 	return func(cmd *cobra.Command, args []string) error {
-		cfg := sessioncli.ShowConfig{Server: binding.Server}
+		cfg := sessioncli.ShowConfig{}
+		if binding.Server != nil {
+			cfg.Server = *binding.Server
+		}
 		if len(args) == 1 {
 			cfg.SessionID = args[0]
 		}
-		cfg.Server = binding.Server
-		cfg.JSON = binding.JSON
+		if binding.JSON != nil {
+			cfg.JSON = *binding.JSON
+		}
 		cfg.Output = cmd.OutOrStdout()
 		if binding.DiagnosticsWriter != nil {
 			cfg.Diagnostics = binding.DiagnosticsWriter(cmd)
 		}
-		cfg.Verbose = binding.Verbose
-		cfg.Debug = binding.Debug
+		if binding.Verbose != nil {
+			cfg.Verbose = binding.Verbose()
+		}
+		if binding.Debug != nil {
+			cfg.Debug = *binding.Debug
+		}
 		return showSession(cfg)
 	}
 }

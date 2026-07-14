@@ -200,7 +200,7 @@
       "runnable": false,
       "usage": {
         "line": "session",
-        "example": "  you session list\n\n  you session show session-beta"
+        "example": "  # List live sessions on the default local port.\n  you session list\n\n  # Show orchestrator-aware runtime for one live session.\n  you session show session-beta\n\n  # Pause and resume the default compatibility session.\n  you session pause\n  you session resume\n\n  # Pause and resume one named or durable Factory Session.\n  you session pause session-beta\n  you session resume dur-sess-js-run-n-001\n\n  # Emit API-shaped JSON for automation.\n  you session list --json\n\n  # Open and close sessions on a non-default port.\n  you session create --dir /workspace/fleet --port 9090\n  you session delete session-beta --port 9090 --json\n\n  # Pause and resume the default compatibility session.\n  you session pause\n  you session resume\n\n  # Target a different service port for list output.\n  you session list --port 9090"
       },
       "flags": {
         "you.session.flag.debug": {

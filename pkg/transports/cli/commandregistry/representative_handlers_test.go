@@ -41,8 +41,8 @@ func TestSessionShowRunEUsesHandwrittenServicePath(t *testing.T) {
 	registry, err := commandregistry.NewRepresentativeRegistry(commandregistry.RepresentativeHandlers{
 		RootRunE: noopRunE,
 		SessionShowRunE: commandregistry.SessionShowRunE(commandregistry.SessionShowBinding{
-			Server:      srv.URL,
-			JSON:        true,
+			Server:      stringPtr(srv.URL),
+			JSON:        boolPtr(true),
 			ShowSession: sessioncli.Show,
 		}),
 	})
@@ -72,7 +72,7 @@ func TestSessionShowRunEUsesHandwrittenServicePath(t *testing.T) {
 func TestSessionShowRunEWritesDiagnosticsToConfiguredWriter(t *testing.T) {
 	var diagnostic bytes.Buffer
 	runE := commandregistry.SessionShowRunE(commandregistry.SessionShowBinding{
-		Server: "http://127.0.0.1:1",
+		Server: stringPtr("http://127.0.0.1:1"),
 		DiagnosticsWriter: func(cmd *cobra.Command) io.Writer {
 			return &diagnostic
 		},
@@ -87,4 +87,12 @@ func TestSessionShowRunEWritesDiagnosticsToConfiguredWriter(t *testing.T) {
 	if err := runE(cmd, nil); err != nil {
 		t.Fatalf("RunE() error = %v", err)
 	}
+}
+
+func stringPtr(value string) *string {
+	return &value
+}
+
+func boolPtr(value bool) *bool {
+	return &value
 }

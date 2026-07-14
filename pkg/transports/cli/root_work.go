@@ -7,9 +7,13 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	configinitcmd "github.com/portpowered/infinite-you/pkg/transports/cli/configinit"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
@@ -17,6 +21,159 @@ import (
 	workflowcli "github.com/portpowered/infinite-you/pkg/transports/cli/workflow"
 	"github.com/spf13/cobra"
 )
+
+// useGeneratedRepresentativeFamily toggles production root wiring between the
+// generated representative-family constructor and the legacy handwritten path.
+// Flip this constant to false for a one-localized-change rollback.
+const useGeneratedRepresentativeFamily = true
+
+func newLegacyRootCommandWithOptions(options RootCommandOptions) *cobra.Command {
+	options = normalizeRootCommandOptions(options)
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := &cobra.Command{
+		Use:          cliBinaryName,
+		Short:        "Run and manage CPN-based workflow factories",
+		SilenceUsage: true,
+		Long: "Run and manage CPN-based workflow factories.\n\n" +
+			"What:\n" +
+			"CPN-based workflow factory CLI for running factories, submitting work, and inspecting live sessions.\n\n" +
+			"How to use:\n" +
+			"Run " + cliBinaryName + " run --work ./docs/examples/startup-work.json to start the current Factory with explicit Work and the local dashboard (http://localhost:7437/dashboard/ui).\n" +
+			"Use " + cliBinaryName + " run --dir factory --work ./docs/examples/startup-work.json for an explicit Factory directory. See " + cliBinaryName + " <cmd> --help for subcommand details.\n\n" +
+			"Agents:\n" +
+			"Start with " + cliBinaryName + " docs agents for orientation, " + cliBinaryName + " submit or " + cliBinaryName + " submit batch to enqueue work, and " + cliBinaryName + " session list to confirm a live factory.\n" +
+			"Run " + cliBinaryName + " docs for all packaged reference topics. Use --verbose or --debug for stderr diagnostics; full policy in " + cliBinaryName + " docs.",
+		Example: "  # Start the default Codex-backed Factory with explicit Work.\n" +
+			"  " + cliBinaryName + " run --work ./docs/examples/startup-work.json\n\n" +
+			"  # Agent orientation and command matrix.\n" +
+			"  " + cliBinaryName + " docs agents",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			policy := diagnostics.resolvePolicy(false)
+			return runFactoryWithOptions(cmd, defaultcmd.OOTBRunConfig(), nil, globals, operatorDefaults, policy, options, true)
+		},
+	}
+	root.PersistentFlags().BoolVarP(&diagnostics.verbose, "verbose", "v", false, "emit concise command diagnostics to stderr")
+	root.PersistentFlags().BoolVarP(&diagnostics.debug, "debug", "d", false, "emit lower-level command diagnostics where supported (implies --verbose)")
+	root.PersistentFlags().StringVar(&globals.server, "server", cliserver.DefaultBaseURI, "factory API base URI (http:// or https://); HTTP client commands target this URI and you run binds locally to its host and port")
+	root.PersistentFlags().BoolVar(&globals.json, "json", false, "emit structured JSON on stdout for supported commands; diagnostics remain on stderr")
+	root.PersistentFlags().StringVar(
+		&operatorDefaults.defaultWorkerModelProvider,
+		"default-worker-model-provider",
+		"",
+		fmt.Sprintf(
+			"default worker model provider for model workers with omitted modelProvider (%s; DEFAULT resolves through lower-precedence concrete provider)",
+			interfaces.AcceptedPublicWorkerModelProviderSummary(),
+		),
+	)
+	root.PersistentFlags().StringVar(
+		&operatorDefaults.defaultWorkerModel,
+		"default-worker-model",
+		"",
+		"default worker model for model workers with omitted model",
+	)
+
+	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, newSessionCommand(globals, diagnostics, options))...)
+	return root
+}
+
+func newRootCommandWithGeneratedRepresentativeFamily(options RootCommandOptions) *cobra.Command {
+	options = normalizeRootCommandOptions(options)
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+
+	registry, err := newRepresentativeHandlerRegistry(globals, diagnostics, operatorDefaults, options)
+	if err != nil {
+		panic(fmt.Sprintf("build representative handler registry: %v", err))
+	}
+	components, err := climanifestcobra.NewRepresentativeFamilyComponents(
+		registry,
+		representativePersistentFlagBindings(globals, diagnostics, operatorDefaults),
+	)
+	if err != nil {
+		panic(fmt.Sprintf("build representative family command: %v", err))
+	}
+
+	session := components.Session
+	session.AddCommand(handwrittenSessionSubcommands(globals, diagnostics, options, components.Show)...)
+
+	root := components.Root
+	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, session)...)
+	return root
+}
+
+func productionRootSubcommands(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	options RootCommandOptions,
+	session *cobra.Command,
+) []*cobra.Command {
+	return []*cobra.Command{
+		newDocsCommand(diagnostics),
+		configinitcmd.NewSystemConfigCommand(cliBinaryName, configinitcmd.CommandGlobals{
+			JSON:    func() bool { return globals.json },
+			HomeDir: options.HomeDir,
+		}, configinitcmd.CommandDiagnostics{
+			Writer:  diagnostics.writer,
+			Verbose: diagnostics.verboseEnabled,
+		}),
+		newFactoryCommand(globals, diagnostics),
+		newInitCommand(globals, diagnostics),
+		newMCPCommand(options),
+		newModelsCommand(globals, diagnostics, operatorDefaults, options),
+		newRunCommand(globals, diagnostics, operatorDefaults, options),
+		newSubmitCommand(globals, diagnostics),
+		session,
+		newWorkCommand(globals, diagnostics),
+		newWorkflowCommand(globals, diagnostics, options),
+	}
+}
+
+func representativePersistentFlagBindings(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+) climanifestcobra.PersistentFlagBindings {
+	return climanifestcobra.PersistentFlagBindings{
+		Verbose:                    &diagnostics.verbose,
+		Debug:                      &diagnostics.debug,
+		Server:                     &globals.server,
+		JSON:                       &globals.json,
+		DefaultWorkerModelProvider: &operatorDefaults.defaultWorkerModelProvider,
+		DefaultWorkerModel:         &operatorDefaults.defaultWorkerModel,
+		FlagUsages: map[string]string{
+			"verbose": "emit concise command diagnostics to stderr",
+			"debug":   "emit lower-level command diagnostics where supported (implies --verbose)",
+			"server":  "factory API base URI (http:// or https://); HTTP client commands target this URI and you run binds locally to its host and port",
+			"json":    "emit structured JSON on stdout for supported commands; diagnostics remain on stderr",
+			"default-worker-model-provider": fmt.Sprintf(
+				"default worker model provider for model workers with omitted modelProvider (%s; DEFAULT resolves through lower-precedence concrete provider)",
+				interfaces.AcceptedPublicWorkerModelProviderSummary(),
+			),
+			"default-worker-model": "default worker model for model workers with omitted model",
+		},
+	}
+}
+
+func handwrittenSessionSubcommands(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	options RootCommandOptions,
+	generatedShow *cobra.Command,
+) []*cobra.Command {
+	return []*cobra.Command{
+		newSessionListCommand(diagnostics, options),
+		generatedShow,
+		newSessionDispatchesCommand(globals, diagnostics),
+		newSessionPauseCommand(globals, diagnostics),
+		newSessionResumeCommand(globals, diagnostics),
+		newSessionCreateCommand(diagnostics),
+		newSessionDeleteCommand(diagnostics),
+	}
+}
 
 func newRunCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, operatorDefaults *cliOperatorDefaultsOptions, rootOptions RootCommandOptions) *cobra.Command {
 	cfg := defaultcmd.ExplicitRunConfig()
@@ -389,15 +546,7 @@ func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 			"  # Target a different service port for list output.\n" +
 			"  " + cliBinaryName + " session list --port 9090",
 	}
-	sessionCmd.AddCommand(
-		newSessionListCommand(diagnostics, options),
-		newSessionShowCommand(globals, diagnostics),
-		newSessionDispatchesCommand(globals, diagnostics),
-		newSessionPauseCommand(globals, diagnostics),
-		newSessionResumeCommand(globals, diagnostics),
-		newSessionCreateCommand(diagnostics),
-		newSessionDeleteCommand(diagnostics),
-	)
+	sessionCmd.AddCommand(handwrittenSessionSubcommands(globals, diagnostics, options, newSessionShowCommand(globals, diagnostics))...)
 	return sessionCmd
 }
 
@@ -454,10 +603,10 @@ func newRepresentativeHandlerRegistry(
 			return runFactoryWithOptions(cmd, defaultcmd.OOTBRunConfig(), nil, globals, operatorDefaults, policy, rootOptions, true)
 		},
 		SessionShowRunE: commandregistry.SessionShowRunE(commandregistry.SessionShowBinding{
-			Server:            globals.server,
-			JSON:              globals.json,
-			Verbose:           diagnostics.verboseEnabled(),
-			Debug:             diagnostics.debug,
+			Server:            &globals.server,
+			JSON:              &globals.json,
+			Verbose:           diagnostics.verboseEnabled,
+			Debug:             &diagnostics.debug,
 			DiagnosticsWriter: diagnostics.writer,
 			ShowSession:       showSession,
 		}),
