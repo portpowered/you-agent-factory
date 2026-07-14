@@ -17,8 +17,10 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaceresponseevents "github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	"github.com/portpowered/infinite-you/pkg/work/content"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
 )
 
@@ -927,4 +929,43 @@ func assertInferenceProgressFragment(
 	if *fragment.ProviderSessionRef != *wantSession {
 		t.Fatalf("provider session = %#v, want %#v", fragment.ProviderSessionRef, wantSession)
 	}
+}
+
+func agyTimeoutPartialDraftPublished(published []InferenceProgressFragment) bool {
+	for _, fragment := range published {
+		draft, ok := fragment.CanonicalDraft.(interfaceresponseevents.Draft)
+		if !ok || draft.Kind != interfaceresponseevents.KindMessage || draft.Phase != interfaceresponseevents.PhaseCompleted {
+			continue
+		}
+		var payload interfaceresponseevents.MessagePayload
+		if err := json.Unmarshal(draft.Payload, &payload); err != nil || !payload.Partial {
+			continue
+		}
+		if len(payload.ContentBlocks) == 1 && payload.ContentBlocks[0].Text == "partial answer before timeout" {
+			return true
+		}
+	}
+	return false
+}
+
+type agyInferenceStubSession struct {
+	launch agypty.ProcessLaunch
+	result agypty.SessionResult
+}
+
+func (s *agyInferenceStubSession) Run(context.Context) (agypty.SessionResult, error) {
+	return s.result, nil
+}
+
+func (s *agyInferenceStubSession) Close() error { return nil }
+
+type agyInferenceStubAllocator struct {
+	sessions []*agyInferenceStubSession
+	result   agypty.SessionResult
+}
+
+func (a *agyInferenceStubAllocator) Allocate(_ context.Context, launch agypty.ProcessLaunch, _ agypty.SessionConfig) (agypty.PTYSession, error) {
+	session := &agyInferenceStubSession{launch: launch, result: a.result}
+	a.sessions = append(a.sessions, session)
+	return session, nil
 }
