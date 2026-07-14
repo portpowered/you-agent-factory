@@ -279,44 +279,78 @@ func factoryConfigInitLocalBindingTarget(
 ) (flagTarget, error) {
 	switch commandID {
 	case "you.factory.list":
-		if flag.Long == "dir" {
-			return requireStringBinding(flag.Long, bindings.FactoryListDir)
-		}
+		return factoryConfigInitListLocalBinding(flag, bindings)
 	case "you.factory.create":
-		switch flag.Long {
-		case "dir":
-			return requireStringBinding(flag.Long, bindings.FactoryCreateDir)
-		case "from":
-			return requireStringBinding(flag.Long, bindings.FactoryCreateFrom)
-		case "set-current":
-			return requireBoolBinding(flag.Long, bindings.FactoryCreateSetCurrent)
-		}
+		return factoryConfigInitCreateLocalBinding(flag, bindings)
 	case "you.factory.update":
-		switch flag.Long {
-		case "dir":
-			return requireStringBinding(flag.Long, bindings.FactoryUpdateDir)
-		case "from":
-			return requireStringBinding(flag.Long, bindings.FactoryUpdateFrom)
-		}
+		return factoryConfigInitUpdateLocalBinding(flag, bindings)
 	case "you.factory.delete":
-		if flag.Long == "dir" {
-			return requireStringBinding(flag.Long, bindings.FactoryDeleteDir)
-		}
+		return factoryConfigInitDeleteLocalBinding(flag, bindings)
 	case "you.factory.replace-current":
-		if flag.Long == "session" {
-			return requireStringBinding(flag.Long, bindings.FactoryReplaceSessionID)
-		}
+		return factoryConfigInitReplaceCurrentLocalBinding(flag, bindings)
 	case "you.init":
-		switch flag.Long {
-		case "dir":
-			return requireStringBinding(flag.Long, bindings.InitDir)
-		case "type":
-			return requireStringBinding(flag.Long, bindings.InitType)
-		case "executor":
-			return requireStringBinding(flag.Long, bindings.InitExecutor)
-		}
+		return factoryConfigInitInitLocalBinding(flag, bindings)
+	default:
+		return flagTarget{}, fmt.Errorf("unsupported local flag %q on %q", flag.Long, commandID)
 	}
-	return flagTarget{}, fmt.Errorf("unsupported local flag %q on %q", flag.Long, commandID)
+}
+
+func factoryConfigInitListLocalBinding(flag climanifest.Flag, bindings FactoryConfigInitFlagBindings) (flagTarget, error) {
+	if flag.Long == "dir" {
+		return requireStringBinding(flag.Long, bindings.FactoryListDir)
+	}
+	return flagTarget{}, fmt.Errorf("unsupported local flag %q on %q", flag.Long, "you.factory.list")
+}
+
+func factoryConfigInitCreateLocalBinding(flag climanifest.Flag, bindings FactoryConfigInitFlagBindings) (flagTarget, error) {
+	switch flag.Long {
+	case "dir":
+		return requireStringBinding(flag.Long, bindings.FactoryCreateDir)
+	case "from":
+		return requireStringBinding(flag.Long, bindings.FactoryCreateFrom)
+	case "set-current":
+		return requireBoolBinding(flag.Long, bindings.FactoryCreateSetCurrent)
+	default:
+		return flagTarget{}, fmt.Errorf("unsupported local flag %q on %q", flag.Long, "you.factory.create")
+	}
+}
+
+func factoryConfigInitUpdateLocalBinding(flag climanifest.Flag, bindings FactoryConfigInitFlagBindings) (flagTarget, error) {
+	switch flag.Long {
+	case "dir":
+		return requireStringBinding(flag.Long, bindings.FactoryUpdateDir)
+	case "from":
+		return requireStringBinding(flag.Long, bindings.FactoryUpdateFrom)
+	default:
+		return flagTarget{}, fmt.Errorf("unsupported local flag %q on %q", flag.Long, "you.factory.update")
+	}
+}
+
+func factoryConfigInitDeleteLocalBinding(flag climanifest.Flag, bindings FactoryConfigInitFlagBindings) (flagTarget, error) {
+	if flag.Long == "dir" {
+		return requireStringBinding(flag.Long, bindings.FactoryDeleteDir)
+	}
+	return flagTarget{}, fmt.Errorf("unsupported local flag %q on %q", flag.Long, "you.factory.delete")
+}
+
+func factoryConfigInitReplaceCurrentLocalBinding(flag climanifest.Flag, bindings FactoryConfigInitFlagBindings) (flagTarget, error) {
+	if flag.Long == "session" {
+		return requireStringBinding(flag.Long, bindings.FactoryReplaceSessionID)
+	}
+	return flagTarget{}, fmt.Errorf("unsupported local flag %q on %q", flag.Long, "you.factory.replace-current")
+}
+
+func factoryConfigInitInitLocalBinding(flag climanifest.Flag, bindings FactoryConfigInitFlagBindings) (flagTarget, error) {
+	switch flag.Long {
+	case "dir":
+		return requireStringBinding(flag.Long, bindings.InitDir)
+	case "type":
+		return requireStringBinding(flag.Long, bindings.InitType)
+	case "executor":
+		return requireStringBinding(flag.Long, bindings.InitExecutor)
+	default:
+		return flagTarget{}, fmt.Errorf("unsupported local flag %q on %q", flag.Long, "you.init")
+	}
 }
 
 func requireStringBinding(name string, target *string) (flagTarget, error) {
