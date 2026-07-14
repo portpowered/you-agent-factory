@@ -109,15 +109,24 @@ func TestNewWorkFamilyCommandExposesOnlyWorkFamily(t *testing.T) {
 
 func TestNewWorkFamilyCommandRegistersContractedFlagsAndArgs(t *testing.T) {
 	work, _ := mustWorkFamilyTree(t)
+	manifest := mustWorkFamilyManifest(t)
+	assertWorkShowContractedFlags(t, work)
+	assertWorkListContractedFlags(t, work)
+	assertWorkVisualizeContractedFlags(t, work)
+	assertWorkFamilyCompletionParity(t, work, manifest)
+}
+
+func mustWorkFamilyManifest(t *testing.T) climanifest.Manifest {
+	t.Helper()
 	manifest, err := generated.WorkFamilyManifest()
 	if err != nil {
 		t.Fatalf("WorkFamilyManifest() error = %v", err)
 	}
+	return manifest
+}
 
-	showRecord, err := manifest.CommandByID("you.work.show")
-	if err != nil {
-		t.Fatalf("CommandByID(you.work.show) error = %v", err)
-	}
+func assertWorkShowContractedFlags(t *testing.T, work *cobra.Command) {
+	t.Helper()
 	show, err := climanifestparity.FindCommandByPath(work, "work show")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(work show) error = %v", err)
@@ -132,11 +141,10 @@ func TestNewWorkFamilyCommandRegistersContractedFlagsAndArgs(t *testing.T) {
 	if err := show.Args(show, []string{}); err == nil {
 		t.Fatal("work show args = nil error, want required positional rejection")
 	}
+}
 
-	listRecord, err := manifest.CommandByID("you.work.list")
-	if err != nil {
-		t.Fatalf("CommandByID(you.work.list) error = %v", err)
-	}
+func assertWorkListContractedFlags(t *testing.T, work *cobra.Command) {
+	t.Helper()
 	list, err := climanifestparity.FindCommandByPath(work, "work list")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(work list) error = %v", err)
@@ -146,7 +154,10 @@ func TestNewWorkFamilyCommandRegistersContractedFlagsAndArgs(t *testing.T) {
 			t.Fatalf("work list missing local flag %q", flagName)
 		}
 	}
+}
 
+func assertWorkVisualizeContractedFlags(t *testing.T, work *cobra.Command) {
+	t.Helper()
 	visualize, err := climanifestparity.FindCommandByPath(work, "work visualize")
 	if err != nil {
 		t.Fatalf("FindCommandByPath(work visualize) error = %v", err)
@@ -154,6 +165,18 @@ func TestNewWorkFamilyCommandRegistersContractedFlagsAndArgs(t *testing.T) {
 	formatFlag := visualize.Flags().Lookup("format")
 	if formatFlag == nil || formatFlag.DefValue != "mermaid" {
 		t.Fatalf("format flag = %#v, want default mermaid", formatFlag)
+	}
+}
+
+func assertWorkFamilyCompletionParity(t *testing.T, work *cobra.Command, manifest climanifest.Manifest) {
+	t.Helper()
+	showRecord, err := manifest.CommandByID("you.work.show")
+	if err != nil {
+		t.Fatalf("CommandByID(you.work.show) error = %v", err)
+	}
+	listRecord, err := manifest.CommandByID("you.work.list")
+	if err != nil {
+		t.Fatalf("CommandByID(you.work.list) error = %v", err)
 	}
 
 	root := workCommandWithInheritedFlags(t, work)
