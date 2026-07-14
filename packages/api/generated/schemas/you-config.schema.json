@@ -7,22 +7,55 @@
   "additionalProperties": false,
   "properties": {
     "backendScopeID": {
-      "type": "string"
+      "type": "string",
+      "description": "Stable identifier for the local provider-backed runtime boundary owned by systemconfig.",
+      "examples": [
+        "local-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+      ]
     },
     "defaults": {
       "type": "object",
       "additionalProperties": false,
+      "description": "Operator defaults parsed by operatorconfig from file before env/flag resolution.",
+      "examples": [
+        {
+          "workerModelProvider": "claude",
+          "workerModel": "claude-sonnet"
+        }
+      ],
       "properties": {
         "workerModelProvider": {
-          "type": "string"
+          "type": "string",
+          "description": "Default worker model provider resolved through file, environment, and flag precedence.",
+          "examples": [
+            "claude",
+            "codex",
+            "openai"
+          ]
         },
         "workerModel": {
-          "type": "string"
+          "type": "string",
+          "description": "Default worker model name resolved through file, environment, and flag precedence.",
+          "examples": [
+            "claude-sonnet",
+            "gpt-5-codex"
+          ]
         }
       }
     },
     "workerPresets": {
       "type": "array",
+      "description": "Named worker model presets parsed from file only.",
+      "examples": [
+        [
+          {
+            "id": "research",
+            "modelProvider": "openai",
+            "model": "gpt-5.4",
+            "reasoningEffort": "high"
+          }
+        ]
+      ],
       "items": {
         "$ref": "#/$defs/workerPreset"
       }
@@ -39,17 +72,33 @@
       "properties": {
         "id": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "Required non-empty preset identifier after trim.",
+          "examples": [
+            "research",
+            "fast"
+          ]
         },
         "modelProvider": {
           "type": "string",
           "minLength": 1,
           "not": {
             "const": "DEFAULT"
-          }
+          },
+          "description": "Required non-empty model provider canonicalized to supported providers.",
+          "examples": [
+            "openai",
+            "claude",
+            "codex"
+          ]
         },
         "model": {
-          "type": "string"
+          "type": "string",
+          "description": "Optional model name trimmed when present.",
+          "examples": [
+            "gpt-5.4",
+            "claude-sonnet-4-20250514"
+          ]
         },
         "reasoningEffort": {
           "enum": [
@@ -58,7 +107,344 @@
             "low",
             "medium",
             "high"
+          ],
+          "description": "Optional reasoning effort level. Empty value is accepted.",
+          "examples": [
+            "",
+            "low",
+            "medium",
+            "high"
           ]
+        }
+      }
+    },
+    "fieldContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inventoryId",
+        "jsonPath",
+        "documentation",
+        "lifecycle",
+        "defaultEmptyBehavior"
+      ],
+      "properties": {
+        "inventoryId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "jsonPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "documentation": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        },
+        "defaultEmptyBehavior": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "contract": {
+    "formatVersion": "1.0.0",
+    "sharedConfigFile": {
+      "relativePath": ".you-agent-factory/config.json",
+      "resolvedBy": "defaultpaths.OperatorConfigPath(homeDir)"
+    },
+    "fields": {
+      "backendScopeID": {
+        "inventoryId": "backendScopeID",
+        "jsonPath": "backendScopeID",
+        "defaultEmptyBehavior": "missing, whitespace-only file, or empty value triggers EnsureLocalBackendScope to generate local-<uuid> and persist it",
+        "documentation": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.backend-scope-id",
+          "documentation": {
+            "title": {
+              "id": "config.backend-scope-id.title",
+              "canonicalEnglish": "Backend scope identifier"
+            },
+            "description": {
+              "id": "config.backend-scope-id.description",
+              "canonicalEnglish": "Stable identifier for the local provider-backed runtime boundary. Missing, whitespace-only, or empty values trigger EnsureLocalBackendScope to generate local-<uuid> and persist it through systemconfig."
+            }
+          },
+          "examples": [
+            "local-aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+          ],
+          "visibility": "public",
+          "sourceHash": "d84fba3e2ae63115c026f76e7c59e8420f512de2b56f679c87541248dbaf3552"
+        },
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.backend-scope-id",
+          "state": "active",
+          "since": "1.0.0"
+        }
+      },
+      "defaults": {
+        "inventoryId": "defaults",
+        "jsonPath": "defaults",
+        "defaultEmptyBehavior": "missing defaults object yields empty operator defaults",
+        "documentation": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.defaults",
+          "documentation": {
+            "title": {
+              "id": "config.defaults.title",
+              "canonicalEnglish": "Operator defaults"
+            },
+            "description": {
+              "id": "config.defaults.description",
+              "canonicalEnglish": "File-backed default worker model provider and model resolved through file, environment, and flag precedence layers."
+            }
+          },
+          "examples": [
+            {
+              "workerModelProvider": "claude",
+              "workerModel": "claude-sonnet"
+            }
+          ],
+          "visibility": "public",
+          "sourceHash": "8bdd73464dfb1f84fee58b77addb17af535142ce3efec7c7bc692a8dd03234ff"
+        },
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.defaults",
+          "state": "active",
+          "since": "1.0.0"
+        }
+      },
+      "defaults.workerModelProvider": {
+        "inventoryId": "defaults.workerModelProvider",
+        "jsonPath": "defaults.workerModelProvider",
+        "defaultEmptyBehavior": "missing or whitespace-only value is unset until env/flag layers apply; symbolic DEFAULT resolves through lower-precedence concrete provider",
+        "documentation": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.defaults.worker-model-provider",
+          "documentation": {
+            "title": {
+              "id": "config.defaults.worker-model-provider.title",
+              "canonicalEnglish": "Default worker model provider"
+            },
+            "description": {
+              "id": "config.defaults.worker-model-provider.description",
+              "canonicalEnglish": "Default model provider for workers when not overridden per preset or invocation. Values are trimmed and canonicalized; unsupported providers fail resolve. Symbolic DEFAULT resolves through lower-precedence concrete provider."
+            }
+          },
+          "examples": [
+            "claude",
+            "codex",
+            "openai"
+          ],
+          "visibility": "public",
+          "sourceHash": "d75dc9cff096885b6e5925c7a7e4381db6ee5e8e06ae2ee6c797a91cbc617b30"
+        },
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.defaults.worker-model-provider",
+          "state": "active",
+          "since": "1.0.0"
+        }
+      },
+      "defaults.workerModel": {
+        "inventoryId": "defaults.workerModel",
+        "jsonPath": "defaults.workerModel",
+        "defaultEmptyBehavior": "missing or whitespace-only value is unset until env/flag layers apply",
+        "documentation": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.defaults.worker-model",
+          "documentation": {
+            "title": {
+              "id": "config.defaults.worker-model.title",
+              "canonicalEnglish": "Default worker model"
+            },
+            "description": {
+              "id": "config.defaults.worker-model.description",
+              "canonicalEnglish": "Default model name for workers when not overridden per preset or invocation. Missing or whitespace-only values remain unset until env/flag layers apply."
+            }
+          },
+          "examples": [
+            "claude-sonnet",
+            "gpt-5-codex"
+          ],
+          "visibility": "public",
+          "sourceHash": "d6648c340057e48717f7908beb28fe8dd473c8c1a9698d7c284bc8774ebdac2c"
+        },
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.defaults.worker-model",
+          "state": "active",
+          "since": "1.0.0"
+        }
+      },
+      "workerPresets": {
+        "inventoryId": "workerPresets",
+        "jsonPath": "workerPresets",
+        "defaultEmptyBehavior": "missing workerPresets array is backward compatible and yields an empty preset list",
+        "documentation": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets",
+          "documentation": {
+            "title": {
+              "id": "config.worker-presets.title",
+              "canonicalEnglish": "Worker presets"
+            },
+            "description": {
+              "id": "config.worker-presets.description",
+              "canonicalEnglish": "Named worker model presets parsed from file only. Missing array is backward compatible and yields an empty preset list."
+            }
+          },
+          "examples": [
+            [
+              {
+                "id": "research",
+                "modelProvider": "openai",
+                "model": "gpt-5.4",
+                "reasoningEffort": "high"
+              }
+            ]
+          ],
+          "visibility": "public",
+          "sourceHash": "bb3e0f465efa56c86d0846c4dbbd6c8bdbd78629e2e63ebfd07a1cdb459c83e1"
+        },
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets",
+          "state": "active",
+          "since": "1.0.0"
+        }
+      },
+      "workerPresets[].id": {
+        "inventoryId": "workerPresets[].id",
+        "jsonPath": "workerPresets[].id",
+        "defaultEmptyBehavior": "required non-empty after trim; duplicate ids are rejected",
+        "documentation": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.id",
+          "documentation": {
+            "title": {
+              "id": "config.worker-presets.id.title",
+              "canonicalEnglish": "Worker preset identifier"
+            },
+            "description": {
+              "id": "config.worker-presets.id.description",
+              "canonicalEnglish": "Required non-empty preset identifier after trim. Duplicate ids are rejected."
+            }
+          },
+          "examples": [
+            "research",
+            "fast"
+          ],
+          "visibility": "public",
+          "sourceHash": "c76793d1fd697e087fbfa7a59b2bb2ff48940ff7214ac5cde1738b90ff3d8a01"
+        },
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.id",
+          "state": "active",
+          "since": "1.0.0"
+        }
+      },
+      "workerPresets[].modelProvider": {
+        "inventoryId": "workerPresets[].modelProvider",
+        "jsonPath": "workerPresets[].modelProvider",
+        "defaultEmptyBehavior": "required non-empty; canonicalized to supported providers; symbolic DEFAULT is rejected in presets",
+        "documentation": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.model-provider",
+          "documentation": {
+            "title": {
+              "id": "config.worker-presets.model-provider.title",
+              "canonicalEnglish": "Worker preset model provider"
+            },
+            "description": {
+              "id": "config.worker-presets.model-provider.description",
+              "canonicalEnglish": "Required non-empty model provider canonicalized to supported providers. Symbolic DEFAULT is rejected in presets."
+            }
+          },
+          "examples": [
+            "openai",
+            "claude",
+            "codex"
+          ],
+          "visibility": "public",
+          "sourceHash": "24af6bcc1f3b8e812e144fbdf1166a388d1f7331a58c2248a62ace098ba4a578"
+        },
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.model-provider",
+          "state": "active",
+          "since": "1.0.0"
+        }
+      },
+      "workerPresets[].model": {
+        "inventoryId": "workerPresets[].model",
+        "jsonPath": "workerPresets[].model",
+        "defaultEmptyBehavior": "optional; trimmed when present",
+        "documentation": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.model",
+          "documentation": {
+            "title": {
+              "id": "config.worker-presets.model.title",
+              "canonicalEnglish": "Worker preset model"
+            },
+            "description": {
+              "id": "config.worker-presets.model.description",
+              "canonicalEnglish": "Optional model name trimmed when present."
+            }
+          },
+          "examples": [
+            "gpt-5.4",
+            "claude-sonnet-4-20250514"
+          ],
+          "visibility": "public",
+          "sourceHash": "a4334fa56ef14b8f8015d36e3bb259f78e11007b92eb9d2e019db46df563c453"
+        },
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.model",
+          "state": "active",
+          "since": "1.0.0"
+        }
+      },
+      "workerPresets[].reasoningEffort": {
+        "inventoryId": "workerPresets[].reasoningEffort",
+        "jsonPath": "workerPresets[].reasoningEffort",
+        "defaultEmptyBehavior": "optional; empty value is accepted; supported values are minimal, low, medium, high",
+        "documentation": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.reasoning-effort",
+          "documentation": {
+            "title": {
+              "id": "config.worker-presets.reasoning-effort.title",
+              "canonicalEnglish": "Worker preset reasoning effort"
+            },
+            "description": {
+              "id": "config.worker-presets.reasoning-effort.description",
+              "canonicalEnglish": "Optional reasoning effort level. Empty value is accepted; supported values are minimal, low, medium, and high."
+            }
+          },
+          "examples": [
+            "",
+            "low",
+            "medium",
+            "high"
+          ],
+          "visibility": "public",
+          "sourceHash": "e86e22b0cc80dc31e5ae9137dfd66f86a61957be6d71684ef364a36379aa5a76"
+        },
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.worker-presets.reasoning-effort",
+          "state": "active",
+          "since": "1.0.0"
         }
       }
     }

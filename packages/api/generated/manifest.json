@@ -271,7 +271,7 @@
       "path": "generated/schemas/mock-workers.schema.json"
     },
     "generated.schemas.you-config": {
-      "artifactHash": "6f367e645304563d567ce89bf14549b94deb068c50f8ee3b45714da233360f5b",
+      "artifactHash": "c7a863e564778ec807fb0475de04a7dc8f1e67db1bf4a9344e9a51fdb78fec85",
       "documentation": {
         "documentation": {
           "description": {
@@ -288,7 +288,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.you-config",
-        "sourceHash": "6f367e645304563d567ce89bf14549b94deb068c50f8ee3b45714da233360f5b",
+        "sourceHash": "c7a863e564778ec807fb0475de04a7dc8f1e67db1bf4a9344e9a51fdb78fec85",
         "visibility": "public"
       },
       "family": "config",
