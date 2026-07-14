@@ -29,6 +29,7 @@ type Flag struct {
 	Default         string `json:"default"`
 	ChangedDefault  bool   `json:"changedDefault"`
 	NoOptionDefault string `json:"noOptionDefault"`
+	Completion      string `json:"completion"`
 	Visibility      string `json:"visibility"`
 }
 

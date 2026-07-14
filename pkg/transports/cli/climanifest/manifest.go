@@ -20,6 +20,43 @@ type Command struct {
 	Usage         Usage               `json:"usage"`
 	Arguments     map[string]Argument `json:"arguments,omitempty"`
 	Flags         map[string]Flag     `json:"flags,omitempty"`
+	Channels      Channels            `json:"channels,omitempty"`
+	Outputs       map[string]Output   `json:"outputs,omitempty"`
+	Exits         map[string]Exit     `json:"exits,omitempty"`
+	SideEffects   map[string]SideEffect `json:"sideEffects,omitempty"`
+	Constraints   Constraints         `json:"constraints,omitempty"`
+}
+
+// Channels carries declared input and output channel surfaces.
+type Channels struct {
+	Input  []string `json:"input"`
+	Output []string `json:"output"`
+}
+
+// Output is one declared command output record.
+type Output struct {
+	ID      string `json:"id"`
+	Channel string `json:"channel"`
+	Format  string `json:"format"`
+}
+
+// Exit is one declared process exit outcome.
+type Exit struct {
+	ID   string `json:"id"`
+	Code int    `json:"code"`
+	Kind string `json:"kind"`
+}
+
+// SideEffect is one declared command side effect.
+type SideEffect struct {
+	ID   string `json:"id"`
+	Kind string `json:"kind"`
+}
+
+// Constraints carries runtime and platform declarations.
+type Constraints struct {
+	Runtime   []string `json:"runtime"`
+	Platforms []string `json:"platforms"`
 }
 
 // Documentation carries shared documentation-schema fields used for help parity.
