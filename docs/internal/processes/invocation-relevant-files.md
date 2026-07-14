@@ -277,7 +277,10 @@ primary-result behavior.
   terminal `InvocationResponse` outcomes for every fidelity class (full-stream,
   partial-stream, snapshot-only, and final-only including Agy) plus the structured
   tool-lifecycle fixture via `AssertObservableToolLifecycle` before adding new
-  transport parity tests. While legacy response-stream
+  transport parity tests. Use `AssertPrimaryStreamModeParity` with
+  `ProjectPrimaryOnlyInvocation` and `ProjectResponseStreamInvocation` to prove
+  primary-only and response-stream observation modes agree on authoritative
+  terminal `InvocationResponse` outcomes for the same fixture run. While legacy response-stream
   consumers remain supported, carry an exact draft beside the compatibility
   fragment and let `pkg/factory/sessions/stream/manager.go` publish that draft
   directly; do not remap it through the lossy legacy fragment mapper. Keep the
