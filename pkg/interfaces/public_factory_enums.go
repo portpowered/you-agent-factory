@@ -43,6 +43,7 @@ var internalModelProviderToPublicWorkerModelProvider = map[ModelProvider]factory
 	ModelProviderKiro:     factoryapi.WorkerModelProviderKiro,
 	ModelProviderOpenCode: factoryapi.WorkerModelProviderOpenCode,
 	ModelProviderPi:       factoryapi.WorkerModelProviderPi,
+	ModelProviderAgy:      factoryapi.WorkerModelProviderAgy,
 }
 
 // PublicWorkerModelProviderFromInternal maps a canonical internal provider command to the generated public enum.
@@ -68,6 +69,8 @@ func InternalModelProviderFromPublicWorkerModelProvider(value factoryapi.WorkerM
 		return ModelProviderOpenCode, true
 	case publicFactoryWorkerModelProviderPi:
 		return ModelProviderPi, true
+	case publicFactoryWorkerModelProviderAgy:
+		return ModelProviderAgy, true
 	default:
 		return "", false
 	}
@@ -150,6 +153,7 @@ var publicFactoryWorkerModelProviderAliases = map[string]string{
 	publicFactoryWorkerModelProviderKiro:     publicFactoryWorkerModelProviderKiro,
 	publicFactoryWorkerModelProviderOpenCode: publicFactoryWorkerModelProviderOpenCode,
 	publicFactoryWorkerModelProviderPi:       publicFactoryWorkerModelProviderPi,
+	publicFactoryWorkerModelProviderAgy:      publicFactoryWorkerModelProviderAgy,
 }
 
 var publicFactoryWorkerProviderAliases = map[string]string{
@@ -285,6 +289,7 @@ const (
 	publicFactoryWorkerModelProviderKiro     = "KIRO"
 	publicFactoryWorkerModelProviderOpenCode = "OPENCODE"
 	publicFactoryWorkerModelProviderPi       = "PI"
+	publicFactoryWorkerModelProviderAgy      = "AGY"
 	publicFactoryWorkerProviderScriptWrap    = "SCRIPT_WRAP"
 )
 
@@ -315,9 +320,9 @@ var internalFactoryWorkerModelProviderAliases = map[string]string{
 	"openai":       publicFactoryWorkerModelProviderCodex,
 	"opencode":     publicFactoryWorkerModelProviderOpenCode,
 	"pi":           publicFactoryWorkerModelProviderPi,
-	"agy":          "agy",
-	"AGY":          "agy",
-	"antigravity":  "agy",
+	"agy":          publicFactoryWorkerModelProviderAgy,
+	"AGY":          publicFactoryWorkerModelProviderAgy,
+	"antigravity":  publicFactoryWorkerModelProviderAgy,
 }
 
 var internalFactoryWorkerProviderAliases = map[string]string{
@@ -462,8 +467,8 @@ func CanonicalizeReasoningEffort(value string) (string, bool) {
 // AcceptedPublicWorkerModelProviderSummary returns canonical provider names and
 // representative public aliases for operator-facing validation errors.
 func AcceptedPublicWorkerModelProviderSummary() string {
-	return "accepted canonical providers: CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE; " +
-		"accepted aliases include codex, claude, gemini, kiro-cli, opencode, agent, cursor, and anthropic"
+	return "accepted canonical providers: CLAUDE, CODEX, CURSOR, GEMINI, KIRO, OPENCODE, PI, AGY; " +
+		"accepted aliases include codex, claude, gemini, kiro-cli, opencode, pi, agy, agent, cursor, and anthropic"
 }
 
 // PermissivePublicFactoryWorkerProvider canonicalizes supported public worker providers and preserves unknown values.

@@ -8942,6 +8942,7 @@ components:
         - WorkerModelProviderKiro
         - WorkerModelProviderOpenCode
         - WorkerModelProviderPi
+        - WorkerModelProviderAgy
       enum:
         - CLAUDE
         - CODEX
@@ -8950,6 +8951,7 @@ components:
         - KIRO
         - OPENCODE
         - PI
+        - AGY
       x-enum-descriptions:
         - Claude model execution routed through the `claude` provider command.
         - Codex model execution routed through the `codex` provider command.
@@ -8958,6 +8960,7 @@ components:
         - Kiro model execution routed through the `kiro-cli` provider command.
         - OpenCode model execution routed through the `opencode` provider command.
         - Pi model execution routed through the `pi` provider command.
+        - Agy model execution routed through the `agy` provider command.
     WorkerModelLocality:
       type: string
       description: Provider locality for a model worker capability declaration.
