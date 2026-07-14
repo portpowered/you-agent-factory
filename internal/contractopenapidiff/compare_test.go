@@ -375,6 +375,28 @@ func TestCompareYAML_MajorWinsMixedFixture_ClassifiesMajor(t *testing.T) {
 	}
 }
 
+func TestCompareYAML_RemovePathParameterFixture_ClassifiesMajor(t *testing.T) {
+	t.Parallel()
+
+	before := readFixture(t, "remove-path-parameter", "before.yaml")
+	after := readFixture(t, "remove-path-parameter", "after.yaml")
+
+	result, err := contractopenapidiff.CompareYAML(before, after)
+	if err != nil {
+		t.Fatalf("CompareYAML() error = %v", err)
+	}
+	if result.Classification != contractopenapidiff.ClassificationMajor {
+		t.Fatalf("Classification = %q, want %q", result.Classification, contractopenapidiff.ClassificationMajor)
+	}
+
+	wantChanges := []contractopenapidiff.Change{
+		{Code: contractopenapidiff.CodeParameterRemoved, Path: "/pets.parameters[query:limit]"},
+	}
+	if !slices.Equal(result.Changes, wantChanges) {
+		t.Fatalf("Changes = %#v, want %#v", result.Changes, wantChanges)
+	}
+}
+
 func TestCompareYAML_UnsupportedOperationIDFixture_FailsClosed(t *testing.T) {
 	t.Parallel()
 
@@ -476,6 +498,31 @@ func TestCompareYAML_UnsupportedStructuralSurfaceFixtures_FailClosed(t *testing.
 			name:     "component-parameter-remove",
 			fixture:  "unsupported-component-parameter-remove",
 			wantPath: "components.parameters.Limit",
+		},
+		{
+			name:     "operation-security",
+			fixture:  "unsupported-operation-security",
+			wantPath: "GET /pets.security",
+		},
+		{
+			name:     "path-servers",
+			fixture:  "unsupported-path-servers",
+			wantPath: "/pets.servers",
+		},
+		{
+			name:     "media-type-encoding",
+			fixture:  "unsupported-media-type-encoding",
+			wantPath: "POST /pets.requestBody.content.multipart/form-data.encoding.file",
+		},
+		{
+			name:     "response-links",
+			fixture:  "unsupported-response-links",
+			wantPath: "GET /pets.responses.200.links.GetPet",
+		},
+		{
+			name:     "operation-callbacks",
+			fixture:  "unsupported-operation-callbacks",
+			wantPath: "POST /pets.callbacks.onData",
 		},
 	}
 	for _, tc := range cases {

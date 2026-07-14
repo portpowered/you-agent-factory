@@ -1,0 +1,23 @@
+openapi: 3.0.3
+info:
+  title: Unsupported Media Type Encoding Fixture
+  version: 1.0.0
+paths:
+  /pets:
+    post:
+      operationId: uploadPet
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+            encoding:
+              file:
+                contentType: image/png
+      responses:
+        '200':
+          description: Uploaded.

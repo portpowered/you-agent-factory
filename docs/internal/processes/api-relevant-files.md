@@ -97,7 +97,11 @@ Use this map when changing the public REST contract.
   fail closed instead of silently classifying as `patch`. Unhandled parameter
   serialization fields (`style`, `explode`, `allowReserved`), response `headers`,
   and non-schema `components` maps (`parameters`, `securitySchemes`, etc.) also
-  fail closed with path-aware `UnsupportedDiffError` outcomes.
+  fail closed with path-aware `UnsupportedDiffError` outcomes. Operation
+  `security`, path-item `parameters`/`servers`, media-type `encoding`/`example`,
+  response `links`, and operation `callbacks` must also fail closed or classify
+  explicitly; path-item parameter removal reuses `collectParameterChanges` as
+  major with `openapi.remove.parameter`.
 - Focused fixtures live under
   `internal/contractopenapidiff/testdata/`; prove end-to-end outcomes in
   `internal/contractopenapidiff/compare_test.go` and the consolidated matrix in

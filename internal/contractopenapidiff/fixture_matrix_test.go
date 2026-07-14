@@ -157,6 +157,42 @@ var openAPIDiffFixtureMatrix = []struct {
 		failClosed: true,
 	},
 	{
+		name:           "remove-path-parameter",
+		fixture:        "remove-path-parameter",
+		category:       categoryParameter,
+		classification: contractopenapidiff.ClassificationMajor,
+	},
+	{
+		name:       "unsupported-operation-security",
+		fixture:    "unsupported-operation-security",
+		category:   categoryFailClosed,
+		failClosed: true,
+	},
+	{
+		name:       "unsupported-path-servers",
+		fixture:    "unsupported-path-servers",
+		category:   categoryFailClosed,
+		failClosed: true,
+	},
+	{
+		name:       "unsupported-media-type-encoding",
+		fixture:    "unsupported-media-type-encoding",
+		category:   categoryFailClosed,
+		failClosed: true,
+	},
+	{
+		name:       "unsupported-response-links",
+		fixture:    "unsupported-response-links",
+		category:   categoryFailClosed,
+		failClosed: true,
+	},
+	{
+		name:       "unsupported-operation-callbacks",
+		fixture:    "unsupported-operation-callbacks",
+		category:   categoryFailClosed,
+		failClosed: true,
+	},
+	{
 		name:       "unsupported-component-parameter-remove",
 		fixture:    "unsupported-component-parameter-remove",
 		category:   categoryFailClosed,

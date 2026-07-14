@@ -85,15 +85,19 @@ func externalDocsStructuralEqual(before, after *openapi3.ExternalDocs) bool {
 }
 
 func compareServersStructural(before, after openapi3.Servers) error {
+	return compareServersAt("servers", before, after)
+}
+
+func compareServersAt(path string, before, after openapi3.Servers) error {
 	if len(before) != len(after) {
-		return unsupportedStructuralDiff("servers")
+		return unsupportedStructuralDiff(path)
 	}
 	for i := range before {
 		if before[i] == nil || after[i] == nil {
-			return unsupportedStructuralDiff("servers")
+			return unsupportedStructuralDiff(path)
 		}
 		if before[i].URL != after[i].URL {
-			return unsupportedStructuralDiff("servers[" + fmt.Sprint(i) + "].url")
+			return unsupportedStructuralDiff(path + "[" + fmt.Sprint(i) + "].url")
 		}
 	}
 	return nil
@@ -167,10 +171,18 @@ func collectPathItemChanges(path string, before, after *openapi3.PathItem) ([]Ch
 	if before == nil || after == nil {
 		return nil, unsupportedStructuralDiff("paths." + path)
 	}
+	var changes []Change
+	pathParamChanges, err := collectParameterChanges(path, before.Parameters, after.Parameters)
+	if err != nil {
+		return nil, err
+	}
+	changes = append(changes, pathParamChanges...)
+	if err := compareServersAt(path+".servers", before.Servers, after.Servers); err != nil {
+		return nil, err
+	}
+
 	beforeOps := before.Operations()
 	afterOps := after.Operations()
-
-	var changes []Change
 	for method := range beforeOps {
 		if after.GetOperation(method) == nil {
 			changes = appendMajorChange(changes, CodeOperationRemoved, operationPath(method, path))
@@ -204,6 +216,12 @@ func collectOperationChanges(opPath string, before, after *openapi3.Operation) (
 	}
 	if before.Deprecated != after.Deprecated {
 		return nil, unsupportedStructuralDiff(opPath + ".deprecated")
+	}
+	if err := checkUnsupportedOperationSecurity(opPath, before, after); err != nil {
+		return nil, err
+	}
+	if err := checkUnsupportedOperationCallbacks(opPath, before, after); err != nil {
+		return nil, err
 	}
 
 	var changes []Change
@@ -319,6 +337,9 @@ func collectResponsesChanges(opPath string, before, after *openapi3.Responses) (
 		if err := checkUnsupportedResponseHeaders(opPath+".responses."+status+".headers", beforeResponse.Headers, afterResponse.Headers); err != nil {
 			return nil, err
 		}
+		if err := checkUnsupportedResponseLinks(opPath+".responses."+status+".links", beforeResponse.Links, afterResponse.Links); err != nil {
+			return nil, err
+		}
 		responseChanges, err := collectMediaTypeChanges(opPath+".responses."+status+".content", beforeResponse.Content, afterResponse.Content)
 		if err != nil {
 			return nil, err
@@ -338,11 +359,15 @@ func collectMediaTypeChanges(path string, before, after openapi3.Content) ([]Cha
 		if !ok {
 			return nil, unsupportedStructuralDiff(path + "." + mediaType)
 		}
-		schemaChanges, err := collectSchemaRefChanges(path+"."+mediaType+".schema", beforeMedia.Schema, afterMedia.Schema)
+		mediaPath := path + "." + mediaType
+		schemaChanges, err := collectSchemaRefChanges(mediaPath+".schema", beforeMedia.Schema, afterMedia.Schema)
 		if err != nil {
 			return nil, err
 		}
 		changes = append(changes, schemaChanges...)
+		if err := checkUnsupportedMediaTypeResiduals(mediaPath, beforeMedia, afterMedia); err != nil {
+			return nil, err
+		}
 	}
 	return changes, nil
 }
@@ -378,6 +403,70 @@ func collectComponentChanges(before, after *openapi3.Components) ([]Change, erro
 		return nil, err
 	}
 	return changes, nil
+}
+
+func checkUnsupportedOperationSecurity(opPath string, before, after *openapi3.Operation) error {
+	if securityRequirementsEqual(before.Security, after.Security) {
+		return nil
+	}
+	return unsupportedStructuralDiff(opPath + ".security")
+}
+
+func securityRequirementsEqual(before, after *openapi3.SecurityRequirements) bool {
+	if before == nil && after == nil {
+		return true
+	}
+	if before == nil || after == nil {
+		return false
+	}
+	return reflect.DeepEqual(*before, *after)
+}
+
+func checkUnsupportedOperationCallbacks(opPath string, before, after *openapi3.Operation) error {
+	return checkNamedMapResidual(opPath+".callbacks", before.Callbacks, after.Callbacks)
+}
+
+func checkUnsupportedMediaTypeResiduals(path string, before, after *openapi3.MediaType) error {
+	if !anyEqual(before.Example, after.Example) {
+		return unsupportedStructuralDiff(path + ".example")
+	}
+	if !reflect.DeepEqual(before.Examples, after.Examples) {
+		return unsupportedStructuralDiff(path + ".examples")
+	}
+	return checkNamedMapResidual(path+".encoding", before.Encoding, after.Encoding)
+}
+
+func checkUnsupportedResponseLinks(path string, before, after openapi3.Links) error {
+	return checkNamedMapResidual(path, before, after)
+}
+
+func checkNamedMapResidual[T any](path string, before, after map[string]T) error {
+	if reflect.DeepEqual(before, after) {
+		return nil
+	}
+	allNames := make(map[string]struct{})
+	for name := range before {
+		allNames[name] = struct{}{}
+	}
+	for name := range after {
+		allNames[name] = struct{}{}
+	}
+	names := make([]string, 0, len(allNames))
+	for name := range allNames {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		beforeValue, beforeOK := before[name]
+		afterValue, afterOK := after[name]
+		if !beforeOK || !afterOK {
+			return unsupportedStructuralDiff(path + "." + name)
+		}
+		if !reflect.DeepEqual(beforeValue, afterValue) {
+			return unsupportedStructuralDiff(path + "." + name)
+		}
+	}
+	return unsupportedStructuralDiff(path)
 }
 
 func checkUnsupportedParameterResiduals(path string, before, after *openapi3.Parameter) error {
@@ -466,32 +555,7 @@ func checkUnsupportedComponentResiduals(before, after *openapi3.Components) erro
 }
 
 func checkComponentMapResidual[T any](path string, before, after map[string]T) error {
-	if reflect.DeepEqual(before, after) {
-		return nil
-	}
-	allNames := make(map[string]struct{})
-	for name := range before {
-		allNames[name] = struct{}{}
-	}
-	for name := range after {
-		allNames[name] = struct{}{}
-	}
-	names := make([]string, 0, len(allNames))
-	for name := range allNames {
-		names = append(names, name)
-	}
-	slices.Sort(names)
-	for _, name := range names {
-		beforeValue, beforeOK := before[name]
-		afterValue, afterOK := after[name]
-		if !beforeOK || !afterOK {
-			return unsupportedStructuralDiff(path + "." + name)
-		}
-		if !reflect.DeepEqual(beforeValue, afterValue) {
-			return unsupportedStructuralDiff(path + "." + name)
-		}
-	}
-	return unsupportedStructuralDiff(path)
+	return checkNamedMapResidual(path, before, after)
 }
 
 func boolPtrEqual(before, after *bool) bool {
