@@ -390,10 +390,86 @@ func NewLegacyWorkFamilyCommand() *cobra.Command {
 	return newWorkCommand(globals, diagnostics)
 }
 
+// NewLegacyWorkFamilyRootForParity builds an isolated you → work tree with shared
+// persistent globals for generator-vs-legacy parity tests.
+func NewLegacyWorkFamilyRootForParity() *cobra.Command {
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	root.AddCommand(newWorkCommand(globals, diagnostics))
+	return root
+}
+
+// NewWorkFamilyParityRoots builds matching legacy and generated you → work parity
+// roots that share one persistent globals shell.
+func NewWorkFamilyParityRoots(
+	registry *commandregistry.Registry,
+	bindings climanifestcobra.WorkFamilyBindings,
+) (legacyRoot, generatedRoot *cobra.Command, err error) {
+	if registry == nil {
+		return nil, nil, fmt.Errorf("build work family parity roots: registry is required")
+	}
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+
+	legacyRoot = newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	legacyRoot.AddCommand(newWorkCommand(globals, diagnostics))
+
+	generatedWork, err := climanifestcobra.NewWorkFamilyCommand(registry, bindings)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build work family parity roots: %w", err)
+	}
+	generatedRoot = newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	generatedRoot.AddCommand(generatedWork)
+	return legacyRoot, generatedRoot, nil
+}
+
+// NewWorkFamilyParityRootsWithProductionHandlers builds legacy and generated
+// parity roots wired with production work handler bindings.
+func NewWorkFamilyParityRootsWithProductionHandlers() (legacyRoot, generatedRoot *cobra.Command, err error) {
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+
+	legacyRoot = newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	legacyRoot.AddCommand(newWorkCommand(globals, diagnostics))
+
+	registry, bindings, err := newWorkHandlerRegistry(globals, diagnostics)
+	if err != nil {
+		return nil, nil, err
+	}
+	generatedWork, err := climanifestcobra.NewWorkFamilyCommand(registry, bindings)
+	if err != nil {
+		return nil, nil, err
+	}
+	generatedRoot = newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	generatedRoot.AddCommand(generatedWork)
+	return legacyRoot, generatedRoot, nil
+}
+
 func newWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
 	workCmd := &cobra.Command{
 		Use:   "work",
 		Short: "Inspect work from a running factory",
+		Long: "Inspect and control work on a running you-agent-factory service.\n\n" +
+			"Subcommands:\n" +
+			"  list       list work from GET /factory-sessions/{session_id}/work with optional filters and pagination\n" +
+			"  show       show one work item from GET /factory-sessions/{session_id}/work/{work_id}\n" +
+			"  move       move one work item to another authored state through POST /factory-sessions/{session_id}/work/{work_id}/move\n" +
+			"  visualize  read a local FACTORY_REQUEST_BATCH JSON file and render its dependency graph to stdout\n\n" +
+			"API-backed list, show, and move commands target the default compatibility session unless --session is set. " +
+			"Use global --json to emit API-shaped responses on stdout; diagnostics stay on stderr when --verbose or --debug is set.",
+		Example: "  # List work on the default compatibility session.\n" +
+			"  " + cliBinaryName + " work list\n\n" +
+			"  # Show one work item after submit.\n" +
+			"  " + cliBinaryName + " work show work-123\n\n" +
+			"  # Render a local batch dependency graph.\n" +
+			"  " + cliBinaryName + " work visualize batch.json > graph.mermaid",
 	}
 	workCmd.AddCommand(newWorkListCommand(globals, diagnostics))
 	workCmd.AddCommand(newWorkShowCommand(globals, diagnostics))
@@ -452,6 +528,8 @@ func newWorkListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 			"--work-type-name matches workTypeName exactly. " +
 			"--trace-id matches traceId or currentChainingTraceId exactly. " +
 			"Combine filters with --max-results and --next-token to page through the filtered result set.",
+		Example: "  " + cliBinaryName + " work list\n\n" +
+			"  " + cliBinaryName + " work list --name startup --max-results 25",
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg.Server = globals.server
@@ -489,6 +567,8 @@ func newWorkShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 			"Run " + cliBinaryName + " session list to discover live session ids.\n\n" +
 			"After submit, use " + cliBinaryName + " work list --name <name> to find work ids, " +
 			"then " + cliBinaryName + " work show <work-id> to verify one item without JSON pagination.",
+		Example: "  " + cliBinaryName + " work show work-123\n\n" +
+			"  " + cliBinaryName + " --json work show work-123",
 		Args:    cobra.ExactArgs(1),
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -520,6 +600,8 @@ func newWorkMoveCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOp
 			"Run " + cliBinaryName + " session list to discover live session ids.\n\n" +
 			"Moves are rejected while the work item is in an active dispatch. " +
 			"Repeating the same --request-id after a successful move returns 409 without a second mutation.",
+		Example: "  " + cliBinaryName + " work move work-123 ready\n\n" +
+			"  " + cliBinaryName + " work move work-123 ready --request-id op-1",
 		Args:    cobra.ExactArgs(2),
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -625,17 +707,47 @@ func newSessionShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 	return cmd
 }
 
-func newWorkHandlerRegistry(
-	globals *cliGlobalOptions,
-	diagnostics *cliDiagnosticsOptions,
-) (*commandregistry.Registry, error) {
+func newWorkFamilyBindings(globals *cliGlobalOptions) (climanifestcobra.WorkFamilyBindings, *string) {
 	listCfg := workcli.ListConfig{Server: globals.server}
 	showCfg := workcli.ShowConfig{Server: globals.server}
 	moveCfg := workcli.MoveConfig{Server: globals.server}
 	var visualizeFormat string
-	return commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
+	return climanifestcobra.WorkFamilyBindings{
+		ListConfig:      &listCfg,
+		ShowConfig:      &showCfg,
+		MoveConfig:      &moveCfg,
+		VisualizeFormat: &visualizeFormat,
+		FlagUsages:      workFamilyFlagUsages(),
+	}, &visualizeFormat
+}
+
+func workFamilyFlagUsages() map[string]string {
+	return map[string]string{
+		"state-name":     "filter by current state name",
+		"state-type":     "filter by current state type (INITIAL, PROCESSING, TERMINAL, FAILED)",
+		"name":           "filter by case-insensitive substring of work name (applied before pagination)",
+		"work-type-name": "filter by exact workTypeName (applied before pagination)",
+		"trace-id":       "filter by exact traceId or currentChainingTraceId (applied before pagination)",
+		"sort-by":        "sort returned work by field (state.type)",
+		"max-results":    "maximum work items to return per page after server-side filters",
+		"next-token":     "pagination cursor returned by a previous work list response",
+		"session":        "target one live factory session; omit to use the default compatibility session",
+		"request-id":     "optional client idempotency key for operator moves",
+		"format":         "output format: mermaid or markdown-mermaid",
+	}
+}
+
+func newWorkHandlerRegistry(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+) (*commandregistry.Registry, climanifestcobra.WorkFamilyBindings, error) {
+	bindings, visualizeFormatPtr := newWorkFamilyBindings(globals)
+	listCfg := bindings.ListConfig
+	showCfg := bindings.ShowConfig
+	moveCfg := bindings.MoveConfig
+	registry, err := commandregistry.NewWorkRegistry(commandregistry.WorkHandlers{
 		ListRunE: commandregistry.ListRunE(commandregistry.ListBinding{
-			Config:            &listCfg,
+			Config:            listCfg,
 			Server:            &globals.server,
 			JSON:              &globals.json,
 			Verbose:           diagnostics.verboseEnabled,
@@ -644,7 +756,7 @@ func newWorkHandlerRegistry(
 			ListWork:          listWork,
 		}),
 		ShowRunE: commandregistry.ShowRunE(commandregistry.ShowBinding{
-			Config:            &showCfg,
+			Config:            showCfg,
 			Server:            &globals.server,
 			JSON:              &globals.json,
 			Verbose:           diagnostics.verboseEnabled,
@@ -653,7 +765,7 @@ func newWorkHandlerRegistry(
 			ShowWork:          showWork,
 		}),
 		MoveRunE: commandregistry.MoveRunE(commandregistry.MoveBinding{
-			Config:            &moveCfg,
+			Config:            moveCfg,
 			Server:            &globals.server,
 			JSON:              &globals.json,
 			Verbose:           diagnostics.verboseEnabled,
@@ -662,10 +774,14 @@ func newWorkHandlerRegistry(
 			MoveWork:          moveWork,
 		}),
 		VisualizeRunE: commandregistry.VisualizeRunE(commandregistry.VisualizeBinding{
-			Format:    &visualizeFormat,
+			Format:    visualizeFormatPtr,
 			Visualize: visualizeWork,
 		}),
 	})
+	if err != nil {
+		return nil, climanifestcobra.WorkFamilyBindings{}, err
+	}
+	return registry, bindings, nil
 }
 
 func newRepresentativeHandlerRegistry(

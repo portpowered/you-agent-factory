@@ -232,7 +232,9 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `NewWorkFamilyComponents`, `NewWorkFamilyCommandFromManifest`) and builds
   `you work` → `you work list|show|move|visualize` from embedded generated metadata
   plus registry-attached handwritten handlers; isolated legacy construction for parity
-  uses `cli.NewLegacyWorkFamilyCommand`. Production root cutover is
+  uses `cli.NewLegacyWorkFamilyCommand` and shared-root helpers
+  `NewLegacyWorkFamilyRootForParity`, `NewWorkFamilyParityRoots`, and
+  `NewWorkFamilyParityRootsWithProductionHandlers`. Production root cutover is
   controlled by `useGeneratedRepresentativeFamily` in `pkg/transports/cli/root_work.go`
   (`newRootCommandWithGeneratedRepresentativeFamily` with
   `newLegacyRootCommandWithOptions` rollback). Generated-vs-legacy parity for the
@@ -240,7 +242,11 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   (`CompareConstructorIdentityParity`, `CompareConstructorHelpParity`,
   `CompareConstructorParseParity`, `CompareConstructorCompletionInventoryParity`,
   `TestGeneratedVsLegacyParityMatrix_RepresentativeFamily`) with isolated legacy
-  construction via `cli.NewLegacyRepresentativeFamilyCommand`.
+  construction via `cli.NewLegacyRepresentativeFamilyCommand`. Work-family parity
+  mirrors the same package (`TestGeneratedVsLegacyParityMatrix_WorkFamily`,
+  `TestProductionManifestParsingParity_WorkFamily`,
+  `TestProductionManifestOutputModeParity_WorkFamily`) using the shared-root helpers
+  above; `WorkFamilyBindings.FlagUsages` bridges handwritten local flag help text.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/transports/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before

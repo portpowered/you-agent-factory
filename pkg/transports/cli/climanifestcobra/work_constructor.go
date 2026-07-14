@@ -28,6 +28,9 @@ type WorkFamilyBindings struct {
 	ShowConfig      *workcli.ShowConfig
 	MoveConfig      *workcli.MoveConfig
 	VisualizeFormat *string
+	// FlagUsages supplies Cobra help text for local flags when the manifest does
+	// not carry per-flag usage strings.
+	FlagUsages map[string]string
 }
 
 // NewWorkFamilyCommand builds the work you.work → list/show/move/visualize tree
@@ -247,7 +250,7 @@ func registerWorkLocalFlags(cmd *cobra.Command, record climanifest.Command, bind
 		if err != nil {
 			return err
 		}
-		if err := registerFlag(cmd.Flags(), flag, target, ""); err != nil {
+		if err := registerFlag(cmd.Flags(), flag, target, workFlagUsage(bindings, flag.Long)); err != nil {
 			return fmt.Errorf("register local flag %q: %w", flag.Long, err)
 		}
 		if err := applyFlagContract(cmd.Flags().Lookup(flag.Long), flag); err != nil {
@@ -324,4 +327,11 @@ func visualizeLocalBindingTarget(flag climanifest.Flag, format *string) (flagTar
 	default:
 		return flagTarget{}, fmt.Errorf("unsupported visualize local flag %q", flag.Long)
 	}
+}
+
+func workFlagUsage(bindings WorkFamilyBindings, longName string) string {
+	if bindings.FlagUsages == nil {
+		return ""
+	}
+	return bindings.FlagUsages[longName]
 }

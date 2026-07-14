@@ -104,6 +104,20 @@ func TestPositionalArgsFromManifestCoversCardinalityModes(t *testing.T) {
 	if err := cmd.Args(cmd, []string{"one", "two"}); err != nil {
 		t.Fatalf("max args error = %v", err)
 	}
+
+	twoRequired := positionalArgsFromManifest(climanifest.Command{
+		Arguments: map[string]climanifest.Argument{
+			"arg0": {Position: 0, MinCardinality: 1, MaxCardinality: 1},
+			"arg1": {Position: 1, MinCardinality: 1, MaxCardinality: 1},
+		},
+	})
+	cmd = &cobra.Command{Use: "move", Args: twoRequired}
+	if err := cmd.Args(cmd, []string{"work-1", "ready"}); err != nil {
+		t.Fatalf("two required args error = %v", err)
+	}
+	if err := cmd.Args(cmd, []string{"work-1"}); err == nil {
+		t.Fatal("two required args accepted one positional, want rejection")
+	}
 }
 
 func TestBuildCommandFromRecordAppliesHiddenVisibility(t *testing.T) {
