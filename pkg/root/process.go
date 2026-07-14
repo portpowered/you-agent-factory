@@ -34,10 +34,15 @@ func Main() int {
 	}, Dependencies{})
 }
 
-type productionGraphBuilder struct{}
+type productionGraphBuilder struct {
+	buildMCP wire.MCPExecutionBuilder
+}
 
-func (productionGraphBuilder) Build(ctx context.Context, request GraphRequest) (*ApplicationGraph, error) {
-	return wire.BuildProcessGraph(ctx, request.Startup, request.Policy)
+func (builder productionGraphBuilder) Build(ctx context.Context, request GraphRequest) (*ApplicationGraph, error) {
+	if builder.buildMCP == nil {
+		builder.buildMCP = wire.BuildMCPExecutionService
+	}
+	return wire.BuildProcessGraphWithMCPBuilder(ctx, request.Startup, request.Policy, builder.buildMCP)
 }
 
 type productionInitializer struct{}

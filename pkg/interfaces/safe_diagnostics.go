@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // SafeWorkDiagnostics carries the canonical dashboard-safe execution

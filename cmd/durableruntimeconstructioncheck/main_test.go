@@ -34,7 +34,7 @@ func TestScanAcceptsApplicationCompositionAndApprovedHarness(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
 		"pkg/factory/sessions/execution/service.go":             "testdata/approved_composition.go.txt",
 		"pkg/factory/sessions/execution/testharness/harness.go": "testdata/approved_harness.go.txt",
-		"pkg/api/transport_test.go":                             "testdata/approved_transport_test.go.txt",
+		"pkg/transports/http/transport_test.go":                 "testdata/approved_transport_test.go.txt",
 	})
 
 	findings, err := scan(root)
@@ -43,6 +43,27 @@ func TestScanAcceptsApplicationCompositionAndApprovedHarness(t *testing.T) {
 	}
 	if len(findings) != 0 {
 		t.Fatalf("approved ownership produced findings: %v", findings)
+	}
+}
+
+func TestScanRejectsTransportApplicationComposition(t *testing.T) {
+	root := fixtureRepository(t, map[string]string{
+		"pkg/transports/cli/run/compose.go": "testdata/prohibited_transport_composition.go.txt",
+	})
+
+	findings, err := scan(root)
+	if err != nil {
+		t.Fatalf("scan fixture: %v", err)
+	}
+	for _, prohibited := range []string{
+		"BuildInvocationBootstrap",
+		"NewExecutionService",
+		"NewFakeServiceFromContractFixtures",
+		"ProjectPersistence",
+	} {
+		if !containsFinding(findings, prohibited) {
+			t.Errorf("findings %#v do not report %s", findings, prohibited)
+		}
 	}
 }
 

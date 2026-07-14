@@ -380,9 +380,9 @@ func isBackendCoveragePackage(importPath string) bool {
 		return true
 	case !strings.HasPrefix(importPath, modulePath+"/pkg/"):
 		return false
-	case importPath == modulePath+"/pkg/api/generated":
+	case importPath == modulePath+"/pkg/transports/http/generated":
 		return false
-	case importPath == modulePath+"/pkg/generatedclient":
+	case importPath == modulePath+"/pkg/transports/http/client":
 		return false
 	case strings.HasPrefix(importPath, modulePath+"/pkg/testutil"):
 		return false

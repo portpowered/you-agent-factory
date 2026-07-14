@@ -3,8 +3,8 @@ package contentcontract
 import (
 	"encoding/json"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // PartsFromGenerated translates supported generated work content parts into the

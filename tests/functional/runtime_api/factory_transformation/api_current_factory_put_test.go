@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/api/apitypes"
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
@@ -556,7 +556,7 @@ func staleVersionCase(name string, logicalDelta int64, physicalDelta time.Durati
 				Physical: current.Physical.Add(physicalDelta),
 			})
 		},
-			wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
+		wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
 		wantState: "task",
 	}
 }
@@ -567,7 +567,7 @@ func missingVersionCase() advancedSaveVersionCase {
 		version: func(t *testing.T, current factoryapi.HybridLogicalTimestamp) any {
 			return nil
 		},
-			wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
+		wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
 		wantState: "task",
 	}
 }
@@ -578,7 +578,7 @@ func missingLogicalVersionCase() advancedSaveVersionCase {
 		version: func(t *testing.T, current factoryapi.HybridLogicalTimestamp) any {
 			return map[string]any{"physical": current.Physical.Add(time.Second).UTC().Format(time.RFC3339Nano)}
 		},
-			wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
+		wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
 		wantState: "task",
 	}
 }
@@ -589,7 +589,7 @@ func missingPhysicalVersionCase() advancedSaveVersionCase {
 		version: func(t *testing.T, current factoryapi.HybridLogicalTimestamp) any {
 			return map[string]any{"logical": strconv.FormatInt(current.Logical.Int64()+1, 10)}
 		},
-			wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
+		wantCode:  factoryapi.ErrorResponseCodeSTALEFACTORYVERSION,
 		wantState: "task",
 	}
 }

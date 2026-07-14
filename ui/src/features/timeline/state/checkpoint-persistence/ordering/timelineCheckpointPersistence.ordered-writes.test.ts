@@ -71,14 +71,23 @@ async function readStoredCheckpoint(
   return read;
 }
 
-async function releaseCommittedSequenceRead(
+async function releaseAtomicWrite(
   fixture: ReturnType<
     typeof createControlledIndexedDBTestDouble<StoredCheckpointEnvelope>
   >,
+  replaces = true,
 ) {
   fixture.controls.succeed("open");
   await flushPromiseContinuations();
   fixture.controls.succeed("get");
+  if (replaces) {
+    fixture.controls.succeed("put");
+  }
+  fixture.controls.completeTransaction();
+  await flushPromiseContinuations();
+  await flushPromiseContinuations();
+  await flushPromiseContinuations();
+  await flushPromiseContinuations();
   await flushPromiseContinuations();
   await flushPromiseContinuations();
 }
@@ -99,23 +108,10 @@ describe("timeline checkpoint same-stream write ordering", () => {
     );
 
     expect(fixture.controls.pendingOperations()).toEqual(["open"]);
-    await releaseCommittedSequenceRead(fixture);
-    expect(fixture.controls.pendingOperations()).toEqual(["open"]);
-    fixture.controls.succeed("open");
-    await flushPromiseContinuations();
-    fixture.controls.succeed("put");
-    expect(fixture.controls.pendingOperations()).toEqual([]);
-    fixture.controls.completeTransaction();
-    await flushPromiseContinuations();
-    await flushPromiseContinuations();
-    await flushPromiseContinuations();
-    await flushPromiseContinuations();
+    await releaseAtomicWrite(fixture);
 
     expect(fixture.controls.pendingOperations()).toEqual(["open"]);
-    fixture.controls.succeed("open");
-    await flushPromiseContinuations();
-    fixture.controls.succeed("put");
-    fixture.controls.completeTransaction();
+    await releaseAtomicWrite(fixture);
     await Promise.all([first, newer]);
 
     await expect(readStoredCheckpoint(fixture)).resolves.toMatchObject({
@@ -144,13 +140,7 @@ describe("timeline checkpoint same-stream write ordering", () => {
     await flushPromiseContinuations();
 
     expect(fixture.controls.pendingOperations()).toEqual(["open"]);
-    await releaseCommittedSequenceRead(fixture);
-    expect(fixture.controls.pendingOperations()).toEqual(["open"]);
-    fixture.controls.succeed("open");
-    await flushPromiseContinuations();
-    expect(fixture.controls.pendingOperations()).toEqual(["put"]);
-    fixture.controls.succeed("put");
-    fixture.controls.completeTransaction();
+    await releaseAtomicWrite(fixture);
     await Promise.all([newerWrite, olderWrite]);
 
     await expect(readStoredCheckpoint(fixture)).resolves.toMatchObject({
@@ -179,11 +169,7 @@ describe("timeline checkpoint same-stream write ordering", () => {
     await flushPromiseContinuations();
 
     expect(fixture.controls.pendingOperations()).toEqual(["open"]);
-    await releaseCommittedSequenceRead(fixture);
-    fixture.controls.succeed("open");
-    await flushPromiseContinuations();
-    fixture.controls.succeed("put");
-    fixture.controls.completeTransaction();
+    await releaseAtomicWrite(fixture);
     await Promise.all([first, equal]);
 
     await expect(readStoredCheckpoint(fixture)).resolves.toMatchObject({
@@ -234,12 +220,6 @@ describe("timeline checkpoint independent stream writes", () => {
     await flushPromiseContinuations();
     fixture.controls.succeed("get");
     fixture.controls.succeed("get");
-    await flushPromiseContinuations();
-    await flushPromiseContinuations();
-    expect(fixture.controls.pendingOperations()).toEqual(["open", "open"]);
-    fixture.controls.succeed("open");
-    fixture.controls.succeed("open");
-    await flushPromiseContinuations();
     expect(fixture.controls.pendingOperations()).toEqual(["put", "put"]);
 
     fixture.controls.succeed("put");
@@ -282,11 +262,7 @@ describe("timeline checkpoint lane lifecycle", () => {
       streamIdentity,
     );
 
-    await releaseCommittedSequenceRead(fixture);
-    fixture.controls.succeed("open");
-    await flushPromiseContinuations();
-    fixture.controls.succeed("put");
-    fixture.controls.completeTransaction();
+    await releaseAtomicWrite(fixture);
     await first;
     await flushPromiseContinuations();
 
@@ -297,11 +273,7 @@ describe("timeline checkpoint lane lifecycle", () => {
     );
 
     expect(fixture.controls.pendingOperations()).toEqual(["open"]);
-    await releaseCommittedSequenceRead(fixture);
-    fixture.controls.succeed("open");
-    await flushPromiseContinuations();
-    fixture.controls.succeed("put");
-    fixture.controls.completeTransaction();
+    await releaseAtomicWrite(fixture);
     await next;
 
     expect([...fixture.records.values()]).toEqual([
@@ -326,11 +298,7 @@ describe("timeline checkpoint durable admission lifecycle", () => {
       streamIdentity,
     );
 
-    await releaseCommittedSequenceRead(fixture);
-    fixture.controls.succeed("open");
-    await flushPromiseContinuations();
-    fixture.controls.succeed("put");
-    fixture.controls.completeTransaction();
+    await releaseAtomicWrite(fixture);
     await committed;
     await flushPromiseContinuations();
 
@@ -345,7 +313,8 @@ describe("timeline checkpoint durable admission lifecycle", () => {
       streamIdentity,
     );
     expect(fixture.controls.pendingOperations()).toEqual(["open"]);
-    await releaseCommittedSequenceRead(fixture);
+    await releaseAtomicWrite(fixture, false);
+    await releaseAtomicWrite(fixture, false);
     await Promise.all([older, equal]);
 
     expect(fixture.controls.pendingOperations()).toEqual([]);
@@ -388,7 +357,8 @@ describe("timeline checkpoint durable admission lifecycle", () => {
       streamIdentity,
     );
 
-    await releaseCommittedSequenceRead(fixture);
+    await releaseAtomicWrite(fixture, false);
+    await releaseAtomicWrite(fixture, false);
     await Promise.all([older, equal]);
 
     expect(fixture.controls.pendingOperations()).toEqual([]);
@@ -419,11 +389,7 @@ describe("timeline checkpoint clear lifecycle", () => {
       checkpoint(82, "event-82", 82),
       streamIdentity,
     );
-    await releaseCommittedSequenceRead(fixture);
-    fixture.controls.succeed("open");
-    await flushPromiseContinuations();
-    fixture.controls.succeed("put");
-    fixture.controls.completeTransaction();
+    await releaseAtomicWrite(fixture);
     await committed;
     await flushPromiseContinuations();
 
@@ -441,11 +407,7 @@ describe("timeline checkpoint clear lifecycle", () => {
       replayCheckpoint,
       streamIdentity,
     );
-    await releaseCommittedSequenceRead(fixture);
-    fixture.controls.succeed("open");
-    await flushPromiseContinuations();
-    fixture.controls.succeed("put");
-    fixture.controls.completeTransaction();
+    await releaseAtomicWrite(fixture);
     await replayed;
 
     expect([...fixture.records.values()]).toEqual([

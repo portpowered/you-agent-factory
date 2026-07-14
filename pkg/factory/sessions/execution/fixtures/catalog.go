@@ -47,7 +47,7 @@ const (
 
 // ContractFixtureCatalogRelativePath is the repository-relative path to the durable
 // session contract fixture catalog consumed by FakeService and downstream cells.
-const ContractFixtureCatalogRelativePath = "pkg/api/testdata/durable-session-contract-fixtures.json"
+const ContractFixtureCatalogRelativePath = "pkg/transports/http/testdata/durable-session-contract-fixtures.json"
 
 // Published fixture scenario IDs are stable identifiers downstream CLI, MCP, API,
 // and website cells can import for deterministic Factory Session verification.

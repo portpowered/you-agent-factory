@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
-	"github.com/portpowered/infinite-you/pkg/apisurface"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // ProjectCheckpointArtifactRef maps one internal checkpoint record to public
@@ -87,10 +87,10 @@ func JavaScriptRuntimeStateFromCheckpoints(
 	for _, record := range records {
 		projected := ProjectCheckpointRef(record)
 		state.Checkpoints = append(state.Checkpoints, interfaces.FactorySessionJavaScriptCheckpointRef{
-			ID:        projected.Id,
-			Label:     stringValue(projected.Label),
-			Summary:   stringValue(projected.Summary),
-			Timestamp: timeValue(projected.Timestamp),
+			ID:          projected.Id,
+			Label:       stringValue(projected.Label),
+			Summary:     stringValue(projected.Summary),
+			Timestamp:   timeValue(projected.Timestamp),
 			ArtifactRef: projectInterfaceArtifactRef(projected.ArtifactRef),
 		})
 	}

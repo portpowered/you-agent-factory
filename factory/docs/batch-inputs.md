@@ -44,7 +44,7 @@ narrow verification path from the repository root:
 
 ```sh
 go test ./pkg/workers/prompting -run TestPromptRenderer_ResolvesCheckedInPlannerFactoryDocs -count=1
-go test ./pkg/cli/submit -run TestSubmitBatch_DryRunFactoryDocsBatchInputExample -count=1
+go test ./pkg/transports/cli/submit -run TestSubmitBatch_DryRunFactoryDocsBatchInputExample -count=1
 ```
 
 The first command is the doc-path smoke check: it renders

@@ -80,10 +80,10 @@ func disabledZap() *zap.Logger { return zap.NewNop() }`,
 
 func TestScanAllowsNarrowCompositionOwners(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
-		"pkg/cli/root.go": `package cli
+		"pkg/transports/cli/root.go": `package cli
 import "github.com/portpowered/infinite-you/pkg/logging"
 func compose() { _, _ = logging.BuildLogger(false, false) }`,
-		"pkg/cli/terminalpolicy/policy.go": `package terminalpolicy
+		"pkg/transports/cli/terminalpolicy/policy.go": `package terminalpolicy
 import "github.com/portpowered/infinite-you/pkg/logging"
 func compose() { _, _ = logging.BuildLogger(false, false) }`,
 		"pkg/logging/logger.go": `package logging

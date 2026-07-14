@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	initcmd "github.com/portpowered/infinite-you/pkg/cli/init"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 )
 
 // TestInitFactory_AgentSlotResourceAlignmentRunsWithMockWorkers proves the default
@@ -65,9 +65,9 @@ func TestInitFactory_AgentSlotResourceAlignmentRunsWithMockWorkers(t *testing.T)
 	h.RunUntilComplete(t, 15*time.Second)
 
 	h.Assert().
-		HasTokenInPlace(initcmd.DefaultFactoryInputType + ":complete").
-		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":init").
-		HasNoTokenInPlace(initcmd.DefaultFactoryInputType + ":failed").
+		HasTokenInPlace(initcmd.DefaultFactoryInputType+":complete").
+		HasNoTokenInPlace(initcmd.DefaultFactoryInputType+":init").
+		HasNoTokenInPlace(initcmd.DefaultFactoryInputType+":failed").
 		PlaceTokenCount(initcmd.DefaultFactoryInputType+":complete", 1).
 		PlaceTokenCount("agent-slot:available", 1)
 

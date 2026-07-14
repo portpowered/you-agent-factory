@@ -186,9 +186,16 @@ root.
 | `pkg/runtimehost`, `pkg/composebridge` | `pkg/wire` | **Batch 008 — Legacy composition-root deletion.** Remove each exception when transports and `pkg/initializer` consume the explicit graph and no caller needs the runtime-host facade or composition bridge. |
 
 Generated-code exceptions are a separate policy class, not migration roots:
-`pkg/generatedclient`, `pkg/api/generated`, and generated Go files carrying the
-standard `Code generated ... DO NOT EDIT.` header. They may contain generated
-transport contracts or clients but must never own handwritten product behavior.
+`pkg/transports/http/client`, `pkg/transports/http/generated`, and generated Go
+files carrying the standard `Code generated ... DO NOT EDIT.` header. They may
+contain generated transport contracts or clients but must never own handwritten
+product behavior.
+
+The historical transport roots `pkg/api`, `pkg/apisurface`, `pkg/cli`,
+`pkg/mcp`, and `pkg/generatedclient` are retired. Repository code imports their
+canonical successors under `pkg/transports`; the package-boundary guard rejects
+reintroduction of those imports and handwritten Go inside generated-only
+transport packages.
 
 Historical model and hosted-worker roots are a prohibited policy class, not
 migration exceptions. `pkg/modelhost`, `pkg/localmodels`, and

@@ -28,8 +28,8 @@ func TestIsBackendCoveragePackage(t *testing.T) {
 	}{
 		{name: "factory command", importPath: modulePath + "/cmd/factory", want: true},
 		{name: "backend package", importPath: modulePath + "/pkg/config", want: true},
-		{name: "generated api package", importPath: modulePath + "/pkg/api/generated", want: false},
-		{name: "generated client package", importPath: modulePath + "/pkg/generatedclient", want: false},
+		{name: "generated api package", importPath: modulePath + "/pkg/transports/http/generated", want: false},
+		{name: "generated client package", importPath: modulePath + "/pkg/transports/http/client", want: false},
 		{name: "test helper package", importPath: modulePath + "/pkg/testutil/runtimefixtures", want: false},
 		{name: "functional test package", importPath: modulePath + "/tests/functional/runtime_api", want: false},
 		{name: "ui package", importPath: modulePath + "/ui", want: false},
@@ -82,7 +82,7 @@ func TestResolveCoverageLaneDefaults(t *testing.T) {
 	if !slices.Contains(coverPackages, modulePath+"/pkg/config") {
 		t.Fatalf("cover packages missing backend package: %v", coverPackages)
 	}
-	if slices.Contains(coverPackages, modulePath+"/pkg/generatedclient") {
+	if slices.Contains(coverPackages, modulePath+"/pkg/transports/http/client") {
 		t.Fatalf("cover packages unexpectedly include generated client: %v", coverPackages)
 	}
 	if slices.Contains(coverPackages, modulePath+"/pkg/testutil") {
@@ -194,7 +194,7 @@ func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfile(t *testing.T) {
 	profilePath := writeCoverageProfile(t, strings.Join([]string{
 		"mode: count",
 		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
-		modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+		modulePath + "/pkg/transports/http/client/client.go:1.1,2.1 4 0",
 		"",
 	}, "\n"))
 
@@ -207,7 +207,7 @@ func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfile(t *testing.T) {
 		[]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
-			modulePath + "/pkg/generatedclient",
+			modulePath + "/pkg/transports/http/client",
 		},
 		80,
 		emptyCoverageBaseline,
@@ -236,7 +236,7 @@ func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfileWithOKSummary(t *
 	profilePath := writeCoverageProfile(t, strings.Join([]string{
 		"mode: count",
 		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
-		modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+		modulePath + "/pkg/transports/http/client/client.go:1.1,2.1 4 0",
 		"",
 	}, "\n"))
 
@@ -249,7 +249,7 @@ func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfileWithOKSummary(t *
 		[]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
-			modulePath + "/pkg/generatedclient",
+			modulePath + "/pkg/transports/http/client",
 		},
 		80,
 		emptyCoverageBaseline,
@@ -278,20 +278,20 @@ func TestEvaluateCoverageFlagsBackendPackagesMissingFromProfileWithCoverpkgOKSum
 	profilePath := writeCoverageProfile(t, strings.Join([]string{
 		"mode: count",
 		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
-		modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+		modulePath + "/pkg/transports/http/client/client.go:1.1,2.1 4 0",
 		"",
 	}, "\n"))
 
 	result, totalLine, err := evaluateCoverage(
 		"total: (statements) 82.5%\n",
-		"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements in "+modulePath+"/pkg/config, "+modulePath+"/pkg/service, "+modulePath+"/pkg/generatedclient\n"+
+		"ok  "+modulePath+"/pkg/config\t0.123s\tcoverage: 0.0% of statements in "+modulePath+"/pkg/config, "+modulePath+"/pkg/service, "+modulePath+"/pkg/transports/http/client\n"+
 			"ok  "+modulePath+"/pkg/service\t(cached)\tcoverage: 100.0% of statements\n",
 		profilePath,
 		repoRoot,
 		[]string{
 			modulePath + "/pkg/config",
 			modulePath + "/pkg/service",
-			modulePath + "/pkg/generatedclient",
+			modulePath + "/pkg/transports/http/client",
 		},
 		80,
 		emptyCoverageBaseline,
@@ -357,7 +357,7 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackages(t *testing.T) {
 	profilePath := writeCoverageProfile(t, strings.Join([]string{
 		"mode: count",
 		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
-		modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+		modulePath + "/pkg/transports/http/client/client.go:1.1,2.1 4 0",
 		modulePath + "/pkg/testutil/runtimefixtures/factory.go:1.1,2.1 3 0",
 		"",
 	}, "\n"))
@@ -365,13 +365,13 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackages(t *testing.T) {
 	result, totalLine, err := evaluateCoverage(
 		"total: (statements) 81.0%\n",
 		modulePath+"/pkg/service\t\tcoverage: 100.0% of statements\n"+
-			modulePath+"/pkg/generatedclient\t\tcoverage: 0.0% of statements\n"+
+			modulePath+"/pkg/transports/http/client\t\tcoverage: 0.0% of statements\n"+
 			modulePath+"/pkg/testutil/runtimefixtures\t\tcoverage: 0.0% of statements\n",
 		profilePath,
 		repoRoot,
 		[]string{
 			modulePath + "/pkg/service",
-			modulePath + "/pkg/generatedclient",
+			modulePath + "/pkg/transports/http/client",
 			modulePath + "/pkg/testutil/runtimefixtures",
 		},
 		80,
@@ -399,7 +399,7 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackagesWithOKSummary(t *testi
 	profilePath := writeCoverageProfile(t, strings.Join([]string{
 		"mode: count",
 		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
-		modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+		modulePath + "/pkg/transports/http/client/client.go:1.1,2.1 4 0",
 		modulePath + "/pkg/testutil/runtimefixtures/factory.go:1.1,2.1 3 0",
 		"",
 	}, "\n"))
@@ -407,13 +407,13 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackagesWithOKSummary(t *testi
 	result, totalLine, err := evaluateCoverage(
 		"total: (statements) 81.0%\n",
 		"ok  "+modulePath+"/pkg/service\t0.111s\tcoverage: 100.0% of statements\n"+
-			"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements\n"+
+			"ok  "+modulePath+"/pkg/transports/http/client\t(cached)\tcoverage: 0.0% of statements\n"+
 			"ok  "+modulePath+"/pkg/testutil/runtimefixtures\t0.321s\tcoverage: 0.0% of statements\n",
 		profilePath,
 		repoRoot,
 		[]string{
 			modulePath + "/pkg/service",
-			modulePath + "/pkg/generatedclient",
+			modulePath + "/pkg/transports/http/client",
 			modulePath + "/pkg/testutil/runtimefixtures",
 		},
 		80,
@@ -441,7 +441,7 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackagesWithCoverpkgOKSummary(
 	profilePath := writeCoverageProfile(t, strings.Join([]string{
 		"mode: count",
 		modulePath + "/pkg/service/factory.go:1.1,2.1 5 2",
-		modulePath + "/pkg/generatedclient/client.go:1.1,2.1 4 0",
+		modulePath + "/pkg/transports/http/client/client.go:1.1,2.1 4 0",
 		modulePath + "/pkg/testutil/runtimefixtures/factory.go:1.1,2.1 3 0",
 		"",
 	}, "\n"))
@@ -449,13 +449,13 @@ func TestEvaluateCoverageSkipsExcludedZeroCoveragePackagesWithCoverpkgOKSummary(
 	result, totalLine, err := evaluateCoverage(
 		"total: (statements) 81.0%\n",
 		"ok  "+modulePath+"/pkg/service\t0.111s\tcoverage: 100.0% of statements\n"+
-			"ok  "+modulePath+"/pkg/generatedclient\t(cached)\tcoverage: 0.0% of statements in "+modulePath+"/pkg/generatedclient, "+modulePath+"/pkg/service\n"+
+			"ok  "+modulePath+"/pkg/transports/http/client\t(cached)\tcoverage: 0.0% of statements in "+modulePath+"/pkg/transports/http/client, "+modulePath+"/pkg/service\n"+
 			"ok  "+modulePath+"/pkg/testutil/runtimefixtures\t0.321s\tcoverage: 0.0% of statements in "+modulePath+"/pkg/testutil/runtimefixtures, "+modulePath+"/pkg/service\n",
 		profilePath,
 		repoRoot,
 		[]string{
 			modulePath + "/pkg/service",
-			modulePath + "/pkg/generatedclient",
+			modulePath + "/pkg/transports/http/client",
 			modulePath + "/pkg/testutil/runtimefixtures",
 		},
 		80,

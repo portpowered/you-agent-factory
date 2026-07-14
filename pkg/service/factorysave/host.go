@@ -3,7 +3,7 @@ package factorysave
 import (
 	"context"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/api/generated"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // Host exposes only the definition-owned save operation needed by this
