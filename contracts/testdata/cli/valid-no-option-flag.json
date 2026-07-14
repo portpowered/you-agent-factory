@@ -1,0 +1,69 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.enable": {
+      "id": "example.factory.enable",
+      "name": "enable",
+      "path": "example factory enable",
+      "aliases": [],
+      "groupId": "factory",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.enable",
+        "documentation": {
+          "title": {
+            "id": "example.factory.enable.title",
+            "canonicalEnglish": "Enable a factory feature"
+          },
+          "description": {
+            "id": "example.factory.enable.description",
+            "canonicalEnglish": "Enables a factory feature using a boolean flag that accepts no explicit option value."
+          }
+        },
+        "examples": [
+          "example factory enable --force"
+        ],
+        "visibility": "public",
+        "sourceHash": "3333444455556666777788889999000011112222aaaabbbbccccddddeeeeffff"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.enable",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "enable",
+        "example": "  example factory enable --force"
+      },
+      "flags": {
+        "example.factory.enable.flag.force": {
+          "id": "example.factory.enable.flag.force",
+          "long": "force",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.factory.enable.flag.force",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      }
+    }
+  }
+}

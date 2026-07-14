@@ -1,0 +1,48 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.dispatch": {
+      "id": "example.factory.dispatch",
+      "name": "dispatch",
+      "path": "example factory dispatch",
+      "aliases": [],
+      "groupId": "factory",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.dispatch",
+        "documentation": {
+          "title": {
+            "id": "example.factory.dispatch.title",
+            "canonicalEnglish": "Dispatch factory work"
+          },
+          "description": {
+            "id": "example.factory.dispatch.description",
+            "canonicalEnglish": "Dispatches work through a handler with an invalid stable identity."
+          }
+        },
+        "examples": [
+          "example factory dispatch"
+        ],
+        "visibility": "public",
+        "sourceHash": "cccc3333dddd4444eeee5555ffff66667777888899990000aaaa1111bbbb2222"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.dispatch",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "dispatch",
+        "example": "  example factory dispatch"
+      },
+      "handler": {
+        "id": "Invalid_Handler",
+        "operationId": "submitWorkBySessionId"
+      }
+    }
+  }
+}

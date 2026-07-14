@@ -139,7 +139,7 @@ func executeSessionRun(
 
 	readDone := startPTYCapture(reader, cfg, &mu, &buf, &capacityHit, &lastByteAt)
 
-	timer := time.NewTimer(timeUntilTimeout(lastByteAt, hardDeadline, cfg))
+	timer := time.NewTimer(timeUntilTimeout(readLastByteAt(&mu, &lastByteAt), hardDeadline, cfg))
 	defer timer.Stop()
 
 	var (
@@ -152,20 +152,21 @@ func executeSessionRun(
 		select {
 		case waitErr = <-waitDone:
 			timer.Stop()
-			return finishSessionRun(reader, readDone, &mu, buf, capacityHit, timedOut, waitErr, proc, runErr)
+			return finishSessionRun(reader, readDone, &mu, &buf, &capacityHit, timedOut, waitErr, proc, runErr)
 		case <-ctx.Done():
 			timer.Stop()
 			_ = proc.Terminate()
 			waitErr = <-waitDone
-			return finishSessionRun(reader, readDone, &mu, buf, capacityHit, timedOut, waitErr, proc, ctx.Err())
+			return finishSessionRun(reader, readDone, &mu, &buf, &capacityHit, timedOut, waitErr, proc, ctx.Err())
 		case <-timer.C:
-			if sessionRunTimedOut(time.Now(), hardDeadline, cfg, lastByteAt) {
+			lastByte := readLastByteAt(&mu, &lastByteAt)
+			if sessionRunTimedOut(time.Now(), hardDeadline, cfg, lastByte) {
 				timedOut = true
 				_ = proc.Terminate()
 				waitErr = <-waitDone
-				return finishSessionRun(reader, readDone, &mu, buf, capacityHit, timedOut, waitErr, proc, nil)
+				return finishSessionRun(reader, readDone, &mu, &buf, &capacityHit, timedOut, waitErr, proc, nil)
 			}
-			timer.Reset(timeUntilTimeout(lastByteAt, hardDeadline, cfg))
+			timer.Reset(timeUntilTimeout(lastByte, hardDeadline, cfg))
 		}
 	}
 }
@@ -211,6 +212,12 @@ func startPTYCapture(
 	return readDone
 }
 
+func readLastByteAt(mu *sync.Mutex, lastByteAt *time.Time) time.Time {
+	mu.Lock()
+	defer mu.Unlock()
+	return *lastByteAt
+}
+
 func sessionRunTimedOut(now, hardDeadline time.Time, cfg SessionConfig, lastByteAt time.Time) bool {
 	if !now.Before(hardDeadline) {
 		return true
@@ -222,8 +229,8 @@ func finishSessionRun(
 	reader io.ReadCloser,
 	readDone <-chan struct{},
 	mu *sync.Mutex,
-	buf []byte,
-	capacityHit bool,
+	buf *[]byte,
+	capacityHit *bool,
 	timedOut bool,
 	waitErr error,
 	proc *sessionProcess,
@@ -232,8 +239,8 @@ func finishSessionRun(
 	closePTYReader(reader)
 	<-readDone
 	mu.Lock()
-	resultBuf := append([]byte(nil), buf...)
-	hit := capacityHit
+	resultBuf := append([]byte(nil), (*buf)...)
+	hit := *capacityHit
 	mu.Unlock()
 	return finalizeSessionResult(resultBuf, hit, timedOut, waitErr, proc), runErr
 }

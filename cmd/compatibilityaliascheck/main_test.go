@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -70,21 +69,6 @@ func repositoryRoot(t *testing.T) string {
 	root, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {
 		t.Fatalf("repository root: %v", err)
-	}
-	return root
-}
-
-func fixtureRepository(t *testing.T, files map[string]string) string {
-	t.Helper()
-	root := t.TempDir()
-	for relative, contents := range files {
-		path := filepath.Join(root, filepath.FromSlash(relative))
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatalf("create fixture directory: %v", err)
-		}
-		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
-			t.Fatalf("write fixture %s: %v", relative, err)
-		}
 	}
 	return root
 }

@@ -1,0 +1,68 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.publish": {
+      "id": "example.factory.publish",
+      "name": "publish",
+      "path": "example factory publish",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.publish",
+        "documentation": {
+          "title": {
+            "id": "example.factory.publish.title",
+            "canonicalEnglish": "Publish factory artifacts"
+          },
+          "description": {
+            "id": "example.factory.publish.description",
+            "canonicalEnglish": "Publishes factory artifacts with an invalid no-option default on a string flag."
+          }
+        },
+        "examples": [
+          "example factory publish"
+        ],
+        "visibility": "public",
+        "sourceHash": "5555666677778888999900001111222233334444aaaabbbbccccddddeeeeffff"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.publish",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "publish",
+        "example": "  example factory publish"
+      },
+      "flags": {
+        "example.factory.publish.flag.channel": {
+          "id": "example.factory.publish.flag.channel",
+          "long": "channel",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.factory.publish.flag.channel",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      }
+    }
+  }
+}

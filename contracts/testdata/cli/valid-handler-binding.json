@@ -1,0 +1,48 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.invoke": {
+      "id": "example.factory.invoke",
+      "name": "invoke",
+      "path": "example factory invoke",
+      "aliases": [],
+      "groupId": "factory",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.invoke",
+        "documentation": {
+          "title": {
+            "id": "example.factory.invoke.title",
+            "canonicalEnglish": "Invoke a factory session"
+          },
+          "description": {
+            "id": "example.factory.invoke.description",
+            "canonicalEnglish": "Invokes one factory session through a bound handler and optional OpenAPI operation."
+          }
+        },
+        "examples": [
+          "example factory invoke --session-id sess-123"
+        ],
+        "visibility": "public",
+        "sourceHash": "bbbb2222cccc3333dddd4444eeee5555ffff66667777888899990000aaaa1111"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.invoke",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "invoke",
+        "example": "  example factory invoke --session-id sess-123"
+      },
+      "handler": {
+        "id": "example.factory.invoke.handler",
+        "operationId": "invokeFactorySessionBySessionId"
+      }
+    }
+  }
+}

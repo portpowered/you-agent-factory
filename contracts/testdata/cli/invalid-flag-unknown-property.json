@@ -1,0 +1,69 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.inspect": {
+      "id": "example.factory.inspect",
+      "name": "inspect",
+      "path": "example factory inspect",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.inspect",
+        "documentation": {
+          "title": {
+            "id": "example.factory.inspect.title",
+            "canonicalEnglish": "Inspect factory state"
+          },
+          "description": {
+            "id": "example.factory.inspect.description",
+            "canonicalEnglish": "Inspects factory state with an invalid unknown flag property."
+          }
+        },
+        "examples": [
+          "example factory inspect"
+        ],
+        "visibility": "public",
+        "sourceHash": "4444555566667777888899990000111122223333aaaabbbbccccddddeeeeffff"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.inspect",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "inspect",
+        "example": "  example factory inspect"
+      },
+      "flags": {
+        "example.factory.inspect.flag.output": {
+          "id": "example.factory.inspect.flag.output",
+          "long": "output",
+          "shorthand": "o",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.factory.inspect.flag.output",
+            "state": "active",
+            "since": "1.0.0"
+          },
+          "unknownField": "not-allowed"
+        }
+      }
+    }
+  }
+}
