@@ -552,6 +552,15 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
 - `internal/releasesmoke/harness.go` isolates spawned `you run` smoke processes from
   the developer's real `HOME` so `tests/release` stays hermetic through
   `make test`.
+- `internal/builtcliacceptance` owns the hermetic built-CLI acceptance harness for
+  the S24 cross-surface matrix: `NewHarness` builds `./cmd/factory`, `NewSession`
+  allocates isolated home/log/work directories, `ProcessEnvForIsolatedHome` redirects
+  profile env vars, `WithNoExternalServer` reserves a loopback `--server` URL without
+  a pre-running listener, and `ScenarioFailure` carries exit status plus stdout/stderr
+  tails for scenario mismatches. Focused harness proof lives in
+  `tests/functional/acceptance/harness_smoke_test.go`; later S24 scenario stories
+  should compose scenario assertions on top of this package rather than re-building
+  binary/home/log wiring in each test file.
 - `pkg/factory/packages/catalog.go` owns packaged factory lookup and metadata;
   payload sources live under `pkg/factory/packages/definitions/`, and config
   initialization is the only catalog-to-disk installation boundary. Named
