@@ -263,17 +263,17 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 	duration := time.Since(started)
 	commandDiagnostics := commandDiagnostics(execReq, result, duration, false)
 	providerSession := effectiveProviderSession(req, result)
-	cursorProvider := req.ModelProvider == string(interfaces.ModelProviderCursor)
+	providerUsesStructuredCompletion := providerRequiresInferenceCompletion(req.ModelProvider)
 	if err != nil {
 		logger.Error("inference dispatch failed with error",
 			providerLogFields(req, "error", err.Error())...)
 		providerErr := normalizeProviderExecutionError(
 			req.ModelProvider, result, err, providerSession,
-			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
+			providerInferenceFailureDiagnostics(req.ModelProvider, commandDiagnostics, result),
 		)
 		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result, duration)...)
 		logger.Error("inferencer: request failed",
-			cursorFailureLogFields(req, cursorProvider, result, "has_error", true)...)
+			providerLogFields(req, "has_error", true)...)
 		p.publishFailureFragment(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr)
 		return interfaces.InferenceResponse{}, providerErr
 	}
@@ -285,17 +285,17 @@ func (p *ScriptWrapProvider) Execute(ctx context.Context, req interfaces.RunnerE
 				"stderr_bytes", len(result.Stderr))...)
 		providerErr := normalizeProviderExitFailure(
 			req.ModelProvider, result, providerSession,
-			cursorInferenceFailureDiagnostics(cursorProvider, commandDiagnostics, result),
+			providerInferenceFailureDiagnostics(req.ModelProvider, commandDiagnostics, result),
 		)
 		logger.Error("provider failure normalized", providerFailureLogFields(req, providerErr, result, duration)...)
 		logger.Error("inferencer: request failed",
-			cursorFailureLogFields(req, cursorProvider, result, "exit_code", result.ExitCode)...)
+			providerLogFields(req, "exit_code", result.ExitCode)...)
 		p.publishFailureFragment(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr)
 		return interfaces.InferenceResponse{}, providerErr
 	}
 
-	if cursorProvider {
-		return p.completeCursorInference(req, result, commandDiagnostics, logger)
+	if providerUsesStructuredCompletion {
+		return p.completeProviderInference(req, result, commandDiagnostics, logger)
 	}
 	content := string(result.Stdout)
 	logger.Info("inferencer: request completed",
@@ -826,42 +826,26 @@ func parseProviderTimeoutFailure(provider string, result CommandResult) Provider
 	}
 }
 
-func cursorFailureLogFields(req interfaces.RunnerExecutionRequest, cursorProvider bool, result CommandResult, extra ...any) []any {
-	return providerLogFields(req, extra...)
-}
-
-func cursorInferenceFailureDiagnostics(
-	cursorProvider bool,
-	commandDiagnostics *interfaces.WorkDiagnostics,
-	result CommandResult,
-) *interfaces.WorkDiagnostics {
-	if !cursorProvider {
-		return commandDiagnostics
-	}
-	return cursorpkg.WithCommandOutputExcerpts(commandDiagnostics, result.Stdout, result.Stderr)
-}
-
-func (p *ScriptWrapProvider) completeCursorInference(
+func (p *ScriptWrapProvider) completeProviderInference(
 	req interfaces.RunnerExecutionRequest,
 	result CommandResult,
 	commandDiagnostics *interfaces.WorkDiagnostics,
 	logger logging.Logger,
 ) (interfaces.InferenceResponse, error) {
-	parsed, parseErr := cursorpkg.ParseInferenceResult(req.ModelProvider, result.Stdout)
+	parsed, parseErr := parseProviderInferenceSuccess(req.ModelProvider, result.Stdout)
 	if parseErr != nil {
-		logger.Error("inferencer: cursor JSON parse failed",
-			cursorFailureLogFields(req, true, result,
-				"error", parseErr.Message)...)
-		failureDiagnostics := cursorpkg.WithCommandOutputExcerpts(commandDiagnostics, result.Stdout, result.Stderr)
+		logger.Error("inferencer: provider inference parse failed",
+			providerLogFields(req, "error", parseErr.Message)...)
+		failureDiagnostics := providerInferenceFailureDiagnostics(req.ModelProvider, commandDiagnostics, result)
 		providerSession := parseErr.ProviderSession
 		if providerSession == nil {
 			providerSession = effectiveProviderSession(req, result)
 		}
-		providerErr := cursorParseProviderError(result, parseErr, providerSession, failureDiagnostics)
+		providerErr := providerParseFailureError(result, parseErr, providerSession, failureDiagnostics)
 		p.publishFailureFragment(req.Dispatch.DispatchID, providerErr.ProviderSession, providerErr)
 		return interfaces.InferenceResponse{}, providerErr
 	}
-	diagnostics := cursorpkg.WithResponseMetadata(commandDiagnostics, parsed.ResponseMetadata)
+	diagnostics := providerInferenceResponseDiagnostics(req.ModelProvider, commandDiagnostics, parsed.ResponseMetadata)
 	logger.Info("inferencer: request completed",
 		appendProviderSessionLogFields(providerLogFields(req,
 			"output_len", len(parsed.Content)), parsed.ProviderSession)...)
@@ -873,26 +857,25 @@ func (p *ScriptWrapProvider) completeCursorInference(
 	}, nil
 }
 
-func cursorParseProviderError(
+func providerParseFailureError(
 	result CommandResult,
-	parseErr *cursorpkg.ParseFailure,
+	parseErr *providerInferenceParseFailure,
 	session *interfaces.ProviderSessionMetadata,
 	diagnostics *interfaces.WorkDiagnostics,
 ) *ProviderError {
-	failure, canonical := parseErr.CanonicalResult()
-	if !canonical {
-		return cursorProviderError(
-			result, parseErr.Type, parseErr.Message, parseErr.Cause, session, diagnostics,
+	if parseErr.canonical {
+		if parseErr.ProviderSession != nil {
+			session = parseErr.ProviderSession
+		}
+		return newProviderErrorFromResultWithDiagnostics(
+			ProviderFailureResult{Reason: parseErr.canonicalReason, Message: parseErr.canonicalMessage},
+			parseErr.Cause,
+			session,
+			diagnostics,
 		)
 	}
-	if failure.ProviderSession != nil {
-		session = failure.ProviderSession
-	}
-	return newProviderErrorFromResultWithDiagnostics(
-		ProviderFailureResult{Reason: failure.Reason, Message: failure.Message},
-		parseErr.Cause,
-		session,
-		diagnostics,
+	return cursorProviderError(
+		result, parseErr.Type, parseErr.Message, parseErr.Cause, session, diagnostics,
 	)
 }
 
@@ -986,6 +969,86 @@ func effectiveProviderSession(req interfaces.ProviderInferenceRequest, result Co
 		}
 	}
 	return nil
+}
+
+type providerInferenceSuccess struct {
+	Content          string
+	ProviderSession  *interfaces.ProviderSessionMetadata
+	ResponseMetadata map[string]string
+}
+
+type providerInferenceParseFailure struct {
+	Type             interfaces.WorkFailureType
+	Message          string
+	ProviderSession  *interfaces.ProviderSessionMetadata
+	Cause            error
+	canonical        bool
+	canonicalReason  interfaces.WorkFailureType
+	canonicalMessage string
+}
+
+func providerRequiresInferenceCompletion(provider string) bool {
+	return strings.EqualFold(strings.TrimSpace(provider), string(interfaces.ModelProviderCursor))
+}
+
+func parseProviderInferenceSuccess(provider string, stdout []byte) (*providerInferenceSuccess, *providerInferenceParseFailure) {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case string(interfaces.ModelProviderCursor):
+		parsed, failure := cursorpkg.ParseInferenceResult(provider, stdout)
+		if failure != nil {
+			return nil, providerInferenceParseFailureFromCursor(failure)
+		}
+		return &providerInferenceSuccess{
+			Content:          parsed.Content,
+			ProviderSession:  parsed.ProviderSession,
+			ResponseMetadata: parsed.ResponseMetadata,
+		}, nil
+	default:
+		return &providerInferenceSuccess{Content: string(stdout)}, nil
+	}
+}
+
+func providerInferenceParseFailureFromCursor(failure *cursorpkg.ParseFailure) *providerInferenceParseFailure {
+	if failure == nil {
+		return nil
+	}
+	parsed := &providerInferenceParseFailure{
+		Type:            failure.Type,
+		Message:         failure.Message,
+		ProviderSession: failure.ProviderSession,
+		Cause:           failure.Cause,
+	}
+	if canonical, ok := failure.CanonicalResult(); ok {
+		parsed.canonical = true
+		parsed.canonicalReason = canonical.Reason
+		parsed.canonicalMessage = canonical.Message
+		if canonical.ProviderSession != nil {
+			parsed.ProviderSession = canonical.ProviderSession
+		}
+	}
+	return parsed
+}
+
+func providerInferenceFailureDiagnostics(
+	provider string,
+	commandDiagnostics *interfaces.WorkDiagnostics,
+	result CommandResult,
+) *interfaces.WorkDiagnostics {
+	if strings.EqualFold(strings.TrimSpace(provider), string(interfaces.ModelProviderCursor)) {
+		return cursorpkg.WithCommandOutputExcerpts(commandDiagnostics, result.Stdout, result.Stderr)
+	}
+	return commandDiagnostics
+}
+
+func providerInferenceResponseDiagnostics(
+	provider string,
+	commandDiagnostics *interfaces.WorkDiagnostics,
+	responseMetadata map[string]string,
+) *interfaces.WorkDiagnostics {
+	if strings.EqualFold(strings.TrimSpace(provider), string(interfaces.ModelProviderCursor)) {
+		return cursorpkg.WithResponseMetadata(commandDiagnostics, responseMetadata)
+	}
+	return commandDiagnostics
 }
 
 var _ Provider = (*ScriptWrapProvider)(nil)

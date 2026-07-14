@@ -129,27 +129,12 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 		return workerprocess.ExecCommandRunner{}.Run(ctx, req)
 	}
 	dispatchID := strings.TrimSpace(req.DispatchID)
-	var cursorStream *cursorprogress.ResponseEventStream
-	if cursorprogress.IsCommand(req.Command) {
-		cursorStream = cursorprogress.NewResponseEventStream(dispatchID, func(fragment cursorprogress.ProgressFragment) {
-			r.Publisher(inferenceProgressFragmentFromCursor(fragment))
-		}, r.Logger)
-	}
-	var codexStream *codexprogress.ProgressStream
-	if codexprogress.IsCommand(req.Command) {
-		codexStream = codexprogress.NewProgressStream(req, func(fragment codexprogress.ProgressFragment) {
-			r.Publisher(inferenceProgressFragmentFromCodex(fragment))
-		})
-	}
+	progressStream := newProgressStreamObserver(req, r.Publisher, r.Logger)
 	observer := func(stream string, chunk []byte) {
 		if len(chunk) == 0 {
 			return
 		}
-		if cursorStream != nil {
-			cursorStream.Observe(ctx, stream, chunk)
-			return
-		}
-		if codexStream != nil && codexStream.Observe(stream, chunk) {
+		if progressStream != nil && progressStream.observe(ctx, stream, chunk) {
 			return
 		}
 		payload := string(chunk)
@@ -164,37 +149,10 @@ func (r InferenceProgressPublishingCommandRunner) Run(ctx context.Context, req C
 		Observer: observer,
 		Logger:   logging.EnsureLogger(r.Logger),
 	}.Run(ctx, req)
-	if cursorStream != nil {
-		cursorStream.Flush(ctx, cursorprogress.FlushReason(ctx, result.ExitCode, err))
-	}
-	if codexStream != nil {
-		codexStream.Flush()
+	if progressStream != nil {
+		progressStream.flush(ctx, result, err)
 	}
 	return result, err
-}
-
-func inferenceProgressFragmentFromCursor(fragment cursorprogress.ProgressFragment) InferenceProgressFragment {
-	if fragment.HasCanonicalDraft {
-		return StructuredResponseEvent(fragment.CanonicalDraft)
-	}
-	return InferenceProgressFragment{
-		DispatchID:        fragment.DispatchID,
-		Kind:              fragment.Kind,
-		Payload:           fragment.Payload,
-		ExternalEventType: fragment.ExternalEventType,
-	}
-}
-
-func inferenceProgressFragmentFromCodex(fragment codexprogress.ProgressFragment) InferenceProgressFragment {
-	return InferenceProgressFragment{
-		DispatchID:         fragment.DispatchID,
-		Kind:               fragment.Kind,
-		Type:               fragment.Type,
-		Payload:            fragment.Payload,
-		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(fragment.ProviderSessionRef),
-		ExternalEventType:  fragment.ExternalEventType,
-		Metadata:           fragment.Metadata,
-	}
 }
 
 // NewInferenceProgressPublishingCommandRunner constructs a provider command
@@ -282,4 +240,92 @@ func (p *ScriptWrapProvider) agyRequestValidationError(req interfaces.ProviderIn
 	)
 	p.publishFailureFragment(req.Dispatch.DispatchID, nil, providerErr)
 	return providerErr
+}
+
+type progressStreamObserver interface {
+	observe(ctx context.Context, stream string, chunk []byte) bool
+	flush(ctx context.Context, result CommandResult, err error)
+}
+
+func progressStreamIdentity(command string) adapter.Identity {
+	if cursorprogress.IsCommand(command) {
+		return adapter.Identity(interfaces.ModelProviderCursor)
+	}
+	if codexprogress.IsCommand(command) {
+		return adapter.Identity(interfaces.ModelProviderCodex)
+	}
+	return adapter.NormalizeIdentity(adapter.Identity(command))
+}
+
+func newProgressStreamObserver(
+	req CommandRequest,
+	publisher InferenceProgressPublisher,
+	logger logging.Logger,
+) progressStreamObserver {
+	dispatchID := strings.TrimSpace(req.DispatchID)
+	switch progressStreamIdentity(req.Command) {
+	case adapter.Identity(interfaces.ModelProviderCursor):
+		return &cursorProgressObserver{
+			stream: cursorprogress.NewResponseEventStream(dispatchID, func(fragment cursorprogress.ProgressFragment) {
+				publisher(inferenceProgressFragmentFromCursor(fragment))
+			}, logger),
+		}
+	case adapter.Identity(interfaces.ModelProviderCodex):
+		return &codexProgressObserver{
+			stream: codexprogress.NewProgressStream(req, func(fragment codexprogress.ProgressFragment) {
+				publisher(inferenceProgressFragmentFromCodex(fragment))
+			}),
+		}
+	default:
+		return nil
+	}
+}
+
+type cursorProgressObserver struct {
+	stream *cursorprogress.ResponseEventStream
+}
+
+func (o *cursorProgressObserver) observe(ctx context.Context, stream string, chunk []byte) bool {
+	o.stream.Observe(ctx, stream, chunk)
+	return true
+}
+
+func (o *cursorProgressObserver) flush(ctx context.Context, result CommandResult, err error) {
+	o.stream.Flush(ctx, cursorprogress.FlushReason(ctx, result.ExitCode, err))
+}
+
+type codexProgressObserver struct {
+	stream *codexprogress.ProgressStream
+}
+
+func (o *codexProgressObserver) observe(_ context.Context, stream string, chunk []byte) bool {
+	return o.stream.Observe(stream, chunk)
+}
+
+func (o *codexProgressObserver) flush(_ context.Context, _ CommandResult, _ error) {
+	o.stream.Flush()
+}
+
+func inferenceProgressFragmentFromCursor(fragment cursorprogress.ProgressFragment) InferenceProgressFragment {
+	if fragment.HasCanonicalDraft {
+		return StructuredResponseEvent(fragment.CanonicalDraft)
+	}
+	return InferenceProgressFragment{
+		DispatchID:        fragment.DispatchID,
+		Kind:              fragment.Kind,
+		Payload:           fragment.Payload,
+		ExternalEventType: fragment.ExternalEventType,
+	}
+}
+
+func inferenceProgressFragmentFromCodex(fragment codexprogress.ProgressFragment) InferenceProgressFragment {
+	return InferenceProgressFragment{
+		DispatchID:         fragment.DispatchID,
+		Kind:               fragment.Kind,
+		Type:               fragment.Type,
+		Payload:            fragment.Payload,
+		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(fragment.ProviderSessionRef),
+		ExternalEventType:  fragment.ExternalEventType,
+		Metadata:           fragment.Metadata,
+	}
 }

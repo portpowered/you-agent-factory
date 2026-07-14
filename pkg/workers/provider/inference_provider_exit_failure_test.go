@@ -13,7 +13,9 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/codex/progress"
+	cursorprogress "github.com/portpowered/infinite-you/pkg/workers/provider/cursor/progress"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -443,6 +445,29 @@ func TestIsCodexCommand_AcceptsNativeExecutableShapes(t *testing.T) {
 	}
 	if progress.IsCommand("codex-helper.exe") {
 		t.Fatal("codex-helper.exe must not be classified as the Codex provider command")
+	}
+}
+
+func TestProgressStreamIdentity_SelectsProviderOwnedObservers(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		command  string
+		identity adapter.Identity
+	}{
+		{command: "agent", identity: adapter.Identity(interfaces.ModelProviderCursor)},
+		{command: "agent.exe", identity: adapter.Identity(interfaces.ModelProviderCursor)},
+		{command: "codex", identity: adapter.Identity(interfaces.ModelProviderCodex)},
+		{command: `C:\tools\codex.cmd`, identity: adapter.Identity(interfaces.ModelProviderCodex)},
+		{command: "claude", identity: adapter.Identity(interfaces.ModelProviderClaude)},
+	}
+	for _, tc := range tests {
+		if got := progressStreamIdentity(tc.command); got != tc.identity {
+			t.Fatalf("progressStreamIdentity(%q) = %q, want %q", tc.command, got, tc.identity)
+		}
+	}
+	if cursorprogress.IsCommand("agent-helper") || progress.IsCommand("codex-helper.exe") {
+		t.Fatal("helper executables must not be classified as provider commands")
 	}
 }
 
