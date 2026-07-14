@@ -188,12 +188,9 @@ async function advanceControlledWrite(
   await flushPromiseContinuations();
   fixture.controls.succeed("get");
   await flushPromiseContinuations();
-  await flushPromiseContinuations();
-  fixture.controls.succeed("open", openOrdinal);
-  await flushPromiseContinuations();
   fixture.controls.succeed("put");
   fixture.controls.completeTransaction();
-  for (let turn = 0; turn < 4; turn += 1) {
+  for (let turn = 0; turn < 6; turn += 1) {
     await flushPromiseContinuations();
   }
 }
@@ -424,7 +421,9 @@ describe("App checkpoint lifecycle safety", () => {
     vi.stubGlobal("indexedDB", controlled.indexedDB);
     await scheduleCheckpoint(B);
     window.dispatchEvent(new Event("pagehide"));
-    await flushPromiseContinuations();
+    for (let turn = 0; turn < 12; turn += 1) {
+      await flushPromiseContinuations();
+    }
 
     expect(controlled.controls.pendingOperations()).toEqual(["open", "open"]);
 
