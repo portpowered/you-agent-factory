@@ -14,6 +14,7 @@ import (
 	configinitcmd "github.com/portpowered/infinite-you/pkg/cli/configinit"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
+	factorypackages "github.com/portpowered/infinite-you/pkg/factory/packages"
 	"github.com/spf13/cobra"
 )
 
@@ -127,14 +128,14 @@ func TestConfigInitCommand_FreshIsolatedHomeCreatesSystemConfig(t *testing.T) {
 	if !strings.Contains(got, "Created system config at") {
 		t.Fatalf("stdout = %q, want created system config message", got)
 	}
-	for _, name := range factoryconfig.BuiltInNamedFactoryNames() {
+	for _, name := range factorypackages.Names() {
 		if !strings.Contains(got, "Created packaged factory "+name) {
 			t.Fatalf("stdout = %q, want created packaged factory message for %q", got, name)
 		}
 	}
 
 	namedFactoriesRoot := defaultpaths.NamedFactoriesRoot(homeDir)
-	for _, name := range factoryconfig.BuiltInNamedFactoryNames() {
+	for _, name := range factorypackages.Names() {
 		wantDir, err := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, name)
 		if err != nil {
 			t.Fatalf("MapNamedFactoryDir(%q): %v", name, err)
@@ -249,7 +250,7 @@ func TestConfigInitCommand_DoubleRunIsSuccessfulNoOp(t *testing.T) {
 	if !strings.Contains(got, "System config already present at") {
 		t.Fatalf("stdout = %q, want already-present system config message", got)
 	}
-	for _, name := range factoryconfig.BuiltInNamedFactoryNames() {
+	for _, name := range factorypackages.Names() {
 		if !strings.Contains(got, "Packaged factory "+name+" already present at") {
 			t.Fatalf("stdout = %q, want already-present packaged factory message for %q", got, name)
 		}
@@ -314,7 +315,7 @@ func TestConfigInitCommand_FactoryMaterializationFailureReportsActionableError(t
 	}
 	got := err.Error()
 	for _, want := range []string{
-		"materialize packaged default factory",
+		"install packaged factory",
 		"@you/fusion",
 		namedFactoriesRoot,
 	} {

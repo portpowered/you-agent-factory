@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
+	factorypackages "github.com/portpowered/infinite-you/pkg/factory/packages"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -107,7 +108,7 @@ func TestInit_FreshHomeMaterializesPackagedDefaultFactories(t *testing.T) {
 		t.Fatalf("namedFactoriesRoot = %q, want %q", result.NamedFactoriesRoot, namedFactoriesRoot)
 	}
 
-	wantNames := factoryconfig.BuiltInNamedFactoryNames()
+	wantNames := factorypackages.Names()
 	if len(result.PackagedFactories) != len(wantNames) {
 		t.Fatalf("packaged factory count = %d, want %d", len(result.PackagedFactories), len(wantNames))
 	}
@@ -534,12 +535,48 @@ func TestInit_FactoryMaterializationFailureReportsActionableError(t *testing.T) 
 	}
 	got := err.Error()
 	for _, want := range []string{
-		"materialize packaged default factory",
+		"install packaged factory",
 		"@you/fusion",
 		namedFactoriesRoot,
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("error = %q, want substring %q", got, want)
 		}
+	}
+}
+
+func TestEnsurePackagedFactories_InvalidPayloadDoesNotCommitTarget(t *testing.T) {
+	t.Parallel()
+
+	namedFactoriesRoot := t.TempDir()
+	definition := factorypackages.Definition{
+		Name: "@test/invalid",
+		JSON: []byte(`{"id":"invalid","workers":[`),
+	}
+
+	_, err := ensurePackagedFactories(namedFactoriesRoot, []factorypackages.Definition{definition})
+	if err == nil {
+		t.Fatal("expected invalid packaged factory payload to fail")
+	}
+	for _, want := range []string{"install packaged factory", definition.Name, namedFactoriesRoot} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want substring %q", err, want)
+		}
+	}
+
+	targetDir, mapErr := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, definition.Name)
+	if mapErr != nil {
+		t.Fatalf("MapNamedFactoryDir(%q): %v", definition.Name, mapErr)
+	}
+	if _, statErr := os.Stat(targetDir); !os.IsNotExist(statErr) {
+		t.Fatalf("Stat(%q) error = %v, want target absent", targetDir, statErr)
+	}
+
+	installed, listErr := factoryconfig.ListNamedFactories(namedFactoriesRoot)
+	if listErr != nil {
+		t.Fatalf("ListNamedFactories(%q): %v", namedFactoriesRoot, listErr)
+	}
+	if len(installed) != 0 {
+		t.Fatalf("installed factories after failed install = %v, want none", installed)
 	}
 }
