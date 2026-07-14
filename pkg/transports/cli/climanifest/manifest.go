@@ -25,6 +25,13 @@ type Command struct {
 	Exits         map[string]Exit     `json:"exits,omitempty"`
 	SideEffects   map[string]SideEffect `json:"sideEffects,omitempty"`
 	Constraints   Constraints         `json:"constraints,omitempty"`
+	Handler       *Handler            `json:"handler,omitempty"`
+}
+
+// Handler carries stable handler identity and optional OpenAPI operation binding.
+type Handler struct {
+	ID          string `json:"id"`
+	OperationID string `json:"operationId,omitempty"`
 }
 
 // Channels carries declared input and output channel surfaces.
