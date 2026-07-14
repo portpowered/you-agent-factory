@@ -173,14 +173,7 @@ type terminalCleaningCasesFile struct {
 
 // TerminalCleaningCorpus is the cached terminal-cleaning regression fixture set.
 type TerminalCleaningCorpus struct {
-	casesByName map[string]TerminalCleaningCase
-	allCases    []TerminalCleaningCase
-}
-
-// Case returns the named fixture.
-func (c TerminalCleaningCorpus) Case(name string) (TerminalCleaningCase, bool) {
-	entry, ok := c.casesByName[name]
-	return entry, ok
+	allCases []TerminalCleaningCase
 }
 
 // Cases returns all fixtures in file order.
@@ -214,20 +207,12 @@ func loadTerminalCleaningCorpus() (TerminalCleaningCorpus, error) {
 		return TerminalCleaningCorpus{}, fmt.Errorf("decode terminal cleaning cases: no cases")
 	}
 
-	casesByName := make(map[string]TerminalCleaningCase, len(raw.Cases))
 	for _, entry := range raw.Cases {
 		if entry.Name == "" {
 			return TerminalCleaningCorpus{}, fmt.Errorf("decode terminal cleaning cases: missing name")
 		}
-		if _, exists := casesByName[entry.Name]; exists {
-			return TerminalCleaningCorpus{}, fmt.Errorf("decode terminal cleaning cases: duplicate name %q", entry.Name)
-		}
-		casesByName[entry.Name] = entry
 	}
-	return TerminalCleaningCorpus{
-		casesByName: casesByName,
-		allCases:    raw.Cases,
-	}, nil
+	return TerminalCleaningCorpus{allCases: raw.Cases}, nil
 }
 
 // RawBytes decodes the fixture capture bytes.
