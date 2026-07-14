@@ -200,8 +200,11 @@ async function advanceControlledWrite(
   fixture.controls.succeed("open", openOrdinal);
   await waitForControlledOperation(fixture, "get");
   fixture.controls.succeed("get");
-  await waitForControlledOperation(fixture, "put");
-  fixture.controls.succeed("put");
+  await flushPromiseContinuations();
+  if (fixture.controls.pendingOperations().includes("put")) {
+    await waitForControlledOperation(fixture, "put");
+    fixture.controls.succeed("put");
+  }
   fixture.controls.completeTransaction();
   for (let turn = 0; turn < 4; turn += 1) {
     await flushPromiseContinuations();
