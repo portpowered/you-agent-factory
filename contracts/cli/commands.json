@@ -730,6 +730,292 @@
         "operationId": "getFactorySession"
       }
     },
+    "you.docs": {
+      "id": "you.docs",
+      "name": "docs",
+      "path": "you docs",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.docs",
+        "documentation": {
+          "title": {
+            "id": "you.docs.title",
+            "canonicalEnglish": "Print packaged markdown reference topics"
+          },
+          "description": {
+            "id": "you.docs.description",
+            "canonicalEnglish": "Print packaged markdown reference topics from the installed binary.\n\nRun without a topic to print the quick-start blurb and packaged docs index. Use one supported topic argument to print the authored markdown page with no wrapper formatting."
+          }
+        },
+        "examples": [
+          "you docs",
+          "you docs agents",
+          "you docs run"
+        ],
+        "visibility": "public",
+        "sourceHash": "1c225442121e2840cda0fd974d2a40fd438010f88c764ff2f2845d32c138a059"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.docs",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "docs [topic]",
+        "example": "  # Print the packaged docs index and quick-start blurb.\n  you docs\n\n  # Print one authored reference topic.\n  you docs agents"
+      },
+      "arguments": {
+        "you.docs.arg.0": {
+          "id": "you.docs.arg.0",
+          "name": "topic",
+          "position": 0,
+          "kind": "positional",
+          "valueType": "string",
+          "required": false,
+          "minCardinality": 0,
+          "maxCardinality": 1,
+          "variadic": false,
+          "enum": [
+            "agents",
+            "authoring-factories",
+            "run",
+            "config",
+            "mock-workers",
+            "record-replay",
+            "guards",
+            "relationships",
+            "work",
+            "sessions",
+            "orchestrators",
+            "javascript-workflows",
+            "mcp",
+            "workstations",
+            "workstation",
+            "workers",
+            "resources",
+            "models",
+            "batch-inputs",
+            "batch-work",
+            "templates"
+          ],
+          "pattern": "",
+          "completion": "static",
+          "channels": [
+            "cli"
+          ],
+          "doubleDash": "terminates-flags"
+        }
+      },
+      "flags": {
+        "you.docs.flag.debug": {
+          "id": "you.docs.flag.debug",
+          "long": "debug",
+          "shorthand": "d",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.docs.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.docs.flag.default-worker-model": {
+          "id": "you.docs.flag.default-worker-model",
+          "long": "default-worker-model",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.docs.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.docs.flag.default-worker-model-provider": {
+          "id": "you.docs.flag.default-worker-model-provider",
+          "long": "default-worker-model-provider",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.docs.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.docs.flag.json": {
+          "id": "you.docs.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.docs.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.docs.flag.server": {
+          "id": "you.docs.flag.server",
+          "long": "server",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "string",
+          "required": false,
+          "default": "http://localhost:7437",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.docs.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "you.docs.flag.verbose": {
+          "id": "you.docs.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "inherited",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.docs.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "outputs": {
+        "you.docs.output.markdown": {
+          "id": "you.docs.output.markdown",
+          "channel": "stdout",
+          "format": "text"
+        }
+      },
+      "exits": {
+        "you.docs.exit.success": {
+          "id": "you.docs.exit.success",
+          "code": 0,
+          "kind": "success"
+        },
+        "you.docs.exit.failure": {
+          "id": "you.docs.exit.failure",
+          "code": 1,
+          "kind": "failure"
+        },
+        "you.docs.exit.usage": {
+          "id": "you.docs.exit.usage",
+          "code": 1,
+          "kind": "usage"
+        }
+      },
+      "sideEffects": {
+        "you.docs.side-effect.filesystem": {
+          "id": "you.docs.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "constraints": {
+        "runtime": [
+          "local"
+        ],
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ]
+      },
+      "handler": {
+        "id": "you.docs.handler"
+      }
+    },
     "you.models": {
       "id": "you.models",
       "name": "models",

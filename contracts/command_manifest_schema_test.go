@@ -390,6 +390,109 @@ func TestCommandManifestSchemaProductionModelsFamily(t *testing.T) {
 	}
 }
 
+func TestCommandManifestSchemaProductionDocsFamily(t *testing.T) {
+	instance := readJSON(t, filepath.Join("cli", "commands.json"))
+	commands, ok := instance.(map[string]any)["commands"].(map[string]any)
+	if !ok {
+		t.Fatal("production manifest missing commands map")
+	}
+
+	docs, ok := commands["you.docs"].(map[string]any)
+	if !ok {
+		t.Fatal("production manifest missing you.docs command")
+	}
+	if got, _ := docs["path"].(string); got != "you docs" {
+		t.Fatalf("you.docs path = %q, want you docs", got)
+	}
+	if runnable, _ := docs["runnable"].(bool); !runnable {
+		t.Fatal("you.docs must be runnable")
+	}
+
+	args, ok := docs["arguments"].(map[string]any)
+	if !ok {
+		t.Fatal("you.docs missing arguments map")
+	}
+	arg, ok := args["you.docs.arg.0"].(map[string]any)
+	if !ok {
+		t.Fatal("you.docs missing topic argument record")
+	}
+	if got, _ := arg["name"].(string); got != "topic" {
+		t.Fatalf("you.docs argument name = %q, want topic", got)
+	}
+	if required, _ := arg["required"].(bool); required {
+		t.Fatal("you.docs topic argument must be optional")
+	}
+	switch max := arg["maxCardinality"].(type) {
+	case float64:
+		if int(max) != 1 {
+			t.Fatalf("you.docs topic maxCardinality = %v, want 1", max)
+		}
+	case int:
+		if max != 1 {
+			t.Fatalf("you.docs topic maxCardinality = %d, want 1", max)
+		}
+	case int64:
+		if max != 1 {
+			t.Fatalf("you.docs topic maxCardinality = %d, want 1", max)
+		}
+	case json.Number:
+		if got, err := max.Int64(); err != nil || got != 1 {
+			t.Fatalf("you.docs topic maxCardinality = %v, want 1", max)
+		}
+	default:
+		t.Fatalf("you.docs topic maxCardinality = %T(%v), want 1", arg["maxCardinality"], arg["maxCardinality"])
+	}
+	if got, _ := arg["completion"].(string); got != "static" {
+		t.Fatalf("you.docs topic completion = %q, want static", got)
+	}
+	enum, ok := arg["enum"].([]any)
+	if !ok || len(enum) == 0 {
+		t.Fatal("you.docs topic enum must list supported packaged topics")
+	}
+	enumValues := make(map[string]struct{}, len(enum))
+	for _, value := range enum {
+		text, ok := value.(string)
+		if !ok {
+			t.Fatalf("you.docs topic enum value = %T, want string", value)
+		}
+		enumValues[text] = struct{}{}
+	}
+	for _, want := range []string{"agents", "workstation", "batch-work"} {
+		if _, ok := enumValues[want]; !ok {
+			t.Fatalf("you.docs topic enum missing %q", want)
+		}
+	}
+
+	flags, ok := docs["flags"].(map[string]any)
+	if !ok {
+		t.Fatal("you.docs missing flags map")
+	}
+	if _, ok := flags["you.docs.flag.port"]; ok {
+		t.Fatal("you.docs must not declare a local --port flag")
+	}
+	for _, flagID := range []string{
+		"you.docs.flag.debug",
+		"you.docs.flag.json",
+		"you.docs.flag.server",
+		"you.docs.flag.verbose",
+	} {
+		if _, ok := flags[flagID]; !ok {
+			t.Fatalf("you.docs missing inherited flag %s", flagID)
+		}
+	}
+
+	handler, ok := docs["handler"].(map[string]any)
+	if !ok {
+		t.Fatal("you.docs missing handler binding")
+	}
+	if got, _ := handler["id"].(string); got != "you.docs.handler" {
+		t.Fatalf("you.docs handler id = %q, want you.docs.handler", got)
+	}
+	if _, hasOperation := handler["operationId"]; hasOperation {
+		t.Fatal("you.docs handler must not bind an OpenAPI operationId")
+	}
+}
+
 func TestCommandManifestSchemaInvalidFixtureMatrix(t *testing.T) {
 	schema := commandManifestSchema(t)
 
