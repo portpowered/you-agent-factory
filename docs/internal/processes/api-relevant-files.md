@@ -49,6 +49,14 @@ Use this map when changing the public REST contract.
   and rejected tampered hashes in `internal/contractstaging/manifest_test.go`;
   prove accepted/rejected manifest schema fixtures in
   `contracts/manifest_schema_test.go`.
+- Regeneration cleanliness for owned staging outputs lives in
+  `internal/contractstaging/generate.go` (`Generate`) with repository evidence in
+  `internal/contractstaging/generate_test.go` and command-level reproduction in
+  `cmd/contractsgenerate/main_test.go`. Repeated generation from unchanged
+  inputs must leave `Check()` clean, keep owned staging digests stable, and not
+  mutate authored OpenAPI or generated Go/TypeScript clients; `make
+  contracts-smoke` runs the same generate/check loop twice at the Makefile
+  layer.
 - `scripts/api-package-consumer.mjs` installs the real tarball offline into an
   isolated temporary consumer and resolves concrete named exports plus every
   packaged wildcard match from that installation. Keep resolution rooted in
