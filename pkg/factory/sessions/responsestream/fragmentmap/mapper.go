@@ -1,4 +1,6 @@
-package compat
+// Package fragmentmap projects internal session response-stream events into the
+// canonical FactoryResponseEvent vocabulary for session-owned publication.
+package fragmentmap
 
 import (
 	"crypto/sha256"
@@ -13,12 +15,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
-// ErrUnsupportedFragmentKind indicates the mapper does not yet handle the
-// supplied legacy response-stream fragment kind.
-var ErrUnsupportedFragmentKind = errors.New("unsupported legacy fragment kind")
+// ErrUnsupportedFragmentKind indicates the mapper does not handle the supplied
+// internal response-stream event kind.
+var ErrUnsupportedFragmentKind = errors.New("unsupported internal response-stream event kind")
 
 // Context carries correlation fields required on canonical response events but
-// absent from legacy response-stream fragments.
+// absent from internal response-stream events.
 type Context struct {
 	FactorySessionID string
 	RunID            string
@@ -26,10 +28,8 @@ type Context struct {
 
 type fragmentMapper func(Context, responsestream.Event) (responseevents.FactoryResponseEvent, error)
 
-// MapFragment converts one legacy response-stream event into canonical
-// FactoryResponseEvent values. Progress, response, terminal stream markers, and
-// compaction signals are supported in this lane; other kinds return
-// ErrUnsupportedFragmentKind until later stories land.
+// MapFragment converts one internal response-stream event into canonical
+// FactoryResponseEvent values.
 func MapFragment(ctx Context, fragment responsestream.Event) ([]responseevents.FactoryResponseEvent, error) {
 	mapper, label, ok := fragmentMapperForKind(fragment.Kind)
 	if !ok {
@@ -366,7 +366,7 @@ func fragmentProvider(fragment responsestream.Event) string {
 			return runner
 		}
 	}
-	return "legacy-fragment"
+	return "internal-fragment"
 }
 
 func fragmentNativeEventType(fragment responsestream.Event) string {

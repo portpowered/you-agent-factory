@@ -7,7 +7,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/compat"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/fragmentmap"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
@@ -204,7 +204,7 @@ func publishCanonicalResponseEvents(session *factorysessions.LiveSession, fragme
 	if skipCanonical {
 		return nil
 	}
-	events, err := compat.MapFragment(compat.Context{
+	events, err := fragmentmap.MapFragment(fragmentmap.Context{
 		FactorySessionID: factorysessions.CanonicalFactorySessionID(session),
 	}, fragment)
 	if err != nil {

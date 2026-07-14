@@ -47,3 +47,17 @@ func TestPrivateContractRemovalGate_PrivateNDJSONRecordTypesRejected(t *testing.
 		t.Fatal(err)
 	}
 }
+
+func TestPrivateContractRemovalGate_LegacyCompatMapperDeleted(t *testing.T) {
+	repoRoot := testutil.MustRepoRoot(t)
+	if err := removalgate.AssertLegacyCompatMapperDeleted(repoRoot); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestPrivateContractRemovalGate_NoRetiredPrivateContractSymbolsInProductionSurfaces(t *testing.T) {
+	repoRoot := testutil.MustRepoRoot(t)
+	if err := removalgate.AssertNoRetiredPrivateContractSymbolsInProductionSurfaces(repoRoot); err != nil {
+		t.Fatal(err)
+	}
+}

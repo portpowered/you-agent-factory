@@ -87,6 +87,12 @@ func AssertGate(ctx context.Context, repoRoot string) error {
 	if err := AssertPublicTransportLayersDoNotImportLegacyCompat(repoRoot); err != nil {
 		return fmt.Errorf("public transport depends on legacy compat mapper: %w", err)
 	}
+	if err := AssertLegacyCompatMapperDeleted(repoRoot); err != nil {
+		return fmt.Errorf("legacy compat mapper deletion: %w", err)
+	}
+	if err := AssertNoRetiredPrivateContractSymbolsInProductionSurfaces(repoRoot); err != nil {
+		return fmt.Errorf("retired private-contract symbols: %w", err)
+	}
 	return nil
 }
 

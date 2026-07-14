@@ -1,4 +1,4 @@
-package compat_test
+package fragmentmap_test
 
 import (
 	"encoding/json"
@@ -8,7 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/compat"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/fragmentmap"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -30,12 +30,12 @@ func TestMapFragment_ProgressFragmentEmitsProgressUpdated(t *testing.T) {
 		},
 		ExternalEventType: "response.progress",
 	}
-	ctx := compat.Context{
+	ctx := fragmentmap.Context{
 		FactorySessionID: "session-abc",
 		RunID:            "run-xyz",
 	}
 
-	events, err := compat.MapFragment(ctx, fragment)
+	events, err := fragmentmap.MapFragment(ctx, fragment)
 	if err != nil {
 		t.Fatalf("MapFragment() error = %v", err)
 	}
@@ -109,7 +109,7 @@ func TestMapFragment_ProgressProvenanceNeverClaimsLossless(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			events, err := compat.MapFragment(compat.Context{
+			events, err := fragmentmap.MapFragment(fragmentmap.Context{
 				FactorySessionID: "session-1",
 				RunID:            "run-1",
 			}, tc.fragment)
@@ -148,13 +148,13 @@ func TestMapFragment_ProgressMappingIsDeterministic(t *testing.T) {
 			"runner_id": "codex",
 		},
 	}
-	ctx := compat.Context{FactorySessionID: "session-det", RunID: "run-det"}
+	ctx := fragmentmap.Context{FactorySessionID: "session-det", RunID: "run-det"}
 
-	first, err := compat.MapFragment(ctx, fragment)
+	first, err := fragmentmap.MapFragment(ctx, fragment)
 	if err != nil {
 		t.Fatalf("first MapFragment() error = %v", err)
 	}
-	second, err := compat.MapFragment(ctx, fragment)
+	second, err := fragmentmap.MapFragment(ctx, fragment)
 	if err != nil {
 		t.Fatalf("second MapFragment() error = %v", err)
 	}
@@ -187,12 +187,12 @@ func TestMapFragment_ResponseFragmentEmitsMessageDelta(t *testing.T) {
 		},
 		ExternalEventType: "response.output_text.delta",
 	}
-	ctx := compat.Context{
+	ctx := fragmentmap.Context{
 		FactorySessionID: "session-abc",
 		RunID:            "run-xyz",
 	}
 
-	events, err := compat.MapFragment(ctx, fragment)
+	events, err := fragmentmap.MapFragment(ctx, fragment)
 	if err != nil {
 		t.Fatalf("MapFragment() error = %v", err)
 	}
@@ -223,14 +223,14 @@ func TestMapFragment_ResponseFragmentEmitsMessageDelta(t *testing.T) {
 func TestMapFragment_ResponseFragmentStableItemIDAcrossDeltas(t *testing.T) {
 	t.Parallel()
 
-	ctx := compat.Context{FactorySessionID: "session-1", RunID: "run-1"}
+	ctx := fragmentmap.Context{FactorySessionID: "session-1", RunID: "run-1"}
 	base := responsestream.Event{
 		Kind:       responsestream.EventKindResponseFragment,
 		Type:       responsestream.EventTypeTextDelta,
 		DispatchID: "dispatch-shared",
 	}
 
-	first, err := compat.MapFragment(ctx, responsestream.Event{
+	first, err := fragmentmap.MapFragment(ctx, responsestream.Event{
 		Sequence:   1,
 		RecordedAt: time.Date(2026, 7, 12, 12, 0, 0, 0, time.UTC),
 		Kind:       base.Kind,
@@ -241,7 +241,7 @@ func TestMapFragment_ResponseFragmentStableItemIDAcrossDeltas(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first MapFragment() error = %v", err)
 	}
-	second, err := compat.MapFragment(ctx, responsestream.Event{
+	second, err := fragmentmap.MapFragment(ctx, responsestream.Event{
 		Sequence:   2,
 		RecordedAt: time.Date(2026, 7, 12, 12, 0, 1, 0, time.UTC),
 		Kind:       base.Kind,
@@ -264,7 +264,7 @@ func TestMapFragment_ResponseFragmentStableItemIDAcrossDeltas(t *testing.T) {
 func TestMapFragment_ResponseFragmentDistinctItemIDsForDistinctDispatches(t *testing.T) {
 	t.Parallel()
 
-	ctx := compat.Context{FactorySessionID: "session-1", RunID: "run-1"}
+	ctx := fragmentmap.Context{FactorySessionID: "session-1", RunID: "run-1"}
 	makeFragment := func(dispatchID, payload string) responsestream.Event {
 		return responsestream.Event{
 			Kind:       responsestream.EventKindResponseFragment,
@@ -274,11 +274,11 @@ func TestMapFragment_ResponseFragmentDistinctItemIDsForDistinctDispatches(t *tes
 		}
 	}
 
-	alpha, err := compat.MapFragment(ctx, makeFragment("dispatch-a", "alpha"))
+	alpha, err := fragmentmap.MapFragment(ctx, makeFragment("dispatch-a", "alpha"))
 	if err != nil {
 		t.Fatalf("alpha MapFragment() error = %v", err)
 	}
-	beta, err := compat.MapFragment(ctx, makeFragment("dispatch-b", "beta"))
+	beta, err := fragmentmap.MapFragment(ctx, makeFragment("dispatch-b", "beta"))
 	if err != nil {
 		t.Fatalf("beta MapFragment() error = %v", err)
 	}
@@ -326,7 +326,7 @@ func TestMapFragment_ResponseProvenanceNeverClaimsLossless(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			events, err := compat.MapFragment(compat.Context{
+			events, err := fragmentmap.MapFragment(fragmentmap.Context{
 				FactorySessionID: "session-1",
 				RunID:            "run-1",
 			}, tc.fragment)
@@ -365,13 +365,13 @@ func TestMapFragment_ResponseMappingIsDeterministic(t *testing.T) {
 			"runner_id": "codex",
 		},
 	}
-	ctx := compat.Context{FactorySessionID: "session-det", RunID: "run-det"}
+	ctx := fragmentmap.Context{FactorySessionID: "session-det", RunID: "run-det"}
 
-	first, err := compat.MapFragment(ctx, fragment)
+	first, err := fragmentmap.MapFragment(ctx, fragment)
 	if err != nil {
 		t.Fatalf("first MapFragment() error = %v", err)
 	}
-	second, err := compat.MapFragment(ctx, fragment)
+	second, err := fragmentmap.MapFragment(ctx, fragment)
 	if err != nil {
 		t.Fatalf("second MapFragment() error = %v", err)
 	}
@@ -396,12 +396,12 @@ func TestMapFragment_StreamCompletedEmitsRunCompleted(t *testing.T) {
 		},
 		ExternalEventType: "response.completed",
 	}
-	ctx := compat.Context{
+	ctx := fragmentmap.Context{
 		FactorySessionID: "session-abc",
 		RunID:            "run-xyz",
 	}
 
-	events, err := compat.MapFragment(ctx, fragment)
+	events, err := fragmentmap.MapFragment(ctx, fragment)
 	if err != nil {
 		t.Fatalf("MapFragment() error = %v", err)
 	}
@@ -460,12 +460,12 @@ func TestMapFragment_StreamFailedEmitsErrorFailed(t *testing.T) {
 		},
 		ExternalEventType: "response.failed",
 	}
-	ctx := compat.Context{
+	ctx := fragmentmap.Context{
 		FactorySessionID: "session-abc",
 		RunID:            "run-xyz",
 	}
 
-	events, err := compat.MapFragment(ctx, fragment)
+	events, err := fragmentmap.MapFragment(ctx, fragment)
 	if err != nil {
 		t.Fatalf("MapFragment() error = %v", err)
 	}
@@ -500,7 +500,7 @@ func TestMapFragment_StreamFailedEmitsErrorFailed(t *testing.T) {
 func TestMapFragment_StreamFailedUsesDefaultMessageWhenPayloadEmpty(t *testing.T) {
 	t.Parallel()
 
-	events, err := compat.MapFragment(compat.Context{
+	events, err := fragmentmap.MapFragment(fragmentmap.Context{
 		FactorySessionID: "session-1",
 		RunID:            "run-1",
 	}, responsestream.Event{
@@ -523,7 +523,7 @@ func TestMapFragment_StreamFailedUsesDefaultMessageWhenPayloadEmpty(t *testing.T
 func TestMapFragment_StreamFailedCanceledUsesCanceledCode(t *testing.T) {
 	t.Parallel()
 
-	events, err := compat.MapFragment(compat.Context{
+	events, err := fragmentmap.MapFragment(fragmentmap.Context{
 		FactorySessionID: "session-1",
 		RunID:            "run-1",
 	}, responsestream.Event{
@@ -578,7 +578,7 @@ func TestMapFragment_TerminalProvenanceNeverClaimsLossless(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			events, err := compat.MapFragment(compat.Context{
+			events, err := fragmentmap.MapFragment(fragmentmap.Context{
 				FactorySessionID: "session-1",
 				RunID:            "run-1",
 			}, tc.fragment)
@@ -612,13 +612,13 @@ func TestMapFragment_TerminalMappingIsDeterministic(t *testing.T) {
 			"runner_id": "codex",
 		},
 	}
-	ctx := compat.Context{FactorySessionID: "session-det", RunID: "run-det"}
+	ctx := fragmentmap.Context{FactorySessionID: "session-det", RunID: "run-det"}
 
-	first, err := compat.MapFragment(ctx, fragment)
+	first, err := fragmentmap.MapFragment(ctx, fragment)
 	if err != nil {
 		t.Fatalf("first MapFragment() error = %v", err)
 	}
-	second, err := compat.MapFragment(ctx, fragment)
+	second, err := fragmentmap.MapFragment(ctx, fragment)
 	if err != nil {
 		t.Fatalf("second MapFragment() error = %v", err)
 	}
@@ -648,12 +648,12 @@ func TestMapFragment_CompactionSignalEmitsStreamGapUpdated(t *testing.T) {
 			ID:       "cursor-session-123",
 		},
 	}
-	ctx := compat.Context{
+	ctx := fragmentmap.Context{
 		FactorySessionID: "session-abc",
 		RunID:            "run-xyz",
 	}
 
-	events, err := compat.MapFragment(ctx, fragment)
+	events, err := fragmentmap.MapFragment(ctx, fragment)
 	if err != nil {
 		t.Fatalf("MapFragment() error = %v", err)
 	}
@@ -684,7 +684,7 @@ func TestMapFragment_CompactionSignalEmitsStreamGapUpdated(t *testing.T) {
 func TestMapFragment_CompactionGapPayloadHandlesMissingBounds(t *testing.T) {
 	t.Parallel()
 
-	events, err := compat.MapFragment(compat.Context{
+	events, err := fragmentmap.MapFragment(fragmentmap.Context{
 		FactorySessionID: "session-1",
 		RunID:            "run-1",
 	}, responsestream.Event{
@@ -742,7 +742,7 @@ func TestMapFragment_CompactionProvenanceAlwaysLossy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			events, err := compat.MapFragment(compat.Context{
+			events, err := fragmentmap.MapFragment(fragmentmap.Context{
 				FactorySessionID: "session-1",
 				RunID:            "run-1",
 			}, tc.fragment)
@@ -782,13 +782,13 @@ func TestMapFragment_CompactionMappingIsDeterministic(t *testing.T) {
 			"runner_id": "codex",
 		},
 	}
-	ctx := compat.Context{FactorySessionID: "session-det", RunID: "run-det"}
+	ctx := fragmentmap.Context{FactorySessionID: "session-det", RunID: "run-det"}
 
-	first, err := compat.MapFragment(ctx, fragment)
+	first, err := fragmentmap.MapFragment(ctx, fragment)
 	if err != nil {
 		t.Fatalf("first MapFragment() error = %v", err)
 	}
-	second, err := compat.MapFragment(ctx, fragment)
+	second, err := fragmentmap.MapFragment(ctx, fragment)
 	if err != nil {
 		t.Fatalf("second MapFragment() error = %v", err)
 	}

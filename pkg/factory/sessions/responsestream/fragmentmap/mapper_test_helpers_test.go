@@ -1,4 +1,4 @@
-package compat_test
+package fragmentmap_test
 
 import (
 	"encoding/json"
