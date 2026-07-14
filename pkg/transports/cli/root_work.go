@@ -54,6 +54,50 @@ func NewLegacyRepresentativeFamilyCommand() *cobra.Command {
 	return root
 }
 
+// NewLegacyFactoryConfigInitFamilyCommand builds the isolated handwritten
+// you → factory/config/init tree used by the generator-vs-legacy parity matrix.
+func NewLegacyFactoryConfigInitFamilyCommand() *cobra.Command {
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	root.AddCommand(
+		configinitcmd.NewSystemConfigCommand(cliBinaryName, configinitcmd.CommandGlobals{
+			JSON:    func() bool { return globals.json },
+			HomeDir: options.HomeDir,
+		}, configinitcmd.CommandDiagnostics{
+			Writer:  diagnostics.writer,
+			Verbose: diagnostics.verboseEnabled,
+		}),
+		newFactoryCommand(globals, diagnostics),
+		newInitCommand(globals, diagnostics),
+	)
+	return root
+}
+
+// NewGeneratedFactoryConfigInitFamilyCommandForParity builds the generated
+// you → factory/config/init tree used by the generator-vs-legacy parity matrix.
+func NewGeneratedFactoryConfigInitFamilyCommandForParity(
+	registry *commandregistry.Registry,
+	bindings climanifestcobra.FactoryConfigInitFlagBindings,
+) (*cobra.Command, error) {
+	if registry == nil {
+		return nil, fmt.Errorf("build factory/config/init parity command: registry is required")
+	}
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	components, err := climanifestcobra.NewFactoryConfigInitFamilyComponents(registry, bindings)
+	if err != nil {
+		return nil, fmt.Errorf("build factory/config/init parity command: %w", err)
+	}
+	root.AddCommand(components.Config, components.Factory, components.Init)
+	return root, nil
+}
+
 func newLegacyRootCommandShell(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,

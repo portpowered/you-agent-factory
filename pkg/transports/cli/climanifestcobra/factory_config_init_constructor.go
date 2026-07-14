@@ -149,7 +149,7 @@ func finalizeFactoryConfigInitCommand(
 	if factoryConfigInitSilenceUsage(record.ID) {
 		cmd.SilenceUsage = true
 	}
-	cmd.Args = positionalArgsFromManifest(record)
+	cmd.Args = factoryConfigInitPositionalArgs(record)
 	if usesDeprecatedPortPreRun(record.ID) {
 		cmd.PreRunE = rejectDeprecatedPortFlag
 	}
@@ -235,7 +235,7 @@ func registerFactoryConfigInitLocalFlags(
 		if err != nil {
 			return err
 		}
-		usage := factoryConfigInitFlagUsage(bindings, flag.Long)
+		usage := factoryConfigInitFlagUsage(record.ID, flag.Long, bindings)
 		if err := registerFlag(cmd.Flags(), flag, target, usage); err != nil {
 			return fmt.Errorf("register local flag %q: %w", flag.Long, err)
 		}
@@ -249,7 +249,23 @@ func registerFactoryConfigInitLocalFlags(
 	return nil
 }
 
-func factoryConfigInitFlagUsage(bindings FactoryConfigInitFlagBindings, longName string) string {
+func factoryConfigInitPositionalArgs(record climanifest.Command) cobra.PositionalArgs {
+	if record.ID == "you.factory.replace-current" {
+		return cobra.NoArgs
+	}
+	return positionalArgsFromManifest(record)
+}
+
+func factoryConfigInitFlagUsage(commandID, longName string, bindings FactoryConfigInitFlagBindings) string {
+	switch commandID {
+	case "you.init":
+		switch longName {
+		case "dir":
+			return "base directory to create"
+		case "type":
+			return "scaffold type to generate (supported: default, ralph)"
+		}
+	}
 	if bindings.FlagUsages == nil {
 		return ""
 	}
