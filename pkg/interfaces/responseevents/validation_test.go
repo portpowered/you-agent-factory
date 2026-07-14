@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 )
 
 func TestValidateEvent_AcceptsApprovedKindPhaseMatrix(t *testing.T) {

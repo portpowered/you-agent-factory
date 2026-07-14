@@ -305,6 +305,42 @@ func TestManager_PublishesProviderCanonicalDraftWithoutLegacyRemapping(t *testin
 	}
 }
 
+func TestManager_SuppressesLegacyTerminalAfterProviderCanonicalDrafts(t *testing.T) {
+	t.Parallel()
+
+	session := factorysessions.NewLiveSession(
+		"sess-adapter-terminal", "/factory", "/workspace", "/workspace",
+		factorysessions.TargetRef{Kind: factorysessions.TargetKindDefault}, nil, false, "factory",
+	)
+	publisher := stream.NewManager(&streamTestHost{session: session}).InferenceProgressPublisherFactory(nil)(session.ID)
+	payload, err := json.Marshal(responseevents.MessagePayload{
+		Role: "assistant", ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: "final answer"}},
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	draft := responseevents.Draft{
+		RunID: "run-1", DispatchID: "dispatch-1", Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted,
+		Provenance: responseevents.Provenance{
+			Provider: "opencode", NativeEventType: "text", Delivery: responseevents.DeliveryNativeStream,
+			Representation: responseevents.RepresentationSnapshot, Fidelity: responseevents.FidelityNormalized,
+		},
+		Payload: payload, ItemID: "message-1", ProviderSessionRef: "session-1",
+	}
+	publisher(workerprovider.CanonicalDraftFragment(draft.DispatchID, draft))
+	terminal := workerprovider.CompletedFragment(draft.DispatchID, nil)
+	terminal.CanonicalEventAlreadyPublished = true
+	publisher(terminal)
+
+	events := session.ResponseEvents.Events()
+	if len(events) != 1 || events[0].Kind != responseevents.KindMessage || events[0].Phase != responseevents.PhaseCompleted {
+		t.Fatalf("canonical events = %#v", events)
+	}
+	if events[0].Provenance != draft.Provenance || events[0].ItemID != draft.ItemID || events[0].ProviderSessionRef != draft.ProviderSessionRef {
+		t.Fatalf("adapter semantics were not preserved: %#v", events[0])
+	}
+}
+
 func TestManager_NativeFailureSuppressesLegacyMarkersSecondCanonicalProjection(t *testing.T) {
 	t.Parallel()
 	session := factorysessions.NewLiveSession(

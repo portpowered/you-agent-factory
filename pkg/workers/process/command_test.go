@@ -799,7 +799,9 @@ func TestExecCommandRunner_HelperProcess(t *testing.T) {
 		time.Sleep(10 * time.Second)
 		os.Exit(0)
 	case "pid-sleep":
-		writeCommandHelperPID()
+		if os.Getenv("COMMAND_HELPER_PID_WRITTEN_BY_PARENT") != "1" {
+			writeCommandHelperPID()
+		}
 		time.Sleep(10 * time.Second)
 		os.Exit(0)
 	case "pid-term-exit":
@@ -865,7 +867,11 @@ func spawnCommandHelperChild() {
 		"--",
 		"child-sleep",
 	)
-	child.Env = append(os.Environ(), "GO_WANT_COMMAND_HELPER=1")
+	child.Env = append(os.Environ(),
+		"GO_WANT_COMMAND_HELPER=1",
+		"COMMAND_HELPER_PID_FILE="+pidFile,
+		"COMMAND_HELPER_PID_WRITTEN_BY_PARENT=1",
+	)
 	if err := child.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "start child: %v\n", err)
 		os.Exit(2)

@@ -317,6 +317,7 @@ func TestFailureBaseline_QuietPreservesRuntimeFileDiagnosticsWhileTerminalStaysM
 	var stdout, stderr bytes.Buffer
 	runErr := Run(context.Background(), RunConfig{
 		Dir:                        dir,
+		ExecutionBaseDir:           dir,
 		WorkFile:                   workFile,
 		MockWorkersEnabled:         true,
 		SuppressDashboardRendering: true,
@@ -380,6 +381,9 @@ func looksLikeStructuredLogLine(line string) bool {
 
 func runWithCapturedTerminal(t *testing.T, cfg RunConfig) (stdout, stderr string, err error) {
 	t.Helper()
+	if cfg.ExecutionBaseDir == "" && cfg.Dir != "" {
+		cfg.ExecutionBaseDir = cfg.Dir
+	}
 
 	oldStdout := os.Stdout
 	oldStderr := os.Stderr

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/testkit"
@@ -123,7 +123,54 @@ func TestFullStreamAdapterConformance(t *testing.T) {
 	})
 }
 
+func TestFullStreamAdapterConformanceSupportsSnapshotOnlyNativeStreams(t *testing.T) {
+	t.Parallel()
+
+	session := interfaces.ProviderSessionMetadata{Provider: "fixture", Kind: "session_id", ID: fixtureProviderRef}
+	testkit.RunFullStream(t, testkit.FullStreamFixture{
+		NewAdapter: func() adapter.Adapter { return snapshotStreamAdapter{} },
+		Request: interfaces.ProviderInferenceRequest{
+			Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-snapshot-conformance"},
+			Model:    "fixture-model", UserMessage: privatePrompt,
+		},
+		ContentAndTools: observations(
+			line(`{"type":"orbit","session":"session-42"}`),
+			line(`{"type":"seal","item":"message-7","text":"Hello world"}`),
+		),
+		RetryableFailure: observations(
+			line(`{"type":"orbit","session":"session-42"}`),
+			line(`{"type":"pause","seconds":2}`),
+		),
+		UnsafeAndRecovering: observations(
+			line(`{"type":"orbit","session":"session-42"}`),
+			line(`{"type":`+privatePrompt+`,"token":"`+secretToken+`"}`),
+			line(`{"type":"future_shape","prompt":"`+privatePrompt+`","token":"`+secretToken+`"}`),
+			line(`{"type":"seal","item":"message-7","text":"Hello world"}`),
+		),
+		UnterminatedFinal: observations(
+			line(`{"type":"orbit","session":"session-42"}`),
+			[]byte(`{"type":"seal","item":"message-7","text":"Hello world"}`),
+		),
+		FinalResult: workerprocess.CommandResult{Stdout: []byte(`{"content":"Hello world","session":"session-42"}`)},
+		Expected: testkit.FullStreamExpected{
+			Capabilities:    adapter.Capabilities{NativeStreaming: true, MessageSnapshots: true, StableItemIDs: true},
+			ProviderSession: session,
+			ProviderRef:     fixtureProviderRef, MessageItemID: fixtureMessageID,
+			FinalContent: "Hello world", RetryAfter: 2,
+		},
+		ForbiddenDiagnostic: []string{privatePrompt, secretToken},
+	})
+}
+
 type fullStreamAdapter struct{}
+
+type snapshotStreamAdapter struct{ fullStreamAdapter }
+
+func (snapshotStreamAdapter) Capabilities(context.Context, adapter.CapabilityContext) (adapter.CapabilityResult, error) {
+	return adapter.CapabilityResult{Capabilities: adapter.Capabilities{
+		NativeStreaming: true, MessageSnapshots: true, StableItemIDs: true,
+	}}, nil
+}
 
 func (fullStreamAdapter) Identity() adapter.Identity { return "fixture-full-stream" }
 

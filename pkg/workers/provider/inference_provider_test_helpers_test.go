@@ -19,7 +19,48 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workcontent"
 	"github.com/portpowered/infinite-you/pkg/workcontent/materialize"
+	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
 )
+
+type fixedOpenCodeIdentifier struct{ executable string }
+
+func (i fixedOpenCodeIdentifier) Identify(context.Context, string) (opencodeadapter.Installation, error) {
+	executable := i.executable
+	if executable == "" {
+		executable = "opencode"
+	}
+	return opencodeadapter.Installation{Executable: executable, Fingerprint: "test-installation"}, nil
+}
+
+type fixedOpenCodeDiscoverer struct{ mode opencodeadapter.Mode }
+
+func (d fixedOpenCodeDiscoverer) Discover(context.Context, opencodeadapter.Installation) (opencodeadapter.Decision, error) {
+	return opencodeadapter.Decision{Version: "1.2.3", Mode: d.mode}, nil
+}
+
+func openCodeResolverForTest(t *testing.T, mode opencodeadapter.Mode) *opencodeadapter.Resolver {
+	return openCodeResolverForExecutable(t, mode, "")
+}
+
+func openCodeResolverForExecutable(t *testing.T, mode opencodeadapter.Mode, executable string) *opencodeadapter.Resolver {
+	t.Helper()
+	resolver, err := opencodeadapter.NewResolver(opencodeadapter.ResolverOptions{
+		Identifier: fixedOpenCodeIdentifier{executable: executable}, Discoverer: fixedOpenCodeDiscoverer{mode: mode},
+	})
+	if err != nil {
+		t.Fatalf("NewResolver() error = %v", err)
+	}
+	return resolver
+}
+
+func newScriptWrapProviderForTest(t *testing.T, runner CommandRunner, modelProvider string) *ScriptWrapProvider {
+	t.Helper()
+	options := []ScriptWrapProviderOption{WithProviderCommandRunner(runner)}
+	if modelProvider == string(interfaces.ModelProviderOpenCode) {
+		options = append(options, WithOpenCodeCapabilityResolver(openCodeResolverForTest(t, opencodeadapter.ModeFinalOnly)))
+	}
+	return NewScriptWrapProvider(options...)
+}
 
 func InputTokens(tokens ...interfaces.Token) []any {
 	if len(tokens) == 0 {
