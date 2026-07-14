@@ -889,3 +889,15 @@ func assertForbiddenWorkflowRunVocabulary(t *testing.T, text string) {
 		}
 	}
 }
+
+func TestNewRepresentativeHandlerRegistryWiresHandwrittenSessionShow(t *testing.T) {
+	globals := &cliGlobalOptions{}
+	diagnostics := &cliDiagnosticsOptions{}
+	registry, err := newRepresentativeHandlerRegistry(globals, diagnostics, &cliOperatorDefaultsOptions{}, RootCommandOptions{})
+	if err != nil {
+		t.Fatalf("newRepresentativeHandlerRegistry() error = %v", err)
+	}
+	if _, err := registry.Lookup("you.session.show"); err != nil {
+		t.Fatalf("Lookup(you.session.show) error = %v", err)
+	}
+}

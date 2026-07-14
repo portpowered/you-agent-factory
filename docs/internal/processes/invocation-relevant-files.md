@@ -144,8 +144,12 @@ primary-result behavior.
   `pkg/transports/cli/climanifestgen` (`Generate`, `Check`, `ExtractRepresentativeFamily`)
   with `cmd/climanifestgen` and committed artifacts under
   `pkg/transports/cli/generated` (`RepresentativeFamilyManifest`, embedded
-  `representative_family.json`). Constructor/handler-registry cutover remains deferred
-  to later B10-CLI-GENERATOR stories.
+  `representative_family.json`). Handwritten representative-family handlers are
+  registered by stable command ID in `pkg/transports/cli/commandregistry`
+  (`NewRepresentativeRegistry`, `SessionShowRunE`, `AttachRunE`,
+  `VerifyRepresentativeRunnableCoverage`) and production wiring helper
+  `newRepresentativeHandlerRegistry` in `pkg/transports/cli/root_work.go`.
+  Generated constructor/cutover remains deferred to later B10-CLI-GENERATOR stories.
 - Operator default worker model settings resolve at the CLI/process boundary in
   `pkg/transports/cli/root.go` (`resolveOperatorDefaults`) and flow through
   `run.RunConfig.OperatorDefaults` into `service.FactoryServiceConfig` before

@@ -9,6 +9,7 @@ import (
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
@@ -436,6 +437,31 @@ func newSessionShowCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 
 	registerDeprecatedPortFlag(cmd)
 	return cmd
+}
+
+func newRepresentativeHandlerRegistry(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	rootOptions RootCommandOptions,
+) (*commandregistry.Registry, error) {
+	if operatorDefaults == nil {
+		operatorDefaults = &cliOperatorDefaultsOptions{}
+	}
+	return commandregistry.NewRepresentativeRegistry(commandregistry.RepresentativeHandlers{
+		RootRunE: func(cmd *cobra.Command, args []string) error {
+			policy := diagnostics.resolvePolicy(false)
+			return runFactoryWithOptions(cmd, defaultcmd.OOTBRunConfig(), nil, globals, operatorDefaults, policy, rootOptions, true)
+		},
+		SessionShowRunE: commandregistry.SessionShowRunE(commandregistry.SessionShowBinding{
+			Server:            globals.server,
+			JSON:              globals.json,
+			Verbose:           diagnostics.verboseEnabled(),
+			Debug:             diagnostics.debug,
+			DiagnosticsWriter: diagnostics.writer,
+			ShowSession:       showSession,
+		}),
+	})
 }
 
 func newSessionDispatchesCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {

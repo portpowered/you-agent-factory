@@ -45,6 +45,7 @@ func assertGeneratorInfrastructurePresent(t *testing.T, repoRoot string) {
 	requiredPaths := []string{
 		filepath.Join(repoRoot, "pkg", "transports", "cli", "climanifestgen"),
 		filepath.Join(repoRoot, "pkg", "transports", "cli", "generated"),
+		filepath.Join(repoRoot, "pkg", "transports", "cli", "commandregistry"),
 	}
 	for _, path := range requiredPaths {
 		if _, err := os.Stat(path); err != nil {
@@ -55,9 +56,7 @@ func assertGeneratorInfrastructurePresent(t *testing.T, repoRoot string) {
 
 func assertNoForbiddenCLICutoverPaths(t *testing.T, repoRoot string) {
 	t.Helper()
-	forbiddenPaths := []string{
-		filepath.Join(repoRoot, "pkg", "transports", "cli", "commandregistry"),
-	}
+	forbiddenPaths := []string{}
 	for _, path := range forbiddenPaths {
 		if _, err := os.Stat(path); err == nil {
 			t.Fatalf("generated CLI cutover path must not exist yet: %s", path)
@@ -80,7 +79,7 @@ func assertNoForbiddenCLIGeneratorMarkers(t *testing.T, repoRoot string) {
 		}
 		if entry.IsDir() {
 			switch entry.Name() {
-			case "climanifest", "climanifestparity", "climanifestgen", "cliinputs", "commandidentity", "baseline", "generated":
+			case "climanifest", "climanifestparity", "climanifestgen", "cliinputs", "commandidentity", "commandregistry", "baseline", "generated":
 				return filepath.SkipDir
 			}
 			return nil
