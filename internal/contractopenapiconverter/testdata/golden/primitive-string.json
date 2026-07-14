@@ -1,0 +1,5 @@
+{
+  "description": "Example identifier",
+  "format": "uuid",
+  "type": "string"
+}

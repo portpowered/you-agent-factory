@@ -1,0 +1,28 @@
+type: object
+additionalProperties: false
+description: Combined core-shape fixture
+properties:
+  id:
+    type: string
+    format: uuid
+  labels:
+    type: array
+    items:
+      type: string
+    minItems: 1
+  status:
+    type: string
+    enum:
+      - ACTIVE
+      - INACTIVE
+  widget:
+    type: object
+    additionalProperties: false
+    properties:
+      name:
+        type: string
+    required:
+      - name
+required:
+  - id
+  - status
