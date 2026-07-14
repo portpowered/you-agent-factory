@@ -3,6 +3,7 @@ package apiserver_test
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -150,4 +151,49 @@ func (s *FactorySessionSSEStream) ReadEvents(count int) []factoryapi.FactoryEven
 		events = append(events, s.ReadNextEvent())
 	}
 	return events
+}
+
+// GetSessionEvents issues GET /factory-sessions/{session_id}/events with an optional
+// raw query string and Accept header, failing closed when the request exceeds the
+// harness timeout.
+func (h *FactorySessionSSEHarness) GetSessionEvents(
+	serverURL, sessionID, query, accept string,
+) *http.Response {
+	h.t.Helper()
+
+	path := "/factory-sessions/" + sessionID + "/events"
+	if query != "" {
+		path += "?" + query
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), h.timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, serverURL+path, nil)
+	if err != nil {
+		h.t.Fatalf("new session events request: %v", err)
+	}
+	if accept != "" {
+		req.Header.Set("Accept", accept)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		h.t.Fatalf("GET %s: %v", path, err)
+	}
+	return resp
+}
+
+// ProbeRecovery issues the JSON reconnect probe for one session event stream and
+// decodes the structured recovery outcome.
+func (h *FactorySessionSSEHarness) ProbeRecovery(
+	serverURL, sessionID, query string,
+) (factoryapi.FactorySessionEventStreamRecovery, *http.Response) {
+	h.t.Helper()
+
+	resp := h.GetSessionEvents(serverURL, sessionID, query, "application/json")
+	var recovery factoryapi.FactorySessionEventStreamRecovery
+	if err := json.NewDecoder(resp.Body).Decode(&recovery); err != nil {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		h.t.Fatalf("decode recovery probe response: %v: %s", err, string(body))
+	}
+	return recovery, resp
 }
