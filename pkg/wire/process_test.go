@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 )
 
@@ -143,6 +144,54 @@ func TestBuildMCPExecutionServiceSelectsRequestedBackingService(t *testing.T) {
 				t.Fatalf("service type = %T, want fixture service", service)
 			}
 		})
+	}
+}
+
+func TestBuildSessionExecutionServiceSelectsRequestedBackingService(t *testing.T) {
+	t.Parallel()
+	fixturePath := testutil.MustRepoPath(t, "pkg/transports/http/testdata/durable-session-contract-fixtures.json")
+	tests := []struct {
+		name        string
+		request     sessionexecutioncli.ServiceRequest
+		wantRuntime bool
+	}{
+		{name: "explicit fixture", request: sessionexecutioncli.ServiceRequest{FixtureCatalogPath: fixturePath}},
+		{name: "repository fixture default", request: sessionexecutioncli.ServiceRequest{}},
+		{
+			name: "runtime",
+			request: sessionexecutioncli.ServiceRequest{
+				ExecutionBackendConfig: sessionexecutioncli.ExecutionBackendConfig{
+					Provider:    string(factorysessionexecution.ExecutionProviderJavaScriptRuntime),
+					ProjectRoot: t.TempDir(),
+				},
+			},
+			wantRuntime: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service, err := BuildSessionExecutionService(context.Background(), test.request)
+			if err != nil {
+				t.Fatalf("BuildSessionExecutionService() error = %v", err)
+			}
+			if test.wantRuntime {
+				if _, ok := service.(*factorysessionexecution.JavaScriptRuntimeService); !ok {
+					t.Fatalf("service type = %T, want runtime service", service)
+				}
+			} else if _, ok := service.(*factorysessionexecution.FakeService); !ok {
+				t.Fatalf("service type = %T, want fixture service", service)
+			}
+		})
+	}
+}
+
+func TestBuildSessionExecutionServiceRejectsUnsupportedProvider(t *testing.T) {
+	t.Parallel()
+	service, err := BuildSessionExecutionService(context.Background(), sessionexecutioncli.ServiceRequest{
+		ExecutionBackendConfig: sessionexecutioncli.ExecutionBackendConfig{Provider: "unsupported"},
+	})
+	if err == nil || service != nil || !strings.Contains(err.Error(), "use fake or javascript-runtime") {
+		t.Fatalf("BuildSessionExecutionService() = (%T, %v), want actionable unsupported-provider error", service, err)
 	}
 }
 
