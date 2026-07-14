@@ -148,6 +148,86 @@
         }
       }
     },
+    "fileOwner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package",
+        "owns"
+      ],
+      "properties": {
+        "package": {
+          "enum": [
+            "operatorconfig",
+            "systemconfig"
+          ]
+        },
+        "owns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "tolerates": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "doesNotOwn": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "sharedFileSplit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "owners"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owners": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/fileOwner"
+          }
+        }
+      }
+    },
+    "unknownFieldPolicyEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package",
+        "policy"
+      ],
+      "properties": {
+        "package": {
+          "enum": [
+            "operatorconfig",
+            "systemconfig"
+          ]
+        },
+        "policy": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "fieldContract": {
       "type": "object",
       "additionalProperties": false,
@@ -156,7 +236,10 @@
         "jsonPath",
         "documentation",
         "lifecycle",
-        "defaultEmptyBehavior"
+        "defaultEmptyBehavior",
+        "parseOwner",
+        "persistenceOwner",
+        "strictness"
       ],
       "properties": {
         "inventoryId": {
@@ -176,6 +259,27 @@
         "defaultEmptyBehavior": {
           "type": "string",
           "minLength": 1
+        },
+        "parseOwner": {
+          "enum": [
+            "operatorconfig",
+            "systemconfig"
+          ]
+        },
+        "persistenceOwner": {
+          "enum": [
+            "none",
+            "operatorconfig",
+            "systemconfig"
+          ]
+        },
+        "strictness": {
+          "type": "string",
+          "minLength": 1
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
         }
       }
     }
@@ -186,11 +290,56 @@
       "relativePath": ".you-agent-factory/config.json",
       "resolvedBy": "defaultpaths.OperatorConfigPath(homeDir)"
     },
+    "sharedFileSplit": {
+      "summary": "systemconfig owns backendScopeID load/generate/persist; operatorconfig owns defaults and workerPresets parse/resolve and tolerates sibling backendScopeID without claiming ownership",
+      "owners": [
+        {
+          "package": "systemconfig",
+          "owns": [
+            "backendScopeID"
+          ]
+        },
+        {
+          "package": "operatorconfig",
+          "owns": [
+            "defaults",
+            "defaults.workerModelProvider",
+            "defaults.workerModel",
+            "workerPresets",
+            "workerPresets[].id",
+            "workerPresets[].modelProvider",
+            "workerPresets[].model",
+            "workerPresets[].reasoningEffort"
+          ],
+          "tolerates": [
+            "backendScopeID"
+          ],
+          "doesNotOwn": [
+            "backendScopeID"
+          ]
+        }
+      ]
+    },
+    "unknownFieldPolicy": [
+      {
+        "package": "operatorconfig",
+        "policy": "ParseFileConfig uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values"
+      },
+      {
+        "package": "systemconfig",
+        "policy": "loadBackendScopeID unmarshals only backendScopeID and ignores other top-level keys on read; persistBackendScopeID rewrites the file through a raw-message map that preserves unrelated sibling keys"
+      }
+    ],
+    "siblingPreservation": "persistBackendScopeID preserves defaults, workerPresets, and unknown top-level sibling keys already present in the shared config file",
     "fields": {
       "backendScopeID": {
         "inventoryId": "backendScopeID",
         "jsonPath": "backendScopeID",
         "defaultEmptyBehavior": "missing, whitespace-only file, or empty value triggers EnsureLocalBackendScope to generate local-<uuid> and persist it",
+        "parseOwner": "systemconfig",
+        "persistenceOwner": "systemconfig",
+        "strictness": "systemconfig tolerant load (unknown top-level keys ignored on read; preserved on persist)",
+        "notes": "operatorconfig parse accepts sibling backendScopeID but does not return it on FileConfig",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.backend-scope-id",
@@ -221,6 +370,10 @@
         "inventoryId": "defaults",
         "jsonPath": "defaults",
         "defaultEmptyBehavior": "missing defaults object yields empty operator defaults",
+        "parseOwner": "operatorconfig",
+        "persistenceOwner": "none",
+        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
+        "notes": "defaults object is not persisted by operatorconfig loaders; only parsed from file before env/flag resolution",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.defaults",
@@ -254,6 +407,10 @@
         "inventoryId": "defaults.workerModelProvider",
         "jsonPath": "defaults.workerModelProvider",
         "defaultEmptyBehavior": "missing or whitespace-only value is unset until env/flag layers apply; symbolic DEFAULT resolves through lower-precedence concrete provider",
+        "parseOwner": "operatorconfig",
+        "persistenceOwner": "none",
+        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
+        "notes": "values are trimmed and canonicalized; unsupported providers fail resolve",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.defaults.worker-model-provider",
@@ -286,6 +443,9 @@
         "inventoryId": "defaults.workerModel",
         "jsonPath": "defaults.workerModel",
         "defaultEmptyBehavior": "missing or whitespace-only value is unset until env/flag layers apply",
+        "parseOwner": "operatorconfig",
+        "persistenceOwner": "none",
+        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.defaults.worker-model",
@@ -317,6 +477,10 @@
         "inventoryId": "workerPresets",
         "jsonPath": "workerPresets",
         "defaultEmptyBehavior": "missing workerPresets array is backward compatible and yields an empty preset list",
+        "parseOwner": "operatorconfig",
+        "persistenceOwner": "none",
+        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
+        "notes": "file-only (no env or flag layers)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.worker-presets",
@@ -354,6 +518,9 @@
         "inventoryId": "workerPresets[].id",
         "jsonPath": "workerPresets[].id",
         "defaultEmptyBehavior": "required non-empty after trim; duplicate ids are rejected",
+        "parseOwner": "operatorconfig",
+        "persistenceOwner": "none",
+        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.worker-presets.id",
@@ -385,6 +552,9 @@
         "inventoryId": "workerPresets[].modelProvider",
         "jsonPath": "workerPresets[].modelProvider",
         "defaultEmptyBehavior": "required non-empty; canonicalized to supported providers; symbolic DEFAULT is rejected in presets",
+        "parseOwner": "operatorconfig",
+        "persistenceOwner": "none",
+        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.worker-presets.model-provider",
@@ -417,6 +587,9 @@
         "inventoryId": "workerPresets[].model",
         "jsonPath": "workerPresets[].model",
         "defaultEmptyBehavior": "optional; trimmed when present",
+        "parseOwner": "operatorconfig",
+        "persistenceOwner": "none",
+        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.worker-presets.model",
@@ -448,6 +621,9 @@
         "inventoryId": "workerPresets[].reasoningEffort",
         "jsonPath": "workerPresets[].reasoningEffort",
         "defaultEmptyBehavior": "optional; empty value is accepted; supported values are minimal, low, medium, high",
+        "parseOwner": "operatorconfig",
+        "persistenceOwner": "none",
+        "strictness": "operatorconfig strict decode (DisallowUnknownFields on parse)",
         "documentation": {
           "formatVersion": "1.0.0",
           "itemId": "config.worker-presets.reasoning-effort",
