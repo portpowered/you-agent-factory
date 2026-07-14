@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/config/you-config.schema.json",
+  "title": "You operator and system configuration",
+  "description": "The shared .you-agent-factory/config.json contract consumed by operatorconfig and systemconfig.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "backendScopeID": {
+      "type": "string"
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workerModelProvider": {
+          "type": "string"
+        },
+        "workerModel": {
+          "type": "string"
+        }
+      }
+    },
+    "workerPresets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/workerPreset"
+      }
+    }
+  },
+  "$defs": {
+    "workerPreset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "modelProvider"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modelProvider": {
+          "type": "string",
+          "minLength": 1,
+          "not": {
+            "const": "DEFAULT"
+          }
+        },
+        "model": {
+          "type": "string"
+        },
+        "reasoningEffort": {
+          "enum": [
+            "",
+            "minimal",
+            "low",
+            "medium",
+            "high"
+          ]
+        }
+      }
+    }
+  }
+}

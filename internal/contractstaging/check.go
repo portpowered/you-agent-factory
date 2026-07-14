@@ -34,7 +34,7 @@ func (drift Drift) Empty() bool {
 // Check computes expected artifacts in memory, then compares their path set and
 // bytes with package staging without changing either authored or staged files.
 func Check(repositoryRoot string) (Drift, error) {
-	expected, err := expectedArtifacts(repositoryRoot)
+	expected, err := Artifacts(repositoryRoot)
 	if err != nil {
 		return Drift{}, err
 	}
@@ -64,7 +64,8 @@ func Check(repositoryRoot string) (Drift, error) {
 	return drift, nil
 }
 
-func expectedArtifacts(repositoryRoot string) (map[string][]byte, error) {
+// Artifacts returns the complete deterministic package staging projection.
+func Artifacts(repositoryRoot string) (map[string][]byte, error) {
 	documents, diagnostics := contractjoiner.Join(JoinInput(repositoryRoot))
 	if len(diagnostics) != 0 {
 		payload, err := json.Marshal(diagnostics)
@@ -74,7 +75,7 @@ func expectedArtifacts(repositoryRoot string) (map[string][]byte, error) {
 		return nil, fmt.Errorf("join canonical contracts: %s", payload)
 	}
 
-	expected := make(map[string][]byte, len(documents))
+	expected := make(map[string][]byte, len(documents)+len(rawArtifacts)+2)
 	for _, document := range documents {
 		payload, err := contractjoiner.MarshalCanonicalJSON(document.Value)
 		if err != nil {
@@ -83,6 +84,30 @@ func expectedArtifacts(repositoryRoot string) (map[string][]byte, error) {
 		path := filepath.ToSlash(filepath.Join(joinedOutputDirectory, document.Path))
 		expected[path] = payload
 	}
+	for _, artifact := range rawArtifacts {
+		sourcePath := filepath.Join(repositoryRoot, filepath.FromSlash(artifact.Source))
+		payload, err := os.ReadFile(sourcePath)
+		if err != nil {
+			return nil, fmt.Errorf("read canonical raw artifact %s: %w", artifact.Source, err)
+		}
+		if artifact.Source == CanonicalOpenAPIPath {
+			payload, err = ProjectStagedOpenAPI(payload, ReviewedOpenAPIBytePolicy)
+			if err != nil {
+				return nil, fmt.Errorf("project staged OpenAPI: %w", err)
+			}
+		}
+		expected[artifact.Target] = payload
+	}
+	factorySchema, err := generateFactorySchema(repositoryRoot)
+	if err != nil {
+		return nil, err
+	}
+	expected[factorySchemaTarget] = factorySchema
+	manifest, err := generateManifest(repositoryRoot, expected)
+	if err != nil {
+		return nil, err
+	}
+	expected[manifestTarget] = manifest
 	return expected, nil
 }
 
