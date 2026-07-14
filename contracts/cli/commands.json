@@ -473,7 +473,7 @@
       "runnable": true,
       "usage": {
         "line": "show [session-id]",
-        "example": "  you session show\n\n  you session show session-beta"
+        "example": "  # Show the default compatibility factory session.\n  you session show\n\n  # Show one named live session with orchestrator-aware runtime fields.\n  you session show session-beta\n\n  # Emit API-shaped JSON for automation.\n  you --json session show session-beta"
       },
       "arguments": {
         "you.session.show.arg.0": {
