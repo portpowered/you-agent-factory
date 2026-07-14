@@ -1,0 +1,75 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.bad.async-sync-return": {
+      "id": "example.bad.async-sync-return",
+      "name": "asyncSyncReturn",
+      "path": "bad.asyncSyncReturn",
+      "kind": "function",
+      "async": true,
+      "parameters": [],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.bad.async-sync-return",
+        "documentation": {
+          "title": {
+            "id": "example.bad.async-sync-return.title",
+            "canonicalEnglish": "Impossible async sync return"
+          },
+          "description": {
+            "id": "example.bad.async-sync-return.description",
+            "canonicalEnglish": "Declares async execution but documents a synchronous return shape."
+          }
+        },
+        "examples": [],
+        "visibility": "internal",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.bad.async-sync-return",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "example.bad.sync-promise-return": {
+      "id": "example.bad.sync-promise-return",
+      "name": "syncPromiseReturn",
+      "path": "bad.syncPromiseReturn",
+      "kind": "function",
+      "async": false,
+      "parameters": [],
+      "return": {
+        "kind": "promise",
+        "type": "array"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.bad.sync-promise-return",
+        "documentation": {
+          "title": {
+            "id": "example.bad.sync-promise-return.title",
+            "canonicalEnglish": "Impossible sync promise return"
+          },
+          "description": {
+            "id": "example.bad.sync-promise-return.description",
+            "canonicalEnglish": "Declares synchronous execution but documents a promise return shape."
+          }
+        },
+        "examples": [],
+        "visibility": "internal",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.bad.sync-promise-return",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

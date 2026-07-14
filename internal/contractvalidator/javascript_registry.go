@@ -19,6 +19,8 @@ func JavaScriptRegistry() Registry {
 		Documents: []Document{
 			{Path: "contracts/testdata/javascript/valid-nested-namespace.json", SchemaID: runtimeManifestSchemaID},
 			{Path: "contracts/testdata/javascript/valid-value.json", SchemaID: runtimeManifestSchemaID},
+			{Path: "contracts/testdata/javascript/valid-synchronous-function.json", SchemaID: runtimeManifestSchemaID},
+			{Path: "contracts/testdata/javascript/valid-asynchronous-function.json", SchemaID: runtimeManifestSchemaID},
 		},
 	})
 }

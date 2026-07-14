@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.portpowered.com/you/contracts/javascript/runtime-manifest.schema.json",
   "title": "JavaScript runtime symbol manifest",
-  "description": "Authored installed-runtime symbol metadata for globals, nested namespaces, and values. Callable signatures and semantic integrity checks are validated in later schema revisions and family-specific diagnostics.",
+  "description": "Authored installed-runtime symbol metadata for globals, nested namespaces, values, and callable signatures. Semantic integrity checks for paths, parents, and supported surfaces are validated in later schema revisions and family-specific diagnostics.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -37,6 +37,229 @@
       "type": "string",
       "pattern": "^[a-z][a-zA-Z0-9]*$"
     },
+    "parameterType": {
+      "description": "Descriptive installed-runtime parameter type label.",
+      "type": "string",
+      "enum": [
+        "any",
+        "array",
+        "boolean",
+        "function",
+        "json-compatible",
+        "number",
+        "object",
+        "string",
+        "undefined"
+      ]
+    },
+    "syncReturnType": {
+      "description": "Descriptive synchronous return type label.",
+      "type": "string",
+      "enum": [
+        "any",
+        "array",
+        "boolean",
+        "number",
+        "object",
+        "object-or-undefined",
+        "string",
+        "undefined"
+      ]
+    },
+    "promiseReturnType": {
+      "description": "Descriptive promise resolution type label.",
+      "type": "string",
+      "enum": [
+        "any",
+        "array",
+        "child-result-object",
+        "pipeline-result-array",
+        "undefined",
+        "void"
+      ]
+    },
+    "parameter": {
+      "description": "One ordered callable parameter with required, optional, default, or rest behavior.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "position",
+        "required",
+        "rest",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "name": {
+          "description": "The parameter name exposed in installed-runtime documentation.",
+          "type": "string",
+          "pattern": "^[a-z][a-zA-Z0-9]*$"
+        },
+        "position": {
+          "description": "Zero-based position in the ordered callable parameter list.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "required": {
+          "description": "Whether callers must supply a value for this parameter.",
+          "type": "boolean"
+        },
+        "rest": {
+          "description": "Whether this parameter collects remaining arguments.",
+          "type": "boolean"
+        },
+        "default": {
+          "description": "Serialized default value when the parameter is optional.",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/parameterType"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "required": {
+                "const": true
+              }
+            },
+            "required": [
+              "required"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "default"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "rest": {
+                "const": true
+              }
+            },
+            "required": [
+              "rest"
+            ]
+          },
+          "then": {
+            "properties": {
+              "required": {
+                "const": false
+              }
+            },
+            "not": {
+              "required": [
+                "default"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "parameterList": {
+      "description": "Ordered callable parameters from first to last position.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/parameter"
+      }
+    },
+    "syncReturn": {
+      "description": "Synchronous return metadata for a callable symbol.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "sync"
+        },
+        "type": {
+          "$ref": "#/$defs/syncReturnType"
+        }
+      }
+    },
+    "promiseReturn": {
+      "description": "Promise return metadata for an asynchronous callable symbol.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "promise"
+        },
+        "type": {
+          "$ref": "#/$defs/promiseReturnType"
+        }
+      }
+    },
+    "returnShape": {
+      "description": "Declared callable return shape.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/syncReturn"
+        },
+        {
+          "$ref": "#/$defs/promiseReturn"
+        }
+      ]
+    },
+    "asyncReturnConstraints": {
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "async": {
+                "const": true
+              }
+            },
+            "required": [
+              "async"
+            ]
+          },
+          "then": {
+            "properties": {
+              "return": {
+                "$ref": "#/$defs/promiseReturn"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "async": {
+                "const": false
+              }
+            },
+            "required": [
+              "async"
+            ]
+          },
+          "then": {
+            "properties": {
+              "return": {
+                "$ref": "#/$defs/syncReturn"
+              }
+            }
+          }
+        }
+      ]
+    },
     "symbolBase": {
       "type": "object",
       "additionalProperties": false,
@@ -61,8 +284,10 @@
           "$ref": "#/$defs/symbolPath"
         },
         "kind": {
-          "description": "The installed symbol shape. Callable kinds are added in later schema revisions.",
+          "description": "The installed symbol shape.",
           "enum": [
+            "function",
+            "method",
             "namespace",
             "value"
           ]
@@ -84,6 +309,16 @@
         },
         "lifecycle": {
           "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        },
+        "async": {
+          "description": "Whether the installed callable returns a Promise.",
+          "type": "boolean"
+        },
+        "parameters": {
+          "$ref": "#/$defs/parameterList"
+        },
+        "return": {
+          "$ref": "#/$defs/returnShape"
         }
       }
     },
@@ -100,7 +335,10 @@
           "properties": {
             "kind": {
               "const": "namespace"
-            }
+            },
+            "async": false,
+            "parameters": false,
+            "return": false
           },
           "not": {
             "required": [
@@ -124,7 +362,10 @@
           "properties": {
             "kind": {
               "const": "namespace"
-            }
+            },
+            "async": false,
+            "parameters": false,
+            "return": false
           }
         }
       ]
@@ -139,6 +380,46 @@
           "properties": {
             "kind": {
               "const": "value"
+            },
+            "async": false,
+            "parameters": false,
+            "return": false
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "parent"
+                ]
+              },
+              {
+                "required": [
+                  "members"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "functionSymbol": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/symbolBase"
+        },
+        {
+          "$ref": "#/$defs/asyncReturnConstraints"
+        },
+        {
+          "type": "object",
+          "required": [
+            "async",
+            "parameters",
+            "return"
+          ],
+          "properties": {
+            "kind": {
+              "const": "function"
             }
           },
           "not": {
@@ -158,6 +439,35 @@
         }
       ]
     },
+    "methodSymbol": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/symbolBase"
+        },
+        {
+          "$ref": "#/$defs/asyncReturnConstraints"
+        },
+        {
+          "type": "object",
+          "required": [
+            "parent",
+            "async",
+            "parameters",
+            "return"
+          ],
+          "properties": {
+            "kind": {
+              "const": "method"
+            }
+          },
+          "not": {
+            "required": [
+              "members"
+            ]
+          }
+        }
+      ]
+    },
     "symbol": {
       "oneOf": [
         {
@@ -168,6 +478,12 @@
         },
         {
           "$ref": "#/$defs/valueSymbol"
+        },
+        {
+          "$ref": "#/$defs/functionSymbol"
+        },
+        {
+          "$ref": "#/$defs/methodSymbol"
         }
       ]
     }

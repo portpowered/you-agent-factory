@@ -1,0 +1,141 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.sync-logging": {
+      "id": "example.sync-logging",
+      "name": "syncLogging",
+      "path": "syncLogging",
+      "kind": "namespace",
+      "members": [
+        "log"
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.sync-logging",
+        "documentation": {
+          "title": {
+            "id": "example.sync-logging.title",
+            "canonicalEnglish": "Sync logging namespace"
+          },
+          "description": {
+            "id": "example.sync-logging.description",
+            "canonicalEnglish": "Root namespace grouping synchronous workflow logging helpers."
+          }
+        },
+        "examples": [
+          "syncLogging.log"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.sync-logging",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "example.sync-logging.log": {
+      "id": "example.sync-logging.log",
+      "name": "log",
+      "path": "syncLogging.log",
+      "kind": "method",
+      "parent": "example.sync-logging",
+      "async": false,
+      "parameters": [
+        {
+          "id": "example.sync-logging.log.param.message",
+          "name": "message",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "string"
+        },
+        {
+          "id": "example.sync-logging.log.param.fields",
+          "name": "fields",
+          "position": 1,
+          "required": false,
+          "rest": false,
+          "type": "object",
+          "default": "{}"
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.sync-logging.log",
+        "documentation": {
+          "title": {
+            "id": "example.sync-logging.log.title",
+            "canonicalEnglish": "Sync log method"
+          },
+          "description": {
+            "id": "example.sync-logging.log.description",
+            "canonicalEnglish": "Emits a workflow-scoped log record with an optional fields object."
+          }
+        },
+        "examples": [
+          "syncLogging.log(\"checkpoint\", { step: 1 })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.sync-logging.log",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "example.phase": {
+      "id": "example.phase",
+      "name": "phase",
+      "path": "phase",
+      "kind": "function",
+      "async": false,
+      "parameters": [
+        {
+          "id": "example.phase.param.name",
+          "name": "name",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "string"
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.phase",
+        "documentation": {
+          "title": {
+            "id": "example.phase.title",
+            "canonicalEnglish": "Phase marker"
+          },
+          "description": {
+            "id": "example.phase.description",
+            "canonicalEnglish": "Records a named workflow phase for progress tracking."
+          }
+        },
+        "examples": [
+          "phase(\"draft\")"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.phase",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}
