@@ -116,3 +116,42 @@ func TestCommandManifestSchemaFlagFixtures(t *testing.T) {
 		})
 	}
 }
+
+func TestCommandManifestSchemaRelationshipFixtures(t *testing.T) {
+	schema := commandManifestSchema(t)
+
+	tests := []struct {
+		name     string
+		fixture  string
+		valid    bool
+		wantPath string
+	}{
+		{name: "valid mutex relationship", fixture: "valid-mutex-relationship.json", valid: true},
+		{name: "valid required-together relationship", fixture: "valid-required-together-relationship.json", valid: true},
+		{name: "valid conditional relationship", fixture: "valid-conditional-relationship.json", valid: true},
+		{
+			name:     "mutex relationship with one participant",
+			fixture:  "invalid-relationship-impossible.json",
+			wantPath: "/commands/example.factory.export/relationships/example.factory.export.rel.mutex.archive/participants",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			instance := readJSON(t, filepath.Join("testdata", "cli", test.fixture))
+			err := schema.Validate(instance)
+			if test.valid {
+				if err != nil {
+					t.Fatalf("validate valid fixture: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("expected fixture validation to fail")
+			}
+			if paths := validationPaths(t, err); !slices.Contains(paths, test.wantPath) {
+				t.Fatalf("validation paths = %v, want %q", paths, test.wantPath)
+			}
+		})
+	}
+}

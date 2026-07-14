@@ -1,0 +1,108 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.format": {
+      "id": "example.factory.format",
+      "name": "format",
+      "path": "example factory format",
+      "aliases": [],
+      "groupId": "factory",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.format",
+        "documentation": {
+          "title": {
+            "id": "example.factory.format.title",
+            "canonicalEnglish": "Select an output format"
+          },
+          "description": {
+            "id": "example.factory.format.description",
+            "canonicalEnglish": "Selects one mutually exclusive output format for factory results."
+          }
+        },
+        "examples": [
+          "example factory format --json"
+        ],
+        "visibility": "public",
+        "sourceHash": "6666777788889999000011112222333344445555aaaabbbbccccddddeeeeffff"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.format",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "format",
+        "example": "  example factory format --json"
+      },
+      "flags": {
+        "example.factory.format.flag.json": {
+          "id": "example.factory.format.flag.json",
+          "long": "json",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.factory.format.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "example.factory.format.flag.yaml": {
+          "id": "example.factory.format.flag.yaml",
+          "long": "yaml",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.factory.format.flag.yaml",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "relationships": {
+        "example.factory.format.rel.mutex.json-yaml": {
+          "id": "example.factory.format.rel.mutex.json-yaml",
+          "kind": "mutually-exclusive",
+          "participants": [
+            {
+              "type": "flag",
+              "id": "example.factory.format.flag.json"
+            },
+            {
+              "type": "flag",
+              "id": "example.factory.format.flag.yaml"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

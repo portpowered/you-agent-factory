@@ -1,0 +1,80 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.export": {
+      "id": "example.factory.export",
+      "name": "export",
+      "path": "example factory export",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.export",
+        "documentation": {
+          "title": {
+            "id": "example.factory.export.title",
+            "canonicalEnglish": "Export factory artifacts"
+          },
+          "description": {
+            "id": "example.factory.export.description",
+            "canonicalEnglish": "Exports factory artifacts with an impossible mutex relationship that names only one participant."
+          }
+        },
+        "examples": [
+          "example factory export"
+        ],
+        "visibility": "public",
+        "sourceHash": "9999000011112222333344445555666677778888aaaabbbbccccddddeeeeffff"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.export",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "export",
+        "example": "  example factory export"
+      },
+      "flags": {
+        "example.factory.export.flag.archive": {
+          "id": "example.factory.export.flag.archive",
+          "long": "archive",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.factory.export.flag.archive",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "relationships": {
+        "example.factory.export.rel.mutex.archive": {
+          "id": "example.factory.export.rel.mutex.archive",
+          "kind": "mutually-exclusive",
+          "participants": [
+            {
+              "type": "flag",
+              "id": "example.factory.export.flag.archive"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

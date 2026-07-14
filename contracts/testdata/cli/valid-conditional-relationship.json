@@ -1,0 +1,139 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.trace": {
+      "id": "example.factory.trace",
+      "name": "trace",
+      "path": "example factory trace",
+      "aliases": [],
+      "groupId": "factory",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.trace",
+        "documentation": {
+          "title": {
+            "id": "example.factory.trace.title",
+            "canonicalEnglish": "Trace factory execution"
+          },
+          "description": {
+            "id": "example.factory.trace.description",
+            "canonicalEnglish": "Enables verbose tracing and requires output controls when the verbose trigger is set."
+          }
+        },
+        "examples": [
+          "example factory trace --verbose --log-level debug --output trace.log"
+        ],
+        "visibility": "public",
+        "sourceHash": "8888999900001111222233334444555566667777aaaabbbbccccddddeeeeffff"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.trace",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "trace",
+        "example": "  example factory trace --verbose --log-level debug --output trace.log"
+      },
+      "flags": {
+        "example.factory.trace.flag.verbose": {
+          "id": "example.factory.trace.flag.verbose",
+          "long": "verbose",
+          "shorthand": "v",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "bool",
+          "required": false,
+          "default": "false",
+          "changedDefault": false,
+          "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.factory.trace.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "example.factory.trace.flag.log-level": {
+          "id": "example.factory.trace.flag.log-level",
+          "long": "log-level",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "static",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.factory.trace.flag.log-level",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "example.factory.trace.flag.output": {
+          "id": "example.factory.trace.flag.output",
+          "long": "output",
+          "shorthand": "o",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.factory.trace.flag.output",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "relationships": {
+        "example.factory.trace.rel.conditional.verbose-log-level-output": {
+          "id": "example.factory.trace.rel.conditional.verbose-log-level-output",
+          "kind": "conditional",
+          "when": {
+            "type": "flag",
+            "id": "example.factory.trace.flag.verbose"
+          },
+          "participants": [
+            {
+              "type": "flag",
+              "id": "example.factory.trace.flag.verbose"
+            },
+            {
+              "type": "flag",
+              "id": "example.factory.trace.flag.log-level"
+            },
+            {
+              "type": "flag",
+              "id": "example.factory.trace.flag.output"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

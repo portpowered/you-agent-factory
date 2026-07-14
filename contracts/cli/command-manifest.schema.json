@@ -116,6 +116,16 @@
           "additionalProperties": {
             "$ref": "#/$defs/flag"
           }
+        },
+        "relationships": {
+          "description": "Parse-constraint relationship records keyed by stable relationship identifiers. Object keys make duplicate relationship IDs structurally unrepresentable.",
+          "type": "object",
+          "propertyNames": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/relationship"
+          }
         }
       }
     },
@@ -446,6 +456,112 @@
             "properties": {
               "valueType": {
                 "const": "stringArray"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "participantRef": {
+      "description": "Stable reference to one flag or argument participant in a relationship group.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "id"
+      ],
+      "properties": {
+        "type": {
+          "description": "Whether the participant is a flag or positional argument on the same command.",
+          "enum": [
+            "flag",
+            "argument"
+          ]
+        },
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        }
+      }
+    },
+    "relationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "participants"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "kind": {
+          "description": "The parse-constraint relationship expressed by this record.",
+          "enum": [
+            "mutually-exclusive",
+            "required-together",
+            "at-least-one",
+            "conditional",
+            "conflict"
+          ]
+        },
+        "participants": {
+          "description": "Ordered participant references constrained by this relationship.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/participantRef"
+          },
+          "uniqueItems": true
+        },
+        "when": {
+          "description": "Trigger participant for conditional relationships. Required when kind is conditional.",
+          "$ref": "#/$defs/participantRef"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "mutually-exclusive",
+                  "required-together",
+                  "at-least-one",
+                  "conflict"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "properties": {
+              "participants": {
+                "minItems": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "conditional"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "when"
+            ],
+            "properties": {
+              "participants": {
+                "minItems": 2
               }
             }
           }

@@ -120,6 +120,9 @@ func CLIRegistry() Registry {
 			{Path: "contracts/testdata/cli/valid-persistent-flag.json", SchemaID: commandManifestID},
 			{Path: "contracts/testdata/cli/valid-inherited-flag.json", SchemaID: commandManifestID},
 			{Path: "contracts/testdata/cli/valid-no-option-flag.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-mutex-relationship.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-required-together-relationship.json", SchemaID: commandManifestID},
+			{Path: "contracts/testdata/cli/valid-conditional-relationship.json", SchemaID: commandManifestID},
 		},
 	})
 }

@@ -1,0 +1,108 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.factory.authenticate": {
+      "id": "example.factory.authenticate",
+      "name": "authenticate",
+      "path": "example factory authenticate",
+      "aliases": [],
+      "groupId": "factory",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.authenticate",
+        "documentation": {
+          "title": {
+            "id": "example.factory.authenticate.title",
+            "canonicalEnglish": "Authenticate to a factory endpoint"
+          },
+          "description": {
+            "id": "example.factory.authenticate.description",
+            "canonicalEnglish": "Supplies credentials that must be provided together before authentication proceeds."
+          }
+        },
+        "examples": [
+          "example factory authenticate --user alice --pass secret"
+        ],
+        "visibility": "public",
+        "sourceHash": "7777888899990000111122223333444455556666aaaabbbbccccddddeeeeffff"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.factory.authenticate",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "authenticate",
+        "example": "  example factory authenticate --user alice --pass secret"
+      },
+      "flags": {
+        "example.factory.authenticate.flag.user": {
+          "id": "example.factory.authenticate.flag.user",
+          "long": "user",
+          "shorthand": "u",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.factory.authenticate.flag.user",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        },
+        "example.factory.authenticate.flag.pass": {
+          "id": "example.factory.authenticate.flag.pass",
+          "long": "pass",
+          "shorthand": "p",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.factory.authenticate.flag.pass",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      },
+      "relationships": {
+        "example.factory.authenticate.rel.required-together.pass-user": {
+          "id": "example.factory.authenticate.rel.required-together.pass-user",
+          "kind": "required-together",
+          "participants": [
+            {
+              "type": "flag",
+              "id": "example.factory.authenticate.flag.pass"
+            },
+            {
+              "type": "flag",
+              "id": "example.factory.authenticate.flag.user"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
