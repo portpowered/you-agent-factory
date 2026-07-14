@@ -77,11 +77,12 @@ func (f *FactorySessionSSEFixture) LiveDispatchEvent(t *testing.T) factoryapi.Fa
 		factoryapi.FactoryEventTypeDispatchRequest,
 		factorySessionSSEFixtureLiveEventID,
 		factoryapi.FactoryEventContext{
-			Tick:       2,
-			Sequence:   3,
-			EventTime:  factorySessionSSEFixtureEventTime.Add(2 * time.Second),
-			SessionId:  &sessionID,
-			DispatchId: stringPointerForAPIServerTest("b08-sse-fixture-dispatch-1"),
+			Tick:            2,
+			Sequence:        3,
+			SessionSequence: factorySessionSSESessionSequencePointer(3),
+			EventTime:       factorySessionSSEFixtureEventTime.Add(2 * time.Second),
+			SessionId:       &sessionID,
+			DispatchId:      stringPointerForAPIServerTest("b08-sse-fixture-dispatch-1"),
 		},
 		factoryapi.DispatchRequestEventPayload{
 			TransitionId: "review",
@@ -108,10 +109,11 @@ func factorySessionSSEFixtureRetainedEvents(t *testing.T) []factoryapi.FactoryEv
 			factoryapi.FactoryEventTypeRunRequest,
 			factorySessionSSEFixtureRetainedEventOneID,
 			factoryapi.FactoryEventContext{
-				Tick:      0,
-				Sequence:  0,
-				EventTime: factorySessionSSEFixtureEventTime,
-				SessionId: &sessionID,
+				Tick:            0,
+				Sequence:        0,
+				SessionSequence: factorySessionSSESessionSequencePointer(0),
+				EventTime:       factorySessionSSEFixtureEventTime,
+				SessionId:       &sessionID,
 			},
 			factoryapi.RunRequestEventPayload{
 				RecordedAt: factorySessionSSEFixtureEventTime,
@@ -123,10 +125,11 @@ func factorySessionSSEFixtureRetainedEvents(t *testing.T) []factoryapi.FactoryEv
 			factoryapi.FactoryEventTypeInitialStructureRequest,
 			factorySessionSSEFixtureRetainedEventTwoID,
 			factoryapi.FactoryEventContext{
-				Tick:      0,
-				Sequence:  1,
-				EventTime: factorySessionSSEFixtureEventTime,
-				SessionId: &sessionID,
+				Tick:            0,
+				Sequence:        1,
+				SessionSequence: factorySessionSSESessionSequencePointer(1),
+				EventTime:       factorySessionSSEFixtureEventTime,
+				SessionId:       &sessionID,
 			},
 			factoryapi.InitialStructureRequestEventPayload{
 				Factory: factoryapi.Factory{Name: "b08-sse-fixture-factory"},
@@ -137,15 +140,20 @@ func factorySessionSSEFixtureRetainedEvents(t *testing.T) []factoryapi.FactoryEv
 			factoryapi.FactoryEventTypeWorkRequest,
 			factorySessionSSEFixtureRetainedEventThreeID,
 			factoryapi.FactoryEventContext{
-				Tick:      1,
-				Sequence:  2,
-				EventTime: factorySessionSSEFixtureEventTime.Add(time.Second),
-				SessionId: &sessionID,
-				RequestId: stringPointerForAPIServerTest("b08-sse-fixture-request-1"),
+				Tick:            1,
+				Sequence:        2,
+				SessionSequence: factorySessionSSESessionSequencePointer(2),
+				EventTime:       factorySessionSSEFixtureEventTime.Add(time.Second),
+				SessionId:       &sessionID,
+				RequestId:       stringPointerForAPIServerTest("b08-sse-fixture-request-1"),
 			},
 			factoryapi.WorkRequestEventPayload{
 				Type: factoryapi.WorkRequestTypeFactoryRequestBatch,
 			},
 		),
 	}
+}
+
+func factorySessionSSESessionSequencePointer(sequence int) *int {
+	return &sequence
 }
