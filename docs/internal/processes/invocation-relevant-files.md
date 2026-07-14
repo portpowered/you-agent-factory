@@ -372,6 +372,14 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   (`TestCrossProviderParitySmoke_ProviderSuiteEntrypoint`). Maintainer lanes:
   `make provider-parity-smoke` (also invoked by `make api-smoke`) and
   `make response-stream-stress-smoke` for response-event backpressure/race proofs.
+  Batch 09 private-contract removal gates live in
+  `pkg/factory/sessions/responsestream/removalgate` (`AssertGate`,
+  `AssertDocsPrerequisite`, `AssertNoPrivateNDJSONInProductionSurfaces`,
+  `AssertPublicTransportLayersDoNotImportLegacyCompat`) with package tests in
+  `gate_test.go` and the functional entrypoint
+  `tests/functional/smoke/response_stream_private_contract_removal_gate_smoke_test.go`
+  (`TestResponseStreamPrivateContractRemovalGateSmoke`). Run these before deleting
+  private NDJSON record types or legacy compat mapper code.
   While legacy response-stream consumers remain supported, carry an exact draft beside the compatibility
   fragment and let `pkg/factory/sessions/stream/manager.go` publish that draft
   directly; do not remap it through the lossy legacy fragment mapper. Keep the
