@@ -314,13 +314,3 @@ func classifyCodexStructuredSignal(errorType string, status int) (interfaces.Wor
 func codexExitFailureMessage(exitCode int) string {
 	return fmt.Sprintf("codex exited with code %d", exitCode)
 }
-
-
-func containsAny(haystack string, needles ...string) bool {
-	for _, needle := range needles {
-		if needle != "" && strings.Contains(haystack, needle) {
-			return true
-		}
-	}
-	return false
-}

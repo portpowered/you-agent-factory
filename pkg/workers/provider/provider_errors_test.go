@@ -790,13 +790,6 @@ func ParseGeminiProviderFailure(result CommandResult) ProviderFailureResult {
 	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
 }
 
-func ParseKiroProviderFailure(result CommandResult) ProviderFailureResult {
-	parsed := kiropkg.ParseProviderFailure(kiropkg.FailureInput{
-		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-	})
-	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
-}
-
 func ParseOpenCodeProviderFailure(result CommandResult) ProviderFailureResult {
 	parsed := opencodepkg.ParseProviderFailure(opencodepkg.FailureInput{
 		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
@@ -837,15 +830,4 @@ func knownKiroFailure(reason interfaces.WorkFailureType) ProviderFailureResult {
 		message = "Kiro encountered a temporary service error."
 	}
 	return ProviderFailureResult{Reason: reason, Message: message}
-}
-
-func boundUTF8Bytes(message string, limit int) string {
-	if limit <= 0 || len(message) <= limit {
-		return message
-	}
-	bounded := []byte(message)[:limit]
-	for len(bounded) > 0 && bounded[len(bounded)-1]&0xc0 == 0x80 {
-		bounded = bounded[:len(bounded)-1]
-	}
-	return string(bounded)
 }
