@@ -130,8 +130,13 @@ func assertTimeoutTerminalDrafts(t *testing.T, drafts []responseevents.Draft, pa
 		assertPartialTimeoutMessageDraft(t, drafts[index], partialText)
 		index++
 	}
+	assertTimeoutErrorDraft(t, drafts[index])
+	assertTimeoutFailedRunDraft(t, drafts[index+1])
+}
 
-	errorDraft := drafts[index]
+func assertTimeoutErrorDraft(t *testing.T, errorDraft responseevents.Draft) {
+	t.Helper()
+
 	if err := responseevents.ValidateDraft(errorDraft); err != nil {
 		t.Fatalf("timeout error draft invalid: %v", err)
 	}
@@ -154,8 +159,11 @@ func assertTimeoutTerminalDrafts(t *testing.T, drafts []responseevents.Draft, pa
 	if !errorPayload.Retryable {
 		t.Fatal("timeout error retryable = false, want true")
 	}
+}
 
-	failedRun := drafts[index+1]
+func assertTimeoutFailedRunDraft(t *testing.T, failedRun responseevents.Draft) {
+	t.Helper()
+
 	if err := responseevents.ValidateDraft(failedRun); err != nil {
 		t.Fatalf("failed run draft invalid: %v", err)
 	}
