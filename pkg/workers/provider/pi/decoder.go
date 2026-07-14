@@ -181,7 +181,10 @@ func (d *decoder) decodeRecord(raw []byte) (adapter.DecodeResult, error) {
 		} else {
 			d.messageID = stableMessageID("", d.context)
 		}
-		payload, err := marshalPayload(responseevents.MessagePayload{Role: "assistant"})
+		payload, err := marshalPayload(responseevents.MessagePayload{
+			Role: "assistant",
+			ContentBlocks: []responseevents.ContentBlock{{Kind: responseevents.ContentBlockText, Text: ""}},
+		})
 		if err != nil {
 			return adapter.DecodeResult{}, err
 		}
