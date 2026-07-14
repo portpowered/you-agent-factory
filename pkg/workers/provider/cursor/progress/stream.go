@@ -32,7 +32,7 @@ type ProgressPublisher func(fragment ProgressFragment)
 
 // IsCommand reports whether command names the Cursor CLI executable.
 func IsCommand(command string) bool {
-	base := strings.ToLower(filepath.Base(strings.TrimSpace(command)))
+	base := strings.ToLower(filepath.Base(strings.ReplaceAll(strings.TrimSpace(command), `\`, "/")))
 	return base == string(interfaces.ModelProviderCursor) ||
 		base == string(interfaces.ModelProviderCursor)+".exe" ||
 		base == string(interfaces.ModelProviderCursor)+".cmd"
