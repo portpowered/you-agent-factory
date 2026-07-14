@@ -639,11 +639,6 @@ type CompetingFailureSignal struct {
 	InternalCause string
 }
 
-// IsRecognizedFailureType reports whether a failure type is a known class.
-func IsRecognizedFailureType(failureType interfaces.WorkFailureType) bool {
-	return failureType != "" && failureType != interfaces.WorkFailureTypeUnknown
-}
-
 // SelectFailureByPrecedence collapses competing signals to one authoritative
 // outcome using the shared precedence model:
 //

@@ -89,13 +89,6 @@ func ParseGeminiProviderFailure(result CommandResult) ProviderFailureResult {
 	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
 }
 
-func ParseKiroProviderFailure(result CommandResult) ProviderFailureResult {
-	parsed := kiropkg.ParseProviderFailure(kiropkg.FailureInput{
-		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
-	})
-	return ProviderFailureResult{Reason: parsed.Reason, Message: parsed.Message}
-}
-
 func ParseOpenCodeProviderFailure(result CommandResult) ProviderFailureResult {
 	parsed := opencodeadapter.ParseProviderFailure(opencodeadapter.FailureInput{
 		Stdout: result.Stdout, Stderr: result.Stderr, ExitCode: result.ExitCode,
@@ -825,5 +818,152 @@ func TestClaudeProviderBehavior_PassesUserMessageAsArgument(t *testing.T) {
 	}
 	if len(commandReq.Stdin) != 0 {
 		t.Fatalf("expected claude request not to use stdin, got %q", string(commandReq.Stdin))
+	}
+}
+
+func TestResolveCodexProviderFailure_MapsOwnedResolution(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stdout:   []byte(`{"type":"turn.failed","error":{"message":"unexpected status 503"}}` + "\n"),
+		Stderr:   []byte("ERROR: unexpected status 401\n"),
+	}
+	got, ok := ResolveCodexProviderFailure(result, CodexFailureResolutionInput{})
+	if !ok {
+		t.Fatal("ResolveCodexProviderFailure() ok = false, want true")
+	}
+	if got.Result.Reason != interfaces.WorkFailureTypeInternalServerError {
+		t.Fatalf("Result = %#v, want server failure", got.Result)
+	}
+	if got.InternalCause == "" {
+		t.Fatal("expected bounded internal cause on resolution")
+	}
+}
+
+func TestParseCodexProviderFailureLayers_SkipsPrecedence(t *testing.T) {
+	result := CommandResult{
+		ExitCode: 1,
+		Stdout:   []byte(`{"type":"turn.failed","error":{"message":"unexpected status 429"}}` + "\n"),
+		Stderr:   []byte("ERROR: unexpected status 401\n"),
+	}
+	got := ParseCodexProviderFailureLayers(result)
+	if got.Reason != interfaces.WorkFailureTypeAuthFailure {
+		t.Fatalf("ParseCodexProviderFailureLayers() = %#v, want stderr auth failure without stream precedence", got)
+	}
+}
+
+func TestCodexReportingDispatchWrappers_MapNeutralOutcomes(t *testing.T) {
+	stream, ok := CodexStructuredStreamReportingOutcome([]byte(
+		`{"type":"turn.failed","error":{"message":"unexpected status 429"}}` + "\n",
+	))
+	if !ok || stream.Reason != interfaces.WorkFailureTypeThrottled {
+		t.Fatalf("CodexStructuredStreamReportingOutcome() = (%#v, %v), want throttle", stream, ok)
+	}
+
+	exit := CodexProcessExitReportingOutcome(CommandResult{
+		ExitCode: 1,
+		Stderr:   []byte("ERROR: unexpected status 401\n"),
+	})
+	if exit.Reason != interfaces.WorkFailureTypeAuthFailure {
+		t.Fatalf("CodexProcessExitReportingOutcome() = %#v, want auth failure", exit)
+	}
+}
+
+func TestCodexSanitizedFailureFixtureFromResolution_ProjectsPolicy(t *testing.T) {
+	resolution := ProviderFailureResolution{
+		Result: ProviderFailureResult{
+			Reason:  interfaces.WorkFailureTypeThrottled,
+			Message: "Codex is temporarily unavailable due to usage or capacity limits.",
+		},
+		InternalCause: "unexpected status 429",
+	}
+	fixture := CodexSanitizedFailureFixtureFromResolution(resolution)
+	if !fixture.Retryable || fixture.InternalCause != resolution.InternalCause {
+		t.Fatalf("CodexSanitizedFailureFixtureFromResolution() = %#v, want retryable throttle projection", fixture)
+	}
+}
+
+func TestCodexSanitizedFailureFixtureFromProviderError_IncludesCause(t *testing.T) {
+	providerErr := NewProviderErrorFromResult(ProviderFailureResult{
+		Reason:  interfaces.WorkFailureTypeTimeout,
+		Message: "Codex execution timed out.",
+	}, ProviderFailureInternalCauseError("context deadline exceeded"))
+	fixture := CodexSanitizedFailureFixtureFromProviderError(providerErr)
+	if fixture.Type != interfaces.WorkFailureTypeTimeout || fixture.InternalCause != "context deadline exceeded" {
+		t.Fatalf("CodexSanitizedFailureFixtureFromProviderError() = %#v, want timeout with cause", fixture)
+	}
+}
+
+func TestCodexSanitizedFailureFixtureFromProviderError_NilReturnsZeroValue(t *testing.T) {
+	if got := CodexSanitizedFailureFixtureFromProviderError(nil); got != (CodexSanitizedFailureFixture{}) {
+		t.Fatalf("CodexSanitizedFailureFixtureFromProviderError(nil) = %#v, want zero fixture", got)
+	}
+}
+
+func TestParseProviderExitFailure_RoutesOwnedProviderPackages(t *testing.T) {
+	testCases := []struct {
+		provider string
+		result   CommandResult
+		want     interfaces.WorkFailureType
+	}{
+		{
+			provider: string(interfaces.ModelProviderClaude),
+			result:   CommandResult{ExitCode: 1, Stderr: []byte(`API Error: 401 {"type":"error","error":{"type":"authentication_error","message":"sign in"}}`)},
+			want:     interfaces.WorkFailureTypeAuthFailure,
+		},
+		{
+			provider: string(interfaces.ModelProviderGemini),
+			result:   CommandResult{ExitCode: 1, Stderr: []byte("ERROR: 429 RESOURCE_EXHAUSTED")},
+			want:     interfaces.WorkFailureTypeThrottled,
+		},
+		{
+			provider: string(interfaces.ModelProviderKiro),
+			result:   CommandResult{ExitCode: 1, Stderr: []byte("ERROR: Unauthorized")},
+			want:     interfaces.WorkFailureTypeAuthFailure,
+		},
+		{
+			provider: string(interfaces.ModelProviderOpenCode),
+			result:   CommandResult{ExitCode: 1, Stderr: []byte(`{"error":{"type":"invalid_request_error","message":"bad model"}}`)},
+			want:     interfaces.WorkFailureTypePermanentBadRequest,
+		},
+		{
+			provider: string(interfaces.ModelProviderCodex),
+			result:   CommandResult{ExitCode: 1, Stderr: []byte("ERROR: unexpected status 429\n")},
+			want:     interfaces.WorkFailureTypeThrottled,
+		},
+		{
+			provider: "unknown-provider",
+			result:   CommandResult{ExitCode: 9, Stderr: []byte("cleanup noise")},
+			want:     interfaces.WorkFailureTypeUnknown,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.provider, func(t *testing.T) {
+			got := parseProviderExitFailure(tc.provider, tc.result)
+			if got.failure.Reason != tc.want {
+				t.Fatalf("parseProviderExitFailure() = %#v, want reason %q", got.failure, tc.want)
+			}
+		})
+	}
+}
+
+func TestExtractCodexErrorLine_ReturnsLastErrorPrefixedLine(t *testing.T) {
+	line, ok := extractCodexErrorLine(CommandResult{Stderr: []byte("planning\nERROR: first\nERROR: decisive")})
+	if !ok || line != "ERROR: decisive" {
+		t.Fatalf("extractCodexErrorLine() = (%q, %v), want decisive error line", line, ok)
+	}
+}
+
+func TestSelectFailureByPrecedence_StructuredWinsOverStderr(t *testing.T) {
+	throttle := ProviderFailureResult{Reason: interfaces.WorkFailureTypeThrottled, Message: "throttle"}
+	auth := ProviderFailureResult{Reason: interfaces.WorkFailureTypeAuthFailure, Message: "auth"}
+	exit := ProviderFailureResult{Reason: interfaces.WorkFailureTypeUnknown, Message: "exit fallback"}
+	got, ok := SelectFailureByPrecedence([]CompetingFailureSignal{
+		{Tier: FailureSignalTierStructured, Recognized: true, Result: throttle},
+		{Tier: FailureSignalTierStderr, Recognized: true, Result: auth},
+		{Tier: FailureSignalTierExit, Result: exit},
+	})
+	if !ok || got.Result != throttle {
+		t.Fatalf("SelectFailureByPrecedence() = (%#v, %v), want structured throttle", got, ok)
 	}
 }
