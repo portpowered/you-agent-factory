@@ -277,7 +277,11 @@ func collectParameterPairChanges(path string, before, after *openapi3.Parameter)
 	if err != nil {
 		return nil, err
 	}
-	return append(changes, schemaChanges...), nil
+	changes = append(changes, schemaChanges...)
+	if err := checkUnsupportedParameterResiduals(path, before, after); err != nil {
+		return nil, err
+	}
+	return changes, nil
 }
 
 func collectRequestBodyChanges(opPath string, before, after *openapi3.RequestBodyRef) ([]Change, error) {
@@ -311,6 +315,9 @@ func collectResponsesChanges(opPath string, before, after *openapi3.Responses) (
 		afterResponse := responseValue(afterResponseRef)
 		if beforeResponse == nil || afterResponse == nil {
 			return nil, unsupportedStructuralDiff(opPath + ".responses." + status)
+		}
+		if err := checkUnsupportedResponseHeaders(opPath+".responses."+status+".headers", beforeResponse.Headers, afterResponse.Headers); err != nil {
+			return nil, err
 		}
 		responseChanges, err := collectMediaTypeChanges(opPath+".responses."+status+".content", beforeResponse.Content, afterResponse.Content)
 		if err != nil {
@@ -367,7 +374,134 @@ func collectComponentChanges(before, after *openapi3.Components) ([]Change, erro
 		}
 		changes = append(changes, schemaChanges...)
 	}
+	if err := checkUnsupportedComponentResiduals(before, after); err != nil {
+		return nil, err
+	}
 	return changes, nil
+}
+
+func checkUnsupportedParameterResiduals(path string, before, after *openapi3.Parameter) error {
+	if before.Style != after.Style {
+		return unsupportedStructuralDiff(path + ".style")
+	}
+	if !boolPtrEqual(before.Explode, after.Explode) {
+		return unsupportedStructuralDiff(path + ".explode")
+	}
+	if before.AllowEmptyValue != after.AllowEmptyValue {
+		return unsupportedStructuralDiff(path + ".allowEmptyValue")
+	}
+	if before.AllowReserved != after.AllowReserved {
+		return unsupportedStructuralDiff(path + ".allowReserved")
+	}
+	if before.Deprecated != after.Deprecated {
+		return unsupportedStructuralDiff(path + ".deprecated")
+	}
+	if !anyEqual(before.Example, after.Example) {
+		return unsupportedStructuralDiff(path + ".example")
+	}
+	if !reflect.DeepEqual(before.Examples, after.Examples) {
+		return unsupportedStructuralDiff(path + ".examples")
+	}
+	if !reflect.DeepEqual(before.Content, after.Content) {
+		return unsupportedStructuralDiff(path + ".content")
+	}
+	return nil
+}
+
+func checkUnsupportedResponseHeaders(path string, before, after openapi3.Headers) error {
+	if len(before) == 0 && len(after) == 0 {
+		return nil
+	}
+	allNames := make(map[string]struct{})
+	for name := range before {
+		allNames[name] = struct{}{}
+	}
+	for name := range after {
+		allNames[name] = struct{}{}
+	}
+	names := make([]string, 0, len(allNames))
+	for name := range allNames {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		beforeHeader, beforeOK := before[name]
+		afterHeader, afterOK := after[name]
+		if !beforeOK || !afterOK {
+			return unsupportedStructuralDiff(path + "." + name)
+		}
+		if !reflect.DeepEqual(beforeHeader, afterHeader) {
+			return unsupportedStructuralDiff(path + "." + name)
+		}
+	}
+	return nil
+}
+
+func checkUnsupportedComponentResiduals(before, after *openapi3.Components) error {
+	if err := checkComponentMapResidual("components.parameters", before.Parameters, after.Parameters); err != nil {
+		return err
+	}
+	if err := checkComponentMapResidual("components.headers", before.Headers, after.Headers); err != nil {
+		return err
+	}
+	if err := checkComponentMapResidual("components.requestBodies", before.RequestBodies, after.RequestBodies); err != nil {
+		return err
+	}
+	if err := checkComponentMapResidual("components.responses", before.Responses, after.Responses); err != nil {
+		return err
+	}
+	if err := checkComponentMapResidual("components.securitySchemes", before.SecuritySchemes, after.SecuritySchemes); err != nil {
+		return err
+	}
+	if err := checkComponentMapResidual("components.examples", before.Examples, after.Examples); err != nil {
+		return err
+	}
+	if err := checkComponentMapResidual("components.links", before.Links, after.Links); err != nil {
+		return err
+	}
+	if err := checkComponentMapResidual("components.callbacks", before.Callbacks, after.Callbacks); err != nil {
+		return err
+	}
+	return nil
+}
+
+func checkComponentMapResidual[T any](path string, before, after map[string]T) error {
+	if reflect.DeepEqual(before, after) {
+		return nil
+	}
+	allNames := make(map[string]struct{})
+	for name := range before {
+		allNames[name] = struct{}{}
+	}
+	for name := range after {
+		allNames[name] = struct{}{}
+	}
+	names := make([]string, 0, len(allNames))
+	for name := range allNames {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	for _, name := range names {
+		beforeValue, beforeOK := before[name]
+		afterValue, afterOK := after[name]
+		if !beforeOK || !afterOK {
+			return unsupportedStructuralDiff(path + "." + name)
+		}
+		if !reflect.DeepEqual(beforeValue, afterValue) {
+			return unsupportedStructuralDiff(path + "." + name)
+		}
+	}
+	return unsupportedStructuralDiff(path)
+}
+
+func boolPtrEqual(before, after *bool) bool {
+	if before == nil && after == nil {
+		return true
+	}
+	if before == nil || after == nil {
+		return false
+	}
+	return *before == *after
 }
 
 func collectSchemaRefChanges(path string, before, after *openapi3.SchemaRef) ([]Change, error) {

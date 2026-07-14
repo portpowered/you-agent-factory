@@ -138,6 +138,30 @@ var openAPIDiffFixtureMatrix = []struct {
 		category:   categoryFailClosed,
 		failClosed: true,
 	},
+	{
+		name:       "unsupported-parameter-style",
+		fixture:    "unsupported-parameter-style",
+		category:   categoryFailClosed,
+		failClosed: true,
+	},
+	{
+		name:       "unsupported-response-header-remove",
+		fixture:    "unsupported-response-header-remove",
+		category:   categoryFailClosed,
+		failClosed: true,
+	},
+	{
+		name:       "unsupported-security-scheme",
+		fixture:    "unsupported-security-scheme",
+		category:   categoryFailClosed,
+		failClosed: true,
+	},
+	{
+		name:       "unsupported-component-parameter-remove",
+		fixture:    "unsupported-component-parameter-remove",
+		category:   categoryFailClosed,
+		failClosed: true,
+	},
 }
 
 func TestCompareYAML_FixtureMatrix_ClassifiesRepresentativeCases(t *testing.T) {

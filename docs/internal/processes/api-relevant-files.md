@@ -94,7 +94,10 @@ Use this map when changing the public REST contract.
   operation or schema path instead of returning a guessed classification.
   Residual schema keywords outside the supported comparison surface (for example
   `nullable`, `additionalProperties`, `oneOf`, constraints, and `default`) also
-  fail closed instead of silently classifying as `patch`.
+  fail closed instead of silently classifying as `patch`. Unhandled parameter
+  serialization fields (`style`, `explode`, `allowReserved`), response `headers`,
+  and non-schema `components` maps (`parameters`, `securitySchemes`, etc.) also
+  fail closed with path-aware `UnsupportedDiffError` outcomes.
 - Focused fixtures live under
   `internal/contractopenapidiff/testdata/`; prove end-to-end outcomes in
   `internal/contractopenapidiff/compare_test.go` and the consolidated matrix in

@@ -1,0 +1,21 @@
+openapi: 3.0.3
+info:
+  title: Unsupported Response Header Remove Fixture
+  version: 1.0.0
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      responses:
+        '200':
+          description: Pet list.
+          headers:
+            X-RateLimit:
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string

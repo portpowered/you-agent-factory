@@ -449,6 +449,62 @@ func TestCompareYAML_UnsupportedSchemaKeywordFixtures_FailClosed(t *testing.T) {
 	}
 }
 
+func TestCompareYAML_UnsupportedStructuralSurfaceFixtures_FailClosed(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		fixture  string
+		wantPath string
+	}{
+		{
+			name:     "parameter-style",
+			fixture:  "unsupported-parameter-style",
+			wantPath: "GET /pets.parameters[query:tags].style",
+		},
+		{
+			name:     "response-header-remove",
+			fixture:  "unsupported-response-header-remove",
+			wantPath: "GET /pets.responses.200.headers.X-RateLimit",
+		},
+		{
+			name:     "security-scheme",
+			fixture:  "unsupported-security-scheme",
+			wantPath: "components.securitySchemes.bearerAuth",
+		},
+		{
+			name:     "component-parameter-remove",
+			fixture:  "unsupported-component-parameter-remove",
+			wantPath: "components.parameters.Limit",
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			before := readFixture(t, tc.fixture, "before.yaml")
+			after := readFixture(t, tc.fixture, "after.yaml")
+
+			result, err := contractopenapidiff.CompareYAML(before, after)
+			if err == nil {
+				t.Fatalf("CompareYAML() = %#v, want unsupported diff error", result)
+			}
+			if !contractopenapidiff.IsUnsupportedDiff(err) {
+				t.Fatalf("CompareYAML() error = %v, want unsupported diff refusal", err)
+			}
+
+			var unsupported *contractopenapidiff.UnsupportedDiffError
+			if !errors.As(err, &unsupported) {
+				t.Fatalf("errors.As() = false, want *UnsupportedDiffError")
+			}
+			if unsupported.Path != tc.wantPath {
+				t.Fatalf("unsupported.Path = %q, want %q", unsupported.Path, tc.wantPath)
+			}
+		})
+	}
+}
+
 func TestCompareYAML_SupportedFixtures_StillClassifySuccessfully(t *testing.T) {
 	t.Parallel()
 
