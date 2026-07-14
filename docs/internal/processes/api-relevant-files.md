@@ -92,6 +92,9 @@ Use this map when changing the public REST contract.
   `{operation}.responses.{status}.content.{mediaType}.schema`). Unsupported
   or ambiguous structural deltas fail closed via `UnsupportedDiffError` with an
   operation or schema path instead of returning a guessed classification.
+  Residual schema keywords outside the supported comparison surface (for example
+  `nullable`, `additionalProperties`, `oneOf`, constraints, and `default`) also
+  fail closed instead of silently classifying as `patch`.
 - Focused fixtures live under
   `internal/contractopenapidiff/testdata/`; prove end-to-end outcomes in
   `internal/contractopenapidiff/compare_test.go` and the consolidated matrix in

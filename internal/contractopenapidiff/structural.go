@@ -438,7 +438,149 @@ func collectSchemaChanges(path string, before, after *openapi3.Schema) ([]Change
 		}
 		changes = append(changes, itemChanges...)
 	}
+	if err := checkUnsupportedSchemaResiduals(path, before, after); err != nil {
+		return nil, err
+	}
 	return changes, nil
+}
+
+func checkUnsupportedSchemaResiduals(path string, before, after *openapi3.Schema) error {
+	if before.Nullable != after.Nullable {
+		return unsupportedStructuralDiff(path + ".nullable")
+	}
+	if !additionalPropertiesEqual(before.AdditionalProperties, after.AdditionalProperties) {
+		return unsupportedStructuralDiff(path + ".additionalProperties")
+	}
+	if before.MinLength != after.MinLength {
+		return unsupportedStructuralDiff(path + ".minLength")
+	}
+	if !uint64PtrEqual(before.MaxLength, after.MaxLength) {
+		return unsupportedStructuralDiff(path + ".maxLength")
+	}
+	if before.Pattern != after.Pattern {
+		return unsupportedStructuralDiff(path + ".pattern")
+	}
+	if !schemaRefsEqual(before.OneOf, after.OneOf) {
+		return unsupportedStructuralDiff(path + ".oneOf")
+	}
+	if !schemaRefsEqual(before.AnyOf, after.AnyOf) {
+		return unsupportedStructuralDiff(path + ".anyOf")
+	}
+	if !schemaRefsEqual(before.AllOf, after.AllOf) {
+		return unsupportedStructuralDiff(path + ".allOf")
+	}
+	if !schemaRefStructuralEqual(before.Not, after.Not) {
+		return unsupportedStructuralDiff(path + ".not")
+	}
+	if !anyEqual(before.Default, after.Default) {
+		return unsupportedStructuralDiff(path + ".default")
+	}
+	if !anyEqual(before.Example, after.Example) {
+		return unsupportedStructuralDiff(path + ".example")
+	}
+	if before.UniqueItems != after.UniqueItems {
+		return unsupportedStructuralDiff(path + ".uniqueItems")
+	}
+	if before.ExclusiveMin != after.ExclusiveMin {
+		return unsupportedStructuralDiff(path + ".exclusiveMinimum")
+	}
+	if before.ExclusiveMax != after.ExclusiveMax {
+		return unsupportedStructuralDiff(path + ".exclusiveMaximum")
+	}
+	if before.ReadOnly != after.ReadOnly {
+		return unsupportedStructuralDiff(path + ".readOnly")
+	}
+	if before.WriteOnly != after.WriteOnly {
+		return unsupportedStructuralDiff(path + ".writeOnly")
+	}
+	if before.AllowEmptyValue != after.AllowEmptyValue {
+		return unsupportedStructuralDiff(path + ".allowEmptyValue")
+	}
+	if before.Deprecated != after.Deprecated {
+		return unsupportedStructuralDiff(path + ".deprecated")
+	}
+	if !float64PtrEqual(before.Min, after.Min) {
+		return unsupportedStructuralDiff(path + ".minimum")
+	}
+	if !float64PtrEqual(before.Max, after.Max) {
+		return unsupportedStructuralDiff(path + ".maximum")
+	}
+	if !float64PtrEqual(before.MultipleOf, after.MultipleOf) {
+		return unsupportedStructuralDiff(path + ".multipleOf")
+	}
+	if before.MinItems != after.MinItems {
+		return unsupportedStructuralDiff(path + ".minItems")
+	}
+	if !uint64PtrEqual(before.MaxItems, after.MaxItems) {
+		return unsupportedStructuralDiff(path + ".maxItems")
+	}
+	if before.MinProps != after.MinProps {
+		return unsupportedStructuralDiff(path + ".minProperties")
+	}
+	if !uint64PtrEqual(before.MaxProps, after.MaxProps) {
+		return unsupportedStructuralDiff(path + ".maxProperties")
+	}
+	if !reflect.DeepEqual(before.XML, after.XML) {
+		return unsupportedStructuralDiff(path + ".xml")
+	}
+	if !reflect.DeepEqual(before.Discriminator, after.Discriminator) {
+		return unsupportedStructuralDiff(path + ".discriminator")
+	}
+	return nil
+}
+
+func additionalPropertiesEqual(before, after openapi3.AdditionalProperties) bool {
+	if (before.Has == nil) != (after.Has == nil) {
+		return false
+	}
+	if before.Has != nil && after.Has != nil && *before.Has != *after.Has {
+		return false
+	}
+	return schemaRefStructuralEqual(before.Schema, after.Schema)
+}
+
+func schemaRefsEqual(before, after openapi3.SchemaRefs) bool {
+	return reflect.DeepEqual(before, after)
+}
+
+func schemaRefStructuralEqual(before, after *openapi3.SchemaRef) bool {
+	if before == nil && after == nil {
+		return true
+	}
+	if before == nil || after == nil {
+		return false
+	}
+	if before.Ref != after.Ref {
+		return false
+	}
+	if before.Ref != "" {
+		return true
+	}
+	return reflect.DeepEqual(before.Value, after.Value)
+}
+
+func float64PtrEqual(before, after *float64) bool {
+	if before == nil && after == nil {
+		return true
+	}
+	if before == nil || after == nil {
+		return false
+	}
+	return *before == *after
+}
+
+func uint64PtrEqual(before, after *uint64) bool {
+	if before == nil && after == nil {
+		return true
+	}
+	if before == nil || after == nil {
+		return false
+	}
+	return *before == *after
+}
+
+func anyEqual(before, after any) bool {
+	return reflect.DeepEqual(before, after)
 }
 
 func collectEnumChanges(path string, before, after []any) ([]Change, error) {
