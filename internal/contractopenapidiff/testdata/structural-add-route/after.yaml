@@ -1,0 +1,17 @@
+openapi: 3.0.3
+info:
+  title: Docs Only Fixture
+  version: 1.0.0
+  description: Before API description.
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      responses:
+        '200':
+          description: ok
+    post:
+      operationId: createPet
+      responses:
+        '201':
+          description: created

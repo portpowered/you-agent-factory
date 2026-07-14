@@ -72,6 +72,22 @@ Use this map when changing the public REST contract.
   `make api-smoke`; this inventory lane must not modify authored OpenAPI,
   generated clients, or `pkg/transports/http` handlers.
 
+## OpenAPI contract semver comparator
+
+- `internal/contractopenapidiff` owns the build-time OpenAPI comparator that
+  classifies supported semantic deltas between two loaded documents as
+  `major`, `minor`, or `patch` with stable change codes and operation/schema
+  paths. Use `CompareYAML` or `CompareDocuments`; keep runtime packages from
+  importing it.
+- Documentation-only differences (description, summary, externalDocs, schema
+  title) classify as `patch` when structural surfaces match. Non-documentation
+  differences currently fail closed until later comparator stories extend
+  classification.
+- Focused fixtures live under
+  `internal/contractopenapidiff/testdata/`; prove end-to-end outcomes in
+  `internal/contractopenapidiff/compare_test.go` and include the package in
+  `make contracts-smoke`.
+
 ## Compatibility Alias Inventory
 
 This inventory is the maintainer source of truth for retained public aliases.
