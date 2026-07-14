@@ -27,7 +27,7 @@
       "documentation": {
         "documentation": {
           "description": {
-            "canonicalEnglish": "Run and manage CPN-based workflow factories.\n\nWhat:\nCPN-based workflow factory CLI for running factories, submitting work, and inspecting live sessions.\n\nHow to use:\nRun you run --work ./docs/examples/startup-work.json to start the current Factory with explicit Work and the local dashboard (http://localhost:7437/dashboard/ui).\nUse you run --dir factory --work ./docs/examples/startup-work.json for an explicit Factory directory. See you \u003ccmd\u003e --help for subcommand details.\n\nAgents:\nStart with you docs agents for orientation, you submit or you submit batch to enqueue work, and you session list to confirm a live factory.\nRun you docs for all packaged reference topics. Use --verbose or --debug for stderr diagnostics; full policy in you docs.",
+            "canonicalEnglish": "Run and manage CPN-based workflow factories.\n\nWhat:\nCPN-based workflow factory CLI for running factories, submitting work, and inspecting live sessions.\n\nHow to use:\nRun you run --work ./docs/examples/startup-work.json to start the current Factory with explicit Work and the local dashboard (http://localhost:7437/dashboard/ui).\nUse you run --dir factory --work ./docs/examples/startup-work.json for an explicit Factory directory. See you <cmd> --help for subcommand details.\n\nAgents:\nStart with you docs agents for orientation, you submit or you submit batch to enqueue work, and you session list to confirm a live factory.\nRun you docs for all packaged reference topics. Use --verbose or --debug for stderr diagnostics; full policy in you docs.",
             "id": "you.description"
           },
           "title": {
@@ -253,6 +253,450 @@
       "usage": {
         "example": "  # Start the default Codex-backed Factory with explicit Work.\n  you run --work ./docs/examples/startup-work.json\n\n  # Agent orientation and command matrix.\n  you docs agents",
         "line": "you"
+      },
+      "visibility": "visible"
+    },
+    "you.config": {
+      "aliases": [],
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Initialize operator and system configuration under the shared home directory.\n\nSubcommands:\n  init  create operator/system config on a fresh home without overwriting existing files\n\nUse `you factory config` to inspect or transform factory.json configuration.",
+            "id": "you.config.description"
+          },
+          "title": {
+            "canonicalEnglish": "Initialize operator and system configuration",
+            "id": "you.config.title"
+          }
+        },
+        "examples": [
+          "you config init"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.config",
+        "sourceHash": "59c331a5612e5271ec8d1fca149d48f88ac97f7cf828194abd22d98e7af12e07",
+        "visibility": "public"
+      },
+      "flags": {
+        "you.config.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.config.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.config.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.config.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.config.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.config.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.config.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.config.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.config.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.config.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.config.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.config.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "id": "you.config",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.config",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "config",
+      "path": "you config",
+      "runnable": false,
+      "usage": {
+        "example": "  # Bootstrap operator/system config on a fresh home.\n  you config init",
+        "line": "config"
+      },
+      "visibility": "visible"
+    },
+    "you.config.init": {
+      "aliases": [],
+      "arguments": {
+        "you.config.init.arg.0": {
+          "channels": [
+            "cli"
+          ],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.config.init.arg.0",
+          "kind": "positional",
+          "maxCardinality": -1,
+          "minCardinality": 0,
+          "name": "arg0",
+          "pattern": "",
+          "position": 0,
+          "required": false,
+          "valueType": "string",
+          "variadic": true
+        }
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Create operator/system config at ~/.you-agent-factory/config.json on a fresh home.\n\nRe-running against an existing config file succeeds without rewriting user-edited contents.",
+            "id": "you.config.init.description"
+          },
+          "title": {
+            "canonicalEnglish": "Create operator/system config on a fresh home",
+            "id": "you.config.init.title"
+          }
+        },
+        "examples": [
+          "you config init"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.config.init",
+        "sourceHash": "261ea3b6e5ad5b73613f9483f39a67face057bb6805952247d0239b0b90f2abd",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.config.init.exit.failure": {
+          "code": 1,
+          "id": "you.config.init.exit.failure",
+          "kind": "failure"
+        },
+        "you.config.init.exit.success": {
+          "code": 0,
+          "id": "you.config.init.exit.success",
+          "kind": "success"
+        },
+        "you.config.init.exit.usage": {
+          "code": 1,
+          "id": "you.config.init.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.config.init.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.config.init.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.config.init.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.config.init.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.config.init.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.config.init.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.config.init.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.config.init.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.config.init.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.config.init.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.config.init.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.config.init.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.config.init.handler"
+      },
+      "id": "you.config.init",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.config.init",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "init",
+      "outputs": {
+        "you.config.init.output.human": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.config.init.output.human"
+        },
+        "you.config.init.output.json": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.config.init.output.json"
+        }
+      },
+      "path": "you config init",
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.config.init.side-effect.filesystem": {
+          "id": "you.config.init.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "usage": {
+        "example": "  # Bootstrap operator/system config on a fresh home.\n  you config init",
+        "line": "init"
       },
       "visibility": "visible"
     },
@@ -872,7 +1316,7 @@
       },
       "usage": {
         "example": "",
-        "line": "expand \u003cfactory.json\u003e"
+        "line": "expand <factory.json>"
       },
       "visibility": "visible"
     },
@@ -1134,7 +1578,7 @@
       },
       "usage": {
         "example": "",
-        "line": "flatten \u003cfactory-path\u003e"
+        "line": "flatten <factory-path>"
       },
       "visibility": "visible"
     },
@@ -1404,7 +1848,7 @@
       },
       "usage": {
         "example": "  # Validate a single-file factory config.\n  you factory config validate ./factory.json\n\n  # Validate a split-layout factory directory.\n  you factory config validate ./factory\n\n  # Emit structured validation output for automation.\n  you --json factory config validate ./factory.json",
-        "line": "validate \u003cfactory-path\u003e"
+        "line": "validate <factory-path>"
       },
       "visibility": "visible"
     },
@@ -1742,7 +2186,7 @@
       },
       "usage": {
         "example": "  # Create a new named factory from a config file.\n  you factory create staging --from ./factory.json\n\n  # Create and select the new factory as current.\n  you factory create staging --from ./factory.json --set-current\n\n  # Emit structured confirmation for scripting.\n  you --json factory create staging --from ./factory.json",
-        "line": "create \u003cname\u003e"
+        "line": "create <name>"
       },
       "visibility": "visible"
     },
@@ -2033,7 +2477,7 @@
       },
       "usage": {
         "example": "  # Delete an unused named factory.\n  you factory delete staging\n\n  # Delete from a custom factory root.\n  you factory delete staging --dir my-factory",
-        "line": "delete \u003cname\u003e"
+        "line": "delete <name>"
       },
       "visibility": "visible"
     },
@@ -3227,7 +3671,345 @@
       },
       "usage": {
         "example": "  # Replace an existing named factory from a config file.\n  you factory update staging --from ./factory.json\n\n  # Emit structured confirmation for scripting.\n  you --json factory update staging --from ./factory.json",
-        "line": "update \u003cname\u003e"
+        "line": "update <name>"
+      },
+      "visibility": "visible"
+    },
+    "you.init": {
+      "aliases": [],
+      "arguments": {
+        "you.init.arg.0": {
+          "channels": [
+            "cli"
+          ],
+          "completion": "none",
+          "doubleDash": "terminates-flags",
+          "enum": [],
+          "id": "you.init.arg.0",
+          "kind": "positional",
+          "maxCardinality": -1,
+          "minCardinality": 0,
+          "name": "arg0",
+          "pattern": "",
+          "position": 0,
+          "required": false,
+          "valueType": "string",
+          "variadic": true
+        }
+      },
+      "channels": {
+        "input": [
+          "cli",
+          "env",
+          "config",
+          "stdin"
+        ],
+        "output": [
+          "stdout",
+          "stderr"
+        ]
+      },
+      "constraints": {
+        "platforms": [
+          "linux",
+          "darwin",
+          "windows"
+        ],
+        "runtime": [
+          "local"
+        ]
+      },
+      "documentation": {
+        "documentation": {
+          "description": {
+            "canonicalEnglish": "Create factory directory structure.\n\nSupported scaffold types:\n  default - single-step task-processing scaffold\n  ralph   - minimal PRD-to-execution scaffold\n\nOmitting --executor preserves the default Codex-backed starter scaffold. Supported starter scaffold values are codex and claude. Omitting --type keeps the current default scaffold behavior. For the default scaffold, --executor chooses which starter worker scaffold is generated.",
+            "id": "you.init.description"
+          },
+          "title": {
+            "canonicalEnglish": "Create factory directory structure",
+            "id": "you.init.title"
+          }
+        },
+        "examples": [
+          "you init",
+          "you init --dir my-factory --executor claude",
+          "you init --type ralph --dir ralph-factory"
+        ],
+        "formatVersion": "1.0.0",
+        "itemId": "you.init",
+        "sourceHash": "90c4c18f546c973f8e7618a967f5785a398a8ca619bf50a0969f1b53820f06d9",
+        "visibility": "public"
+      },
+      "exits": {
+        "you.init.exit.failure": {
+          "code": 1,
+          "id": "you.init.exit.failure",
+          "kind": "failure"
+        },
+        "you.init.exit.success": {
+          "code": 0,
+          "id": "you.init.exit.success",
+          "kind": "success"
+        },
+        "you.init.exit.usage": {
+          "code": 1,
+          "id": "you.init.exit.usage",
+          "kind": "usage"
+        }
+      },
+      "flags": {
+        "you.init.flag.debug": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.init.flag.debug",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.debug",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "debug",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "d",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.init.flag.default-worker-model": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.init.flag.default-worker-model",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.default-worker-model",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.init.flag.default-worker-model-provider": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "",
+          "id": "you.init.flag.default-worker-model-provider",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.default-worker-model-provider",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "default-worker-model-provider",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.init.flag.json": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.init.flag.json",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.json",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "json",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.init.flag.server": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "http://localhost:7437",
+          "id": "you.init.flag.server",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.server",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "server",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.init.flag.verbose": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "false",
+          "id": "you.init.flag.verbose",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.verbose",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "verbose",
+          "noOptionDefault": "true",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "inherited",
+          "shorthand": "v",
+          "valueType": "bool",
+          "visibility": "visible"
+        },
+        "you.init.flag.dir": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "factory",
+          "id": "you.init.flag.dir",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.dir",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "dir",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.init.flag.type": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "default",
+          "id": "you.init.flag.type",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.type",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "type",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        },
+        "you.init.flag.executor": {
+          "aliases": [],
+          "binding": "",
+          "changedDefault": false,
+          "completion": "none",
+          "default": "codex",
+          "id": "you.init.flag.executor",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.executor",
+            "since": "1.0.0",
+            "state": "active"
+          },
+          "long": "executor",
+          "noOptionDefault": "",
+          "normalization": "",
+          "repeatable": false,
+          "required": false,
+          "scope": "local",
+          "shorthand": "",
+          "valueType": "string",
+          "visibility": "visible"
+        }
+      },
+      "handler": {
+        "id": "you.init.handler"
+      },
+      "id": "you.init",
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.init",
+        "since": "1.0.0",
+        "state": "active"
+      },
+      "name": "init",
+      "outputs": {
+        "you.init.output.human": {
+          "channel": "stdout",
+          "format": "text",
+          "id": "you.init.output.human"
+        },
+        "you.init.output.json": {
+          "channel": "stdout",
+          "format": "json",
+          "id": "you.init.output.json"
+        }
+      },
+      "path": "you init",
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
+      "runnable": true,
+      "sideEffects": {
+        "you.init.side-effect.filesystem": {
+          "id": "you.init.side-effect.filesystem",
+          "kind": "filesystem"
+        }
+      },
+      "usage": {
+        "example": "  # Create the default Codex-backed scaffold in ./factory.\n  you init\n\n  # Create a Claude-backed default scaffold in a custom directory.\n  you init --dir my-factory --executor claude\n\n  # Create the minimal Ralph PRD-to-execution scaffold.\n  you init --type ralph --dir ralph-factory",
+        "line": "init"
       },
       "visibility": "visible"
     },
