@@ -157,7 +157,14 @@ export interface paths {
     };
     /**
      * Stream factory events for one session
-     * @description Canonical event stream for dashboard, Factory Session, and durable replay traffic. Streams factory events for the explicitly selected live session. Historical events are sent first in ascending tick order, followed by live events on the same connection. Reconnect clients may pass after_event_id or after_sequence to receive only events newer than the acknowledged point; after_sequence prefers FactoryEvent.context.sessionSequence for session-scoped lifecycle events. When the request asks for application/json, the same route acts as a reconnect probe and returns a structured recovery outcome instead of opening Server-Sent Events. Probe responses classify cursor_stale separately from unknown-session failures and tell the dashboard when the next retry must omit after_event_id and after_sequence. Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
+     * @description Canonical FactoryEvent Server-Sent Events stream for dashboard, Factory Session, and durable replay traffic scoped to one explicitly selected session_id. OpenAPI 3.0.3 cannot structurally declare SSE event ids, comment keepalives, or per-connection ordering guarantees, so the lifecycle rules below are documented in operation prose rather than as unsupported response fields.
+     *     Event ordering: the server sends retained history first in ascending tick order, then continues on the same connection with live FactoryEvent records. Each text/event-stream data frame is serialized JSON matching the FactoryEvent union referenced by x-event-schema.
+     *     Reconnect cursors: pass after_event_id or after_sequence to receive only events recorded after the acknowledged point. When both are present, after_event_id wins. For session-scoped streams, after_sequence prefers FactoryEvent.context.sessionSequence when that field is present; otherwise it falls back to FactoryEvent.context.sequence. Omitting both cursors starts replay from the beginning of the session's currently retained history.
+     *     Replay bounds: live sessions replay only events retained for the current stream generation of the targeted Factory Session. Durable execution session identifiers replay persisted canonical records for that session without crossing into another session. Cursors that no longer match the retained history boundary return typed invalid-cursor handling (400 on SSE open, cursor_stale on JSON reconnect probe) rather than silently skipping events.
+     *     Identity handshake before reconnect: compare the response headers X-Factory-Session-Backend-Scope-Id, X-Factory-Session-Logical-Session-Key-Id, X-Factory-Session-Factory-Session-Id, and X-Factory-Session-Stream-Generation-Id with the latest sync-preflight or session-read identity set before reusing a persisted reconnect cursor or stream-derived cache. A changed streamGenerationId means the current stream generation invalidates prior cursors even when factorySessionId is unchanged.
+     *     Keepalives: successful SSE responses use Connection keep-alive. Idle periods may occur while the Factory Session is waiting for new canonical events; clients must treat these as normal waiting state rather than terminal stream completion unless the HTTP connection closes.
+     *     Expired-cursor recovery: when Accept includes application/json, the same route acts as a reconnect probe and returns FactorySessionEventStreamRecovery instead of opening Server-Sent Events. cursor_stale outcomes tell clients to retry with omitAfterEventId and omitAfterSequence set so the next open omits stale cursors. UNKNOWN_SESSION means the selector does not resolve to a live or durable session and never falls back to the default session.
+     *     Unknown session identifiers return NOT_FOUND instead of falling back to the default session.
      */
     get: operations["getEventsBySessionId"];
     put?: never;
@@ -5476,9 +5483,9 @@ export interface components {
     FactoryDispatchStatusFilter: components["schemas"]["FactoryDispatchStatus"];
     /** @description Stable factory-session artifact identifier. */
     ArtifactID: string;
-    /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
+    /** @description Session-scoped reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. */
     AfterEventId: string;
-    /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
+    /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
     AfterSequence: number;
     /** @description Last acknowledged FactoryResponseEvent.sequence. The stream sends only retained response events with a greater sequence before continuing with live events. Omit this cursor to start at the beginning of retained response-event history. If the cursor predates retained history, the first emitted event is a STREAM_GAP record describing the loss instead of silently skipping it. */
     ResponseEventAfterSequence: number;
@@ -5724,9 +5731,9 @@ export interface operations {
   getEvents: {
     parameters: {
       query?: {
-        /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
+        /** @description Session-scoped reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. */
         after_event_id?: components["parameters"]["AfterEventId"];
-        /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
+        /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
         after_sequence?: components["parameters"]["AfterSequence"];
       };
       header?: never;
@@ -5751,9 +5758,9 @@ export interface operations {
   getEventsBySessionId: {
     parameters: {
       query?: {
-        /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
+        /** @description Session-scoped reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. */
         after_event_id?: components["parameters"]["AfterEventId"];
-        /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
+        /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
         after_sequence?: components["parameters"]["AfterSequence"];
       };
       header?: never;
@@ -5765,7 +5772,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Factory event stream for the targeted session, or a JSON reconnect recovery probe result when Accept includes application/json. */
+      /** @description Retained catch-up in ascending tick order followed by live FactoryEvent records for the targeted session when Accept requests text/event-stream, or a JSON FactorySessionEventStreamRecovery reconnect probe result when Accept includes application/json. Successful SSE responses use Connection keep-alive and may remain idle until the next canonical FactoryEvent is recorded. */
       200: {
         headers: {
           /** @description Stable backend scope identifier for the current live Factory Session event history. Compare this handshake header with session-sync or preflight `backendScopeId` values before reusing reconnect cursors or stream-derived projections. */
@@ -5829,9 +5836,9 @@ export interface operations {
         backend_scope_id?: components["parameters"]["BackendScopeId"];
         /** @description Optional canonical logical-session key derived from the normalized factory session target. When the requested session selector is missing or stale, resolution uses backendScopeId plus this key to locate the replacement current live Factory Session. */
         logical_session_key_id?: components["parameters"]["LogicalSessionKeyId"];
-        /** @description Reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. */
+        /** @description Session-scoped reconnect cursor identifying the last acknowledged FactoryEvent.id. The stream replays only events recorded after this stable event identifier. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. */
         after_event_id?: components["parameters"]["AfterEventId"];
-        /** @description Reconnect cursor identifying the last acknowledged ordering point. Global event streams use FactoryEvent.context.sequence; session-scoped streams use FactoryEvent.context.sessionSequence when present. */
+        /** @description Session-scoped reconnect cursor identifying the last acknowledged ordering point. Session-scoped FactoryEvent streams prefer FactoryEvent.context.sessionSequence when present and otherwise fall back to FactoryEvent.context.sequence. When both after_event_id and after_sequence are present on GET /factory-sessions/{session_id}/events, after_event_id wins. Cursors that no longer match the retained history boundary surface as cursor_stale on JSON reconnect probes or invalid-cursor 400 responses on SSE open. */
         after_sequence?: components["parameters"]["AfterSequence"];
       };
       header?: never;
