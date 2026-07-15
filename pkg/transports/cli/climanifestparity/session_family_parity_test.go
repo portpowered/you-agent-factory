@@ -3,12 +3,17 @@ package climanifestparity_test
 import (
 	"bytes"
 	"context"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
@@ -16,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
+	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	"github.com/spf13/cobra"
 )
 
@@ -355,4 +361,238 @@ func loadBundledOpenAPIContract(t *testing.T) *openapi3.T {
 		t.Fatalf("validate openapi contract: %v", err)
 	}
 	return doc
+}
+
+func TestGeneratedVsLegacySessionCreateListDeleteExecutionParity(t *testing.T) {
+	for _, tc := range sessionExecutionParityCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			var requests []sessionHTTPExecutionRequest
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Errorf("read request: %v", err)
+				}
+				requests = append(requests, sessionHTTPExecutionRequest{method: r.Method, path: r.URL.EscapedPath(), body: string(body)})
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				_, _ = io.WriteString(w, tc.response)
+			}))
+			defer server.Close()
+
+			var buildRequests []sessionexecutioncli.ServiceRequest
+			options := sessionExecutionOptions(t, &buildRequests)
+			argv := tc.argv(sessionServerPort(t, server))
+			legacy, generated := executeSessionFamilyPair(t, options, argv)
+
+			assertSessionCommandResultParity(t, legacy, generated, tc.wantError)
+			assertSessionHTTPRequests(t, requests, tc)
+			assertSessionBuilderRequests(t, buildRequests, tc.wantBuilderCalls)
+		})
+	}
+}
+
+type sessionExecutionParityCase struct {
+	name             string
+	argv             func(int) []string
+	status           int
+	response         string
+	wantMethod       string
+	wantPath         string
+	wantBodyContains []string
+	wantRequestCount int
+	wantBuilderCalls int
+	wantError        bool
+}
+
+func sessionExecutionParityCases() []sessionExecutionParityCase {
+	return []sessionExecutionParityCase{
+		{
+			name: "create human success preserves target request",
+			argv: func(port int) []string {
+				return []string{"--verbose", "session", "create", "--dir", "/workspace/fleet", "--port", strconv.Itoa(port), "--init-new-factory", "--target-kind", "named", "--target-name", "beta"}
+			},
+			status:     http.StatusOK,
+			response:   `{"session":{"id":"session-beta","project":"beta","factoryDir":"/workspace/fleet/beta","folderPath":"/workspace/fleet","isDefault":false,"target":{"kind":"named","name":"beta"}}}`,
+			wantMethod: http.MethodPost, wantPath: "/factory-sessions", wantRequestCount: 2,
+			wantBodyContains: []string{`"folderPath":"/workspace/fleet"`, `"initNewFactory":true`, `"kind":"named"`, `"name":"beta"`},
+		},
+		{
+			name: "create json validation preserves exclusion request",
+			argv: func(port int) []string {
+				return []string{"session", "create", "--dir", "/workspace/fleet", "--port", strconv.Itoa(port), "--validate-only", "--json"}
+			},
+			status: http.StatusOK, response: `{}`, wantMethod: http.MethodPost, wantPath: "/factory-sessions", wantRequestCount: 2,
+			wantBodyContains: []string{`"validateOnly":true`},
+		},
+		{
+			name: "create target selection failure preserves json and error",
+			argv: func(port int) []string {
+				return []string{"session", "create", "--dir", "/workspace/fleet", "--port", strconv.Itoa(port), "--json"}
+			},
+			status:     http.StatusOK,
+			response:   `{"targets":[{"label":"beta","ref":{"kind":"named","name":"beta"}}]}`,
+			wantMethod: http.MethodPost, wantPath: "/factory-sessions", wantRequestCount: 2, wantError: true,
+		},
+		{
+			name: "list default live human preserves GET",
+			argv: func(port int) []string {
+				return []string{"--verbose", "session", "list", "--port", strconv.Itoa(port)}
+			},
+			status:     http.StatusOK,
+			response:   `{"sessions":[{"id":"session-beta","project":"beta","factoryDir":"/workspace/fleet/beta","folderPath":"/workspace/fleet","isDefault":false}]}`,
+			wantMethod: http.MethodGet, wantPath: "/factory-sessions", wantRequestCount: 2,
+		},
+		{
+			name: "list live json preserves API output",
+			argv: func(port int) []string {
+				return []string{"session", "list", "--scope", "live", "--port", strconv.Itoa(port), "--json"}
+			},
+			status: http.StatusOK, response: `{"sessions":[]}`, wantMethod: http.MethodGet, wantPath: "/factory-sessions", wantRequestCount: 2,
+		},
+		{
+			name: "list server failure preserves diagnostics and error",
+			argv: func(port int) []string {
+				return []string{"--verbose", "session", "list", "--port", strconv.Itoa(port)}
+			},
+			status: http.StatusInternalServerError, response: `{"code":"INTERNAL","message":"list unavailable"}`,
+			wantMethod: http.MethodGet, wantPath: "/factory-sessions", wantRequestCount: 2, wantError: true,
+		},
+		{
+			name: "list persisted uses durable collaborator only",
+			argv: func(_ int) []string {
+				return []string{"session", "list", "--scope", "persisted", "--json"}
+			},
+			status: http.StatusOK, wantBuilderCalls: 2,
+		},
+		{
+			name: "delete human success preserves exact session path",
+			argv: func(port int) []string {
+				return []string{"--verbose", "session", "delete", "session-beta", "--port", strconv.Itoa(port)}
+			},
+			status: http.StatusNoContent, wantMethod: http.MethodDelete, wantPath: "/factory-sessions/session-beta", wantRequestCount: 2,
+		},
+		{
+			name: "delete json success preserves confirmation",
+			argv: func(port int) []string {
+				return []string{"session", "delete", "session-beta", "--port", strconv.Itoa(port), "--json"}
+			},
+			status: http.StatusNoContent, wantMethod: http.MethodDelete, wantPath: "/factory-sessions/session-beta", wantRequestCount: 2,
+		},
+		{
+			name: "delete not found preserves diagnostic error",
+			argv: func(port int) []string {
+				return []string{"--verbose", "session", "delete", "missing-session", "--port", strconv.Itoa(port)}
+			},
+			status: http.StatusNotFound, response: `{"code":"NOT_FOUND","message":"factory session not found"}`,
+			wantMethod: http.MethodDelete, wantPath: "/factory-sessions/missing-session", wantRequestCount: 2, wantError: true,
+		},
+	}
+}
+
+type sessionHTTPExecutionRequest struct {
+	method string
+	path   string
+	body   string
+}
+
+type sessionCommandResult struct {
+	stdout string
+	stderr string
+	err    error
+}
+
+func sessionExecutionOptions(t *testing.T, requests *[]sessionexecutioncli.ServiceRequest) cli.RootCommandOptions {
+	t.Helper()
+	service, err := fse.NewFakeServiceFromContractFixtures(testutil.MustRepoPath(t, "pkg/transports/http/testdata/durable-session-contract-fixtures.json"))
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures() error = %v", err)
+	}
+	return cli.RootCommandOptions{BuildSessionExecution: func(_ context.Context, request sessionexecutioncli.ServiceRequest) (fse.Service, error) {
+		*requests = append(*requests, request)
+		return service, nil
+	}}
+}
+
+func executeSessionFamilyPair(t *testing.T, options cli.RootCommandOptions, argv []string) (sessionCommandResult, sessionCommandResult) {
+	t.Helper()
+	legacy := cli.NewLegacySessionFamilyCommand(options)
+	generated, err := cli.NewGeneratedSessionFamilyCommand(options)
+	if err != nil {
+		t.Fatalf("NewGeneratedSessionFamilyCommand() error = %v", err)
+	}
+	return executeSessionCommand(t, legacy, argv), executeSessionCommand(t, generated, argv)
+}
+
+func executeSessionCommand(t *testing.T, root *cobra.Command, argv []string) sessionCommandResult {
+	t.Helper()
+	var stdout, stderr bytes.Buffer
+	root.SetOut(&stdout)
+	root.SetErr(&stderr)
+	root.SetArgs(argv)
+	err := root.Execute()
+	return sessionCommandResult{stdout: stdout.String(), stderr: stderr.String(), err: err}
+}
+
+var durationMillisPattern = regexp.MustCompile(`durationMillis=\d+`)
+
+func assertSessionCommandResultParity(t *testing.T, legacy, generated sessionCommandResult, wantError bool) {
+	t.Helper()
+	if legacy.stdout != generated.stdout {
+		t.Fatalf("stdout mismatch:\nlegacy=%q\ngenerated=%q", legacy.stdout, generated.stdout)
+	}
+	legacyStderr := durationMillisPattern.ReplaceAllString(legacy.stderr, "durationMillis=<elapsed>")
+	generatedStderr := durationMillisPattern.ReplaceAllString(generated.stderr, "durationMillis=<elapsed>")
+	if legacyStderr != generatedStderr {
+		t.Fatalf("stderr mismatch:\nlegacy=%q\ngenerated=%q", legacyStderr, generatedStderr)
+	}
+	if (legacy.err != nil) != wantError || (generated.err != nil) != wantError {
+		t.Fatalf("errors: legacy=%v generated=%v, wantError=%t", legacy.err, generated.err, wantError)
+	}
+	if wantError && legacy.err.Error() != generated.err.Error() {
+		t.Fatalf("error mismatch: legacy=%q generated=%q", legacy.err, generated.err)
+	}
+}
+
+func assertSessionHTTPRequests(t *testing.T, requests []sessionHTTPExecutionRequest, tc sessionExecutionParityCase) {
+	t.Helper()
+	if len(requests) != tc.wantRequestCount {
+		t.Fatalf("HTTP requests = %#v, want %d", requests, tc.wantRequestCount)
+	}
+	if len(requests) == 0 {
+		return
+	}
+	if requests[0] != requests[1] {
+		t.Fatalf("HTTP request mismatch: legacy=%#v generated=%#v", requests[0], requests[1])
+	}
+	if requests[0].method != tc.wantMethod || requests[0].path != tc.wantPath {
+		t.Fatalf("HTTP request = %s %s, want %s %s", requests[0].method, requests[0].path, tc.wantMethod, tc.wantPath)
+	}
+	for _, fragment := range tc.wantBodyContains {
+		if !strings.Contains(requests[0].body, fragment) {
+			t.Fatalf("HTTP body missing %q: %s", fragment, requests[0].body)
+		}
+	}
+}
+
+func assertSessionBuilderRequests(t *testing.T, requests []sessionexecutioncli.ServiceRequest, want int) {
+	t.Helper()
+	if len(requests) != want {
+		t.Fatalf("durable builder requests = %#v, want %d calls", requests, want)
+	}
+	if len(requests) == 2 && requests[0] != requests[1] {
+		t.Fatalf("durable builder request mismatch: legacy=%#v generated=%#v", requests[0], requests[1])
+	}
+}
+
+func sessionServerPort(t *testing.T, server *httptest.Server) int {
+	t.Helper()
+	_, rawPort, err := net.SplitHostPort(strings.TrimPrefix(server.URL, "http://"))
+	if err != nil {
+		t.Fatalf("split server address %q: %v", server.URL, err)
+	}
+	port, err := strconv.Atoi(rawPort)
+	if err != nil {
+		t.Fatalf("parse server port %q: %v", rawPort, err)
+	}
+	return port
 }
