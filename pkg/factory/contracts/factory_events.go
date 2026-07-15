@@ -164,6 +164,138 @@ type FactoryDispatchWarning struct {
 	Message string `json:"message"`
 }
 
+// FactoryDispatchKind identifies the execution family of one Factory dispatch.
+type FactoryDispatchKind string
+
+const (
+	FactoryDispatchKindJavaScriptAgent      FactoryDispatchKind = "JAVASCRIPT_AGENT"
+	FactoryDispatchKindJavaScriptScript     FactoryDispatchKind = "JAVASCRIPT_SCRIPT"
+	FactoryDispatchKindJavaScriptSynthesize FactoryDispatchKind = "JAVASCRIPT_SYNTHESIZE"
+	FactoryDispatchKindJavaScriptSystem     FactoryDispatchKind = "JAVASCRIPT_SYSTEM"
+	FactoryDispatchKindJavaScriptTool       FactoryDispatchKind = "JAVASCRIPT_TOOL"
+	FactoryDispatchKindJavaScriptVerify     FactoryDispatchKind = "JAVASCRIPT_VERIFY"
+	FactoryDispatchKindPetriTransition      FactoryDispatchKind = "PETRI_TRANSITION"
+)
+
+// FactoryDispatchStatus is the canonical lifecycle status recorded for a
+// dispatch on the Factory event stream.
+type FactoryDispatchStatus string
+
+const (
+	FactoryDispatchStatusCompleted   FactoryDispatchStatus = "COMPLETED"
+	FactoryDispatchStatusFailed      FactoryDispatchStatus = "FAILED"
+	FactoryDispatchStatusInterrupted FactoryDispatchStatus = "INTERRUPTED"
+	FactoryDispatchStatusQueued      FactoryDispatchStatus = "QUEUED"
+	FactoryDispatchStatusRunning     FactoryDispatchStatus = "RUNNING"
+)
+
+// DispatchReconciliationSource identifies the authority that supplied a
+// durable dispatch reconciliation fact.
+type DispatchReconciliationSource string
+
+const (
+	DispatchReconciliationSourceDurableState      DispatchReconciliationSource = "DURABLE_STATE"
+	DispatchReconciliationSourceProviderSession   DispatchReconciliationSource = "PROVIDER_SESSION"
+	DispatchReconciliationSourceRuntimeReconciler DispatchReconciliationSource = "RUNTIME_RECONCILER"
+	DispatchReconciliationSourceStreamReplay      DispatchReconciliationSource = "STREAM_REPLAY"
+)
+
+// FactoryDispatchUsage retains optional provider usage exactly as recorded.
+type FactoryDispatchUsage struct {
+	CostUSD        *float64 `json:"costUsd,omitempty"`
+	DurationMillis *int64   `json:"durationMillis,omitempty"`
+	InputTokens    *int64   `json:"inputTokens,omitempty"`
+	OutputTokens   *int64   `json:"outputTokens,omitempty"`
+	RetryCount     *int32   `json:"retryCount,omitempty"`
+	TotalTokens    *int64   `json:"totalTokens,omitempty"`
+}
+
+// FactoryArtifact is the customer-visible metadata for a session-owned
+// artifact. Artifact bodies and storage remain outside the Factory event.
+type FactoryArtifact struct {
+	AuditMode       *string                         `json:"auditMode,omitempty"`
+	CaptureMetadata *FactoryArtifactCaptureMetadata `json:"captureMetadata,omitempty"`
+	ContentHash     *string                         `json:"contentHash,omitempty"`
+	ID              string                          `json:"id"`
+	Kind            string                          `json:"kind"`
+	Label           *string                         `json:"label,omitempty"`
+	RedactionCounts *FactoryArtifactRedactionCounts `json:"redactionCounts,omitempty"`
+	SizeBytes       *int64                          `json:"sizeBytes,omitempty"`
+	Summary         *string                         `json:"summary,omitempty"`
+	Visibility      string                          `json:"visibility"`
+}
+
+// FactoryArtifactCaptureMetadata records how an artifact was captured.
+type FactoryArtifactCaptureMetadata struct {
+	CapturedAt       *time.Time `json:"capturedAt,omitempty"`
+	MIMEType         *string    `json:"mimeType,omitempty"`
+	SourceDispatchID *string    `json:"sourceDispatchId,omitempty"`
+}
+
+// FactoryArtifactRedactionCounts records bounded redaction totals.
+type FactoryArtifactRedactionCounts struct {
+	Paths   *int32 `json:"paths,omitempty"`
+	Secrets *int32 `json:"secrets,omitempty"`
+	Tokens  *int32 `json:"tokens,omitempty"`
+}
+
+// FactorySessionJavaScriptCheckpointEventRef retains the customer-visible
+// checkpoint reference carried by an interruption event.
+type FactorySessionJavaScriptCheckpointEventRef struct {
+	ArtifactRef *FactoryArtifactRef `json:"artifactRef,omitempty"`
+	ID          string              `json:"id"`
+	Label       *string             `json:"label,omitempty"`
+	Summary     *string             `json:"summary,omitempty"`
+	Timestamp   *time.Time          `json:"timestamp,omitempty"`
+}
+
+// DispatchQueuedEventPayload records a dispatch awaiting execution.
+type DispatchQueuedEventPayload struct {
+	CoordinationRef   *string             `json:"coordinationRef,omitempty"`
+	DispatchKind      FactoryDispatchKind `json:"dispatchKind"`
+	InputArtifactIDs  *[]string           `json:"inputArtifactIds,omitempty"`
+	InputWorkIDs      *[]string           `json:"inputWorkIds,omitempty"`
+	Label             *string             `json:"label,omitempty"`
+	Model             *string             `json:"model,omitempty"`
+	ModelProvider     *string             `json:"modelProvider,omitempty"`
+	ParentDispatchID  *string             `json:"parentDispatchId,omitempty"`
+	PresetID          *string             `json:"presetId,omitempty"`
+	PromptDigest      *string             `json:"promptDigest,omitempty"`
+	Provider          *string             `json:"provider,omitempty"`
+	QueuePosition     *int                `json:"queuePosition,omitempty"`
+	ReasoningEffort   *string             `json:"reasoningEffort,omitempty"`
+	RetryOfDispatchID *string             `json:"retryOfDispatchId,omitempty"`
+	RunnerID          *string             `json:"runnerId,omitempty"`
+	SchemaDigest      *string             `json:"schemaDigest,omitempty"`
+}
+
+// DispatchInterruptedEventPayload records an observed interruption.
+type DispatchInterruptedEventPayload struct {
+	CheckpointRef      *FactorySessionJavaScriptCheckpointEventRef `json:"checkpointRef,omitempty"`
+	InterruptedAt      time.Time                                   `json:"interruptedAt"`
+	ObservedStatus     FactoryDispatchStatus                       `json:"observedStatus"`
+	ProviderSessionRef *workerexecution.ProviderSessionMetadata    `json:"providerSessionRef,omitempty"`
+	Reason             string                                      `json:"reason"`
+	RetryPlanned       bool                                        `json:"retryPlanned"`
+}
+
+// DispatchReconciledEventPayload records a durable dispatch reconciliation.
+type DispatchReconciledEventPayload struct {
+	ArtifactIDs          *[]string                      `json:"artifactIds,omitempty"`
+	FailureDetail        *workerexecution.FailureDetail `json:"failureDetail,omitempty"`
+	ReconciledStatus     FactoryDispatchStatus          `json:"reconciledStatus"`
+	ReconciliationSource DispatchReconciliationSource   `json:"reconciliationSource"`
+	Replayed             bool                           `json:"replayed"`
+	ResultArtifactRef    *FactoryArtifactRef            `json:"resultArtifactRef,omitempty"`
+	Usage                *FactoryDispatchUsage          `json:"usage,omitempty"`
+}
+
+// ArtifactCreatedEventPayload records customer-visible artifact metadata.
+type ArtifactCreatedEventPayload struct {
+	Artifact   FactoryArtifact `json:"artifact"`
+	CapturedAt *time.Time      `json:"capturedAt,omitempty"`
+}
+
 // OrchestratorPhaseChangedEventPayload records a workflow phase transition.
 // Current phase identity remains authoritative in FactoryEventContext.
 type OrchestratorPhaseChangedEventPayload struct {

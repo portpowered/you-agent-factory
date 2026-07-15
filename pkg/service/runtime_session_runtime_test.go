@@ -1988,10 +1988,10 @@ func terminalJavaScriptRecordingHistory(
 	artifactHash, artifactSize := "sha256:"+strings.Repeat("d", 64), int64(16)
 	capturedAt := eventTime.Add(time.Second)
 	history.RecordArtifactCreated(factoryevents.ArtifactCreatedInput{
-		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 1,
-		Artifact: factoryapi.FactoryArtifact{Id: "artifact-result", Kind: factoryapi.FactoryArtifactKindFINALRESULT,
-			Visibility: factoryapi.FactoryArtifactVisibilityPUBLIC, ContentHash: &artifactHash, SizeBytes: &artifactSize,
-			CaptureMetadata: &factoryapi.FactoryArtifactCaptureMetadata{CapturedAt: &capturedAt}},
+		SessionID: defaultFactorySessionID, OrchestratorKind: interfaces.OrchestratorKindJavaScript, Source: "runtime", Tick: 1,
+		Artifact: interfaces.FactoryArtifact{ID: "artifact-result", Kind: "FINAL_RESULT",
+			Visibility: "PUBLIC", ContentHash: &artifactHash, SizeBytes: &artifactSize,
+			CaptureMetadata: &interfaces.FactoryArtifactCaptureMetadata{CapturedAt: &capturedAt}},
 		CapturedAt: &capturedAt,
 	}, capturedAt)
 	status := interfaces.FactorySessionResultStatus(resultStatus)
@@ -2086,10 +2086,10 @@ func lifecycleJavaScriptRecordingHistory(t *testing.T, finalStatus factoryapi.Fa
 	checkpointAt := eventTime.Add(time.Second)
 	artifactHash, artifactSize := "sha256:"+strings.Repeat("f", 64), int64(12)
 	history.RecordArtifactCreated(factoryevents.ArtifactCreatedInput{
-		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 1,
-		Artifact: factoryapi.FactoryArtifact{Id: "artifact-checkpoint", Kind: factoryapi.FactoryArtifactKindCHECKPOINT,
-			Visibility: factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT, ContentHash: &artifactHash, SizeBytes: &artifactSize,
-			CaptureMetadata: &factoryapi.FactoryArtifactCaptureMetadata{CapturedAt: &checkpointAt}}, CapturedAt: &checkpointAt,
+		SessionID: defaultFactorySessionID, OrchestratorKind: interfaces.OrchestratorKindJavaScript, Source: "runtime", Tick: 1,
+		Artifact: interfaces.FactoryArtifact{ID: "artifact-checkpoint", Kind: "CHECKPOINT",
+			Visibility: "INTERNAL_CHECKPOINT", ContentHash: &artifactHash, SizeBytes: &artifactSize,
+			CaptureMetadata: &interfaces.FactoryArtifactCaptureMetadata{CapturedAt: &checkpointAt}}, CapturedAt: &checkpointAt,
 	}, checkpointAt)
 	history.RecordOrchestratorCheckpointWritten(factoryevents.OrchestratorCheckpointWrittenInput{
 		SessionID: defaultFactorySessionID, OrchestratorKind: interfaces.OrchestratorKindJavaScript, OrchestratorDialect: "workflow-v1",
