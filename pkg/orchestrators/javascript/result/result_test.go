@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
@@ -117,7 +118,7 @@ func TestProjectPrimaryResult_MapsJSONAndArtifactBackedOutputs(t *testing.T) {
 	if validation.HasIssues() {
 		t.Fatalf("projection validation = %#v", validation.Issues)
 	}
-	if len(parts) != 1 || parts[0].Type != interfaces.WorkContentPartTypeJSON {
+	if len(parts) != 1 || parts[0].Type != work.WorkContentPartTypeJSON {
 		t.Fatalf("json parts = %#v", parts)
 	}
 
@@ -136,7 +137,7 @@ func TestProjectPrimaryResult_MapsJSONAndArtifactBackedOutputs(t *testing.T) {
 	if imageValidation.HasIssues() {
 		t.Fatalf("image validation = %#v", imageValidation.Issues)
 	}
-	if len(imageParts) != 1 || imageParts[0].Type != interfaces.WorkContentPartTypeImage {
+	if len(imageParts) != 1 || imageParts[0].Type != work.WorkContentPartTypeImage {
 		t.Fatalf("image parts = %#v", imageParts)
 	}
 	if imageParts[0].URL != imageURI || imageParts[0].ArtifactID != "artifact-image-1" {

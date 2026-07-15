@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -76,7 +77,7 @@ func TestPoisonTokenMalformedSubmissions(t *testing.T) {
 
 	t.Run("mixed_batch_rejects_without_partial_submit", func(t *testing.T) {
 		h := newPoisonSubmitHarness(t)
-		err := h.SubmitFullError(context.Background(), []interfaces.SubmitRequest{
+		err := h.SubmitFullError(context.Background(), []work.SubmitRequest{
 			{WorkTypeID: "task", Payload: []byte(`{"good": 1}`)},
 			{WorkTypeID: "missing", Payload: []byte(`{"bad": 1}`)},
 		})
@@ -171,16 +172,16 @@ func TestPoisonTokenValidWorkUnaffected(t *testing.T) {
 
 	// Submit a burst of mixed valid and invalid work.
 	for i := range validItems {
-		requireSubmitFullRejected(t, h, []interfaces.SubmitRequest{
+		requireSubmitFullRejected(t, h, []work.SubmitRequest{
 			{WorkTypeID: "", Payload: []byte(`{"poison":true}`)},
 		}, "missing workTypeName")
-		requireSubmitFullRejected(t, h, []interfaces.SubmitRequest{
+		requireSubmitFullRejected(t, h, []work.SubmitRequest{
 			{WorkTypeID: "bogus", Payload: []byte(`{"poison":true}`)},
 		}, "unknown work type")
-		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{
+		h.SubmitFull(context.Background(), []work.SubmitRequest{
 			{WorkTypeID: "task", Payload: fmt.Appendf(nil, `{"item":%d}`, i)},
 		})
-		requireSubmitFullRejected(t, h, []interfaces.SubmitRequest{
+		requireSubmitFullRejected(t, h, []work.SubmitRequest{
 			{WorkTypeID: "also-bogus", Payload: []byte(`{"poison":true}`)},
 		}, "unknown work type")
 	}
@@ -552,7 +553,7 @@ type poisonExecutor struct {
 	overrideTransitionID string
 }
 
-func (e *poisonExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *poisonExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	transitionID := dispatch.TransitionID
 	if e.overrideTransitionID != "" {
 		transitionID = e.overrideTransitionID
@@ -569,7 +570,7 @@ func (e *poisonExecutor) Execute(_ context.Context, dispatch interfaces.WorkDisp
 // no Outcome, no OutputTokens.
 type emptyResultExecutor struct{}
 
-func (e *emptyResultExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *emptyResultExecutor) Execute(_ context.Context, _ work.WorkDispatch) (interfaces.WorkResult, error) {
 	return interfaces.WorkResult{}, nil
 }
 
@@ -580,7 +581,7 @@ type massiveSpawnExecutor struct {
 	realOutcome interfaces.WorkOutcome
 }
 
-func (e *massiveSpawnExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *massiveSpawnExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	spawned := make([]interfaces.TokenColor, e.spawnCount)
 	for i := range spawned {
 		spawned[i] = interfaces.TokenColor{
@@ -603,7 +604,7 @@ type errorExecutor struct {
 	err error
 }
 
-func (e *errorExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *errorExecutor) Execute(_ context.Context, _ work.WorkDispatch) (interfaces.WorkResult, error) {
 	return interfaces.WorkResult{}, e.err
 }
 
@@ -612,7 +613,7 @@ type panicWorkerExecutor struct {
 	message string
 }
 
-func (e *panicWorkerExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *panicWorkerExecutor) Execute(_ context.Context, _ work.WorkDispatch) (interfaces.WorkResult, error) {
 	panic(e.message)
 }
 
@@ -654,7 +655,7 @@ func requireSubmitRejected(t *testing.T, h *testutil.ServiceTestHarness, workTyp
 	}
 }
 
-func requireSubmitFullRejected(t *testing.T, h *testutil.ServiceTestHarness, reqs []interfaces.SubmitRequest, wantErr string) {
+func requireSubmitFullRejected(t *testing.T, h *testutil.ServiceTestHarness, reqs []work.SubmitRequest, wantErr string) {
 	t.Helper()
 
 	err := h.SubmitFullError(context.Background(), reqs)

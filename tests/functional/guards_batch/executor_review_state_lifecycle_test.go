@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -113,7 +114,7 @@ func TestExecutorReviewStateLifecycle_CompletedExecutorAndReviewConvergeToTermin
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:                   laneName,
 		WorkTypeID:             "task",
 		TargetState:            "init",
@@ -197,12 +198,12 @@ func TestExecutorReviewStateLifecycle_DuplicateReviewRegressionMatchesLaneThreeS
 
 func TestExecutorReviewStateLifecycle_ThreeNamedLanesExposePlannerClassificationEvidence(t *testing.T) {
 	cases := []struct {
-		laneName         string
-		items            []queueWorkSnapshot
-		wantCause        executorReviewMismatchCause
-		wantDisp         executorReviewPlannerDisposition
-		requireSpawned   bool
-		requireReviews   bool
+		laneName          string
+		items             []queueWorkSnapshot
+		wantCause         executorReviewMismatchCause
+		wantDisp          executorReviewPlannerDisposition
+		requireSpawned    bool
+		requireReviews    bool
 		requireFailedTask bool
 	}{
 		{
@@ -410,7 +411,7 @@ func submitExecutorReviewProcessResiduePattern(
 ) {
 	t.Helper()
 
-	requests := []interfaces.SubmitRequest{
+	requests := []work.SubmitRequest{
 		{
 			Name:                   laneName,
 			WorkTypeID:             "task",
@@ -439,7 +440,7 @@ func submitExecutorReviewProcessResiduePattern(
 		},
 	}
 	for _, req := range requests {
-		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
+		h.SubmitFull(context.Background(), []work.SubmitRequest{req})
 	}
 }
 

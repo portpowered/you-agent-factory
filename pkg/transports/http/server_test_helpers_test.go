@@ -26,6 +26,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 	_ "modernc.org/sqlite"
 )
@@ -368,7 +369,7 @@ func listWorkFilterTopology() *state.Net {
 	}
 }
 
-func assertGeneratedWorkContentParts(t *testing.T, content *factoryapi.WorkContent, want []interfaces.WorkContentPart) {
+func assertGeneratedWorkContentParts(t *testing.T, content *factoryapi.WorkContent, want []work.WorkContentPart) {
 	t.Helper()
 	if content == nil {
 		t.Fatalf("content = nil, want %#v", want)
@@ -433,25 +434,25 @@ func assertFactorySessionInvocation(
 	}
 }
 
-func assertGeneratedWorkContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedWorkContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	switch want.Type {
-	case interfaces.WorkContentPartTypeText:
+	case work.WorkContentPartTypeText:
 		assertGeneratedTextContentPart(t, got, index, want)
-	case interfaces.WorkContentPartTypeImage:
+	case work.WorkContentPartTypeImage:
 		assertGeneratedImageContentPart(t, got, index, want)
-	case interfaces.WorkContentPartTypeAudio:
+	case work.WorkContentPartTypeAudio:
 		assertGeneratedAudioContentPart(t, got, index, want)
-	case interfaces.WorkContentPartTypeJSON:
+	case work.WorkContentPartTypeJSON:
 		assertGeneratedJSONContentPart(t, got, index, want)
-	case interfaces.WorkContentPartTypeBinary:
+	case work.WorkContentPartTypeBinary:
 		assertGeneratedBinaryContentPart(t, got, index, want)
 	default:
 		t.Fatalf("unsupported expected content type %q", want.Type)
 	}
 }
 
-func assertGeneratedTextContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedTextContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	part, err := got.AsWorkTextContentPart()
 	if err != nil {
@@ -463,7 +464,7 @@ func assertGeneratedTextContentPart(t *testing.T, got factoryapi.WorkContentPart
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
-func assertGeneratedImageContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedImageContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	part, err := got.AsWorkImageContentPart()
 	if err != nil {
@@ -475,7 +476,7 @@ func assertGeneratedImageContentPart(t *testing.T, got factoryapi.WorkContentPar
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
-func assertGeneratedAudioContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedAudioContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	part, err := got.AsWorkAudioContentPart()
 	if err != nil {
@@ -487,7 +488,7 @@ func assertGeneratedAudioContentPart(t *testing.T, got factoryapi.WorkContentPar
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
-func assertGeneratedJSONContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedJSONContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	part, err := got.AsWorkJsonContentPart()
 	if err != nil {
@@ -503,7 +504,7 @@ func assertGeneratedJSONContentPart(t *testing.T, got factoryapi.WorkContentPart
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
-func assertGeneratedBinaryContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedBinaryContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	part, err := got.AsWorkBinaryContentPart()
 	if err != nil {
@@ -515,7 +516,7 @@ func assertGeneratedBinaryContentPart(t *testing.T, got factoryapi.WorkContentPa
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
-func assertGeneratedPartSharedFields(t *testing.T, index int, slot *string, label *string, role *string, contentType *string, artifactID *string, metadata *factoryapi.WorkContentMetadata, want interfaces.WorkContentPart) {
+func assertGeneratedPartSharedFields(t *testing.T, index int, slot *string, label *string, role *string, contentType *string, artifactID *string, metadata *factoryapi.WorkContentMetadata, want work.WorkContentPart) {
 	t.Helper()
 
 	if derefString(slot) != want.Slot ||
@@ -616,7 +617,7 @@ func namedFactoryPayloadJSON(project, workType string) string {
 	}`, project, project, workType, workType, workType)
 }
 
-func submittedRequestNamed(t *testing.T, requests []interfaces.SubmitRequest, name string) interfaces.SubmitRequest {
+func submittedRequestNamed(t *testing.T, requests []work.SubmitRequest, name string) work.SubmitRequest {
 	t.Helper()
 	for _, request := range requests {
 		if request.Name == name {
@@ -624,7 +625,7 @@ func submittedRequestNamed(t *testing.T, requests []interfaces.SubmitRequest, na
 		}
 	}
 	t.Fatalf("submit request %q not found in %#v", name, requests)
-	return interfaces.SubmitRequest{}
+	return work.SubmitRequest{}
 }
 
 func listedWorkByID(t *testing.T, works []factoryapi.Work, workID string) factoryapi.Work {
@@ -638,19 +639,19 @@ func listedWorkByID(t *testing.T, works []factoryapi.Work, workID string) factor
 	return factoryapi.Work{}
 }
 
-func assertSubmittedChildRelations(t *testing.T, relations []interfaces.Relation) {
+func assertSubmittedChildRelations(t *testing.T, relations []work.Relation) {
 	t.Helper()
 
 	var foundParentChild bool
 	var foundDependsOn bool
 	for _, relation := range relations {
 		switch relation.Type {
-		case interfaces.RelationParentChild:
+		case work.RelationParentChild:
 			foundParentChild = true
 			if relation.TargetWorkID != "batch-request-api-parent-child-parent" {
 				t.Fatalf("parent-child target = %q, want batch-request-api-parent-child-parent", relation.TargetWorkID)
 			}
-		case interfaces.RelationDependsOn:
+		case work.RelationDependsOn:
 			foundDependsOn = true
 			if relation.TargetWorkID != "batch-request-api-parent-child-prerequisite" {
 				t.Fatalf("depends_on target = %q, want batch-request-api-parent-child-prerequisite", relation.TargetWorkID)

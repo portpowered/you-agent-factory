@@ -13,6 +13,7 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type recordingLogger struct {
@@ -333,7 +334,7 @@ func TestTickWhilePaused_SkipsCascadeButOperatorMoveUpdatesMarking(t *testing.T)
 	f, ctx := setupPausedParentFailedChildInit(t)
 	assertChildRemainsInInitAfterPausedTick(t, f, ctx)
 
-	result, err := f.MoveWork(ctx, "child-work", "complete", interfaces.WorkStateChangeSourceCLI, "")
+	result, err := f.MoveWork(ctx, "child-work", "complete", work.WorkStateChangeSourceCLI, "")
 	if err != nil {
 		t.Fatalf("MoveWork while paused: %v", err)
 	}
@@ -363,14 +364,14 @@ func setupPausedParentFailedChildInit(t *testing.T) (factory.Factory, context.Co
 	}
 
 	ctx := context.Background()
-	if _, err := submitWorkRequests(ctx, f, []interfaces.SubmitRequest{
+	if _, err := submitWorkRequests(ctx, f, []work.SubmitRequest{
 		{WorkID: "parent-work", WorkTypeID: "task", TraceID: "trace-parent"},
 		{
 			WorkID:     "child-work",
 			WorkTypeID: "task",
 			TraceID:    "trace-child",
-			Relations: []interfaces.Relation{{
-				Type:          interfaces.RelationDependsOn,
+			Relations: []work.Relation{{
+				Type:          work.RelationDependsOn,
 				TargetWorkID:  "parent-work",
 				RequiredState: "complete",
 			}},
@@ -382,7 +383,7 @@ func setupPausedParentFailedChildInit(t *testing.T) (factory.Factory, context.Co
 		t.Fatalf("Tick inject: %v", err)
 	}
 
-	if _, err := f.MoveWork(ctx, "parent-work", "failed", interfaces.WorkStateChangeSourceCLI, ""); err != nil {
+	if _, err := f.MoveWork(ctx, "parent-work", "failed", work.WorkStateChangeSourceCLI, ""); err != nil {
 		t.Fatalf("MoveWork parent to failed: %v", err)
 	}
 	if err := f.Pause(ctx); err != nil {

@@ -7,16 +7,17 @@ import (
 	"time"
 
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestReconstructFactoryWorldState_PetriFixtureReconstructsMarkingWithoutJavaScriptProjection(t *testing.T) {
 	t0 := time.Date(2026, 6, 8, 17, 0, 0, 0, time.UTC)
-	workItem := interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "draft", TraceID: "trace-1"}
+	workItem := work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "draft", TraceID: "trace-1"}
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
 		workInputEvent(1, t0.Add(time.Second), workItem),

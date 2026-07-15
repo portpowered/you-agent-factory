@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workdomain "github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -172,8 +173,8 @@ func writeProviderErrorSmokeWorkstationConfig(
 	}
 }
 
-func submitRequestFromProviderErrorSmokeWork(work ProviderErrorSmokeWork) interfaces.SubmitRequest {
-	return interfaces.SubmitRequest{
+func submitRequestFromProviderErrorSmokeWork(work ProviderErrorSmokeWork) workdomain.SubmitRequest {
+	return workdomain.SubmitRequest{
 		Name:       work.Name,
 		WorkID:     work.WorkID,
 		WorkTypeID: work.WorkTypeID,

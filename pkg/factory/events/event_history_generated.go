@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -369,12 +370,12 @@ func splitPlaceID(placeID string) (string, string) {
 	return before, after
 }
 
-func generatedWorksPtr(items []interfaces.FactoryWorkItem) *[]factoryapi.Work {
+func generatedWorksPtr(items []work.FactoryWorkItem) *[]factoryapi.Work {
 	works := generatedWorks(items)
 	return slicePtr(works)
 }
 
-func generatedWorks(items []interfaces.FactoryWorkItem) []factoryapi.Work {
+func generatedWorks(items []work.FactoryWorkItem) []factoryapi.Work {
 	out := make([]factoryapi.Work, 0, len(items))
 	for _, item := range items {
 		out = append(out, generatedWork(item))
@@ -382,7 +383,7 @@ func generatedWorks(items []interfaces.FactoryWorkItem) []factoryapi.Work {
 	return out
 }
 
-func generatedWork(item interfaces.FactoryWorkItem) factoryapi.Work {
+func generatedWork(item work.FactoryWorkItem) factoryapi.Work {
 	name := item.DisplayName
 	if name == "" {
 		name = item.ID
@@ -434,7 +435,7 @@ func generatedDispatchRequestEventMetadataPtr(replayKey string, selection interf
 	}
 }
 
-func generatedFactoryRelationsPtr(relations []interfaces.FactoryRelation) *[]factoryapi.Relation {
+func generatedFactoryRelationsPtr(relations []work.FactoryRelation) *[]factoryapi.Relation {
 	out := make([]factoryapi.Relation, 0, len(relations))
 	for _, relation := range relations {
 		out = append(out, generatedFactoryRelation(relation))
@@ -442,7 +443,7 @@ func generatedFactoryRelationsPtr(relations []interfaces.FactoryRelation) *[]fac
 	return slicePtr(out)
 }
 
-func generatedFactoryRelation(relation interfaces.FactoryRelation) factoryapi.Relation {
+func generatedFactoryRelation(relation work.FactoryRelation) factoryapi.Relation {
 	targetName := relation.TargetWorkName
 	if targetName == "" {
 		targetName = relation.TargetWorkID

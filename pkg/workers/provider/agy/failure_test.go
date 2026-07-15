@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
@@ -131,7 +132,7 @@ func TestAdapterClassifyFailureTimeoutDoesNotTreatPartialOutputAsSuccess(t *test
 	result, executeErr := adapter.Execute(context.Background(), registry, runner, adapter.ExecuteInput{
 		Provider: providerAdapter.Identity(),
 		Command: adapter.CommandContext{Request: interfaces.ProviderInferenceRequest{
-			Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-agy-timeout"},
+			Dispatch:         work.WorkDispatch{DispatchID: "dispatch-agy-timeout"},
 			WorkingDirectory: ".",
 			UserMessage:      "plan the goal",
 		}},
@@ -158,7 +159,7 @@ func TestAdapterBuildCommandMissingExecutableClassifiesDistinctly(t *testing.T) 
 	providerAdapter := agy.NewAdapter(factoryRoot, agy.WithExecutable(missingExecutable))
 	_, err := providerAdapter.BuildCommand(context.Background(), adapter.CommandContext{
 		Request: interfaces.ProviderInferenceRequest{
-			Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-missing"},
+			Dispatch:         work.WorkDispatch{DispatchID: "dispatch-missing"},
 			WorkingDirectory: ".",
 			UserMessage:      "hello",
 		},

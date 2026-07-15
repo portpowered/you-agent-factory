@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
@@ -97,7 +98,7 @@ func (runner *stubRunner) Execute(ctx context.Context, _ interfaces.RunnerExecut
 
 func testAgentRunRequest() interfaces.WorkstationExecutionRequest {
 	return interfaces.WorkstationExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      "dispatch-1",
 			TransitionID:    "transition-1",
 			WorkerType:      "agent-worker",

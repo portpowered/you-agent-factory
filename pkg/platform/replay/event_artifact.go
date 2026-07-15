@@ -7,6 +7,8 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workdomain "github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -272,7 +274,7 @@ func normalizeLegacyReplayTransitionRoutes(workstation map[string]any) {
 	delete(workstation, "promptTemplate")
 }
 
-func workRelationsFromGenerated(works []factoryapi.Work, relations *[]factoryapi.Relation) []interfaces.WorkRelation {
+func workRelationsFromGenerated(works []factoryapi.Work, relations *[]factoryapi.Relation) []work.WorkRelation {
 	if relations == nil {
 		return nil
 	}
@@ -282,7 +284,7 @@ func workRelationsFromGenerated(works []factoryapi.Work, relations *[]factoryapi
 			namesByID[workID] = work.Name
 		}
 	}
-	out := make([]interfaces.WorkRelation, 0, len(*relations))
+	out := make([]work.WorkRelation, 0, len(*relations))
 	for _, relation := range *relations {
 		sourceWorkName := relation.SourceWorkName
 		if mapped := namesByID[sourceWorkName]; mapped != "" {
@@ -299,8 +301,8 @@ func workRelationsFromGenerated(works []factoryapi.Work, relations *[]factoryapi
 		if sourceWorkName == "" || targetWorkName == "" {
 			continue
 		}
-		out = append(out, interfaces.WorkRelation{
-			Type:           interfaces.WorkRelationType(relation.Type),
+		out = append(out, work.WorkRelation{
+			Type:           work.WorkRelationType(relation.Type),
 			SourceWorkName: sourceWorkName,
 			TargetWorkName: targetWorkName,
 			RequiredState:  stringValue(relation.RequiredState),
@@ -469,7 +471,7 @@ func assignEventSequences(events []factoryapi.FactoryEvent) {
 	}
 }
 
-func generatedDispatchConsumedWorkRefsFromReplayDispatch(dispatch interfaces.WorkDispatch) []factoryapi.DispatchConsumedWorkRef {
+func generatedDispatchConsumedWorkRefsFromReplayDispatch(dispatch work.WorkDispatch) []factoryapi.DispatchConsumedWorkRef {
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	out := make([]factoryapi.DispatchConsumedWorkRef, 0, len(tokens))
 	for _, token := range tokens {
@@ -496,7 +498,7 @@ func generatedDispatchConsumedWorkRefsFromReplayDispatch(dispatch interfaces.Wor
 	return out
 }
 
-func generatedResourcesFromReplayDispatch(dispatch interfaces.WorkDispatch) *[]factoryapi.Resource {
+func generatedResourcesFromReplayDispatch(dispatch work.WorkDispatch) *[]factoryapi.Resource {
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	resources := make([]factoryapi.Resource, 0, len(tokens))
 	for _, token := range tokens {
@@ -587,9 +589,9 @@ func workFromGeneratedWork(work factoryapi.Work, requestID string) interfaces.Wo
 	}
 }
 
-func factoryWorkItemFromGeneratedWork(work factoryapi.Work) interfaces.FactoryWorkItem {
+func factoryWorkItemFromGeneratedWork(work factoryapi.Work) workdomain.FactoryWorkItem {
 	item := workFromGeneratedWork(work, "")
-	return interfaces.FactoryWorkItem{
+	return workdomain.FactoryWorkItem{
 		ID:                       item.WorkID,
 		WorkTypeID:               item.WorkTypeID,
 		State:                    item.State,
@@ -597,7 +599,7 @@ func factoryWorkItemFromGeneratedWork(work factoryapi.Work) interfaces.FactoryWo
 		CurrentChainingTraceID:   item.CurrentChainingTraceID,
 		PreviousChainingTraceIDs: append([]string(nil), item.PreviousChainingTraceIDs...),
 		TraceID:                  item.TraceID,
-		Content:                  append([]interfaces.WorkContentPart(nil), item.Content...),
+		Content:                  append([]workdomain.WorkContentPart(nil), item.Content...),
 		Tags:                     cloneStringMap(item.Tags),
 	}
 }

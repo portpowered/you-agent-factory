@@ -9,8 +9,8 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/work/content"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
 )
@@ -39,20 +39,20 @@ func TestFactoryEventHistory_RecordWorkRequest_SerializesContentURLNotMaterializ
 	}
 	defer cleanup()
 
-	record := interfaces.WorkRequestRecord{
+	record := work.WorkRequestRecord{
 		RequestID: "request-url-wire",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		TraceID:   "trace-url-wire",
 		Source:    "external-submit",
-		WorkItems: []interfaces.FactoryWorkItem{{
+		WorkItems: []work.FactoryWorkItem{{
 			ID:          "work-url-wire",
 			WorkTypeID:  "task",
 			DisplayName: "url-wire",
 			TraceID:     "trace-url-wire",
-			Content: []interfaces.WorkContentPart{
-				{Type: interfaces.WorkContentPartTypeText, Text: "review images"},
-				{Type: interfaces.WorkContentPartTypeImage, URL: localURL},
-				{Type: interfaces.WorkContentPartTypeImage, URL: remoteURL},
+			Content: []work.WorkContentPart{
+				{Type: work.WorkContentPartTypeText, Text: "review images"},
+				{Type: work.WorkContentPartTypeImage, URL: localURL},
+				{Type: work.WorkContentPartTypeImage, URL: remoteURL},
 			},
 		}},
 	}

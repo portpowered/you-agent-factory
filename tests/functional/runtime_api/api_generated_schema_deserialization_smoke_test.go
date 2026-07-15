@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -133,7 +134,7 @@ func generatedSchemaTransportAndRuntimeSummaryFromRecordedReplay(
 ) (generatedSchemaTransportSummary, generatedSchemaRuntimeSummary) {
 	t.Helper()
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		WorkID:     "generated-schema-runtime-work",
 		TraceID:    "generated-schema-runtime-trace",

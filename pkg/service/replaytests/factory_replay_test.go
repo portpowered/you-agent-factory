@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap/zapcore"
 )
@@ -97,12 +98,12 @@ func TestBuildFactoryService_ReplayModeUsesRecordedProviderSideEffects(t *testin
 	writeWorkstationAgentsMD(t, sourceDir, "process")
 
 	artifactPath := filepath.Join(t.TempDir(), "recording.json")
-	saveReplayBehaviorArtifact(t, sourceDir, artifactPath, interfaces.WorkDispatch{
+	saveReplayBehaviorArtifact(t, sourceDir, artifactPath, work.WorkDispatch{
 		DispatchID:      "recorded-dispatch-provider",
 		TransitionID:    "process",
 		WorkerType:      "worker-a",
 		WorkstationName: "process",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			ReplayKey: "process/trace-replay-provider/work-replay-provider",
 			TraceID:   "trace-replay-provider",
 			WorkIDs:   []string{"work-replay-provider"},
@@ -146,12 +147,12 @@ func TestBuildFactoryService_ReplayModeDeliversRecordedCompletionAtLogicalTick(t
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
 	artifactPath := filepath.Join(t.TempDir(), "recording.json")
-	recordedDispatch := interfaces.WorkDispatch{
+	recordedDispatch := work.WorkDispatch{
 		DispatchID:      "recorded-dispatch-logical-tick",
 		TransitionID:    "process",
 		WorkerType:      "worker-a",
 		WorkstationName: "process",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			ReplayKey: "process/trace-logical-tick/work-logical-tick",
 			TraceID:   "trace-logical-tick",
 			WorkIDs:   []string{"work-logical-tick"},
@@ -289,12 +290,12 @@ func TestBuildFactoryService_ReplayModeUsesRecordedCommandRunnerSideEffects(t *t
 	writeWorkstationAgentsMD(t, sourceDir, "process")
 
 	artifactPath := filepath.Join(t.TempDir(), "recording.json")
-	saveReplayBehaviorArtifact(t, sourceDir, artifactPath, interfaces.WorkDispatch{
+	saveReplayBehaviorArtifact(t, sourceDir, artifactPath, work.WorkDispatch{
 		DispatchID:      "recorded-dispatch-command",
 		TransitionID:    "process",
 		WorkerType:      "worker-a",
 		WorkstationName: "process",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			ReplayKey: "process/trace-replay-command/work-replay-command",
 			TraceID:   "trace-replay-command",
 			WorkIDs:   []string{"work-replay-command"},
@@ -337,12 +338,12 @@ func TestBuildFactoryService_ReplayModeStopsOnDispatchDivergence(t *testing.T) {
 	writeWorkstationAgentsMD(t, sourceDir, "process")
 
 	artifactPath := filepath.Join(t.TempDir(), "recording.json")
-	saveReplayBehaviorArtifact(t, sourceDir, artifactPath, interfaces.WorkDispatch{
+	saveReplayBehaviorArtifact(t, sourceDir, artifactPath, work.WorkDispatch{
 		DispatchID:      "recorded-dispatch-mismatch",
 		TransitionID:    "review",
 		WorkerType:      "worker-a",
 		WorkstationName: "review",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			ReplayKey: "review/trace-divergence/work-divergence",
 			TraceID:   "trace-divergence",
 			WorkIDs:   []string{"work-divergence"},
@@ -395,12 +396,12 @@ func TestBuildFactoryService_ReplayModeWarnsOnCurrentConfigHashMismatch(t *testi
 	writeWorkstationAgentsMD(t, sourceDir, "process")
 
 	artifactPath := filepath.Join(t.TempDir(), "recording.json")
-	saveReplayBehaviorArtifact(t, sourceDir, artifactPath, interfaces.WorkDispatch{
+	saveReplayBehaviorArtifact(t, sourceDir, artifactPath, work.WorkDispatch{
 		DispatchID:      "recorded-dispatch-warning",
 		TransitionID:    "process",
 		WorkerType:      "worker-a",
 		WorkstationName: "process",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			ReplayKey: "process/trace-warning/work-warning",
 			TraceID:   "trace-warning",
 			WorkIDs:   []string{"work-warning"},
@@ -440,7 +441,7 @@ func TestBuildFactoryService_ReplayModeWarnsOnCurrentConfigHashMismatch(t *testi
 	}
 }
 
-func saveReplayBehaviorArtifact(t *testing.T, sourceDir, artifactPath string, dispatch interfaces.WorkDispatch, result interfaces.WorkResult) {
+func saveReplayBehaviorArtifact(t *testing.T, sourceDir, artifactPath string, dispatch work.WorkDispatch, result interfaces.WorkResult) {
 	t.Helper()
 
 	createdTick := dispatch.Execution.DispatchCreatedTick
@@ -482,7 +483,7 @@ func newReplayArtifactFromLoadedFactory(t *testing.T, recordedAt time.Time, load
 	return artifact
 }
 
-func serviceReplayDispatchCreatedEvent(t *testing.T, dispatch interfaces.WorkDispatch, tick int) factoryapi.FactoryEvent {
+func serviceReplayDispatchCreatedEvent(t *testing.T, dispatch work.WorkDispatch, tick int) factoryapi.FactoryEvent {
 	t.Helper()
 	metadata := map[string]string{}
 	if dispatch.Execution.ReplayKey != "" {
@@ -615,7 +616,7 @@ func serviceReplayDispatchCompletedEvent(t *testing.T, completionID string, resu
 	}
 }
 
-func serviceReplayWorksFromDispatch(dispatch interfaces.WorkDispatch) []factoryapi.Work {
+func serviceReplayWorksFromDispatch(dispatch work.WorkDispatch) []factoryapi.Work {
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	works := make([]factoryapi.Work, 0, len(tokens))
 	for _, token := range tokens {
@@ -644,7 +645,7 @@ func serviceReplayWorksFromDispatch(dispatch interfaces.WorkDispatch) []factorya
 	return works
 }
 
-func serviceReplayDispatchInputRefsFromDispatch(dispatch interfaces.WorkDispatch) []factoryapi.DispatchConsumedWorkRef {
+func serviceReplayDispatchInputRefsFromDispatch(dispatch work.WorkDispatch) []factoryapi.DispatchConsumedWorkRef {
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	refs := make([]factoryapi.DispatchConsumedWorkRef, 0, len(tokens))
 	for _, token := range tokens {
@@ -668,7 +669,7 @@ func serviceReplayDispatchInputRefsFromDispatch(dispatch interfaces.WorkDispatch
 	return refs
 }
 
-func serviceReplayResourcesFromDispatch(dispatch interfaces.WorkDispatch) *[]factoryapi.Resource {
+func serviceReplayResourcesFromDispatch(dispatch work.WorkDispatch) *[]factoryapi.Resource {
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	resources := make([]factoryapi.Resource, 0, len(tokens))
 	for _, token := range tokens {

@@ -7,6 +7,7 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
@@ -53,7 +54,7 @@ func TestWorkstationExecutor_PromptRendersFactorySessionID(t *testing.T) {
 				Renderer:        &executor.DefaultPromptRenderer{},
 			}
 
-			_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+			_, err := we.Execute(context.Background(), work.WorkDispatch{
 				DispatchID:      "d-session",
 				TransitionID:    "t-session",
 				WorkerType:      "worker-a",

@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestPartsFromGeneratedPreservesSupportedPartOrderAndValues(t *testing.T) {
@@ -17,10 +17,10 @@ func TestPartsFromGeneratedPreservesSupportedPartOrderAndValues(t *testing.T) {
 
 	got := PartsFromGenerated(&content)
 
-	want := []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
-		{Type: interfaces.WorkContentPartTypeImage, URL: testContentURL("fixtures/alpha.png")},
-		{Type: interfaces.WorkContentPartTypeText, Text: "omega"},
+	want := []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "alpha"},
+		{Type: work.WorkContentPartTypeImage, URL: testContentURL("fixtures/alpha.png")},
+		{Type: work.WorkContentPartTypeText, Text: "omega"},
 	}
 	assertWorkContentPartsEqual(t, got, want)
 }
@@ -37,10 +37,10 @@ func TestPartsFromGeneratedReturnsNilForNilOrEmptyContent(t *testing.T) {
 }
 
 func TestGeneratedPtrFromPartsPreservesSupportedPartOrderAndValues(t *testing.T) {
-	parts := []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
-		{Type: interfaces.WorkContentPartTypeImage, URL: testContentURL("fixtures/alpha.png")},
-		{Type: interfaces.WorkContentPartTypeText, Text: "omega"},
+	parts := []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "alpha"},
+		{Type: work.WorkContentPartTypeImage, URL: testContentURL("fixtures/alpha.png")},
+		{Type: work.WorkContentPartTypeText, Text: "omega"},
 	}
 
 	got := GeneratedPtrFromParts(parts)
@@ -56,16 +56,16 @@ func TestGeneratedPtrFromPartsReturnsNilForNilOrEmptyContent(t *testing.T) {
 		t.Fatalf("GeneratedPtrFromParts(nil) = %#v, want nil", got)
 	}
 
-	if got := GeneratedPtrFromParts([]interfaces.WorkContentPart{}); got != nil {
+	if got := GeneratedPtrFromParts([]work.WorkContentPart{}); got != nil {
 		t.Fatalf("GeneratedPtrFromParts(empty) = %#v, want nil", got)
 	}
 }
 
 func TestGeneratedPtrFromPartsSkipsUnsupportedParts(t *testing.T) {
-	parts := []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
-		{Type: interfaces.WorkContentPartType("unsupported"), File: "fixtures/ignored.wav"},
-		{Type: interfaces.WorkContentPartTypeImage, URL: testContentURL("fixtures/alpha.png")},
+	parts := []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "alpha"},
+		{Type: work.WorkContentPartType("unsupported"), File: "fixtures/ignored.wav"},
+		{Type: work.WorkContentPartTypeImage, URL: testContentURL("fixtures/alpha.png")},
 	}
 
 	got := GeneratedPtrFromParts(parts)
@@ -73,15 +73,15 @@ func TestGeneratedPtrFromPartsSkipsUnsupportedParts(t *testing.T) {
 	if got == nil {
 		t.Fatalf("GeneratedPtrFromParts(parts) = nil, want supported content")
 	}
-	assertGeneratedWorkContentPartsEqual(t, got, []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
-		{Type: interfaces.WorkContentPartTypeImage, URL: testContentURL("fixtures/alpha.png")},
+	assertGeneratedWorkContentPartsEqual(t, got, []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "alpha"},
+		{Type: work.WorkContentPartTypeImage, URL: testContentURL("fixtures/alpha.png")},
 	})
 }
 
 func TestGeneratedPtrFromPartsReturnsNilWhenAllPartsAreUnsupported(t *testing.T) {
-	parts := []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartType("unsupported"), File: "fixtures/ignored.wav"},
+	parts := []work.WorkContentPart{
+		{Type: work.WorkContentPartType("unsupported"), File: "fixtures/ignored.wav"},
 	}
 
 	if got := GeneratedPtrFromParts(parts); got != nil {
@@ -100,18 +100,18 @@ func TestPartsFromGeneratedAcceptsUppercaseAndExtendedContentShapes(t *testing.T
 
 	got := PartsFromGenerated(&content)
 
-	assertWorkContentPartsEqual(t, got, []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "Alpha", Label: "input"},
-		{Type: interfaces.WorkContentPartTypeAudio, URL: testContentURL("fixtures/output.wav"), Metadata: map[string]any{"voice": "alloy"}},
-		{Type: interfaces.WorkContentPartTypeJSON, JSON: json.RawMessage(`{"voice":"alloy"}`)},
-		{Type: interfaces.WorkContentPartTypeBinary, URL: testContentURL("fixtures/blob.bin")},
+	assertWorkContentPartsEqual(t, got, []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "Alpha", Label: "input"},
+		{Type: work.WorkContentPartTypeAudio, URL: testContentURL("fixtures/output.wav"), Metadata: map[string]any{"voice": "alloy"}},
+		{Type: work.WorkContentPartTypeJSON, JSON: json.RawMessage(`{"voice":"alloy"}`)},
+		{Type: work.WorkContentPartTypeBinary, URL: testContentURL("fixtures/blob.bin")},
 	})
 }
 
 func TestGeneratedPtrFromPartsPreservesExtendedContentFields(t *testing.T) {
-	parts := []interfaces.WorkContentPart{
+	parts := []work.WorkContentPart{
 		{
-			Type:        interfaces.WorkContentPartTypeAudio,
+			Type:        work.WorkContentPartTypeAudio,
 			URL:         testContentURL("fixtures/output.wav"),
 			Slot:        "audio",
 			Label:       "speech",
@@ -121,7 +121,7 @@ func TestGeneratedPtrFromPartsPreservesExtendedContentFields(t *testing.T) {
 			Metadata:    map[string]any{"voice": "alloy"},
 		},
 		{
-			Type:        interfaces.WorkContentPartTypeJSON,
+			Type:        work.WorkContentPartTypeJSON,
 			JSON:        json.RawMessage(`{"voice":"alloy","speed":1}`),
 			Slot:        "settings",
 			ContentType: "application/json",
@@ -215,7 +215,7 @@ func mustGeneratedBinaryPart(t *testing.T, file string) factoryapi.WorkContentPa
 	return part
 }
 
-func assertWorkContentPartsEqual(t *testing.T, got, want []interfaces.WorkContentPart) {
+func assertWorkContentPartsEqual(t *testing.T, got, want []work.WorkContentPart) {
 	t.Helper()
 
 	if len(got) != len(want) {
@@ -228,7 +228,7 @@ func assertWorkContentPartsEqual(t *testing.T, got, want []interfaces.WorkConten
 	}
 }
 
-func assertGeneratedWorkContentPartsEqual(t *testing.T, got *factoryapi.WorkContent, want []interfaces.WorkContentPart) {
+func assertGeneratedWorkContentPartsEqual(t *testing.T, got *factoryapi.WorkContent, want []work.WorkContentPart) {
 	t.Helper()
 
 	if got == nil {
@@ -241,7 +241,7 @@ func assertGeneratedWorkContentPartsEqual(t *testing.T, got *factoryapi.WorkCont
 	assertWorkContentPartsEqual(t, roundTrip, want)
 }
 
-func workContentPartEqual(left, right interfaces.WorkContentPart) bool {
+func workContentPartEqual(left, right work.WorkContentPart) bool {
 	if left.Type != right.Type ||
 		left.Text != right.Text ||
 		left.URL != right.URL ||

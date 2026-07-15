@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/http/moveprojection"
 	"github.com/portpowered/infinite-you/pkg/transports/http/workstationprojection"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -399,7 +400,7 @@ func workTypesFromNet(net *state.Net) map[string]*state.WorkType {
 func publicWorkToken(token *interfaces.Token) bool {
 	return materialize.IsPublicWorkToken(token)
 }
-func domainWorkContentToGeneratedPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
+func domainWorkContentToGeneratedPtr(parts []work.WorkContentPart) *factoryapi.WorkContent {
 	return contentcontract.GeneratedPtrFromParts(parts)
 }
 

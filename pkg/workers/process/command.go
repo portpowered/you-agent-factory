@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // CommandRunner executes a low-level subprocess request for worker code.
@@ -131,8 +132,8 @@ func (r ExecCommandRunner) Run(ctx context.Context, req CommandRequest) (Command
 	return result, nil
 }
 
-func SubprocessRequestBase(dispatch interfaces.WorkDispatch) CommandRequest {
-	clonedDispatch := interfaces.CloneWorkDispatch(dispatch)
+func SubprocessRequestBase(dispatch work.WorkDispatch) CommandRequest {
+	clonedDispatch := work.CloneWorkDispatch(dispatch)
 	return CommandRequest{
 		DispatchID:               clonedDispatch.DispatchID,
 		TransitionID:             clonedDispatch.TransitionID,

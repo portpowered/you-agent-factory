@@ -8,6 +8,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestEditedMaterializedPackagedTTSFactoryChangesInvocationBackendMetadata(t *testing.T) {
@@ -109,7 +110,7 @@ func metadataBackendForWorker(t *testing.T, output string, worker *interfaces.Wo
 	return metadataBackend(t, content)
 }
 
-func metadataBackend(t *testing.T, content []interfaces.WorkContentPart) string {
+func metadataBackend(t *testing.T, content []work.WorkContentPart) string {
 	t.Helper()
 	if len(content) != 1 {
 		t.Fatalf("metadata content = %#v, want one text part", content)

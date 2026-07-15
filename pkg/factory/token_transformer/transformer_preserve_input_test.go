@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestOutputToken_PreserveInput_SameType_KeepsConsumedPayload(t *testing.T) {
@@ -30,8 +31,8 @@ func TestOutputToken_PreserveInput_SameType_KeepsConsumedPayload(t *testing.T) {
 			WorkTypeID: "task",
 			WorkID:     "work-1",
 			Payload:    []byte("input-payload"),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
 				Text: "input-content",
 			}},
 		}},
@@ -115,8 +116,8 @@ func TestOutputToken_OutputAsPayload_UsesWorkerOutput(t *testing.T) {
 			WorkTypeID: "task",
 			WorkID:     "work-1",
 			Payload:    []byte("input-payload"),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
 				Text: "input-content",
 			}},
 		}},
@@ -160,8 +161,8 @@ func TestOutputToken_OutputAsPayload_Continue_UsesNextTurnContent(t *testing.T) 
 			WorkTypeID: "task",
 			WorkID:     "work-1",
 			Payload:    []byte("input-payload"),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
 				Text: "input-content",
 			}},
 		}},
@@ -214,8 +215,8 @@ func TestOutputToken_OutputAsPayload_RejectedLoopback_UsesNextTurnContent(t *tes
 			WorkTypeID: "task",
 			WorkID:     "work-1",
 			Payload:    []byte("input-payload"),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
 				Text: "input-content",
 			}},
 		}},
@@ -262,8 +263,8 @@ func TestOutputToken_OutputAsPayload_RejectedFailurePlace_KeepsRequestContent(t 
 			WorkTypeID: "task",
 			WorkID:     "work-1",
 			Payload:    []byte("input-payload"),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
 				Text: "input-content",
 			}},
 		}},
@@ -314,8 +315,8 @@ func TestOutputToken_OutputAsPayload_Failed_KeepsRequestContentAndDiagnostics(t 
 			WorkTypeID: "task",
 			WorkID:     "work-1",
 			Payload:    []byte("input-payload"),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
 				Text: "input-content",
 			}},
 		}},
@@ -524,8 +525,8 @@ func TestOutputToken_PreserveInput_MultiOutput_EachLaneKeepsConsumedWorkData(t *
 		WorkTypeID: "task",
 		WorkID:     "work-task-1",
 		Payload:    []byte("input-payload"),
-		Content: []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
 			Text: "input-content",
 		}},
 		Tags: map[string]string{"objective": "goal-1"},

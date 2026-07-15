@@ -12,8 +12,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -205,8 +206,8 @@ func consumeMutationsForDecision(transitionID string, inputTokens []interfaces.T
 	return consumeMutations
 }
 
-func (d *DispatcherSubsystem) buildWorkDispatch(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], decision interfaces.FiringDecision, tr *petri.Transition, inputTokens []interfaces.Token) interfaces.WorkDispatch {
-	dispatch := interfaces.WorkDispatch{
+func (d *DispatcherSubsystem) buildWorkDispatch(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], decision interfaces.FiringDecision, tr *petri.Transition, inputTokens []interfaces.Token) work.WorkDispatch {
+	dispatch := work.WorkDispatch{
 		DispatchID:               uuid.NewString(),
 		TransitionID:             decision.TransitionID,
 		WorkerType:               decision.WorkerType,
@@ -223,7 +224,7 @@ func (d *DispatcherSubsystem) buildWorkDispatch(snapshot *interfaces.EngineState
 	return dispatch
 }
 
-func (d *DispatcherSubsystem) logDispatch(decision interfaces.FiringDecision, inputTokens []interfaces.Token, dispatch interfaces.WorkDispatch) {
+func (d *DispatcherSubsystem) logDispatch(decision interfaces.FiringDecision, inputTokens []interfaces.Token, dispatch work.WorkDispatch) {
 	d.logger.Info("dispatcher: dispatching work to worker",
 		workers.WorkLogFields(dispatch.Execution,
 			"transition_id", decision.TransitionID,
@@ -355,8 +356,8 @@ func (d *DispatcherSubsystem) workIDFromTokens(tokens []interfaces.Token) string
 	return ""
 }
 
-func executionMetadataForDispatch(transitionID string, currentTick int, inputTokens []interfaces.Token) interfaces.ExecutionMetadata {
-	metadata := interfaces.ExecutionMetadata{
+func executionMetadataForDispatch(transitionID string, currentTick int, inputTokens []interfaces.Token) work.ExecutionMetadata {
+	metadata := work.ExecutionMetadata{
 		CurrentTick: currentTick,
 	}
 	for _, token := range identityTokens(inputTokens) {

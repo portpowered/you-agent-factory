@@ -8,6 +8,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/dataplane"
@@ -85,8 +86,8 @@ func (f *lifecycleTestFactory) WaitToComplete() <-chan struct{} {
 	return ch
 }
 
-func (f *lifecycleTestFactory) SubmitWorkRequest(context.Context, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
-	return interfaces.WorkRequestSubmitResult{}, nil
+func (f *lifecycleTestFactory) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	return work.WorkRequestSubmitResult{}, nil
 }
 
 func (f *lifecycleTestFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
@@ -99,8 +100,8 @@ func (f *lifecycleTestFactory) GetEngineStateSnapshot(context.Context) (*interfa
 	}, nil
 }
 
-func (f *lifecycleTestFactory) MoveWork(context.Context, string, string, interfaces.WorkStateChangeSource, string) (interfaces.OperatorMoveResult, error) {
-	return interfaces.OperatorMoveResult{}, nil
+func (f *lifecycleTestFactory) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {
+	return work.OperatorMoveResult{}, nil
 }
 
 func TestLiveLifecycle_ApplyControl_AcceptsRunningPause(t *testing.T) {
@@ -240,7 +241,7 @@ func (f *snapshotErrorFactory) GetFactoryEvents(context.Context) ([]factoryapi.F
 	return f.inner.GetFactoryEvents(context.Background())
 }
 func (f *snapshotErrorFactory) WaitToComplete() <-chan struct{} { return f.inner.WaitToComplete() }
-func (f *snapshotErrorFactory) SubmitWorkRequest(ctx context.Context, req interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (f *snapshotErrorFactory) SubmitWorkRequest(ctx context.Context, req work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	return f.inner.SubmitWorkRequest(ctx, req)
 }
 func (f *snapshotErrorFactory) SubscribeFactoryEvents(ctx context.Context, cursor *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
@@ -249,6 +250,6 @@ func (f *snapshotErrorFactory) SubscribeFactoryEvents(ctx context.Context, curso
 func (f *snapshotErrorFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	return nil, fmt.Errorf("snapshot unavailable")
 }
-func (f *snapshotErrorFactory) MoveWork(ctx context.Context, a, b string, source interfaces.WorkStateChangeSource, reason string) (interfaces.OperatorMoveResult, error) {
+func (f *snapshotErrorFactory) MoveWork(ctx context.Context, a, b string, source work.WorkStateChangeSource, reason string) (work.OperatorMoveResult, error) {
 	return f.inner.MoveWork(ctx, a, b, source, reason)
 }

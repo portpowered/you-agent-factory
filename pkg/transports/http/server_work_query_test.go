@@ -15,6 +15,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workdomain "github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestSubmitWorkThenListWork_ConfirmsObservedJSONFields(t *testing.T) {
@@ -26,7 +28,7 @@ func TestSubmitWorkThenListWork_ConfirmsObservedJSONFields(t *testing.T) {
 	assertSubmitThenListWorkListing(t, srv, mf, submitted, now)
 }
 
-func assertSubmitThenListWorkRequest(t *testing.T, srv *Server, mf *testutil.MockFactory) interfaces.SubmitRequest {
+func assertSubmitThenListWorkRequest(t *testing.T, srv *Server, mf *testutil.MockFactory) workdomain.SubmitRequest {
 	t.Helper()
 
 	rec := submitWorkRequest(t, srv, `{"name":"Inventory story","workTypeName":"task","traceId":"trace-inventory-1","payload":{"title":"Document current API"},"tags":{"branch":"api-standardization"}}`)
@@ -68,7 +70,7 @@ func TestSubmitWork_OmitsUnsetOptionalBoundaryFields(t *testing.T) {
 	}
 }
 
-func assertSubmitThenListWorkListing(t *testing.T, srv *Server, mf *testutil.MockFactory, submitted interfaces.SubmitRequest, now time.Time) {
+func assertSubmitThenListWorkListing(t *testing.T, srv *Server, mf *testutil.MockFactory, submitted workdomain.SubmitRequest, now time.Time) {
 	t.Helper()
 
 	mf.Marking.Tokens["tok-inventory-1"] = &interfaces.Token{
@@ -79,9 +81,9 @@ func assertSubmitThenListWorkListing(t *testing.T, srv *Server, mf *testutil.Moc
 			WorkID:     "work-inventory-1",
 			WorkTypeID: submitted.WorkTypeID,
 			TraceID:    submitted.TraceID,
-			Content: []interfaces.WorkContentPart{
-				{Type: interfaces.WorkContentPartTypeText, Text: "Inspect this"},
-				{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/inventory.png"},
+			Content: []workdomain.WorkContentPart{
+				{Type: work.WorkContentPartTypeText, Text: "Inspect this"},
+				{Type: work.WorkContentPartTypeImage, URL: "file://fixtures/inventory.png"},
 			},
 			Tags: submitted.Tags,
 		},
@@ -111,9 +113,9 @@ func assertSubmitThenListWorkListing(t *testing.T, srv *Server, mf *testutil.Moc
 	if work.State == nil || work.State.Name != "init" || work.State.Type != factoryapi.WorkStateTypeINITIAL {
 		t.Fatalf("state = %#v, want init/INITIAL", work.State)
 	}
-	assertGeneratedWorkContentParts(t, work.Content, []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "Inspect this"},
-		{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/inventory.png"},
+	assertGeneratedWorkContentParts(t, work.Content, []workdomain.WorkContentPart{
+		{Type: workdomain.WorkContentPartTypeText, Text: "Inspect this"},
+		{Type: workdomain.WorkContentPartTypeImage, URL: "file://fixtures/inventory.png"},
 	})
 	if work.Tags == nil || (*work.Tags)["branch"] != "api-standardization" {
 		t.Fatalf("tags = %#v, want branch api-standardization", work.Tags)
@@ -134,7 +136,7 @@ func TestGetWork(t *testing.T) {
 					CurrentChainingTraceID:   "chain-1",
 					PreviousChainingTraceIDs: []string{"chain-a", "chain-b"},
 					TraceID:                  "trace-1",
-					Content:                  []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "Review screenshot"}, {Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/review.png"}},
+					Content:                  []workdomain.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "Review screenshot"}, {Type: work.WorkContentPartTypeImage, URL: "file://fixtures/review.png"}},
 				},
 				CreatedAt: now,
 				EnteredAt: now,
@@ -161,9 +163,9 @@ func TestGetWork(t *testing.T) {
 	if resp.ChainingTraceDepth == nil || *resp.ChainingTraceDepth != 4 || resp.CurrentChainingTraceId == nil || *resp.CurrentChainingTraceId != "chain-1" || resp.PreviousChainingTraceIds == nil || len(*resp.PreviousChainingTraceIds) != 2 {
 		t.Fatalf("chaining trace fields = %#v, want preserved trace lineage", resp)
 	}
-	assertGeneratedWorkContentParts(t, resp.Content, []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "Review screenshot"},
-		{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/review.png"},
+	assertGeneratedWorkContentParts(t, resp.Content, []workdomain.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "Review screenshot"},
+		{Type: work.WorkContentPartTypeImage, URL: "file://fixtures/review.png"},
 	})
 }
 
@@ -730,7 +732,7 @@ func TestListWork_ReturnsRuntimeRelationsWithSourceToTargetDirection(t *testing.
 		"tok-5": listWorkToken("tok-5", "work-origin", "task:init", "task", now),
 	}
 	tokens["tok-1"].Color.Name = "review"
-	tokens["tok-1"].Color.Relations = []interfaces.Relation{{Type: interfaces.RelationDependsOn, TargetWorkID: "work-draft", RequiredState: "complete"}, {Type: interfaces.RelationParentChild, TargetWorkID: "work-parent"}, {Type: interfaces.RelationSpawnedBy, TargetWorkID: "work-origin"}}
+	tokens["tok-1"].Color.Relations = []work.Relation{{Type: work.RelationDependsOn, TargetWorkID: "work-draft", RequiredState: "complete"}, {Type: work.RelationParentChild, TargetWorkID: "work-parent"}, {Type: work.RelationSpawnedBy, TargetWorkID: "work-origin"}}
 	tokens["tok-2"].Color.Name = "draft"
 	tokens["tok-3"].Color.Name = "parent"
 	tokens["tok-4"].Color.Name = "standalone"
@@ -970,10 +972,10 @@ func TestUpsertWorkRequest_AcceptsCanonicalContent(t *testing.T) {
 	if len(mf.Submitted[0].Content) != 2 {
 		t.Fatalf("content count = %d, want 2", len(mf.Submitted[0].Content))
 	}
-	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
+	if mf.Submitted[0].Content[0].Type != work.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
 		t.Fatalf("submitted content[0] = %#v, want canonical text content", mf.Submitted[0].Content[0])
 	}
-	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].URL != "file://fixtures/ui.png" {
+	if mf.Submitted[0].Content[1].Type != work.WorkContentPartTypeImage || mf.Submitted[0].Content[1].URL != "file://fixtures/ui.png" {
 		t.Fatalf("submitted content[1] = %#v, want canonical image content", mf.Submitted[0].Content[1])
 	}
 }
@@ -1001,13 +1003,13 @@ func TestUpsertWorkRequest_AcceptsUppercaseAndExtendedContent(t *testing.T) {
 	if len(mf.Submitted) != 1 || len(mf.Submitted[0].Content) != 3 {
 		t.Fatalf("submitted content = %#v, want 3 canonical parts", mf.Submitted)
 	}
-	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[0].Label != "reference" {
+	if mf.Submitted[0].Content[0].Type != work.WorkContentPartTypeImage || mf.Submitted[0].Content[0].Label != "reference" {
 		t.Fatalf("submitted content[0] = %#v, want normalized image part", mf.Submitted[0].Content[0])
 	}
-	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeBinary || mf.Submitted[0].Content[1].ContentType != "application/octet-stream" {
+	if mf.Submitted[0].Content[1].Type != work.WorkContentPartTypeBinary || mf.Submitted[0].Content[1].ContentType != "application/octet-stream" {
 		t.Fatalf("submitted content[1] = %#v, want canonical binary part", mf.Submitted[0].Content[1])
 	}
-	if mf.Submitted[0].Content[2].Type != interfaces.WorkContentPartTypeJSON {
+	if mf.Submitted[0].Content[2].Type != work.WorkContentPartTypeJSON {
 		t.Fatalf("submitted content[2] = %#v, want canonical json part", mf.Submitted[0].Content[2])
 	}
 	jsonValue := map[string]any{}
@@ -1146,7 +1148,7 @@ func TestUpsertWorkRequest_AcceptsParentChildRelationsByWorkName(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("PUT /work-requests status = %d, want 201: %s", rec.Code, rec.Body.String())
 	}
-	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Relations) != 2 || mf.WorkRequests[0].Relations[0].Type != interfaces.WorkRelationParentChild {
+	if len(mf.WorkRequests) != 1 || len(mf.WorkRequests[0].Relations) != 2 || mf.WorkRequests[0].Relations[0].Type != work.WorkRelationParentChild {
 		t.Fatalf("work request relations = %#v, want parent-child plus dependency", mf.WorkRequests)
 	}
 	child := submittedRequestNamed(t, mf.Submitted, "child")

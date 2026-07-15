@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	agentstate "github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/state/validation"
@@ -334,7 +335,7 @@ type analyzerExecutor struct {
 	tracker *metaFactoryTracker
 }
 
-func (e *analyzerExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *analyzerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	e.tracker.recordAnalyzer()
 
 	// Simulate: analyzed stats, found that transition X has high retry rate.
@@ -360,7 +361,7 @@ type proposalEmitterExecutor struct {
 	tracker *metaFactoryTracker
 }
 
-func (e *proposalEmitterExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *proposalEmitterExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	proposalJSON := ""
 	traceID := ""
 	if len(dispatch.InputTokens) > 0 {
@@ -388,7 +389,7 @@ type validatorExecutor struct {
 	tracker *metaFactoryTracker
 }
 
-func (e *validatorExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *validatorExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	e.tracker.recordValidator()
 
 	proposalJSON := ""
@@ -430,7 +431,7 @@ type rejectingValidatorExecutor struct {
 	rejectUntilN int
 }
 
-func (e *rejectingValidatorExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *rejectingValidatorExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	e.tracker.recordValidator()
 
 	callNum := e.tracker.validatorCalls()
@@ -462,7 +463,7 @@ type alwaysRejectingValidatorExecutor struct {
 	tracker *metaFactoryTracker
 }
 
-func (e *alwaysRejectingValidatorExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *alwaysRejectingValidatorExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	e.tracker.recordValidator()
 
 	return interfaces.WorkResult{
@@ -478,7 +479,7 @@ type applyEmitterExecutor struct {
 	tracker *metaFactoryTracker
 }
 
-func (e *applyEmitterExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *applyEmitterExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	proposalJSON := ""
 	traceID := ""
 	if len(dispatch.InputTokens) > 0 {
@@ -508,7 +509,7 @@ type applierExecutor struct {
 	tracker *metaFactoryTracker
 }
 
-func (e *applierExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *applierExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	e.tracker.recordApplier()
 
 	proposalJSON := ""

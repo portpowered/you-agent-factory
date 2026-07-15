@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestRunnerFromProviderUsesProviderInference(t *testing.T) {
@@ -71,7 +72,7 @@ func TestNewWorkerPoolDispatchesRegisteredExecutor(t *testing.T) {
 	pool.Start()
 	defer pool.Stop()
 
-	dispatched := pool.Dispatch("worker-a", interfaces.WorkDispatch{
+	dispatched := pool.Dispatch("worker-a", work.WorkDispatch{
 		DispatchID:   "dispatch-1",
 		TransitionID: "transition-1",
 		WorkerType:   "worker-a",
@@ -92,7 +93,7 @@ func TestNewWorkerPoolDispatchesRegisteredExecutor(t *testing.T) {
 
 func TestPanicAsFailedResultPreservesDispatchIdentity(t *testing.T) {
 	duration := 25 * time.Millisecond
-	result := PanicAsFailedResult(interfaces.WorkDispatch{
+	result := PanicAsFailedResult(work.WorkDispatch{
 		DispatchID:   "dispatch-1",
 		TransitionID: "transition-1",
 	}, "boom", duration)
@@ -112,7 +113,7 @@ func TestPanicAsFailedResultPreservesDispatchIdentity(t *testing.T) {
 }
 
 func TestWorkLogFieldsAddsStableExecutionFields(t *testing.T) {
-	fields := WorkLogFields(interfaces.ExecutionMetadata{
+	fields := WorkLogFields(work.ExecutionMetadata{
 		RequestID: "request-1",
 		TraceID:   "trace-1",
 		WorkIDs:   []string{"work-1", "work-2"},
@@ -147,7 +148,7 @@ func TestRootExecutionInterfaceAliasesAcceptImplementations(t *testing.T) {
 	worker := WorkerExecutor(stubWorkerExecutor{
 		result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
 	})
-	workerResult, err := worker.Execute(context.Background(), interfaces.WorkDispatch{})
+	workerResult, err := worker.Execute(context.Background(), work.WorkDispatch{})
 	if err != nil {
 		t.Fatalf("worker executor returned error: %v", err)
 	}
@@ -195,7 +196,7 @@ type stubWorkerExecutor struct {
 	result interfaces.WorkResult
 }
 
-func (s stubWorkerExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (s stubWorkerExecutor) Execute(_ context.Context, _ work.WorkDispatch) (interfaces.WorkResult, error) {
 	return s.result, nil
 }
 

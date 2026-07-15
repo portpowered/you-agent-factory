@@ -12,6 +12,7 @@ import (
 	"time"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
@@ -586,14 +587,14 @@ func writeInvocationJSON(cfg RunConfig, result apisurface.FactoryInvocationResul
 	return err
 }
 
-func invocationPrimaryResultText(parts []interfaces.WorkContentPart) (string, error) {
+func invocationPrimaryResultText(parts []work.WorkContentPart) (string, error) {
 	if len(parts) == 0 {
 		return "", fmt.Errorf("invocation primary result is empty")
 	}
 
 	textParts := make([]string, 0, len(parts))
 	for _, part := range parts {
-		if part.Type.Normalized() != interfaces.WorkContentPartTypeText {
+		if part.Type.Normalized() != work.WorkContentPartTypeText {
 			return "", fmt.Errorf("invocation primary result is not plain text; use --json")
 		}
 		textParts = append(textParts, part.Text)

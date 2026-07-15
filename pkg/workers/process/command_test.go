@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // commandHelperSpawnTimeoutBudget allows slow CI hosts (especially Windows) to
@@ -497,7 +497,7 @@ func commandCleanupTestRequest(t *testing.T) CommandRequest {
 		DispatchID:      "dispatch-cleanup-log",
 		WorkerType:      "script",
 		WorkstationName: "cleanup-test-station",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			RequestID: "request-cleanup-log",
 			TraceID:   "trace-cleanup-log",
 			WorkIDs:   []string{"work-cleanup-log"},
@@ -671,7 +671,7 @@ func loggingCommandRunnerTestRequest() CommandRequest {
 		Stdin:   []byte("stdin"),
 		Env:     []string{"VISIBLE=1"},
 		WorkDir: "/tmp/work",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			RequestID: "request-command",
 			TraceID:   "trace-command",
 			WorkIDs:   []string{"work-command"},

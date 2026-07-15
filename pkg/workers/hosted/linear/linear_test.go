@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 )
 
@@ -78,14 +79,14 @@ func TestRunPollCycle_SubmitsFilteredIssuesAndPersistsCheckpoint(t *testing.T) {
 	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
 	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
 
-	var submitted []interfaces.WorkRequest
+	var submitted []work.WorkRequest
 	result, err := RunPollCycle(
 		context.Background(),
 		Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
 		nil,
 		workstation,
 		worker,
-		func(_ context.Context, request interfaces.WorkRequest) error {
+		func(_ context.Context, request work.WorkRequest) error {
 			submitted = append(submitted, request)
 			return nil
 		},
@@ -169,7 +170,7 @@ func TestRunPollCycle_StopsAtCheckpointAndSkipsResubmission(t *testing.T) {
 		nil,
 		workstation,
 		worker,
-		func(_ context.Context, request interfaces.WorkRequest) error {
+		func(_ context.Context, request work.WorkRequest) error {
 			submitCalls++
 			if len(request.Works) != 1 || request.Works[0].WorkID != "linear:issue-new" {
 				t.Fatalf("submitted request = %#v, want only newest issue above checkpoint", request)
@@ -193,7 +194,7 @@ func TestRunPollCycle_StopsAtCheckpointAndSkipsResubmission(t *testing.T) {
 		nil,
 		workstation,
 		worker,
-		func(_ context.Context, request interfaces.WorkRequest) error {
+		func(_ context.Context, request work.WorkRequest) error {
 			t.Fatalf("unexpected resubmission: %#v", request)
 			return nil
 		},
@@ -262,14 +263,14 @@ func TestRunPollCycle_PushesFiltersIntoProviderQueryForBoundedResume(t *testing.
 		UpdatedAt: "2026-05-22T07:00:00Z",
 	})
 
-	var submitted []interfaces.WorkRequest
+	var submitted []work.WorkRequest
 	result, err := RunPollCycle(
 		context.Background(),
 		Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
 		nil,
 		workstation,
 		worker,
-		func(_ context.Context, request interfaces.WorkRequest) error {
+		func(_ context.Context, request work.WorkRequest) error {
 			submitted = append(submitted, request)
 			return nil
 		},
@@ -356,17 +357,17 @@ func linearWorkerConfigForTest(
 	return worker
 }
 
-func normalizeSubmittedLinearWorkRequest(t *testing.T, request interfaces.WorkRequest) []interfaces.SubmitRequest {
+func normalizeSubmittedLinearWorkRequest(t *testing.T, request work.WorkRequest) []work.SubmitRequest {
 	t.Helper()
 
-	normalized, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
+	normalized, err := requests.NormalizeWorkRequest(request, work.WorkRequestNormalizeOptions{})
 	if err != nil {
 		t.Fatalf("NormalizeWorkRequest: %v", err)
 	}
 	return normalized
 }
 
-func assertNormalizedHostedLinearIssues(t *testing.T, normalized []interfaces.SubmitRequest) {
+func assertNormalizedHostedLinearIssues(t *testing.T, normalized []work.SubmitRequest) {
 	t.Helper()
 
 	if len(normalized) != 2 {

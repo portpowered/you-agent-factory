@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -39,7 +40,7 @@ func TestWorkInQueueScheduler_BatchSubmissionPrioritizesWorkInProgressState(t *t
 		),
 	)
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{
 		{
 			RequestID:  "request-state-priority",
 			WorkID:     "work-initial",
@@ -89,7 +90,7 @@ func TestWorkInQueueScheduler_RuntimeSmokeOrdersProcessingThenInitialThenCron(t 
 		),
 	)
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{
 		schedulerPriorityWorkRequest("request-runtime-priority", "work-processing", "processing", "task", "processing"),
 		schedulerPriorityWorkRequest("request-runtime-priority", "work-initial", "initial", "task", ""),
 		schedulerPriorityWorkRequest("request-runtime-priority", "work-cron-input", "cron-input", "scheduled", ""),
@@ -124,7 +125,7 @@ func TestWorkInQueueScheduler_RuntimeSmokeCustomSchedulerReceivesRuntimeConfig(t
 		),
 	)
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{
 		schedulerPriorityWorkRequest("request-runtime-priority-custom", "work-processing", "processing", "task", "processing"),
 		schedulerPriorityWorkRequest("request-runtime-priority-custom", "work-initial", "initial", "task", ""),
 		schedulerPriorityWorkRequest("request-runtime-priority-custom", "work-cron-input", "cron-input", "scheduled", ""),
@@ -254,8 +255,8 @@ stopToken: COMPLETE
 `
 }
 
-func schedulerPriorityWorkRequest(requestID, workID, name, workTypeID, targetState string) interfaces.SubmitRequest {
-	return interfaces.SubmitRequest{
+func schedulerPriorityWorkRequest(requestID, workID, name, workTypeID, targetState string) work.SubmitRequest {
+	return work.SubmitRequest{
 		RequestID:   requestID,
 		WorkID:      workID,
 		Name:        name,
@@ -266,8 +267,8 @@ func schedulerPriorityWorkRequest(requestID, workID, name, workTypeID, targetSta
 	}
 }
 
-func schedulerPriorityCronTimeRequest(workID, workstation string, dueAt, expiresAt time.Time) interfaces.SubmitRequest {
-	return interfaces.SubmitRequest{
+func schedulerPriorityCronTimeRequest(workID, workstation string, dueAt, expiresAt time.Time) work.SubmitRequest {
+	return work.SubmitRequest{
 		RequestID:   "request-runtime-priority",
 		WorkID:      workID,
 		Name:        "cron:" + workstation,

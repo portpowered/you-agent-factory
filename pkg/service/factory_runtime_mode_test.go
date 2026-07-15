@@ -20,7 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factory/sessions/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -32,7 +32,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
@@ -106,7 +107,7 @@ func TestBuildFactoryService_ServiceModeAcceptsLateSubmissionAfterIdleStartup(t 
 		)
 	}
 
-	err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+	err = submitWorkRequestsToService(context.Background(), svc, []work.SubmitRequest{{
 		WorkTypeID: "task",
 		TraceID:    "trace-late-submit",
 		Payload:    json.RawMessage(`{"title":"late submit"}`),
@@ -184,7 +185,7 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureLifecycleAndStateTr
 		return runtimeMetricNameAndValue(record, runtimeMetricStateIdle, 1)
 	}, "idle state")
 
-	err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+	err = submitWorkRequestsToService(context.Background(), svc, []work.SubmitRequest{{
 		WorkTypeID: "task",
 		TraceID:    "trace-runtime-metrics-active",
 		Payload:    json.RawMessage(`{"title":"runtime metrics active"}`),
@@ -300,7 +301,7 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureDispatchOutcomes(t 
 	}
 
 	for _, submission := range submissions {
-		err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+		err = submitWorkRequestsToService(context.Background(), svc, []work.SubmitRequest{{
 			WorkID:     submission.workID,
 			Name:       submission.workID,
 			WorkTypeID: "task",
@@ -429,7 +430,7 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureProviderAndScriptDi
 	}
 	metricsPath := liveSessionHandle(session).Bundle.MetricsSink.Path()
 
-	err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+	err = submitWorkRequestsToService(context.Background(), svc, []work.SubmitRequest{{
 		WorkID:     "work-provider-metrics",
 		Name:       "work-provider-metrics",
 		WorkTypeID: "model-task",
@@ -459,7 +460,7 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureProviderAndScriptDi
 		return runtimeMetricMatchesProviderValue(record, runtimeMetricProviderCost, "work-provider-metrics", 2.75, "usd")
 	}, "provider cost")
 
-	err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+	err = submitWorkRequestsToService(context.Background(), svc, []work.SubmitRequest{{
 		WorkID:     "work-provider-failed",
 		Name:       "work-provider-failed",
 		WorkTypeID: "model-task",
@@ -474,7 +475,7 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureProviderAndScriptDi
 			metricRecordString(record, "reason") == string(interfaces.WorkFailureTypeInternalServerError)
 	}, "provider failure")
 
-	err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+	err = submitWorkRequestsToService(context.Background(), svc, []work.SubmitRequest{{
 		WorkID:     "work-script-metrics",
 		Name:       "work-script-metrics",
 		WorkTypeID: "script-task",
@@ -561,7 +562,7 @@ func TestBuildFactoryService_ServiceModeContinuesWhenRuntimeMetricsSinkUnavailab
 		t.Fatal("runtime metrics sink should be nil when metrics root is unavailable")
 	}
 	logPath := liveSessionHandle(session).Bundle.LogSink.Path()
-	err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+	err = submitWorkRequestsToService(context.Background(), svc, []work.SubmitRequest{{
 		WorkID:     "work-no-metrics-sink",
 		Name:       "work-no-metrics-sink",
 		WorkTypeID: "task",
@@ -618,7 +619,7 @@ func TestBuildFactoryService_BatchModeRejectsLateSubmissionAfterTermination(t *t
 		t.Fatalf("batch completion status = %q, want %q", snap.RuntimeStatus, interfaces.RuntimeStatusFinished)
 	}
 
-	err = submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+	err = submitWorkRequestsToService(context.Background(), svc, []work.SubmitRequest{{
 		WorkTypeID: "task",
 		TraceID:    "trace-after-stop",
 	}})
@@ -1728,8 +1729,8 @@ type stubFactoryCoordinator struct {
 	getSessionResult   factoryapi.FactorySession
 	openResult         factoryapi.OpenFactorySessionResponse
 	currentFactory     factoryapi.Factory
-	workSubmitResult   interfaces.WorkRequestSubmitResult
-	moveResult         interfaces.OperatorMoveResult
+	workSubmitResult   work.WorkRequestSubmitResult
+	moveResult         work.OperatorMoveResult
 	eventStream        *interfaces.FactoryEventStream
 	engineSnapshot     *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 	calls              []string
@@ -1795,13 +1796,13 @@ func (s *stubFactoryCoordinator) OpenFactorySessionFromFolder(_ context.Context,
 	return &FactorySessionOpenResult{SessionID: "session-from-folder"}, nil
 }
 
-func (s *stubFactoryCoordinator) SubmitWorkRequestForSession(_ context.Context, sessionID string, _ interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (s *stubFactoryCoordinator) SubmitWorkRequestForSession(_ context.Context, sessionID string, _ work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	s.calls = append(s.calls, "submit-session-work")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.workSubmitResult, nil
 }
 
-func (s *stubFactoryCoordinator) MoveWorkForSession(_ context.Context, sessionID, _, _, _ string) (interfaces.OperatorMoveResult, error) {
+func (s *stubFactoryCoordinator) MoveWorkForSession(_ context.Context, sessionID, _, _, _ string) (work.OperatorMoveResult, error) {
 	s.calls = append(s.calls, "move-session-work")
 	s.sessionIDs = append(s.sessionIDs, sessionID)
 	return s.moveResult, nil
@@ -2012,8 +2013,8 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubFactoryCoordinator{
-		workSubmitResult: interfaces.WorkRequestSubmitResult{RequestID: "request-1"},
-		moveResult:       interfaces.OperatorMoveResult{WorkID: "move-1"},
+		workSubmitResult: work.WorkRequestSubmitResult{RequestID: "request-1"},
+		moveResult:       work.OperatorMoveResult{WorkID: "move-1"},
 		eventStream:      &interfaces.FactoryEventStream{},
 		engineSnapshot:   &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{RuntimeStatus: interfaces.RuntimeStatusIdle},
 	}
@@ -2072,7 +2073,7 @@ func TestFactoryService_LifecycleMethodsDelegateToCoordinator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCurrentFactoryForSession: %v", err)
 	}
-	if _, err := svc.SubmitWorkRequestForSession(context.Background(), "session-a", interfaces.WorkRequest{}); err != nil {
+	if _, err := svc.SubmitWorkRequestForSession(context.Background(), "session-a", work.WorkRequest{}); err != nil {
 		t.Fatalf("SubmitWorkRequestForSession: %v", err)
 	}
 	if _, err := svc.MoveWorkForSession(context.Background(), "session-a", "work-1", "done", "request-2"); err != nil {
@@ -2394,7 +2395,7 @@ func buildBatchSnapshotFixture(t *testing.T) *FactoryService {
 func submitSnapshotStatusWork(t *testing.T, svc *FactoryService) {
 	t.Helper()
 
-	if err := submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+	if err := submitWorkRequestsToService(context.Background(), svc, []work.SubmitRequest{{
 		WorkTypeID: "task",
 		TraceID:    "trace-engine-state-statuses",
 		Payload:    json.RawMessage(`{"title":"runtime-statuses"}`),
@@ -2448,7 +2449,7 @@ func snapshotHasCompletedTaskToken(snap *interfaces.EngineStateSnapshot[petri.Ma
 
 type dispatchMetricsWorkerExecutor struct{}
 
-func (dispatchMetricsWorkerExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (dispatchMetricsWorkerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	result := interfaces.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
@@ -2496,7 +2497,7 @@ func runtimeMetricMatchesValue(record map[string]any, metricName, workID, outcom
 
 type providerMetricsWorkerExecutor struct{}
 
-func (providerMetricsWorkerExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (providerMetricsWorkerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	if len(dispatch.Execution.WorkIDs) > 0 && dispatch.Execution.WorkIDs[0] == "work-provider-failed" {
 		return interfaces.WorkResult{
 			DispatchID:   dispatch.DispatchID,
@@ -2548,7 +2549,7 @@ func (providerMetricsWorkerExecutor) Execute(_ context.Context, dispatch interfa
 
 type scriptMetricsWorkerExecutor struct{}
 
-func (scriptMetricsWorkerExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (scriptMetricsWorkerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	return interfaces.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,

@@ -9,15 +9,16 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestLoadFromFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "work.json")
 
-	req := interfaces.WorkRequest{
+	req := work.WorkRequest{
 		RequestID: "request-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{{
 			Name:       "source-file",
 			WorkTypeID: "task",
@@ -39,8 +40,8 @@ func TestLoadFromFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFromFile: %v", err)
 	}
-	if got.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
-		t.Errorf("Type = %q, want %q", got.Type, interfaces.WorkRequestTypeFactoryRequestBatch)
+	if got.Type != work.WorkRequestTypeFactoryRequestBatch {
+		t.Errorf("Type = %q, want %q", got.Type, work.WorkRequestTypeFactoryRequestBatch)
 	}
 	if len(got.Works) != 1 || got.Works[0].WorkTypeID != "task" {
 		t.Fatalf("Works = %#v, want one task work item", got.Works)
@@ -60,8 +61,8 @@ func TestLoadFromFile_DocsExampleStartupWorkFile(t *testing.T) {
 	if got.RequestID != "docs-example-story-001" {
 		t.Fatalf("request ID = %q, want docs-example-story-001", got.RequestID)
 	}
-	if got.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
-		t.Fatalf("type = %q, want %q", got.Type, interfaces.WorkRequestTypeFactoryRequestBatch)
+	if got.Type != work.WorkRequestTypeFactoryRequestBatch {
+		t.Fatalf("type = %q, want %q", got.Type, work.WorkRequestTypeFactoryRequestBatch)
 	}
 	if len(got.Works) != 1 {
 		t.Fatalf("work count = %d, want 1", len(got.Works))

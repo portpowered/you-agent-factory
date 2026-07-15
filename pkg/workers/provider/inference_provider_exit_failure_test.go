@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -112,9 +113,9 @@ func TestScriptWrapProvider_Infer_LogsCorrelatedNormalizedCodexFailureAfterParsi
 		Model:         "gpt-5.6-sol",
 		UserMessage:   prompt,
 		EnvVars:       map[string]string{"API_TOKEN": credential},
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID: "dispatch-failure-1",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				RequestID: "request-failure-1", TraceID: "trace-failure-1", WorkIDs: []string{"work-failure-1", "work-failure-2"},
 			},
 		},
@@ -171,7 +172,7 @@ func TestScriptWrapProvider_Infer_LogsNormalizedFailuresWithoutSyntheticExitCode
 			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
 				ModelProvider: string(interfaces.ModelProviderClaude),
 				UserMessage:   "private prompt",
-				Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-no-exit"},
+				Dispatch:      work.WorkDispatch{DispatchID: "dispatch-no-exit"},
 			})
 			if err == nil {
 				t.Fatal("Infer returned nil error")

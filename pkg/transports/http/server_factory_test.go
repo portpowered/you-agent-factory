@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestCreateFactoryRoute_RemovedFromRouter(t *testing.T) {
@@ -177,16 +178,16 @@ func TestInvokeModel_ReturnsInvocationMetadata(t *testing.T) {
 			Worker:           "tts-worker",
 			Operation:        "TTS",
 			ProviderLocality: interfaces.ModelLocalityLocal,
-			Content: []interfaces.WorkContentPart{{
-				Type:        interfaces.WorkContentPartTypeAudio,
+			Content: []work.WorkContentPart{{
+				Type:        work.WorkContentPartTypeAudio,
 				File:        "artifacts/output.wav",
 				ContentType: "audio/wav",
 			}},
 			Bindings: []interfaces.ResolvedModelOperationBinding{{
 				Slot:   "text",
 				Source: interfaces.ModelOperationBindingSourceInput,
-				Content: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
+				Content: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText,
 					Text: "hello world",
 				}},
 			}},

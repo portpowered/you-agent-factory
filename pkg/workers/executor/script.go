@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
@@ -249,7 +250,7 @@ func scriptEventContext(req CommandRequest, eventTime time.Time) factoryapi.Fact
 	}
 }
 
-func scriptEventTick(metadata interfaces.ExecutionMetadata) int {
+func scriptEventTick(metadata work.ExecutionMetadata) int {
 	if metadata.CurrentTick != 0 {
 		return metadata.CurrentTick
 	}
@@ -338,7 +339,7 @@ func scriptCommandDiagnostic(result interfaces.WorkResult) (*interfaces.CommandD
 	return result.Diagnostics.Command, true
 }
 
-func argTemplateErrorResult(dispatch interfaces.WorkDispatch, duration time.Duration, err error) interfaces.WorkResult {
+func argTemplateErrorResult(dispatch work.WorkDispatch, duration time.Duration, err error) interfaces.WorkResult {
 	return interfaces.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
@@ -351,7 +352,7 @@ func argTemplateErrorResult(dispatch interfaces.WorkDispatch, duration time.Dura
 func scriptRunErrorResult(
 	ctx context.Context,
 	logger logging.Logger,
-	dispatch interfaces.WorkDispatch,
+	dispatch work.WorkDispatch,
 	commandResult CommandResult,
 	diagnostics *interfaces.WorkDiagnostics,
 	duration time.Duration,
@@ -390,7 +391,7 @@ func scriptRunErrorResult(
 
 func scriptExitFailureResult(
 	logger logging.Logger,
-	dispatch interfaces.WorkDispatch,
+	dispatch work.WorkDispatch,
 	commandResult CommandResult,
 	diagnostics *interfaces.WorkDiagnostics,
 	duration time.Duration,
@@ -414,7 +415,7 @@ func scriptExitFailureResult(
 
 func scriptAcceptedResult(
 	logger logging.Logger,
-	dispatch interfaces.WorkDispatch,
+	dispatch work.WorkDispatch,
 	commandResult CommandResult,
 	diagnostics *interfaces.WorkDiagnostics,
 	duration time.Duration,

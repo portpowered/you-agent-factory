@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -124,7 +125,7 @@ type snapshotCapturingExecutor struct {
 	captured atomic.Bool
 }
 
-func (e *snapshotCapturingExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *snapshotCapturingExecutor) Execute(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
 	if !e.captured.Load() {
 		if rt, err := e.harness.GetEngineStateSnapshot(); err == nil {
 			e.mu.Lock()
@@ -235,7 +236,7 @@ type barrierSnapshotExecutor struct {
 	initOnce sync.Once
 }
 
-func (e *barrierSnapshotExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *barrierSnapshotExecutor) Execute(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
 	e.initOnce.Do(func() { e.release = make(chan struct{}) })
 
 	count := int(e.arrived.Add(1))

@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -103,15 +104,15 @@ Process the input task.
 func submitCursorProviderSmokeWork(t *testing.T, h *testutil.ServiceTestHarness) {
 	t.Helper()
 
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-cursor-provider-smoke",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{{
 			Name:       "cursor-provider-smoke",
 			WorkTypeID: "task",
 			TraceID:    "trace-cursor-provider-smoke",
-			Content: []interfaces.WorkContentPart{
-				{Type: interfaces.WorkContentPartTypeText, Text: "cursor provider smoke"},
+			Content: []work.WorkContentPart{
+				{Type: work.WorkContentPartTypeText, Text: "cursor provider smoke"},
 			},
 		}},
 	})

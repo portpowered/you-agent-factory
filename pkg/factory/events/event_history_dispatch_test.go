@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func assertJSONField(t *testing.T, object map[string]any, field string, want any) {
@@ -41,12 +42,12 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 	history.RecordWorkstationRequest(4, interfaces.FactoryDispatchRecord{
 		DispatchID:  "dispatch-1",
 		CreatedTick: 4,
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      "dispatch-1",
 			TransitionID:    "build",
 			WorkerType:      "builder",
 			WorkstationName: "Build",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				RequestID: "request-1",
 				ReplayKey: "replay-1",
 			},
@@ -83,7 +84,7 @@ func TestFactoryEventHistory_RecordWorkstationRequest_NormalizesEventTimeToUTC(t
 
 	history.RecordWorkstationRequest(4, interfaces.FactoryDispatchRecord{
 		DispatchID: "dispatch-utc",
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID:   "dispatch-utc",
 			TransitionID: "build",
 		},
@@ -476,12 +477,12 @@ func dispatchRequestMetadataForEventHistoryTest(t *testing.T, history *FactoryEv
 	t.Helper()
 	history.RecordWorkstationRequest(4, interfaces.FactoryDispatchRecord{
 		DispatchID: "dispatch-runner",
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      "dispatch-runner",
 			TransitionID:    "build",
 			WorkerType:      "builder",
 			WorkstationName: "Build",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				ReplayKey: "replay-runner",
 			},
 		},

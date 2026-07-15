@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
@@ -167,7 +168,7 @@ func (e *recursiveSpawnerExecutor) depthDistribution() map[int]int {
 	return dist
 }
 
-func (e *recursiveSpawnerExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *recursiveSpawnerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	e.mu.Lock()
 	e.calls++
 	e.mu.Unlock()

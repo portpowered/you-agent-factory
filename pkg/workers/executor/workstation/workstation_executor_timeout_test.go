@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
@@ -59,7 +60,7 @@ func TestWorkstationExecutor_AppliesWorkstationExecutionTimeout(t *testing.T) {
 		Renderer: &executor.DefaultPromptRenderer{},
 	}
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-timeout",
 		TransitionID:    "t-timeout",
 		WorkerType:      "worker-a",
@@ -99,7 +100,7 @@ func TestWorkstationExecutor_InvalidWorkstationExecutionLimitReturnsActionableFa
 		Renderer: &executor.DefaultPromptRenderer{},
 	}
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-timeout",
 		TransitionID:    "t-timeout",
 		WorkerType:      "worker-a",
@@ -140,7 +141,7 @@ func TestWorkstationExecutor_WorkstationExecutionLimitSetsTimeout(t *testing.T) 
 	}
 
 	start := time.Now()
-	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	_, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-timeout",
 		TransitionID:    "t-timeout",
 		WorkerType:      "worker-a",
@@ -181,7 +182,7 @@ func TestWorkstationExecutor_ScriptWorkerTimeoutPrefersWorkstationLimit(t *testi
 	}
 
 	start := time.Now()
-	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	_, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-timeout",
 		TransitionID:    "t-timeout",
 		WorkerType:      "script-worker",
@@ -218,7 +219,7 @@ func TestWorkstationExecutor_ScriptWorkerTimeoutFallsBackToWorkerTimeout(t *test
 	}
 
 	start := time.Now()
-	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	_, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-timeout",
 		TransitionID:    "t-timeout",
 		WorkerType:      "script-worker",
@@ -255,7 +256,7 @@ func TestWorkstationExecutor_ExplicitPositiveTimeoutOverridesDefaults(t *testing
 	}
 
 	start := time.Now()
-	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	_, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-timeout",
 		TransitionID:    "t-timeout",
 		WorkerType:      "script-worker",
@@ -292,7 +293,7 @@ func TestWorkstationExecutor_ScriptWorkerTimeoutDefaultsToTwoHours(t *testing.T)
 	}
 
 	start := time.Now()
-	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	_, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-timeout",
 		TransitionID:    "t-timeout",
 		WorkerType:      "script-worker",
@@ -348,7 +349,7 @@ func TestWorkstationExecutor_ZeroTimeoutDefaultsToTwoHours(t *testing.T) {
 			}
 
 			start := time.Now()
-			_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+			_, err := we.Execute(context.Background(), work.WorkDispatch{
 				DispatchID:      "d-timeout",
 				TransitionID:    "t-timeout",
 				WorkerType:      "script-worker",
@@ -387,7 +388,7 @@ func TestWorkstationExecutor_ModelWorkerTimeoutFallsBackToWorkerTimeout(t *testi
 	}
 
 	start := time.Now()
-	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	_, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-model-timeout",
 		TransitionID:    "t-model-timeout",
 		WorkerType:      "model-worker",
@@ -423,7 +424,7 @@ func TestWorkstationExecutor_ModelWorkerTimeoutCancelsLongRunningExecutor(t *tes
 	}
 
 	start := time.Now()
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-model-timeout",
 		TransitionID:    "t-model-timeout",
 		WorkerType:      "model-worker",

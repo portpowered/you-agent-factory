@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -20,9 +21,9 @@ func queueManyItems(t *testing.T, h *testutil.ServiceTestHarness, workTypeID str
 	t.Helper()
 	ctx := context.Background()
 
-	reqs := make([]interfaces.SubmitRequest, numItems)
+	reqs := make([]work.SubmitRequest, numItems)
 	for i := range numItems {
-		reqs[i] = interfaces.SubmitRequest{
+		reqs[i] = work.SubmitRequest{
 			WorkTypeID: workTypeID,
 			Payload:    fmt.Appendf(nil, `{"item": %d}`, i),
 			TraceID:    fmt.Sprintf("trace-%s-%d", workTypeID, i),
@@ -532,7 +533,7 @@ type concurrencyTracker struct {
 	currentConcurrent *int
 }
 
-func (ct *concurrencyTracker) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (ct *concurrencyTracker) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	ct.mu.Lock()
 	*ct.currentConcurrent++
 	if *ct.currentConcurrent > *ct.maxConcurrent {

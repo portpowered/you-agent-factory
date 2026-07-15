@@ -2,10 +2,12 @@ package mappingtests
 
 import (
 	"encoding/json"
-	. "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"strings"
 	"testing"
+
+	. "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestFactoryConfigMapper_ExpandRejectsRetiredCronIntervalField(t *testing.T) {
@@ -541,8 +543,8 @@ func TestWorkstationConfigToOpenAPI_UsesBodyAsCanonicalExportPromptField(t *test
 				Label: "utterance",
 				Type:  interfaces.ModelOperationContentTypeText,
 			},
-			Config: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Config: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
 				Text: "fallback",
 				Slot: "text",
 			}},

@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -19,7 +20,7 @@ func TestIdeaToPRD_CrossWorkTypeOutput(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "idea_to_prd"))
 
 	originTraceID := "trace-idea-to-prd-test"
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "idea",
 		Payload:    []byte(`{"title": "search bar on docs"}`),
 		TraceID:    originTraceID,
@@ -78,12 +79,12 @@ func TestIdeaToPRD_MultipleIdeas(t *testing.T) {
 
 	trace1 := "trace-idea-multi-1"
 	trace2 := "trace-idea-multi-2"
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "idea",
 		Payload:    []byte(`{"title": "idea one"}`),
 		TraceID:    trace1,
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "idea",
 		Payload:    []byte(`{"title": "idea two"}`),
 		TraceID:    trace2,

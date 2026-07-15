@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 )
 
@@ -218,7 +219,7 @@ func providerInferenceRequestFromChild(
 		}
 	}
 	inferReq := interfaces.ProviderInferenceRequest{
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID: dispatchID,
 		},
 		UserMessage:   req.Prompt,

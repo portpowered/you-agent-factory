@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func dashboardQueueCountViewsFromRenderData(renderData dashboardrender.SimpleDashboardRenderData) []dashboardQueueCountView {
@@ -285,7 +286,7 @@ func (collector *worldViewFallbackWorkItemCollector) addTerminalWork(
 	return true
 }
 
-func (collector *worldViewFallbackWorkItemCollector) addWorkItems(items []interfaces.FactoryWorkItem) {
+func (collector *worldViewFallbackWorkItemCollector) addWorkItems(items []work.FactoryWorkItem) {
 	for _, item := range items {
 		if item.ID == "" {
 			continue
@@ -294,7 +295,7 @@ func (collector *worldViewFallbackWorkItemCollector) addWorkItems(items []interf
 	}
 }
 
-func (collector *worldViewFallbackWorkItemCollector) addMissingWorkItems(items []interfaces.FactoryWorkItem) {
+func (collector *worldViewFallbackWorkItemCollector) addMissingWorkItems(items []work.FactoryWorkItem) {
 	for _, item := range items {
 		if item.ID == "" {
 			continue

@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/parityfixtures"
 )
 
@@ -116,8 +117,8 @@ func floodCanonicalHumanProgress(sink responseEventSink, count int) {
 
 var responseStreamBacklogSuccessResult = apisurface.FactoryInvocationResult{
 	Status: factoryapi.InvocationTerminalStatusCompleted,
-	PrimaryResult: []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+	PrimaryResult: []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "goal completed"},
 	},
 }
 
@@ -167,8 +168,8 @@ func TestHumanResponseStreamRenderer_RendersOrderedProgressAndSeparatesPrimaryRe
 
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		Status: factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "goal completed"},
 		},
 	}); err != nil {
 		t.Fatalf("writeFinalInvocationResult: %v", err)
@@ -259,8 +260,8 @@ func TestHumanResponseStreamRenderer_NoHeaderWithoutProgress(t *testing.T) {
 	var output strings.Builder
 	renderer := newHumanResponseStreamRenderer(&output)
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "goal completed"},
 		},
 		Status: factoryapi.InvocationTerminalStatusCompleted,
 	}); err != nil {
@@ -413,8 +414,8 @@ func TestJSONResponseStreamRenderer_EmitsCanonicalResponseEventsAndInvocationRes
 		RequestID: "req-1",
 		TraceID:   "trace-1",
 		Status:    factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "goal completed"},
 		},
 	}); err != nil {
 		t.Fatalf("writeFinalInvocationResult: %v", err)
@@ -477,8 +478,8 @@ func TestRun_FactoryInvocationResponseStreamJSONPreservesSlowWriterOrder(t *test
 						RequestID: "req-slow-writer",
 						TraceID:   "trace-slow-writer",
 						Status:    factoryapi.InvocationTerminalStatusCompleted,
-						PrimaryResult: []interfaces.WorkContentPart{
-							{Type: interfaces.WorkContentPartTypeText, Text: text},
+						PrimaryResult: []work.WorkContentPart{
+							{Type: work.WorkContentPartTypeText, Text: text},
 						},
 					}, nil
 				},
@@ -541,8 +542,8 @@ func TestRun_FactoryInvocationResponseStreamJSONDrainsEventPublishedAtInvocation
 						RequestID: "req-terminal-boundary",
 						TraceID:   "trace-terminal-boundary",
 						Status:    factoryapi.InvocationTerminalStatusCompleted,
-						PrimaryResult: []interfaces.WorkContentPart{
-							{Type: interfaces.WorkContentPartTypeText, Text: text},
+						PrimaryResult: []work.WorkContentPart{
+							{Type: work.WorkContentPartTypeText, Text: text},
 						},
 					}, nil
 				},
@@ -695,8 +696,8 @@ func TestJSONResponseStreamRenderer_EmitsOnlyInvocationResultWithoutEvents(t *te
 	renderer := newJSONResponseStreamRenderer(&output)
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
 		Status: factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "goal completed"},
 		},
 	}); err != nil {
 		t.Fatalf("writeFinalInvocationResult: %v", err)
@@ -811,8 +812,8 @@ func TestResponseStreamNDJSON_PublicVocabularyDecodesAfterPrivateRemoval(t *test
 		RequestID: "req-migration-1",
 		TraceID:   "trace-migration-1",
 		Status:    factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "done"},
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "done"},
 		},
 	}
 
@@ -845,8 +846,8 @@ func TestResponseStreamNDJSON_RendererOutputDecodesThroughPublicContract(t *test
 	result := apisurface.FactoryInvocationResult{
 		RequestID: "req-migration-2",
 		Status:    factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "final"},
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "final"},
 		},
 	}
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -103,9 +104,9 @@ func TestCrossWorkflowPipelineNoDeadlock(t *testing.T) {
 		}},
 	})
 	hB := testutil.NewServiceTestHarness(t, dirB)
-	hB.SetCustomExecutor("submitter", &funcExecutor{fn: func(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	hB.SetCustomExecutor("submitter", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 		for i := range 3 {
-			hA.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+			hA.SubmitFull(context.Background(), []work.SubmitRequest{{
 				WorkTypeID: "code-change",
 				TraceID:    fmt.Sprintf("deadlock-test-%d", i),
 				Payload:    fmt.Appendf(nil, `{"item": %d}`, i),
@@ -218,7 +219,7 @@ func TestCrossWorkflowPipelineNoRace(t *testing.T) {
 		go func(gid int) {
 			defer submitWg.Done()
 			for i := range 3 {
-				hA.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+				hA.SubmitFull(context.Background(), []work.SubmitRequest{{
 					WorkTypeID: "code-change",
 					TraceID:    fmt.Sprintf("race-%d-%d", gid, i),
 					Payload:    fmt.Appendf(nil, `{"g":%d,"i":%d}`, gid, i),
@@ -400,7 +401,7 @@ type staticExecutor struct {
 	tags    map[string]string
 }
 
-func (e *staticExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *staticExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	output := ""
 	if e.tags != nil {
 		output = e.tags["findings"]
@@ -415,9 +416,9 @@ func (e *staticExecutor) Execute(_ context.Context, dispatch interfaces.WorkDisp
 
 // funcExecutor wraps a function as a WorkerExecutor.
 type funcExecutor struct {
-	fn func(context.Context, interfaces.WorkDispatch) (interfaces.WorkResult, error)
+	fn func(context.Context, work.WorkDispatch) (interfaces.WorkResult, error)
 }
 
-func (e *funcExecutor) Execute(ctx context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *funcExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	return e.fn(ctx, dispatch)
 }

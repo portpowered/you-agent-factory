@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -58,8 +59,8 @@ func TestInvokeModel_InferenceAndLegacyBindingFixturesStayAligned(t *testing.T) 
 	inputTokens := []interfaces.Token{{
 		ID: "token-tts",
 		Color: interfaces.TokenColor{
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
 				Slot: "text",
 				Text: "hello world",
 			}},

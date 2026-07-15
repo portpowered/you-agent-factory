@@ -10,12 +10,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workdomain "github.com/portpowered/infinite-you/pkg/work"
 )
 
 const externalSubmissionHookName = "external-submit"
 
 type queuedSubmissionHook struct {
-	batches []interfaces.GeneratedSubmissionBatch
+	batches []workdomain.GeneratedSubmissionBatch
 }
 
 func newQueuedSubmissionHook() *queuedSubmissionHook {
@@ -30,12 +31,12 @@ func (h *queuedSubmissionHook) Priority() int {
 	return 0
 }
 
-func (h *queuedSubmissionHook) enqueue(work []interfaces.SubmitRequest) {
-	copied := make([]interfaces.SubmitRequest, len(work))
+func (h *queuedSubmissionHook) enqueue(work []workdomain.SubmitRequest) {
+	copied := make([]workdomain.SubmitRequest, len(work))
 	copy(copied, work)
-	h.batches = append(h.batches, interfaces.GeneratedSubmissionBatch{
+	h.batches = append(h.batches, workdomain.GeneratedSubmissionBatch{
 		Request:  requests.WorkRequestFromSubmitRequests(copied),
-		Metadata: interfaces.GeneratedSubmissionBatchMetadata{Source: h.Name()},
+		Metadata: workdomain.GeneratedSubmissionBatchMetadata{Source: h.Name()},
 	})
 }
 

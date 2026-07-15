@@ -10,6 +10,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -302,7 +303,7 @@ func replacementFactoryChangePayload(events []factoryapi.FactoryEvent) (factorya
 	return factoryapi.FactoryChangeEventPayload{}, false
 }
 
-func workersExecutionTick(metadata interfaces.ExecutionMetadata) int {
+func workersExecutionTick(metadata work.ExecutionMetadata) int {
 	if metadata.CurrentTick != 0 {
 		return metadata.CurrentTick
 	}
@@ -388,8 +389,8 @@ func modelEventOutputContent(raw string) *factoryapi.WorkContent {
 	if err := json.Unmarshal([]byte(trimmed), &envelope); err == nil && len(envelope.Content) != 0 {
 		return &envelope.Content
 	}
-	return contentcontract.GeneratedPtrFromParts([]interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	return contentcontract.GeneratedPtrFromParts([]work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: raw,
 	}})
 }
@@ -477,7 +478,7 @@ func int64PtrIfPositive(value int64) *int64 {
 	return &value
 }
 
-func modelEventGeneratedWorkContent(parts []interfaces.WorkContentPart) factoryapi.WorkContent {
+func modelEventGeneratedWorkContent(parts []work.WorkContentPart) factoryapi.WorkContent {
 	content := contentcontract.GeneratedPtrFromParts(parts)
 	if content == nil {
 		return nil
@@ -519,7 +520,7 @@ func submitWorkRequestWithFactory(activeFactory factory.Factory) workRequestSubm
 	if activeFactory == nil {
 		return nil
 	}
-	return func(ctx context.Context, request interfaces.WorkRequest) error {
+	return func(ctx context.Context, request work.WorkRequest) error {
 		_, err := activeFactory.SubmitWorkRequest(ctx, request)
 		return err
 	}
@@ -618,7 +619,7 @@ func (fs *Host) clearRunState() {
 }
 
 // SubmitWorkRequest submits a canonical work request batch to the factory.
-func (fs *Host) SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (fs *Host) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	return fs.requireCoordinator().SubmitWorkRequest(ctx, request)
 }
 

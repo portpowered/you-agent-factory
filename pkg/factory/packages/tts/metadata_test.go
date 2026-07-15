@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestMetadataContentFromWorkerOutput_ReturnsTextMetadataWithoutRawAudio(t *testing.T) {
@@ -15,7 +16,7 @@ func TestMetadataContentFromWorkerOutput_ReturnsTextMetadataWithoutRawAudio(t *t
 	if err != nil {
 		t.Fatalf("MetadataContentFromWorkerOutput: %v", err)
 	}
-	if len(got) != 1 || got[0].Type != interfaces.WorkContentPartTypeText {
+	if len(got) != 1 || got[0].Type != work.WorkContentPartTypeText {
 		t.Fatalf("content = %#v, want one text metadata part", got)
 	}
 	if strings.Contains(got[0].Text, "AUDIO") {

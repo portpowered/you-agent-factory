@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/codex/progress"
 )
@@ -26,7 +26,7 @@ func TestProgressStream_NormalizesStructuredLifecycleEvents(t *testing.T) {
 		Command:         "codex",
 		DispatchID:      "dispatch-codex-json-1",
 		WorkstationName: "review",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			WorkIDs: []string{"work-codex-json-1"},
 		},
 	}
@@ -65,7 +65,7 @@ func TestProgressStream_MapsUnknownAndMalformedEventsToBoundedDiagnostics(t *tes
 		Command:         "codex",
 		DispatchID:      "dispatch-codex-json-2",
 		WorkstationName: "review",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			WorkIDs: []string{"work-codex-json-2"},
 		},
 	}
@@ -108,7 +108,7 @@ func TestProgressStream_MapsFailureCancelAndTruncation(t *testing.T) {
 		Command:         "codex",
 		DispatchID:      "dispatch-codex-json-3",
 		WorkstationName: "review",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			WorkIDs: []string{"work-codex-json-3"},
 		},
 	}

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/batchload"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
@@ -932,7 +933,7 @@ func isInteractiveOutput(output io.Writer) bool {
 }
 
 // LoadWorkFile reads a canonical FACTORY_REQUEST_BATCH from a JSON file.
-func LoadWorkFile(path string) (interfaces.WorkRequest, error) {
+func LoadWorkFile(path string) (work.WorkRequest, error) {
 	return batchload.LoadFromFile(path)
 }
 

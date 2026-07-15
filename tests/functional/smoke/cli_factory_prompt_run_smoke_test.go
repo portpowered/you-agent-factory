@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -426,7 +427,7 @@ func TestNamedFactoryRun_RealCLIResolvesGlobalFactoryFromUnrelatedWorkingDirecto
 	}
 
 	prompt := fmt.Sprintf("functional-smoke-named-factory-%d", time.Now().UnixNano())
-	testutil.WriteSeedRequest(t, namedFactoryDir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, namedFactoryDir, work.SubmitRequest{
 		WorkID:     "named-factory-smoke-work",
 		WorkTypeID: defaultPromptRunWorkTypeName,
 		TraceID:    "named-factory-smoke-trace",

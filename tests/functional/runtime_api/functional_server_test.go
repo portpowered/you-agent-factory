@@ -19,7 +19,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -374,7 +375,7 @@ func dashboardWorkItemRef(item interfaces.FactoryWorldWorkItemRef) DashboardWork
 func dashboardDispatchWorkItems(dispatch interfaces.FactoryWorldDispatchCompletion) []interfaces.FactoryWorldWorkItemRef {
 	seen := map[string]struct{}{}
 	out := make([]interfaces.FactoryWorldWorkItemRef, 0, len(dispatch.InputWorkItems)+len(dispatch.OutputWorkItems)+len(dispatch.WorkItemIDs))
-	appendItem := func(item interfaces.FactoryWorkItem) {
+	appendItem := func(item work.FactoryWorkItem) {
 		if item.ID == "" {
 			return
 		}
@@ -525,7 +526,7 @@ func dashboardTraceMutationsFromCompletion(dispatch interfaces.FactoryWorldDispa
 	return &out
 }
 
-func dashboardTraceMutationFromWorkItem(item interfaces.FactoryWorkItem, fromPlace string, fallbackTime time.Time) TraceMutationView {
+func dashboardTraceMutationFromWorkItem(item work.FactoryWorkItem, fromPlace string, fallbackTime time.Time) TraceMutationView {
 	token := dashboardTraceTokenFromWorkItem(item, item.ID, fallbackTime)
 	return TraceMutationView{
 		FromPlace:      stringPtrIfNotEmptyForFunctionalDashboard(dashboardCompatPlaceID(fromPlace)),
@@ -536,7 +537,7 @@ func dashboardTraceMutationFromWorkItem(item interfaces.FactoryWorkItem, fromPla
 	}
 }
 
-func dashboardTraceTokenFromWorkItem(item interfaces.FactoryWorkItem, tokenID string, fallbackTime time.Time) TraceTokenView {
+func dashboardTraceTokenFromWorkItem(item work.FactoryWorkItem, tokenID string, fallbackTime time.Time) TraceTokenView {
 	return TraceTokenView{
 		CreatedAt:  dashboardTimeString(fallbackTime),
 		EnteredAt:  dashboardTimeString(fallbackTime),

@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -113,7 +114,7 @@ func TestSameNameConsumePathOwnership_TaskOnlyWithoutIdeaTwin_StrandedAsHistoric
 	defer cancel()
 	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:        cellName,
 		WorkTypeID:  "task",
 		TargetState: "to-complete",
@@ -179,7 +180,7 @@ func TestSameNameConsumePathOwnership_ProjectionMatchesRuntimeBeforeConsume(t *t
 	defer cancel()
 	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{
 		{
 			Name:        "idea-only",
 			WorkTypeID:  "idea",
@@ -225,7 +226,7 @@ func TestSameNameConsumePathOwnership_ProjectionMatchesRuntimeBeforeConsume(t *t
 func submitConsumePathPair(t *testing.T, h *testutil.ServiceTestHarness, cellName string) {
 	t.Helper()
 
-	for _, req := range []interfaces.SubmitRequest{
+	for _, req := range []work.SubmitRequest{
 		{
 			Name:        cellName,
 			WorkTypeID:  "idea",
@@ -239,7 +240,7 @@ func submitConsumePathPair(t *testing.T, h *testutil.ServiceTestHarness, cellNam
 			TraceID:     "trace-task-" + cellName,
 		},
 	} {
-		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
+		h.SubmitFull(context.Background(), []work.SubmitRequest{req})
 	}
 }
 
@@ -254,13 +255,13 @@ func submitSameNameOrphanAfterConsumePattern(
 ) {
 	t.Helper()
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:        cellName,
 		WorkTypeID:  "idea",
 		TargetState: "to-complete",
 		TraceID:     "trace-idea-" + cellName,
 	}})
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:        cellName,
 		WorkTypeID:  "task",
 		TargetState: "to-complete",
@@ -268,7 +269,7 @@ func submitSameNameOrphanAfterConsumePattern(
 	}})
 	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, 3*time.Second)
 	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, 3*time.Second)
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:        cellName,
 		WorkTypeID:  "task",
 		TargetState: "to-complete",

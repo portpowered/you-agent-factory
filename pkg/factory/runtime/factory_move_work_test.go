@@ -6,12 +6,13 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 func TestMoveWork_AcceptsWhileFactoryPaused(t *testing.T) {
@@ -25,7 +26,7 @@ func TestMoveWork_AcceptsWhileFactoryPaused(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	if _, err := submitWorkRequests(ctx, f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(ctx, f, []work.SubmitRequest{{
 		WorkID:     "work-paused-move",
 		WorkTypeID: "task",
 		TraceID:    "trace-paused-move",
@@ -39,7 +40,7 @@ func TestMoveWork_AcceptsWhileFactoryPaused(t *testing.T) {
 		t.Fatalf("Pause: %v", err)
 	}
 
-	result, err := f.MoveWork(ctx, "work-paused-move", "complete", interfaces.WorkStateChangeSourceCLI, "")
+	result, err := f.MoveWork(ctx, "work-paused-move", "complete", work.WorkStateChangeSourceCLI, "")
 	if err != nil {
 		t.Fatalf("MoveWork while paused: %v", err)
 	}
@@ -91,7 +92,7 @@ func TestMoveWork_SubscribeReceivesWorkStateChangeInOrder(t *testing.T) {
 	}
 
 	submitCtx := context.Background()
-	if _, err := submitWorkRequests(submitCtx, f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(submitCtx, f, []work.SubmitRequest{{
 		WorkID:     "work-stream-move",
 		WorkTypeID: "task",
 		TraceID:    "trace-stream-move",
@@ -109,7 +110,7 @@ func TestMoveWork_SubscribeReceivesWorkStateChangeInOrder(t *testing.T) {
 		t.Fatalf("SubscribeFactoryEvents: %v", err)
 	}
 
-	if _, err := f.MoveWork(submitCtx, "work-stream-move", "complete", interfaces.WorkStateChangeSourceAPI, ""); err != nil {
+	if _, err := f.MoveWork(submitCtx, "work-stream-move", "complete", work.WorkStateChangeSourceAPI, ""); err != nil {
 		t.Fatalf("MoveWork: %v", err)
 	}
 

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // Dispatcher manages worker execution. It supports two execution modes:
@@ -17,7 +18,7 @@ import (
 type Dispatcher interface {
 	// Dispatch executes a work dispatch synchronously, blocking until the
 	// result is available.
-	Dispatch(ctx context.Context, dispatch *interfaces.WorkDispatch) (interfaces.WorkResult, error)
+	Dispatch(ctx context.Context, dispatch *work.WorkDispatch) (interfaces.WorkResult, error)
 	// WorkerState returns a point-in-time snapshot of the dispatcher state.
 	WorkerState() interfaces.WorkerState
 	// Tick processes all currently queued dispatches synchronously, blocking
@@ -77,6 +78,6 @@ func InputTokens(tokens ...interfaces.Token) []any {
 }
 
 // WorkDispatchInputTokens returns the token payload as typed petri tokens.
-func WorkDispatchInputTokens(dispatch interfaces.WorkDispatch) []interfaces.Token {
+func WorkDispatchInputTokens(dispatch work.WorkDispatch) []interfaces.Token {
 	return cloneInputTokens(dispatch.InputTokens)
 }

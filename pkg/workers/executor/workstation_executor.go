@@ -15,6 +15,7 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"github.com/portpowered/infinite-you/pkg/workers/worktree"
@@ -69,7 +70,7 @@ type resolvedWorkstationExecutionContext struct {
 }
 
 // Execute implements WorkerExecutor for WorkstationExecutor.
-func (we *WorkstationExecutor) Execute(ctx context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (we *WorkstationExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	start := time.Now()
 	logger := logging.EnsureLogger(we.Logger)
 	logger.Info("workstation: execution entered",
@@ -98,7 +99,7 @@ func (we *WorkstationExecutor) Execute(ctx context.Context, dispatch interfaces.
 }
 
 // executeLogicalMove passes input token colors through without calling any worker.
-func (we *WorkstationExecutor) executeLogicalMove(dispatch interfaces.WorkDispatch, start time.Time) interfaces.WorkResult {
+func (we *WorkstationExecutor) executeLogicalMove(dispatch work.WorkDispatch, start time.Time) interfaces.WorkResult {
 	logger := logging.EnsureLogger(we.Logger)
 
 	logger.Info("logical move fired",
@@ -118,7 +119,7 @@ func (we *WorkstationExecutor) executeLogicalMove(dispatch interfaces.WorkDispat
 }
 
 // executeModelWorkstation renders the prompt and calls the configured worker executor.
-func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time) (interfaces.WorkResult, error) {
+func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time) (interfaces.WorkResult, error) {
 	logger := logging.EnsureLogger(we.Logger)
 	invocationArgs := invocationArgumentsFromDispatch(dispatch)
 	invocationDiagnostics := invocationDiagnosticsForDispatch(we.RuntimeConfig, invocationArgs)
@@ -188,7 +189,7 @@ func (we *WorkstationExecutor) executeModelWorkstation(ctx context.Context, disp
 
 func invocationDiagnosticsForDispatch(
 	runtimeCfg interfaces.RuntimeFactoryConfigLookup,
-	args *interfaces.InvocationArguments,
+	args *work.InvocationArguments,
 ) *interfaces.WorkDiagnostics {
 	if args == nil {
 		return nil
@@ -204,7 +205,7 @@ func invocationDiagnosticsForDispatch(
 	return &interfaces.WorkDiagnostics{Invocation: diagnostic}
 }
 
-func invocationArgumentsFromDispatch(dispatch interfaces.WorkDispatch) *interfaces.InvocationArguments {
+func invocationArgumentsFromDispatch(dispatch work.WorkDispatch) *work.InvocationArguments {
 	for _, raw := range dispatch.InputTokens {
 		token, ok := raw.(interfaces.Token)
 		if !ok {
@@ -220,7 +221,7 @@ func invocationArgumentsFromDispatch(dispatch interfaces.WorkDispatch) *interfac
 	return nil
 }
 
-func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time, logger logging.Logger) (resolvedWorkstationExecutionContext, *interfaces.WorkResult) {
+func (we *WorkstationExecutor) resolveWorkstationExecutionContext(dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig, start time.Time, logger logging.Logger) (resolvedWorkstationExecutionContext, *interfaces.WorkResult) {
 	requestContext := resolvedWorkstationExecutionContext{
 		ProjectID:   dispatch.ProjectID,
 		SessionID:   factorySessionIDFromWorkflowContext(we.WorkflowContext),
@@ -312,7 +313,7 @@ func defaultRuntimeWorkingDirectory(runtimeCfg interfaces.RuntimeConfigLookup) s
 
 func (we *WorkstationExecutor) applyCodexFactoryWorktreePreparation(
 	ctx context.Context,
-	dispatch interfaces.WorkDispatch,
+	dispatch work.WorkDispatch,
 	workstationDef *interfaces.FactoryWorkstationConfig,
 	workerDef *interfaces.WorkerConfig,
 	requestContext *resolvedWorkstationExecutionContext,
@@ -387,7 +388,7 @@ func pathExists(value string) bool {
 	return err == nil || !errors.Is(err, os.ErrNotExist)
 }
 
-func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfaces.WorkDispatch, workerName string, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, requestContext resolvedWorkstationExecutionContext, start time.Time, logger logging.Logger) (interfaces.WorkstationExecutionRequest, *interfaces.WorkResult) {
+func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch work.WorkDispatch, workerName string, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig, requestContext resolvedWorkstationExecutionContext, start time.Time, logger logging.Logger) (interfaces.WorkstationExecutionRequest, *interfaces.WorkResult) {
 	modelBindings, err := resolveModelOperationBindings(workstationDef, workerDef, requestContext.InputTokens)
 	if err != nil {
 		logger.Error("model operation binding resolution failed",
@@ -430,7 +431,7 @@ func (we *WorkstationExecutor) buildWorkstationExecutionRequest(dispatch interfa
 
 	selection := interfaces.ResolveRunnerSelection(workstationDef.Runner, we.DefaultRunnerID, workerDef.ModelProvider)
 	return interfaces.WorkstationExecutionRequest{
-		Dispatch:                 interfaces.CloneWorkDispatch(dispatch),
+		Dispatch:                 work.CloneWorkDispatch(dispatch),
 		WorkerType:               workerName,
 		WorkstationType:          dispatch.WorkstationName,
 		RunnerID:                 selection.RunnerID,
@@ -595,7 +596,7 @@ func factorySessionIDFromWorkflowContext(wfCtx *factory_context.FactoryContext) 
 	return strings.TrimSpace(wfCtx.SessionID)
 }
 
-func (we *WorkstationExecutor) runtimeWorkstation(dispatch interfaces.WorkDispatch) (*interfaces.FactoryWorkstationConfig, bool) {
+func (we *WorkstationExecutor) runtimeWorkstation(dispatch work.WorkDispatch) (*interfaces.FactoryWorkstationConfig, bool) {
 	if we.RuntimeConfig == nil {
 		return nil, false
 	}
@@ -616,14 +617,14 @@ func (we *WorkstationExecutor) runtimeWorkstation(dispatch interfaces.WorkDispat
 	return &fallback, true
 }
 
-func workstationWorkerName(workstationDef *interfaces.FactoryWorkstationConfig, dispatch interfaces.WorkDispatch) string {
+func workstationWorkerName(workstationDef *interfaces.FactoryWorkstationConfig, dispatch work.WorkDispatch) string {
 	if workstationDef != nil && workstationDef.WorkerTypeName != "" {
 		return workstationDef.WorkerTypeName
 	}
 	return dispatch.WorkerType
 }
 
-func workstationLookupKey(dispatch interfaces.WorkDispatch) string {
+func workstationLookupKey(dispatch work.WorkDispatch) string {
 	return dispatch.WorkstationName
 }
 
@@ -655,7 +656,7 @@ func resolveExecutionTimeout(workerDef *interfaces.WorkerConfig, workstationDef 
 	return 0, nil
 }
 
-func timeoutWorkResult(dispatch interfaces.WorkDispatch, duration time.Duration) interfaces.WorkResult {
+func timeoutWorkResult(dispatch work.WorkDispatch, duration time.Duration) interfaces.WorkResult {
 	failureMetadata := &interfaces.WorkFailureMetadata{
 		Family: interfaces.WorkFailureFamilyRetryable,
 		Type:   interfaces.WorkFailureTypeTimeout,

@@ -5,6 +5,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // WorkerPool manages WorkerRunners by worker type, providing a shared resultCh
@@ -36,7 +37,7 @@ func (p *WorkerPool) Register(workerType string, executor WorkerExecutor) {
 
 // Dispatch sends a WorkDispatch to the appropriate runner's dispatch channel.
 // Returns false if no runner is registered for the dispatch's worker type.
-func (p *WorkerPool) Dispatch(workerType string, dispatch interfaces.WorkDispatch) bool {
+func (p *WorkerPool) Dispatch(workerType string, dispatch work.WorkDispatch) bool {
 	p.mu.RLock()
 	runner, ok := p.runners[workerType]
 	p.mu.RUnlock()

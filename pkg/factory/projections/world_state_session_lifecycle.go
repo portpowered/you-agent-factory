@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
@@ -202,11 +203,11 @@ func buildFactoryWorldSessionBracketProjection(
 	}
 }
 
-func cloneWorkContentParts(parts []interfaces.WorkContentPart) []interfaces.WorkContentPart {
+func cloneWorkContentParts(parts []work.WorkContentPart) []work.WorkContentPart {
 	if len(parts) == 0 {
 		return nil
 	}
-	cloned := make([]interfaces.WorkContentPart, len(parts))
+	cloned := make([]work.WorkContentPart, len(parts))
 	copy(cloned, parts)
 	return cloned
 }

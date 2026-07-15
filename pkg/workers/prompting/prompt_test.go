@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testpath"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestPromptRenderer_BasicInterpolation(t *testing.T) {
@@ -579,8 +580,8 @@ func TestPromptRenderer_MultipleInputTokens_PreservesPerInputCanonicalContent(t 
 			ID: "tok-text",
 			Color: interfaces.TokenColor{
 				WorkID: "work-text",
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeText, Text: "plan"},
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeText, Text: "plan"},
 				},
 				Payload: []byte("plan"),
 			},
@@ -589,9 +590,9 @@ func TestPromptRenderer_MultipleInputTokens_PreservesPerInputCanonicalContent(t 
 			ID: "tok-mixed",
 			Color: interfaces.TokenColor{
 				WorkID: "work-mixed",
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeText, Text: "caption"},
-					{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeText, Text: "caption"},
+					{Type: work.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
 				},
 				Payload: []byte("caption"),
 			},

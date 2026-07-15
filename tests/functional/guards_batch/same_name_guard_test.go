@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -88,12 +89,12 @@ func TestSameNameGuard_MatchingNamesCompletesJoin(t *testing.T) {
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:       "alpha",
 		WorkTypeID: "plan",
 		TraceID:    "trace-same-name-plan",
 	}})
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:       "alpha",
 		WorkTypeID: "task",
 		TraceID:    "trace-same-name-task",
@@ -130,12 +131,12 @@ func TestSameNameGuard_NonMatchingNamesStayBlocked(t *testing.T) {
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:       "alpha",
 		WorkTypeID: "plan",
 		TraceID:    "trace-same-name-plan",
 	}})
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:       "beta",
 		WorkTypeID: "task",
 		TraceID:    "trace-same-name-task",
@@ -238,12 +239,12 @@ Match the later token.
 }
 
 func submitLaterMatchingSameNameGuardWork(h *testutil.ServiceTestHarness) {
-	for _, req := range []interfaces.SubmitRequest{
+	for _, req := range []work.SubmitRequest{
 		{Name: "zeta", WorkTypeID: "idea", TargetState: "to-complete", TraceID: "trace-same-name-idea-zeta"},
 		{Name: "alpha", WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-same-name-task-alpha"},
 		{Name: "zeta", WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-same-name-task-zeta"},
 	} {
-		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
+		h.SubmitFull(context.Background(), []work.SubmitRequest{req})
 	}
 }
 

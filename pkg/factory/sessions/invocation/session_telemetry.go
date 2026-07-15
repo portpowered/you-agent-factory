@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
@@ -119,7 +120,7 @@ func (t *sessionInvocationTelemetry) InvocationSubmitted(cfg *interfaces.Factory
 	}
 }
 
-func (t *sessionInvocationTelemetry) InvocationCompleted(cfg *interfaces.FactoryConfig, source workinvocation.InputSourceLabel, result []interfaces.WorkContentPart) {
+func (t *sessionInvocationTelemetry) InvocationCompleted(cfg *interfaces.FactoryConfig, source workinvocation.InputSourceLabel, result []work.WorkContentPart) {
 	t.metric(InvocationMetricSuccess, invocationMetricLabels(cfg, source))
 	t.metric(InvocationMetricResultType, mergeMetricLabels(invocationMetricLabels(cfg, source), map[string]string{
 		"result_type": primaryResultMetricType(result),
@@ -163,7 +164,7 @@ func (t *sessionInvocationTelemetry) LogInvocationSubmitted(
 	sessionID string,
 	source workinvocation.InputSourceLabel,
 	cfg *interfaces.FactoryConfig,
-	result interfaces.WorkRequestSubmitResult,
+	result work.WorkRequestSubmitResult,
 ) {
 	if packaged := t.packaged(cfg); packaged != nil {
 		fields := t.packagedLogFields(sessionID, source, cfg.InvocationReturn, cfg, packaged)
@@ -400,7 +401,7 @@ func invocationPolicyResolutionPath(cfg *interfaces.InvocationReturnConfig) stri
 	return "submitted_work_terminal"
 }
 
-func primaryResultMetricType(parts []interfaces.WorkContentPart) string {
+func primaryResultMetricType(parts []work.WorkContentPart) string {
 	if len(parts) == 0 {
 		return "empty"
 	}

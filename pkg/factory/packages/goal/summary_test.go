@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestShouldFormatInvocationSummary_MatchesPackagedInvokeWorkstation(t *testing.T) {
@@ -50,7 +51,7 @@ func TestSummaryContentFromWorkerOutput_StripsStopTokenAndReturnsTextSummary(t *
 	if err != nil {
 		t.Fatalf("SummaryContentFromWorkerOutput: %v", err)
 	}
-	if len(got) != 1 || got[0].Type != interfaces.WorkContentPartTypeText {
+	if len(got) != 1 || got[0].Type != work.WorkContentPartTypeText {
 		t.Fatalf("summary content = %#v, want one text part", got)
 	}
 	if got[0].Text != "Final goal summary." {

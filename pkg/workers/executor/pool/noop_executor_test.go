@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
 func TestNoopExecutor_ReturnsAccepted(t *testing.T) {
-	result, err := (&executor.NoopExecutor{}).Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := (&executor.NoopExecutor{}).Execute(context.Background(), work.WorkDispatch{
 		DispatchID:   "d-1",
 		TransitionID: "t1",
 	})

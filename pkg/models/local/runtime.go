@@ -14,6 +14,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -527,7 +528,7 @@ func omniVoiceBoundText(bindings []interfaces.ResolvedModelOperationBinding) (st
 		}
 		var parts []string
 		for _, content := range binding.Content {
-			if content.Type.Normalized() != interfaces.WorkContentPartTypeText {
+			if content.Type.Normalized() != work.WorkContentPartTypeText {
 				continue
 			}
 			text := strings.TrimSpace(content.Text)
@@ -559,7 +560,7 @@ func omniVoiceOutputPath(cachePath string) (string, error) {
 }
 
 func omniVoiceCommandRequest(request interfaces.RunnerExecutionRequest, handle *omniVoiceLocalHandle, outputFile string, stdin []byte) workers.CommandRequest {
-	dispatch := interfaces.CloneWorkDispatch(request.Dispatch)
+	dispatch := work.CloneWorkDispatch(request.Dispatch)
 	args := append([]string(nil), handle.baseArgs...)
 	args = append(args,
 		omniVoiceInvokeSubcommand,
@@ -599,15 +600,15 @@ func omniVoiceCombinedOutput(result workers.CommandResult) string {
 	return strings.Join(parts, "; ")
 }
 
-func omniVoiceResponseContent(stdout string, outputFile string) ([]interfaces.WorkContentPart, error) {
-	content := make([]interfaces.WorkContentPart, 0, 1)
+func omniVoiceResponseContent(stdout string, outputFile string) ([]work.WorkContentPart, error) {
+	content := make([]work.WorkContentPart, 0, 1)
 	if stdout != "" {
-		var direct []interfaces.WorkContentPart
+		var direct []work.WorkContentPart
 		if err := json.Unmarshal([]byte(stdout), &direct); err == nil {
 			content = direct
 		} else {
 			var envelope struct {
-				Content []interfaces.WorkContentPart `json:"content"`
+				Content []work.WorkContentPart `json:"content"`
 			}
 			if envelopeErr := json.Unmarshal([]byte(stdout), &envelope); envelopeErr != nil {
 				return nil, fmt.Errorf("decode local OMNIVOICE response: %w", err)
@@ -616,8 +617,8 @@ func omniVoiceResponseContent(stdout string, outputFile string) ([]interfaces.Wo
 		}
 	}
 	if len(content) == 0 {
-		content = []interfaces.WorkContentPart{{
-			Type:        interfaces.WorkContentPartTypeAudio,
+		content = []work.WorkContentPart{{
+			Type:        work.WorkContentPartTypeAudio,
 			Slot:        omniVoiceModelSlotNameAudio,
 			File:        outputFile,
 			ContentType: OmniVoiceAudioContentType,
@@ -625,7 +626,7 @@ func omniVoiceResponseContent(stdout string, outputFile string) ([]interfaces.Wo
 	}
 	audioFound := false
 	for i := range content {
-		if content[i].Type.Normalized() != interfaces.WorkContentPartTypeAudio {
+		if content[i].Type.Normalized() != work.WorkContentPartTypeAudio {
 			continue
 		}
 		audioFound = true
@@ -640,8 +641,8 @@ func omniVoiceResponseContent(stdout string, outputFile string) ([]interfaces.Wo
 		}
 	}
 	if !audioFound {
-		content = append(content, interfaces.WorkContentPart{
-			Type:        interfaces.WorkContentPartTypeAudio,
+		content = append(content, work.WorkContentPart{
+			Type:        work.WorkContentPartTypeAudio,
 			Slot:        omniVoiceModelSlotNameAudio,
 			File:        outputFile,
 			ContentType: OmniVoiceAudioContentType,

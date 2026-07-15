@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
@@ -287,7 +288,7 @@ func decodeToken(raw any) (interfaces.Token, bool) {
 	return token, true
 }
 
-func workLogFields(metadata interfaces.ExecutionMetadata, keysAndValues ...any) []any {
+func workLogFields(metadata work.ExecutionMetadata, keysAndValues ...any) []any {
 	fields := []any{
 		"request_id", metadata.RequestID,
 		"trace_id", metadata.TraceID,
@@ -332,15 +333,15 @@ func cloneWorkIDs(workIDs []string) []string {
 	return append([]string(nil), workIDs...)
 }
 
-func firstImageContentPart(rawTokens []any) (int, int, interfaces.WorkContentPart, bool) {
+func firstImageContentPart(rawTokens []any) (int, int, work.WorkContentPart, bool) {
 	for tokenIndex, token := range cloneInputTokens(rawTokens) {
 		for partIndex, part := range token.Color.Content {
-			if part.Type == interfaces.WorkContentPartTypeImage {
+			if part.Type == work.WorkContentPartTypeImage {
 				return tokenIndex, partIndex, part, true
 			}
 		}
 	}
-	return 0, 0, interfaces.WorkContentPart{}, false
+	return 0, 0, work.WorkContentPart{}, false
 }
 
 func unsupportedImageContentError(rawTokens []any, executionPath string) error {
@@ -590,4 +591,3 @@ func workerEventExitCode(exitCode int, present bool, includeZero bool) *int {
 	exitCodeCopy := exitCode
 	return &exitCodeCopy
 }
-

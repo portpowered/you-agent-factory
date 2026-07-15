@@ -10,6 +10,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
@@ -23,11 +24,11 @@ import (
 )
 
 type MockFactory struct {
-	Submitted                         []interfaces.SubmitRequest
+	Submitted                         []work.SubmitRequest
 	SubmitErr                         error
-	WorkRequests                      []interfaces.WorkRequest
+	WorkRequests                      []work.WorkRequest
 	SubmitWorkRequestErr              error
-	WorkRequestResults                map[string]interfaces.WorkRequestSubmitResult
+	WorkRequestResults                map[string]work.WorkRequestSubmitResult
 	Marking                           *petri.MarkingSnapshot
 	State                             interfaces.FactoryState
 	Net                               *state.Net
@@ -79,7 +80,7 @@ type MockFactory struct {
 	ClosedFactorySessions             []string
 	CloseFactorySessionErr            error
 	MoveWorkErr                       error
-	AppliedOperatorMoveRequests       map[string]interfaces.OperatorMoveResult
+	AppliedOperatorMoveRequests       map[string]work.OperatorMoveResult
 	DurableExecutionService           factorysessionexecution.Service
 }
 
@@ -462,45 +463,45 @@ func (m *MockFactory) Resume(_ context.Context) error {
 	return nil
 }
 
-func (m *MockFactory) MoveWork(_ context.Context, workID, stateName string, _ interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error) {
+func (m *MockFactory) MoveWork(_ context.Context, workID, stateName string, _ work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
 	if m.MoveWorkErr != nil {
-		return interfaces.OperatorMoveResult{}, m.MoveWorkErr
+		return work.OperatorMoveResult{}, m.MoveWorkErr
 	}
 	return m.applyMockOperatorMove(workID, stateName, requestID)
 }
 
-func (m *MockFactory) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
+func (m *MockFactory) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error) {
 	session, err := m.sessionFactory(sessionID)
 	if err != nil {
-		return interfaces.OperatorMoveResult{}, err
+		return work.OperatorMoveResult{}, err
 	}
-	return session.MoveWork(ctx, workID, stateName, interfaces.WorkStateChangeSourceAPI, requestID)
+	return session.MoveWork(ctx, workID, stateName, work.WorkStateChangeSourceAPI, requestID)
 }
 
-func (m *MockFactory) applyMockOperatorMove(workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
+func (m *MockFactory) applyMockOperatorMove(workID, stateName, requestID string) (work.OperatorMoveResult, error) {
 	requestID = strings.TrimSpace(requestID)
 	if requestID != "" {
 		if m.AppliedOperatorMoveRequests == nil {
-			m.AppliedOperatorMoveRequests = make(map[string]interfaces.OperatorMoveResult)
+			m.AppliedOperatorMoveRequests = make(map[string]work.OperatorMoveResult)
 		}
 		if _, ok := m.AppliedOperatorMoveRequests[requestID]; ok {
-			return interfaces.OperatorMoveResult{}, interfaces.ErrMoveWorkRequestAlreadyApplied
+			return work.OperatorMoveResult{}, work.ErrMoveWorkRequestAlreadyApplied
 		}
 	}
 	if m.Marking == nil || m.Marking.Tokens == nil {
-		return interfaces.OperatorMoveResult{}, engine.ErrMoveWorkNotFound
+		return work.OperatorMoveResult{}, engine.ErrMoveWorkNotFound
 	}
 	token, ok := findMockWorkToken(m.Marking.Tokens, workID)
 	if !ok {
-		return interfaces.OperatorMoveResult{}, engine.ErrMoveWorkNotFound
+		return work.OperatorMoveResult{}, engine.ErrMoveWorkNotFound
 	}
 	if m.Net == nil {
-		return interfaces.OperatorMoveResult{}, engine.ErrMoveWorkInvalidState
+		return work.OperatorMoveResult{}, engine.ErrMoveWorkInvalidState
 	}
 	toPlaceID := state.PlaceID(token.Color.WorkTypeID, stateName)
 	place, ok := m.Net.Places[toPlaceID]
 	if !ok || place.State != stateName {
-		return interfaces.OperatorMoveResult{}, engine.ErrMoveWorkInvalidState
+		return work.OperatorMoveResult{}, engine.ErrMoveWorkInvalidState
 	}
 	fromPlaceID := token.PlaceID
 	fromState := ""
@@ -508,7 +509,7 @@ func (m *MockFactory) applyMockOperatorMove(workID, stateName, requestID string)
 		fromState = fromPlace.State
 	}
 	token.PlaceID = toPlaceID
-	result := interfaces.OperatorMoveResult{
+	result := work.OperatorMoveResult{
 		WorkID:      workID,
 		WorkTypeID:  token.Color.WorkTypeID,
 		FromState:   fromState,
@@ -536,18 +537,18 @@ func findMockWorkToken(tokens map[string]*interfaces.Token, workID string) (*int
 	return nil, false
 }
 
-func (m *MockFactory) SubmitWorkRequest(_ context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (m *MockFactory) SubmitWorkRequest(_ context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	if m.SubmitWorkRequestErr != nil {
-		return interfaces.WorkRequestSubmitResult{}, m.SubmitWorkRequestErr
+		return work.WorkRequestSubmitResult{}, m.SubmitWorkRequestErr
 	}
 	if m.SubmitErr != nil {
-		return interfaces.WorkRequestSubmitResult{}, m.SubmitErr
+		return work.WorkRequestSubmitResult{}, m.SubmitErr
 	}
 	if existing, ok := m.acceptedWorkRequest(request.RequestID); ok {
 		existing.Accepted = false
 		return existing, nil
 	}
-	opts := interfaces.WorkRequestNormalizeOptions{}
+	opts := work.WorkRequestNormalizeOptions{}
 	if m.Net != nil {
 		opts.ValidWorkTypes = make(map[string]bool, len(m.Net.WorkTypes))
 		for workTypeID := range m.Net.WorkTypes {
@@ -557,7 +558,7 @@ func (m *MockFactory) SubmitWorkRequest(_ context.Context, request interfaces.Wo
 	}
 	normalized, err := requests.NormalizeWorkRequest(request, opts)
 	if err != nil {
-		return interfaces.WorkRequestSubmitResult{}, err
+		return work.WorkRequestSubmitResult{}, err
 	}
 	requestID := request.RequestID
 	if requestID == "" && len(normalized) > 0 {
@@ -565,7 +566,7 @@ func (m *MockFactory) SubmitWorkRequest(_ context.Context, request interfaces.Wo
 	}
 	result := requests.WorkRequestSubmitResultFromNormalized(requestID, normalized, true)
 	if m.WorkRequestResults == nil {
-		m.WorkRequestResults = make(map[string]interfaces.WorkRequestSubmitResult)
+		m.WorkRequestResults = make(map[string]work.WorkRequestSubmitResult)
 	}
 	m.WorkRequestResults[requestID] = result
 	m.WorkRequests = append(m.WorkRequests, request)
@@ -573,14 +574,14 @@ func (m *MockFactory) SubmitWorkRequest(_ context.Context, request interfaces.Wo
 	return result, nil
 }
 
-func (m *MockFactory) acceptedWorkRequest(requestID string) (interfaces.WorkRequestSubmitResult, bool) {
+func (m *MockFactory) acceptedWorkRequest(requestID string) (work.WorkRequestSubmitResult, bool) {
 	if requestID == "" {
-		return interfaces.WorkRequestSubmitResult{}, false
+		return work.WorkRequestSubmitResult{}, false
 	}
 	if result, ok := m.WorkRequestResults[requestID]; ok {
 		return result, true
 	}
-	return interfaces.WorkRequestSubmitResult{}, false
+	return work.WorkRequestSubmitResult{}, false
 }
 
 func (m *MockFactory) SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestResolveInferenceOperationBindings_InferenceAndLegacyWorkstationTypesAlign(t *testing.T) {
@@ -30,9 +31,9 @@ func TestWorkContentFromInferenceOutput_OrdersAudioBeforeExtraParts(t *testing.T
 			{Name: "meta", ContentTypes: []string{interfaces.ModelOperationContentTypeJSON}},
 		},
 	}
-	raw, err := json.Marshal([]interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeJSON, JSON: []byte(`{"voice":"alloy"}`)},
-		{Type: interfaces.WorkContentPartTypeAudio, File: "/tmp/speech.wav", ContentType: "audio/wav"},
+	raw, err := json.Marshal([]work.WorkContentPart{
+		{Type: work.WorkContentPartTypeJSON, JSON: []byte(`{"voice":"alloy"}`)},
+		{Type: work.WorkContentPartTypeAudio, File: "/tmp/speech.wav", ContentType: "audio/wav"},
 	})
 	if err != nil {
 		t.Fatalf("marshal fixture output: %v", err)
@@ -45,7 +46,7 @@ func TestWorkContentFromInferenceOutput_OrdersAudioBeforeExtraParts(t *testing.T
 	if len(got) != 2 {
 		t.Fatalf("content = %#v, want 2 ordered parts", got)
 	}
-	if got[0].Type != interfaces.WorkContentPartTypeAudio || got[1].Type != interfaces.WorkContentPartTypeJSON {
+	if got[0].Type != work.WorkContentPartTypeAudio || got[1].Type != work.WorkContentPartTypeJSON {
 		t.Fatalf("ordered content = %#v, want audio before json", got)
 	}
 }
@@ -60,7 +61,7 @@ func TestWorkContentFromInferenceOutput_PreservesTextFallbackForTextOnlyOperatio
 	if err != nil {
 		t.Fatalf("WorkContentFromInferenceOutput: %v", err)
 	}
-	if len(got) != 1 || got[0].Type != interfaces.WorkContentPartTypeText || got[0].Text != "plain answer" {
+	if len(got) != 1 || got[0].Type != work.WorkContentPartTypeText || got[0].Text != "plain answer" {
 		t.Fatalf("content = %#v, want text fallback", got)
 	}
 }
@@ -69,8 +70,8 @@ func TestDirectAndSessionInferenceOutputShapingStayAligned(t *testing.T) {
 	t.Parallel()
 
 	audioPath := "/tmp/direct-session-parity.wav"
-	providerRaw, err := json.Marshal([]interfaces.WorkContentPart{{
-		Type:        interfaces.WorkContentPartTypeAudio,
+	providerRaw, err := json.Marshal([]work.WorkContentPart{{
+		Type:        work.WorkContentPartTypeAudio,
 		File:        audioPath,
 		ContentType: "audio/wav",
 	}})
@@ -122,8 +123,8 @@ func inferenceBindingInputTokensFixture() []interfaces.Token {
 	return []interfaces.Token{{
 		ID: "token-tts",
 		Color: interfaces.TokenColor{
-			Content: []interfaces.WorkContentPart{{
-				Type:  interfaces.WorkContentPartTypeText,
+			Content: []work.WorkContentPart{{
+				Type:  work.WorkContentPartTypeText,
 				Label: "utterance",
 				Text:  "hello world",
 			}},
@@ -219,8 +220,8 @@ func inferenceBindingWorkstationFixture(workstationType string) *interfaces.Fact
 			},
 			{
 				Slot: "voice",
-				Config: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeJSON,
+				Config: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeJSON,
 					Role: "voice",
 					JSON: []byte(`{"name":"alloy"}`),
 				}},

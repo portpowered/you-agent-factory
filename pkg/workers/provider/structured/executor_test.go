@@ -13,13 +13,14 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/structured"
 )
 
 func TestProductionProviderBoundarySelectsStructuredClaudeOnlyForResponseStream(t *testing.T) {
 	req := interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-claude-production"},
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-claude-production"},
 		ModelProvider: string(interfaces.ModelProviderClaude), Model: "claude-sonnet",
 		SessionID: "claude-session-123", UserMessage: "private prompt",
 		EnvVars: map[string]string{"GIT_EDITOR": "vim", "GIT_TERMINAL_PROMPT": "1"},
@@ -69,12 +70,12 @@ func TestProductionResponseStreamClaudeRejectsImageBeforeRunner(t *testing.T) {
 	)
 
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-claude-image"},
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-claude-image"},
 		ModelProvider: string(interfaces.ModelProviderClaude),
 		UserMessage:   "inspect",
-		InputTokens: []any{interfaces.Token{ID: "token-1", Color: interfaces.TokenColor{Content: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "caption"},
-			{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
+		InputTokens: []any{interfaces.Token{ID: "token-1", Color: interfaces.TokenColor{Content: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "caption"},
+			{Type: work.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
 		}}}},
 	})
 	if err == nil {
@@ -96,7 +97,7 @@ func TestProductionResponseStreamClaudeRejectsImageBeforeRunner(t *testing.T) {
 
 func TestProductionProviderBoundarySelectsStructuredCodexOnlyForCapableRunner(t *testing.T) {
 	req := interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-codex-production"},
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-codex-production"},
 		ModelProvider: string(interfaces.ModelProviderCodex), Model: "gpt-test",
 		UserMessage: "private prompt", WorkingDirectory: t.TempDir(),
 	}
@@ -182,7 +183,7 @@ func TestExecutorReconcilesCodexTerminalDraftsWithCommandOutcome(t *testing.T) {
 			runner := &recordingRunner{result: tc.result, err: tc.runErr}
 			var published []workerprovider.InferenceProgressFragment
 			result := structured.NewExecutor().Execute(context.Background(), interfaces.ProviderInferenceRequest{
-				Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-terminal"}, ModelProvider: string(interfaces.ModelProviderCodex), UserMessage: "private prompt",
+				Dispatch: work.WorkDispatch{DispatchID: "dispatch-terminal"}, ModelProvider: string(interfaces.ModelProviderCodex), UserMessage: "private prompt",
 			}, false, nil, runner, func(fragment workerprovider.InferenceProgressFragment) { published = append(published, fragment) }, nil)
 			if result.FailureType != tc.wantFailure {
 				t.Fatalf("failure = %#v, want %q", result, tc.wantFailure)
@@ -223,7 +224,7 @@ func TestExecutorStreamsRealCommandAndReportsSupport(t *testing.T) {
 
 	var published []workerprovider.InferenceProgressFragment
 	result := executor.Execute(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-real-command"},
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-real-command"},
 		ModelProvider: string(interfaces.ModelProviderClaude), UserMessage: "private prompt",
 		EnvVars: map[string]string{"CLAUDE_FIXTURE": fixturePath},
 	}, false, nil, nil, func(fragment workerprovider.InferenceProgressFragment) {
@@ -240,7 +241,7 @@ func TestExecutorStreamsRealCommandAndReportsSupport(t *testing.T) {
 func TestExecutorReturnsStructuredFailureFromBufferedRunner(t *testing.T) {
 	executor := structured.NewExecutor()
 	result := executor.Execute(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-failure"},
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-failure"},
 		ModelProvider: string(interfaces.ModelProviderClaude), UserMessage: "private prompt",
 	}, false, nil, &recordingRunner{result: workerprovider.CommandResult{
 		Stdout: []byte(`{"type":"system","subtype":"api_retry","attempt":2,"retry_delay_ms":1000}` + "\n"),

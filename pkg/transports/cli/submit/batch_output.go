@@ -7,10 +7,10 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 const (
@@ -47,7 +47,7 @@ func batchSubmitSessionID(sessionID string) string {
 	return clidiag.SessionLabel(sessionID)
 }
 
-func batchTraceIDFromRequest(req interfaces.WorkRequest) string {
+func batchTraceIDFromRequest(req work.WorkRequest) string {
 	if req.CurrentChainingTraceID != "" {
 		return req.CurrentChainingTraceID
 	}
@@ -59,7 +59,7 @@ func batchTraceIDFromRequest(req interfaces.WorkRequest) string {
 	return ""
 }
 
-func printBatchDryRunJSON(w io.Writer, sessionID, endpointPath, batchSource string, req interfaces.WorkRequest) error {
+func printBatchDryRunJSON(w io.Writer, sessionID, endpointPath, batchSource string, req work.WorkRequest) error {
 	names := make([]string, 0, len(req.Works))
 	for _, work := range req.Works {
 		names = append(names, work.Name)
@@ -80,7 +80,7 @@ func printBatchDryRunJSON(w io.Writer, sessionID, endpointPath, batchSource stri
 	return json.NewEncoder(w).Encode(payload)
 }
 
-func printBatchSuccessJSON(w io.Writer, sessionID, endpointPath, batchSource string, req interfaces.WorkRequest, result factoryapi.UpsertWorkRequestResponse) error {
+func printBatchSuccessJSON(w io.Writer, sessionID, endpointPath, batchSource string, req work.WorkRequest, result factoryapi.UpsertWorkRequestResponse) error {
 	payload := BatchSubmitJSONResult{
 		RequestID:     result.RequestId,
 		TraceID:       result.TraceId,
@@ -109,7 +109,7 @@ func batchSubmitJSONWorks(works []factoryapi.UpsertWorkRequestSubmittedWork) []B
 	return out
 }
 
-func printBatchSuccessHuman(w io.Writer, req interfaces.WorkRequest, result factoryapi.UpsertWorkRequestResponse) error {
+func printBatchSuccessHuman(w io.Writer, req work.WorkRequest, result factoryapi.UpsertWorkRequestResponse) error {
 	if _, err := fmt.Fprintf(w, "requestId: %s\n", result.RequestId); err != nil {
 		return err
 	}

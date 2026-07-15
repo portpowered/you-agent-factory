@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/timedisplay"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func formatDurationShort(d time.Duration) string {
@@ -160,7 +161,7 @@ func worldWorkItemLabels(workItems []interfaces.FactoryWorldWorkItemRef) []strin
 	return labels
 }
 
-func worldWorkItemLabelsFromItems(workItems []interfaces.FactoryWorkItem) []string {
+func worldWorkItemLabelsFromItems(workItems []work.FactoryWorkItem) []string {
 	labels := make([]string, 0, len(workItems))
 	for _, workItem := range workItems {
 		labels = appendUniqueLabel(labels, worldWorkItemLabel(workRefForDashboardItem(workItem)))
@@ -311,7 +312,7 @@ func formatProviderSession(session *interfaces.ProviderSessionMetadata) string {
 	return strings.Join(parts, " / ") + " / " + session.ID
 }
 
-func workRefForDashboardItem(item interfaces.FactoryWorkItem) interfaces.FactoryWorldWorkItemRef {
+func workRefForDashboardItem(item work.FactoryWorkItem) interfaces.FactoryWorldWorkItemRef {
 	return interfaces.FactoryWorldWorkItemRef{
 		WorkID:      item.ID,
 		WorkTypeID:  item.WorkTypeID,

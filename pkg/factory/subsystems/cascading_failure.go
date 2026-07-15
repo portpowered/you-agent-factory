@@ -7,8 +7,9 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // CascadingFailureSubsystem propagates failure from parent/dependency tokens
@@ -47,7 +48,7 @@ func (cf *CascadingFailureSubsystem) Execute(_ context.Context, snapshot *interf
 	dependents := make(map[string][]*interfaces.Token)
 	for _, tok := range snapshot.Marking.Tokens {
 		for _, rel := range tok.Color.Relations {
-			if rel.Type == interfaces.RelationDependsOn {
+			if rel.Type == work.RelationDependsOn {
 				dependents[rel.TargetWorkID] = append(dependents[rel.TargetWorkID], tok)
 			}
 		}

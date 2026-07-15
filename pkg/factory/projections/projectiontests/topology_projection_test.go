@@ -10,6 +10,7 @@ import (
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
@@ -81,7 +82,7 @@ func TestProjectInitialStructure_NetOnlyTopology_ProjectsCanonicalPayload(t *tes
 			{ID: "story:init", TypeID: "story", State: "init", Category: "INITIAL"},
 			{ID: "story:review", TypeID: "story", State: "review", Category: "PROCESSING"},
 		},
-		Relations: []interfaces.FactoryRelation{
+		Relations: []work.FactoryRelation{
 			{Type: "INPUT", TargetWorkID: "story:init", RequiredState: "work"},
 			{Type: "INPUT", TargetWorkID: "cpu:available", RequiredState: "cpu"},
 			{Type: "OUTPUT", SourceWorkID: "build", TargetWorkID: "story:review"},

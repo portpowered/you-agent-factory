@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestWorkstationResponsePayload_SerializesProjectionFields(t *testing.T) {
@@ -19,7 +20,7 @@ func TestWorkstationResponsePayload_SerializesProjectionFields(t *testing.T) {
 			TokenID:   "token-1",
 			FromPlace: "story:init",
 			ToPlace:   "story:complete",
-			WorkItem: &interfaces.FactoryWorkItem{
+			WorkItem: &work.FactoryWorkItem{
 				ID:          "work-1",
 				WorkTypeID:  "story",
 				DisplayName: "Implement event stream",
@@ -29,7 +30,7 @@ func TestWorkstationResponsePayload_SerializesProjectionFields(t *testing.T) {
 		TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
 		ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-1"},
 		TerminalWork: &interfaces.FactoryTerminalWork{
-			WorkItem: interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "story"},
+			WorkItem: work.FactoryWorkItem{ID: "work-1", WorkTypeID: "story"},
 			Status:   "completed",
 		},
 	})
@@ -52,7 +53,7 @@ func TestInitialStructurePayload_SerializesContractFields(t *testing.T) {
 		WorkTypes:    []interfaces.FactoryWorkType{{ID: "story", States: []interfaces.FactoryStateDefinition{{Value: "init", Category: "INITIAL"}}}},
 		Workstations: []interfaces.FactoryWorkstation{{ID: "execute", Name: "execute-story", WorkerID: "executor"}},
 		Places:       []interfaces.FactoryPlace{{ID: "story:init", TypeID: "story", State: "init", Category: "INITIAL"}},
-		Relations:    []interfaces.FactoryRelation{{Type: "DEPENDS_ON", SourceWorkID: "work-2", TargetWorkID: "work-1", RequiredState: "complete"}},
+		Relations:    []work.FactoryRelation{{Type: "DEPENDS_ON", SourceWorkID: "work-2", TargetWorkID: "work-1", RequiredState: "complete"}},
 	}
 
 	data, err := json.Marshal(payload)
@@ -73,8 +74,8 @@ func TestInitialStructurePayload_SerializesContractFields(t *testing.T) {
 func TestWorkInputAndStateChangePayloads_SerializeContractFields(t *testing.T) {
 	inputPayload := marshalPayloadObject(t, interfaces.WorkInputPayload{
 		TokenID:   "tok-story-1",
-		WorkItem:  interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "story", DisplayName: "Story 1", TraceID: "trace-1"},
-		Relations: []interfaces.FactoryRelation{{Type: "DEPENDS_ON", TargetWorkID: "work-0", RequiredState: "complete"}},
+		WorkItem:  work.FactoryWorkItem{ID: "work-1", WorkTypeID: "story", DisplayName: "Story 1", TraceID: "trace-1"},
+		Relations: []work.FactoryRelation{{Type: "DEPENDS_ON", TargetWorkID: "work-0", RequiredState: "complete"}},
 	})
 	assertJSONField(t, inputPayload, "token_id", "tok-story-1")
 	assertJSONObject(t, inputPayload, "work_item")
@@ -93,11 +94,11 @@ func TestWorkInputAndStateChangePayloads_SerializeContractFields(t *testing.T) {
 func TestWorkRequestAndRelationshipPayloads_SerializeContractFields(t *testing.T) {
 	requestPayload := marshalPayloadObject(t, interfaces.WorkRequestPayload{
 		RequestID:     "request-1",
-		Type:          interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:          work.WorkRequestTypeFactoryRequestBatch,
 		TraceID:       "trace-1",
 		Source:        "external-submit",
 		ParentLineage: []string{"request-parent", "work-parent"},
-		WorkItems:     []interfaces.FactoryWorkItem{{ID: "work-1", WorkTypeID: "story", DisplayName: "Story 1", TraceID: "trace-1"}},
+		WorkItems:     []work.FactoryWorkItem{{ID: "work-1", WorkTypeID: "story", DisplayName: "Story 1", TraceID: "trace-1"}},
 	})
 	assertJSONField(t, requestPayload, "request_id", "request-1")
 	assertJSONField(t, requestPayload, "type", "FACTORY_REQUEST_BATCH")
@@ -110,7 +111,7 @@ func TestWorkRequestAndRelationshipPayloads_SerializeContractFields(t *testing.T
 	relationshipPayload := marshalPayloadObject(t, interfaces.RelationshipChangePayload{
 		RequestID: "request-1",
 		TraceID:   "trace-1",
-		Relation: interfaces.FactoryRelation{
+		Relation: work.FactoryRelation{
 			Type:           "DEPENDS_ON",
 			SourceWorkID:   "work-2",
 			SourceWorkName: "second",

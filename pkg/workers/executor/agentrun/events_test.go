@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -63,7 +64,7 @@ func TestAgentRunSafeDiagnostics_IncludesTranscript(t *testing.T) {
 func TestAgentRunResponseEvent_MapsDispatchAndOutcome(t *testing.T) {
 	t.Parallel()
 
-	dispatch := interfaces.WorkDispatch{DispatchID: "dispatch-42"}
+	dispatch := work.WorkDispatch{DispatchID: "dispatch-42"}
 	result := interfaces.WorkResult{
 		Outcome: interfaces.OutcomeAccepted,
 		Output:  "done",

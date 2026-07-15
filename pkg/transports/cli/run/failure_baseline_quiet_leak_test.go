@@ -12,13 +12,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/terminalpolicy"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 )
 
@@ -126,8 +126,8 @@ func TestFailureBaseline_QuietLeak_OneShotNamedGoalInvocationSuppressesOperatorC
 					RequestID: "req-quiet-leak",
 					TraceID:   "trace-quiet-leak",
 					Status:    factoryapi.InvocationTerminalStatusCompleted,
-					PrimaryResult: []interfaces.WorkContentPart{{
-						Type: interfaces.WorkContentPartTypeText,
+					PrimaryResult: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText,
 						Text: "goal quiet baseline completed",
 					}},
 				}, nil
@@ -219,8 +219,8 @@ func TestFailureBaseline_TerminalPolicyNeverLeaksInvocationPromptAcrossModes(t *
 					invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 						return apisurface.FactoryInvocationResult{
 							Status: factoryapi.InvocationTerminalStatusCompleted,
-							PrimaryResult: []interfaces.WorkContentPart{{
-								Type: interfaces.WorkContentPartTypeText,
+							PrimaryResult: []work.WorkContentPart{{
+								Type: work.WorkContentPartTypeText,
 								Text: "policy-safe primary result",
 							}},
 						}, nil

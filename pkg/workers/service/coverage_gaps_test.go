@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
@@ -86,7 +87,7 @@ func TestStartPollersForRuntime_LogsDisabledPaths(t *testing.T) {
 		&sidecars,
 		factoryCfg,
 		runtimeCfg,
-		func(context.Context, interfaces.WorkRequest) error { return nil },
+		func(context.Context, work.WorkRequest) error { return nil },
 	)
 
 	if observedLogs.FilterMessage("script poller disabled").Len() != 2 {
@@ -143,7 +144,7 @@ func TestRunScriptPoller_UsesWorkerTimeout(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	err := svc.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, func(context.Context, interfaces.WorkRequest) error {
+	err := svc.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
 		return nil
 	})
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
@@ -204,7 +205,7 @@ func TestStartScriptPoller_StopReasonOnContextCancel(t *testing.T) {
 
 	runCtx, cancelRun := context.WithCancel(context.Background())
 	var sidecars sync.WaitGroup
-	svc.StartScriptPoller(runCtx, &sidecars, runtimeCfg, poller, worker, func(context.Context, interfaces.WorkRequest) error {
+	svc.StartScriptPoller(runCtx, &sidecars, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
 		return nil
 	})
 	cancelRun()
@@ -248,7 +249,7 @@ func TestStartCronWatchersForRuntime_LogsTriggerFailure(t *testing.T) {
 		"factory-alpha",
 		factoryCfg,
 		runtimeCfg,
-		func(context.Context, interfaces.WorkRequest) error {
+		func(context.Context, work.WorkRequest) error {
 			return errors.New("cron submit rejected")
 		},
 	)
@@ -297,7 +298,7 @@ func TestService_DefaultCollaboratorsWhenConfigUnset(t *testing.T) {
 		runtimeCfg,
 		poller,
 		worker,
-		func(context.Context, interfaces.WorkRequest) error { return nil },
+		func(context.Context, work.WorkRequest) error { return nil },
 	)
 	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
 		t.Fatalf("RunScriptPoller with default collaborators error = %v", err)

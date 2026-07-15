@@ -1,16 +1,16 @@
 package projections
 
 import (
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workdomain "github.com/portpowered/infinite-you/pkg/work"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
-func factoryWorkItemsFromGenerated(works *[]factoryapi.Work) []interfaces.FactoryWorkItem {
+func factoryWorkItemsFromGenerated(works *[]factoryapi.Work) []workdomain.FactoryWorkItem {
 	if works == nil {
 		return nil
 	}
-	out := make([]interfaces.FactoryWorkItem, 0, len(*works))
+	out := make([]workdomain.FactoryWorkItem, 0, len(*works))
 	for _, work := range *works {
 		item := factoryWorkItemFromGenerated(work)
 		if item.ID != "" {
@@ -20,13 +20,13 @@ func factoryWorkItemsFromGenerated(works *[]factoryapi.Work) []interfaces.Factor
 	return out
 }
 
-func factoryWorkItemFromGenerated(work factoryapi.Work) interfaces.FactoryWorkItem {
+func factoryWorkItemFromGenerated(work factoryapi.Work) workdomain.FactoryWorkItem {
 	currentChainingTraceID := stringValue(work.CurrentChainingTraceId)
 	traceID := stringValue(work.TraceId)
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = traceID
 	}
-	return interfaces.FactoryWorkItem{
+	return workdomain.FactoryWorkItem{
 		ID:                       stringValue(work.WorkId),
 		WorkTypeID:               stringValue(work.WorkTypeName),
 		State:                    generatedWorkStateName(work.State),
@@ -40,6 +40,6 @@ func factoryWorkItemFromGenerated(work factoryapi.Work) interfaces.FactoryWorkIt
 	}
 }
 
-func generatedWorkContentToDomain(content *factoryapi.WorkContent) []interfaces.WorkContentPart {
+func generatedWorkContentToDomain(content *factoryapi.WorkContent) []workdomain.WorkContentPart {
 	return contentcontract.PartsFromGenerated(content)
 }

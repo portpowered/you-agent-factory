@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestMatchColorGuard_PositiveMatch(t *testing.T) {
@@ -599,8 +600,8 @@ func TestDependencyGuard_AllDependenciesMet(t *testing.T) {
 			Color: interfaces.TokenColor{
 				WorkID:     "work-b",
 				WorkTypeID: "task",
-				Relations: []interfaces.Relation{
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
+				Relations: []work.Relation{
+					{Type: work.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
 				},
 			},
 		},
@@ -641,8 +642,8 @@ func TestDependencyGuard_DependencyNotMet(t *testing.T) {
 			Color: interfaces.TokenColor{
 				WorkID:     "work-b",
 				WorkTypeID: "task",
-				Relations: []interfaces.Relation{
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
+				Relations: []work.Relation{
+					{Type: work.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
 				},
 			},
 		},
@@ -673,8 +674,8 @@ func TestDependencyGuard_DependencyNotFound(t *testing.T) {
 			Color: interfaces.TokenColor{
 				WorkID:     "work-b",
 				WorkTypeID: "task",
-				Relations: []interfaces.Relation{
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-missing", RequiredState: "complete"},
+				Relations: []work.Relation{
+					{Type: work.RelationDependsOn, TargetWorkID: "work-missing", RequiredState: "complete"},
 				},
 			},
 		},
@@ -701,8 +702,8 @@ func TestDependencyGuard_NilMarking(t *testing.T) {
 		{
 			ID: "tok-b",
 			Color: interfaces.TokenColor{
-				Relations: []interfaces.Relation{
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
+				Relations: []work.Relation{
+					{Type: work.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
 				},
 			},
 		},
@@ -727,8 +728,8 @@ func TestDependencyGuard_NoDependencies(t *testing.T) {
 			Color: interfaces.TokenColor{
 				WorkID:     "work-b",
 				WorkTypeID: "task",
-				Relations: []interfaces.Relation{
-					{Type: interfaces.RelationParentChild, TargetWorkID: "work-a"},
+				Relations: []work.Relation{
+					{Type: work.RelationParentChild, TargetWorkID: "work-a"},
 				},
 			},
 		},
@@ -769,9 +770,9 @@ func TestDependencyGuard_MultipleDependencies(t *testing.T) {
 			Color: interfaces.TokenColor{
 				WorkID:     "work-b",
 				WorkTypeID: "task",
-				Relations: []interfaces.Relation{
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-c", RequiredState: "complete"},
+				Relations: []work.Relation{
+					{Type: work.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
+					{Type: work.RelationDependsOn, TargetWorkID: "work-c", RequiredState: "complete"},
 				},
 			},
 		},
@@ -814,9 +815,9 @@ func TestDependencyGuard_PartialDependenciesMet(t *testing.T) {
 			Color: interfaces.TokenColor{
 				WorkID:     "work-b",
 				WorkTypeID: "task",
-				Relations: []interfaces.Relation{
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-c", RequiredState: "complete"},
+				Relations: []work.Relation{
+					{Type: work.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
+					{Type: work.RelationDependsOn, TargetWorkID: "work-c", RequiredState: "complete"},
 				},
 			},
 		},

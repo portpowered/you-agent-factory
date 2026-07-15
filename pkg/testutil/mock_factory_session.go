@@ -9,6 +9,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -21,10 +22,10 @@ func (m *MockFactory) WaitToComplete() <-chan struct{} {
 	return ch
 }
 
-func (m *MockFactory) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (m *MockFactory) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	session, err := m.sessionFactory(sessionID)
 	if err != nil {
-		return interfaces.WorkRequestSubmitResult{}, err
+		return work.WorkRequestSubmitResult{}, err
 	}
 	return session.SubmitWorkRequest(ctx, request)
 }

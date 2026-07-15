@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 	executorpkg "github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
@@ -21,9 +22,9 @@ func (m *agentMockProvider) Infer(_ context.Context, req interfaces.ProviderInfe
 	return m.response, nil
 }
 
-func testAgentRequest(dispatch interfaces.WorkDispatch, opts ...func(*interfaces.WorkstationExecutionRequest)) interfaces.WorkstationExecutionRequest {
+func testAgentRequest(dispatch work.WorkDispatch, opts ...func(*interfaces.WorkstationExecutionRequest)) interfaces.WorkstationExecutionRequest {
 	req := interfaces.WorkstationExecutionRequest{
-		Dispatch:        interfaces.CloneWorkDispatch(dispatch),
+		Dispatch:        work.CloneWorkDispatch(dispatch),
 		WorkerType:      dispatch.WorkerType,
 		WorkstationType: dispatch.WorkstationName,
 		ProjectID:       dispatch.ProjectID,
@@ -60,7 +61,7 @@ func TestAgentExecutor_StopTokenControlsOutcome(t *testing.T) {
 	)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -79,7 +80,7 @@ func TestAgentExecutor_StopTokenControlsOutcome(t *testing.T) {
 		&agentMockProvider{response: interfaces.InferenceResponse{Content: "Still working"}},
 	)
 	result, err = executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-2",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -98,7 +99,7 @@ func TestAgentExecutor_StopTokenControlsOutcome(t *testing.T) {
 		&agentMockProvider{response: interfaces.InferenceResponse{Content: "Still iterating\n<CONTINUE>"}},
 	)
 	result, err = executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-3",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -122,7 +123,7 @@ func TestAgentExecutor_StopTokenComesFromRuntimeConfigWithoutDispatchState(t *te
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -147,7 +148,7 @@ func TestAgentExecutor_RuntimeStopTokenChangesAffectSubsequentDispatches(t *test
 	}
 	executor := executorpkg.NewAgentExecutor(runtimeCfg, provider)
 
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		DispatchID:   "d-1",
 		TransitionID: "t-1",
 		WorkerType:   "worker-a",
@@ -165,7 +166,7 @@ func TestAgentExecutor_RuntimeStopTokenChangesAffectSubsequentDispatches(t *test
 	workerDef.StopToken = "DONE"
 
 	second, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-2",
 			TransitionID: dispatch.TransitionID,
 			WorkerType:   dispatch.WorkerType,
@@ -190,7 +191,7 @@ func TestAgentExecutor_ResolvesWorkerConfigPerDispatch(t *testing.T) {
 	}, provider)
 
 	first, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -208,7 +209,7 @@ func TestAgentExecutor_ResolvesWorkerConfigPerDispatch(t *testing.T) {
 	}
 
 	second, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-2",
 			TransitionID: "t-2",
 			WorkerType:   "worker-b",
@@ -235,7 +236,7 @@ func TestAgentExecutor_OutputSchemaSuccess_KeepsRawOutput(t *testing.T) {
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -264,7 +265,7 @@ func TestAgentExecutor_OutputSchemaParseFailure_ReturnsFailedResult(t *testing.T
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",

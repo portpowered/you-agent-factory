@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type recordingProviderFake struct {
@@ -518,11 +519,11 @@ func TestRecordingProvider_Infer_MissingInnerProviderEmitsMisconfiguredFailureEv
 }
 
 func recordingProviderDispatch() interfaces.ProviderInferenceRequest {
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		DispatchID:   "dispatch-1",
 		TransitionID: "transition-1",
 		WorkerType:   "worker-a",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			DispatchCreatedTick: 7,
 			CurrentTick:         8,
 			RequestID:           "request-1",
@@ -720,7 +721,7 @@ func TestInferenceProgressPublishingCommandRunner_NormalizesCodexStructuredEvent
 		Command:         scriptPath,
 		DispatchID:      "dispatch-codex-json-1",
 		WorkstationName: "review",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			WorkIDs: []string{"work-codex-json-1"},
 		},
 	})
@@ -770,7 +771,7 @@ func TestInferenceProgressPublishingCommandRunner_MapsUnknownAndMalformedCodexEv
 		Command:         scriptPath,
 		DispatchID:      "dispatch-codex-json-2",
 		WorkstationName: "review",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			WorkIDs: []string{"work-codex-json-2"},
 		},
 	})
@@ -825,7 +826,7 @@ func TestInferenceProgressPublishingCommandRunner_MapsFailureCancelAndTruncation
 		Command:         scriptPath,
 		DispatchID:      "dispatch-codex-json-3",
 		WorkstationName: "review",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			WorkIDs: []string{"work-codex-json-3"},
 		},
 	})

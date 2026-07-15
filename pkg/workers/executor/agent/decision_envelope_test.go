@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 	executorpkg "github.com/portpowered/infinite-you/pkg/workers/executor"
 	"github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
@@ -21,7 +22,7 @@ func reviewAgentRequest(dispatchID string, content string) (interfaces.Workstati
 		response: interfaces.InferenceResponse{Content: content},
 	}
 	request := testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:      dispatchID,
 			TransitionID:    "review",
 			WorkerType:      "planner",
@@ -231,7 +232,7 @@ func TestAgentExecutor_ProcessWorkstation_StillUsesStopTokenWhenNotReview(t *tes
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:      "d-process-1",
 			TransitionID:    "process",
 			WorkerType:      "processor",

@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
@@ -83,7 +84,7 @@ func TestAdapterExecuteTimeoutPartialDoesNotPopulateSuccessfulInferenceResponse(
 	result, executeErr := adapter.Execute(context.Background(), registry, runner, adapter.ExecuteInput{
 		Provider: providerAdapter.Identity(),
 		Command: adapter.CommandContext{Request: interfaces.ProviderInferenceRequest{
-			Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-agy-timeout"},
+			Dispatch:         work.WorkDispatch{DispatchID: "dispatch-agy-timeout"},
 			WorkingDirectory: ".",
 			UserMessage:      "plan the goal",
 		}},

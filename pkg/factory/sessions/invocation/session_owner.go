@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -48,11 +49,11 @@ type SessionInvocationTelemetry interface {
 	InterpolationFailure(*interfaces.FactoryConfig, workinvocation.InputSourceLabel, error)
 	SubmissionFailure(*interfaces.FactoryConfig, workinvocation.InputSourceLabel, error)
 	InvocationSubmitted(*interfaces.FactoryConfig, workinvocation.InputSourceLabel)
-	InvocationCompleted(*interfaces.FactoryConfig, workinvocation.InputSourceLabel, []interfaces.WorkContentPart)
+	InvocationCompleted(*interfaces.FactoryConfig, workinvocation.InputSourceLabel, []work.WorkContentPart)
 	InvocationFailed(*interfaces.FactoryConfig, workinvocation.InputSourceLabel, string)
 	LogArgumentFailure(string, workinvocation.InputSourceLabel, *interfaces.FactoryConfig, *workinvocation.NormalizedArguments, error, string)
 	LogSubmissionFailure(string, workinvocation.InputSourceLabel, *interfaces.FactoryConfig, error)
-	LogInvocationSubmitted(string, workinvocation.InputSourceLabel, *interfaces.FactoryConfig, interfaces.WorkRequestSubmitResult)
+	LogInvocationSubmitted(string, workinvocation.InputSourceLabel, *interfaces.FactoryConfig, work.WorkRequestSubmitResult)
 	LogInvocationCompleted(string, SessionInvocationWaitInput, workinvocation.PrimaryResultSelection)
 	LogInvocationFailed(string, SessionInvocationWaitInput, FactoryInvocationResult, string)
 }
@@ -61,7 +62,7 @@ type SessionInvocationTelemetry interface {
 // resolve, submit, observe, and wait for one Factory Session invocation.
 type SessionOwnerDependencies struct {
 	FactoryConfig func(string) (*interfaces.FactoryConfig, error)
-	SubmitWork    func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error)
+	SubmitWork    func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error)
 	Observe       func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error)
 	WaitNext      func(context.Context) error
 	Telemetry     SessionInvocationTelemetry
@@ -119,7 +120,7 @@ func (o *SessionOwner) InvokeFactorySession(
 		}
 		return FactoryInvocationResult{}, err
 	}
-	submitResult, err := o.deps.SubmitWork(ctx, sessionID, interfaces.SubmitRequest{
+	submitResult, err := o.deps.SubmitWork(ctx, sessionID, work.SubmitRequest{
 		RequestID:           trimmedStringValue(request.RequestId),
 		WorkTypeID:          workTypeName,
 		Content:             resolved.Content,
@@ -149,7 +150,7 @@ func (o *SessionOwner) InvokeFactorySession(
 // ResolvedSessionInvocationInput is the normalized input carried into Work submission.
 type ResolvedSessionInvocationInput struct {
 	Source              workinvocation.InputSourceLabel
-	Content             []interfaces.WorkContentPart
+	Content             []work.WorkContentPart
 	NormalizedArguments *workinvocation.NormalizedArguments
 }
 
@@ -174,7 +175,7 @@ func ResolveSessionInvocationInput(cfg *interfaces.FactoryConfig, request factor
 	return resolveStructuredSessionInvocationInput(signature, directArgs, content)
 }
 
-func resolveCompatibilitySessionInvocationInput(content []interfaces.WorkContentPart) (ResolvedSessionInvocationInput, error) {
+func resolveCompatibilitySessionInvocationInput(content []work.WorkContentPart) (ResolvedSessionInvocationInput, error) {
 	if len(content) == 0 {
 		return ResolvedSessionInvocationInput{}, &interfaces.RequestValidationError{Message: "content is required when args are omitted"}
 	}
@@ -195,7 +196,7 @@ func resolveCompatibilitySessionInvocationInput(content []interfaces.WorkContent
 func resolveStructuredSessionInvocationInput(
 	signature *interfaces.InvocationSignatureConfig,
 	directArgs []workinvocation.NamedArgumentInput,
-	content []interfaces.WorkContentPart,
+	content []work.WorkContentPart,
 ) (ResolvedSessionInvocationInput, error) {
 	if signature == nil {
 		return ResolvedSessionInvocationInput{}, &workinvocation.ArgumentError{
@@ -219,7 +220,7 @@ func resolveStructuredSessionInvocationInput(
 	return ResolvedSessionInvocationInput{Source: source, NormalizedArguments: &normalized}, nil
 }
 
-func sessionInvocationCompatibilityContent(request factoryapi.InvocationRequest) ([]interfaces.WorkContentPart, error) {
+func sessionInvocationCompatibilityContent(request factoryapi.InvocationRequest) ([]work.WorkContentPart, error) {
 	if request.Content == nil {
 		if request.SourceKind != nil && *request.SourceKind != factoryapi.InvocationInputSourceKindText {
 			return nil, &interfaces.RequestValidationError{Message: "sourceKind must be text"}

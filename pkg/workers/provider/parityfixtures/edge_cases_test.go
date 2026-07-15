@@ -8,8 +8,9 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
-	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/parityfixtures"
 )
 
@@ -291,7 +292,7 @@ func TestRunTerminal_UnsupportedProvider(t *testing.T) {
 		TranscriptFile: "testdata/full_stream_claude.jsonl",
 		Provider:       "unsupported-provider",
 		Request: interfaces.ProviderInferenceRequest{
-			Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-unsupported"},
+			Dispatch: work.WorkDispatch{DispatchID: "dispatch-unsupported"},
 		},
 	})
 	if err == nil || !strings.Contains(err.Error(), "unsupported parity provider") {

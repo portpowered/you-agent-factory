@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // buildTestTopology creates a minimal topology with one work type for testing.
@@ -230,7 +231,7 @@ func TestFormatSimpleDashboardWithRenderData_RendersUnavailableTimes(t *testing.
 					DispatchID:      "dispatch-complete",
 					TransitionID:    "write",
 					Workstation:     interfaces.FactoryWorkstationRef{Name: "Writer"},
-					OutputWorkItems: []interfaces.FactoryWorkItem{{ID: "work-complete", WorkTypeID: "story", DisplayName: "Complete story"}},
+					OutputWorkItems: []work.FactoryWorkItem{{ID: "work-complete", WorkTypeID: "story", DisplayName: "Complete story"}},
 					Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
 				}},
 			},
@@ -318,8 +319,8 @@ func buildTerminalProviderRenderFixture(now time.Time) (
 						DispatchID:      "dispatch-complete",
 						TransitionID:    "write",
 						Workstation:     interfaces.FactoryWorkstationRef{Name: "Writer"},
-						InputWorkItems:  []interfaces.FactoryWorkItem{{ID: "work-complete", WorkTypeID: "story", DisplayName: "Draft docs"}},
-						OutputWorkItems: []interfaces.FactoryWorkItem{{ID: "work-complete", WorkTypeID: "story", DisplayName: "Docs complete"}},
+						InputWorkItems:  []work.FactoryWorkItem{{ID: "work-complete", WorkTypeID: "story", DisplayName: "Draft docs"}},
+						OutputWorkItems: []work.FactoryWorkItem{{ID: "work-complete", WorkTypeID: "story", DisplayName: "Docs complete"}},
 						Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
 						StartedAt:       now.Add(-70 * time.Second),
 						CompletedAt:     now.Add(-65 * time.Second),
@@ -329,8 +330,8 @@ func buildTerminalProviderRenderFixture(now time.Time) (
 						DispatchID:      "dispatch-rejected",
 						TransitionID:    "review",
 						Workstation:     interfaces.FactoryWorkstationRef{Name: "Reviewer"},
-						InputWorkItems:  []interfaces.FactoryWorkItem{{ID: "work-rejected", WorkTypeID: "story", DisplayName: "Review draft"}},
-						OutputWorkItems: []interfaces.FactoryWorkItem{{ID: "work-rejected", WorkTypeID: "story", DisplayName: "Needs rewrite"}},
+						InputWorkItems:  []work.FactoryWorkItem{{ID: "work-rejected", WorkTypeID: "story", DisplayName: "Review draft"}},
+						OutputWorkItems: []work.FactoryWorkItem{{ID: "work-rejected", WorkTypeID: "story", DisplayName: "Needs rewrite"}},
 						Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeRejected), Feedback: "missing acceptance tests"},
 						StartedAt:       now.Add(-60 * time.Second),
 						CompletedAt:     now.Add(-45 * time.Second),
@@ -340,8 +341,8 @@ func buildTerminalProviderRenderFixture(now time.Time) (
 						DispatchID:      "dispatch-failed",
 						TransitionID:    "ship",
 						Workstation:     interfaces.FactoryWorkstationRef{Name: "Publisher"},
-						InputWorkItems:  []interfaces.FactoryWorkItem{{ID: "work-failed", WorkTypeID: "story", DisplayName: "Ship change"}},
-						OutputWorkItems: []interfaces.FactoryWorkItem{{ID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"}},
+						InputWorkItems:  []work.FactoryWorkItem{{ID: "work-failed", WorkTypeID: "story", DisplayName: "Ship change"}},
+						OutputWorkItems: []work.FactoryWorkItem{{ID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"}},
 						Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeThrottled, Message: "provider unavailable"}},
 						StartedAt:       now.Add(-40 * time.Second),
 						CompletedAt:     now.Add(-20 * time.Second),
@@ -352,7 +353,7 @@ func buildTerminalProviderRenderFixture(now time.Time) (
 					DispatchID:      "dispatch-failed",
 					TransitionID:    "ship",
 					WorkstationName: "Publisher",
-					ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &interfaces.FactoryWorkItem{ID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"}}},
+					ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"}}},
 					Outcome:         string(interfaces.OutcomeFailed),
 					FailureDetail:   &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeThrottled, Message: "provider unavailable"},
 					ProviderSession: interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"},
@@ -413,8 +414,8 @@ func buildDispatchHistoryFallbackFixture(now time.Time) dashboardrender.SimpleDa
 					DispatchID:   "accepted-terminal",
 					TransitionID: "write",
 					Workstation:  interfaces.FactoryWorkstationRef{Name: "Writer"},
-					TerminalWork: &interfaces.FactoryTerminalWork{Status: "COMPLETE", WorkItem: interfaces.FactoryWorkItem{ID: "completed-terminal", WorkTypeID: "story", DisplayName: "Published draft"}},
-					OutputWorkItems: []interfaces.FactoryWorkItem{
+					TerminalWork: &interfaces.FactoryTerminalWork{Status: "COMPLETE", WorkItem: work.FactoryWorkItem{ID: "completed-terminal", WorkTypeID: "story", DisplayName: "Published draft"}},
+					OutputWorkItems: []work.FactoryWorkItem{
 						{ID: "completed-terminal", WorkTypeID: "story", DisplayName: "should not replace terminal"},
 					},
 					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
@@ -426,8 +427,8 @@ func buildDispatchHistoryFallbackFixture(now time.Time) dashboardrender.SimpleDa
 					DispatchID:   "accepted-output",
 					TransitionID: "review",
 					Workstation:  interfaces.FactoryWorkstationRef{Name: "Reviewer"},
-					TerminalWork: &interfaces.FactoryTerminalWork{Status: "FAILED", WorkItem: interfaces.FactoryWorkItem{ID: "completed-output", WorkTypeID: "story", DisplayName: "should skip failed terminal"}},
-					OutputWorkItems: []interfaces.FactoryWorkItem{
+					TerminalWork: &interfaces.FactoryTerminalWork{Status: "FAILED", WorkItem: work.FactoryWorkItem{ID: "completed-output", WorkTypeID: "story", DisplayName: "should skip failed terminal"}},
+					OutputWorkItems: []work.FactoryWorkItem{
 						{ID: "completed-output", WorkTypeID: "story", DisplayName: "Review ready"},
 					},
 					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
@@ -439,7 +440,7 @@ func buildDispatchHistoryFallbackFixture(now time.Time) dashboardrender.SimpleDa
 					DispatchID:     "accepted-input-only",
 					TransitionID:   "draft",
 					Workstation:    interfaces.FactoryWorkstationRef{Name: "Drafter"},
-					InputWorkItems: []interfaces.FactoryWorkItem{{ID: "completed-input-only", WorkTypeID: "story", DisplayName: "should stay hidden"}},
+					InputWorkItems: []work.FactoryWorkItem{{ID: "completed-input-only", WorkTypeID: "story", DisplayName: "should stay hidden"}},
 					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
 					StartedAt:      now.Add(-35 * time.Second),
 					CompletedAt:    now.Add(-31 * time.Second),
@@ -449,8 +450,8 @@ func buildDispatchHistoryFallbackFixture(now time.Time) dashboardrender.SimpleDa
 					DispatchID:   "failed-terminal",
 					TransitionID: "ship",
 					Workstation:  interfaces.FactoryWorkstationRef{Name: "Publisher"},
-					TerminalWork: &interfaces.FactoryTerminalWork{Status: "FAILED", WorkItem: interfaces.FactoryWorkItem{ID: "failed-terminal", WorkTypeID: "story", DisplayName: "Publish blocked"}},
-					OutputWorkItems: []interfaces.FactoryWorkItem{
+					TerminalWork: &interfaces.FactoryTerminalWork{Status: "FAILED", WorkItem: work.FactoryWorkItem{ID: "failed-terminal", WorkTypeID: "story", DisplayName: "Publish blocked"}},
+					OutputWorkItems: []work.FactoryWorkItem{
 						{ID: "failed-terminal", WorkTypeID: "story", DisplayName: "should not replace failed terminal"},
 					},
 					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeThrottled, Message: "provider unavailable"}},
@@ -462,11 +463,11 @@ func buildDispatchHistoryFallbackFixture(now time.Time) dashboardrender.SimpleDa
 					DispatchID:   "failed-output-and-input-fallback",
 					TransitionID: interfaces.SystemTimeExpiryTransitionID,
 					Workstation:  interfaces.FactoryWorkstationRef{Name: interfaces.SystemTimeExpiryTransitionID},
-					InputWorkItems: []interfaces.FactoryWorkItem{
+					InputWorkItems: []work.FactoryWorkItem{
 						{ID: "failed-output", WorkTypeID: "story", DisplayName: "should not replace failed output"},
 						{ID: "failed-input", WorkTypeID: "story", DisplayName: "Retry later"},
 					},
-					OutputWorkItems: []interfaces.FactoryWorkItem{
+					OutputWorkItems: []work.FactoryWorkItem{
 						{ID: "failed-output", WorkTypeID: "story", DisplayName: "Expired artifact"},
 					},
 					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureDetail: &interfaces.FailureDetail{Reason: "expired", Message: "expired"}},

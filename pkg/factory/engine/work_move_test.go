@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestMoveWork_AcceptsValidRelocation(t *testing.T) {
@@ -129,7 +130,7 @@ func TestMoveWork_DoesNotRecordDispatchEvents(t *testing.T) {
 	marking.AddToken(newMoveTestToken("tok-1", "work-1", "task:init"))
 
 	dispatchCount := 0
-	eng := NewFactoryEngine(net, marking, nil, WithDispatchHandler(func(interfaces.WorkDispatch) {
+	eng := NewFactoryEngine(net, marking, nil, WithDispatchHandler(func(work.WorkDispatch) {
 		dispatchCount++
 	}))
 
@@ -159,7 +160,7 @@ func TestMoveWork_WakesRunLoopWithoutBufferedInputs(t *testing.T) {
 				}
 				return &interfaces.TickResult{
 					Dispatches: []interfaces.DispatchRecord{{
-						Dispatch: interfaces.WorkDispatch{
+						Dispatch: work.WorkDispatch{
 							DispatchID:   "dispatch-after-move",
 							TransitionID: "transition-after-move",
 							WorkerType:   "worker-a",
@@ -175,7 +176,7 @@ func TestMoveWork_WakesRunLoopWithoutBufferedInputs(t *testing.T) {
 			return nil, nil
 		},
 	}
-	eng := NewFactoryEngine(net, marking, []subsystems.Subsystem{dispatchSub}, WithDispatchHandler(func(dispatch interfaces.WorkDispatch) {
+	eng := NewFactoryEngine(net, marking, []subsystems.Subsystem{dispatchSub}, WithDispatchHandler(func(dispatch work.WorkDispatch) {
 		if dispatch.DispatchID == "dispatch-after-move" {
 			select {
 			case dispatched <- struct{}{}:

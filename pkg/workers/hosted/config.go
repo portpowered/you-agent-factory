@@ -6,6 +6,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/workers/hosted/linear"
 	"go.uber.org/zap"
 )
@@ -14,7 +15,7 @@ import (
 type SecretResolver func(ctx context.Context, runtimeCfg interfaces.RuntimeConfigLookup, secretRef string) (string, error)
 
 // Submitter submits normalized hosted-poller work requests into factory ingress.
-type Submitter func(context.Context, interfaces.WorkRequest) error
+type Submitter func(context.Context, work.WorkRequest) error
 
 // Config carries hosted-poller runtime dependencies injected by the service root.
 type Config struct {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func newAdhocProcessReviewHarness(
@@ -26,7 +27,7 @@ func newAdhocProcessReviewHarness(
 		testutil.WithExecutionBaseDir(dir),
 	)
 
-	harness.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	harness.SubmitFull(context.Background(), []work.SubmitRequest{{
 		WorkTypeID: "task",
 		WorkID:     "task-process-review-contract",
 		TraceID:    "trace-process-review-contract",

@@ -16,6 +16,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // seedFileCounter provides unique filenames across concurrent test invocations.
@@ -233,7 +234,7 @@ func WriteSeedMarkdownFile(t *testing.T, dir, workType, name string, content []b
 // Use this instead of WriteSeedFile when the test needs to preserve TraceID,
 // Tags, state placement, or internal execution fields through the file watcher
 // pipeline.
-func WriteSeedRequest(t *testing.T, dir string, req interfaces.SubmitRequest) {
+func WriteSeedRequest(t *testing.T, dir string, req work.SubmitRequest) {
 	t.Helper()
 	data, err := json.Marshal(seedWorkRequestFromSubmitRequest(req))
 	if err != nil {
@@ -245,7 +246,7 @@ func WriteSeedRequest(t *testing.T, dir string, req interfaces.SubmitRequest) {
 // WriteSeedBatchFile writes a canonical FACTORY_REQUEST_BATCH watched-file input
 // into inputs/BATCH/default so functional tests exercise the public mixed-work-
 // type file-watcher boundary instead of direct API or runtime helpers.
-func WriteSeedBatchFile(t *testing.T, dir string, request interfaces.WorkRequest) {
+func WriteSeedBatchFile(t *testing.T, dir string, request work.WorkRequest) {
 	t.Helper()
 
 	data, err := json.Marshal(request)
@@ -274,21 +275,21 @@ type seedWorkRequest struct {
 }
 
 type seedWork struct {
-	Name             string                `json:"name"`
-	WorkID           string                `json:"workId,omitempty"`
-	WorkTypeID       string                `json:"workTypeName"`
-	State            string                `json:"state,omitempty"`
-	TraceID          string                `json:"traceId,omitempty"`
-	Payload          any                   `json:"payload,omitempty"`
-	Tags             map[string]string     `json:"tags,omitempty"`
-	ExecutionID      string                `json:"execution_id,omitempty"`
-	RuntimeRelations []interfaces.Relation `json:"runtime_relations,omitempty"`
+	Name             string            `json:"name"`
+	WorkID           string            `json:"workId,omitempty"`
+	WorkTypeID       string            `json:"workTypeName"`
+	State            string            `json:"state,omitempty"`
+	TraceID          string            `json:"traceId,omitempty"`
+	Payload          any               `json:"payload,omitempty"`
+	Tags             map[string]string `json:"tags,omitempty"`
+	ExecutionID      string            `json:"execution_id,omitempty"`
+	RuntimeRelations []work.Relation   `json:"runtime_relations,omitempty"`
 }
 
-func seedWorkRequestFromSubmitRequest(req interfaces.SubmitRequest) seedWorkRequest {
+func seedWorkRequestFromSubmitRequest(req work.SubmitRequest) seedWorkRequest {
 	return seedWorkRequest{
 		RequestID: req.RequestID,
-		Type:      string(interfaces.WorkRequestTypeFactoryRequestBatch),
+		Type:      string(work.WorkRequestTypeFactoryRequestBatch),
 		Works: []seedWork{{
 			Name:             seedWorkName(req),
 			WorkID:           req.WorkID,
@@ -303,7 +304,7 @@ func seedWorkRequestFromSubmitRequest(req interfaces.SubmitRequest) seedWorkRequ
 	}
 }
 
-func seedWorkName(req interfaces.SubmitRequest) string {
+func seedWorkName(req work.SubmitRequest) string {
 	if req.Name != "" {
 		return req.Name
 	}

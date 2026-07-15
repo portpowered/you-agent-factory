@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // ShouldFormatInvocationSummary reports whether workstation output should be
@@ -28,13 +29,13 @@ func ShouldFormatInvocationSummary(workstation *interfaces.FactoryWorkstationCon
 
 // SummaryContentFromWorkerOutput converts goal worker output into canonical text
 // work content for invocation primary-result selection.
-func SummaryContentFromWorkerOutput(output, stopToken string) ([]interfaces.WorkContentPart, error) {
+func SummaryContentFromWorkerOutput(output, stopToken string) ([]work.WorkContentPart, error) {
 	summary := normalizeGoalSummaryText(output, stopToken)
 	if summary == "" {
 		return nil, fmt.Errorf("goal worker output is empty after normalization")
 	}
-	return []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	return []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: summary,
 	}}, nil
 }

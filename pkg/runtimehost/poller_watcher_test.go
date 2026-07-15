@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 )
 
@@ -55,7 +56,7 @@ func TestHostStartSchedulerSidecarsForRuntimeDelegatesCompleteSessionInput(t *te
 		{Name: "cron", Kind: interfaces.WorkstationKindCron},
 	}}
 	runtimeCfg := &sidecarRuntimeConfig{factoryCfg: factoryCfg}
-	submitter := workRequestSubmitter(func(context.Context, interfaces.WorkRequest) error { return nil })
+	submitter := workRequestSubmitter(func(context.Context, work.WorkRequest) error { return nil })
 
 	err := host.startSchedulerSidecarsForRuntime(ctx, group, "/factory", factoryCfg, runtimeCfg, submitter)
 	if err != nil {
@@ -84,7 +85,7 @@ func TestHostStartSchedulerSidecarsForRuntimeSkipsNonServiceRuntime(t *testing.T
 		"/factory",
 		factoryCfg,
 		runtimeCfg,
-		func(context.Context, interfaces.WorkRequest) error { return nil },
+		func(context.Context, work.WorkRequest) error { return nil },
 	)
 	if err != nil {
 		t.Fatalf("startSchedulerSidecarsForRuntime: %v", err)

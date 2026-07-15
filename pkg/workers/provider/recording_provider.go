@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 const (
@@ -209,7 +210,7 @@ func inferenceEventContext(req interfaces.ProviderInferenceRequest, eventTime ti
 	}
 }
 
-func inferenceEventTick(metadata interfaces.ExecutionMetadata) int {
+func inferenceEventTick(metadata work.ExecutionMetadata) int {
 	if metadata.CurrentTick != 0 {
 		return metadata.CurrentTick
 	}

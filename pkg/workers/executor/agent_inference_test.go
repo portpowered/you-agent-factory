@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestAgentExecutor_ModelOperationOutputUsesCanonicalWorkContent(t *testing.T) {
@@ -29,7 +30,7 @@ func TestAgentExecutor_ModelOperationOutputUsesCanonicalWorkContent(t *testing.T
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "dispatch-tts",
 			TransitionID: "transition-tts",
 			WorkerType:   "tts-worker",
@@ -43,18 +44,18 @@ func TestAgentExecutor_ModelOperationOutputUsesCanonicalWorkContent(t *testing.T
 		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
 	}
 
-	var content []interfaces.WorkContentPart
+	var content []work.WorkContentPart
 	if err := json.Unmarshal([]byte(result.Output), &content); err != nil {
 		t.Fatalf("decode canonical output: %v", err)
 	}
-	if len(content) != 1 || content[0].Type != interfaces.WorkContentPartTypeAudio || content[0].File != audioPath {
+	if len(content) != 1 || content[0].Type != work.WorkContentPartTypeAudio || content[0].File != audioPath {
 		t.Fatalf("output = %#v, want canonical audio WorkContent", content)
 	}
 }
 
 func TestInferenceRequestForExecutionRequest_ForwardsModelOperationContract(t *testing.T) {
 	req := testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:      "d-tts",
 			TransitionID:    "t-tts",
 			WorkerType:      "worker-a",
@@ -65,16 +66,16 @@ func TestInferenceRequestForExecutionRequest_ForwardsModelOperationContract(t *t
 			{
 				Slot:   "text",
 				Source: interfaces.ModelOperationBindingSourceInput,
-				Content: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
+				Content: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText,
 					Text: "hello",
 				}},
 			},
 			{
 				Slot:   "voice",
 				Source: interfaces.ModelOperationBindingSourceConfig,
-				Content: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeJSON,
+				Content: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeJSON,
 					JSON: []byte(`{"name":"alloy"}`),
 				}},
 			},
@@ -130,12 +131,12 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 			TraceID:    "trace-1",
 		},
 	}
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		DispatchID:      "dispatch-1",
 		TransitionID:    "transition-1",
 		WorkerType:      "worker-a",
 		WorkstationName: "review",
-		Execution:       interfaces.ExecutionMetadata{ReplayKey: "transition-1/trace-1/work-1", TraceID: "trace-1", WorkIDs: []string{"work-1"}},
+		Execution:       work.ExecutionMetadata{ReplayKey: "transition-1/trace-1/work-1", TraceID: "trace-1", WorkIDs: []string{"work-1"}},
 		InputTokens:     InputTokens(inputToken),
 		InputBindings:   map[string][]string{"task": {"token-1"}},
 	}
@@ -183,7 +184,7 @@ func TestAgentExecutor_InferenceRequestUsesCanonicalWorkDispatchPayload(t *testi
 }
 
 func TestInferenceRequestForExecutionRequest_DefaultWorkingDirectoryDoesNotRequireRunnerCapability(t *testing.T) {
-	got := inferenceRequestForExecutionRequest(testAgentRequest(interfaces.WorkDispatch{
+	got := inferenceRequestForExecutionRequest(testAgentRequest(work.WorkDispatch{
 		DispatchID: "d-default-workdir", TransitionID: "t-default-workdir", WorkerType: "worker-a", WorkstationName: "review",
 	}, withAgentPrompts("System prompt", "Review"), withAgentWorkingDirectory("/tmp/runtime-session")), &interfaces.WorkerConfig{
 		Model: "gemini-1.5-pro", ModelProvider: interfaces.RunnerIDGemini,

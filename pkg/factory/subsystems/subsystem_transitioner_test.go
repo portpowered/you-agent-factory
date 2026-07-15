@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestCalculateArcs(t *testing.T) {
@@ -184,7 +185,7 @@ func TestCalculateMutations_RecordedOutputWorkOverridesGeneratedIdentity(t *test
 		result: resolvedWorkResult{
 			transitionID: "t1",
 			outcome:      interfaces.OutcomeAccepted,
-			recordedOutputWork: []interfaces.FactoryWorkItem{{
+			recordedOutputWork: []work.FactoryWorkItem{{
 				ID:                       "work-review-99",
 				WorkTypeID:               "wt-review",
 				DisplayName:              "review-override",
@@ -396,8 +397,8 @@ func TestTransitioner_PreserveInput_SpawnedWorkKeepsConsumedWorkData(t *testing.
 
 	snapshot := workerBatchSnapshot("worker-output")
 	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.Payload = []byte("input-payload")
-	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.Content = []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.Content = []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: "input-content",
 	}}
 	snapshot.Dispatches["dispatch-1"].ConsumedTokens[0].Color.Tags = map[string]string{"objective": "goal-1"}
@@ -445,8 +446,8 @@ func TestTransitioner_SpawnedWorkRelationsRemainDetachedFromResultMutation(t *te
 		WorkID:     "child-work-1",
 		WorkTypeID: "child",
 		DataType:   interfaces.DataTypeWork,
-		Relations: []interfaces.Relation{{
-			Type:          interfaces.RelationDependsOn,
+		Relations: []work.Relation{{
+			Type:          work.RelationDependsOn,
 			TargetWorkID:  "work-source",
 			RequiredState: "complete",
 		}},

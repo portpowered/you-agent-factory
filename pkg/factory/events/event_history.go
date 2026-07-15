@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -276,7 +277,7 @@ func (h *FactoryEventHistory) RecordRunRequest() {
 
 // RecordWorkInput records a submitted work token after submit-time identity
 // generation has completed.
-func (h *FactoryEventHistory) RecordWorkInput(tick int, req interfaces.SubmitRequest, token interfaces.Token, eventTime time.Time) {
+func (h *FactoryEventHistory) RecordWorkInput(tick int, req work.SubmitRequest, token interfaces.Token, eventTime time.Time) {
 	if h == nil || token.ID == "" {
 		return
 	}
@@ -284,7 +285,7 @@ func (h *FactoryEventHistory) RecordWorkInput(tick int, req interfaces.SubmitReq
 
 // RecordWorkRequest records the batch-level request before its work items are
 // exposed as individual work input events.
-func (h *FactoryEventHistory) RecordWorkRequest(tick int, record interfaces.WorkRequestRecord, eventTime time.Time) {
+func (h *FactoryEventHistory) RecordWorkRequest(tick int, record work.WorkRequestRecord, eventTime time.Time) {
 	if h == nil || record.RequestID == "" {
 		return
 	}
@@ -293,7 +294,7 @@ func (h *FactoryEventHistory) RecordWorkRequest(tick int, record interfaces.Work
 		Tick:      tick,
 		EventTime: eventTime,
 		RequestId: stringPtr(record.RequestID),
-		TraceIds:  stringSlicePtr(interfaces.CanonicalChainingTraceIDs([]string{record.TraceID})),
+		TraceIds:  stringSlicePtr(work.CanonicalChainingTraceIDs([]string{record.TraceID})),
 		WorkIds:   stringSlicePtr(workItemIDs(record.WorkItems)),
 		Source:    stringPtrIfNotEmpty(record.Source),
 	}
@@ -315,7 +316,7 @@ func (h *FactoryEventHistory) RecordWorkRequest(tick int, record interfaces.Work
 }
 
 // RecordRelationshipChange records one relation created by a request batch.
-func (h *FactoryEventHistory) RecordRelationshipChange(tick int, requestID string, traceID string, index int, relation interfaces.FactoryRelation, eventTime time.Time) {
+func (h *FactoryEventHistory) RecordRelationshipChange(tick int, requestID string, traceID string, index int, relation work.FactoryRelation, eventTime time.Time) {
 	if h == nil || relation.Type == "" || relation.TargetWorkID == "" {
 		return
 	}
@@ -333,7 +334,7 @@ func (h *FactoryEventHistory) RecordRelationshipChange(tick int, requestID strin
 			Tick:      tick,
 			EventTime: eventTime,
 			RequestId: stringPtrIfNotEmpty(requestID),
-			TraceIds:  stringSlicePtr(interfaces.CanonicalChainingTraceIDs([]string{traceID, relation.TraceID})),
+			TraceIds:  stringSlicePtr(work.CanonicalChainingTraceIDs([]string{traceID, relation.TraceID})),
 			WorkIds:   stringSlicePtr(uniqueStrings([]string{relation.SourceWorkID, relation.TargetWorkID})),
 		},
 		factoryapi.RelationshipChangeRequestEventPayload{Relation: generatedFactoryRelation(relation)},
@@ -503,7 +504,7 @@ func (h *FactoryEventHistory) RecordRunResponse(tick int, state interfaces.Facto
 
 // RecordWorkStateChange records a canonical marking relocation for operator or
 // cascade recovery paths.
-func (h *FactoryEventHistory) RecordWorkStateChange(tick int, record interfaces.WorkStateChangeRecord, eventTime time.Time) {
+func (h *FactoryEventHistory) RecordWorkStateChange(tick int, record work.WorkStateChangeRecord, eventTime time.Time) {
 	if h == nil || record.WorkID == "" || record.Source == "" {
 		return
 	}
@@ -641,7 +642,7 @@ func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 	return out
 }
 
-func (h *FactoryEventHistory) resolvedRunnerSelectionForDispatch(dispatch interfaces.WorkDispatch) interfaces.ResolvedRunnerSelection {
+func (h *FactoryEventHistory) resolvedRunnerSelectionForDispatch(dispatch work.WorkDispatch) interfaces.ResolvedRunnerSelection {
 	if h == nil {
 		return interfaces.ResolvedRunnerSelection{}
 	}
@@ -650,7 +651,7 @@ func (h *FactoryEventHistory) resolvedRunnerSelectionForDispatch(dispatch interf
 	return interfaces.ResolveRunnerSelection(workstationRunner, factoryRunner, workerModelProvider)
 }
 
-func (h *FactoryEventHistory) runnerSelectionInputsForDispatch(dispatch interfaces.WorkDispatch) (string, string) {
+func (h *FactoryEventHistory) runnerSelectionInputsForDispatch(dispatch work.WorkDispatch) (string, string) {
 	if h == nil || h.runtimeConfig == nil {
 		return "", ""
 	}
@@ -714,7 +715,7 @@ func workIDsFromTokens(tokens []interfaces.Token) []string {
 	return uniqueStrings(values)
 }
 
-func workItemIDs(items []interfaces.FactoryWorkItem) []string {
+func workItemIDs(items []work.FactoryWorkItem) []string {
 	values := make([]string, 0, len(items))
 	for _, item := range items {
 		values = append(values, item.ID)
@@ -804,13 +805,13 @@ func isAgentRunEventType(eventType factoryapi.FactoryEventType) bool {
 	return eventType == factoryapi.FactoryEventTypeAgentRunResponse
 }
 
-func workItemFromToken(token interfaces.Token) interfaces.FactoryWorkItem {
+func workItemFromToken(token interfaces.Token) work.FactoryWorkItem {
 	currentChainingTraceID := token.Color.CurrentChainingTraceID
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = token.Color.TraceID
 	}
 	_, stateValue := splitPlaceID(token.PlaceID)
-	return interfaces.FactoryWorkItem{
+	return work.FactoryWorkItem{
 		ID:                       token.Color.WorkID,
 		WorkTypeID:               token.Color.WorkTypeID,
 		DisplayName:              token.Color.Name,
@@ -818,7 +819,7 @@ func workItemFromToken(token interfaces.Token) interfaces.FactoryWorkItem {
 		CurrentChainingTraceID:   currentChainingTraceID,
 		PreviousChainingTraceIDs: append([]string(nil), token.Color.PreviousChainingTraceIDs...),
 		TraceID:                  token.Color.TraceID,
-		Content:                  append([]interfaces.WorkContentPart(nil), token.Color.Content...),
+		Content:                  append([]work.WorkContentPart(nil), token.Color.Content...),
 		ParentID:                 token.Color.ParentID,
 		State:                    stateValue,
 		PlaceID:                  token.PlaceID,
@@ -855,8 +856,8 @@ func failureReasonForResult(result interfaces.WorkResult) string {
 	return failureReasonUnknown
 }
 
-func outputWorkItems(mutations []interfaces.TokenMutationRecord, consumedTokens []interfaces.Token) []interfaces.FactoryWorkItem {
-	items := make([]interfaces.FactoryWorkItem, 0, len(mutations))
+func outputWorkItems(mutations []interfaces.TokenMutationRecord, consumedTokens []interfaces.Token) []work.FactoryWorkItem {
+	items := make([]work.FactoryWorkItem, 0, len(mutations))
 	previousChainingTraceIDs := interfaces.PreviousChainingTraceIDsFromTokens(consumedTokens)
 	for _, mutation := range mutations {
 		if mutation.Token == nil || mutation.Token.Color.DataType == interfaces.DataTypeResource {

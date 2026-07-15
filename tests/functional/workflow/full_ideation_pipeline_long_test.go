@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -19,7 +20,7 @@ func TestFullIdeationPipeline_HappyPath(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "full_ideation_pipeline"))
 
 	originTraceID := "trace-idea-lineage-001"
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "idea",
 		TraceID:    originTraceID,
 		Payload:    []byte(`{"title":"search bar on docs"}`),
@@ -62,7 +63,7 @@ func TestFullIdeationPipeline_RejectionLoop(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "full_ideation_pipeline"))
 
 	originTraceID := "trace-rejection-loop-001"
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "idea",
 		TraceID:    originTraceID,
 		Payload:    []byte(`{"title":"rejection loop test"}`),
@@ -110,7 +111,7 @@ func TestFullIdeationPipeline_CrossWorkTypeLineage(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "full_ideation_pipeline"))
 
 	originTraceID := "trace-cross-wt-lineage-001"
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "idea",
 		TraceID:    originTraceID,
 		Payload:    []byte(`{"title":"cross-work-type lineage test"}`),

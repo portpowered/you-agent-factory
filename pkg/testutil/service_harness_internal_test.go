@@ -15,12 +15,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap/zapcore"
 )
 
 type waitUntilCancelExecutor struct{}
 
-func (waitUntilCancelExecutor) Execute(ctx context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (waitUntilCancelExecutor) Execute(ctx context.Context, _ work.WorkDispatch) (interfaces.WorkResult, error) {
 	<-ctx.Done()
 	return interfaces.WorkResult{Outcome: interfaces.OutcomeFailed}, ctx.Err()
 }

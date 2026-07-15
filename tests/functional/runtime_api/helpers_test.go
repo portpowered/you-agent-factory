@@ -14,7 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -108,7 +109,7 @@ func startFunctionalServer(t *testing.T, factoryDir string, useMockWorkers bool,
 	return startFunctionalServerWithConfig(t, factoryDir, useMockWorkers, nil, extraOpts...)
 }
 
-func (fs *functionalAPIServer) SubmitRuntimeWork(t *testing.T, submitted ...interfaces.SubmitRequest) []interfaces.SubmitRequest {
+func (fs *functionalAPIServer) SubmitRuntimeWork(t *testing.T, submitted ...work.SubmitRequest) []work.SubmitRequest {
 	t.Helper()
 
 	normalized := normalizeSubmitRequestsForFunctionalTest(submitted)

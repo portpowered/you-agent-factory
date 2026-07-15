@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/testkit"
@@ -47,7 +48,7 @@ func TestAdapterBuildCommandPreservesOptionalExecutionContext(t *testing.T) {
 	built, err := claude.NewAdapter().BuildCommand(context.Background(), adapter.CommandContext{
 		SkipPermissions: true,
 		Request: interfaces.ProviderInferenceRequest{
-			Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-options"},
+			Dispatch:         work.WorkDispatch{DispatchID: "dispatch-options"},
 			WorkerType:       "agent-worker",
 			WorkstationType:  "review-work",
 			ProjectID:        "project-options",
@@ -114,7 +115,7 @@ func TestAdapterFullStreamConformance(t *testing.T) {
 	testkit.RunFullStream(t, testkit.FullStreamFixture{
 		NewAdapter: func() adapter.Adapter { return claude.NewAdapter() },
 		Request: interfaces.ProviderInferenceRequest{
-			Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-conformance"},
+			Dispatch: work.WorkDispatch{DispatchID: "dispatch-conformance"},
 			Model:    "claude-sonnet-4", UserMessage: privateConformancePrompt,
 		},
 		ContentAndTools: claudeObservations(

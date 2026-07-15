@@ -6,9 +6,10 @@ import (
 	"time"
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -143,7 +144,7 @@ func (executor *AgentRunExecutor) Execute(ctx context.Context, request interface
 }
 
 func (executor *AgentRunExecutor) recordAgentRunResponse(
-	dispatch interfaces.WorkDispatch,
+	dispatch work.WorkDispatch,
 	result interfaces.WorkResult,
 	duration time.Duration,
 	transcript []messages.Message,
@@ -166,7 +167,7 @@ func agentRunInferenceRequest(
 	workerDef *interfaces.WorkerConfig,
 ) interfaces.ProviderInferenceRequest {
 	req := interfaces.ProviderInferenceRequest{
-		Dispatch:          interfaces.CloneWorkDispatch(request.Dispatch),
+		Dispatch:          work.CloneWorkDispatch(request.Dispatch),
 		WorkerType:        request.WorkerType,
 		WorkstationType:   request.WorkstationType,
 		RunnerID:          request.RunnerID,
@@ -205,7 +206,7 @@ func evaluateAgentRunOutcome(output string, workerDef *interfaces.WorkerConfig) 
 }
 
 func agentRunFailureWorkResult(
-	dispatch interfaces.WorkDispatch,
+	dispatch work.WorkDispatch,
 	err error,
 	duration time.Duration,
 	toolPolicy string,
@@ -226,7 +227,7 @@ func agentRunFailureWorkResult(
 	}
 }
 
-func missingWorkerWorkResult(dispatch interfaces.WorkDispatch, workerType string, duration time.Duration) interfaces.WorkResult {
+func missingWorkerWorkResult(dispatch work.WorkDispatch, workerType string, duration time.Duration) interfaces.WorkResult {
 	return interfaces.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,

@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -42,7 +43,7 @@ func TestEndToEndDispatch_CompletesThroughServiceHarness(t *testing.T) {
 func TestEndToEndDispatch_MultipleWorkItemsCompleteIndependently(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simpleEndToEndPipelineConfig())
 	for i := 0; i < 3; i++ {
-		testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 			WorkTypeID: "task",
 			TraceID:    fmt.Sprintf("trace-e2e-batch-%d", i),
 			Payload:    []byte(`{"title":"batch item"}`),

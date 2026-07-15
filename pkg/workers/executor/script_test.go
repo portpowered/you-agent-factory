@@ -15,6 +15,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
@@ -89,9 +90,9 @@ func (r fixedCommandRunner) Run(_ context.Context, _ CommandRequest) (CommandRes
 	return CommandResult{Stdout: r.stdout, Stderr: r.stderr, ExitCode: r.exitCode}, r.err
 }
 
-func testScriptRequest(dispatch interfaces.WorkDispatch, opts ...func(*interfaces.WorkstationExecutionRequest)) interfaces.WorkstationExecutionRequest {
+func testScriptRequest(dispatch work.WorkDispatch, opts ...func(*interfaces.WorkstationExecutionRequest)) interfaces.WorkstationExecutionRequest {
 	req := interfaces.WorkstationExecutionRequest{
-		Dispatch:    interfaces.CloneWorkDispatch(dispatch),
+		Dispatch:    work.CloneWorkDispatch(dispatch),
 		WorkerType:  dispatch.WorkerType,
 		ProjectID:   dispatch.ProjectID,
 		InputTokens: append([]any(nil), dispatch.InputTokens...),
@@ -152,7 +153,7 @@ func TestScriptExecutor_CancellationReturnsFailedResult(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
-	result, err := executor.Execute(ctx, testScriptRequest(interfaces.WorkDispatch{DispatchID: "d-1", TransitionID: "t-3"}))
+	result, err := executor.Execute(ctx, testScriptRequest(work.WorkDispatch{DispatchID: "d-1", TransitionID: "t-3"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -173,7 +174,7 @@ func TestScriptExecutor_TemplateSubstitutionAndEnvMerging(t *testing.T) {
 	executor := &ScriptExecutor{Command: cmd, Args: args}
 
 	result, err := executor.Execute(context.Background(), testScriptRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-4",
 			InputTokens: InputTokens(interfaces.Token{
@@ -206,15 +207,15 @@ func TestScriptExecutor_RejectsImageContentBeforeRunner(t *testing.T) {
 	}
 
 	result, err := executor.Execute(context.Background(), testScriptRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-image-script",
 			TransitionID: "t-image-script",
 			InputTokens: InputTokens(interfaces.Token{
 				ID: "token-image",
 				Color: interfaces.TokenColor{
 					WorkID: "work-image",
-					Content: []interfaces.WorkContentPart{
-						{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
+					Content: []work.WorkContentPart{
+						{Type: work.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
 					},
 				},
 			}),
@@ -245,7 +246,7 @@ func TestScriptExecutor_ExecutionWorkDirPrefersWorkingDirectory(t *testing.T) {
 	}
 
 	_, err := executor.Execute(context.Background(), testScriptRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-5",
 		},
@@ -271,7 +272,7 @@ func TestScriptExecutor_PropagatesExecutionMetadataToCommandRunner(t *testing.T)
 		CommandRunner: runner,
 	}
 
-	want := interfaces.ExecutionMetadata{
+	want := work.ExecutionMetadata{
 		DispatchCreatedTick: 4,
 		CurrentTick:         5,
 		RequestID:           "request-1",
@@ -279,7 +280,7 @@ func TestScriptExecutor_PropagatesExecutionMetadataToCommandRunner(t *testing.T)
 		WorkIDs:             []string{"work-1", "work-2"},
 		ReplayKey:           "transition-1/trace-1/work-1/work-2",
 	}
-	_, err := executor.Execute(context.Background(), testScriptRequest(interfaces.WorkDispatch{
+	_, err := executor.Execute(context.Background(), testScriptRequest(work.WorkDispatch{
 		DispatchID:   "d-1",
 		TransitionID: "transition-1",
 		Execution:    want,
@@ -309,7 +310,7 @@ func TestScriptExecutor_SharedCommandRunnerReceivesResolvedDispatchRequest(t *te
 		CommandRunner: runner,
 	}
 
-	wantExecution := interfaces.ExecutionMetadata{
+	wantExecution := work.ExecutionMetadata{
 		DispatchCreatedTick: 7,
 		CurrentTick:         9,
 		RequestID:           "request-script",
@@ -484,8 +485,8 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 	}
 }
 
-func sharedRunnerDispatch(execution interfaces.ExecutionMetadata) interfaces.WorkstationExecutionRequest {
-	dispatch := interfaces.WorkDispatch{
+func sharedRunnerDispatch(execution work.ExecutionMetadata) interfaces.WorkstationExecutionRequest {
+	dispatch := work.WorkDispatch{
 		DispatchID:   "dispatch-script",
 		TransitionID: "transition-script",
 		ProjectID:    "analytics-platform",
@@ -526,7 +527,7 @@ func newRecordedScriptExecutor(runner CommandRunner, recorder func(factoryapi.Fa
 func executeRecordedScript(t *testing.T, executor *ScriptExecutor) interfaces.WorkResult {
 	t.Helper()
 
-	result, err := executor.Execute(context.Background(), sharedRunnerDispatch(interfaces.ExecutionMetadata{
+	result, err := executor.Execute(context.Background(), sharedRunnerDispatch(work.ExecutionMetadata{
 		DispatchCreatedTick: 7,
 		CurrentTick:         9,
 		RequestID:           "request-script",
@@ -540,7 +541,7 @@ func executeRecordedScript(t *testing.T, executor *ScriptExecutor) interfaces.Wo
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the shared command-runner request contract visible in one reviewer-readable assertion flow.
-func assertSharedRunnerRequest(t *testing.T, runner *capturingCommandRunner, wantExecution interfaces.ExecutionMetadata) {
+func assertSharedRunnerRequest(t *testing.T, runner *capturingCommandRunner, wantExecution work.ExecutionMetadata) {
 	t.Helper()
 
 	runner.mu.Lock()
@@ -598,7 +599,7 @@ func TestScriptExecutor_DirectCommandEnvironmentDoesNotAddProviderAutomationDefa
 		CommandRunner: envPrintingCommandRunner{},
 	}
 
-	result, err := executor.Execute(context.Background(), testScriptRequest(interfaces.WorkDispatch{
+	result, err := executor.Execute(context.Background(), testScriptRequest(work.WorkDispatch{
 		DispatchID:   "d-script-env",
 		TransitionID: "t-script-env",
 	}))
@@ -631,7 +632,7 @@ func TestScriptExecutor_CommandEnvironmentUsesDispatchEnvOverrides(t *testing.T)
 	}
 
 	result, err := executor.Execute(context.Background(), testScriptRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-script-override-env",
 			TransitionID: "t-script-override-env",
 		},
@@ -668,7 +669,7 @@ func TestScriptExecutor_AttachesCommandDiagnosticsToWorkResult(t *testing.T) {
 	}
 
 	result, err := executor.Execute(context.Background(), testScriptRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			InputTokens: InputTokens(interfaces.Token{
@@ -718,7 +719,7 @@ func TestScriptExecutor_CommandDiagnosticsRedactSensitiveEnvWithoutChangingExecu
 
 	const rawSecret = "super-secret-script-token"
 	result, err := executor.Execute(context.Background(), testScriptRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-sensitive-env",
 			TransitionID: "t-sensitive-env",
 		},
@@ -784,12 +785,12 @@ func mapValues(values map[string]string) []string {
 }
 
 func TestExecutionWorkDir_FallsBackFromWorktreeToContext(t *testing.T) {
-	request := testScriptRequest(interfaces.WorkDispatch{}, withScriptWorktree("/tmp/worktree"))
+	request := testScriptRequest(work.WorkDispatch{}, withScriptWorktree("/tmp/worktree"))
 	if got := executionWorkDir(request); got != "/tmp/worktree" {
 		t.Fatalf("executionWorkDir() = %q, want %q", got, "/tmp/worktree")
 	}
 
-	request = testScriptRequest(interfaces.WorkDispatch{}, withScriptWorkingDirectory("/tmp/context"))
+	request = testScriptRequest(work.WorkDispatch{}, withScriptWorkingDirectory("/tmp/context"))
 	if got := executionWorkDir(request); got != "/tmp/context" {
 		t.Fatalf("executionWorkDir() = %q, want %q", got, "/tmp/context")
 	}
@@ -806,7 +807,7 @@ func TestScriptExecutor_TimeoutStopsProcessBeforeItCanFinish(t *testing.T) {
 	defer cancel()
 
 	result, err := executor.Execute(ctx, testScriptRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-helper",
 			TransitionID: "t-helper",
 		},

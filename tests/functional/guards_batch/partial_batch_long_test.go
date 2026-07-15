@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -69,7 +70,7 @@ func TestPartialBatch_TemplateResolvesFromTags(t *testing.T) {
 	support.SkipLongFunctional(t, "slow partial-batch template sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_parameterized_success"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		Payload:    []byte(`{"title": "template test"}`),
 		Tags:       map[string]string{"branch": "feature-abc"},
@@ -119,7 +120,7 @@ func TestPartialBatch_ProviderExitFailureRoutesTokenToFailedWithContext(t *testi
 	support.SkipLongFunctional(t, "slow partial-batch provider-exit sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "provider-exit-failure",
 		WorkID:     "work-provider-exit-failure",
 		WorkTypeID: "task",
@@ -178,7 +179,7 @@ func TestPartialBatch_RetryableProviderFailuresRetryThroughScriptWrapPath(t *tes
 	support.SkipLongFunctional(t, "slow partial-batch retryable-provider sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "provider-retry-success",
 		WorkID:     "work-provider-retry-success",
 		WorkTypeID: "task",
@@ -244,7 +245,7 @@ func throttledProviderFailureHarness(t *testing.T) (*testutil.ServiceTestHarness
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "worktree_passthrough"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "provider-throttle-requeue",
 		WorkID:     "work-provider-throttle-requeue",
 		WorkTypeID: "task",

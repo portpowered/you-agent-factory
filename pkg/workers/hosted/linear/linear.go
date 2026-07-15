@@ -17,6 +17,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 )
 
@@ -64,7 +65,7 @@ type linearIssueAssignee struct {
 }
 
 type CycleResult struct {
-	Submissions []interfaces.SubmitRequest
+	Submissions []work.SubmitRequest
 	Checkpoint  Checkpoint
 	FoundNewer  bool
 }
@@ -86,7 +87,7 @@ type linearIssueFilter struct {
 	StateIDs []string
 }
 
-type Submitter func(context.Context, interfaces.WorkRequest) error
+type Submitter func(context.Context, work.WorkRequest) error
 
 func RunPollCycle(
 	ctx context.Context,
@@ -233,18 +234,18 @@ func hostedLinearSubmissions(
 	workstation interfaces.FactoryWorkstationConfig,
 	workerDef *interfaces.WorkerConfig,
 	issues []linearIssue,
-) ([]interfaces.SubmitRequest, error) {
+) ([]work.SubmitRequest, error) {
 	if len(issues) == 0 {
 		return nil, nil
 	}
 	requestID := hostedLinearBatchRequestID(workstation.Name, issues)
-	submissions := make([]interfaces.SubmitRequest, 0, len(issues))
+	submissions := make([]work.SubmitRequest, 0, len(issues))
 	for _, issue := range issues {
 		payload, err := hostedLinearIssuePayload(issue, workerDef.Linear)
 		if err != nil {
 			return nil, fmt.Errorf("marshal linear issue payload %q: %w", issue.ID, err)
 		}
-		submissions = append(submissions, interfaces.SubmitRequest{
+		submissions = append(submissions, work.SubmitRequest{
 			RequestID:   requestID,
 			WorkID:      "linear:" + issue.ID,
 			Name:        hostedLinearIssueName(issue),

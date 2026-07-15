@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
-func assertGeneratedWorkContentParts(t *testing.T, content *factoryapi.WorkContent, want []interfaces.WorkContentPart) {
+func assertGeneratedWorkContentParts(t *testing.T, content *factoryapi.WorkContent, want []work.WorkContentPart) {
 	t.Helper()
 	if content == nil {
 		t.Fatalf("content = nil, want %#v", want)
@@ -21,25 +21,25 @@ func assertGeneratedWorkContentParts(t *testing.T, content *factoryapi.WorkConte
 	}
 }
 
-func assertGeneratedWorkContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedWorkContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	switch want.Type {
-	case interfaces.WorkContentPartTypeText:
+	case work.WorkContentPartTypeText:
 		assertGeneratedTextContentPart(t, got, index, want)
-	case interfaces.WorkContentPartTypeImage:
+	case work.WorkContentPartTypeImage:
 		assertGeneratedImageContentPart(t, got, index, want)
-	case interfaces.WorkContentPartTypeAudio:
+	case work.WorkContentPartTypeAudio:
 		assertGeneratedAudioContentPart(t, got, index, want)
-	case interfaces.WorkContentPartTypeJSON:
+	case work.WorkContentPartTypeJSON:
 		assertGeneratedJSONContentPart(t, got, index, want)
-	case interfaces.WorkContentPartTypeBinary:
+	case work.WorkContentPartTypeBinary:
 		assertGeneratedBinaryContentPart(t, got, index, want)
 	default:
 		t.Fatalf("unsupported expected content type %q", want.Type)
 	}
 }
 
-func assertGeneratedTextContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedTextContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	part, err := got.AsWorkTextContentPart()
 	if err != nil {
@@ -51,7 +51,7 @@ func assertGeneratedTextContentPart(t *testing.T, got factoryapi.WorkContentPart
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
-func assertGeneratedImageContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedImageContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	part, err := got.AsWorkImageContentPart()
 	if err != nil {
@@ -63,7 +63,7 @@ func assertGeneratedImageContentPart(t *testing.T, got factoryapi.WorkContentPar
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
-func assertGeneratedAudioContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedAudioContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	part, err := got.AsWorkAudioContentPart()
 	if err != nil {
@@ -75,7 +75,7 @@ func assertGeneratedAudioContentPart(t *testing.T, got factoryapi.WorkContentPar
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
-func assertGeneratedJSONContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedJSONContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	part, err := got.AsWorkJsonContentPart()
 	if err != nil {
@@ -91,7 +91,7 @@ func assertGeneratedJSONContentPart(t *testing.T, got factoryapi.WorkContentPart
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
-func assertGeneratedBinaryContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want interfaces.WorkContentPart) {
+func assertGeneratedBinaryContentPart(t *testing.T, got factoryapi.WorkContentPart, index int, want work.WorkContentPart) {
 	t.Helper()
 	part, err := got.AsWorkBinaryContentPart()
 	if err != nil {
@@ -103,7 +103,7 @@ func assertGeneratedBinaryContentPart(t *testing.T, got factoryapi.WorkContentPa
 	assertGeneratedPartSharedFields(t, index, part.Slot, part.Label, part.Role, part.ContentType, part.ArtifactId, part.Metadata, want)
 }
 
-func assertGeneratedPartSharedFields(t *testing.T, index int, slot *string, label *string, role *string, contentType *string, artifactID *string, metadata *factoryapi.WorkContentMetadata, want interfaces.WorkContentPart) {
+func assertGeneratedPartSharedFields(t *testing.T, index int, slot *string, label *string, role *string, contentType *string, artifactID *string, metadata *factoryapi.WorkContentMetadata, want work.WorkContentPart) {
 	t.Helper()
 
 	if derefString(slot) != want.Slot ||

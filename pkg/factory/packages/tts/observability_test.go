@@ -4,7 +4,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestClassifyInvocationWait_LoadingWhenActiveWorkRemains(t *testing.T) {
@@ -69,7 +70,7 @@ func TestIsPackagedFactory_MatchesBuiltInCatalogIdentity(t *testing.T) {
 }
 
 func packagedTTSFailureWorldState(requestID, workID, failureMessage string) interfaces.FactoryWorldState {
-	submitted := interfaces.FactoryWorkItem{
+	submitted := work.FactoryWorkItem{
 		ID:         workID,
 		WorkTypeID: "task",
 		State:      "init",
@@ -81,13 +82,13 @@ func packagedTTSFailureWorldState(requestID, workID, failureMessage string) inte
 
 	state := interfaces.FactoryWorldState{
 		WorkRequestsByID:       make(map[string]interfaces.WorkRequestPayload),
-		FailedWorkItemsByID:    make(map[string]interfaces.FactoryWorkItem),
+		FailedWorkItemsByID:    make(map[string]work.FactoryWorkItem),
 		FailureDetailsByWorkID: make(map[string]interfaces.FactoryWorldFailureDetail),
 	}
 	state.WorkRequestsByID[requestID] = interfaces.WorkRequestPayload{
 		RequestID: requestID,
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		WorkItems: []interfaces.FactoryWorkItem{submitted},
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		WorkItems: []work.FactoryWorkItem{submitted},
 	}
 	state.FailedWorkItemsByID[workID] = failed
 	state.FailureDetailsByWorkID[workID] = interfaces.FactoryWorldFailureDetail{

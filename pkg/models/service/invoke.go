@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
@@ -155,7 +156,7 @@ func directModelInvocationWorkstationRequest(
 	selection := interfaces.ResolveRunnerSelection("", factoryRunnerID, workerDef.ModelProvider)
 	inputContent := contentcontract.PartsFromGenerated(request.Content)
 	return interfaces.WorkstationExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      directModelInvocationTransitionID,
 			TransitionID:    directModelInvocationTransitionID,
 			WorkerType:      workerDef.Name,
@@ -174,12 +175,12 @@ func directModelInvocationWorkstationRequest(
 	}
 }
 
-func directModelInvocationStream(content []interfaces.WorkContentPart, options *factoryapi.ModelInvocationOptions) (string, string, error) {
+func directModelInvocationStream(content []work.WorkContentPart, options *factoryapi.ModelInvocationOptions) (string, string, error) {
 	if options == nil || options.ResponseMode == nil || *options.ResponseMode != factoryapi.AUDIOSTREAM {
 		return "", "", nil
 	}
 	for _, part := range content {
-		if part.Type.Normalized() != interfaces.WorkContentPartTypeAudio || strings.TrimSpace(part.File) == "" {
+		if part.Type.Normalized() != work.WorkContentPartTypeAudio || strings.TrimSpace(part.File) == "" {
 			continue
 		}
 		contentType := strings.TrimSpace(part.ContentType)

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // ShouldFormatInvocationResponse reports whether workstation output should be
@@ -27,13 +28,13 @@ func ShouldFormatInvocationResponse(workstation *interfaces.FactoryWorkstationCo
 
 // ResponseContentFromWorkerOutput converts subagent worker output into canonical
 // text work content for invocation primary-result selection.
-func ResponseContentFromWorkerOutput(output, stopToken string) ([]interfaces.WorkContentPart, error) {
+func ResponseContentFromWorkerOutput(output, stopToken string) ([]work.WorkContentPart, error) {
 	response := normalizeSubagentResponseText(output, stopToken)
 	if response == "" {
 		return nil, fmt.Errorf("subagent worker output is empty after normalization")
 	}
-	return []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	return []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: response,
 	}}, nil
 }

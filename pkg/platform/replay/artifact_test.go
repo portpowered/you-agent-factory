@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -152,8 +153,8 @@ func replayArtifactFieldEvents(t *testing.T, recordedAt time.Time, generatedFact
 	return events
 }
 
-func replayArtifactFieldDispatch() interfaces.WorkDispatch {
-	return interfaces.WorkDispatch{
+func replayArtifactFieldDispatch() work.WorkDispatch {
+	return work.WorkDispatch{
 		DispatchID:   "dispatch-1",
 		TransitionID: "transition-1",
 		WorkerType:   "executor",
@@ -163,7 +164,7 @@ func replayArtifactFieldDispatch() interfaces.WorkDispatch {
 				WorkID: "work-1", WorkTypeID: "story", DataType: interfaces.DataTypeWork, TraceID: "trace-1",
 			},
 		}),
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			ReplayKey: "transition-1/work-1",
 			TraceID:   "trace-1",
 			WorkIDs:   []string{"work-1"},
@@ -171,10 +172,10 @@ func replayArtifactFieldDispatch() interfaces.WorkDispatch {
 	}
 }
 
-func replayArtifactFieldInferenceDispatch() interfaces.WorkDispatch {
-	return interfaces.WorkDispatch{
+func replayArtifactFieldInferenceDispatch() work.WorkDispatch {
+	return work.WorkDispatch{
 		DispatchID: "dispatch-1",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			RequestID: "request-1",
 			TraceID:   "trace-1",
 			WorkIDs:   []string{"work-1"},
@@ -232,7 +233,7 @@ func safeDiagnosticsReplayArtifact(t *testing.T) *interfaces.ReplayArtifact {
 		t,
 		replayInferenceResponseEvent(
 			t,
-			interfaces.WorkDispatch{DispatchID: "dispatch-safe"},
+			work.WorkDispatch{DispatchID: "dispatch-safe"},
 			"dispatch-safe/inference-request/1",
 			1,
 			2,
@@ -651,7 +652,7 @@ func artifactTestFactory() factoryapi.Factory {
 }
 
 func replayInferenceDispatch() interfaces.ProviderInferenceRequest {
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		DispatchID:   "dispatch-1",
 		TransitionID: "process",
 		WorkerType:   "worker-a",
@@ -664,7 +665,7 @@ func replayInferenceDispatch() interfaces.ProviderInferenceRequest {
 				TraceID:    "trace-1",
 			},
 		}),
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			RequestID: "request-1",
 			ReplayKey: "process/work-1",
 			TraceID:   "trace-1",

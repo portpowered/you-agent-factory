@@ -18,6 +18,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/configinit"
@@ -59,8 +60,8 @@ func TestBuildApplication_ConstructsInvocationBootstrapOnceBeforeInitializer(t *
 			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 				return apisurface.FactoryInvocationResult{
 					Status: factoryapi.InvocationTerminalStatusCompleted,
-					PrimaryResult: []interfaces.WorkContentPart{{
-						Type: interfaces.WorkContentPartTypeText,
+					PrimaryResult: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText,
 						Text: "done",
 					}},
 				}, nil
@@ -155,8 +156,8 @@ func TestRun_FactoryInvocationUsesNoServerBootstrapConfig(t *testing.T) {
 			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 				return apisurface.FactoryInvocationResult{
 					Status: factoryapi.InvocationTerminalStatusCompleted,
-					PrimaryResult: []interfaces.WorkContentPart{{
-						Type: interfaces.WorkContentPartTypeText,
+					PrimaryResult: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText,
 						Text: "done",
 					}},
 				}, nil
@@ -199,8 +200,8 @@ func TestRun_FactoryInvocationReleasesSessionThroughFactoryServiceOwnership(t *t
 			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 				return apisurface.FactoryInvocationResult{
 					Status: factoryapi.InvocationTerminalStatusCompleted,
-					PrimaryResult: []interfaces.WorkContentPart{{
-						Type: interfaces.WorkContentPartTypeText,
+					PrimaryResult: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText,
 						Text: "done",
 					}},
 				}, nil
@@ -548,8 +549,8 @@ func TestRun_NamedFactoryStdinInvocationWritesMetadataPrimaryResult(t *testing.T
 					RequestID: "request-tts-stdin",
 					TraceID:   "trace-tts-stdin",
 					Status:    factoryapi.InvocationTerminalStatusCompleted,
-					PrimaryResult: []interfaces.WorkContentPart{{
-						Type: interfaces.WorkContentPartTypeText,
+					PrimaryResult: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText,
 						Text: metadataJSON,
 					}},
 				}, nil
@@ -606,8 +607,8 @@ func TestRun_FactoryInvocationWritesPrimaryTextOnly(t *testing.T) {
 					RequestID: "request-123",
 					TraceID:   "trace-123",
 					Status:    factoryapi.InvocationTerminalStatusCompleted,
-					PrimaryResult: []interfaces.WorkContentPart{{
-						Type: interfaces.WorkContentPartTypeText,
+					PrimaryResult: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText,
 						Text: "final output",
 					}},
 				}, nil
@@ -811,8 +812,8 @@ func TestRun_NamedGoalInvocationWritesPrimaryResult(t *testing.T) {
 							RequestID: "request-goal-" + tc.name,
 							TraceID:   "trace-goal-" + tc.name,
 							Status:    factoryapi.InvocationTerminalStatusCompleted,
-							PrimaryResult: []interfaces.WorkContentPart{{
-								Type: interfaces.WorkContentPartTypeText,
+							PrimaryResult: []work.WorkContentPart{{
+								Type: work.WorkContentPartTypeText,
 								Text: tc.wantOutput,
 							}},
 						}, nil
@@ -976,8 +977,8 @@ func TestRun_NamedGoalInvocationSuccessParityAcrossCLIAndAPIEnvelope(t *testing.
 		RequestID: "request-goal-parity-success",
 		TraceID:   "trace-goal-parity-success",
 		Status:    factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		PrimaryResult: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
 			Text: "goal parity completed",
 		}},
 	}
@@ -1155,7 +1156,7 @@ func TestFactoryInvocationCLIAndAPIEquivalenceMatrix(t *testing.T) {
 func invocationParityCompletedResult(requestID, text string) apisurface.FactoryInvocationResult {
 	return apisurface.FactoryInvocationResult{
 		RequestID: requestID, TraceID: requestID + "-trace", Status: factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: text}},
+		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: text}},
 	}
 }
 

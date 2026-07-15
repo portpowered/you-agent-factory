@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	interfaceresponseevents "github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/work/content"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
@@ -102,7 +103,7 @@ func mapValues(values map[string]string) []string {
 	return out
 }
 
-func assertExecutionMetadataEqual(t *testing.T, want, got interfaces.ExecutionMetadata) {
+func assertExecutionMetadataEqual(t *testing.T, want, got work.ExecutionMetadata) {
 	t.Helper()
 	if got.DispatchCreatedTick != want.DispatchCreatedTick {
 		t.Fatalf("DispatchCreatedTick = %d, want %d", got.DispatchCreatedTick, want.DispatchCreatedTick)
@@ -469,18 +470,18 @@ func TestScriptWrapProvider_Infer_CodexImageContentEmitsOrderedImageArgs(t *test
 			interfaces.Token{
 				ID: "token-1",
 				Color: interfaces.TokenColor{
-					Content: []interfaces.WorkContentPart{
-						{Type: interfaces.WorkContentPartTypeText, Text: "before"},
-						{Type: interfaces.WorkContentPartTypeImage, URL: imageOneURL},
+					Content: []work.WorkContentPart{
+						{Type: work.WorkContentPartTypeText, Text: "before"},
+						{Type: work.WorkContentPartTypeImage, URL: imageOneURL},
 					},
 				},
 			},
 			interfaces.Token{
 				ID: "token-2",
 				Color: interfaces.TokenColor{
-					Content: []interfaces.WorkContentPart{
-						{Type: interfaces.WorkContentPartTypeImage, URL: imageTwoURL},
-						{Type: interfaces.WorkContentPartTypeText, Text: "after"},
+					Content: []work.WorkContentPart{
+						{Type: work.WorkContentPartTypeImage, URL: imageTwoURL},
+						{Type: work.WorkContentPartTypeText, Text: "after"},
 					},
 				},
 			},
@@ -508,8 +509,8 @@ func TestScriptWrapProvider_Infer_CodexTextOnlyContentDoesNotEmitImageArgs(t *te
 		InputTokens: InputTokens(interfaces.Token{
 			ID: "token-1",
 			Color: interfaces.TokenColor{
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeText, Text: "only text"},
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeText, Text: "only text"},
 				},
 			},
 		}),
@@ -539,8 +540,8 @@ func TestScriptWrapProvider_Infer_CodexMissingImageFailsBeforeRunner(t *testing.
 		InputTokens: InputTokens(interfaces.Token{
 			ID: "token-1",
 			Color: interfaces.TokenColor{
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeImage, URL: missingURL},
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeImage, URL: missingURL},
 				},
 			},
 		}),
@@ -592,8 +593,8 @@ func TestScriptWrapProvider_Infer_CodexRemoteImageMaterializesToTempPath(t *test
 		InputTokens: InputTokens(interfaces.Token{
 			ID: "token-1",
 			Color: interfaces.TokenColor{
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeImage, URL: server.URL},
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeImage, URL: server.URL},
 				},
 			},
 		}),
@@ -651,8 +652,8 @@ func TestScriptWrapProvider_Infer_CodexInaccessibleRemoteImageFailsBeforeRunner(
 		InputTokens: InputTokens(interfaces.Token{
 			ID: "token-1",
 			Color: interfaces.TokenColor{
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeImage, URL: server.URL},
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeImage, URL: server.URL},
 				},
 			},
 		}),
@@ -716,9 +717,9 @@ func TestScriptWrapProvider_Infer_CodexBatchLocalAndRemoteImageURLs(t *testing.T
 		InputTokens: InputTokens(interfaces.Token{
 			ID: "token-1",
 			Color: interfaces.TokenColor{
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeImage, URL: localURL},
-					{Type: interfaces.WorkContentPartTypeImage, URL: server.URL},
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeImage, URL: localURL},
+					{Type: work.WorkContentPartTypeImage, URL: server.URL},
 				},
 			},
 		}),

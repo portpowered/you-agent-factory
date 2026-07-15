@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // ConfigMapper converts a FactoryConfig into a petri state.
@@ -1046,8 +1047,8 @@ func cloneModelOperationBindings(bindings []interfaces.ModelOperationBinding) []
 	for i := range bindings {
 		out[i] = interfaces.ModelOperationBinding{
 			Slot:           bindings[i].Slot,
-			Config:         interfaces.CloneWorkContentParts(bindings[i].Config),
-			DefaultContent: interfaces.CloneWorkContentParts(bindings[i].DefaultContent),
+			Config:         work.CloneWorkContentParts(bindings[i].Config),
+			DefaultContent: work.CloneWorkContentParts(bindings[i].DefaultContent),
 		}
 		if bindings[i].Selector != nil {
 			selector := *bindings[i].Selector

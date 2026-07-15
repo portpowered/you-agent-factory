@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
@@ -35,19 +36,19 @@ args:
 ---
 `)
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "mock-smoke-accept-work",
 		WorkTypeID: "accept-task",
 		TraceID:    "mock-smoke-accept-trace",
 		Payload:    []byte(`{"title":"default accept"}`),
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "mock-smoke-reject-work",
 		WorkTypeID: "reject-task",
 		TraceID:    "mock-smoke-reject-trace",
 		Payload:    []byte(`{"title":"configured reject"}`),
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "mock-smoke-script-work",
 		WorkTypeID: "script-task",
 		TraceID:    "mock-smoke-script-trace",

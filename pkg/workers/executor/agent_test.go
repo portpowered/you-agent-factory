@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -39,9 +40,9 @@ func (m *agentMockProvider) Infer(_ context.Context, req interfaces.ProviderInfe
 	return m.response, m.err
 }
 
-func testAgentRequest(dispatch interfaces.WorkDispatch, opts ...func(*interfaces.WorkstationExecutionRequest)) interfaces.WorkstationExecutionRequest {
+func testAgentRequest(dispatch work.WorkDispatch, opts ...func(*interfaces.WorkstationExecutionRequest)) interfaces.WorkstationExecutionRequest {
 	req := interfaces.WorkstationExecutionRequest{
-		Dispatch:        interfaces.CloneWorkDispatch(dispatch),
+		Dispatch:        work.CloneWorkDispatch(dispatch),
 		WorkerType:      dispatch.WorkerType,
 		WorkstationType: dispatch.WorkstationName,
 		ProjectID:       dispatch.ProjectID,
@@ -91,7 +92,7 @@ func withAgentModelOperation(operation string, bindings []interfaces.ResolvedMod
 	}
 }
 
-func assertExecutionMetadataEqual(t *testing.T, want, got interfaces.ExecutionMetadata) {
+func assertExecutionMetadataEqual(t *testing.T, want, got work.ExecutionMetadata) {
 	t.Helper()
 	if want.RequestID != got.RequestID {
 		t.Fatalf("RequestID = %q, want %q", got.RequestID, want.RequestID)
@@ -118,7 +119,7 @@ func TestAgentExecutor_SuccessfulResponse_PopulatesOutput(t *testing.T) {
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -158,7 +159,7 @@ func TestAgentExecutor_AttachesProviderDiagnosticsToWorkResult(t *testing.T) {
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:      "d-1",
 			TransitionID:    "t-1",
 			WorkerType:      "worker-a",
@@ -221,7 +222,7 @@ func TestAgentExecutor_SuccessResponseDiagnosticsStayDetachedFromProviderMutatio
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:      "d-1",
 			TransitionID:    "t-1",
 			WorkerType:      "worker-a",
@@ -288,7 +289,7 @@ func TestAgentExecutor_ErrorDiagnosticsStayDetachedFromProviderMutation(t *testi
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:      "d-1",
 			TransitionID:    "t-1",
 			WorkerType:      "worker-a",
@@ -331,14 +332,14 @@ func TestAgentExecutor_PropagatesExecutionMetadataToProviderRequest(t *testing.T
 		},
 	}, provider)
 
-	want := interfaces.ExecutionMetadata{
+	want := work.ExecutionMetadata{
 		DispatchCreatedTick: 7,
 		CurrentTick:         8,
 		TraceID:             "trace-1",
 		WorkIDs:             []string{"work-1", "work-2"},
 		ReplayKey:           "transition-1/trace-1/work-1/work-2",
 	}
-	_, err := executor.Execute(context.Background(), testAgentRequest(interfaces.WorkDispatch{
+	_, err := executor.Execute(context.Background(), testAgentRequest(work.WorkDispatch{
 		DispatchID:      "d-1",
 		TransitionID:    "transition-1",
 		WorkerType:      "worker-a",
@@ -365,7 +366,7 @@ func TestAgentExecutor_ClaudeSessionIDFromRuntimeConfigFlowsIntoProviderRequest(
 	}, provider)
 
 	_, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -402,7 +403,7 @@ func TestAgentExecutor_SuccessfulClaudeResponse_PreservesConfiguredSessionID(t *
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -432,7 +433,7 @@ func TestAgentExecutor_ProviderError_ReturnsFailedResult(t *testing.T) {
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -472,7 +473,7 @@ func TestAgentExecutor_SuccessfulResponse_PreservesProviderSession(t *testing.T)
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -518,7 +519,7 @@ func TestAgentExecutor_RetryableProviderError_RetriesTwiceBeforeSuccess(t *testi
 	}
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -581,7 +582,7 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryable
 	executor.retryConfig.jitter = func(time.Duration) time.Duration { return 0 }
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -653,7 +654,7 @@ func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 	executor.retryConfig.jitter = func(time.Duration) time.Duration { return 0 }
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -713,7 +714,7 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -762,7 +763,7 @@ func TestAgentExecutor_RawDeadlineExceeded_RetriesBeforeSuccess(t *testing.T) {
 	}
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-raw-timeout-success",
 			TransitionID: "t-raw-timeout-success",
 			WorkerType:   "worker-a",
@@ -805,7 +806,7 @@ func TestAgentExecutor_RawDeadlineExceeded_ExhaustsRetriesIntoStructuredTimeoutF
 	executor.retryConfig.jitter = func(time.Duration) time.Duration { return 0 }
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-raw-timeout-fail",
 			TransitionID: "t-raw-timeout-fail",
 			WorkerType:   "worker-a",

@@ -14,15 +14,16 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 type dispatchRecorder struct {
 	mu         sync.Mutex
-	dispatches []interfaces.WorkDispatch
+	dispatches []work.WorkDispatch
 }
 
-func (r *dispatchRecorder) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (r *dispatchRecorder) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	r.mu.Lock()
 	r.dispatches = append(r.dispatches, dispatch)
 	r.mu.Unlock()
@@ -34,11 +35,11 @@ func (r *dispatchRecorder) Execute(_ context.Context, dispatch interfaces.WorkDi
 	}, nil
 }
 
-func (r *dispatchRecorder) Dispatches() []interfaces.WorkDispatch {
+func (r *dispatchRecorder) Dispatches() []work.WorkDispatch {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	out := make([]interfaces.WorkDispatch, len(r.dispatches))
+	out := make([]work.WorkDispatch, len(r.dispatches))
 	copy(out, r.dispatches)
 	return out
 }

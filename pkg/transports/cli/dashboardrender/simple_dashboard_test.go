@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestSimpleDashboardRenderDataFromWorldState_CountsFailedWorkItemsForCustomerSummary(t *testing.T) {
@@ -22,13 +23,13 @@ func TestSimpleDashboardRenderDataFromWorldState_CountsFailedWorkItemsForCustome
 		Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed)},
 	}
 	worldState := interfaces.FactoryWorldState{
-		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+		WorkItemsByID: map[string]work.FactoryWorkItem{
 			"work-1": {ID: "work-1", WorkTypeID: "story", DisplayName: "Blocked Story"},
 			"work-2": {ID: "work-2", WorkTypeID: "story", DisplayName: "Rejected Story"},
 			"work-3": {ID: "work-3", WorkTypeID: "story", DisplayName: "Reworked Story"},
 		},
 		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{failedDispatch},
-		FailedWorkItemsByID: map[string]interfaces.FactoryWorkItem{
+		FailedWorkItemsByID: map[string]work.FactoryWorkItem{
 			"work-1": {ID: "work-1", WorkTypeID: "story", DisplayName: "Blocked Story"},
 			"work-2": {ID: "work-2", WorkTypeID: "story", DisplayName: "Rejected Story"},
 			"work-3": {ID: "work-3", WorkTypeID: "story", DisplayName: "Reworked Story"},

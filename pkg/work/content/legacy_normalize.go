@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // FilesystemPathToContentURL maps a host filesystem path to a canonical file:// content URL.
@@ -30,11 +30,11 @@ func FilesystemPathToContentURL(path string) (string, error) {
 
 // NormalizeFileBackedContentPart maps legacy file-only parts to url and clears bare file
 // so canonical content persists url only.
-func NormalizeFileBackedContentPart(part interfaces.WorkContentPart) (interfaces.WorkContentPart, error) {
+func NormalizeFileBackedContentPart(part work.WorkContentPart) (work.WorkContentPart, error) {
 	switch part.Type.Normalized() {
-	case interfaces.WorkContentPartTypeImage,
-		interfaces.WorkContentPartTypeAudio,
-		interfaces.WorkContentPartTypeBinary:
+	case work.WorkContentPartTypeImage,
+		work.WorkContentPartTypeAudio,
+		work.WorkContentPartTypeBinary:
 	default:
 		return part, nil
 	}
@@ -42,10 +42,10 @@ func NormalizeFileBackedContentPart(part interfaces.WorkContentPart) (interfaces
 	hasURL := strings.TrimSpace(part.URL) != ""
 	hasFile := strings.TrimSpace(part.File) != ""
 	if hasURL && hasFile {
-		return interfaces.WorkContentPart{}, ContentURLAndFileConflictError()
+		return work.WorkContentPart{}, ContentURLAndFileConflictError()
 	}
 	if !hasURL && !hasFile {
-		return interfaces.WorkContentPart{}, fmt.Errorf("url must be a non-empty string")
+		return work.WorkContentPart{}, fmt.Errorf("url must be a non-empty string")
 	}
 	if hasURL {
 		part.File = ""
@@ -54,10 +54,10 @@ func NormalizeFileBackedContentPart(part interfaces.WorkContentPart) (interfaces
 
 	contentURL, err := FilesystemPathToContentURL(part.File)
 	if err != nil {
-		return interfaces.WorkContentPart{}, err
+		return work.WorkContentPart{}, err
 	}
 	if err := ValidateContentURL(contentURL); err != nil {
-		return interfaces.WorkContentPart{}, err
+		return work.WorkContentPart{}, err
 	}
 	part.URL = contentURL
 	part.File = ""
@@ -65,11 +65,11 @@ func NormalizeFileBackedContentPart(part interfaces.WorkContentPart) (interfaces
 }
 
 // NormalizeFileBackedContent applies NormalizeFileBackedContentPart to each part in order.
-func NormalizeFileBackedContent(content []interfaces.WorkContentPart) ([]interfaces.WorkContentPart, error) {
+func NormalizeFileBackedContent(content []work.WorkContentPart) ([]work.WorkContentPart, error) {
 	if len(content) == 0 {
 		return content, nil
 	}
-	normalized := make([]interfaces.WorkContentPart, len(content))
+	normalized := make([]work.WorkContentPart, len(content))
 	for i, part := range content {
 		var err error
 		normalized[i], err = NormalizeFileBackedContentPart(part)

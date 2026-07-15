@@ -13,6 +13,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -53,7 +54,7 @@ Spawn a descendant and wait for the factory timeout to cancel it.
 		t.Fatalf("write worker AGENTS.md: %v", err)
 	}
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-timeout-cleanup-smoke",
 		WorkTypeID: "task",
 		TraceID:    "trace-timeout-cleanup-smoke",
@@ -119,7 +120,7 @@ Timeout once, then succeed after the Agent Factory requeues the work.
 		t.Fatalf("write worker AGENTS.md: %v", err)
 	}
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-timeout-requeue-smoke",
 		WorkTypeID: "task",
 		TraceID:    "trace-timeout-requeue-smoke",

@@ -2,6 +2,11 @@
 
 Use this map when changing the public REST contract.
 
+- Canonical backend `Work`, `WorkRequest`, ordered content, relations, dispatch
+  identity, state-change, and payload-lineage contracts live in `pkg/work`.
+  Generated OpenAPI conversion remains at transport boundaries such as
+  `pkg/work/content/contract`, `pkg/transports/mapping`, and
+  `pkg/transports/http`; do not make the Work owner import generated clients.
 - Work-list filtering, ordering, and validation policy belongs in `pkg/work/query`; `pkg/api/handlers_work_read.go` maps generated `ListWorkBySessionIdParams` and `Work` values into that domain projection, while `pkg/cli/work/list.go` maps normalized query options into URL parameters. Keep generated OpenAPI types and URL encoding at those transport boundaries, and prove policy with pure query tests plus route-level API and CLI request tests.
 
 ## Package staging artifacts

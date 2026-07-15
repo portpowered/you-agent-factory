@@ -10,6 +10,7 @@ import (
 
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 const factoryDocsTargetPrefix = "factory/docs/"
@@ -140,13 +141,13 @@ func buildPromptValidationData(inputCount int, docPaths []string) PromptData {
 				"branch": "main",
 			},
 			Payload: "payload",
-			Relations: []interfaces.Relation{{
-				Type:          interfaces.RelationDependsOn,
+			Relations: []work.Relation{{
+				Type:          work.RelationDependsOn,
 				TargetWorkID:  "target-work",
 				RequiredState: "SUCCEEDED",
 			}},
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
 				Text: "content",
 			}},
 			PreviousOutput:    "previous-output",

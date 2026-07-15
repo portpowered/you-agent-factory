@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 	executorpkg "github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
@@ -29,7 +30,7 @@ func TestAgentExecutor_ForwardsOpenCodeAgentOnOpenCodeDispatch(t *testing.T) {
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:      "d-1",
 			TransitionID:    "t-1",
 			WorkerType:      "worker-a",
@@ -74,7 +75,7 @@ func TestAgentExecutor_LeavesOpenCodeAgentEmptyForNonOpenCodeDispatch(t *testing
 	}, provider)
 
 	_, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:      "d-codex",
 			TransitionID:    "t-codex",
 			WorkerType:      "worker-a",

@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func twoStagePipelineConfig() map[string]any {
@@ -47,7 +48,7 @@ type blockingExecutor struct {
 	calls     *int
 }
 
-func (e *blockingExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *blockingExecutor) Execute(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
 	e.mu.Lock()
 	*e.calls++
 	e.mu.Unlock()

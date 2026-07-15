@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func emitCleanInvocationOutcome(ctx context.Context, cfg RunConfig, runner factoryServiceRunner, runErr error, startedAt time.Time) error {
@@ -244,7 +245,7 @@ func cleanInvocationWorkTargetFromFile(workFile string) (cleanInvocationWorkTarg
 	if err != nil {
 		return cleanInvocationWorkTarget{}, err
 	}
-	normalized, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
+	normalized, err := requests.NormalizeWorkRequest(request, work.WorkRequestNormalizeOptions{})
 	if err != nil {
 		return cleanInvocationWorkTarget{}, err
 	}

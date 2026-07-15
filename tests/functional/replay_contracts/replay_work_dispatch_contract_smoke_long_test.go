@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -22,9 +23,9 @@ func TestReplayWorkDispatchContractSmoke_CanonicalWorkRequestPreservesPayload(t 
 	req, dir := runWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "canonical dispatch output",
 		submit: func(harness *testutil.ServiceTestHarness) {
-			harness.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+			harness.SubmitWorkRequest(context.Background(), work.WorkRequest{
 				RequestID: "request-dispatch-smoke-001",
-				Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+				Type:      work.WorkRequestTypeFactoryRequestBatch,
 				Works: []interfaces.Work{{
 					Name:       "canonical-dispatch-smoke",
 					WorkID:     "work-dispatch-smoke-001",
@@ -57,7 +58,7 @@ func TestReplayWorkDispatchContractSmoke_LegacySubmitRequestAdapterPreservesPayl
 	req, dir := runWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "legacy dispatch output",
 		submit: func(harness *testutil.ServiceTestHarness) {
-			harness.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+			harness.SubmitFull(context.Background(), []work.SubmitRequest{{
 				RequestID:  "request-legacy-smoke-001",
 				Name:       "legacy-dispatch-smoke",
 				WorkID:     "work-legacy-smoke-001",
@@ -92,9 +93,9 @@ func TestReplayWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelati
 	run := runRecordedWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "recorded dispatch output",
 		submit: func(harness *testutil.ServiceTestHarness) {
-			harness.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+			harness.SubmitWorkRequest(context.Background(), work.WorkRequest{
 				RequestID: "request-recorded-smoke-001",
-				Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+				Type:      work.WorkRequestTypeFactoryRequestBatch,
 				Works: []interfaces.Work{{
 					Name:       "recorded-dispatch-smoke",
 					WorkID:     "work-recorded-smoke-001",

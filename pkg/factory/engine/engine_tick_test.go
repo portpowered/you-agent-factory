@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestTickCallsSubsystem(t *testing.T) {
@@ -19,7 +20,7 @@ func TestTickCallsSubsystem(t *testing.T) {
 	sub := &mockSubsystem{group: subsystems.Scheduler}
 	engine := NewFactoryEngine(n, marking, []subsystems.Subsystem{sub})
 
-	if _, err := submitWorkRequests(context.Background(), engine, []interfaces.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-1"}}); err != nil {
+	if _, err := submitWorkRequests(context.Background(), engine, []work.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-1"}}); err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
 	}
 	if err := engine.Tick(context.Background()); err != nil {
@@ -169,8 +170,8 @@ func TestTickWhileAutomaticTicksPaused_SkipsCascadeMutations(t *testing.T) {
 		Color: interfaces.TokenColor{
 			WorkID:     "child-work",
 			WorkTypeID: "task",
-			Relations: []interfaces.Relation{{
-				Type:          interfaces.RelationDependsOn,
+			Relations: []work.Relation{{
+				Type:          work.RelationDependsOn,
 				TargetWorkID:  "parent-work",
 				RequiredState: "complete",
 			}},
@@ -265,7 +266,7 @@ func TestResumeDrainsMultipleBufferedSubmissionsToQuiescence(t *testing.T) {
 
 	traceIDs := []string{"trace-resume-a", "trace-resume-b", "trace-resume-c"}
 	for _, traceID := range traceIDs {
-		if _, err := submitWorkRequests(context.Background(), engine, []interfaces.SubmitRequest{{
+		if _, err := submitWorkRequests(context.Background(), engine, []work.SubmitRequest{{
 			WorkTypeID: "task",
 			TraceID:    traceID,
 		}}); err != nil {
@@ -310,14 +311,14 @@ func TestWakeForPendingProcessing_SignalsDispatchHookBacklogAfterPausedWake(t *t
 			alreadyDispatched = true
 			return &interfaces.TickResult{
 				Dispatches: []interfaces.DispatchRecord{{
-					Dispatch: interfaces.WorkDispatch{DispatchID: "d-hook-paused-wake", TransitionID: "t1", WorkerType: "test-worker"},
+					Dispatch: work.WorkDispatch{DispatchID: "d-hook-paused-wake", TransitionID: "t1", WorkerType: "test-worker"},
 				}},
 			}, nil
 		},
 	}
 
 	hook := newTestDispatchResultHook()
-	hook.submit = func(_ context.Context, dispatch interfaces.WorkDispatch) error {
+	hook.submit = func(_ context.Context, dispatch work.WorkDispatch) error {
 		hook.submits = append(hook.submits, dispatch)
 		return nil
 	}
@@ -326,10 +327,10 @@ func TestWakeForPendingProcessing_SignalsDispatchHookBacklogAfterPausedWake(t *t
 	engine := NewFactoryEngine(n, marking, []subsystems.Subsystem{dispatchSub},
 		WithAutomaticTicksPaused(func() bool { return paused }),
 		WithDispatchResultHook(hook),
-		WithDispatchHandler(func(interfaces.WorkDispatch) {}),
+		WithDispatchHandler(func(work.WorkDispatch) {}),
 	)
 
-	if _, err := submitWorkRequests(context.Background(), engine, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), engine, []work.SubmitRequest{{
 		WorkTypeID: "task",
 		TraceID:    "trace-hook-paused-wake",
 	}}); err != nil {
@@ -386,7 +387,7 @@ func TestRepeatedPausedWakePreservesBufferedSubmission(t *testing.T) {
 		return paused
 	}))
 
-	if _, err := submitWorkRequests(context.Background(), engine, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), engine, []work.SubmitRequest{{
 		WorkTypeID: "task",
 		TraceID:    "trace-repeated-pause-submit",
 	}}); err != nil {
@@ -419,7 +420,7 @@ func TestRepeatedPausedWakePreservesBufferedResult(t *testing.T) {
 		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
 			return &interfaces.TickResult{
 				Dispatches: []interfaces.DispatchRecord{{
-					Dispatch: interfaces.WorkDispatch{
+					Dispatch: work.WorkDispatch{
 						DispatchID:   "dispatch-repeated-pause",
 						TransitionID: "t1",
 						WorkerType:   "test-worker",
@@ -436,13 +437,13 @@ func TestRepeatedPausedWakePreservesBufferedResult(t *testing.T) {
 
 	paused := true
 	engine := NewFactoryEngine(n, marking, []subsystems.Subsystem{dispatchSub},
-		WithDispatchHandler(func(interfaces.WorkDispatch) {}),
+		WithDispatchHandler(func(work.WorkDispatch) {}),
 		WithAutomaticTicksPaused(func() bool {
 			return paused
 		}),
 	)
 
-	if _, err := submitWorkRequests(context.Background(), engine, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), engine, []work.SubmitRequest{{
 		WorkTypeID: "task",
 		TraceID:    "trace-repeated-pause-result",
 	}}); err != nil {

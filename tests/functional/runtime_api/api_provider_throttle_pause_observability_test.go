@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	workdomain "github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -181,7 +182,7 @@ func newThrottlePauseObservabilityFixture(t *testing.T) throttlePauseObservabili
 func submitThrottlePauseWork(t *testing.T, server *functionalAPIServer, work testutil.ProviderErrorSmokeWork) {
 	t.Helper()
 
-	server.SubmitRuntimeWork(t, interfaces.SubmitRequest{
+	server.SubmitRuntimeWork(t, workdomain.SubmitRequest{
 		Name:       work.Name,
 		WorkID:     work.WorkID,
 		WorkTypeID: work.WorkTypeID,

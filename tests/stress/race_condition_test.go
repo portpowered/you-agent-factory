@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // TestRaceConditionConcurrentMutation verifies the engine has no race conditions
@@ -45,7 +46,7 @@ func TestRaceConditionConcurrentMutation(t *testing.T) {
 		go func(gid int) {
 			defer submitWg.Done()
 			for i := range itemsPerSubmitter {
-				h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+				h.SubmitFull(context.Background(), []work.SubmitRequest{{
 					WorkTypeID: "task",
 					TraceID:    fmt.Sprintf("trace-%d-%d", gid, i),
 					Payload:    fmt.Appendf(nil, `{"goroutine":%d,"item":%d}`, gid, i),
@@ -132,7 +133,7 @@ func TestRaceConditionWithMockExecutors(t *testing.T) {
 		go func(gid int) {
 			defer submitWg.Done()
 			for i := range itemsPerSubmitter {
-				h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+				h.SubmitFull(context.Background(), []work.SubmitRequest{{
 					WorkTypeID: "task",
 					TraceID:    fmt.Sprintf("trace-%d-%d", gid, i),
 					Payload:    fmt.Appendf(nil, `{"goroutine":%d,"item":%d}`, gid, i),
@@ -215,7 +216,7 @@ func TestRaceConditionMarkingConsistency(t *testing.T) {
 		go func(gid int) {
 			defer submitWg.Done()
 			for i := range itemsPerSubmitter {
-				h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+				h.SubmitFull(context.Background(), []work.SubmitRequest{{
 					WorkTypeID: "task",
 					TraceID:    fmt.Sprintf("trace-%d-%d", gid, i),
 					Payload:    fmt.Appendf(nil, `{"goroutine":%d,"item":%d}`, gid, i),
@@ -354,7 +355,7 @@ type delayExecutor struct {
 	maxDelay time.Duration
 }
 
-func (e *delayExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *delayExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	if e.maxDelay > 0 {
 		time.Sleep(time.Duration(rand.Int63n(int64(e.maxDelay))))
 	}

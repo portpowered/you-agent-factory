@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -24,11 +25,11 @@ func TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetries
 	fakeClock := clockwork.NewFakeClockAt(start)
 	dir := support.ScaffoldFactory(t, cronSmokeFactoryConfig("* * * * *"))
 
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 32)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 32)
 	fs := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		cfg.Clock = fakeClock
-	}, factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
+	}, factory.WithSubmissionRecorder(func(record work.FactorySubmissionRecord) {
 		observedSubmissions <- record
 	}))
 
@@ -94,7 +95,7 @@ func TestCronWorkstations_ServiceModeSmoke_SubmitsInternalTimeWorkExpiresRetries
 	assertNoCronDispatchForWorkstation(t, fs.GetEngineStateSnapshot(t), "poll-with-input")
 	assertExpiredCronTimeWorkHandled(t, fs, requiredInputRecord.Request.WorkID, "poll-with-input")
 
-	submittedSignals := fs.SubmitRuntimeWork(t, interfaces.SubmitRequest{
+	submittedSignals := fs.SubmitRuntimeWork(t, work.SubmitRequest{
 		WorkTypeID: "signal",
 		WorkID:     "signal-for-cron-smoke",
 		Name:       "Cron smoke signal",
@@ -121,11 +122,11 @@ func TestCronWorkstations_ServiceModeExpiryConsumesStaleTriggerWithTerminalOutpu
 	fakeClock := clockwork.NewFakeClockAt(start)
 	dir := support.ScaffoldFactory(t, cronDefaultExpiryTerminalOutputConfig("* * * * *"))
 
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 32)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 32)
 	fs := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		cfg.Clock = fakeClock
-	}, factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
+	}, factory.WithSubmissionRecorder(func(record work.FactorySubmissionRecord) {
 		observedSubmissions <- record
 	}))
 
@@ -171,7 +172,7 @@ stopToken: COMPLETE
 Fail the cron task.
 `)
 
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 32)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 32)
 	fs := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		cfg.Clock = fakeClock
@@ -179,7 +180,7 @@ Fail the cron task.
 			Stderr:   []byte("cron worker unavailable"),
 			ExitCode: 1,
 		})
-	}, factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
+	}, factory.WithSubmissionRecorder(func(record work.FactorySubmissionRecord) {
 		observedSubmissions <- record
 	}))
 
@@ -329,29 +330,29 @@ func cronImplicitFailureFactoryConfig(schedule string) map[string]any {
 
 func waitForCronSubmissionFromWorkstation(
 	t *testing.T,
-	submissions <-chan interfaces.FactorySubmissionRecord,
+	submissions <-chan work.FactorySubmissionRecord,
 	workstation string,
 	nominalAt time.Time,
 	timeout time.Duration,
-) interfaces.FactorySubmissionRecord {
+) work.FactorySubmissionRecord {
 	t.Helper()
 	return waitForCronSubmissions(t, submissions, []string{workstation}, nominalAt, timeout)[workstation]
 }
 
 func waitForCronSubmissions(
 	t *testing.T,
-	submissions <-chan interfaces.FactorySubmissionRecord,
+	submissions <-chan work.FactorySubmissionRecord,
 	workstations []string,
 	nominalAt time.Time,
 	timeout time.Duration,
-) map[string]interfaces.FactorySubmissionRecord {
+) map[string]work.FactorySubmissionRecord {
 	t.Helper()
 
 	want := make(map[string]bool, len(workstations))
 	for _, workstation := range workstations {
 		want[workstation] = true
 	}
-	found := make(map[string]interfaces.FactorySubmissionRecord, len(workstations))
+	found := make(map[string]work.FactorySubmissionRecord, len(workstations))
 	wantNominalAt := nominalAt.UTC().Format(time.RFC3339Nano)
 	deadline := time.After(timeout)
 	for len(found) < len(want) {
@@ -375,7 +376,7 @@ func waitForCronSubmissions(
 	return found
 }
 
-func assertCronSubmissionRecord(t *testing.T, record interfaces.FactorySubmissionRecord, workstation string, nominalAt time.Time) {
+func assertCronSubmissionRecord(t *testing.T, record work.FactorySubmissionRecord, workstation string, nominalAt time.Time) {
 	t.Helper()
 
 	if record.Source != "external-submit" {

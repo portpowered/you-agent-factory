@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type crossWorkflowFinding struct {
@@ -108,7 +109,7 @@ func installStaticFindingsExecutor(h *testutil.ServiceTestHarness, findings []cr
 }
 
 func installWorkGeneratorExecutor(h *testutil.ServiceTestHarness) {
-	h.SetCustomExecutor("work-generator", &funcExecutor{fn: func(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	h.SetCustomExecutor("work-generator", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 		var findings []crossWorkflowFinding
 		_ = json.Unmarshal([]byte(payloadFromDispatch(dispatch)), &findings)
 
@@ -132,12 +133,12 @@ func installCrossSubmitterExecutor(
 	hCode *testutil.ServiceTestHarness,
 	submittedCount *atomic.Int32,
 ) {
-	hMeta.SetCustomExecutor("cross-submitter", &funcExecutor{fn: func(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	hMeta.SetCustomExecutor("cross-submitter", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 		var workIDs []string
 		_ = json.Unmarshal([]byte(payloadFromDispatch(dispatch)), &workIDs)
 
 		for _, id := range workIDs {
-			hCode.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+			hCode.SubmitFull(context.Background(), []work.SubmitRequest{{
 				WorkTypeID: "code-change",
 				TraceID:    fmt.Sprintf("meta-%s", id),
 				Payload:    fmt.Appendf(nil, `{"finding_id": %q}`, id),
@@ -159,7 +160,7 @@ func installRecursiveExecutors(
 	scanCount *atomic.Int32,
 	submittedCount *atomic.Int32,
 ) {
-	hMeta.SetCustomExecutor("recursive-scanner", &funcExecutor{fn: func(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	hMeta.SetCustomExecutor("recursive-scanner", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 		iteration := scanCount.Add(1)
 		results := firstOrRescanFindings(iteration)
 		findingsJSON, _ := json.Marshal(results)
@@ -171,7 +172,7 @@ func installRecursiveExecutors(
 		}, nil
 	}})
 
-	hMeta.SetCustomExecutor("recursive-submitter", &funcExecutor{fn: func(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	hMeta.SetCustomExecutor("recursive-submitter", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 		var findings []recursiveScanFinding
 		_ = json.Unmarshal([]byte(payloadFromDispatch(dispatch)), &findings)
 
@@ -213,7 +214,7 @@ func submitRecursiveFindings(
 ) bool {
 	needsRescan := false
 	for _, finding := range findings {
-		hCode.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+		hCode.SubmitFull(context.Background(), []work.SubmitRequest{{
 			WorkTypeID: "code-change",
 			TraceID:    fmt.Sprintf("recursive-meta-%s", finding.ID),
 			Payload:    fmt.Appendf(nil, `{"finding_id": %q}`, finding.ID),
@@ -226,7 +227,7 @@ func submitRecursiveFindings(
 	return needsRescan
 }
 
-func payloadFromDispatch(dispatch interfaces.WorkDispatch) string {
+func payloadFromDispatch(dispatch work.WorkDispatch) string {
 	if len(dispatch.InputTokens) == 0 {
 		return ""
 	}
@@ -331,7 +332,7 @@ func submitWorkflowWorkItems(
 
 	for i, def := range defs {
 		for j := range itemsPerWorkflow {
-			err := harnesses[i].SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+			err := harnesses[i].SubmitFull(context.Background(), []work.SubmitRequest{{
 				WorkTypeID: def.workType,
 				WorkID:     fmt.Sprintf("%s-work-%d", def.name, j),
 				TraceID:    fmt.Sprintf("%s-trace-%d", def.name, j),
@@ -503,7 +504,7 @@ func submitThroughputWorkload(
 		go func(gid int) {
 			defer submitWg.Done()
 			for i := range itemsPerSubmitter {
-				h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+				h.SubmitFull(context.Background(), []work.SubmitRequest{{
 					WorkTypeID: "task",
 					TraceID:    fmt.Sprintf("trace-%d-%d", gid, i),
 					Payload:    fmt.Appendf(nil, `{"g":%d,"i":%d}`, gid, i),

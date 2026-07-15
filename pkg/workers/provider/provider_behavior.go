@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/work/content"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
@@ -483,7 +484,7 @@ func codexImageArgs(ctx context.Context, req interfaces.ProviderInferenceRequest
 	var args []string
 	for tokenIndex, token := range tokens {
 		for partIndex, part := range token.Color.Content {
-			if part.Type != interfaces.WorkContentPartTypeImage {
+			if part.Type != work.WorkContentPartTypeImage {
 				continue
 			}
 			contentURL, err := codexImageContentURL(part)
@@ -504,7 +505,7 @@ func codexImageArgs(ctx context.Context, req interfaces.ProviderInferenceRequest
 	return args, nil
 }
 
-func codexImageContentURL(part interfaces.WorkContentPart) (string, error) {
+func codexImageContentURL(part work.WorkContentPart) (string, error) {
 	if strings.TrimSpace(part.URL) != "" {
 		return part.URL, nil
 	}

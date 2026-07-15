@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestWithExecutionBaseDir_SetsHarnessServiceConfig(t *testing.T) {
@@ -71,9 +72,9 @@ func TestWriteDynamicExecutionFile_WritesUnderExecutionChannel(t *testing.T) {
 
 func TestWriteSeedBatchFile_WritesCanonicalBatchSeed(t *testing.T) {
 	dir := t.TempDir()
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{{
 			Name:       "seed",
 			WorkID:     "work-1",
@@ -90,7 +91,7 @@ func TestWriteSeedBatchFile_WritesCanonicalBatchSeed(t *testing.T) {
 		t.Fatalf("ReadFile(%q): %v", path, err)
 	}
 
-	var got interfaces.WorkRequest
+	var got work.WorkRequest
 	if err := json.Unmarshal(data, &got); err != nil {
 		t.Fatalf("json.Unmarshal(%q): %v", path, err)
 	}

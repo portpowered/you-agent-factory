@@ -1,15 +1,15 @@
 package projections
 
 import (
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
-func (r *factoryWorldReducer) factoryRelationsFromGenerated(relations *[]factoryapi.Relation, context factoryapi.FactoryEventContext) []interfaces.FactoryRelation {
+func (r *factoryWorldReducer) factoryRelationsFromGenerated(relations *[]factoryapi.Relation, context factoryapi.FactoryEventContext) []work.FactoryRelation {
 	if relations == nil {
 		return nil
 	}
-	out := make([]interfaces.FactoryRelation, 0, len(*relations))
+	out := make([]work.FactoryRelation, 0, len(*relations))
 	for _, relation := range *relations {
 		converted := r.factoryRelationFromGenerated(relation, context)
 		if converted.TargetWorkID != "" {
@@ -25,8 +25,8 @@ func factoryRelationFromGenerated(
 	traceID string,
 	sourceWorkID string,
 	targetWorkID string,
-) interfaces.FactoryRelation {
-	return interfaces.FactoryRelation{
+) work.FactoryRelation {
+	return work.FactoryRelation{
 		Type:           string(relation.Type),
 		SourceWorkID:   sourceWorkID,
 		SourceWorkName: relation.SourceWorkName,

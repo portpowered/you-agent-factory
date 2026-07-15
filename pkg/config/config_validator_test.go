@@ -8,6 +8,7 @@ import (
 
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestValidationResult_HasErrors_FalseWithOnlyWarningsAndHints(t *testing.T) {
@@ -17,7 +18,9 @@ func TestValidationResult_HasErrors_FalseWithOnlyWarningsAndHints(t *testing.T) 
 			{Severity: SeverityHint, Path: "b", Message: "hint", Rule: "r2"},
 		},
 	}
-	if vr.HasErrors() { t.Fatal("HasErrors() should be false when only warnings and hints present") }
+	if vr.HasErrors() {
+		t.Fatal("HasErrors() should be false when only warnings and hints present")
+	}
 }
 
 func TestValidationResult_HasErrors_TrueWithErrors(t *testing.T) {
@@ -27,7 +30,9 @@ func TestValidationResult_HasErrors_TrueWithErrors(t *testing.T) {
 			{Severity: SeverityError, Path: "b", Message: "err", Rule: "r2"},
 		},
 	}
-	if !vr.HasErrors() { t.Fatal("HasErrors() should be true when error findings present") }
+	if !vr.HasErrors() {
+		t.Fatal("HasErrors() should be true when error findings present")
+	}
 }
 
 func TestValidationResult_Errors_ReturnsOnlyErrors(t *testing.T) {
@@ -285,7 +290,7 @@ func TestRuleModelInvokeWorkstations_AcceptsCompatibleModelInvokeWorkstationAcro
 				WorkerTypeName: "tts-worker",
 				OperationBindings: []interfaces.ModelOperationBinding{
 					{Slot: "text", Selector: &interfaces.ModelOperationBindingSelector{Label: "utterance"}},
-					{Slot: "voice", Config: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeJSON, JSON: []byte(`{"name":"alloy"}`)}}},
+					{Slot: "voice", Config: []work.WorkContentPart{{Type: work.WorkContentPartTypeJSON, JSON: []byte(`{"name":"alloy"}`)}}},
 				},
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
@@ -404,7 +409,7 @@ func TestRuleModelInvokeWorkstations_RejectsDuplicateUnknownAndEmptyOperationBin
 		WorkerTypeName: "tts-worker",
 		OperationBindings: []interfaces.ModelOperationBinding{
 			{Slot: "text", Selector: &interfaces.ModelOperationBindingSelector{Label: "utterance"}},
-			{Slot: "text", Config: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "fallback"}}},
+			{Slot: "text", Config: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "fallback"}}},
 			{Slot: "voice", Selector: &interfaces.ModelOperationBindingSelector{Role: "system"}},
 			{Slot: "style"},
 		},

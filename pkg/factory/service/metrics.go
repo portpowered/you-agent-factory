@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 )
 
@@ -40,7 +41,7 @@ const (
 	runtimeMetricScriptFailed         = "script.failed"
 )
 
-func (r *Bundle) recordSubmissionMetric(record interfaces.FactorySubmissionRecord) {
+func (r *Bundle) recordSubmissionMetric(record work.FactorySubmissionRecord) {
 	fields := metrics.Fields{
 		WorkID:  strings.TrimSpace(record.Request.WorkID),
 		TraceID: strings.TrimSpace(record.Request.TraceID),
@@ -74,7 +75,7 @@ func (r *Bundle) recordCompletionMetrics(record interfaces.FactoryCompletionReco
 	}
 }
 
-func runtimeDispatchMetricFields(dispatch interfaces.WorkDispatch) metrics.Fields {
+func runtimeDispatchMetricFields(dispatch work.WorkDispatch) metrics.Fields {
 	fields := metrics.Fields{
 		DispatchID:  dispatch.DispatchID,
 		TraceID:     strings.TrimSpace(dispatch.Execution.TraceID),

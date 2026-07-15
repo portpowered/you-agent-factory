@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -53,7 +54,7 @@ func replayWorkRequestEvent(t *testing.T, requestID string, tick int, source str
 	t.Helper()
 
 	payload := factoryapi.WorkRequestEventPayload{
-		Type:      factoryapi.WorkRequestType(interfaces.WorkRequestTypeFactoryRequestBatch),
+		Type:      factoryapi.WorkRequestType(work.WorkRequestTypeFactoryRequestBatch),
 		Works:     slicePtr(works),
 		Relations: slicePtr(relations),
 		Source:    stringPtrIfNotEmpty(source),
@@ -85,7 +86,7 @@ func replayWorkRequestEvent(t *testing.T, requestID string, tick int, source str
 	}
 }
 
-func replayDispatchCreatedEvent(t *testing.T, dispatch interfaces.WorkDispatch, tick int) factoryapi.FactoryEvent {
+func replayDispatchCreatedEvent(t *testing.T, dispatch work.WorkDispatch, tick int) factoryapi.FactoryEvent {
 	t.Helper()
 
 	metadata := map[string]string{}
@@ -149,7 +150,7 @@ func replayDispatchCompletedEvent(t *testing.T, completionID string, result inte
 	}
 }
 
-func generatedReplayOutputWorkPtr(items []interfaces.FactoryWorkItem) *[]factoryapi.Work {
+func generatedReplayOutputWorkPtr(items []work.FactoryWorkItem) *[]factoryapi.Work {
 	if len(items) == 0 {
 		return nil
 	}
@@ -198,7 +199,7 @@ func TestReduceReplayEvents_CompletionsPreserveRecordedOutputWork(t *testing.T) 
 			DispatchID:   "dispatch-1",
 			TransitionID: "setup-workspace",
 			Outcome:      interfaces.OutcomeAccepted,
-			RecordedOutputWork: []interfaces.FactoryWorkItem{
+			RecordedOutputWork: []work.FactoryWorkItem{
 				{
 					ID:                     "work-plan-38",
 					WorkTypeID:             "plan",
@@ -305,9 +306,9 @@ func TestReduceReplayEvents_CompletionsOmitDiagnosticsWhenReplayArtifactOmitsThe
 		t,
 		replayInferenceResponseEvent(
 			t,
-			interfaces.WorkDispatch{
+			work.WorkDispatch{
 				DispatchID: "dispatch-no-diagnostics",
-				Execution: interfaces.ExecutionMetadata{
+				Execution: work.ExecutionMetadata{
 					RequestID: "request-no-diagnostics",
 					TraceID:   "trace-no-diagnostics",
 					WorkIDs:   []string{"work-no-diagnostics"},
@@ -353,7 +354,7 @@ func TestReduceReplayEvents_CompletionsOmitDiagnosticsWhenReplayArtifactOmitsThe
 func thinDispatchReplayArtifact(t *testing.T) (*interfaces.ReplayArtifact, factoryapi.FactoryEvent) {
 	t.Helper()
 
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		DispatchID:   "dispatch-1",
 		TransitionID: "process",
 		InputTokens: workers.InputTokens(
@@ -377,7 +378,7 @@ func thinDispatchReplayArtifact(t *testing.T) (*interfaces.ReplayArtifact, facto
 				},
 			},
 		),
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			RequestID: "request-1",
 			ReplayKey: "process/trace-1/work-1",
 			TraceID:   "trace-1",
@@ -402,9 +403,9 @@ func safeDiagnosticReductionArtifact(t *testing.T) *interfaces.ReplayArtifact {
 		t,
 		replayInferenceResponseEvent(
 			t,
-			interfaces.WorkDispatch{
+			work.WorkDispatch{
 				DispatchID: "dispatch-safe",
-				Execution: interfaces.ExecutionMetadata{
+				Execution: work.ExecutionMetadata{
 					RequestID: "request-safe",
 					TraceID:   "trace-safe",
 					WorkIDs:   []string{"work-safe"},
@@ -547,7 +548,7 @@ func assertThinReplayReduction(t *testing.T, reduced *replayEventLog) {
 func assertThinReplayDispatchIdentity(
 	t *testing.T,
 	submission replaySubmission,
-	recorded interfaces.WorkDispatch,
+	recorded work.WorkDispatch,
 ) {
 	t.Helper()
 
@@ -580,7 +581,7 @@ func assertThinReplayDispatchIdentity(
 	}
 }
 
-func assertThinReplayDispatchTokens(t *testing.T, recorded interfaces.WorkDispatch) {
+func assertThinReplayDispatchTokens(t *testing.T, recorded work.WorkDispatch) {
 	t.Helper()
 
 	inputTokens := workers.WorkDispatchInputTokens(recorded)
@@ -608,7 +609,7 @@ func assertThinReplayDispatchTokens(t *testing.T, recorded interfaces.WorkDispat
 	}
 }
 
-func assertReplayDispatchOwnedContract(t *testing.T, recorded interfaces.WorkDispatch) {
+func assertReplayDispatchOwnedContract(t *testing.T, recorded work.WorkDispatch) {
 	t.Helper()
 
 	payload, err := json.Marshal(recorded)
@@ -683,7 +684,7 @@ func replayInferenceRequestEvent(t *testing.T, request interfaces.ProviderInfere
 
 func replayInferenceResponseEvent(
 	t *testing.T,
-	dispatch interfaces.WorkDispatch,
+	dispatch work.WorkDispatch,
 	inferenceRequestID string,
 	attempt int,
 	tick int,
@@ -787,7 +788,7 @@ func TestReduceReplayEvents_OperatorWorkStateChanges(t *testing.T) {
 	if change.change.FromPlaceID != "task:failed" || change.change.ToPlaceID != "task:init" {
 		t.Fatalf("places = %q -> %q, want task:failed -> task:init", change.change.FromPlaceID, change.change.ToPlaceID)
 	}
-	if change.change.Source != interfaces.WorkStateChangeSourceAPI {
+	if change.change.Source != work.WorkStateChangeSourceAPI {
 		t.Fatalf("source = %q, want api", change.change.Source)
 	}
 }

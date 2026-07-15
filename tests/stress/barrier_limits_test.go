@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // ---------------------------------------------------------------------------
@@ -349,7 +350,7 @@ type barrierSpawnerExecutor struct {
 	childCount int
 }
 
-func (e *barrierSpawnerExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *barrierSpawnerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	e.mu.Lock()
 	e.calls++
 	e.mu.Unlock()
@@ -404,7 +405,7 @@ type failOnNthBarrierExecutor struct {
 	failOn int // 1-indexed
 }
 
-func (e *failOnNthBarrierExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *failOnNthBarrierExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	e.mu.Lock()
 	e.calls++
 	n := e.calls

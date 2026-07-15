@@ -8,9 +8,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -51,7 +52,7 @@ func (c *FactoryConfig) IsInlineDispatch() bool { return c.inlineDispatch }
 
 // SubmissionRecorder receives authoritative submission observations from the
 // engine before submitted work is injected into the marking.
-type SubmissionRecorder func(interfaces.FactorySubmissionRecord)
+type SubmissionRecorder func(work.FactorySubmissionRecord)
 
 // DispatchRecorder receives authoritative dispatch observations from the
 // engine after in-flight tracking is updated and before worker submission.
@@ -80,7 +81,7 @@ type SubmissionHook interface {
 // DispatchResultHook bridges engine-owned dispatch creation with worker
 // execution and tick-owned result delivery.
 type DispatchResultHook interface {
-	SubmitDispatch(ctx context.Context, dispatch interfaces.WorkDispatch) error
+	SubmitDispatch(ctx context.Context, dispatch work.WorkDispatch) error
 	OnTick(ctx context.Context, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]interfaces.WorkResult, error)
 	WaitCh() <-chan struct{}
 	HasPendingResults() bool
@@ -96,7 +97,7 @@ type DispatchResultHookWakeSignaler interface {
 // CompletionDeliveryPlanner maps a runtime dispatch to the logical tick at
 // which a completed worker result may become visible.
 type CompletionDeliveryPlanner interface {
-	DeliveryTickForDispatch(dispatch interfaces.WorkDispatch) (int, bool, error)
+	DeliveryTickForDispatch(dispatch work.WorkDispatch) (int, bool, error)
 }
 
 // WithNet sets the CPN definition for the factory. Required.

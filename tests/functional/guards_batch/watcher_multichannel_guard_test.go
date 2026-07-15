@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -47,10 +48,10 @@ func TestMultiChannelGuard_ExecutionIDPropagation(t *testing.T) {
 	testutil.WriteSeedExecutionFile(t, dir, "chapter", wantExecutionID, []byte(`{"title": "Execution ID propagation test"}`))
 
 	var submissionsMu sync.Mutex
-	var chapterSubmission interfaces.FactorySubmissionRecord
+	var chapterSubmission work.FactorySubmissionRecord
 
 	h := testutil.NewServiceTestHarness(t, dir,
-		testutil.WithExtraOptions(factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
+		testutil.WithExtraOptions(factory.WithSubmissionRecorder(func(record work.FactorySubmissionRecord) {
 			if record.Request.WorkTypeID != "chapter" {
 				return
 			}
@@ -160,7 +161,7 @@ func TestMultiChannelGuard_DynamicExecDirWithGuard(t *testing.T) {
 	}
 
 	var submissionsMu sync.Mutex
-	var chapterSubmission interfaces.FactorySubmissionRecord
+	var chapterSubmission work.FactorySubmissionRecord
 
 	proc := &execDirObservingProcessor{
 		factoryDir:      dir,
@@ -168,7 +169,7 @@ func TestMultiChannelGuard_DynamicExecDirWithGuard(t *testing.T) {
 	}
 
 	h := support.NewGuardsBatchHarness(t, dir,
-		testutil.WithExtraOptions(factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
+		testutil.WithExtraOptions(factory.WithSubmissionRecorder(func(record work.FactorySubmissionRecord) {
 			if record.Request.WorkTypeID != "chapter" {
 				return
 			}

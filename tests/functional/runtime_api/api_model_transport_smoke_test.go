@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -142,8 +143,8 @@ func providerBackedModelTransportSmokeConfig() map[string]any {
 
 func mustMarshalFunctionalAudioContentResponse(t *testing.T, audioPath string) string {
 	t.Helper()
-	body, err := json.Marshal([]interfaces.WorkContentPart{{
-		Type:        interfaces.WorkContentPartTypeAudio,
+	body, err := json.Marshal([]work.WorkContentPart{{
+		Type:        work.WorkContentPartTypeAudio,
 		File:        audioPath,
 		ContentType: "audio/wav",
 	}})

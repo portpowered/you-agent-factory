@@ -6,6 +6,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // Option configures a FactoryEngine.
@@ -29,7 +30,7 @@ func WithClock(clock factory.Clock) Option {
 
 // WithDispatchHandler registers a callback invoked for each WorkDispatch produced
 // during a tick. The runtime uses this to forward dispatches to the WorkerPool.
-func WithDispatchHandler(fn func(interfaces.WorkDispatch)) Option {
+func WithDispatchHandler(fn func(work.WorkDispatch)) Option {
 	return func(e *FactoryEngine) {
 		e.dispatchHandler = fn
 	}
@@ -74,7 +75,7 @@ func WithSubmissionHook(hook factory.SubmissionHook) Option {
 
 // WithSubmissionRecorder registers a callback invoked after a submission hook
 // returns work and before the engine injects that work into the marking.
-func WithSubmissionRecorder(fn func(interfaces.FactorySubmissionRecord)) Option {
+func WithSubmissionRecorder(fn func(work.FactorySubmissionRecord)) Option {
 	return func(e *FactoryEngine) {
 		e.recordSubmission = fn
 	}
@@ -82,7 +83,7 @@ func WithSubmissionRecorder(fn func(interfaces.FactorySubmissionRecord)) Option 
 
 // WithWorkRequestRecorder registers a callback invoked once for each request
 // batch observed before its work items are injected into the marking.
-func WithWorkRequestRecorder(fn func(int, interfaces.WorkRequestRecord)) Option {
+func WithWorkRequestRecorder(fn func(int, work.WorkRequestRecord)) Option {
 	return func(e *FactoryEngine) {
 		e.recordWorkRequest = fn
 	}
@@ -90,7 +91,7 @@ func WithWorkRequestRecorder(fn func(int, interfaces.WorkRequestRecord)) Option 
 
 // WithWorkInputRecorder registers a callback invoked after a submit request is
 // converted to a runtime token and injected into the marking.
-func WithWorkInputRecorder(fn func(int, interfaces.SubmitRequest, interfaces.Token)) Option {
+func WithWorkInputRecorder(fn func(int, work.SubmitRequest, interfaces.Token)) Option {
 	return func(e *FactoryEngine) {
 		e.recordWorkInput = fn
 	}

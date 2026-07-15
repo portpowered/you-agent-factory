@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
@@ -38,7 +39,7 @@ func TestNew_ProviderBoundPetriDispatchPreservesPublicContractOnReplay(t *testin
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID: "work-provider-contract", WorkTypeID: "task", TraceID: "trace-provider-contract",
 	}}); err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
@@ -78,7 +79,7 @@ type providerBoundaryExecutor struct {
 	provider workerprovider.Provider
 }
 
-func (e providerBoundaryExecutor) Execute(ctx context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e providerBoundaryExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	response, err := e.provider.Infer(ctx, interfaces.ProviderInferenceRequest{
 		Dispatch:      dispatch,
 		WorkerType:    dispatch.WorkerType,
@@ -227,9 +228,9 @@ func TestNew_SubmitWorkRequestRecordsCanonicalWorkRequestEvent(t *testing.T) {
 	f := newPassingInlineRuntime(t)
 	tickable := tickableFactory(t, f)
 
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-canonical-work-event",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{{
 			Name:       "canonical",
 			WorkID:     "work-canonical",
@@ -333,7 +334,7 @@ func newSafeBoundaryRuntime(t *testing.T) factory.Factory {
 
 func submitSafeBoundaryRequests(t *testing.T, f factory.Factory) {
 	t.Helper()
-	_, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{
+	_, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{
 		{WorkID: "work-safe-success", WorkTypeID: "task", TraceID: "trace-safe-success", Payload: json.RawMessage(`{"story":"safe success"}`)},
 		{WorkID: "work-safe-failure", WorkTypeID: "task", TraceID: "trace-safe-failure", Payload: json.RawMessage(`{"story":"safe failure"}`)},
 		{WorkID: "work-safe-windows-process-failure", WorkTypeID: "task", TraceID: "trace-safe-windows-process-failure", Payload: json.RawMessage(`{"story":"safe windows process failure"}`)},
@@ -442,13 +443,13 @@ func assertSafeBoundaryRequestViews(t *testing.T, worldState interfaces.FactoryW
 
 func submitOrderedEventHistoryRequest(t *testing.T, f factory.Factory) {
 	t.Helper()
-	_, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	_, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID:     "work-1",
 		Name:       "Write PRD",
 		WorkTypeID: "task",
 		TraceID:    "trace-1",
-		Relations: []interfaces.Relation{{
-			Type:          interfaces.RelationDependsOn,
+		Relations: []work.Relation{{
+			Type:          work.RelationDependsOn,
 			TargetWorkID:  "upstream-1",
 			RequiredState: "done",
 		}},
@@ -577,16 +578,16 @@ func assertRuntimeEventIDsStable(t *testing.T, f factory.Factory, events []facto
 	}
 }
 
-func mustUnmarshalRuntimeWorkRequest(t *testing.T, body string) interfaces.WorkRequest {
+func mustUnmarshalRuntimeWorkRequest(t *testing.T, body string) work.WorkRequest {
 	t.Helper()
-	var request interfaces.WorkRequest
+	var request work.WorkRequest
 	if err := json.Unmarshal([]byte(body), &request); err != nil {
 		t.Fatalf("Unmarshal WorkRequest: %v", err)
 	}
 	return request
 }
 
-func assertIdempotentBatchSubmit(t *testing.T, f factory.Factory, request interfaces.WorkRequest) {
+func assertIdempotentBatchSubmit(t *testing.T, f factory.Factory, request work.WorkRequest) {
 	t.Helper()
 	result, err := f.SubmitWorkRequest(context.Background(), request)
 	if err != nil {
@@ -670,27 +671,27 @@ func assertBatchRequestReplayProjection(t *testing.T, events []factoryapi.Factor
 	}
 }
 
-func generatedRuntimeBatchFixture() interfaces.GeneratedSubmissionBatch {
-	return interfaces.GeneratedSubmissionBatch{
-		Request: interfaces.WorkRequest{
+func generatedRuntimeBatchFixture() work.GeneratedSubmissionBatch {
+	return work.GeneratedSubmissionBatch{
+		Request: work.WorkRequest{
 			RequestID: "generated-request-events",
-			Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+			Type:      work.WorkRequestTypeFactoryRequestBatch,
 			Works: []interfaces.Work{
 				{Name: "draft", WorkID: "work-draft", WorkTypeID: "task", TraceID: "trace-generated"},
 				{Name: "review", WorkID: "work-review", WorkTypeID: "task"},
 			},
-			Relations: []interfaces.WorkRelation{{
-				Type:           interfaces.WorkRelationDependsOn,
+			Relations: []work.WorkRelation{{
+				Type:           work.WorkRelationDependsOn,
 				SourceWorkName: "review",
 				TargetWorkName: "draft",
 				RequiredState:  "done",
 			}},
 		},
-		Metadata: interfaces.GeneratedSubmissionBatchMetadata{
+		Metadata: work.GeneratedSubmissionBatchMetadata{
 			Source:        "worker-output:dispatch-parent",
 			ParentLineage: []string{"request-parent", "work-parent"},
 		},
-		Submissions: []interfaces.SubmitRequest{{
+		Submissions: []work.SubmitRequest{{
 			Name:        "review",
 			WorkID:      "work-review",
 			TargetState: "done",

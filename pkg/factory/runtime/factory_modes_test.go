@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -38,7 +39,7 @@ func TestFactoryEventHistory_SubscribeReplaysHistoryThenStreamsLiveEvents(t *tes
 		}
 	}
 
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-live"}}); err != nil {
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-live"}}); err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
 	}
 	if err := tickableFactory(t, f).Tick(context.Background()); err != nil {
@@ -140,7 +141,7 @@ func TestPetriMutationRecorderFailureStopsRuntimeWithDispatchContext(t *testing.
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-recording-failure"}}); err != nil {
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-recording-failure"}}); err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
 	}
 	err = f.Run(context.Background())
@@ -227,7 +228,7 @@ func TestNew_ServiceModeWithoutInitialWork_AcceptsLateSubmission(t *testing.T) {
 		)
 	}
 
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-late-submit"}}); err != nil {
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-late-submit"}}); err != nil {
 		t.Fatalf("SubmitWorkRequest late work: %v", err)
 	}
 
@@ -276,7 +277,7 @@ func TestNew_BatchModeWithoutInitialWork_RejectsLateSubmissionAfterTermination(t
 		t.Fatalf("Run: %v", err)
 	}
 
-	_, err = submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-after-stop"}})
+	_, err = submitWorkRequests(context.Background(), f, []work.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-after-stop"}})
 	if err == nil {
 		t.Fatal("expected late batch submission to fail after runtime termination")
 	}
@@ -302,7 +303,7 @@ func TestNew_WorkerPoolDispatchResultHookRecordsCompletionAtObservedTick(t *test
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-hook"}}); err != nil {
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-hook"}}); err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
 	}
 
@@ -341,7 +342,7 @@ func TestNew_ReplayDelayedWorkerPoolCompletionWakesAtPlannedTick(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-delayed"}}); err != nil {
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-delayed"}}); err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
 	}
 
@@ -387,7 +388,7 @@ func TestNew_ReplayPlannerCanReplaceWorkerCompletionResult(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-replayed-result"}}); err != nil {
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-replayed-result"}}); err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
 	}
 
@@ -433,7 +434,7 @@ func TestNew_ServiceModeWorkerPoolResultSignalCompletesLateSubmission(t *testing
 	case <-time.After(100 * time.Millisecond):
 	}
 
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID:     "work-late-pool",
 		WorkTypeID: "task",
 		TraceID:    "trace-late-pool",
@@ -499,7 +500,7 @@ func TestGetEngineStateSnapshot_AggregatesRuntimeLifecycleUptimeAndTopology(t *t
 		errCh <- f.Run(runCtx)
 	}()
 
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkTypeID: "task",
 		TraceID:    "trace-aggregate-snapshot",
 	}}); err != nil {
@@ -594,7 +595,7 @@ func TestRuntimeVisitCountRoutesSharedTraceSiblingsIndependentlyAtThreshold(t *t
 		t.Fatalf("dispatch count after exhaustion = %d, want %d", len(exhausted.DispatchHistory), maxReviews)
 	}
 
-	if _, err := f.MoveWork(ctx, "work-unaffected", "review", interfaces.WorkStateChangeSourceCLI, ""); err != nil {
+	if _, err := f.MoveWork(ctx, "work-unaffected", "review", work.WorkStateChangeSourceCLI, ""); err != nil {
 		t.Fatalf("MoveWork unaffected sibling to review: %v", err)
 	}
 	if err := tickable.Tick(ctx); err != nil {
@@ -658,7 +659,7 @@ func runVisitCountSiblingIsolationScenario(t *testing.T, maxReviews int) factory
 	if err := tickable.Tick(ctx); err != nil {
 		t.Fatalf("Tick live loop breaker: %v", err)
 	}
-	if _, err := f.MoveWork(ctx, "work-unaffected", "review", interfaces.WorkStateChangeSourceCLI, ""); err != nil {
+	if _, err := f.MoveWork(ctx, "work-unaffected", "review", work.WorkStateChangeSourceCLI, ""); err != nil {
 		t.Fatalf("MoveWork live unaffected sibling: %v", err)
 	}
 	for phase := 0; phase < 2; phase++ {
@@ -724,7 +725,7 @@ func replayVisitCountSiblingIsolationScenario(t *testing.T, maxReviews int, even
 
 type nextTickCompletionPlanner struct{}
 
-func (nextTickCompletionPlanner) DeliveryTickForDispatch(dispatch interfaces.WorkDispatch) (int, bool, error) {
+func (nextTickCompletionPlanner) DeliveryTickForDispatch(dispatch work.WorkDispatch) (int, bool, error) {
 	return dispatch.Execution.DispatchCreatedTick + 1, true, nil
 }
 
@@ -780,8 +781,8 @@ func buildVisitCountSiblingIsolationNet(maxReviews int) *state.Net {
 	}
 }
 
-func sharedTraceSiblingSubmissions(sharedTrace string) []interfaces.SubmitRequest {
-	return []interfaces.SubmitRequest{
+func sharedTraceSiblingSubmissions(sharedTrace string) []work.SubmitRequest {
+	return []work.SubmitRequest{
 		{RequestID: "request-shared-siblings", WorkID: "work-repeated", Name: "repeated", WorkTypeID: "task", TargetState: "review", CurrentChainingTraceID: sharedTrace, TraceID: sharedTrace},
 		{RequestID: "request-shared-siblings", WorkID: "work-unaffected", Name: "unaffected", WorkTypeID: "task", TargetState: "held", CurrentChainingTraceID: sharedTrace, TraceID: sharedTrace},
 	}

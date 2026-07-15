@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 const (
@@ -66,13 +67,13 @@ func newFactoryWorldReducer(selectedTick int) *factoryWorldReducer {
 	return &factoryWorldReducer{
 		stateValue: interfaces.FactoryWorldState{
 			Tick:                          selectedTick,
-			PayloadLineage:                interfaces.WorkPayloadLineageProjection{},
+			PayloadLineage:                work.WorkPayloadLineageProjection{},
 			WorkRequestsByID:              make(map[string]interfaces.WorkRequestPayload),
-			RelationsByWorkID:             make(map[string][]interfaces.FactoryRelation),
-			WorkItemsByID:                 make(map[string]interfaces.FactoryWorkItem),
-			ActiveWorkItemsByID:           make(map[string]interfaces.FactoryWorkItem),
+			RelationsByWorkID:             make(map[string][]work.FactoryRelation),
+			WorkItemsByID:                 make(map[string]work.FactoryWorkItem),
+			ActiveWorkItemsByID:           make(map[string]work.FactoryWorkItem),
 			TerminalWorkByID:              make(map[string]interfaces.FactoryTerminalWork),
-			FailedWorkItemsByID:           make(map[string]interfaces.FactoryWorkItem),
+			FailedWorkItemsByID:           make(map[string]work.FactoryWorkItem),
 			FailureDetailsByWorkID:        make(map[string]interfaces.FactoryWorldFailureDetail),
 			InferenceAttemptsByDispatchID: make(map[string]map[string]interfaces.FactoryWorldInferenceAttempt),
 			ScriptRequestsByDispatchID:    make(map[string]map[string]interfaces.FactoryWorldScriptRequest),
@@ -333,7 +334,7 @@ func (r *factoryWorldReducer) applyWorkRequest(context factoryapi.FactoryEventCo
 	}
 	r.stateValue.WorkRequestsByID[requestID] = interfaces.WorkRequestPayload{
 		RequestID:     requestID,
-		Type:          interfaces.WorkRequestType(payload.Type),
+		Type:          work.WorkRequestType(payload.Type),
 		TraceID:       traceID,
 		Source:        stringValue(payload.Source),
 		ParentLineage: cloneStringSlice(sliceValue(payload.ParentLineage)),
@@ -367,7 +368,7 @@ func (r *factoryWorldReducer) state() interfaces.FactoryWorldState {
 	return r.stateValue
 }
 
-func (r *factoryWorldReducer) factoryRelationFromGenerated(relation factoryapi.Relation, context factoryapi.FactoryEventContext) interfaces.FactoryRelation {
+func (r *factoryWorldReducer) factoryRelationFromGenerated(relation factoryapi.Relation, context factoryapi.FactoryEventContext) work.FactoryRelation {
 	requestItems := r.requestWorkItems(stringValue(context.RequestId))
 	targetWorkID := stringValue(relation.TargetWorkId)
 	if targetWorkID == "" {
@@ -386,14 +387,14 @@ func (r *factoryWorldReducer) factoryRelationFromGenerated(relation factoryapi.R
 	)
 }
 
-func (r *factoryWorldReducer) requestWorkItems(requestID string) []interfaces.FactoryWorkItem {
+func (r *factoryWorldReducer) requestWorkItems(requestID string) []work.FactoryWorkItem {
 	if requestID == "" {
 		return nil
 	}
 	return r.stateValue.WorkRequestsByID[requestID].WorkItems
 }
 
-func workIDForRequestName(items []interfaces.FactoryWorkItem, workName string) string {
+func workIDForRequestName(items []work.FactoryWorkItem, workName string) string {
 	if workName == "" {
 		return ""
 	}
@@ -414,7 +415,7 @@ func sourceWorkIDFromContext(context factoryapi.FactoryEventContext, targetWorkI
 	return ""
 }
 
-func (r *factoryWorldReducer) addWorkToken(tokenID string, placeID string, item interfaces.FactoryWorkItem) {
+func (r *factoryWorldReducer) addWorkToken(tokenID string, placeID string, item work.FactoryWorkItem) {
 	if tokenID == "" || placeID == "" {
 		return
 	}
@@ -799,7 +800,7 @@ func removeString(values []string, target string) []string {
 	return out
 }
 
-func (r *factoryWorldReducer) addRelation(relation interfaces.FactoryRelation) {
+func (r *factoryWorldReducer) addRelation(relation work.FactoryRelation) {
 	if relation.SourceWorkID == "" || relation.TargetWorkID == "" {
 		return
 	}
@@ -836,20 +837,20 @@ func cloneStringMap(input map[string]string) map[string]string {
 	return clone
 }
 
-func cloneWorkItems(input []interfaces.FactoryWorkItem) []interfaces.FactoryWorkItem {
+func cloneWorkItems(input []work.FactoryWorkItem) []work.FactoryWorkItem {
 	if len(input) == 0 {
 		return nil
 	}
-	out := make([]interfaces.FactoryWorkItem, len(input))
+	out := make([]work.FactoryWorkItem, len(input))
 	for i, item := range input {
 		out[i] = item
 		out[i].Tags = cloneStringMap(item.Tags)
-		out[i].Content = append([]interfaces.WorkContentPart(nil), item.Content...)
+		out[i].Content = append([]work.WorkContentPart(nil), item.Content...)
 	}
 	return out
 }
 
-func sortedWorkItems(input []interfaces.FactoryWorkItem) []interfaces.FactoryWorkItem {
+func sortedWorkItems(input []work.FactoryWorkItem) []work.FactoryWorkItem {
 	if len(input) == 0 {
 		return nil
 	}
@@ -903,7 +904,7 @@ func sortedStrings(values []string) []string {
 	return deduped
 }
 
-func mergeFactoryWorkItem(existing interfaces.FactoryWorkItem, incoming interfaces.FactoryWorkItem) interfaces.FactoryWorkItem {
+func mergeFactoryWorkItem(existing work.FactoryWorkItem, incoming work.FactoryWorkItem) work.FactoryWorkItem {
 	if incoming.ID == "" {
 		incoming.ID = existing.ID
 	}
@@ -929,7 +930,7 @@ func mergeFactoryWorkItem(existing interfaces.FactoryWorkItem, incoming interfac
 		incoming.PreviousChainingTraceIDs = append([]string(nil), existing.PreviousChainingTraceIDs...)
 	}
 	if incoming.Content == nil {
-		incoming.Content = append([]interfaces.WorkContentPart(nil), existing.Content...)
+		incoming.Content = append([]work.WorkContentPart(nil), existing.Content...)
 	}
 	if incoming.ParentID == "" {
 		incoming.ParentID = existing.ParentID

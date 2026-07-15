@@ -4,6 +4,7 @@ import (
 	"maps"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // Marking represents the complete state of tokens across places in a petri net.
@@ -127,7 +128,7 @@ func deepCopyToken(t *interfaces.Token) interfaces.Token {
 		maps.Copy(cp.Color.Tags, t.Color.Tags)
 	}
 	if t.Color.Relations != nil {
-		cp.Color.Relations = make([]interfaces.Relation, len(t.Color.Relations))
+		cp.Color.Relations = make([]work.Relation, len(t.Color.Relations))
 		copy(cp.Color.Relations, t.Color.Relations)
 	}
 	if t.Color.Payload != nil {

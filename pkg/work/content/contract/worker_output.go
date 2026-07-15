@@ -4,14 +4,14 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // ContentFromWorkerOutput maps one workstation response body onto canonical work
 // content. JSON WorkContent, content envelopes, and part arrays are parsed when
 // present; otherwise the raw body becomes one text part.
-func ContentFromWorkerOutput(raw string) ([]interfaces.WorkContentPart, error) {
+func ContentFromWorkerOutput(raw string) ([]work.WorkContentPart, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return nil, nil
@@ -29,13 +29,13 @@ func ContentFromWorkerOutput(raw string) ([]interfaces.WorkContentPart, error) {
 		return PartsFromGenerated(&envelope.Content), nil
 	}
 
-	var parts []interfaces.WorkContentPart
+	var parts []work.WorkContentPart
 	if err := json.Unmarshal([]byte(trimmed), &parts); err == nil && len(parts) > 0 {
 		return parts, nil
 	}
 
-	return []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	return []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: raw,
 	}}, nil
 }

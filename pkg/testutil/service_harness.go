@@ -15,11 +15,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
@@ -257,7 +258,7 @@ func NewServiceTestHarness(t *testing.T, dir string, opts ...ServiceTestHarnessO
 // --- internal routing helpers ---
 
 // submit delegates to the underlying FactoryService.
-func (h *ServiceTestHarness) submit(ctx context.Context, reqs []interfaces.SubmitRequest) error {
+func (h *ServiceTestHarness) submit(ctx context.Context, reqs []work.SubmitRequest) error {
 	request := requests.WorkRequestFromSubmitRequests(reqs)
 	_, err := h.svc.SubmitWorkRequest(ctx, request)
 	return err
@@ -394,7 +395,7 @@ type delegatingExecutor struct {
 	fallback   workers.WorkerExecutor
 }
 
-func (d *delegatingExecutor) Execute(ctx context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (d *delegatingExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	if custom, ok := d.customs[d.workerType]; ok {
 		return custom.Execute(ctx, dispatch)
 	}
@@ -527,7 +528,7 @@ func (h *ServiceTestHarness) SubmitWork(workTypeID string, payload []byte) error
 func (h *ServiceTestHarness) SubmitError(workTypeID string, payload []byte) error {
 	h.t.Helper()
 
-	return h.submit(context.Background(), []interfaces.SubmitRequest{{
+	return h.submit(context.Background(), []work.SubmitRequest{{
 		WorkTypeID: workTypeID,
 		Payload:    payload,
 		TraceID:    fmt.Sprintf("trace-%s-%d", workTypeID, time.Now().UnixNano()),
@@ -537,7 +538,7 @@ func (h *ServiceTestHarness) SubmitError(workTypeID string, payload []byte) erro
 // SubmitFull submits one or more work items with full control over WorkID,
 // TraceID, Tags, Relations, and other SubmitRequest fields. It wraps those
 // fields into a canonical WorkRequest before calling the service ingress.
-func (h *ServiceTestHarness) SubmitFull(ctx context.Context, reqs []interfaces.SubmitRequest) error {
+func (h *ServiceTestHarness) SubmitFull(ctx context.Context, reqs []work.SubmitRequest) error {
 	h.t.Helper()
 
 	if err := h.SubmitFullError(ctx, reqs); err != nil {
@@ -549,7 +550,7 @@ func (h *ServiceTestHarness) SubmitFull(ctx context.Context, reqs []interfaces.S
 
 // SubmitFullError is the nonfatal form of SubmitFull for tests that need to
 // assert validation errors without failing the test immediately.
-func (h *ServiceTestHarness) SubmitFullError(ctx context.Context, reqs []interfaces.SubmitRequest) error {
+func (h *ServiceTestHarness) SubmitFullError(ctx context.Context, reqs []work.SubmitRequest) error {
 	h.t.Helper()
 
 	return h.submit(ctx, reqs)
@@ -557,7 +558,7 @@ func (h *ServiceTestHarness) SubmitFullError(ctx context.Context, reqs []interfa
 
 // SubmitWorkRequest submits a canonical work request batch with full control
 // over request IDs, work item names, payloads, tags, and relations.
-func (h *ServiceTestHarness) SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) error {
+func (h *ServiceTestHarness) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) error {
 	h.t.Helper()
 
 	if _, err := h.svc.SubmitWorkRequest(ctx, request); err != nil {
@@ -693,8 +694,8 @@ func (h *ServiceTestHarness) GetFactoryEvents(ctx context.Context) ([]factoryapi
 }
 
 // MoveWork applies a synchronous operator relocation through the service layer.
-func (h *ServiceTestHarness) MoveWork(ctx context.Context, workID, stateName string) (interfaces.OperatorMoveResult, error) {
-	return h.svc.MoveWork(ctx, workID, stateName, interfaces.WorkStateChangeSourceAPI, "")
+func (h *ServiceTestHarness) MoveWork(ctx context.Context, workID, stateName string) (work.OperatorMoveResult, error) {
+	return h.svc.MoveWork(ctx, workID, stateName, work.WorkStateChangeSourceAPI, "")
 }
 
 // RunInBackground starts the factory's Run loop in a background goroutine

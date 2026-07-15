@@ -4,22 +4,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestFactoryEventHistory_RecordWorkStateChange_OperatorMoveShape(t *testing.T) {
 	eventTime := time.Date(2026, 4, 18, 12, 30, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return eventTime })
 
-	history.RecordWorkStateChange(3, interfaces.WorkStateChangeRecord{
+	history.RecordWorkStateChange(3, work.WorkStateChangeRecord{
 		WorkID:        "work-1",
 		WorkTypeID:    "task",
 		FromState:     "failed",
 		ToState:       "in-progress",
 		FromPlaceID:   "task:failed",
 		ToPlaceID:     "task:in-progress",
-		Source:        interfaces.WorkStateChangeSourceCLI,
+		Source:        work.WorkStateChangeSourceCLI,
 		RequestID:     "move-request-1",
 		TriggerWorkID: "work-parent",
 		Reason:        "operator recovery",
@@ -85,14 +85,14 @@ func TestFactoryEventHistory_RecordWorkStateChange_NormalizesEventTimeToUTC(t *t
 	eventTime := time.Date(2026, 4, 22, 23, 30, 0, 0, localZone)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
-	history.RecordWorkStateChange(4, interfaces.WorkStateChangeRecord{
+	history.RecordWorkStateChange(4, work.WorkStateChangeRecord{
 		WorkID:      "work-utc",
 		WorkTypeID:  "task",
 		FromState:   "init",
 		ToState:     "done",
 		FromPlaceID: "task:init",
 		ToPlaceID:   "task:done",
-		Source:      interfaces.WorkStateChangeSourceAPI,
+		Source:      work.WorkStateChangeSourceAPI,
 	}, eventTime)
 
 	events := history.Events()
@@ -107,20 +107,20 @@ func TestFactoryEventHistory_RecordWorkStateChange_MatchesRecordWorkRequestEvent
 	eventTime := time.Date(2026, 4, 22, 23, 30, 0, 0, localZone)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
-	history.RecordWorkRequest(4, interfaces.WorkRequestRecord{
+	history.RecordWorkRequest(4, work.WorkRequestRecord{
 		RequestID: "request-utc",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		TraceID:   "trace-utc",
-		WorkItems: []interfaces.FactoryWorkItem{{ID: "work-utc", WorkTypeID: "task"}},
+		WorkItems: []work.FactoryWorkItem{{ID: "work-utc", WorkTypeID: "task"}},
 	}, eventTime)
-	history.RecordWorkStateChange(4, interfaces.WorkStateChangeRecord{
+	history.RecordWorkStateChange(4, work.WorkStateChangeRecord{
 		WorkID:      "work-utc",
 		WorkTypeID:  "task",
 		FromState:   "init",
 		ToState:     "done",
 		FromPlaceID: "task:init",
 		ToPlaceID:   "task:done",
-		Source:      interfaces.WorkStateChangeSourceCLI,
+		Source:      work.WorkStateChangeSourceCLI,
 	}, eventTime)
 
 	events := history.Events()

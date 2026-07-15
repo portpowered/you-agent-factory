@@ -15,11 +15,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -180,10 +181,10 @@ func TestInvokeModel_UsesModelHostLeasesAndReusesLoadedRuntime(t *testing.T) {
 	if runtime.invocationCount() != 2 {
 		t.Fatalf("invocation count = %d, want 2", runtime.invocationCount())
 	}
-	if len(first.Content) != 1 || first.Content[0].Type != interfaces.WorkContentPartTypeAudio || first.StreamFile != audioPath || first.StreamContentType != "audio/wav" {
+	if len(first.Content) != 1 || first.Content[0].Type != work.WorkContentPartTypeAudio || first.StreamFile != audioPath || first.StreamContentType != "audio/wav" {
 		t.Fatalf("first result = %#v, want audio content and stream metadata", first)
 	}
-	if len(second.Content) != 1 || second.Content[0].Type != interfaces.WorkContentPartTypeAudio {
+	if len(second.Content) != 1 || second.Content[0].Type != work.WorkContentPartTypeAudio {
 		t.Fatalf("second result = %#v, want audio content", second)
 	}
 }
@@ -192,7 +193,7 @@ func TestLoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath(t *testing
 	provider := &providerCallRecorder{}
 	wsExec, runtime := localModelManagedRuntimeWorkerExecutor(t, provider)
 
-	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := wsExec.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "dispatch-tts",
 		TransitionID:    "transition-tts",
 		WorkerType:      "tts-worker",
@@ -201,8 +202,8 @@ func TestLoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath(t *testing
 			ID: "token-tts",
 			Color: interfaces.TokenColor{
 				WorkID: "work-tts",
-				Content: []interfaces.WorkContentPart{{
-					Type:  interfaces.WorkContentPartTypeText,
+				Content: []work.WorkContentPart{{
+					Type:  work.WorkContentPartTypeText,
 					Label: "utterance",
 					Text:  "hello world",
 				}},
@@ -226,12 +227,12 @@ func TestLoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath(t *testing
 func TestLoadWorkersFromConfig_LocalModelWorkerRecordsModelExecutionEvents(t *testing.T) {
 	eventTime := time.Date(2026, time.May, 22, 10, 0, 0, 0, time.UTC)
 	wsExec, history, audioPath := localModelExecutionRecorderFixture(t, eventTime)
-	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := wsExec.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "dispatch-tts",
 		TransitionID:    "transition-tts",
 		WorkerType:      "tts-worker",
 		WorkstationName: "speak",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			CurrentTick: 2,
 			RequestID:   "request-tts",
 			TraceID:     "trace-tts",
@@ -241,8 +242,8 @@ func TestLoadWorkersFromConfig_LocalModelWorkerRecordsModelExecutionEvents(t *te
 			ID: "token-tts",
 			Color: interfaces.TokenColor{
 				WorkID: "work-tts",
-				Content: []interfaces.WorkContentPart{{
-					Type:  interfaces.WorkContentPartTypeText,
+				Content: []work.WorkContentPart{{
+					Type:  work.WorkContentPartTypeText,
 					Label: "utterance",
 					Text:  "hello world",
 				}},
@@ -376,9 +377,9 @@ func TestNewRecordingModelRunner_LocalModelWorkerEventsStayDetachedFromLaterSour
 	mutateLocalModelWorkerCloneSource(workerDef)
 
 	_, err := runner.Execute(context.Background(), interfaces.RunnerExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID: "dispatch-tts",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				CurrentTick: 2,
 				RequestID:   "request-tts",
 				TraceID:     "trace-tts",
@@ -562,9 +563,9 @@ func assertRecordedLocalModelExecutionEvents(t *testing.T, events []factoryapi.F
 func TestModelEventContext_NormalizesEventTimeToUTC(t *testing.T) {
 	localZone := time.FixedZone("Model/Local", 9*60*60)
 	context := modelEventContext(interfaces.RunnerExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID: "dispatch-model",
-			Execution:  interfaces.ExecutionMetadata{CurrentTick: 6},
+			Execution:  work.ExecutionMetadata{CurrentTick: 6},
 		},
 	}, time.Date(2026, 4, 20, 21, 15, 0, 0, localZone))
 
@@ -728,8 +729,8 @@ func localModelTestCacheLayout(t *testing.T) localModelCacheLayout {
 
 func mustMarshalAudioContentResponse(t *testing.T, audioPath string) string {
 	t.Helper()
-	content := []interfaces.WorkContentPart{{
-		Type:        interfaces.WorkContentPartTypeAudio,
+	content := []work.WorkContentPart{{
+		Type:        work.WorkContentPartTypeAudio,
 		File:        audioPath,
 		ContentType: "audio/wav",
 	}}
@@ -757,8 +758,8 @@ func stringPtr(value string) *string {
 	return &value
 }
 
-func localModelDispatch() interfaces.WorkDispatch {
-	return interfaces.WorkDispatch{
+func localModelDispatch() work.WorkDispatch {
+	return work.WorkDispatch{
 		DispatchID:      "dispatch-tts",
 		TransitionID:    "transition-tts",
 		WorkerType:      "tts-worker",
@@ -767,8 +768,8 @@ func localModelDispatch() interfaces.WorkDispatch {
 			ID: "token-tts",
 			Color: interfaces.TokenColor{
 				WorkID: "work-tts",
-				Content: []interfaces.WorkContentPart{{
-					Type:  interfaces.WorkContentPartTypeText,
+				Content: []work.WorkContentPart{{
+					Type:  work.WorkContentPartTypeText,
 					Label: "utterance",
 					Text:  "hello world",
 				}},

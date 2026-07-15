@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchCreatesGeneratedWork(t *testing.T) {
@@ -37,7 +38,7 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchPreservesCanonicalCha
 
 	result := executeWorkerBatchTransition(t, transitioner, snapshot)
 	batch := result.GeneratedBatches[0]
-	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, work.WorkRequestNormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true, "child": true},
 	})
 	if err != nil {
@@ -77,7 +78,7 @@ func executeWorkerBatchTransition(
 	return result
 }
 
-func assertGeneratedWorkerBatchMetadata(t *testing.T, result *interfaces.TickResult) (interfaces.GeneratedSubmissionBatch, string) {
+func assertGeneratedWorkerBatchMetadata(t *testing.T, result *interfaces.TickResult) (work.GeneratedSubmissionBatch, string) {
 	t.Helper()
 
 	if len(result.Mutations) != 0 {
@@ -97,10 +98,10 @@ func assertGeneratedWorkerBatchMetadata(t *testing.T, result *interfaces.TickRes
 	return batch, requestID
 }
 
-func normalizeGeneratedWorkerBatch(t *testing.T, batch interfaces.GeneratedSubmissionBatch) []interfaces.SubmitRequest {
+func normalizeGeneratedWorkerBatch(t *testing.T, batch work.GeneratedSubmissionBatch) []work.SubmitRequest {
 	t.Helper()
 
-	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, work.WorkRequestNormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true, "child": true},
 	})
 	if err != nil {
@@ -113,8 +114,8 @@ func assertGeneratedWorkerBatchSubmissions(
 	t *testing.T,
 	requestID string,
 	source string,
-	normalized []interfaces.SubmitRequest,
-) interfaces.SubmitRequest {
+	normalized []work.SubmitRequest,
+) work.SubmitRequest {
 	t.Helper()
 
 	record := requests.WorkRequestRecordFromSubmitRequests(requestID, source, normalized)
@@ -167,8 +168,8 @@ func assertRepeatedGeneratedWorkerBatchRequestID(
 func assertGeneratedWorkerBatchOutcome(
 	t *testing.T,
 	result *interfaces.TickResult,
-	first interfaces.SubmitRequest,
-	second interfaces.SubmitRequest,
+	first work.SubmitRequest,
+	second work.SubmitRequest,
 ) {
 	t.Helper()
 
@@ -391,7 +392,7 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchUsesBatchMetadataSour
 	if len(batch.Metadata.ParentLineage) != 2 {
 		t.Fatalf("parent lineage = %#v, want metadata preserved", batch.Metadata.ParentLineage)
 	}
-	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, work.WorkRequestNormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true, "child": true},
 	})
 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -79,9 +80,9 @@ func runThinEventDualDispatchSmoke(t *testing.T) dualDispatchSmokeFixture {
 		modelWorkID:  dualDispatchSmokeModelWorkID,
 		scriptWorkID: dualDispatchSmokeScriptWorkID,
 	}
-	harness.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	harness.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: smoke.requestID,
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{
 			{
 				Name:       "model-path",

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
@@ -84,8 +85,8 @@ func (fs *Host) sessionInvocationFactoryConfig(sessionID string) (*interfaces.Fa
 	return runtimeCfg.FactoryConfig(), nil
 }
 
-func (fs *Host) submitOwnedSessionInvocationWork(ctx context.Context, sessionID string, request interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
-	return fs.SubmitWorkRequestForSession(ctx, sessionID, factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{request}))
+func (fs *Host) submitOwnedSessionInvocationWork(ctx context.Context, sessionID string, request work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+	return fs.SubmitWorkRequestForSession(ctx, sessionID, factoryrequests.WorkRequestFromSubmitRequests([]work.SubmitRequest{request}))
 }
 
 func (fs *Host) observeSessionInvocation(ctx context.Context, sessionID string, input sessioninvocation.SessionInvocationWaitInput) (sessioninvocation.SessionInvocationObservation, error) {
@@ -174,7 +175,7 @@ func classifyInvocationMissingPrimaryResultFromSnapshot(
 			if strings.TrimSpace(token.Color.RequestID) != strings.TrimSpace(input.RequestID) || tokenStateName(token.PlaceID) != wantState {
 				continue
 			}
-			return workinvocation.ClassifyMissingPrimaryResultWorkItem(input.RequestID, input.InvocationReturn, interfaces.FactoryWorkItem{
+			return workinvocation.ClassifyMissingPrimaryResultWorkItem(input.RequestID, input.InvocationReturn, work.FactoryWorkItem{
 				ID: token.Color.WorkID, WorkTypeID: token.Color.WorkTypeID,
 				DisplayName: token.Color.Name, PlaceID: token.PlaceID,
 			}, sessionID)

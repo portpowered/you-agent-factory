@@ -7,6 +7,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
@@ -365,7 +366,7 @@ func scriptResponseErrored(response interfaces.FactoryWorldScriptResponse) bool 
 	}
 }
 
-func dispatchHasCustomerWork(ids []string, items map[string]interfaces.FactoryWorkItem) bool {
+func dispatchHasCustomerWork(ids []string, items map[string]work.FactoryWorkItem) bool {
 	return len(workItemRefsForIDs(ids, items)) > 0
 }
 
@@ -446,14 +447,14 @@ func consumedInputWorkItemRefsForCompletion(
 func consumedInputWorkItemRefs(
 	dispatchID string,
 	inputs []interfaces.WorkstationInput,
-	fallbackItems []interfaces.FactoryWorkItem,
+	fallbackItems []work.FactoryWorkItem,
 	fallbackIDs []string,
 	state interfaces.FactoryWorldState,
 ) []interfaces.FactoryWorldWorkItemRef {
 	refs := make([]interfaces.FactoryWorldWorkItemRef, 0, len(inputs)+len(fallbackItems)+len(fallbackIDs))
 	seen := make(map[string]struct{}, len(inputs)+len(fallbackItems)+len(fallbackIDs))
 
-	appendConsumedRef := func(workID string, fallback *interfaces.FactoryWorkItem) {
+	appendConsumedRef := func(workID string, fallback *work.FactoryWorkItem) {
 		if workID == "" {
 			return
 		}
@@ -492,14 +493,14 @@ func consumedInputWorkItemRefs(
 
 func consumedInputWorkItemRef(
 	workID string,
-	fallback *interfaces.FactoryWorkItem,
-	resolution interfaces.WorkPayloadResolution,
+	fallback *work.FactoryWorkItem,
+	resolution work.WorkPayloadResolution,
 ) interfaces.FactoryWorldWorkItemRef {
-	if resolution.Status == interfaces.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
+	if resolution.Status == work.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
 		return lineageResolvedWorkItemRef(resolution.Snapshot, string(resolution.Status))
 	}
 
-	item := interfaces.FactoryWorkItem{ID: workID}
+	item := work.FactoryWorkItem{ID: workID}
 	if fallback != nil {
 		item = *fallback
 	}
@@ -527,7 +528,7 @@ func outputWorkItemRefsForCompletion(
 			continue
 		}
 		resolution := state.PayloadLineage.ResolveOutputWorkSnapshot(completion.DispatchID, item.ID)
-		if resolution.Status == interfaces.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
+		if resolution.Status == work.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
 			refs = append(refs, lineageResolvedWorkItemRef(resolution.Snapshot, string(resolution.Status)))
 		} else {
 			ref := workItemRef(item)
@@ -544,12 +545,12 @@ func outputWorkItemRefsForCompletion(
 }
 
 func lineageResolvedWorkItemRef(
-	snapshot *interfaces.WorkPayloadSnapshot,
+	snapshot *work.WorkPayloadSnapshot,
 	payloadStatus string,
 ) interfaces.FactoryWorldWorkItemRef {
 	ref := workItemRef(snapshot.WorkItem)
 	ref.State = snapshot.WorkItem.State
-	ref.Content = interfaces.CloneWorkContentParts(snapshot.WorkItem.Content)
+	ref.Content = work.CloneWorkContentParts(snapshot.WorkItem.Content)
 	ref.PayloadStatus = payloadStatus
 	ref.LineageLogicalWorkID = snapshot.LogicalWorkID
 	ref.LineageSourceKind = string(snapshot.SourceKind)
@@ -560,7 +561,7 @@ func lineageResolvedWorkItemRef(
 
 func workItemRefsForIDs(
 	ids []string,
-	items map[string]interfaces.FactoryWorkItem,
+	items map[string]work.FactoryWorkItem,
 ) []interfaces.FactoryWorldWorkItemRef {
 	refs := make([]interfaces.FactoryWorldWorkItemRef, 0, len(ids))
 	for _, id := range sortedStrings(ids) {
@@ -573,7 +574,7 @@ func workItemRefsForIDs(
 	return refs
 }
 
-func workItemRefsForItems(items []interfaces.FactoryWorkItem) []interfaces.FactoryWorldWorkItemRef {
+func workItemRefsForItems(items []work.FactoryWorkItem) []interfaces.FactoryWorldWorkItemRef {
 	refs := make([]interfaces.FactoryWorldWorkItemRef, 0, len(items))
 	seen := make(map[string]struct{}, len(items))
 	for _, item := range items {
@@ -605,7 +606,7 @@ func workItemRefsForInputs(inputs []interfaces.WorkstationInput) []interfaces.Fa
 	return refs
 }
 
-func workItemRef(item interfaces.FactoryWorkItem) interfaces.FactoryWorldWorkItemRef {
+func workItemRef(item work.FactoryWorkItem) interfaces.FactoryWorldWorkItemRef {
 	currentChainingTraceID := item.CurrentChainingTraceID
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = item.TraceID
@@ -706,7 +707,7 @@ func mutationViewsPtrForCompletion(
 	return &views
 }
 
-func generatedTokenViewForWorkItem(tokenID string, item interfaces.FactoryWorkItem) *factoryapi.FactoryWorldTokenView {
+func generatedTokenViewForWorkItem(tokenID string, item work.FactoryWorkItem) *factoryapi.FactoryWorldTokenView {
 	if tokenID == "" {
 		tokenID = item.ID
 	}
@@ -728,14 +729,14 @@ func generatedTokenViewForWorkItem(tokenID string, item interfaces.FactoryWorkIt
 	}
 }
 
-func mutationTypeForOutput(input interfaces.WorkstationInput, item interfaces.FactoryWorkItem) string {
+func mutationTypeForOutput(input interfaces.WorkstationInput, item work.FactoryWorkItem) string {
 	if input.WorkItem != nil && input.WorkItem.ID == item.ID {
 		return string(interfaces.MutationMove)
 	}
 	return string(interfaces.MutationCreate)
 }
 
-func mutationTokenID(input interfaces.WorkstationInput, item interfaces.FactoryWorkItem) string {
+func mutationTokenID(input interfaces.WorkstationInput, item work.FactoryWorkItem) string {
 	if input.TokenID != "" && input.WorkItem != nil && input.WorkItem.ID == item.ID {
 		return input.TokenID
 	}

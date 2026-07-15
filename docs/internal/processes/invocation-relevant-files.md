@@ -138,13 +138,14 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   validation shared by validate-only and save pre-check flows.
 - `pkg/config/factory_config_mapping*.go` maps `invocationReturn` between the
   OpenAPI factory contract and the internal runtime config.
-- `pkg/interfaces/factory_runtime.go` owns the backend canonical
-  `WorkContentPart`, request-validation error, and `FactoryInvocationResult`
-  shapes used below transport and service boundaries; the Factory Session owner
-  constructs that shared result.
+- `pkg/work` owns canonical `Work`, `WorkRequest`, `WorkContentPart`, invocation
+  argument, dispatch identity, relation, and payload-lineage contracts. The
+  remaining request-validation error and `FactoryInvocationResult` session
+  result shape stay at their current boundary until Factory Session contracts
+  converge; the Factory Session owner constructs that shared result.
 - `pkg/work/content/contract` translates between generated OpenAPI `WorkContent`
-  and the backend-owned `interfaces.WorkContentPart` shape; pure content rules
-  remain in `pkg/work/content`.
+  and the backend-owned `work.WorkContentPart` shape; pure content rules remain
+  in `pkg/work/content`.
 - `pkg/api/handlers_work_write.go` includes the session invocation HTTP
   boundary alongside other session work-write handlers, including projection of
   shared invocation non-success context into the public `InvocationResponse`.

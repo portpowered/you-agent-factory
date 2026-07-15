@@ -11,7 +11,8 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type recordingLeaseHost struct {
@@ -126,7 +127,7 @@ func TestLeaseExecution_AcquiresAndReleasesHostLeaseAroundInference(t *testing.T
 		t.Fatalf("runner type = %T, want *leaseBoundRunner", runner)
 	}
 	result, err := runner.Execute(context.Background(), interfaces.RunnerExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-1"},
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-1"},
 	})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -187,7 +188,7 @@ func TestLeaseExecution_AcquiresAndReleasesHostLeaseAroundAgentWorker(t *testing
 		t.Fatalf("runner type = %T, want *leaseBoundRunner", runner)
 	}
 	result, err := runner.Execute(context.Background(), interfaces.RunnerExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-agent-1"},
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-agent-1"},
 	})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)

@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
@@ -295,7 +296,7 @@ func commandRequestMatches(record sideEffectRecord, req workers.CommandRequest) 
 	return true
 }
 
-func executionMetadataMatches(recorded, observed interfaces.ExecutionMetadata) bool {
+func executionMetadataMatches(recorded, observed work.ExecutionMetadata) bool {
 	if recorded.ReplayKey != "" && observed.ReplayKey != recorded.ReplayKey {
 		return false
 	}

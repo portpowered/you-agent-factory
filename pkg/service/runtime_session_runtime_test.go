@@ -44,6 +44,7 @@ import (
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -852,7 +853,7 @@ func TestFactoryService_SessionRuntimeSurfaceTargetsExplicitSessionID(t *testing
 	defer harness.stop(t)
 
 	betaSessionID := harness.openFactorySession(t, "beta")
-	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+	request := requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{{
 		WorkID:     "beta-session-targeted-work",
 		Name:       "beta-session-targeted-work",
 		WorkTypeID: "task",
@@ -1829,9 +1830,9 @@ func TestPortableCanonicalFactsRetainJavaScriptProjectionInputsCheckpointAndResu
 			ArtifactRef: &interfaces.JavaScriptCheckpointArtifactRef{ID: "artifact-checkpoint"},
 		}},
 		ResultStatus: "FAILED_WITH_PARTIAL",
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "safe partial result"},
-			{Type: interfaces.WorkContentPartTypeBinary, ArtifactID: "artifact-result"},
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "safe partial result"},
+			{Type: work.WorkContentPartTypeBinary, ArtifactID: "artifact-result"},
 		},
 	}
 	succeeded := factoryapi.FactorySessionDurableLifecycleStatusFailed
@@ -1995,7 +1996,7 @@ func terminalJavaScriptRecordingHistory(
 	status := factoryapi.FactoryEventSessionResultStatus(resultStatus)
 	history.RecordSessionResultUpdated(factoryevents.SessionLifecycleResultInput{
 		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 2,
-		ResultStatus: status, ResultSummary: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "recorded result"}}, ArtifactIDs: []string{"artifact-result"},
+		ResultStatus: status, ResultSummary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "recorded result"}}, ArtifactIDs: []string{"artifact-result"},
 	}, eventTime.Add(2*time.Second))
 	history.RecordSessionCompleted(factoryevents.SessionLifecycleCompleteInput{
 		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 3,
@@ -2090,7 +2091,7 @@ func lifecycleJavaScriptRecordingHistory(t *testing.T, finalStatus factoryapi.Fa
 	partialStatus := factoryapi.FactoryEventSessionResultStatusPartial
 	history.RecordSessionResultUpdated(factoryevents.SessionLifecycleResultInput{
 		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 3,
-		ResultStatus: partialStatus, ResultSummary: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "recorded partial result"}}, ArtifactIDs: []string{"artifact-checkpoint"},
+		ResultStatus: partialStatus, ResultSummary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "recorded partial result"}}, ArtifactIDs: []string{"artifact-checkpoint"},
 	}, eventTime.Add(2*time.Second))
 	control := factoryevents.SessionLifecycleControlInput{SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, OrchestratorDialect: "workflow-v1", Source: "runtime"}
 	history.RecordSessionPaused(control, eventTime.Add(3*time.Second))
@@ -2099,7 +2100,7 @@ func lifecycleJavaScriptRecordingHistory(t *testing.T, finalStatus factoryapi.Fa
 		finalResultStatus := factoryapi.FactoryEventSessionResultStatusFinal
 		history.RecordSessionResultUpdated(factoryevents.SessionLifecycleResultInput{
 			SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 6,
-			ResultStatus: finalResultStatus, ResultSummary: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "recorded final result"}}, ArtifactIDs: []string{"artifact-checkpoint"},
+			ResultStatus: finalResultStatus, ResultSummary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "recorded final result"}}, ArtifactIDs: []string{"artifact-checkpoint"},
 		}, eventTime.Add(5*time.Second))
 		history.RecordSessionCompleted(factoryevents.SessionLifecycleCompleteInput{
 			SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, Source: "runtime", Tick: 7,

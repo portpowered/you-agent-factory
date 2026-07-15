@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // WorkerExecutor is the side-effect interface for one dispatched worker step.
 type WorkerExecutor interface {
-	Execute(ctx context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error)
+	Execute(ctx context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error)
 }
 
 // WorkstationRequestExecutor handles worker-owned execution after workstation

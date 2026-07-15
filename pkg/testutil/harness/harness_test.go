@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/testutil"
 )
@@ -166,7 +167,7 @@ type callTracker struct {
 	count int
 }
 
-func (c *callTracker) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (c *callTracker) Execute(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
 	c.count++
 	return interfaces.WorkResult{
 		DispatchID:   d.DispatchID,
@@ -185,7 +186,7 @@ func TestMockExecutor_CallTracking(t *testing.T) {
 		t.Errorf("expected 0 calls, got %d", mock.CallCount())
 	}
 
-	dispatch := interfaces.WorkDispatch{TransitionID: "t1"}
+	dispatch := work.WorkDispatch{TransitionID: "t1"}
 	result, err := mock.Execute(t.Context(), dispatch)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -197,7 +198,7 @@ func TestMockExecutor_CallTracking(t *testing.T) {
 		t.Errorf("expected 1 call, got %d", mock.CallCount())
 	}
 
-	result, err = mock.Execute(t.Context(), interfaces.WorkDispatch{TransitionID: "t2"})
+	result, err = mock.Execute(t.Context(), work.WorkDispatch{TransitionID: "t2"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -206,7 +207,7 @@ func TestMockExecutor_CallTracking(t *testing.T) {
 	}
 
 	// Third call should return default (ACCEPTED).
-	result, err = mock.Execute(t.Context(), interfaces.WorkDispatch{TransitionID: "t3"})
+	result, err = mock.Execute(t.Context(), work.WorkDispatch{TransitionID: "t3"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

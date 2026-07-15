@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
@@ -62,7 +63,7 @@ func TestNew_InlineDispatchWithNoopExecutorCompletesWorkflow(t *testing.T) {
 
 	go func() {
 		time.Sleep(50 * time.Millisecond)
-		_, _ = submitWorkRequests(ctx, f, []interfaces.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-1"}})
+		_, _ = submitWorkRequests(ctx, f, []work.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-1"}})
 	}()
 
 	if err := f.Run(ctx); err != nil {
@@ -89,7 +90,7 @@ func TestNew_InlineDispatchExecutorPanicRoutesFailedWork(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID:     "work-panic",
 		WorkTypeID: "task",
 		TraceID:    "trace-panic",
@@ -140,7 +141,7 @@ func TestNew_InlineDispatchWithoutRegisteredExecutorRecordsMissingExecutorFailur
 	}
 	tickable := tickableFactory(t, f)
 
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID:     "work-missing-executor",
 		WorkTypeID: "task",
 		TraceID:    "trace-missing-executor",
@@ -169,7 +170,7 @@ func TestNew_InlineDispatchWithoutRegisteredExecutorRecordsMissingExecutorFailur
 
 func TestNew_CompletesWorkflowThroughActiveSubsystems(t *testing.T) {
 	f := newPassingInlineRuntime(t)
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID:     "work-active-path",
 		WorkTypeID: "task",
 		TraceID:    "trace-active-path",
@@ -270,7 +271,7 @@ func TestSubmit_AssignsTraceIDWhenMissing(t *testing.T) {
 	}
 
 	tickable := tickableFactory(t, f)
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{WorkTypeID: "task"}}); err != nil {
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{WorkTypeID: "task"}}); err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
 	}
 	if err := tickable.Tick(context.Background()); err != nil {
@@ -306,7 +307,7 @@ func TestNew_WithClockStampsDispatchesDeterministically(t *testing.T) {
 	}
 
 	tickable := tickableFactory(t, f)
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-clock"}}); err != nil {
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-clock"}}); err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
 	}
 	if err := tickable.Tick(context.Background()); err != nil {

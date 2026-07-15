@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
@@ -84,7 +85,7 @@ func TestAdapterBuildCommandUsesTypedArgvWorkspaceAndEnvironment(t *testing.T) {
 	providerAdapter := agy.NewAdapter(factoryRoot, agy.WithExecutable(executable))
 	built, err := providerAdapter.BuildCommand(context.Background(), adapter.CommandContext{
 		Request: interfaces.ProviderInferenceRequest{
-			Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-agy"},
+			Dispatch:         work.WorkDispatch{DispatchID: "dispatch-agy"},
 			Model:            "gemini-pro",
 			SessionID:        "session-1",
 			WorkingDirectory: filepath.Join("workspaces", "a"),
@@ -125,7 +126,7 @@ func TestAdapterExecutePreservesPromptMetacharactersInArgv(t *testing.T) {
 		t.Fatalf("PTYRunner() error = %v", err)
 	}
 	request := interfaces.ProviderInferenceRequest{
-		Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-agy-42"},
+		Dispatch:         work.WorkDispatch{DispatchID: "dispatch-agy-42"},
 		WorkingDirectory: ".",
 		UserMessage:      privatePrompt,
 	}

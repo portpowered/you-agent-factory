@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestSubmissionHook_GeneratedBatchRecordsCanonicalHistoryBeforeInjection(t *testing.T) {
@@ -16,8 +17,8 @@ func TestSubmissionHook_GeneratedBatchRecordsCanonicalHistoryBeforeInjection(t *
 	marking := petri.NewMarking("test-wf")
 
 	var order []string
-	var requestRecords []interfaces.WorkRequestRecord
-	var workInputs []interfaces.SubmitRequest
+	var requestRecords []work.WorkRequestRecord
+	var workInputs []work.SubmitRequest
 	hook := &testSubmissionHook{
 		name:     "file-preseed",
 		priority: 10,
@@ -29,9 +30,9 @@ func TestSubmissionHook_GeneratedBatchRecordsCanonicalHistoryBeforeInjection(t *
 				t.Fatalf("hook should run before injection, saw %d tokens", len(input.Snapshot.Marking.Tokens))
 			}
 			return interfaces.SubmissionHookResult{
-				GeneratedBatches: []interfaces.GeneratedSubmissionBatch{{
-					Request: interfaces.WorkRequest{
-						Type: interfaces.WorkRequestTypeFactoryRequestBatch,
+				GeneratedBatches: []work.GeneratedSubmissionBatch{{
+					Request: work.WorkRequest{
+						Type: work.WorkRequestTypeFactoryRequestBatch,
 						Works: []interfaces.Work{{
 							Name:       "hook-work",
 							WorkID:     "work-hook",
@@ -39,7 +40,7 @@ func TestSubmissionHook_GeneratedBatchRecordsCanonicalHistoryBeforeInjection(t *
 							TraceID:    "trace-hook",
 						}},
 					},
-					Metadata: interfaces.GeneratedSubmissionBatchMetadata{Source: "inputs/task/default"},
+					Metadata: work.GeneratedSubmissionBatchMetadata{Source: "inputs/task/default"},
 				}},
 			}, nil
 		},
@@ -47,11 +48,11 @@ func TestSubmissionHook_GeneratedBatchRecordsCanonicalHistoryBeforeInjection(t *
 
 	eng := NewFactoryEngine(n, marking, nil,
 		WithSubmissionHook(hook),
-		WithWorkRequestRecorder(func(_ int, record interfaces.WorkRequestRecord) {
+		WithWorkRequestRecorder(func(_ int, record work.WorkRequestRecord) {
 			order = append(order, "request:"+record.RequestID)
 			requestRecords = append(requestRecords, record)
 		}),
-		WithWorkInputRecorder(func(_ int, req interfaces.SubmitRequest, _ interfaces.Token) {
+		WithWorkInputRecorder(func(_ int, req work.SubmitRequest, _ interfaces.Token) {
 			order = append(order, "input:"+req.WorkID)
 			workInputs = append(workInputs, req)
 		}),
@@ -185,23 +186,23 @@ func TestRun_KeepsTickingWhileSubmissionHookRequestsKeepAlive(t *testing.T) {
 func TestTickResultGeneratedBatchesRecordedBeforeInputsAndIdempotent(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
-	batch := interfaces.GeneratedSubmissionBatch{
-		Request: interfaces.WorkRequest{
+	batch := work.GeneratedSubmissionBatch{
+		Request: work.WorkRequest{
 			RequestID: "generated-request-1",
-			Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+			Type:      work.WorkRequestTypeFactoryRequestBatch,
 			Works: []interfaces.Work{
 				{Name: "draft", WorkID: "work-draft", WorkTypeID: "task", TraceID: "trace-generated"},
 				{Name: "review", WorkID: "work-review", WorkTypeID: "task"},
 			},
-			Relations: []interfaces.WorkRelation{{
-				Type:           interfaces.WorkRelationDependsOn,
+			Relations: []work.WorkRelation{{
+				Type:           work.WorkRelationDependsOn,
 				SourceWorkName: "review",
 				TargetWorkName: "draft",
 				RequiredState:  "complete",
 			}},
 		},
-		Metadata: interfaces.GeneratedSubmissionBatchMetadata{Source: "generator:test"},
-		Submissions: []interfaces.SubmitRequest{{
+		Metadata: work.GeneratedSubmissionBatchMetadata{Source: "generator:test"},
+		Submissions: []work.SubmitRequest{{
 			Name:        "review",
 			WorkID:      "work-review",
 			TargetState: "complete",
@@ -211,19 +212,19 @@ func TestTickResultGeneratedBatchesRecordedBeforeInputsAndIdempotent(t *testing.
 	sub := &mockSubsystem{
 		group: subsystems.Transitioner,
 		execFn: func(_ context.Context, _ *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) (*interfaces.TickResult, error) {
-			return &interfaces.TickResult{GeneratedBatches: []interfaces.GeneratedSubmissionBatch{batch, batch}}, nil
+			return &interfaces.TickResult{GeneratedBatches: []work.GeneratedSubmissionBatch{batch, batch}}, nil
 		},
 	}
 
 	var order []string
-	var requests []interfaces.WorkRequestRecord
-	var inputs []interfaces.SubmitRequest
+	var requests []work.WorkRequestRecord
+	var inputs []work.SubmitRequest
 	eng := NewFactoryEngine(n, marking, []subsystems.Subsystem{sub},
-		WithWorkRequestRecorder(func(_ int, record interfaces.WorkRequestRecord) {
+		WithWorkRequestRecorder(func(_ int, record work.WorkRequestRecord) {
 			order = append(order, "request:"+record.RequestID)
 			requests = append(requests, record)
 		}),
-		WithWorkInputRecorder(func(_ int, req interfaces.SubmitRequest, _ interfaces.Token) {
+		WithWorkInputRecorder(func(_ int, req work.SubmitRequest, _ interfaces.Token) {
 			order = append(order, "input:"+req.WorkID)
 			inputs = append(inputs, req)
 		}),

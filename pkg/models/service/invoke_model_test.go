@@ -14,7 +14,8 @@ import (
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
@@ -55,7 +56,7 @@ func TestService_InvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
 	if len(result.Bindings) != 1 || result.Bindings[0].Slot != "text" {
 		t.Fatalf("bindings = %#v, want one text binding", result.Bindings)
 	}
-	if len(result.Content) != 1 || result.Content[0].Type != interfaces.WorkContentPartTypeAudio ||
+	if len(result.Content) != 1 || result.Content[0].Type != work.WorkContentPartTypeAudio ||
 		result.StreamFile != audioPath || result.StreamContentType != "audio/wav" {
 		t.Fatalf("result content = %#v stream=%q type=%q, want audio output", result.Content, result.StreamFile, result.StreamContentType)
 	}
@@ -416,8 +417,8 @@ func directInvokeRequest(t *testing.T) factoryapi.ModelInvocationRequest {
 
 func mustMarshalAudioContentResponse(t *testing.T, audioPath string) string {
 	t.Helper()
-	body, err := json.Marshal([]interfaces.WorkContentPart{{
-		Type:        interfaces.WorkContentPartTypeAudio,
+	body, err := json.Marshal([]work.WorkContentPart{{
+		Type:        work.WorkContentPartTypeAudio,
 		File:        audioPath,
 		ContentType: "audio/wav",
 	}})

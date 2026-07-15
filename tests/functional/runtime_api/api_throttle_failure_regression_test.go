@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -26,7 +27,7 @@ func TestRetryableThrottleFailureWithoutGuardUsesDefaultRetryLimitAndFailsWork(t
 		cfg.ProviderCommandRunnerOverride = runner
 	}, factory.WithServiceMode())
 
-	server.SubmitRuntimeWork(t, interfaces.SubmitRequest{
+	server.SubmitRuntimeWork(t, work.SubmitRequest{
 		Name:       "throttled-task",
 		WorkTypeID: "task",
 		Payload:    json.RawMessage(`{"title":"force throttle exhaustion"}`),

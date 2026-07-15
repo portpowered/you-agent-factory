@@ -16,6 +16,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workdomain "github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -33,15 +35,15 @@ type FactoryEngine struct {
 	submissionHook        *queuedSubmissionHook
 	submissionHooks       []factory.SubmissionHook
 	submissionState       map[string]map[string]string
-	workRequests          map[string]interfaces.WorkRequestSubmitResult
-	recordSubmission      func(interfaces.FactorySubmissionRecord)
-	recordWorkRequest     func(int, interfaces.WorkRequestRecord)
-	recordWorkInput       func(int, interfaces.SubmitRequest, interfaces.Token)
+	workRequests          map[string]workdomain.WorkRequestSubmitResult
+	recordSubmission      func(work.FactorySubmissionRecord)
+	recordWorkRequest     func(int, work.WorkRequestRecord)
+	recordWorkInput       func(int, workdomain.SubmitRequest, interfaces.Token)
 	recordDispatch        func(interfaces.FactoryDispatchRecord)
 	recordCompletion      func(interfaces.FactoryCompletionRecord)
 	recordResponse        func(int, interfaces.WorkResult, interfaces.CompletedDispatch)
 	recordPetriMutations  func([]interfaces.TokenMutationRecord) error
-	dispatchHandler       func(interfaces.WorkDispatch)
+	dispatchHandler       func(work.WorkDispatch)
 	dispatchHook          factory.DispatchResultHook
 	resultHandler         func() // called when a result event is processed (e.g. decrement in-flight counter)
 	automaticTicksPaused  func() bool
@@ -80,7 +82,7 @@ func NewFactoryEngine(
 		submitSignal:     make(chan struct{}, 1),
 		submissionHook:   newQueuedSubmissionHook(),
 		submissionState:  make(map[string]map[string]string),
-		workRequests:     make(map[string]interfaces.WorkRequestSubmitResult),
+		workRequests:     make(map[string]workdomain.WorkRequestSubmitResult),
 		acceptingSubmits: true,
 	}
 	for _, opt := range opts {
@@ -250,7 +252,7 @@ func (e *FactoryEngine) hasBufferedInputs() bool {
 
 // SubmitWorkRequest validates and enqueues a canonical work request batch.
 // Repeated request IDs are treated as idempotent no-ops.
-func (e *FactoryEngine) SubmitWorkRequest(context context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (e *FactoryEngine) SubmitWorkRequest(context context.Context, request workdomain.WorkRequest) (workdomain.WorkRequestSubmitResult, error) {
 	e.mu.Lock()
 	if existing, exists := e.workRequests[request.RequestID]; exists && request.RequestID != "" {
 		e.mu.Unlock()
@@ -259,12 +261,12 @@ func (e *FactoryEngine) SubmitWorkRequest(context context.Context, request inter
 	}
 	e.mu.Unlock()
 
-	normalized, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{
+	normalized, err := requests.NormalizeWorkRequest(request, workdomain.WorkRequestNormalizeOptions{
 		ValidWorkTypes:    e.validWorkTypes(),
 		ValidStatesByType: state.ValidStatesByType(e.state.WorkTypes),
 	})
 	if err != nil {
-		return interfaces.WorkRequestSubmitResult{}, err
+		return workdomain.WorkRequestSubmitResult{}, err
 	}
 	if request.RequestID == "" && len(normalized) > 0 {
 		request.RequestID = normalized[0].RequestID
@@ -272,10 +274,10 @@ func (e *FactoryEngine) SubmitWorkRequest(context context.Context, request inter
 	return e.submitNormalizedWorkRequest(context, request.RequestID, normalized)
 }
 
-func (e *FactoryEngine) submitNormalizedWorkRequest(context context.Context, requestID string, work []interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (e *FactoryEngine) submitNormalizedWorkRequest(context context.Context, requestID string, work []workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
 	select {
 	case <-context.Done():
-		return interfaces.WorkRequestSubmitResult{}, context.Err()
+		return workdomain.WorkRequestSubmitResult{}, context.Err()
 	default:
 	}
 
@@ -284,7 +286,7 @@ func (e *FactoryEngine) submitNormalizedWorkRequest(context context.Context, req
 	e.mu.Lock()
 	if !e.acceptingSubmits {
 		e.mu.Unlock()
-		return interfaces.WorkRequestSubmitResult{}, fmt.Errorf("engine has terminated")
+		return workdomain.WorkRequestSubmitResult{}, fmt.Errorf("engine has terminated")
 	}
 	if existing, exists := e.workRequests[requestID]; exists {
 		e.mu.Unlock()
@@ -760,7 +762,7 @@ func (e *FactoryEngine) invokeSubmissionHooks(ctx context.Context) (int, bool, e
 			e.runtimeState.Results = append(e.runtimeState.Results, result.Results...)
 		}
 		if len(result.GeneratedBatches) > 0 {
-			generated := make([]interfaces.GeneratedSubmissionBatch, len(result.GeneratedBatches))
+			generated := make([]work.GeneratedSubmissionBatch, len(result.GeneratedBatches))
 			copy(generated, result.GeneratedBatches)
 			for i := range generated {
 				if generated[i].Metadata.Source == "" {
@@ -801,7 +803,7 @@ func (e *FactoryEngine) applyHookMarkingMutations(mutations []interfaces.Marking
 	return applyMutations(e.runtimeState.Marking, e.state.Places, mutations)
 }
 
-func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []interfaces.GeneratedSubmissionBatch, defaultSource string) (int, error) {
+func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []work.GeneratedSubmissionBatch, defaultSource string) (int, error) {
 	total := 0
 	for i := range batches {
 		batch := batches[i]
@@ -824,7 +826,7 @@ func (e *FactoryEngine) processGeneratedSubmissionBatches(batches []interfaces.G
 	return total, nil
 }
 
-func generatedSubmissionSource(batch interfaces.GeneratedSubmissionBatch, defaultSource string) string {
+func generatedSubmissionSource(batch work.GeneratedSubmissionBatch, defaultSource string) string {
 	if batch.Metadata.Source != "" {
 		return batch.Metadata.Source
 	}
@@ -834,8 +836,8 @@ func generatedSubmissionSource(batch interfaces.GeneratedSubmissionBatch, defaul
 	return "generated-batch"
 }
 
-func (e *FactoryEngine) normalizeGeneratedSubmissionBatch(batch interfaces.GeneratedSubmissionBatch) ([]interfaces.SubmitRequest, string, error) {
-	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+func (e *FactoryEngine) normalizeGeneratedSubmissionBatch(batch work.GeneratedSubmissionBatch) ([]workdomain.SubmitRequest, string, error) {
+	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, workdomain.WorkRequestNormalizeOptions{
 		ValidWorkTypes:    e.validWorkTypes(),
 		ValidStatesByType: state.ValidStatesByType(e.state.WorkTypes),
 	})
@@ -857,7 +859,7 @@ func (e *FactoryEngine) skipGeneratedSubmissionRequest(requestID string, source 
 	return exists
 }
 
-func (e *FactoryEngine) tokensFromGeneratedSubmissions(normalized []interfaces.SubmitRequest) ([]*interfaces.Token, error) {
+func (e *FactoryEngine) tokensFromGeneratedSubmissions(normalized []workdomain.SubmitRequest) ([]*interfaces.Token, error) {
 	now := e.clock.Now()
 	tokens := make([]*interfaces.Token, 0, len(normalized))
 	for _, req := range normalized {
@@ -873,8 +875,8 @@ func (e *FactoryEngine) tokensFromGeneratedSubmissions(normalized []interfaces.S
 func (e *FactoryEngine) recordGeneratedSubmissionRequest(
 	requestID string,
 	source string,
-	batch interfaces.GeneratedSubmissionBatch,
-	normalized []interfaces.SubmitRequest,
+	batch work.GeneratedSubmissionBatch,
+	normalized []workdomain.SubmitRequest,
 ) {
 	e.workRequests[requestID] = requests.WorkRequestSubmitResultFromNormalized(requestID, normalized, true)
 	if e.recordWorkRequest == nil {
@@ -887,12 +889,12 @@ func (e *FactoryEngine) recordGeneratedSubmissionRequest(
 
 func (e *FactoryEngine) recordGeneratedSubmissionTokens(
 	source string,
-	normalized []interfaces.SubmitRequest,
+	normalized []workdomain.SubmitRequest,
 	tokens []*interfaces.Token,
 ) {
 	for index, token := range tokens {
 		if e.recordSubmission != nil {
-			e.recordSubmission(interfaces.FactorySubmissionRecord{
+			e.recordSubmission(work.FactorySubmissionRecord{
 				SubmissionID: submissionRecordID(e.runtimeState.TickCount, source, index),
 				ObservedTick: e.runtimeState.TickCount,
 				Request:      normalized[index],
@@ -907,7 +909,7 @@ func (e *FactoryEngine) recordGeneratedSubmissionTokens(
 }
 
 // injectTokens creates tokens from submit requests and places them in INITIAL places.
-func (e *FactoryEngine) injectTokens(requests []interfaces.SubmitRequest) {
+func (e *FactoryEngine) injectTokens(requests []workdomain.SubmitRequest) {
 	e.logger.Info("engine: injecting tokens", "count", len(requests))
 	for _, req := range requests {
 		token, err := e.transformer.InitialTokenFromSubmit(req, e.clock.Now())

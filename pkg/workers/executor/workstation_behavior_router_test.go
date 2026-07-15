@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type routingStubExecutor struct {
@@ -35,7 +36,7 @@ func TestWorkstationBehaviorRouter_RoutesAgentRunToHarnessExecutor(t *testing.T)
 	}
 
 	result, err := router.Execute(context.Background(), interfaces.WorkstationExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      "dispatch-1",
 			TransitionID:    "transition-1",
 			WorkerType:      "agent-worker",
@@ -68,7 +69,7 @@ func TestWorkstationBehaviorRouter_RoutesInferenceRunToInferenceExecutor(t *test
 	}
 
 	result, err := router.Execute(context.Background(), interfaces.WorkstationExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      "dispatch-2",
 			TransitionID:    "transition-2",
 			WorkerType:      "infer-worker",

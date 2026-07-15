@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type projectionRuntimeLookupFixture struct {
@@ -50,8 +51,8 @@ type worldViewProjectionFixture struct {
 
 func buildWorldViewProjectionState() (*factoryapi.Factory, interfaces.FactoryWorldState) {
 	t0 := time.Date(2026, 6, 17, 10, 0, 0, 0, time.UTC)
-	lineage := interfaces.WorkPayloadLineageProjection{}
-	lineage.RecordWorkRequestSnapshot(1, "request-queued", interfaces.FactoryWorkItem{
+	lineage := work.WorkPayloadLineageProjection{}
+	lineage.RecordWorkRequestSnapshot(1, "request-queued", work.FactoryWorkItem{
 		ID:          "work-queued",
 		WorkTypeID:  "task",
 		DisplayName: "Queued task",
@@ -64,7 +65,7 @@ func buildWorldViewProjectionState() (*factoryapi.Factory, interfaces.FactoryWor
 		Topology:       buildWorldViewProjectionTopology(),
 		PayloadLineage: lineage,
 		WorkItemsByID:  buildWorldViewWorkItems(),
-		ActiveWorkItemsByID: map[string]interfaces.FactoryWorkItem{
+		ActiveWorkItemsByID: map[string]work.FactoryWorkItem{
 			"work-queued": {ID: "work-queued", WorkTypeID: "task", DisplayName: "Queued task", State: "init", TraceID: "trace-queued"},
 		},
 		TerminalWorkByID:    buildWorldViewTerminalWork(),
@@ -108,8 +109,8 @@ func buildWorldViewProjectionTopology() interfaces.InitialStructurePayload {
 	}
 }
 
-func buildWorldViewWorkItems() map[string]interfaces.FactoryWorkItem {
-	return map[string]interfaces.FactoryWorkItem{
+func buildWorldViewWorkItems() map[string]work.FactoryWorkItem {
+	return map[string]work.FactoryWorkItem{
 		"work-queued": {ID: "work-queued", WorkTypeID: "task", DisplayName: "Queued task", State: "init", TraceID: "trace-queued"},
 		"work-active": {ID: "work-active", WorkTypeID: "task", DisplayName: "Active task", State: "review", TraceID: "trace-active", CurrentChainingTraceID: "chain-active"},
 		"time-work":   {ID: "time-work", WorkTypeID: interfaces.SystemTimeWorkTypeID, DisplayName: "Clock tick", State: "pending", TraceID: "trace-time"},
@@ -118,14 +119,14 @@ func buildWorldViewWorkItems() map[string]interfaces.FactoryWorkItem {
 
 func buildWorldViewTerminalWork() map[string]interfaces.FactoryTerminalWork {
 	return map[string]interfaces.FactoryTerminalWork{
-		"term-success": {Status: "COMPLETED", WorkItem: interfaces.FactoryWorkItem{ID: "work-success", WorkTypeID: "task"}},
-		"term-failed":  {Status: "FAILED", WorkItem: interfaces.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task"}},
-		"term-system":  {Status: "COMPLETED", WorkItem: interfaces.FactoryWorkItem{ID: "time-finished", WorkTypeID: interfaces.SystemTimeWorkTypeID}},
+		"term-success": {Status: "COMPLETED", WorkItem: work.FactoryWorkItem{ID: "work-success", WorkTypeID: "task"}},
+		"term-failed":  {Status: "FAILED", WorkItem: work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task"}},
+		"term-system":  {Status: "COMPLETED", WorkItem: work.FactoryWorkItem{ID: "time-finished", WorkTypeID: interfaces.SystemTimeWorkTypeID}},
 	}
 }
 
-func buildWorldViewFailedWorkItems() map[string]interfaces.FactoryWorkItem {
-	return map[string]interfaces.FactoryWorkItem{
+func buildWorldViewFailedWorkItems() map[string]work.FactoryWorkItem {
+	return map[string]work.FactoryWorkItem{
 		"failed-customer": {ID: "failed-customer", WorkTypeID: "task"},
 		"failed-system":   {ID: "failed-system", WorkTypeID: interfaces.SystemTimeWorkTypeID},
 	}
@@ -153,7 +154,7 @@ func buildWorldViewActiveDispatches(t0 time.Time) map[string]interfaces.FactoryW
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID: "tok-active",
 				PlaceID: "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{
+				WorkItem: &work.FactoryWorkItem{
 					ID: "work-active", WorkTypeID: "task", TraceID: "trace-active",
 				},
 			}},
@@ -175,7 +176,7 @@ func buildWorldViewProviderSessions() []interfaces.FactoryWorldProviderSessionRe
 			DispatchID:      "dispatch-provider",
 			TransitionID:    "t-review",
 			WorkItemIDs:     []string{"work-active"},
-			ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &interfaces.FactoryWorkItem{ID: "work-active", WorkTypeID: "task"}}},
+			ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &work.FactoryWorkItem{ID: "work-active", WorkTypeID: "task"}}},
 			ProviderSession: interfaces.ProviderSessionMetadata{ID: "provider-session"},
 		},
 		{
@@ -204,7 +205,7 @@ func buildWorldViewSessionBracket(t0 time.Time) *interfaces.FactoryWorldSessionB
 		SessionID:     "session-1",
 		StartedAt:     t0,
 		ResultStatus:  "running",
-		ResultSummary: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "summary"}},
+		ResultSummary: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "summary"}},
 		ArtifactIDs:   []string{"artifact-1"},
 		Terminal:      true,
 		FinalStatus:   "SUCCESS",
@@ -255,7 +256,7 @@ func assertDashboardProjectionRuntimeCounts(t *testing.T, dashboard SimpleDashbo
 	if got := dashboard.Runtime.CurrentWorkItemsByPlaceID["task:init"]; len(got) != 1 || got[0].WorkID != "work-queued" {
 		t.Fatalf("current work items at task:init = %#v, want queued customer work", got)
 	}
-	if got := dashboard.Runtime.PlaceOccupancyWorkItemsByPlaceID["task:init"]; len(got) != 1 || got[0].PayloadStatus != string(interfaces.WorkPayloadResolutionResolved) {
+	if got := dashboard.Runtime.PlaceOccupancyWorkItemsByPlaceID["task:init"]; len(got) != 1 || got[0].PayloadStatus != string(work.WorkPayloadResolutionResolved) {
 		t.Fatalf("place occupancy work items = %#v, want resolved queued work", got)
 	}
 	if got := dashboard.Runtime.WorkMoveOperationsByWorkID["work-queued"]; len(got) != 1 || got[0].ToState != "review" {
@@ -331,11 +332,11 @@ func testWorldViewTopologyProjectionFiltersCustomerFacingRuntimeData(t *testing.
 }
 
 func TestWorkItemReferenceHelpers_FilterDeduplicateAndStabilize(t *testing.T) {
-	lineage := interfaces.WorkPayloadLineageProjection{}
-	lineage.RecordWorkRequestSnapshot(1, "request-a", interfaces.FactoryWorkItem{
+	lineage := work.WorkPayloadLineageProjection{}
+	lineage.RecordWorkRequestSnapshot(1, "request-a", work.FactoryWorkItem{
 		ID: "work-a", WorkTypeID: "task", State: "init", TraceID: "trace-a",
 	})
-	items := map[string]interfaces.FactoryWorkItem{
+	items := map[string]work.FactoryWorkItem{
 		"work-a":    {ID: "work-a", WorkTypeID: "task", State: "init", TraceID: "trace-a"},
 		"work-b":    {ID: "work-b", WorkTypeID: "task", TraceID: "trace-b"},
 		"time-only": {ID: "time-only", WorkTypeID: interfaces.SystemTimeWorkTypeID, TraceID: "trace-time"},
@@ -345,19 +346,19 @@ func TestWorkItemReferenceHelpers_FilterDeduplicateAndStabilize(t *testing.T) {
 	if !reflect.DeepEqual([]string{refs[0].WorkID, refs[1].WorkID}, []string{"work-a", "work-b"}) {
 		t.Fatalf("workItemRefsForIDs = %#v, want sorted customer refs", refs)
 	}
-	if refs[0].PayloadStatus != string(interfaces.WorkPayloadResolutionResolved) {
+	if refs[0].PayloadStatus != string(work.WorkPayloadResolutionResolved) {
 		t.Fatalf("resolved ref payload status = %q, want RESOLVED", refs[0].PayloadStatus)
 	}
-	if refs[1].PayloadStatus != string(interfaces.WorkPayloadResolutionUnavailable) || refs[1].PayloadUnavailableReason == "" {
+	if refs[1].PayloadStatus != string(work.WorkPayloadResolutionUnavailable) || refs[1].PayloadUnavailableReason == "" {
 		t.Fatalf("unresolved ref = %#v, want unavailable reason", refs[1])
 	}
 
-	activeRefs := workRefsForActiveIDs(interfaces.WorkPayloadLineageProjection{}, []string{"missing"}, items)
+	activeRefs := workRefsForActiveIDs(work.WorkPayloadLineageProjection{}, []string{"missing"}, items)
 	if activeRefs == nil || len(activeRefs) != 0 {
 		t.Fatalf("workRefsForActiveIDs = %#v, want empty non-nil slice", activeRefs)
 	}
 
-	itemRefs := workItemRefsForItems(lineage, []interfaces.FactoryWorkItem{
+	itemRefs := workItemRefsForItems(lineage, []work.FactoryWorkItem{
 		items["work-b"],
 		items["work-a"],
 		items["work-b"],
@@ -369,9 +370,9 @@ func TestWorkItemReferenceHelpers_FilterDeduplicateAndStabilize(t *testing.T) {
 	}
 
 	inputRefs := workItemRefsForInputs(lineage, []interfaces.WorkstationInput{
-		{WorkItem: &interfaces.FactoryWorkItem{ID: "work-b", WorkTypeID: "task"}},
-		{WorkItem: &interfaces.FactoryWorkItem{ID: "work-b", WorkTypeID: "task"}},
-		{WorkItem: &interfaces.FactoryWorkItem{ID: "time-only", WorkTypeID: interfaces.SystemTimeWorkTypeID}},
+		{WorkItem: &work.FactoryWorkItem{ID: "work-b", WorkTypeID: "task"}},
+		{WorkItem: &work.FactoryWorkItem{ID: "work-b", WorkTypeID: "task"}},
+		{WorkItem: &work.FactoryWorkItem{ID: "time-only", WorkTypeID: interfaces.SystemTimeWorkTypeID}},
 		{},
 	})
 	if len(inputRefs) != 1 || inputRefs[0].WorkID != "work-b" {
@@ -379,13 +380,13 @@ func TestWorkItemReferenceHelpers_FilterDeduplicateAndStabilize(t *testing.T) {
 	}
 
 	sessionRefs := providerSessionWorkItemRefs(lineage, interfaces.FactoryWorldProviderSessionRecord{
-		ConsumedInputs: []interfaces.WorkstationInput{{WorkItem: &interfaces.FactoryWorkItem{ID: "work-b", WorkTypeID: "task"}}},
+		ConsumedInputs: []interfaces.WorkstationInput{{WorkItem: &work.FactoryWorkItem{ID: "work-b", WorkTypeID: "task"}}},
 		WorkItemIDs:    []string{"work-a", "work-b", ""},
 	})
 	if !reflect.DeepEqual([]string{sessionRefs[0].WorkID, sessionRefs[1].WorkID}, []string{"work-b", "work-a"}) {
 		t.Fatalf("providerSessionWorkItemRefs = %#v, want input-first deduped refs", sessionRefs)
 	}
-	if providerSessionWorkItemRefs(interfaces.WorkPayloadLineageProjection{}, interfaces.FactoryWorldProviderSessionRecord{}) != nil {
+	if providerSessionWorkItemRefs(work.WorkPayloadLineageProjection{}, interfaces.FactoryWorldProviderSessionRecord{}) != nil {
 		t.Fatal("providerSessionWorkItemRefs(empty) should return nil")
 	}
 
@@ -601,7 +602,7 @@ func TestSessionLifecycleHelperFunctions_ProjectStableCopies(t *testing.T) {
 		t.Fatal("empty non-terminal bracket should stay hidden")
 	}
 
-	parts := []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "summary"}}
+	parts := []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "summary"}}
 	state := interfaces.FactoryWorldState{
 		SessionBracket: &interfaces.FactoryWorldSessionBracketState{
 			SessionID:      "session-2",

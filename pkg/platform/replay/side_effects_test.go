@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -19,9 +20,9 @@ func TestSideEffects_InferReturnsRecordedProviderResponse(t *testing.T) {
 	}
 
 	resp, err := sideEffects.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				ReplayKey: "process/trace-1/work-1",
 				TraceID:   "trace-1",
 				WorkIDs:   []string{"work-1"},
@@ -60,7 +61,7 @@ func TestSideEffects_RunReturnsRecordedCommandResult(t *testing.T) {
 	result, err := sideEffects.Run(context.Background(), workers.CommandRequest{
 		Command: "echo",
 		Args:    []string{"ok"},
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			ReplayKey: "process/trace-2/work-2",
 			TraceID:   "trace-2",
 			WorkIDs:   []string{"work-2"},
@@ -92,9 +93,9 @@ func TestSideEffects_InferDiagnosticsStayDetachedFromRecordedMutation(t *testing
 	providerDiagnostics.Panic.Message = "mutated panic"
 
 	resp, err := sideEffects.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				ReplayKey: "process/trace-1/work-1",
 				TraceID:   "trace-1",
 				WorkIDs:   []string{"work-1"},
@@ -135,7 +136,7 @@ func TestSideEffects_RunResultStaysDetachedFromRecordedCommandMutation(t *testin
 	result, err := sideEffects.Run(context.Background(), workers.CommandRequest{
 		Command: "echo",
 		Args:    []string{"ok"},
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			ReplayKey: "process/trace-2/work-2",
 			TraceID:   "trace-2",
 			WorkIDs:   []string{"work-2"},
@@ -160,9 +161,9 @@ func TestSideEffects_UnmatchedRequestFailsClearly(t *testing.T) {
 	}
 
 	_, err = sideEffects.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				ReplayKey: "unexpected",
 			},
 		},
@@ -181,12 +182,12 @@ func TestSideEffects_UnmatchedRequestFailsClearly(t *testing.T) {
 func TestSideEffects_InferPreservesNilDiagnosticsWhenReplayArtifactOmitsThem(t *testing.T) {
 	artifact := testReplayArtifact(
 		t,
-		replayDispatchCreatedEvent(t, interfaces.WorkDispatch{
+		replayDispatchCreatedEvent(t, work.WorkDispatch{
 			DispatchID:      "dispatch-no-diagnostics",
 			TransitionID:    "process",
 			WorkerType:      "worker-a",
 			WorkstationName: "process",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				ReplayKey: "process/trace-3/work-3",
 				TraceID:   "trace-3",
 				WorkIDs:   []string{"work-3"},
@@ -194,9 +195,9 @@ func TestSideEffects_InferPreservesNilDiagnosticsWhenReplayArtifactOmitsThem(t *
 		}, 2),
 		replayInferenceResponseEvent(
 			t,
-			interfaces.WorkDispatch{
+			work.WorkDispatch{
 				DispatchID: "dispatch-no-diagnostics",
-				Execution: interfaces.ExecutionMetadata{
+				Execution: work.ExecutionMetadata{
 					ReplayKey: "process/trace-3/work-3",
 					TraceID:   "trace-3",
 					WorkIDs:   []string{"work-3"},
@@ -227,9 +228,9 @@ func TestSideEffects_InferPreservesNilDiagnosticsWhenReplayArtifactOmitsThem(t *
 	}
 
 	resp, err := sideEffects.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				ReplayKey: "process/trace-3/work-3",
 				TraceID:   "trace-3",
 				WorkIDs:   []string{"work-3"},
@@ -253,12 +254,12 @@ func TestSideEffects_InferPreservesNilDiagnosticsWhenReplayArtifactOmitsThem(t *
 func TestSideEffects_InferResolvesFailureMetadataOnlyRecordedFailure(t *testing.T) {
 	artifact := testReplayArtifact(
 		t,
-		replayDispatchCreatedEvent(t, interfaces.WorkDispatch{
+		replayDispatchCreatedEvent(t, work.WorkDispatch{
 			DispatchID:      "dispatch-failure-metadata",
 			TransitionID:    "process",
 			WorkerType:      "worker-a",
 			WorkstationName: "process",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				ReplayKey: "process/trace-failure/work-failure",
 				TraceID:   "trace-failure",
 				WorkIDs:   []string{"work-failure"},
@@ -282,9 +283,9 @@ func TestSideEffects_InferResolvesFailureMetadataOnlyRecordedFailure(t *testing.
 	}
 
 	_, err = sideEffects.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				ReplayKey: "process/trace-failure/work-failure",
 				TraceID:   "trace-failure",
 				WorkIDs:   []string{"work-failure"},
@@ -304,12 +305,12 @@ func TestSideEffects_InferResolvesFailureMetadataOnlyRecordedFailure(t *testing.
 
 func TestSideEffects_DispatchWithoutCompletionFailsExplicitly(t *testing.T) {
 	artifact := replaySideEffectArtifact(t)
-	artifact.Events = append(artifact.Events, replayDispatchCreatedEvent(t, interfaces.WorkDispatch{
+	artifact.Events = append(artifact.Events, replayDispatchCreatedEvent(t, work.WorkDispatch{
 		DispatchID:      "dispatch-no-completion",
 		TransitionID:    "process",
 		WorkerType:      "worker-a",
 		WorkstationName: "process",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			ReplayKey: "process/trace-3/work-3",
 			TraceID:   "trace-3",
 			WorkIDs:   []string{"work-3"},
@@ -322,9 +323,9 @@ func TestSideEffects_DispatchWithoutCompletionFailsExplicitly(t *testing.T) {
 	}
 
 	_, err = sideEffects.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				ReplayKey: "process/trace-3/work-3",
 				TraceID:   "trace-3",
 				WorkIDs:   []string{"work-3"},
@@ -349,23 +350,23 @@ func replaySideEffectArtifact(t *testing.T) *interfaces.ReplayArtifact {
 
 func replaySideEffectArtifactWithDiagnostics(t *testing.T) (*interfaces.ReplayArtifact, *interfaces.WorkDiagnostics, *interfaces.WorkDiagnostics) {
 	t.Helper()
-	dispatchProvider := interfaces.WorkDispatch{
+	dispatchProvider := work.WorkDispatch{
 		DispatchID:      "dispatch-provider",
 		TransitionID:    "process",
 		WorkerType:      "worker-a",
 		WorkstationName: "process",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			ReplayKey: "process/trace-1/work-1",
 			TraceID:   "trace-1",
 			WorkIDs:   []string{"work-1"},
 		},
 	}
-	dispatchCommand := interfaces.WorkDispatch{
+	dispatchCommand := work.WorkDispatch{
 		DispatchID:      "dispatch-command",
 		TransitionID:    "process",
 		WorkerType:      "worker-a",
 		WorkstationName: "process",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			ReplayKey: "process/trace-2/work-2",
 			TraceID:   "trace-2",
 			WorkIDs:   []string{"work-2"},
@@ -434,9 +435,9 @@ func TestSideEffects_CancellationDoesNotConsumeRecordedProviderResponse(t *testi
 		t.Fatalf("NewSideEffects: %v", err)
 	}
 	request := interfaces.ProviderInferenceRequest{
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				ReplayKey: "process/trace-1/work-1",
 				TraceID:   "trace-1",
 				WorkIDs:   []string{"work-1"},
@@ -472,7 +473,7 @@ func TestSideEffects_CancellationDoesNotConsumeRecordedCommandResult(t *testing.
 	request := workers.CommandRequest{
 		Command: "echo",
 		Args:    []string{"ok"},
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			ReplayKey: "process/trace-2/work-2",
 			TraceID:   "trace-2",
 			WorkIDs:   []string{"work-2"},

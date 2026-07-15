@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -81,7 +82,7 @@ func TestThroughputNoTokenLoss(t *testing.T) {
 					TraceID: traceID,
 				}
 				mu.Unlock()
-				h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+				h.SubmitFull(context.Background(), []work.SubmitRequest{{
 					WorkTypeID: "task",
 					WorkID:     workID,
 					TraceID:    traceID,
@@ -152,7 +153,7 @@ func TestThroughputNoTokenLossRegression_CustomExecutorPreservesSubmittedWorkIde
 				mu.Lock()
 				submitted[workID] = submittedWorkToken{WorkID: workID, TraceID: traceID}
 				mu.Unlock()
-				h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+				h.SubmitFull(context.Background(), []work.SubmitRequest{{
 					WorkTypeID: "task",
 					WorkID:     workID,
 					TraceID:    traceID,
@@ -268,7 +269,7 @@ func TestThroughputTimeout(t *testing.T) {
 
 		// Submit all items from a single goroutine with interleaved sleeps.
 		for i := range totalItems {
-			h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+			h.SubmitFull(context.Background(), []work.SubmitRequest{{
 				WorkTypeID: "task",
 				TraceID:    fmt.Sprintf("trace-%d", i),
 				Payload:    fmt.Appendf(nil, `{"i":%d}`, i),
@@ -430,7 +431,7 @@ type throughputExecutor struct {
 	calls   int
 }
 
-func (e *throughputExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *throughputExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	start := time.Now()
 
 	if e.delay > 0 {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -13,16 +14,16 @@ func TestDependencyTerminal_BlockedUntilArchived(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_terminal"))
 
 	workIDA := "prd-A-work-id"
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "prd",
 		WorkID:     workIDA,
 		Payload:    []byte("PRD A"),
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "prd",
 		Payload:    []byte("PRD B"),
-		Relations: []interfaces.Relation{
-			{Type: interfaces.RelationDependsOn, TargetWorkID: workIDA, RequiredState: "archived"},
+		Relations: []work.Relation{
+			{Type: work.RelationDependsOn, TargetWorkID: workIDA, RequiredState: "archived"},
 		},
 	})
 
@@ -51,16 +52,16 @@ func TestDependencyTerminal_BlockedDuringProcessing(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_terminal"))
 
 	workIDA := "prd-A-processing"
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "prd",
 		WorkID:     workIDA,
 		Payload:    []byte("PRD A"),
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "prd",
 		Payload:    []byte("PRD B"),
-		Relations: []interfaces.Relation{
-			{Type: interfaces.RelationDependsOn, TargetWorkID: workIDA, RequiredState: "archived"},
+		Relations: []work.Relation{
+			{Type: work.RelationDependsOn, TargetWorkID: workIDA, RequiredState: "archived"},
 		},
 	})
 
@@ -86,16 +87,16 @@ func TestDependencyTerminal_BothComplete(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dependency_terminal"))
 
 	workIDA := "prd-A-both"
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "prd",
 		WorkID:     workIDA,
 		Payload:    []byte("PRD A"),
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "prd",
 		Payload:    []byte("PRD B"),
-		Relations: []interfaces.Relation{
-			{Type: interfaces.RelationDependsOn, TargetWorkID: workIDA, RequiredState: "archived"},
+		Relations: []work.Relation{
+			{Type: work.RelationDependsOn, TargetWorkID: workIDA, RequiredState: "archived"},
 		},
 	})
 

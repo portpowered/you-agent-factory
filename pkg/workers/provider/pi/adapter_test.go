@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
@@ -29,7 +30,7 @@ func TestAdapterFullStreamConformance(t *testing.T) {
 	testkit.RunFullStream(t, testkit.FullStreamFixture{
 		NewAdapter: func() adapter.Adapter { return pi.NewAdapter() },
 		Request: interfaces.ProviderInferenceRequest{
-			Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-conformance"},
+			Dispatch: work.WorkDispatch{DispatchID: "dispatch-conformance"},
 			Model:    "anthropic/claude-sonnet-4", UserMessage: privateConformancePrompt,
 		},
 		ContentAndTools: piObservations(
@@ -46,8 +47,8 @@ func TestAdapterFullStreamConformance(t *testing.T) {
 			`{"type":"auto_retry_start","attempt":2,"retryDelayMs":2000,"errorStatus":429}`,
 		),
 		UnsafeAndRecovering: piObservations(
-			`{"type":` + privateConformancePrompt + `,"token":"` + privateConformanceToken + `"}`,
-			`{"type":"future_shape","prompt":"` + privateConformancePrompt + `","token":"` + privateConformanceToken + `"}`,
+			`{"type":`+privateConformancePrompt+`,"token":"`+privateConformanceToken+`"}`,
+			`{"type":"future_shape","prompt":"`+privateConformancePrompt+`","token":"`+privateConformanceToken+`"}`,
 			`{"type":"message_end","message":{"id":"msg-conformance","role":"assistant","content":[{"type":"text","text":"Hello world"}],"stopReason":"stop"}}`,
 		),
 		UnterminatedFinal: []adapter.Observation{{Stream: adapter.OutputStreamStdout, Chunk: []byte(
@@ -112,7 +113,7 @@ func TestAdapterBuildCommandWiresAuthThroughEnvironmentNotArgv(t *testing.T) {
 
 	built, err := pi.NewAdapter().BuildCommand(context.Background(), adapter.CommandContext{
 		Request: interfaces.ProviderInferenceRequest{
-			Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-auth"},
+			Dispatch:         work.WorkDispatch{DispatchID: "dispatch-auth"},
 			ModelProvider:    string(interfaces.ModelProviderPi),
 			SystemPrompt:     "safe system prompt",
 			UserMessage:      "review the workspace",
@@ -183,7 +184,7 @@ func TestSelectableInvocationIntegrationReturnsAuthoritativeTerminalResult(t *te
 	t.Parallel()
 
 	req := interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-pi-production"},
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-pi-production"},
 		ModelProvider: string(interfaces.ModelProviderPi),
 		Model:         "anthropic/claude-sonnet-4",
 		SessionID:     "pi-session-production",
@@ -462,7 +463,7 @@ func TestAdapterSelectableInvocationFailureIsNormalized(t *testing.T) {
 		workerprovider.WithResponseStreamExecutor(structured.NewExecutor()),
 	)
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-pi-failure"},
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-pi-failure"},
 		ModelProvider: string(interfaces.ModelProviderPi),
 		UserMessage:   "private prompt",
 	})

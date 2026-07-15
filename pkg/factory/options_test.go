@@ -9,10 +9,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -116,7 +117,7 @@ func TestFactoryOptions_PreserveSupportedHookAndRecorderSurface(t *testing.T) {
 
 	options := []FactoryOption{
 		WithSubmissionHook(hook),
-		WithSubmissionRecorder(func(interfaces.FactorySubmissionRecord) {
+		WithSubmissionRecorder(func(work.FactorySubmissionRecord) {
 			submissionRecorderCalled = true
 		}),
 		WithDispatchRecorder(func(interfaces.FactoryDispatchRecord) {
@@ -137,7 +138,7 @@ func TestFactoryOptions_PreserveSupportedHookAndRecorderSurface(t *testing.T) {
 	if len(cfg.SubmissionHooks) != 1 {
 		t.Fatalf("SubmissionHooks length = %d, want 1", len(cfg.SubmissionHooks))
 	}
-	cfg.SubmissionRecorder(interfaces.FactorySubmissionRecord{})
+	cfg.SubmissionRecorder(work.FactorySubmissionRecord{})
 	cfg.DispatchRecorder(interfaces.FactoryDispatchRecord{})
 	cfg.CompletionRecorder(interfaces.FactoryCompletionRecord{})
 	cfg.FactoryEventRecorder(factoryapi.FactoryEvent{})
@@ -171,7 +172,7 @@ func (stubSubmissionHook) OnTick(context.Context, interfaces.SubmissionHookConte
 
 type stubCompletionDeliveryPlanner struct{}
 
-func (stubCompletionDeliveryPlanner) DeliveryTickForDispatch(interfaces.WorkDispatch) (int, bool, error) {
+func (stubCompletionDeliveryPlanner) DeliveryTickForDispatch(work.WorkDispatch) (int, bool, error) {
 	return 0, false, nil
 }
 

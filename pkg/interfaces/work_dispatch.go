@@ -1,41 +1,24 @@
 package interfaces
 
 import (
-	"errors"
 	"time"
+
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // ErrMoveWorkRequestAlreadyApplied reports a duplicate operator move requestId.
-var ErrMoveWorkRequestAlreadyApplied = errors.New("operator move request was already applied")
+var ErrMoveWorkRequestAlreadyApplied = work.ErrMoveWorkRequestAlreadyApplied
 
 // WorkDispatch is the canonical dispatch-owned runtime payload.
 //
 // Dispatcher construction owns these fields. Worker execution must derive any
 // prompt, environment, path, model, provider, or session state into the
 // dedicated boundary request types below instead of mutating WorkDispatch.
-type WorkDispatch struct {
-	DispatchID               string              `json:"dispatch_id"`
-	TransitionID             string              `json:"transition_id"`
-	WorkerType               string              `json:"worker_type,omitempty"`
-	WorkstationName          string              `json:"workstation_name,omitempty"`
-	ProjectID                string              `json:"project_id,omitempty"`
-	CurrentChainingTraceID   string              `json:"current_chaining_trace_id,omitempty"`
-	PreviousChainingTraceIDs []string            `json:"previous_chaining_trace_ids,omitempty"`
-	Execution                ExecutionMetadata   `json:"execution,omitempty"`
-	InputTokens              []any               `json:"input_tokens"`
-	InputBindings            map[string][]string `json:"input_bindings,omitempty"`
-}
+type WorkDispatch = work.WorkDispatch
 
 // ExecutionMetadata carries replay matching and logical tick context from the
 // dispatch runtime.
-type ExecutionMetadata struct {
-	DispatchCreatedTick int      `json:"dispatch_created_tick,omitempty"`
-	CurrentTick         int      `json:"current_tick,omitempty"`
-	RequestID           string   `json:"request_id,omitempty"`
-	TraceID             string   `json:"trace_id,omitempty"`
-	WorkIDs             []string `json:"work_ids,omitempty"`
-	ReplayKey           string   `json:"replay_key,omitempty"`
-}
+type ExecutionMetadata = work.ExecutionMetadata
 
 // WorkstationExecutionRequest is the worker-owned request assembled after
 // workstation rendering. It combines the canonical dispatch identity with the
@@ -111,20 +94,13 @@ type SubprocessExecutionRequest struct {
 // CloneExecutionMetadata returns a detached copy of canonical dispatch
 // execution metadata.
 func CloneExecutionMetadata(metadata ExecutionMetadata) ExecutionMetadata {
-	clone := metadata
-	clone.WorkIDs = cloneStringSlice(metadata.WorkIDs)
-	return clone
+	return work.CloneExecutionMetadata(metadata)
 }
 
 // CloneWorkDispatch returns a detached copy of the canonical dispatch-owned
 // contract.
 func CloneWorkDispatch(dispatch WorkDispatch) WorkDispatch {
-	clone := dispatch
-	clone.PreviousChainingTraceIDs = cloneStringSlice(dispatch.PreviousChainingTraceIDs)
-	clone.Execution = CloneExecutionMetadata(dispatch.Execution)
-	clone.InputTokens = cloneAnySlice(dispatch.InputTokens)
-	clone.InputBindings = cloneStringSliceMap(dispatch.InputBindings)
-	return clone
+	return work.CloneWorkDispatch(dispatch)
 }
 
 // CloneWorkstationExecutionRequest returns a detached copy of the rendered
@@ -286,56 +262,31 @@ func ClearGuardBlockingFields(history *TokenHistory) {
 	history.PlaceVisits = make(map[string]int)
 }
 
-// WorkStateChangeSource identifies who initiated a WORK_STATE_CHANGE event.
-type WorkStateChangeSource string
+type WorkStateChangeSource = work.WorkStateChangeSource
 
 const (
-	WorkStateChangeSourceAPI              WorkStateChangeSource = "api"
-	WorkStateChangeSourceCLI              WorkStateChangeSource = "cli"
-	WorkStateChangeSourceCascadingFailure WorkStateChangeSource = "cascading-failure"
+	WorkStateChangeSourceAPI              = work.WorkStateChangeSourceAPI
+	WorkStateChangeSourceCLI              = work.WorkStateChangeSourceCLI
+	WorkStateChangeSourceCascadingFailure = work.WorkStateChangeSourceCascadingFailure
 )
 
 // WorkStateChangeRecord captures one operator or cascade marking relocation for
 // canonical event history emission.
-type WorkStateChangeRecord struct {
-	WorkID        string
-	WorkTypeID    string
-	WorkTypeName  string
-	FromState     string
-	ToState       string
-	FromPlaceID   string
-	ToPlaceID     string
-	Source        WorkStateChangeSource
-	RequestID     string
-	TriggerWorkID string
-	Reason        string
-}
+type WorkStateChangeRecord = work.WorkStateChangeRecord
 
 // OperatorMoveResult is the engine outcome of a successful manual work relocation.
-type OperatorMoveResult struct {
-	WorkID      string
-	WorkTypeID  string
-	FromState   string
-	ToState     string
-	FromPlaceID string
-	ToPlaceID   string
-	TokenID     string
-}
+type OperatorMoveResult = work.OperatorMoveResult
 
 // Relation defines a typed relationship between work items.
-type Relation struct {
-	Type          RelationType `json:"type"`
-	TargetWorkID  string       `json:"target_work_id"`
-	RequiredState string       `json:"required_state,omitempty"`
-}
+type Relation = work.Relation
 
 // RelationType classifies the relationship between two work items.
-type RelationType string
+type RelationType = work.RelationType
 
 const (
-	RelationDependsOn   RelationType = "DEPENDS_ON"
-	RelationParentChild RelationType = "PARENT_CHILD"
-	RelationSpawnedBy   RelationType = "SPAWNED_BY"
+	RelationDependsOn   = work.RelationDependsOn
+	RelationParentChild = work.RelationParentChild
+	RelationSpawnedBy   = work.RelationSpawnedBy
 )
 
 // FactorySessionDispatchState carries one orchestrator-aware dispatch projection

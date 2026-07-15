@@ -33,6 +33,7 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
@@ -241,15 +242,15 @@ func withServicePayloadVersion(t *testing.T, payload []byte, version factoryapi.
 	return updated
 }
 
-func submitWorkRequestsToService(ctx context.Context, svc *FactoryService, reqs []interfaces.SubmitRequest) error {
+func submitWorkRequestsToService(ctx context.Context, svc *FactoryService, reqs []work.SubmitRequest) error {
 	workRequest := requests.WorkRequestFromSubmitRequests(reqs)
 	_, err := svc.SubmitWorkRequest(ctx, workRequest)
 	return err
 }
 
-func writeWorkRequestFile(t *testing.T, path string, req interfaces.SubmitRequest) {
+func writeWorkRequestFile(t *testing.T, path string, req work.SubmitRequest) {
 	t.Helper()
-	data, err := json.Marshal(requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{req}))
+	data, err := json.Marshal(requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{req}))
 	if err != nil {
 		t.Fatalf("marshal work request file: %v", err)
 	}
@@ -281,19 +282,19 @@ type aggregateSnapshotFactory struct {
 	factoryEventsErr         error
 	factoryEventsCalls       int
 	pauseErr                 error
-	submitFunc               func(context.Context, interfaces.WorkRequest) error
+	submitFunc               func(context.Context, work.WorkRequest) error
 	submitCalls              int
-	submissions              []interfaces.WorkRequest
+	submissions              []work.WorkRequest
 	waitToComplete           chan struct{}
 }
 
 func (f *aggregateSnapshotFactory) Run(context.Context) error { return nil }
-func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
-	normalized, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
+func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	normalized, err := requests.NormalizeWorkRequest(request, work.WorkRequestNormalizeOptions{})
 	if err != nil {
-		return interfaces.WorkRequestSubmitResult{}, err
+		return work.WorkRequestSubmitResult{}, err
 	}
-	result := interfaces.WorkRequestSubmitResult{RequestID: request.RequestID, Accepted: true}
+	result := work.WorkRequestSubmitResult{RequestID: request.RequestID, Accepted: true}
 	if len(normalized) > 0 {
 		result.TraceID = normalized[0].TraceID
 	}
@@ -306,10 +307,10 @@ func (f *aggregateSnapshotFactory) SubmitWorkRequest(ctx context.Context, reques
 	}
 	return result, nil
 }
-func (f *aggregateSnapshotFactory) submissionSnapshot() (int, []interfaces.WorkRequest) {
+func (f *aggregateSnapshotFactory) submissionSnapshot() (int, []work.WorkRequest) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.submitCalls, append([]interfaces.WorkRequest(nil), f.submissions...)
+	return f.submitCalls, append([]work.WorkRequest(nil), f.submissions...)
 }
 func (f *aggregateSnapshotFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	streamGenerationID := strings.TrimSpace(f.streamGenerationID)
@@ -323,8 +324,8 @@ func (f *aggregateSnapshotFactory) SubscribeFactoryEvents(context.Context, *inte
 }
 func (f *aggregateSnapshotFactory) Pause(context.Context) error  { return f.pauseErr }
 func (f *aggregateSnapshotFactory) Resume(context.Context) error { return nil }
-func (f *aggregateSnapshotFactory) MoveWork(context.Context, string, string, interfaces.WorkStateChangeSource, string) (interfaces.OperatorMoveResult, error) {
-	return interfaces.OperatorMoveResult{}, errors.New("MoveWork is not implemented in aggregateSnapshotFactory")
+func (f *aggregateSnapshotFactory) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {
+	return work.OperatorMoveResult{}, errors.New("MoveWork is not implemented in aggregateSnapshotFactory")
 }
 func (f *aggregateSnapshotFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	f.engineStateSnapshotCalls++
@@ -353,16 +354,16 @@ type runtimeMetricsObserverFactory struct {
 }
 
 func (f *runtimeMetricsObserverFactory) Run(context.Context) error { return nil }
-func (f *runtimeMetricsObserverFactory) SubmitWorkRequest(context.Context, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
-	return interfaces.WorkRequestSubmitResult{}, nil
+func (f *runtimeMetricsObserverFactory) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	return work.WorkRequestSubmitResult{}, nil
 }
 func (f *runtimeMetricsObserverFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
 }
 func (f *runtimeMetricsObserverFactory) Pause(context.Context) error  { return nil }
 func (f *runtimeMetricsObserverFactory) Resume(context.Context) error { return nil }
-func (f *runtimeMetricsObserverFactory) MoveWork(context.Context, string, string, interfaces.WorkStateChangeSource, string) (interfaces.OperatorMoveResult, error) {
-	return interfaces.OperatorMoveResult{}, nil
+func (f *runtimeMetricsObserverFactory) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {
+	return work.OperatorMoveResult{}, nil
 }
 func (f *runtimeMetricsObserverFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	f.mu.RLock()
@@ -1239,7 +1240,7 @@ func submitSessionWorkWithType(t *testing.T, session *liveFactorySession, workTy
 	if session == nil || liveSessionHandle(session) == nil || liveSessionHandle(session).Bundle == nil {
 		t.Fatal("live session runtime is required")
 	}
-	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+	request := requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{{
 		WorkID:     workID,
 		Name:       workID,
 		WorkTypeID: workType,
@@ -1254,7 +1255,7 @@ func submitSessionWorkWithType(t *testing.T, session *liveFactorySession, workTy
 func submitCompatWork(t *testing.T, svc *FactoryService, workID, traceID string) {
 	t.Helper()
 
-	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+	request := requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{{
 		WorkID:     workID,
 		Name:       workID,
 		WorkTypeID: "task",

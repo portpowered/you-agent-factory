@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -58,7 +59,7 @@ Process the input task.
 			writeCodexWorktreeWorkstationAgents(t, factoryDir)
 
 			workName := "codex-worktree-feature"
-			testutil.WriteSeedRequest(t, factoryDir, interfaces.SubmitRequest{
+			testutil.WriteSeedRequest(t, factoryDir, work.SubmitRequest{
 				Name:       workName,
 				WorkID:     "work-codex-worktree",
 				WorkTypeID: "task",

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
@@ -101,16 +102,16 @@ func DirectInferenceWorkstationConfig(operation string, bindings []interfaces.Mo
 // envelope shared by direct and session inference execution paths.
 func InferenceOperationUserMessage(
 	operation string,
-	inputContent []interfaces.WorkContentPart,
+	inputContent []work.WorkContentPart,
 	bindings []interfaces.ResolvedModelOperationBinding,
 ) string {
 	payload := struct {
 		Operation string                                     `json:"operation"`
-		Input     []interfaces.WorkContentPart               `json:"input,omitempty"`
+		Input     []work.WorkContentPart                     `json:"input,omitempty"`
 		Bindings  []interfaces.ResolvedModelOperationBinding `json:"bindings,omitempty"`
 	}{
 		Operation: strings.TrimSpace(operation),
-		Input:     append([]interfaces.WorkContentPart(nil), inputContent...),
+		Input:     append([]work.WorkContentPart(nil), inputContent...),
 		Bindings:  interfaces.CloneResolvedModelOperationBindings(bindings),
 	}
 	encoded, err := json.Marshal(payload)
@@ -122,7 +123,7 @@ func InferenceOperationUserMessage(
 
 // WorkContentFromInferenceOutput maps one inference response body onto ordered
 // canonical WorkContent parts declared by the target operation.
-func WorkContentFromInferenceOutput(raw string, operation interfaces.ModelOperation) ([]interfaces.WorkContentPart, error) {
+func WorkContentFromInferenceOutput(raw string, operation interfaces.ModelOperation) ([]work.WorkContentPart, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return nil, nil
@@ -138,13 +139,13 @@ func WorkContentFromInferenceOutput(raw string, operation interfaces.ModelOperat
 	if err := json.Unmarshal([]byte(trimmed), &envelope); err == nil && envelope.Content != nil {
 		return orderWorkContentByOperationOutputs(contentcontract.PartsFromGenerated(&envelope.Content), operation), nil
 	}
-	var parts []interfaces.WorkContentPart
+	var parts []work.WorkContentPart
 	if err := json.Unmarshal([]byte(trimmed), &parts); err == nil {
 		return orderWorkContentByOperationOutputs(parts, operation), nil
 	}
 	if modelOperationHasOnlyTextOutputs(operation) {
-		return []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		return []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
 			Text: raw,
 		}}, nil
 	}
@@ -153,7 +154,7 @@ func WorkContentFromInferenceOutput(raw string, operation interfaces.ModelOperat
 
 // MarshalWorkContentOutput serializes canonical WorkContent parts for accepted
 // inference workstation output.
-func MarshalWorkContentOutput(parts []interfaces.WorkContentPart) (string, error) {
+func MarshalWorkContentOutput(parts []work.WorkContentPart) (string, error) {
 	if len(parts) == 0 {
 		return "", nil
 	}
@@ -182,7 +183,7 @@ func resolveModelOperationBinding(binding interfaces.ModelOperationBinding, inpu
 	if !selectorIsEmpty(binding.Selector) {
 		if part, ok := findMatchingInputContentPart(inputTokens, binding.Selector); ok {
 			resolved.Source = interfaces.ModelOperationBindingSourceInput
-			resolved.Content = []interfaces.WorkContentPart{part}
+			resolved.Content = []work.WorkContentPart{part}
 			return resolved
 		}
 	}
@@ -199,7 +200,7 @@ func resolveModelOperationBinding(binding interfaces.ModelOperationBinding, inpu
 	return resolved
 }
 
-func findMatchingInputContentPart(inputTokens []interfaces.Token, selector *interfaces.ModelOperationBindingSelector) (interfaces.WorkContentPart, bool) {
+func findMatchingInputContentPart(inputTokens []interfaces.Token, selector *interfaces.ModelOperationBindingSelector) (work.WorkContentPart, bool) {
 	for _, token := range inputTokens {
 		for _, part := range token.Color.Content {
 			if modelOperationBindingSelectorMatches(part, selector) {
@@ -207,10 +208,10 @@ func findMatchingInputContentPart(inputTokens []interfaces.Token, selector *inte
 			}
 		}
 	}
-	return interfaces.WorkContentPart{}, false
+	return work.WorkContentPart{}, false
 }
 
-func modelOperationBindingSelectorMatches(part interfaces.WorkContentPart, selector *interfaces.ModelOperationBindingSelector) bool {
+func modelOperationBindingSelectorMatches(part work.WorkContentPart, selector *interfaces.ModelOperationBindingSelector) bool {
 	if selector == nil {
 		return false
 	}
@@ -229,17 +230,17 @@ func modelOperationBindingSelectorMatches(part interfaces.WorkContentPart, selec
 	return true
 }
 
-func modelOperationContentTypeForPart(part interfaces.WorkContentPart) string {
+func modelOperationContentTypeForPart(part work.WorkContentPart) string {
 	switch part.Type.Normalized() {
-	case interfaces.WorkContentPartTypeText:
+	case work.WorkContentPartTypeText:
 		return interfaces.ModelOperationContentTypeText
-	case interfaces.WorkContentPartTypeImage:
+	case work.WorkContentPartTypeImage:
 		return interfaces.ModelOperationContentTypeImage
-	case interfaces.WorkContentPartTypeAudio:
+	case work.WorkContentPartTypeAudio:
 		return interfaces.ModelOperationContentTypeAudio
-	case interfaces.WorkContentPartTypeJSON:
+	case work.WorkContentPartTypeJSON:
 		return interfaces.ModelOperationContentTypeJSON
-	case interfaces.WorkContentPartTypeBinary:
+	case work.WorkContentPartTypeBinary:
 		return interfaces.ModelOperationContentTypeBinary
 	default:
 		return strings.TrimSpace(string(part.Type))
@@ -256,11 +257,11 @@ func selectorIsEmpty(selector *interfaces.ModelOperationBindingSelector) bool {
 		strings.TrimSpace(selector.Role) == ""
 }
 
-func cloneResolvedBindingContent(parts []interfaces.WorkContentPart) []interfaces.WorkContentPart {
+func cloneResolvedBindingContent(parts []work.WorkContentPart) []work.WorkContentPart {
 	if len(parts) == 0 {
 		return nil
 	}
-	cloned := make([]interfaces.WorkContentPart, len(parts))
+	cloned := make([]work.WorkContentPart, len(parts))
 	copy(cloned, parts)
 	return cloned
 }
@@ -282,12 +283,12 @@ func modelOperationHasOnlyTextOutputs(operation interfaces.ModelOperation) bool 
 	return true
 }
 
-func orderWorkContentByOperationOutputs(parts []interfaces.WorkContentPart, operation interfaces.ModelOperation) []interfaces.WorkContentPart {
+func orderWorkContentByOperationOutputs(parts []work.WorkContentPart, operation interfaces.ModelOperation) []work.WorkContentPart {
 	if len(parts) == 0 || len(operation.Outputs) == 0 {
 		return parts
 	}
 
-	ordered := make([]interfaces.WorkContentPart, 0, len(parts))
+	ordered := make([]work.WorkContentPart, 0, len(parts))
 	used := make([]bool, len(parts))
 	for _, slot := range operation.Outputs {
 		wantTypes := slotContentTypes(slot)

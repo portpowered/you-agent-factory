@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
@@ -105,7 +106,7 @@ func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing
 	}
 
 	type starterObservation struct {
-		submitResult interfaces.WorkRequestSubmitResult
+		submitResult work.WorkRequestSubmitResult
 		submitErr    error
 		stream       *interfaces.FactoryEventStream
 		streamErr    error
@@ -127,7 +128,7 @@ func TestFactoryService_Run_APIServerStarterReceivesWorkingAPISurface(t *testing
 		Logger:            zap.NewNop(),
 		APIServerStarter: func(ctx context.Context, runtime apisurface.APISurface, port int, l *zap.Logger) error {
 			observation := starterObservation{}
-			workRequest := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+			workRequest := requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{{
 				WorkID:     "starter-task",
 				Name:       "starter-task",
 				WorkTypeID: "task",
@@ -314,7 +315,7 @@ func TestBuildFactoryService_ConfigWithAllOptions(t *testing.T) {
 
 	// Create a valid work file.
 	workFile := filepath.Join(dir, "initial-work.json")
-	work := interfaces.SubmitRequest{
+	work := work.SubmitRequest{
 		WorkTypeID: "task",
 		Payload:    json.RawMessage(`{"title":"test"}`),
 	}
@@ -364,7 +365,7 @@ func TestBuildFactoryService_ConfigWithAllOptions(t *testing.T) {
 	_ = apiStarted
 }
 
-func dashboardProjectionEventsForTest(t *testing.T, dispatch interfaces.WorkDispatch) []factoryapi.FactoryEvent {
+func dashboardProjectionEventsForTest(t *testing.T, dispatch work.WorkDispatch) []factoryapi.FactoryEvent {
 	t.Helper()
 	result := interfaces.WorkResult{
 		DispatchID:   dispatch.DispatchID,
@@ -431,7 +432,7 @@ func dashboardInitialStructureEventForTest(t *testing.T) factoryapi.FactoryEvent
 	}
 }
 
-func dashboardProjectionDispatchForTest() interfaces.WorkDispatch {
+func dashboardProjectionDispatchForTest() work.WorkDispatch {
 	token := interfaces.Token{
 		ID:      "work-selected",
 		PlaceID: "task:init",
@@ -444,13 +445,13 @@ func dashboardProjectionDispatchForTest() interfaces.WorkDispatch {
 			TraceID:    "trace-selected",
 		},
 	}
-	return interfaces.WorkDispatch{
+	return work.WorkDispatch{
 		DispatchID:      "dispatch-selected",
 		TransitionID:    "process",
 		WorkerType:      "worker-a",
 		WorkstationName: "process",
 		InputTokens:     workers.InputTokens(token),
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			DispatchCreatedTick: 2,
 			RequestID:           "request-selected",
 			TraceID:             "trace-selected",
@@ -653,7 +654,7 @@ func (p *dashboardWorldViewProvider) respond(response interfaces.InferenceRespon
 
 func submitDashboardWorldViewWork(t *testing.T, svc *FactoryService, workID, traceID string) {
 	t.Helper()
-	err := submitWorkRequestsToService(context.Background(), svc, []interfaces.SubmitRequest{{
+	err := submitWorkRequestsToService(context.Background(), svc, []work.SubmitRequest{{
 		WorkID:     workID,
 		WorkTypeID: "task",
 		TraceID:    traceID,

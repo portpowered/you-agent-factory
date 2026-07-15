@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
@@ -317,7 +318,7 @@ func executeOpenCode(t *testing.T, providerAdapter adapter.Adapter, runner adapt
 	return adapter.Execute(context.Background(), registry, runner, adapter.ExecuteInput{
 		Provider: providerAdapter.Identity(),
 		Command: adapter.CommandContext{Request: interfaces.ProviderInferenceRequest{
-			Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-fallback"},
+			Dispatch: work.WorkDispatch{DispatchID: "dispatch-fallback"},
 			Model:    "openai/gpt-5", UserMessage: privatePrompt,
 		}},
 		Decoder: adapter.DecoderContext{RunID: "run-fallback", DispatchID: "dispatch-fallback"},

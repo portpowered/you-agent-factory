@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -55,7 +56,7 @@ func TestGuardedLoopBreaker_DoesNotRouteBelowThresholdAfterReviewContinue(t *tes
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
-	harness.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	harness.SubmitFull(context.Background(), []work.SubmitRequest{{
 		WorkTypeID: "task",
 		WorkID:     "work-task-below-threshold",
 		TraceID:    "trace-review-breaker-below-threshold",
@@ -278,7 +279,7 @@ func TestGuardedLoopBreaker_SurvivesExecutorOneVisitBelowThreshold(t *testing.T)
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	harness.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	harness.SubmitFull(context.Background(), []work.SubmitRequest{{
 		WorkTypeID: "task",
 		WorkID:     "work-task-executor-below-threshold",
 		TraceID:    "trace-work-task-executor-below-threshold",
@@ -321,7 +322,7 @@ func runGuardedLoopBreakerHarness(
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
-	harness.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	harness.SubmitFull(context.Background(), []work.SubmitRequest{{
 		WorkTypeID: "task",
 		WorkID:     workID,
 		TraceID:    "trace-" + workID,

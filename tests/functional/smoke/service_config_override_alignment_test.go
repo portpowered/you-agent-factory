@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -74,7 +75,7 @@ args:
 ---
 `)
 	support.WriteAgentConfig(t, dir, "worker-b", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "mixed-command-smoke-work",
 		WorkTypeID: "task",
 		TraceID:    "trace-mixed-command-smoke",

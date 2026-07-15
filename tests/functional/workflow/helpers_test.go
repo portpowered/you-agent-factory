@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func assertDispatchHistoryContainsWorkstationRoute(
@@ -102,11 +103,11 @@ func firstInputToken(rawTokens any) interfaces.Token {
 
 type capturingExecutor struct {
 	result       interfaces.WorkResult
-	lastDispatch interfaces.WorkDispatch
+	lastDispatch work.WorkDispatch
 	callCount    int
 }
 
-func (e *capturingExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *capturingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	e.lastDispatch = dispatch
 	e.callCount++
 	result := e.result

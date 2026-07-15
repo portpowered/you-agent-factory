@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -782,8 +783,8 @@ Run the script.
 `)
 
 	workFile := filepath.Join(t.TempDir(), "work.json")
-	req := interfaces.WorkRequest{
-		Type: interfaces.WorkRequestTypeFactoryRequestBatch,
+	req := work.WorkRequest{
+		Type: work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{{
 			Name:       "dashboard-render-test-work",
 			WorkID:     "dashboard-render-test-work",

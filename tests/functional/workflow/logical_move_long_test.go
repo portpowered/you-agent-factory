@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -74,7 +75,7 @@ type capturePayloadExecutor struct {
 	capturedPayload []byte
 }
 
-func (c *capturePayloadExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (c *capturePayloadExecutor) Execute(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
 	if len(d.InputTokens) > 0 {
 		c.capturedPayload = firstInputToken(d.InputTokens).Color.Payload
 	}

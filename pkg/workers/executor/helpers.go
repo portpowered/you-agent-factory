@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -95,7 +96,7 @@ func InputTokens(tokens ...interfaces.Token) []any {
 	return clonePetriInputTokens(tokens)
 }
 
-func WorkDispatchInputTokens(dispatch interfaces.WorkDispatch) []interfaces.Token {
+func WorkDispatchInputTokens(dispatch work.WorkDispatch) []interfaces.Token {
 	return cloneInputTokens(dispatch.InputTokens)
 }
 
@@ -103,7 +104,7 @@ func CommandRequestInputTokens(request CommandRequest) []interfaces.Token {
 	return cloneInputTokens(request.InputTokens)
 }
 
-func workDispatchNonResourceTokensForWorkstation(dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig) []interfaces.Token {
+func workDispatchNonResourceTokensForWorkstation(dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig) []interfaces.Token {
 	var tokens []interfaces.Token
 	for _, token := range orderedWorkDispatchTokensForWorkstation(dispatch, workstationDef) {
 		if token.Color.DataType != interfaces.DataTypeResource {
@@ -113,7 +114,7 @@ func workDispatchNonResourceTokensForWorkstation(dispatch interfaces.WorkDispatc
 	return tokens
 }
 
-func orderedWorkDispatchTokensForWorkstation(dispatch interfaces.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig) []interfaces.Token {
+func orderedWorkDispatchTokensForWorkstation(dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig) []interfaces.Token {
 	tokens := WorkDispatchInputTokens(dispatch)
 	if workstationDef == nil || len(tokens) < 2 {
 		return tokens
@@ -292,15 +293,15 @@ func stringSlicePtr(values ...string) *[]string {
 	return &cloned
 }
 
-func firstImageContentPart(rawTokens []any) (int, int, interfaces.WorkContentPart, bool) {
+func firstImageContentPart(rawTokens []any) (int, int, work.WorkContentPart, bool) {
 	for tokenIndex, token := range cloneInputTokens(rawTokens) {
 		for partIndex, part := range token.Color.Content {
-			if part.Type == interfaces.WorkContentPartTypeImage {
+			if part.Type == work.WorkContentPartTypeImage {
 				return tokenIndex, partIndex, part, true
 			}
 		}
 	}
-	return 0, 0, interfaces.WorkContentPart{}, false
+	return 0, 0, work.WorkContentPart{}, false
 }
 
 func unsupportedImageContentError(rawTokens []any, executionPath string) error {
@@ -326,7 +327,7 @@ const (
 
 // WorkLogFields returns stable structured log fields for work-scoped runtime
 // records. Empty strings are intentional so unavailable IDs remain explicit.
-func WorkLogFields(metadata interfaces.ExecutionMetadata, keysAndValues ...any) []any {
+func WorkLogFields(metadata work.ExecutionMetadata, keysAndValues ...any) []any {
 	fields := []any{
 		"request_id", metadata.RequestID,
 		"trace_id", metadata.TraceID,
@@ -360,7 +361,7 @@ type NoopExecutor struct{}
 
 // Execute implements WorkerExecutor. It propagates the first input token's
 // color and returns OutcomeAccepted immediately.
-func (n *NoopExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (n *NoopExecutor) Execute(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
 	return interfaces.WorkResult{
 		DispatchID:   d.DispatchID,
 		TransitionID: d.TransitionID,

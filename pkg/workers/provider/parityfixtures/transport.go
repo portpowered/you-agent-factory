@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 const parityTransportSessionID = "session-parity-transport"
@@ -377,8 +378,8 @@ func invocationResultFromTerminal(fixture Fixture, terminal TerminalResult) inte
 		RequestID: "req-parity-" + fixture.ID,
 		TraceID:   "trace-parity-" + fixture.ID,
 		Status:    factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: terminal.Response.Content},
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: terminal.Response.Content},
 		},
 		SessionID: parityTransportSessionID,
 	}

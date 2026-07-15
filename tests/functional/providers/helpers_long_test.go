@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -170,14 +171,14 @@ func configureTwoInputResourceGatedTemplateWorkstation(t *testing.T, dir, workst
 func writeTwoInputResourceSeeds(t *testing.T, dir string) {
 	t.Helper()
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "zeta-input-name",
 		WorkID:     "zeta-work",
 		WorkTypeID: "zeta-resource",
 		TraceID:    "trace-two-input-resources",
 		Payload:    []byte("zeta-payload"),
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "alpha-input-name",
 		WorkID:     "alpha-work",
 		WorkTypeID: "alpha-resource",
@@ -189,7 +190,7 @@ func writeTwoInputResourceSeeds(t *testing.T, dir string) {
 func writeExecutionTemplateSeed(t *testing.T, dir string) {
 	t.Helper()
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "execution-template-name",
 		WorkID:     "work-execution-template",
 		WorkTypeID: "task",

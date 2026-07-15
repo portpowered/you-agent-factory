@@ -5,11 +5,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestWorkRequestJSONUsesWorkTypeNameContract(t *testing.T) {
-	var request interfaces.WorkRequest
+	var request work.WorkRequest
 	if err := json.Unmarshal([]byte(`{
 		"requestId": "request-json",
 		"type": "FACTORY_REQUEST_BATCH",

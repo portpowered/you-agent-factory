@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
@@ -142,7 +143,7 @@ Work from {{ .Context.WorkDir }}
 		Renderer:      &workerprompting.DefaultPromptRenderer{},
 	}
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-replay-runtime-base",
 		TransitionID:    "t-replay-runtime-base",
 		WorkerType:      "worker-a",

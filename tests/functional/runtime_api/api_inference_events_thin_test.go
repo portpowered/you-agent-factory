@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryboundary "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -45,7 +46,7 @@ func newThinEventSmokeHarness(t *testing.T) thinEventSmokeHarness {
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	recordPath := filepath.Join(t.TempDir(), "thin-event-reducer-views.replay.json")
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-thin-event-reducers",
 		WorkTypeID: "task",
 		TraceID:    "trace-thin-event-reducers",

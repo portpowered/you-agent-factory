@@ -7,6 +7,7 @@ import (
 
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // PromptRenderer interpolates token color data into prompt templates using
@@ -28,8 +29,8 @@ type TokenData struct {
 	Project    string
 	Tags       map[string]string
 	Payload    string
-	Relations  []interfaces.Relation
-	Content    []interfaces.WorkContentPart
+	Relations  []work.Relation
+	Content    []work.WorkContentPart
 
 	PreviousOutput    string
 	RejectionFeedback string
@@ -148,7 +149,7 @@ func buildTokenData(token interfaces.Token, wfCtx *factory_context.FactoryContex
 	td.ParentID = color.ParentID
 	td.Payload = string(color.Payload)
 	td.Relations = color.Relations
-	td.Content = append([]interfaces.WorkContentPart(nil), color.Content...)
+	td.Content = append([]work.WorkContentPart(nil), color.Content...)
 
 	if color.Tags != nil {
 		td.Tags = color.Tags

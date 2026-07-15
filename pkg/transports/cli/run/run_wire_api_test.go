@@ -12,10 +12,10 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestNormalizeInvocationOutputMode(t *testing.T) {
@@ -229,8 +229,8 @@ func TestRun_FactoryInvocationResponseStreamFallsBackWhenStreamAttachmentUnavail
 					RequestID: "req-1",
 					TraceID:   "trace-1",
 					Status:    factoryapi.InvocationTerminalStatusCompleted,
-					PrimaryResult: []interfaces.WorkContentPart{
-						{Type: interfaces.WorkContentPartTypeText, Text: "goal completed"},
+					PrimaryResult: []work.WorkContentPart{
+						{Type: work.WorkContentPartTypeText, Text: "goal completed"},
 					},
 				}, nil
 			},
@@ -287,8 +287,8 @@ func TestRun_FactoryInvocationHumanResponseStreamRejectsLegacyStreamFallback(t *
 						RequestID: "req-1",
 						TraceID:   "trace-1",
 						Status:    factoryapi.InvocationTerminalStatusCompleted,
-						PrimaryResult: []interfaces.WorkContentPart{
-							{Type: interfaces.WorkContentPartTypeText, Text: text},
+						PrimaryResult: []work.WorkContentPart{
+							{Type: work.WorkContentPartTypeText, Text: text},
 						},
 					}, nil
 				},
@@ -342,8 +342,8 @@ func TestRun_FactoryInvocationResponseStreamJSONEmitsStructuredRecords(t *testin
 						RequestID: "req-1",
 						TraceID:   "trace-1",
 						Status:    factoryapi.InvocationTerminalStatusCompleted,
-						PrimaryResult: []interfaces.WorkContentPart{
-							{Type: interfaces.WorkContentPartTypeText, Text: text},
+						PrimaryResult: []work.WorkContentPart{
+							{Type: work.WorkContentPartTypeText, Text: text},
 						},
 					}, nil
 				},
@@ -603,8 +603,8 @@ func slowStdoutResponseEventInvoke(
 			RequestID: "req-1",
 			TraceID:   "trace-1",
 			Status:    factoryapi.InvocationTerminalStatusCompleted,
-			PrimaryResult: []interfaces.WorkContentPart{
-				{Type: interfaces.WorkContentPartTypeText, Text: primaryText},
+			PrimaryResult: []work.WorkContentPart{
+				{Type: work.WorkContentPartTypeText, Text: primaryText},
 			},
 		}, nil
 	}
@@ -747,8 +747,8 @@ func assertSlowStdoutJSONResponseStreamOutput(t *testing.T, output *gatedRespons
 		RequestID: "req-1",
 		TraceID:   "trace-1",
 		Status:    factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: text},
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: text},
 		},
 	})
 }

@@ -21,9 +21,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestPetriRuntime_MutationsPersistAndReloadThroughFactorySessionOwner(t *testing.T) {
@@ -50,7 +51,7 @@ func TestPetriRuntime_MutationsPersistAndReloadThroughFactorySessionOwner(t *tes
 	if err != nil {
 		t.Fatalf("New Petri runtime: %v", err)
 	}
-	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+	request := requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{{
 		WorkTypeID: "task", WorkID: "work-petri-recording", TraceID: "trace-petri-recording",
 	}})
 	if _, err := runtime.SubmitWorkRequest(context.Background(), request); err != nil {

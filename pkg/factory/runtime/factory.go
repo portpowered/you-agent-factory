@@ -12,6 +12,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
@@ -24,8 +25,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 )
@@ -66,7 +67,7 @@ type factoryImpl struct {
 
 type appliedOperatorMove struct {
 	workID string
-	result interfaces.OperatorMoveResult
+	result work.OperatorMoveResult
 }
 
 // Compile-time checks.
@@ -263,10 +264,10 @@ func buildRuntimeEngineOptions(cfg *factory.FactoryConfig, logger logging.Logger
 		engine.WithClock(cfg.Clock),
 		engine.WithTokenTransformer(sharedTransformer),
 		engine.WithResultBuffer(resultBuffer),
-		engine.WithWorkRequestRecorder(func(tick int, record interfaces.WorkRequestRecord) {
+		engine.WithWorkRequestRecorder(func(tick int, record work.WorkRequestRecord) {
 			eventHistory.RecordWorkRequest(tick, record, cfg.Clock.Now())
 		}),
-		engine.WithWorkInputRecorder(func(tick int, req interfaces.SubmitRequest, token interfaces.Token) {
+		engine.WithWorkInputRecorder(func(tick int, req work.SubmitRequest, token interfaces.Token) {
 			eventHistory.RecordWorkInput(tick, req, token, cfg.Clock.Now())
 		}),
 		engine.WithWorkstationResponseRecorder(func(tick int, result interfaces.WorkResult, completed interfaces.CompletedDispatch) {
@@ -316,10 +317,10 @@ func configureRuntimeDispatch(cfg *factory.FactoryConfig, logger logging.Logger,
 	return pool, dispatchHook, append(engineOpts, engine.WithDispatchResultHook(dispatchHook))
 }
 
-func inlineDispatchHandler(cfg *factory.FactoryConfig, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult]) func(interfaces.WorkDispatch) {
+func inlineDispatchHandler(cfg *factory.FactoryConfig, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult]) func(work.WorkDispatch) {
 	executors := cfg.WorkerExecutors
 	net := cfg.GetNet()
-	return func(d interfaces.WorkDispatch) {
+	return func(d work.WorkDispatch) {
 		tr := net.Transitions[d.TransitionID]
 		workerType := dispatchRunnerKey(tr, d)
 		result := executeDispatchSynchronously(context.Background(), d, workerType, executors)
@@ -405,21 +406,21 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 }
 
 // SubmitWorkRequest injects a canonical work request batch idempotently.
-func (f *factoryImpl) SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (f *factoryImpl) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	return f.engine.SubmitWorkRequest(ctx, request)
 }
 
 // MoveWork validates and applies a synchronous operator relocation for one work item.
-func (f *factoryImpl) MoveWork(ctx context.Context, workID string, stateName string, source interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error) {
+func (f *factoryImpl) MoveWork(ctx context.Context, workID string, stateName string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
 	requestID = strings.TrimSpace(requestID)
 	if requestID != "" {
 		f.mu.RLock()
 		if existing, ok := f.operatorMoveRequests[requestID]; ok {
 			f.mu.RUnlock()
 			if existing.workID != workID {
-				return interfaces.OperatorMoveResult{}, interfaces.ErrMoveWorkRequestAlreadyApplied
+				return work.OperatorMoveResult{}, work.ErrMoveWorkRequestAlreadyApplied
 			}
-			return interfaces.OperatorMoveResult{}, interfaces.ErrMoveWorkRequestAlreadyApplied
+			return work.OperatorMoveResult{}, work.ErrMoveWorkRequestAlreadyApplied
 		}
 		f.mu.RUnlock()
 	}
@@ -447,7 +448,7 @@ func (f *factoryImpl) MoveWork(ctx context.Context, workID string, stateName str
 	return result, nil
 }
 
-func (f *factoryImpl) recordOperatorWorkStateChange(result interfaces.OperatorMoveResult, source interfaces.WorkStateChangeSource, requestID, triggerWorkID, reason string) {
+func (f *factoryImpl) recordOperatorWorkStateChange(result work.OperatorMoveResult, source work.WorkStateChangeSource, requestID, triggerWorkID, reason string) {
 	workTypeName := result.WorkTypeID
 	if workType, ok := f.topology.WorkTypes[result.WorkTypeID]; ok && workType != nil {
 		if name := strings.TrimSpace(workType.Name); name != "" {
@@ -455,7 +456,7 @@ func (f *factoryImpl) recordOperatorWorkStateChange(result interfaces.OperatorMo
 		}
 	}
 	tick := f.engine.GetRuntimeStateSnapshot().TickCount
-	f.eventHistory.RecordWorkStateChange(tick, interfaces.WorkStateChangeRecord{
+	f.eventHistory.RecordWorkStateChange(tick, work.WorkStateChangeRecord{
 		WorkID:        result.WorkID,
 		WorkTypeID:    result.WorkTypeID,
 		WorkTypeName:  workTypeName,

@@ -33,6 +33,7 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
@@ -65,8 +66,8 @@ type FactoryCoordinator interface {
 	OpenFactorySession(context.Context, factoryapi.OpenFactorySessionRequest) (factoryapi.OpenFactorySessionResponse, error)
 	CloseFactorySession(context.Context, string) error
 	OpenFactorySessionFromFolder(context.Context, string, *FactorySessionTargetRef, bool, bool) (*FactorySessionOpenResult, error)
-	SubmitWorkRequestForSession(context.Context, string, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
-	MoveWorkForSession(context.Context, string, string, string, string) (interfaces.OperatorMoveResult, error)
+	SubmitWorkRequestForSession(context.Context, string, work.WorkRequest) (work.WorkRequestSubmitResult, error)
+	MoveWorkForSession(context.Context, string, string, string, string) (work.OperatorMoveResult, error)
 	SubscribeFactoryEventsForSession(context.Context, string, *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshotForSession(context.Context, string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 	GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error)
@@ -353,13 +354,13 @@ func (fs *Host) sessionRuntimeConfig(sessionID string) (*factoryconfig.LoadedFac
 	return liveSessionHandle(session).Bundle.RuntimeCfg, nil
 }
 
-func (fs *Host) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (fs *Host) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	return fs.requireCoordinator().SubmitWorkRequestForSession(ctx, sessionID, request)
 }
 
-func (c *runtimeCoordinator) SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (c *runtimeCoordinator) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	if c == nil || c.host == nil {
-		return interfaces.WorkRequestSubmitResult{}, fmt.Errorf("factory service is required")
+		return work.WorkRequestSubmitResult{}, fmt.Errorf("factory service is required")
 	}
 	c.host.activationMu.RLock()
 	defer c.host.activationMu.RUnlock()
@@ -387,30 +388,30 @@ func (c *runtimeCoordinator) GetCurrentFactory(ctx context.Context) (factoryapi.
 	return c.host.requireDefinitions().GetCurrentNamedFactory(ctx)
 }
 
-func (c *runtimeCoordinator) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (c *runtimeCoordinator) SubmitWorkRequestForSession(ctx context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	fs := c.host
 	session, err := fs.requireSession(sessionID)
 	if err != nil {
-		return interfaces.WorkRequestSubmitResult{}, err
+		return work.WorkRequestSubmitResult{}, err
 	}
 	return factoryservice.SubmitWorkRequest(ctx, liveSessionHandle(session).Bundle, request)
 }
 
-func (fs *Host) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
+func (fs *Host) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error) {
 	return fs.requireCoordinator().MoveWorkForSession(ctx, sessionID, workID, stateName, requestID)
 }
 
-func (c *runtimeCoordinator) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
+func (c *runtimeCoordinator) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error) {
 	fs := c.host
 	session, err := fs.requireSession(sessionID)
 	if err != nil {
-		return interfaces.OperatorMoveResult{}, err
+		return work.OperatorMoveResult{}, err
 	}
-	return factoryservice.MoveWork(ctx, liveSessionHandle(session).Bundle, workID, stateName, interfaces.WorkStateChangeSourceAPI, requestID)
+	return factoryservice.MoveWork(ctx, liveSessionHandle(session).Bundle, workID, stateName, work.WorkStateChangeSourceAPI, requestID)
 }
 
 // MoveWork applies a synchronous operator relocation on the current service-owned runtime.
-func (fs *Host) MoveWork(ctx context.Context, workID, stateName string, source interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error) {
+func (fs *Host) MoveWork(ctx context.Context, workID, stateName string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
 	fs.activationMu.RLock()
 	defer fs.activationMu.RUnlock()
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/codex"
@@ -293,7 +294,7 @@ func TestResponseAdapterSnapshotStreamConformance(t *testing.T) {
 	runResponseAdapterConformance(t, responseAdapterFixture{
 		NewAdapter: func() adapter.Adapter { return codex.NewResponseAdapter() },
 		Request: interfaces.ProviderInferenceRequest{
-			Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-conformance"},
+			Dispatch:      work.WorkDispatch{DispatchID: "dispatch-conformance"},
 			ModelProvider: "codex", Model: "gpt-test", UserMessage: prompt,
 		},
 		Content: content,
@@ -397,13 +398,13 @@ func TestResponseAdapterBuildCommandPreservesOrderedImagesAndExecutionControls(t
 		}
 	}
 	request := interfaces.ProviderInferenceRequest{
-		Dispatch:      interfaces.WorkDispatch{DispatchID: "dispatch-command"},
+		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-command"},
 		ModelProvider: string(interfaces.ModelProviderCodex), Model: "gpt-test",
 		UserMessage: "private prompt", WorkingDirectory: workspace,
 		EnvVars: map[string]string{"CUSTOM_CODEX_ENV": "set", "GIT_EDITOR": "vim"},
-		InputTokens: []any{interfaces.Token{ID: "token-images", Color: interfaces.TokenColor{Content: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeImage, File: first},
-			{Type: interfaces.WorkContentPartTypeImage, File: second},
+		InputTokens: []any{interfaces.Token{ID: "token-images", Color: interfaces.TokenColor{Content: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeImage, File: first},
+			{Type: work.WorkContentPartTypeImage, File: second},
 		}}}},
 	}
 	built, err := codex.NewResponseAdapter().BuildCommand(context.Background(), adapter.CommandContext{Request: request, SkipPermissions: true})

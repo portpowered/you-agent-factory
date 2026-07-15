@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
@@ -52,9 +53,9 @@ func TestSessionOwnerTelemetry_NormalizationFailurePreservesStableLabels(t *test
 	cfg.Project = "telemetry-project"
 	owner := NewSessionOwner(SessionOwnerDependencies{
 		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
-		SubmitWork: func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+		SubmitWork: func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
 			t.Fatal("SubmitWork called after normalization failure")
-			return interfaces.WorkRequestSubmitResult{}, nil
+			return work.WorkRequestSubmitResult{}, nil
 		},
 		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			t.Fatal("Observe called after normalization failure")
@@ -96,9 +97,9 @@ func TestSessionOwnerTelemetry_RedactsSensitiveArgumentFailure(t *testing.T) {
 	}
 	owner := NewSessionOwner(SessionOwnerDependencies{
 		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
-		SubmitWork: func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+		SubmitWork: func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
 			t.Fatal("SubmitWork called after interpolation failure")
-			return interfaces.WorkRequestSubmitResult{}, nil
+			return work.WorkRequestSubmitResult{}, nil
 		},
 		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			return SessionInvocationObservation{}, nil
@@ -133,9 +134,9 @@ func TestSessionOwnerTelemetry_DefaultWorkTypeFailureIsReportedOnce(t *testing.T
 	cfg.WorkTypes = nil
 	owner := NewSessionOwner(SessionOwnerDependencies{
 		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
-		SubmitWork: func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+		SubmitWork: func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
 			t.Fatal("SubmitWork called without a default handling Work type")
-			return interfaces.WorkRequestSubmitResult{}, nil
+			return work.WorkRequestSubmitResult{}, nil
 		},
 		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			t.Fatal("Observe called without submitted Work")
@@ -343,8 +344,8 @@ func packagedSessionOwner(
 	observationIndex := 0
 	return NewSessionOwner(SessionOwnerDependencies{
 		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
-		SubmitWork: func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
-			return interfaces.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, nil
+		SubmitWork: func(context.Context, string, work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
+			return work.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, nil
 		},
 		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			observation := observations[observationIndex]

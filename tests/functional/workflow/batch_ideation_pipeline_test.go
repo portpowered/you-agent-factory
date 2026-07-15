@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -19,7 +20,7 @@ func seedBatchIdeas(t *testing.T, dir string, count int) []string {
 	traceIDs := make([]string, count)
 	for i := range count {
 		traceIDs[i] = fmt.Sprintf("trace-batch-idea-%03d", i+1)
-		testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+		testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 			WorkTypeID: "idea",
 			TraceID:    traceIDs[i],
 			Payload:    fmt.Appendf(nil, `{"title":"batch idea %d"}`, i+1),

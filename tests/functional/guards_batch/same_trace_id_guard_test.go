@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -87,13 +88,13 @@ func TestSameTraceIDGuard_MatchingCurrentChainingTraceCompletesJoin(t *testing.T
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:                   "alpha-plan",
 		WorkTypeID:             "plan",
 		CurrentChainingTraceID: "chain-shared",
 		TraceID:                "trace-legacy-plan",
 	}})
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:                   "beta-task",
 		WorkTypeID:             "task",
 		CurrentChainingTraceID: "chain-shared",
@@ -131,12 +132,12 @@ func TestSameTraceIDGuard_FallsBackToLegacyTraceIDWhenCurrentChainingTraceIsMiss
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:       "alpha-plan",
 		WorkTypeID: "plan",
 		TraceID:    "trace-shared",
 	}})
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:       "beta-task",
 		WorkTypeID: "task",
 		TraceID:    "trace-shared",
@@ -166,13 +167,13 @@ func TestSameTraceIDGuard_DifferentTraceIdentityStaysBlocked(t *testing.T) {
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:                   "alpha-plan",
 		WorkTypeID:             "plan",
 		CurrentChainingTraceID: "chain-a",
 		TraceID:                "trace-shared-name",
 	}})
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:                   "alpha-plan",
 		WorkTypeID:             "task",
 		CurrentChainingTraceID: "chain-b",
@@ -215,12 +216,12 @@ func TestSameTraceIDGuard_MissingTraceIdentityFailsClosed(t *testing.T) {
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:       "alpha-plan",
 		WorkTypeID: "plan",
 		TraceID:    "trace-only-plan",
 	}})
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:       "beta-task",
 		WorkTypeID: "task",
 	}})

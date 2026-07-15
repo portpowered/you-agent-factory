@@ -8,13 +8,14 @@ import (
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestBuildFactoryWorldView_ProjectsFromReconstructedWorldState(t *testing.T) {
 	t0 := time.Date(2026, 4, 16, 8, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{
+		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{
 			ID:                 "work-1",
 			WorkTypeID:         "task",
 			DisplayName:        "Write docs",
@@ -29,7 +30,7 @@ func TestBuildFactoryWorldView_ProjectsFromReconstructedWorldState(t *testing.T)
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-1",
 				PlaceID:  "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", ChainingTraceDepth: 3, TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", ChainingTraceDepth: 3, TraceID: "trace-1", PlaceID: "task:init"},
 			}},
 		}),
 	}
@@ -373,7 +374,7 @@ func TestBuildFactoryWorldView_ProjectsCurrentWorkItemsByPlaceID(t *testing.T) {
 	t0 := time.Date(2026, 4, 16, 8, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{
+		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{
 			ID:                 "work-1",
 			WorkTypeID:         "task",
 			DisplayName:        "Write docs",
@@ -388,7 +389,7 @@ func TestBuildFactoryWorldView_ProjectsCurrentWorkItemsByPlaceID(t *testing.T) {
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-1",
 				PlaceID:  "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", ChainingTraceDepth: 3, TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", ChainingTraceDepth: 3, TraceID: "trace-1", PlaceID: "task:init"},
 			}},
 		}),
 	}
@@ -431,7 +432,7 @@ func TestBuildFactoryWorldView_ProjectsSelectedTickTerminalAndFailedPlaceOccupan
 	t0 := time.Date(2026, 4, 16, 8, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{ID: "work-complete", WorkTypeID: "task", DisplayName: "Completed docs", TraceID: "trace-complete", PlaceID: "task:init"}),
+		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{ID: "work-complete", WorkTypeID: "task", DisplayName: "Completed docs", TraceID: "trace-complete", PlaceID: "task:init"}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-complete",
 			TransitionID: "t-review",
@@ -439,7 +440,7 @@ func TestBuildFactoryWorldView_ProjectsSelectedTickTerminalAndFailedPlaceOccupan
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-complete",
 				PlaceID:  "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-complete", WorkTypeID: "task", DisplayName: "Completed docs", TraceID: "trace-complete", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-complete", WorkTypeID: "task", DisplayName: "Completed docs", TraceID: "trace-complete", PlaceID: "task:init"},
 			}},
 		}),
 		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
@@ -452,14 +453,14 @@ func TestBuildFactoryWorldView_ProjectsSelectedTickTerminalAndFailedPlaceOccupan
 				Type:     string(interfaces.MutationMove),
 				TokenID:  "work-complete-terminal",
 				ToPlace:  "task:complete",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-complete", WorkTypeID: "task", DisplayName: "Completed docs", TraceID: "trace-complete", PlaceID: "task:complete"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-complete", WorkTypeID: "task", DisplayName: "Completed docs", TraceID: "trace-complete", PlaceID: "task:complete"},
 			}},
 			TerminalWork: &interfaces.FactoryTerminalWork{
-				WorkItem: interfaces.FactoryWorkItem{ID: "work-complete", WorkTypeID: "task", DisplayName: "Completed docs", TraceID: "trace-complete", PlaceID: "task:complete"},
+				WorkItem: work.FactoryWorkItem{ID: "work-complete", WorkTypeID: "task", DisplayName: "Completed docs", TraceID: "trace-complete", PlaceID: "task:complete"},
 				Status:   "TERMINAL",
 			},
 		}),
-		workInputEvent(4, t0.Add(4*time.Second), interfaces.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked docs", TraceID: "trace-failed", PlaceID: "task:init"}),
+		workInputEvent(4, t0.Add(4*time.Second), work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked docs", TraceID: "trace-failed", PlaceID: "task:init"}),
 		workstationRequestEvent(5, t0.Add(5*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-failed",
 			TransitionID: "t-review",
@@ -467,7 +468,7 @@ func TestBuildFactoryWorldView_ProjectsSelectedTickTerminalAndFailedPlaceOccupan
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-failed",
 				PlaceID:  "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked docs", TraceID: "trace-failed", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked docs", TraceID: "trace-failed", PlaceID: "task:init"},
 			}},
 		}),
 		workstationResponseEvent(6, t0.Add(6*time.Second), interfaces.WorkstationResponsePayload{
@@ -480,10 +481,10 @@ func TestBuildFactoryWorldView_ProjectsSelectedTickTerminalAndFailedPlaceOccupan
 				Type:     string(interfaces.MutationMove),
 				TokenID:  "work-failed-terminal",
 				ToPlace:  "task:failed",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked docs", TraceID: "trace-failed", PlaceID: "task:failed"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked docs", TraceID: "trace-failed", PlaceID: "task:failed"},
 			}},
 			TerminalWork: &interfaces.FactoryTerminalWork{
-				WorkItem: interfaces.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked docs", TraceID: "trace-failed", PlaceID: "task:failed"},
+				WorkItem: work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked docs", TraceID: "trace-failed", PlaceID: "task:failed"},
 				Status:   "FAILED",
 			},
 		}),
@@ -515,7 +516,7 @@ func TestBuildFactoryWorldView_ProjectsCompletedFailedTerminalAndProviderSession
 	t0 := time.Date(2026, 4, 16, 8, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"}),
+		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-1",
 			TransitionID: "t-review",
@@ -523,7 +524,7 @@ func TestBuildFactoryWorldView_ProjectsCompletedFailedTerminalAndProviderSession
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-1",
 				PlaceID:  "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"},
 			}},
 		}),
 		inferenceResponseEvent(3, t0.Add(2500*time.Millisecond), factoryapi.InferenceResponseEventPayload{
@@ -543,12 +544,12 @@ func TestBuildFactoryWorldView_ProjectsCompletedFailedTerminalAndProviderSession
 				Type:     string(interfaces.MutationMove),
 				TokenID:  "work-1",
 				ToPlace:  "task:complete",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
 			}},
 			TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
 			ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
 			TerminalWork: &interfaces.FactoryTerminalWork{
-				WorkItem: interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
+				WorkItem: work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
 				Status:   "TERMINAL",
 			},
 		}),
@@ -588,7 +589,7 @@ func TestBuildFactoryWorldView_ProjectsRejectedDispatchFeedbackAndOutputLabels(t
 	t0 := time.Date(2026, 4, 16, 8, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Review draft", TraceID: "trace-1", PlaceID: "task:init"}),
+		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Review draft", TraceID: "trace-1", PlaceID: "task:init"}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-rejected",
 			TransitionID: "t-review",
@@ -596,7 +597,7 @@ func TestBuildFactoryWorldView_ProjectsRejectedDispatchFeedbackAndOutputLabels(t
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-1",
 				PlaceID:  "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Review draft", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Review draft", TraceID: "trace-1", PlaceID: "task:init"},
 			}},
 		}),
 		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
@@ -609,7 +610,7 @@ func TestBuildFactoryWorldView_ProjectsRejectedDispatchFeedbackAndOutputLabels(t
 				Type:     string(interfaces.MutationMove),
 				TokenID:  "work-1",
 				ToPlace:  "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Needs rewrite", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Needs rewrite", TraceID: "trace-1", PlaceID: "task:init"},
 			}},
 		}),
 	}
@@ -636,7 +637,7 @@ func TestBuildFactoryWorldView_ProjectsRejectedDispatchFeedbackAndOutputLabels(t
 
 func TestBuildFactoryWorldView_CountsMultiTokenProviderDispatchOnce(t *testing.T) {
 	state := interfaces.FactoryWorldState{
-		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+		WorkItemsByID: map[string]work.FactoryWorkItem{
 			"work-1": {ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs"},
 		},
 		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{
@@ -691,13 +692,13 @@ func TestBuildFactoryWorldView_CountsFailedWorkItemsForCustomerSummary(t *testin
 		Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed)},
 	}
 	state := interfaces.FactoryWorldState{
-		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+		WorkItemsByID: map[string]work.FactoryWorkItem{
 			"work-1": {ID: "work-1", WorkTypeID: "story", DisplayName: "Blocked Story"},
 			"work-2": {ID: "work-2", WorkTypeID: "story", DisplayName: "Rejected Story"},
 			"work-3": {ID: "work-3", WorkTypeID: "story", DisplayName: "Reworked Story"},
 		},
 		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{failedDispatch},
-		FailedWorkItemsByID: map[string]interfaces.FactoryWorkItem{
+		FailedWorkItemsByID: map[string]work.FactoryWorkItem{
 			"work-1": {ID: "work-1", WorkTypeID: "story", DisplayName: "Blocked Story"},
 			"work-2": {ID: "work-2", WorkTypeID: "story", DisplayName: "Rejected Story"},
 			"work-3": {ID: "work-3", WorkTypeID: "story", DisplayName: "Reworked Story"},
@@ -725,7 +726,7 @@ func TestBuildFactoryWorldView_SelectedTickProjectionComesFromEventHistory(t *te
 	t0 := time.Date(2026, 4, 16, 8, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"}),
+		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-1",
 			TransitionID: "t-review",
@@ -733,7 +734,7 @@ func TestBuildFactoryWorldView_SelectedTickProjectionComesFromEventHistory(t *te
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-1",
 				PlaceID:  "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"},
 			}},
 		}),
 		inferenceResponseEvent(3, t0.Add(2500*time.Millisecond), factoryapi.InferenceResponseEventPayload{
@@ -753,12 +754,12 @@ func TestBuildFactoryWorldView_SelectedTickProjectionComesFromEventHistory(t *te
 				Type:     string(interfaces.MutationMove),
 				TokenID:  "work-1",
 				ToPlace:  "task:complete",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
 			}},
 			TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
 			ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
 			TerminalWork: &interfaces.FactoryTerminalWork{
-				WorkItem: interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
+				WorkItem: work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
 				Status:   "TERMINAL",
 			},
 		}),
@@ -843,7 +844,7 @@ func TestBuildFactoryWorldView_ProjectsInferenceAttemptsForDashboard(t *testing.
 	exitCode := 1
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"}),
+		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-1",
 			TransitionID: "t-review",
@@ -851,7 +852,7 @@ func TestBuildFactoryWorldView_ProjectsInferenceAttemptsForDashboard(t *testing.
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-1",
 				PlaceID:  "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"},
 			}},
 		}),
 		inferenceRequestEvent(3, t0.Add(3*time.Second), factoryapi.InferenceRequestEventPayload{

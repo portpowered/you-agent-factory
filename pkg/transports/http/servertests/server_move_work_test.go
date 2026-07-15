@@ -11,15 +11,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/factory/runtime"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 )
 
@@ -155,7 +156,7 @@ func TestMoveWork_IntegrationWithRuntimeFactoryWhilePaused(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 	ctx := context.Background()
-	if _, err := f.SubmitWorkRequest(ctx, factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{
+	if _, err := f.SubmitWorkRequest(ctx, factoryrequests.WorkRequestFromSubmitRequests([]work.SubmitRequest{{
 		WorkID:     "work-runtime-paused",
 		WorkTypeID: "task",
 		TraceID:    "trace-runtime-paused",
@@ -193,15 +194,15 @@ func newRuntimeMoveAPISurface(f factory.Factory) apisurface.APISurface {
 	}
 }
 
-func (r *runtimeMoveAPISurface) MoveWork(ctx context.Context, workID, stateName string, source interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error) {
+func (r *runtimeMoveAPISurface) MoveWork(ctx context.Context, workID, stateName string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
 	return r.runtime.MoveWork(ctx, workID, stateName, source, requestID)
 }
 
-func (r *runtimeMoveAPISurface) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
+func (r *runtimeMoveAPISurface) MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error) {
 	if sessionID != factorysessions.DefaultSessionID {
-		return interfaces.OperatorMoveResult{}, apisurface.ErrFactorySessionNotFound
+		return work.OperatorMoveResult{}, apisurface.ErrFactorySessionNotFound
 	}
-	return r.runtime.MoveWork(ctx, workID, stateName, interfaces.WorkStateChangeSourceAPI, requestID)
+	return r.runtime.MoveWork(ctx, workID, stateName, work.WorkStateChangeSourceAPI, requestID)
 }
 
 func (r *runtimeMoveAPISurface) GetEngineStateSnapshot(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {

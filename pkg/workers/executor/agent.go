@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
@@ -180,7 +181,7 @@ func workerTypeForExecutionRequest(request interfaces.WorkstationExecutionReques
 	return request.Dispatch.WorkerType
 }
 
-func missingWorkerWorkResult(dispatch interfaces.WorkDispatch, workerType string, duration time.Duration) interfaces.WorkResult {
+func missingWorkerWorkResult(dispatch work.WorkDispatch, workerType string, duration time.Duration) interfaces.WorkResult {
 	return interfaces.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
@@ -190,7 +191,7 @@ func missingWorkerWorkResult(dispatch interfaces.WorkDispatch, workerType string
 	}
 }
 
-func inferenceErrorWorkResult(dispatch interfaces.WorkDispatch, err error, diagnostics *interfaces.WorkDiagnostics, retryCount int, start time.Time) interfaces.WorkResult {
+func inferenceErrorWorkResult(dispatch work.WorkDispatch, err error, diagnostics *interfaces.WorkDiagnostics, retryCount int, start time.Time) interfaces.WorkResult {
 	providerErr := workerprovider.NormalizeProviderExecutionError(err)
 	failureMetadata := workerprovider.WorkFailureMetadataFromError(providerErr)
 	return interfaces.WorkResult{
@@ -247,7 +248,7 @@ func agentWorkMetrics(start time.Time, retryCount int) interfaces.WorkMetrics {
 
 func inferenceRequestForExecutionRequest(request interfaces.WorkstationExecutionRequest, workerDef *interfaces.WorkerConfig, workstationDef *interfaces.FactoryWorkstationConfig) interfaces.ProviderInferenceRequest {
 	req := interfaces.ProviderInferenceRequest{
-		Dispatch:                     interfaces.CloneWorkDispatch(request.Dispatch),
+		Dispatch:                     work.CloneWorkDispatch(request.Dispatch),
 		WorkerType:                   request.WorkerType,
 		WorkstationType:              inferenceWorkstationType(request),
 		RunnerID:                     request.RunnerID,
@@ -499,7 +500,7 @@ func shouldRequireWorktreeRunnerCapability(request interfaces.WorkstationExecuti
 
 func tokenHasImageContent(token interfaces.Token) bool {
 	for _, part := range token.Color.Content {
-		if part.Type == interfaces.WorkContentPartTypeImage {
+		if part.Type == work.WorkContentPartTypeImage {
 			return true
 		}
 	}

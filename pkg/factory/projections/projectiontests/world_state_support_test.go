@@ -9,6 +9,7 @@ import (
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestReconstructFactoryWorldState_BeforeFirstEventReturnsEmptyState(t *testing.T) {
@@ -25,8 +26,8 @@ func TestReconstructFactoryWorldState_AcceptsJSONDecodedPayloads(t *testing.T) {
 	t0 := time.Date(2026, 4, 23, 11, 0, 0, 0, time.UTC)
 	requestID := "request-json-relations"
 	works := []factoryapi.Work{
-		generatedWorkForProjectionTest(interfaces.FactoryWorkItem{ID: "work-draft", WorkTypeID: "task", DisplayName: "draft", TraceID: "trace-json-relations"}, requestID),
-		generatedWorkForProjectionTest(interfaces.FactoryWorkItem{ID: "work-review", WorkTypeID: "task", DisplayName: "review", TraceID: "trace-json-relations"}, requestID),
+		generatedWorkForProjectionTest(work.FactoryWorkItem{ID: "work-draft", WorkTypeID: "task", DisplayName: "draft", TraceID: "trace-json-relations"}, requestID),
+		generatedWorkForProjectionTest(work.FactoryWorkItem{ID: "work-review", WorkTypeID: "task", DisplayName: "review", TraceID: "trace-json-relations"}, requestID),
 	}
 	relation := factoryapi.Relation{
 		Type:           factoryapi.RelationTypeDependsOn,
@@ -62,7 +63,7 @@ func TestReconstructFactoryWorldState_AcceptsJSONDecodedPayloads(t *testing.T) {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
 	request := state.WorkRequestsByID[requestID]
-	if request.RequestID != requestID || request.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
+	if request.RequestID != requestID || request.Type != work.WorkRequestTypeFactoryRequestBatch {
 		t.Fatalf("decoded request = %#v, want canonical work-request metadata", request)
 	}
 	if len(request.WorkItems) != 2 || request.WorkItems[0].ID != "work-draft" || request.WorkItems[1].ID != "work-review" {
@@ -176,7 +177,7 @@ func canonicalCompletedDispatchProjectionEvents(t0 time.Time) []factoryapi.Facto
 				Type:    string(interfaces.MutationMove),
 				TokenID: "work-1",
 				ToPlace: "task:complete",
-				WorkItem: &interfaces.FactoryWorkItem{
+				WorkItem: &work.FactoryWorkItem{
 					ID:          "work-1",
 					WorkTypeID:  "task",
 					DisplayName: "Write docs",
@@ -187,11 +188,11 @@ func canonicalCompletedDispatchProjectionEvents(t0 time.Time) []factoryapi.Facto
 			TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
 			ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
 			TerminalWork: &interfaces.FactoryTerminalWork{
-				WorkItem: interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
+				WorkItem: work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
 				Status:   "TERMINAL",
 			},
 		}),
-		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"}),
+		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"}),
 		initialStructureEvent(t0),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-1",
@@ -200,7 +201,7 @@ func canonicalCompletedDispatchProjectionEvents(t0 time.Time) []factoryapi.Facto
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-1",
 				PlaceID:  "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:init"},
 			}},
 		}),
 		inferenceResponseEvent(3, t0.Add(2500*time.Millisecond), factoryapi.InferenceResponseEventPayload{
@@ -261,7 +262,7 @@ func safeResponseDiagnosticsProjectionEvents(t0 time.Time) []factoryapi.FactoryE
 	diagnostics := projectionSafeResponseDiagnostics()
 	return []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}),
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}),
 		workstationRequestEvent(2, t0.Add(2*time.Second), interfaces.WorkstationRequestPayload{
 			DispatchID:   "dispatch-1",
 			TransitionID: "t-review",
@@ -269,7 +270,7 @@ func safeResponseDiagnosticsProjectionEvents(t0 time.Time) []factoryapi.FactoryE
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "tok-task-1",
 				PlaceID:  "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"},
 			}},
 		}),
 		inferenceResponseEvent(3, t0.Add(2500*time.Millisecond), factoryapi.InferenceResponseEventPayload{
@@ -456,11 +457,11 @@ func initialStructureEventWithResources(eventTime time.Time, resources []factory
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeInitialStructureRequest, "initial-resources", 0, eventTime, factoryapi.FactoryEventContext{}, payload)
 }
 
-func workInputEvent(tick int, eventTime time.Time, item interfaces.FactoryWorkItem) factoryapi.FactoryEvent {
+func workInputEvent(tick int, eventTime time.Time, item work.FactoryWorkItem) factoryapi.FactoryEvent {
 	return workInputEventWithToken(tick, eventTime, item.ID, item)
 }
 
-func workInputEventWithToken(tick int, eventTime time.Time, _ string, item interfaces.FactoryWorkItem) factoryapi.FactoryEvent {
+func workInputEventWithToken(tick int, eventTime time.Time, _ string, item work.FactoryWorkItem) factoryapi.FactoryEvent {
 	requestID := "request/" + item.ID
 	context := factoryapi.FactoryEventContext{
 		RequestId: stringPtrForProjectionTest(requestID),
@@ -477,7 +478,7 @@ func workInputEventWithToken(tick int, eventTime time.Time, _ string, item inter
 func workstationRequestEvent(tick int, eventTime time.Time, payload interfaces.WorkstationRequestPayload) factoryapi.FactoryEvent {
 	works := make([]factoryapi.Work, 0, len(payload.Inputs))
 	inputRefs := make([]factoryapi.DispatchConsumedWorkRef, 0, len(payload.Inputs))
-	inputWorkItems := make([]interfaces.FactoryWorkItem, 0, len(payload.Inputs))
+	inputWorkItems := make([]work.FactoryWorkItem, 0, len(payload.Inputs))
 	for _, input := range payload.Inputs {
 		if input.WorkItem != nil {
 			inputWorkItems = append(inputWorkItems, *input.WorkItem)
@@ -487,15 +488,15 @@ func workstationRequestEvent(tick int, eventTime time.Time, payload interfaces.W
 	}
 	context := factoryapi.FactoryEventContext{
 		DispatchId:               stringPtrForProjectionTest(payload.DispatchID),
-		CurrentChainingTraceId:   stringPtrForProjectionTest(interfaces.CurrentChainingTraceIDFromWorkItems(inputWorkItems)),
-		PreviousChainingTraceIds: stringSlicePtrForProjectionTest(interfaces.PreviousChainingTraceIDsFromWorkItems(inputWorkItems)),
+		CurrentChainingTraceId:   stringPtrForProjectionTest(work.CurrentChainingTraceIDFromWorkItems(inputWorkItems)),
+		PreviousChainingTraceIds: stringSlicePtrForProjectionTest(work.PreviousChainingTraceIDsFromWorkItems(inputWorkItems)),
 		TraceIds:                 stringSlicePtrForProjectionTest(traceIDsForProjectionTest(works)),
 		WorkIds:                  stringSlicePtrForProjectionTest(workIDsForProjectionTest(works)),
 	}
 	generatedPayload := factoryapi.DispatchRequestEventPayload{
 		TransitionId:             payload.TransitionID,
-		CurrentChainingTraceId:   stringPtrForProjectionTest(interfaces.CurrentChainingTraceIDFromWorkItems(inputWorkItems)),
-		PreviousChainingTraceIds: stringSlicePtrForProjectionTest(interfaces.PreviousChainingTraceIDsFromWorkItems(inputWorkItems)),
+		CurrentChainingTraceId:   stringPtrForProjectionTest(work.CurrentChainingTraceIDFromWorkItems(inputWorkItems)),
+		PreviousChainingTraceIds: stringSlicePtrForProjectionTest(work.PreviousChainingTraceIDsFromWorkItems(inputWorkItems)),
 		Inputs:                   inputRefs,
 		Resources:                generatedResourcesForProjectionTest(payload.Resources),
 	}
@@ -770,7 +771,7 @@ func scriptResponseEvent(tick int, eventTime time.Time, payload factoryapi.Scrip
 	return generatedProjectionEvent(factoryapi.FactoryEventTypeScriptResponse, "script-response/"+payload.ScriptRequestId, tick, eventTime, context, payload)
 }
 
-func generatedWorkForProjectionTest(item interfaces.FactoryWorkItem, requestID string) factoryapi.Work {
+func generatedWorkForProjectionTest(item work.FactoryWorkItem, requestID string) factoryapi.Work {
 	return factoryapi.Work{
 		Name:                     item.DisplayName,
 		RequestId:                stringPtrForProjectionTest(requestID),
@@ -931,7 +932,7 @@ func TestReconstructFactoryWorldState_PreservesAgentRunInspectionDiagnostics(t *
 	})
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEventWithToken(1, t0.Add(time.Second), "tok-story-1", interfaces.FactoryWorkItem{
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-story-1", work.FactoryWorkItem{
 			ID:         "work-1",
 			WorkTypeID: "story",
 			TraceID:    "trace-1",
@@ -944,7 +945,7 @@ func TestReconstructFactoryWorldState_PreservesAgentRunInspectionDiagnostics(t *
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "tok-story-1",
 				PlaceID:  "story:init",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "story", TraceID: "trace-1", PlaceID: "story:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "story", TraceID: "trace-1", PlaceID: "story:init"},
 			}},
 		}),
 		agentRunResponseEvent(3, t0.Add(3*time.Second), factoryapi.AgentRunResponseEventPayload{

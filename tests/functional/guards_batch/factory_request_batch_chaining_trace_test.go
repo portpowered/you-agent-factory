@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -157,11 +158,11 @@ func threeWorkstationChainingTraceFactoryConfig() *interfaces.FactoryConfig {
 	}
 }
 
-func threeWorkstationChainingTraceGeneratedBatch() interfaces.GeneratedSubmissionBatch {
-	return interfaces.GeneratedSubmissionBatch{
-		Request: interfaces.WorkRequest{
+func threeWorkstationChainingTraceGeneratedBatch() work.GeneratedSubmissionBatch {
+	return work.GeneratedSubmissionBatch{
+		Request: work.WorkRequest{
 			RequestID: "request-generated-branches",
-			Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+			Type:      work.WorkRequestTypeFactoryRequestBatch,
 			Works: []interfaces.Work{
 				{
 					Name:                   "branch-z",
@@ -181,10 +182,10 @@ func threeWorkstationChainingTraceGeneratedBatch() interfaces.GeneratedSubmissio
 				},
 			},
 		},
-		Metadata: interfaces.GeneratedSubmissionBatchMetadata{
+		Metadata: work.GeneratedSubmissionBatchMetadata{
 			Source: "generator:three-workstation",
 		},
-		Submissions: []interfaces.SubmitRequest{
+		Submissions: []work.SubmitRequest{
 			{Name: "branch-z", WorkID: "work-branch-z", Tags: map[string]string{"branch": "z"}},
 			{Name: "branch-a", WorkID: "work-branch-a", Tags: map[string]string{"branch": "a"}},
 		},
@@ -231,9 +232,9 @@ func chainingTraceFanInWorkstation() map[string]any {
 func submitChainingTraceFanInWork(t *testing.T, h *testutil.ServiceTestHarness) {
 	t.Helper()
 
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-chaining-fan-in-smoke",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{
 			{
 				Name:                   "lineage-z",
@@ -259,9 +260,9 @@ func submitChainingTraceFanInWork(t *testing.T, h *testutil.ServiceTestHarness) 
 func submitThreeWorkstationChainingTraceWork(t *testing.T, h *testutil.ServiceTestHarness) {
 	t.Helper()
 
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-three-workstation-lineage",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{{
 			Name:                   "seed-root",
 			WorkID:                 "work-seed-root",
@@ -564,7 +565,7 @@ func assertThreeWorkstationWorldStateAndResources(
 
 func assertProjectedGeneratedBranch(
 	t *testing.T,
-	item interfaces.FactoryWorkItem,
+	item work.FactoryWorkItem,
 	wantWorkID string,
 	wantWorkType string,
 	wantTrace string,

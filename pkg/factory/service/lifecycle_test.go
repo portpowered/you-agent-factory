@@ -12,6 +12,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -45,16 +46,16 @@ func (f *orderedStopFactory) Run(ctx context.Context) error {
 }
 
 func (f *lifecycleObserverFactory) Run(context.Context) error { return nil }
-func (f *lifecycleObserverFactory) SubmitWorkRequest(context.Context, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
-	return interfaces.WorkRequestSubmitResult{}, nil
+func (f *lifecycleObserverFactory) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	return work.WorkRequestSubmitResult{}, nil
 }
 func (f *lifecycleObserverFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
 }
 func (f *lifecycleObserverFactory) Pause(context.Context) error  { return nil }
 func (f *lifecycleObserverFactory) Resume(context.Context) error { return nil }
-func (f *lifecycleObserverFactory) MoveWork(context.Context, string, string, interfaces.WorkStateChangeSource, string) (interfaces.OperatorMoveResult, error) {
-	return interfaces.OperatorMoveResult{}, nil
+func (f *lifecycleObserverFactory) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {
+	return work.OperatorMoveResult{}, nil
 }
 func (f *lifecycleObserverFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	f.mu.RLock()

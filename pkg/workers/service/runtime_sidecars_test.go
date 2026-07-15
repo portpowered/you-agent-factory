@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
@@ -78,7 +79,7 @@ func TestStartSchedulerSidecarsForRuntime_AttachesCronAndScriptPollerSupervision
 
 	waitForPollerSubmission(t, submitted, 1, 2*time.Second)
 
-	var cronRequest interfaces.WorkRequest
+	var cronRequest work.WorkRequest
 	var foundCron bool
 	_, submissions := submitted.snapshot()
 	for _, request := range submissions {
@@ -118,7 +119,7 @@ func TestStartSchedulerSidecarsForRuntime_CronCadenceSubmitsScheduledTicks(t *te
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
 	}
 
-	observedRequests := make(chan interfaces.WorkRequest, 8)
+	observedRequests := make(chan work.WorkRequest, 8)
 	svc := workersservice.New(workersservice.Config{
 		Logger: zap.NewNop(),
 		Clock:  fakeClock,
@@ -134,7 +135,7 @@ func TestStartSchedulerSidecarsForRuntime_CronCadenceSubmitsScheduledTicks(t *te
 			FactoryDir: factoryDir,
 			FactoryCfg: factoryCfg,
 			RuntimeCfg: loaded,
-			Submitter: func(_ context.Context, request interfaces.WorkRequest) error {
+			Submitter: func(_ context.Context, request work.WorkRequest) error {
 				select {
 				case observedRequests <- request:
 				default:

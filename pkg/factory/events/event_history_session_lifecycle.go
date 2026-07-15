@@ -11,6 +11,7 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 const (
@@ -45,7 +46,7 @@ type SessionLifecycleResultInput struct {
 	Source           string
 	Tick             int
 	ResultStatus     factoryapi.FactoryEventSessionResultStatus
-	ResultSummary    []interfaces.WorkContentPart
+	ResultSummary    []work.WorkContentPart
 	ArtifactIDs      []string
 }
 
@@ -399,7 +400,7 @@ func sessionLifecycleDigestJSON(raw json.RawMessage) string {
 	return "sha256:" + hex.EncodeToString(sum[:])
 }
 
-func generatedWorkContentPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
+func generatedWorkContentPtr(parts []work.WorkContentPart) *factoryapi.WorkContent {
 	if len(parts) == 0 {
 		return nil
 	}
@@ -407,7 +408,7 @@ func generatedWorkContentPtr(parts []interfaces.WorkContentPart) *factoryapi.Wor
 	for _, part := range parts {
 		item := factoryapi.WorkContentPart{}
 		switch part.Type {
-		case interfaces.WorkContentPartTypeText:
+		case work.WorkContentPartTypeText:
 			text := part.Text
 			if err := item.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
 				Type: factoryapi.WorkContentPartTypeText,
@@ -415,7 +416,7 @@ func generatedWorkContentPtr(parts []interfaces.WorkContentPart) *factoryapi.Wor
 			}); err != nil {
 				continue
 			}
-		case interfaces.WorkContentPartTypeImage:
+		case work.WorkContentPartTypeImage:
 			if err := item.FromWorkImageContentPart(factoryapi.WorkImageContentPart{Url: part.URL}); err != nil {
 				continue
 			}

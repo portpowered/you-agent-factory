@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -21,7 +22,7 @@ type fanoutParserExecutor struct {
 	childCount int
 }
 
-func (e *fanoutParserExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *fanoutParserExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	e.mu.Lock()
 	e.calls++
 	e.mu.Unlock()
@@ -63,7 +64,7 @@ func (e *fanoutParserExecutor) callCount() int {
 	return e.calls
 }
 
-func executionIDFromDispatch(dispatch interfaces.WorkDispatch) string {
+func executionIDFromDispatch(dispatch work.WorkDispatch) string {
 	for _, token := range workers.WorkDispatchInputTokens(dispatch) {
 		if token.Color.Tags[executionIDTagKey] != "" {
 			return token.Color.Tags[executionIDTagKey]
@@ -81,7 +82,7 @@ type execDirObservingProcessor struct {
 	sawExecutionChannel bool
 }
 
-func (p *execDirObservingProcessor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (p *execDirObservingProcessor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	p.mu.Lock()
 	p.dispatchCount++
 	p.mu.Unlock()
@@ -122,7 +123,7 @@ type gatedProcessor struct {
 	dispatchCount int
 }
 
-func (p *gatedProcessor) Execute(ctx context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (p *gatedProcessor) Execute(ctx context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	select {
 	case <-p.release:
 	case <-ctx.Done():
@@ -146,7 +147,7 @@ type multiChapterParserExecutor struct {
 	childCounts []int
 }
 
-func (e *multiChapterParserExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *multiChapterParserExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	e.mu.Lock()
 	call := e.calls
 	e.calls++

@@ -9,10 +9,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/work"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
-func workContentJSONFromParts(parts []interfaces.WorkContentPart) json.RawMessage {
+func workContentJSONFromParts(parts []work.WorkContentPart) json.RawMessage {
 	content := contentcontract.GeneratedPtrFromParts(parts)
 	if content == nil {
 		return nil
@@ -24,9 +25,9 @@ func workContentJSONFromParts(parts []interfaces.WorkContentPart) json.RawMessag
 	return encoded
 }
 
-func resultSummaryTextFromParts(parts []interfaces.WorkContentPart) string {
+func resultSummaryTextFromParts(parts []work.WorkContentPart) string {
 	for _, part := range parts {
-		if part.Type.Normalized() == interfaces.WorkContentPartTypeText {
+		if part.Type.Normalized() == work.WorkContentPartTypeText {
 			if text := strings.TrimSpace(part.Text); text != "" {
 				return text
 			}

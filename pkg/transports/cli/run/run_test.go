@@ -15,6 +15,7 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
@@ -189,8 +190,8 @@ func TestDocsExampleStartupWorkFile(t *testing.T) {
 	if got.RequestID != "docs-example-story-001" {
 		t.Fatalf("request ID = %q, want docs-example-story-001", got.RequestID)
 	}
-	if got.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
-		t.Fatalf("type = %q, want %q", got.Type, interfaces.WorkRequestTypeFactoryRequestBatch)
+	if got.Type != work.WorkRequestTypeFactoryRequestBatch {
+		t.Fatalf("type = %q, want %q", got.Type, work.WorkRequestTypeFactoryRequestBatch)
 	}
 	if len(got.Works) != 1 {
 		t.Fatalf("work count = %d, want 1", len(got.Works))
@@ -728,8 +729,8 @@ func assertStableInvocationSourceConflictMessage(t *testing.T, got string, wantM
 }
 
 func invocationRequestFromLogicalAPIText(text string) (*factoryapi.InvocationRequest, error) {
-	resolved, err := invocations.ResolveAPITextInputContent([]interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	resolved, err := invocations.ResolveAPITextInputContent([]work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: text,
 	}})
 	if err != nil {
@@ -807,7 +808,7 @@ func assertOptionalStringPointerEquals[T ~string](t *testing.T, field string, go
 func assertGeneratedWorkContentPartsFromResponse(
 	t *testing.T,
 	content *factoryapi.WorkContent,
-	want []interfaces.WorkContentPart,
+	want []work.WorkContentPart,
 ) {
 	t.Helper()
 

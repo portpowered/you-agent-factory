@@ -9,6 +9,7 @@ import (
 
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
 
@@ -472,7 +473,7 @@ func TestWorkstationExecutor_ParameterizedWorkingDirectory(t *testing.T) {
 		Renderer: &workerprompting.DefaultPromptRenderer{},
 	}
 
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		TransitionID: "t-1",
 		WorkerType:   "worker-a",
 		InputTokens: InputTokens(interfaces.Token{
@@ -528,7 +529,7 @@ func TestWorkstationExecutor_ParameterizedEnv(t *testing.T) {
 		Renderer: &workerprompting.DefaultPromptRenderer{},
 	}
 
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		TransitionID: "t-1",
 		WorkerType:   "worker-a",
 		InputTokens: InputTokens(interfaces.Token{
@@ -575,7 +576,7 @@ func TestWorkstationExecutor_ParameterizedFieldError(t *testing.T) {
 		Renderer: &workerprompting.DefaultPromptRenderer{},
 	}
 
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		TransitionID:    "t-1",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",

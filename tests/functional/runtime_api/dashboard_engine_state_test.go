@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -99,7 +100,7 @@ func writeDashboardWorldViewAgents(t *testing.T, dir string, agentType string) {
 
 func submitDashboardWorldViewFunctionalWork(t *testing.T, h *testutil.ServiceTestHarness, workID string, traceID string) {
 	t.Helper()
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		WorkID: workID, WorkTypeID: "task", TraceID: traceID, Payload: []byte(`{"item":"dashboard-world-view-functional"}`),
 	}})
 }

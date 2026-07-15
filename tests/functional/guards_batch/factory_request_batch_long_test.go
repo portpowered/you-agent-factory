@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -23,9 +24,9 @@ func TestFactoryRequestBatch_CreatesOneTokenPerWorkItem(t *testing.T) {
 	support.SkipLongFunctional(t, "slow request-batch token-creation sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-batch-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{
 			{Name: "alpha", WorkTypeID: "task", Tags: map[string]string{"project": "test-project"}},
 			{Name: "beta", WorkTypeID: "task", Tags: map[string]string{"project": "test-project"}},
@@ -62,9 +63,9 @@ func TestFactoryRequestBatch_TagsAccessibleInTokenPayload(t *testing.T) {
 		result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
 	}
 	h.SetCustomExecutor("checker", checker)
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-tags-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{{
 			Name:       "story-1",
 			WorkTypeID: "task",
@@ -121,9 +122,9 @@ func TestFactoryRequestBatch_FactoryProjectConfigWinsOverProjectTagForProviderCo
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-project-override-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{{
 			Name:       "story-project-override",
 			WorkID:     "work-project-override",
@@ -188,9 +189,9 @@ func TestFactoryRequestBatch_FactoryProjectConfigFlowsToProviderContext(t *testi
 		testutil.WithProvider(provider),
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-project-config-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{{
 			Name:       "story-project-config",
 			WorkID:     "work-project-config",
@@ -249,16 +250,16 @@ func TestFactoryRequestBatch_DependsOnBlocksDispatch(t *testing.T) {
 	support.SkipLongFunctional(t, "slow request-batch dependency sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-deps-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{
 			{Name: "A", WorkID: "work-A", WorkTypeID: "task", Payload: "A"},
 			{Name: "B", WorkID: "work-B", WorkTypeID: "task", Payload: "B"},
 		},
-		Relations: []interfaces.WorkRelation{
+		Relations: []work.WorkRelation{
 			{
-				Type:           interfaces.WorkRelationDependsOn,
+				Type:           work.WorkRelationDependsOn,
 				SourceWorkName: "B",
 				TargetWorkName: "A",
 			},
@@ -294,15 +295,15 @@ func TestFactoryRequestBatch_HarnessSnapshotObservesNormalizedWork(t *testing.T)
 	support.SkipLongFunctional(t, "slow request-batch snapshot sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "factory_request_batch"))
 
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-snapshot-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{
 			{Name: "first", WorkID: "work-snapshot-first", WorkTypeID: "task", TraceID: "trace-snapshot-1", Payload: "first"},
 			{Name: "second", WorkID: "work-snapshot-second", WorkTypeID: "task", TraceID: "trace-snapshot-1", Payload: "second"},
 		},
-		Relations: []interfaces.WorkRelation{{
-			Type:           interfaces.WorkRelationDependsOn,
+		Relations: []work.WorkRelation{{
+			Type:           work.WorkRelationDependsOn,
 			SourceWorkName: "second",
 			TargetWorkName: "first",
 		}},
@@ -396,15 +397,15 @@ Finish the input task.
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-e2e-batch-smoke",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{
 			{Name: "first", WorkID: "work-e2e-first", WorkTypeID: "task", TraceID: "trace-e2e-batch-smoke", Payload: "first"},
 			{Name: "second", WorkID: "work-e2e-second", WorkTypeID: "task", TraceID: "trace-e2e-batch-smoke", Payload: "second"},
 		},
-		Relations: []interfaces.WorkRelation{{
-			Type:           interfaces.WorkRelationDependsOn,
+		Relations: []work.WorkRelation{{
+			Type:           work.WorkRelationDependsOn,
 			SourceWorkName: "second",
 			TargetWorkName: "first",
 		}},
@@ -428,7 +429,7 @@ Finish the input task.
 // capturingExecutor captures the last dispatch and returns a fixed result.
 type capturingExecutor struct {
 	result       interfaces.WorkResult
-	lastDispatch interfaces.WorkDispatch
+	lastDispatch work.WorkDispatch
 	callCount    int
 }
 
@@ -436,7 +437,7 @@ type generatedBatchExecutor struct {
 	output string
 }
 
-func newGeneratedBatchExecutor(t *testing.T, batch interfaces.GeneratedSubmissionBatch) *generatedBatchExecutor {
+func newGeneratedBatchExecutor(t *testing.T, batch work.GeneratedSubmissionBatch) *generatedBatchExecutor {
 	t.Helper()
 
 	data, err := json.Marshal(batch)
@@ -446,7 +447,7 @@ func newGeneratedBatchExecutor(t *testing.T, batch interfaces.GeneratedSubmissio
 	return &generatedBatchExecutor{output: string(data)}
 }
 
-func (e *generatedBatchExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *generatedBatchExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	return interfaces.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
@@ -455,7 +456,7 @@ func (e *generatedBatchExecutor) Execute(_ context.Context, dispatch interfaces.
 	}, nil
 }
 
-func (e *capturingExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *capturingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	e.lastDispatch = dispatch
 	e.callCount++
 	result := e.result

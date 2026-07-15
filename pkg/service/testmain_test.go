@@ -28,13 +28,14 @@ import (
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
@@ -718,7 +719,7 @@ func TestBuildFactoryService_RecordModeRecordsSubmittedWorkAtEngineTick(t *testi
 	}
 
 	workFile := filepath.Join(dir, "initial-work.json")
-	work := interfaces.SubmitRequest{
+	work := work.SubmitRequest{
 		WorkTypeID: "task",
 		Name:       "from-work-file",
 		TraceID:    "trace-work-file",
@@ -802,7 +803,7 @@ func TestBuildFactoryService_PetriMutationsReloadThroughComposedDurableOwner(t *
 	writeFactoryJSON(t, dir, minimalFactoryConfig())
 	writeWorkstationAgentsMD(t, dir, "process")
 	workFile := filepath.Join(dir, "petri-owner-work.json")
-	writeWorkRequestFile(t, workFile, interfaces.SubmitRequest{
+	writeWorkRequestFile(t, workFile, work.SubmitRequest{
 		WorkTypeID: "task", Name: "petri-owner", TraceID: "trace-petri-owner",
 	})
 	cfg := &FactoryServiceConfig{
@@ -906,7 +907,7 @@ func TestBuildFactoryService_RecordModeStreamsReadableArtifactBeforeShutdown(t *
 	}
 
 	workFile := filepath.Join(dir, "initial-work.json")
-	writeWorkRequestFile(t, workFile, interfaces.SubmitRequest{
+	writeWorkRequestFile(t, workFile, work.SubmitRequest{
 		WorkTypeID: "task",
 		TraceID:    "trace-streamed-recording",
 		Payload:    []byte(`{"task":"record before shutdown"}`),
@@ -992,7 +993,7 @@ func TestBuildFactoryService_RecordModeCopiesWorkerDiagnosticsToArtifact(t *test
 	}
 
 	workFile := filepath.Join(dir, "initial-work.json")
-	work := interfaces.SubmitRequest{
+	work := work.SubmitRequest{
 		WorkTypeID: "task",
 		TraceID:    "trace-diagnostics",
 		Payload:    []byte(`{"task":"record diagnostics"}`),
@@ -1052,7 +1053,7 @@ func TestBuildFactoryService_RecordModeCopiesScriptDiagnosticsToArtifact(t *test
 	}
 
 	workFile := filepath.Join(dir, "initial-work.json")
-	writeWorkRequestFile(t, workFile, interfaces.SubmitRequest{
+	writeWorkRequestFile(t, workFile, work.SubmitRequest{
 		WorkTypeID: "task",
 		TraceID:    "trace-script-diagnostics",
 		Payload:    []byte(`{"task":"record script diagnostics"}`),
@@ -1401,7 +1402,7 @@ You are a helpful assistant.
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
 
-	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := wsExec.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-model-worker-provider-command",
 		TransitionID:    "t-model-worker-provider-command",
 		WorkerType:      "worker-a",
@@ -1578,7 +1579,7 @@ func executeModelWorkerProgressPublisherServiceTest(
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
 
-	result, execErr := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+	result, execErr := wsExec.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      modelWorkerProgressPublisherDispatchID,
 		TransitionID:    "t-model-worker-provider-progress",
 		WorkerType:      "worker-a",
@@ -1820,11 +1821,11 @@ func assertManagedRuntimeModelInvokeInvocation(
 func assertModelInvokeAcceptedAudioOutput(t *testing.T, output string, audioPath string) {
 	t.Helper()
 
-	var content []interfaces.WorkContentPart
+	var content []work.WorkContentPart
 	if err := json.Unmarshal([]byte(output), &content); err != nil {
 		t.Fatalf("decode accepted model invoke output: %v", err)
 	}
-	if len(content) != 1 || content[0].Type != interfaces.WorkContentPartTypeAudio || content[0].File != audioPath {
+	if len(content) != 1 || content[0].Type != work.WorkContentPartTypeAudio || content[0].File != audioPath {
 		t.Fatalf("accepted output = %#v, want one audio part at %q", content, audioPath)
 	}
 }
@@ -1895,8 +1896,8 @@ func modelInvokeWorkstationConfig() *interfaces.FactoryWorkstationConfig {
 			},
 			{
 				Slot: "voice",
-				Config: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeJSON,
+				Config: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeJSON,
 					Role: "voice",
 					JSON: []byte(`{"name":"alloy"}`),
 				}},
@@ -1905,8 +1906,8 @@ func modelInvokeWorkstationConfig() *interfaces.FactoryWorkstationConfig {
 	}
 }
 
-func modelInvokeDispatch() interfaces.WorkDispatch {
-	return interfaces.WorkDispatch{
+func modelInvokeDispatch() work.WorkDispatch {
+	return work.WorkDispatch{
 		DispatchID:      "dispatch-tts",
 		TransitionID:    "transition-tts",
 		WorkerType:      "tts-worker",
@@ -1915,8 +1916,8 @@ func modelInvokeDispatch() interfaces.WorkDispatch {
 			ID: "token-tts",
 			Color: interfaces.TokenColor{
 				WorkID: "work-tts",
-				Content: []interfaces.WorkContentPart{{
-					Type:  interfaces.WorkContentPartTypeText,
+				Content: []work.WorkContentPart{{
+					Type:  work.WorkContentPartTypeText,
 					Label: "utterance",
 					Text:  "hello world",
 				}},
@@ -2109,7 +2110,7 @@ func TestLoadWorkersFromConfig_CanonicalRuntimeLookupDrivesScriptExecutionWorkin
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
 
-	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := wsExec.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-runtime-lookup-script",
 		TransitionID:    "t-runtime-lookup-script",
 		WorkerType:      "script-worker",
@@ -2182,7 +2183,7 @@ func TestLoadWorkersFromConfig_CanonicalRuntimeLookupResolvesPortableFactoryScri
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
 
-	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := wsExec.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-runtime-lookup-script-ref",
 		TransitionID:    "t-runtime-lookup-script-ref",
 		WorkerType:      "script-worker",
@@ -2262,7 +2263,7 @@ func TestLoadWorkersFromConfig_ReplayRuntimeLookupDrivesScriptExecutionWorkingDi
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
 
-	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := wsExec.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-replay-runtime-lookup-script",
 		TransitionID:    "t-replay-runtime-lookup-script",
 		WorkerType:      "script-worker",
@@ -2577,12 +2578,12 @@ func TestWorkerWorkstationTaxonomyRuntime_InferenceTaxonomyRecordsModelExecution
 	)
 	wsExec, history := taxonomyOmniVoiceInferenceWorkstationExecutorWithEvents(t, runtime, cfg, eventTime)
 
-	result, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := wsExec.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "dispatch-taxonomy-inference",
 		TransitionID:    "transition-taxonomy-inference",
 		WorkerType:      "tts-worker",
 		WorkstationName: "speak",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			CurrentTick: 2,
 			RequestID:   "request-taxonomy-inference",
 			TraceID:     "trace-taxonomy-inference",
@@ -2808,7 +2809,7 @@ func taxonomyRuntimeModelInvokeFactoryJSON(workerType, workstationType string) [
 				{
 					"slot": "voice",
 					"config": []map[string]any{{
-						"type": interfaces.WorkContentPartTypeJSON,
+						"type": work.WorkContentPartTypeJSON,
 						"role": "voice",
 						"json": map[string]string{"name": "alloy"},
 					}},
@@ -3143,8 +3144,8 @@ func inferenceModelHostWorkstation() *interfaces.FactoryWorkstationConfig {
 	}
 }
 
-func inferenceModelHostDispatch() interfaces.WorkDispatch {
-	return interfaces.WorkDispatch{
+func inferenceModelHostDispatch() work.WorkDispatch {
+	return work.WorkDispatch{
 		DispatchID:      "dispatch-inference-lease",
 		TransitionID:    "transition-inference-lease",
 		WorkerType:      "tts-worker",
@@ -3153,8 +3154,8 @@ func inferenceModelHostDispatch() interfaces.WorkDispatch {
 			ID: "token-inference-lease",
 			Color: interfaces.TokenColor{
 				WorkID: "work-inference-lease",
-				Content: []interfaces.WorkContentPart{{
-					Type:  interfaces.WorkContentPartTypeText,
+				Content: []work.WorkContentPart{{
+					Type:  work.WorkContentPartTypeText,
 					Label: "utterance",
 					Text:  "hello inference lease",
 				}},

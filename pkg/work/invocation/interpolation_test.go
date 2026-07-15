@@ -5,14 +5,15 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestInterpolateWorkerConfig_OmitsExactOptionalParameter(t *testing.T) {
 	worker, err := InterpolateWorkerConfig(interfaces.WorkerConfig{
 		Model: "${model}",
 		Body:  "Use ${input}",
-	}, &interfaces.InvocationArguments{
-		Arguments: map[string]interfaces.InvocationArgument{
+	}, &work.InvocationArguments{
+		Arguments: map[string]work.InvocationArgument{
 			"input": {Values: []string{"draft"}},
 		},
 	}, nil)
@@ -30,7 +31,7 @@ func TestInterpolateWorkerConfig_OmitsExactOptionalParameter(t *testing.T) {
 func TestInterpolateWorkstationConfig_RejectsMissingEmbeddedParameter(t *testing.T) {
 	_, err := InterpolateWorkstationConfig(interfaces.FactoryWorkstationConfig{
 		PromptTemplate: "Use ${missing} now",
-	}, &interfaces.InvocationArguments{}, nil)
+	}, &work.InvocationArguments{}, nil)
 	if err == nil {
 		t.Fatal("InterpolateWorkstationConfig error = nil, want invalid interpolation")
 	}
@@ -54,8 +55,8 @@ func TestInterpolateWorkerConfig_ResolvesFileContentsValueMode(t *testing.T) {
 
 	worker, err := InterpolateWorkerConfig(interfaces.WorkerConfig{
 		Body: "${input}",
-	}, &interfaces.InvocationArguments{
-		Arguments: map[string]interfaces.InvocationArgument{
+	}, &work.InvocationArguments{
+		Arguments: map[string]work.InvocationArgument{
 			"input": {
 				Values:    []string{path},
 				ValueMode: valueModeFileContents,
@@ -73,12 +74,12 @@ func TestInterpolateWorkerConfig_ResolvesFileContentsValueMode(t *testing.T) {
 func TestInvocationDiagnostic_RedactsSensitiveValuesAndPreservesSources(t *testing.T) {
 	diagnostic := InvocationDiagnostic(&interfaces.InvocationSignatureConfig{
 		Parameters: []interfaces.InvocationParameterConfig{{Name: "apiKey"}},
-	}, &interfaces.InvocationArguments{
-		Arguments: map[string]interfaces.InvocationArgument{
+	}, &work.InvocationArguments{
+		Arguments: map[string]work.InvocationArgument{
 			"apiKey": {
 				Values:    []string{"secret"},
 				Sensitive: true,
-				Sources: []interfaces.InvocationArgumentSource{{
+				Sources: []work.InvocationArgumentSource{{
 					Kind:   "NAMED",
 					Name:   "api-key",
 					Redact: true,

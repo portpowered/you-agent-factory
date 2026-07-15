@@ -3,18 +3,18 @@ package contentcontract
 import (
 	"encoding/json"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // PartsFromGenerated translates supported generated work content parts into the
 // backend-owned canonical shape while preserving order.
-func PartsFromGenerated(content *factoryapi.WorkContent) []interfaces.WorkContentPart {
+func PartsFromGenerated(content *factoryapi.WorkContent) []work.WorkContentPart {
 	if content == nil || len(*content) == 0 {
 		return nil
 	}
 
-	parts := make([]interfaces.WorkContentPart, 0, len(*content))
+	parts := make([]work.WorkContentPart, 0, len(*content))
 	for _, part := range *content {
 		domainPart, ok := PartFromGenerated(part)
 		if ok {
@@ -27,7 +27,7 @@ func PartsFromGenerated(content *factoryapi.WorkContent) []interfaces.WorkConten
 
 // GeneratedPtrFromParts translates supported canonical work content parts into
 // the generated API shape while preserving order.
-func GeneratedPtrFromParts(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
+func GeneratedPtrFromParts(parts []work.WorkContentPart) *factoryapi.WorkContent {
 	if len(parts) == 0 {
 		return nil
 	}
@@ -49,13 +49,13 @@ func GeneratedPtrFromParts(parts []interfaces.WorkContentPart) *factoryapi.WorkC
 
 // PartFromGenerated translates one generated content part into the canonical
 // backend-owned shape.
-func PartFromGenerated(part factoryapi.WorkContentPart) (interfaces.WorkContentPart, bool) {
+func PartFromGenerated(part factoryapi.WorkContentPart) (work.WorkContentPart, bool) {
 	textPart, textErr := part.AsWorkTextContentPart()
 	if textErr == nil {
 		switch textPart.Type {
 		case factoryapi.WorkContentPartTypeText, factoryapi.WorkContentPartTypeTextUpper:
-			return interfaces.WorkContentPart{
-				Type:        interfaces.WorkContentPartType(textPart.Type).Normalized(),
+			return work.WorkContentPart{
+				Type:        work.WorkContentPartType(textPart.Type).Normalized(),
 				Text:        textPart.Text,
 				Slot:        stringValue(textPart.Slot),
 				Label:       stringValue(textPart.Label),
@@ -71,8 +71,8 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (interfaces.WorkContentP
 	if imageErr == nil {
 		switch imagePart.Type {
 		case factoryapi.WorkContentPartTypeImage, factoryapi.WorkContentPartTypeImageUpper:
-			return interfaces.WorkContentPart{
-				Type:        interfaces.WorkContentPartType(imagePart.Type).Normalized(),
+			return work.WorkContentPart{
+				Type:        work.WorkContentPartType(imagePart.Type).Normalized(),
 				URL:         string(imagePart.Url),
 				File:        deprecatedFileValue(imagePart.File),
 				Slot:        stringValue(imagePart.Slot),
@@ -87,8 +87,8 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (interfaces.WorkContentP
 
 	audioPart, audioErr := part.AsWorkAudioContentPart()
 	if audioErr == nil && audioPart.Type == factoryapi.WorkContentPartTypeAudio {
-		return interfaces.WorkContentPart{
-			Type:        interfaces.WorkContentPartTypeAudio,
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeAudio,
 			URL:         string(audioPart.Url),
 			File:        deprecatedFileValue(audioPart.File),
 			Slot:        stringValue(audioPart.Slot),
@@ -104,10 +104,10 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (interfaces.WorkContentP
 	if jsonErr == nil && jsonPart.Type == factoryapi.WorkContentPartTypeJSON {
 		rawJSON, err := json.Marshal(jsonPart.Json)
 		if err != nil {
-			return interfaces.WorkContentPart{}, false
+			return work.WorkContentPart{}, false
 		}
-		return interfaces.WorkContentPart{
-			Type:        interfaces.WorkContentPartTypeJSON,
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeJSON,
 			JSON:        cloneRawMessage(rawJSON),
 			Slot:        stringValue(jsonPart.Slot),
 			Label:       stringValue(jsonPart.Label),
@@ -120,8 +120,8 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (interfaces.WorkContentP
 
 	binaryPart, binaryErr := part.AsWorkBinaryContentPart()
 	if binaryErr == nil && binaryPart.Type == factoryapi.WorkContentPartTypeBinary {
-		return interfaces.WorkContentPart{
-			Type:        interfaces.WorkContentPartTypeBinary,
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeBinary,
 			URL:         string(binaryPart.Url),
 			File:        deprecatedFileValue(binaryPart.File),
 			Slot:        stringValue(binaryPart.Slot),
@@ -133,15 +133,15 @@ func PartFromGenerated(part factoryapi.WorkContentPart) (interfaces.WorkContentP
 		}, true
 	}
 
-	return interfaces.WorkContentPart{}, false
+	return work.WorkContentPart{}, false
 }
 
 // GeneratedPartFromPart translates one canonical content part into the
 // generated API shape.
-func GeneratedPartFromPart(part interfaces.WorkContentPart) (factoryapi.WorkContentPart, bool) {
+func GeneratedPartFromPart(part work.WorkContentPart) (factoryapi.WorkContentPart, bool) {
 	var generated factoryapi.WorkContentPart
 	switch part.Type.Normalized() {
-	case interfaces.WorkContentPartTypeText:
+	case work.WorkContentPartTypeText:
 		if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
 			Type:        factoryapi.WorkContentPartType(part.Type.Normalized()),
 			Text:        part.Text,
@@ -154,7 +154,7 @@ func GeneratedPartFromPart(part interfaces.WorkContentPart) (factoryapi.WorkCont
 		}); err != nil {
 			return factoryapi.WorkContentPart{}, false
 		}
-	case interfaces.WorkContentPartTypeImage:
+	case work.WorkContentPartTypeImage:
 		if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
 			Type:        factoryapi.WorkContentPartType(part.Type.Normalized()),
 			Url:         factoryapi.WorkContentURLProperty(part.URL),
@@ -168,7 +168,7 @@ func GeneratedPartFromPart(part interfaces.WorkContentPart) (factoryapi.WorkCont
 		}); err != nil {
 			return factoryapi.WorkContentPart{}, false
 		}
-	case interfaces.WorkContentPartTypeAudio:
+	case work.WorkContentPartTypeAudio:
 		if err := generated.FromWorkAudioContentPart(factoryapi.WorkAudioContentPart{
 			Type:        factoryapi.WorkContentPartTypeAudio,
 			Url:         factoryapi.WorkContentURLProperty(part.URL),
@@ -182,7 +182,7 @@ func GeneratedPartFromPart(part interfaces.WorkContentPart) (factoryapi.WorkCont
 		}); err != nil {
 			return factoryapi.WorkContentPart{}, false
 		}
-	case interfaces.WorkContentPartTypeJSON:
+	case work.WorkContentPartTypeJSON:
 		var jsonValue any
 		if len(part.JSON) != 0 {
 			if err := json.Unmarshal(part.JSON, &jsonValue); err != nil {
@@ -201,7 +201,7 @@ func GeneratedPartFromPart(part interfaces.WorkContentPart) (factoryapi.WorkCont
 		}); err != nil {
 			return factoryapi.WorkContentPart{}, false
 		}
-	case interfaces.WorkContentPartTypeBinary:
+	case work.WorkContentPartTypeBinary:
 		if err := generated.FromWorkBinaryContentPart(factoryapi.WorkBinaryContentPart{
 			Type:        factoryapi.WorkContentPartTypeBinary,
 			Url:         factoryapi.WorkContentURLProperty(part.URL),

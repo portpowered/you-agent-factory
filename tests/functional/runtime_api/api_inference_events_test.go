@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -21,7 +22,7 @@ func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifac
 	support.SkipLongFunctional(t, "slow inference-event artifact sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	recordPath := filepath.Join(t.TempDir(), "inference-events.replay.json")
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-inference-events",
 		WorkTypeID: "task",
 		TraceID:    "trace-inference-events",
@@ -52,7 +53,7 @@ func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifac
 func TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents(t *testing.T) {
 	support.SkipLongFunctional(t, "slow inference-event script-worker sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-script-no-inference",
 		WorkTypeID: "task",
 		TraceID:    "trace-script-no-inference",

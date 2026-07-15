@@ -9,8 +9,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -33,7 +34,7 @@ type replayTickValidator interface {
 }
 
 type plannedCompletionResultProvider interface {
-	PlannedResultForDispatch(dispatch interfaces.WorkDispatch) (interfaces.WorkResult, bool, error)
+	PlannedResultForDispatch(dispatch work.WorkDispatch) (interfaces.WorkResult, bool, error)
 }
 
 func newWorkerPoolDispatchResultHook(
@@ -58,7 +59,7 @@ func newWorkerPoolDispatchResultHook(
 	}
 }
 
-func (h *workerPoolDispatchResultHook) SubmitDispatch(ctx context.Context, dispatch interfaces.WorkDispatch) error {
+func (h *workerPoolDispatchResultHook) SubmitDispatch(ctx context.Context, dispatch work.WorkDispatch) error {
 	tr, ok := h.net.Transitions[dispatch.TransitionID]
 	if !ok {
 		return fmt.Errorf("unknown transition %q", dispatch.TransitionID)
@@ -196,7 +197,7 @@ func (h *workerPoolDispatchResultHook) signalWaitLocked() {
 
 func executeDispatchSynchronously(
 	ctx context.Context,
-	dispatch interfaces.WorkDispatch,
+	dispatch work.WorkDispatch,
 	runnerKey string,
 	executors map[string]workers.WorkerExecutor,
 ) interfaces.WorkResult {
@@ -233,7 +234,7 @@ func executeDispatchSynchronously(
 	}
 }
 
-func dispatchRunnerKey(tr *petri.Transition, dispatch interfaces.WorkDispatch) string {
+func dispatchRunnerKey(tr *petri.Transition, dispatch work.WorkDispatch) string {
 	if tr != nil && tr.WorkerType != "" {
 		return tr.WorkerType
 	}

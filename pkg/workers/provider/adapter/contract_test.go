@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
@@ -88,7 +89,7 @@ func TestAdapterContract_BuildsCommandWithoutExecutingIt(t *testing.T) {
 	ctx := context.Background()
 	fake := &recordingAdapter{identity: "fake"}
 	command, err := fake.BuildCommand(ctx, adapter.CommandContext{Request: interfaces.ProviderInferenceRequest{
-		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-1"},
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-1"},
 		Model:    "model-1", UserMessage: "private prompt",
 	}})
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -94,7 +95,7 @@ func TestRuntimeState_SameTypeTransitionsPreserveCreatedAt(t *testing.T) {
 		n,
 		initialMarking,
 		[]subsystems.Subsystem{dispatcher, historySubsystem, transitionerSubsystem, termination},
-		engine.WithDispatchHandler(func(dispatch interfaces.WorkDispatch) { _ = dispatch }),
+		engine.WithDispatchHandler(func(dispatch work.WorkDispatch) { _ = dispatch }),
 		engine.WithResultBuffer(resultBuffer),
 	)
 
@@ -203,7 +204,7 @@ func (h *threeStageHarness) SetExecutor(workerType string, exec workers.WorkerEx
 
 func (h *threeStageHarness) submitWork(workTypeID, workID string) {
 	h.t.Helper()
-	request := requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{{WorkTypeID: workTypeID, WorkID: workID}})
+	request := requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{{WorkTypeID: workTypeID, WorkID: workID}})
 	if _, err := h.eng.SubmitWorkRequest(context.Background(), request); err != nil {
 		h.t.Fatalf("failed to submit work: %v", err)
 	}
@@ -211,7 +212,7 @@ func (h *threeStageHarness) submitWork(workTypeID, workID string) {
 
 type failingExecutor struct{ errorMsg string }
 
-func (e *failingExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *failingExecutor) Execute(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
 	return interfaces.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: interfaces.OutcomeFailed, Error: e.errorMsg}, nil
 }
 
@@ -253,7 +254,7 @@ func (sd *threeStgSyncDispatcher) Execute(ctx context.Context, snapshot *interfa
 		}
 
 		tr := sd.net.Transitions[decision.TransitionID]
-		dispatch := interfaces.WorkDispatch{
+		dispatch := work.WorkDispatch{
 			DispatchID:      fmt.Sprintf("%s-dispatch", decision.TransitionID),
 			TransitionID:    decision.TransitionID,
 			WorkerType:      tr.WorkerType,

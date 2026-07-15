@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestInitialTokenFromSubmit_UsesInitialPlaceAndWorkIDGenerator(t *testing.T) {
@@ -26,7 +27,7 @@ func TestInitialTokenFromSubmit_UsesInitialPlaceAndWorkIDGenerator(t *testing.T)
 		WithWorkIDGenerator(petri.NewWorkIDGenerator()),
 	)
 
-	token, err := transformer.InitialTokenFromSubmit(interfaces.SubmitRequest{
+	token, err := transformer.InitialTokenFromSubmit(work.SubmitRequest{
 		RequestID:  "request-1",
 		WorkTypeID: "task",
 		Name:       "story-1",
@@ -69,7 +70,7 @@ func TestInitialTokenFromSubmit_PreservesExplicitChainingLineage(t *testing.T) {
 		WithWorkIDGenerator(petri.NewWorkIDGenerator()),
 	)
 
-	token, err := transformer.InitialTokenFromSubmit(interfaces.SubmitRequest{
+	token, err := transformer.InitialTokenFromSubmit(work.SubmitRequest{
 		WorkTypeID:               "task",
 		CurrentChainingTraceID:   "chain-current",
 		PreviousChainingTraceIDs: []string{"chain-z", "chain-a", "chain-z"},
@@ -106,12 +107,12 @@ func TestInitialTokenFromSubmit_PreservesCanonicalContentOrdering(t *testing.T) 
 		WithWorkIDGenerator(petri.NewWorkIDGenerator()),
 	)
 
-	token, err := transformer.InitialTokenFromSubmit(interfaces.SubmitRequest{
+	token, err := transformer.InitialTokenFromSubmit(work.SubmitRequest{
 		WorkTypeID: "task",
 		TraceID:    "trace-content",
-		Content: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "caption"},
-			{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/diagram.png"},
+		Content: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "caption"},
+			{Type: work.WorkContentPartTypeImage, File: "fixtures/diagram.png"},
 		},
 		Payload: []byte("caption"),
 	}, time.Date(2026, time.May, 20, 12, 0, 0, 0, time.UTC))
@@ -122,10 +123,10 @@ func TestInitialTokenFromSubmit_PreservesCanonicalContentOrdering(t *testing.T) 
 	if len(token.Color.Content) != 2 {
 		t.Fatalf("content count = %d, want 2", len(token.Color.Content))
 	}
-	if token.Color.Content[0].Type != interfaces.WorkContentPartTypeText || token.Color.Content[0].Text != "caption" {
+	if token.Color.Content[0].Type != work.WorkContentPartTypeText || token.Color.Content[0].Text != "caption" {
 		t.Fatalf("first content part = %#v, want ordered text part", token.Color.Content[0])
 	}
-	if token.Color.Content[1].Type != interfaces.WorkContentPartTypeImage || token.Color.Content[1].File != "fixtures/diagram.png" {
+	if token.Color.Content[1].Type != work.WorkContentPartTypeImage || token.Color.Content[1].File != "fixtures/diagram.png" {
 		t.Fatalf("second content part = %#v, want ordered image part", token.Color.Content[1])
 	}
 }
@@ -148,7 +149,7 @@ func TestInitialTokenFromSubmit_TargetStateUsesConfiguredPlace(t *testing.T) {
 		WithWorkIDGenerator(petri.NewWorkIDGenerator()),
 	)
 
-	token, err := transformer.InitialTokenFromSubmit(interfaces.SubmitRequest{
+	token, err := transformer.InitialTokenFromSubmit(work.SubmitRequest{
 		WorkTypeID:  "task",
 		TargetState: "ready",
 		TraceID:     "trace-1",
@@ -181,11 +182,11 @@ func TestInitialTokenFromSubmit_ParentChildRelationSetsParentID(t *testing.T) {
 		WithWorkIDGenerator(petri.NewWorkIDGenerator()),
 	)
 
-	token, err := transformer.InitialTokenFromSubmit(interfaces.SubmitRequest{
+	token, err := transformer.InitialTokenFromSubmit(work.SubmitRequest{
 		WorkTypeID: "story",
 		TraceID:    "trace-1",
-		Relations: []interfaces.Relation{{
-			Type:         interfaces.RelationParentChild,
+		Relations: []work.Relation{{
+			Type:         work.RelationParentChild,
 			TargetWorkID: "work-parent-1",
 		}},
 	}, time.Date(2026, time.April, 12, 12, 0, 0, 0, time.UTC))
@@ -214,12 +215,12 @@ func TestInitialTokenFromSubmit_DetachesMutableRuntimeFields(t *testing.T) {
 		WithWorkIDGenerator(petri.NewWorkIDGenerator()),
 	)
 
-	req := interfaces.SubmitRequest{
+	req := work.SubmitRequest{
 		WorkTypeID: "story",
 		TraceID:    "trace-1",
 		Tags:       map[string]string{"scope": "alpha"},
-		Relations: []interfaces.Relation{{
-			Type:          interfaces.RelationDependsOn,
+		Relations: []work.Relation{{
+			Type:          work.RelationDependsOn,
 			TargetWorkID:  "work-parent-1",
 			RequiredState: "complete",
 		}},

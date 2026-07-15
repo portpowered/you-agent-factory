@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -90,7 +91,7 @@ func (d *NoOpDispatcherSubsystem) Execute(ctx context.Context, snapshot *interfa
 
 		// Build the dispatch record pairing the dispatch with its consumed mutations.
 		execution := executionMetadataForDispatch(decision.TransitionID, snapshot.TickCount, inputTokens)
-		dispatch := interfaces.WorkDispatch{
+		dispatch := work.WorkDispatch{
 			DispatchID:               uuid.NewString(),
 			TransitionID:             decision.TransitionID,
 			WorkerType:               decision.WorkerType,

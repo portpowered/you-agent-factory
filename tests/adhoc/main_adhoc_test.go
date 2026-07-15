@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // TestAdHocPrepare runs the prepare command directly for ad hoc testing.
@@ -72,7 +73,7 @@ func TestAdHocRecordReplaySmoke(t *testing.T) {
 	clearAdhocInputs(t, runDir)
 
 	artifactPath := getenv("AGENT_FACTORY_ADHOC_ARTIFACT", filepath.Join(t.TempDir(), "adhoc-record-replay.json"))
-	testutil.WriteSeedRequest(t, runDir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, runDir, work.SubmitRequest{
 		WorkTypeID: "task",
 		WorkID:     "adhoc-replay-task",
 		TraceID:    "adhoc-replay-trace",

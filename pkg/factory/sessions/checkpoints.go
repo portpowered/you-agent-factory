@@ -9,7 +9,8 @@ import (
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // ProjectCheckpointArtifactRef maps one internal checkpoint record to public
@@ -189,12 +190,12 @@ func finalResultArtifactRef(artifacts []interfaces.FactorySessionArtifactState) 
 	return nil
 }
 
-func primaryResultJSON(parts []interfaces.WorkContentPart) json.RawMessage {
+func primaryResultJSON(parts []work.WorkContentPart) json.RawMessage {
 	if len(parts) == 0 {
 		return nil
 	}
 	for _, part := range parts {
-		if part.Type.Normalized() == interfaces.WorkContentPartTypeJSON && len(part.JSON) > 0 {
+		if part.Type.Normalized() == work.WorkContentPartTypeJSON && len(part.JSON) > 0 {
 			return part.JSON
 		}
 	}

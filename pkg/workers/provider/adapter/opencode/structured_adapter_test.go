@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
@@ -27,7 +28,7 @@ func TestStructuredAdapterSharedConformance(t *testing.T) {
 	testkit.RunFullStream(t, testkit.FullStreamFixture{
 		NewAdapter: func() adapter.Adapter { return newStructuredAdapter(t) },
 		Request: interfaces.ProviderInferenceRequest{
-			Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-conformance"},
+			Dispatch: work.WorkDispatch{DispatchID: "dispatch-conformance"},
 			Model:    "openai/gpt-5", UserMessage: privatePrompt,
 		},
 		ContentAndTools: openCodeObservations(
@@ -76,7 +77,7 @@ func TestStructuredAdapterExecutesNegotiatedJSONModeAndEmitsCanonicalLifecycle(t
 	}
 	runner := &fixtureStreamingRunner{stdout: fixture, chunks: splitFixtureChunks(fixture)}
 	request := interfaces.ProviderInferenceRequest{
-		Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-open-42", TransitionID: "transition-open-42"},
+		Dispatch: work.WorkDispatch{DispatchID: "dispatch-open-42", TransitionID: "transition-open-42"},
 		Model:    "openai/gpt-5", OpenCodeAgent: "implementer", SessionID: "ses_open_42",
 		WorkingDirectory: "/workspace", UserMessage: privatePrompt,
 	}

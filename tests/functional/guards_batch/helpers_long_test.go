@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -22,7 +23,7 @@ func providerErrorCorpusEntryForTest(t *testing.T, name string) workers.Provider
 
 type panickingExecutor struct{}
 
-func (e *panickingExecutor) Execute(_ context.Context, _ interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *panickingExecutor) Execute(_ context.Context, _ work.WorkDispatch) (interfaces.WorkResult, error) {
 	panic("intentional executor panic for testing")
 }
 
@@ -34,7 +35,7 @@ type failOnNthPageExecutor struct {
 	failOn int
 }
 
-func (e *failOnNthPageExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *failOnNthPageExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	e.mu.Lock()
 	e.calls++
 	call := e.calls

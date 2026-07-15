@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -73,9 +74,9 @@ func TestProviderErrorSmoke_ThrottlePauseOnlyBlocksTheAffectedProviderModelLane(
 	h := pauseHarness.BuildRunningServiceHarness(t, 5*time.Second)
 
 	pauseHarness.WaitForThrottleRequeue(t, h, throttledWork, 5*time.Second)
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-" + unaffectedWork.Name,
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{{
 			Name:       unaffectedWork.Name,
 			WorkID:     unaffectedWork.WorkID,

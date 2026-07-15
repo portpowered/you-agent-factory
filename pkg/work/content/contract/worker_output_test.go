@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestContentFromWorkerOutput_ReturnsPlainTextResponse(t *testing.T) {
@@ -12,14 +12,14 @@ func TestContentFromWorkerOutput_ReturnsPlainTextResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ContentFromWorkerOutput: %v", err)
 	}
-	if len(got) != 1 || got[0].Type != interfaces.WorkContentPartTypeText || got[0].Text != "worker response" {
+	if len(got) != 1 || got[0].Type != work.WorkContentPartTypeText || got[0].Text != "worker response" {
 		t.Fatalf("content = %#v, want one text response part", got)
 	}
 }
 
 func TestContentFromWorkerOutput_ParsesCanonicalPartArray(t *testing.T) {
-	raw, err := json.Marshal([]interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	raw, err := json.Marshal([]work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: "structured response",
 	}})
 	if err != nil {

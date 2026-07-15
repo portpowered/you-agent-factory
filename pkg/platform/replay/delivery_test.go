@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -21,9 +22,9 @@ func TestSubmissionHook_ReplaysWorkRequestEventsByTick(t *testing.T) {
 		RequestId:    stringPtrIfNotEmpty("request-1"),
 		WorkTypeName: stringPtrIfNotEmpty("task"),
 		TraceId:      stringPtrIfNotEmpty("trace-1"),
-		Content: replayWorkContentForDeliveryTest(t, []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
-			{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/alpha.png"},
+		Content: replayWorkContentForDeliveryTest(t, []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "alpha"},
+			{Type: work.WorkContentPartTypeImage, URL: "file://fixtures/alpha.png"},
 		}),
 	}, {
 		Name:         "work-2",
@@ -84,21 +85,21 @@ func assertSubmissionHookFinalKeepAliveShutdown(t *testing.T, got interfaces.Sub
 	}
 }
 
-func assertSubmissionHookReplayedRequestID(t *testing.T, batch interfaces.GeneratedSubmissionBatch, want string) {
+func assertSubmissionHookReplayedRequestID(t *testing.T, batch work.GeneratedSubmissionBatch, want string) {
 	t.Helper()
 	if batch.Request.RequestID != want {
 		t.Fatalf("replayed request ID = %q, want %q", batch.Request.RequestID, want)
 	}
 }
 
-func assertSubmissionHookReplayedSourceMetadata(t *testing.T, batch interfaces.GeneratedSubmissionBatch, want string) {
+func assertSubmissionHookReplayedSourceMetadata(t *testing.T, batch work.GeneratedSubmissionBatch, want string) {
 	t.Helper()
 	if batch.Metadata.Source != want {
 		t.Fatalf("replayed source metadata = %q, want %q", batch.Metadata.Source, want)
 	}
 }
 
-func assertSubmissionHookReplayedGeneratedWorkCount(t *testing.T, batch interfaces.GeneratedSubmissionBatch, wantCount int, firstWorkID string) {
+func assertSubmissionHookReplayedGeneratedWorkCount(t *testing.T, batch work.GeneratedSubmissionBatch, wantCount int, firstWorkID string) {
 	t.Helper()
 	if len(batch.Request.Works) != wantCount {
 		t.Fatalf("replayed generated work count = %d, want %d", len(batch.Request.Works), wantCount)
@@ -122,7 +123,7 @@ func assertSubmissionHookReplayedOrderedContent(t *testing.T, work interfaces.Wo
 	}
 }
 
-func assertSubmissionHookReplayedDependencyRelation(t *testing.T, batch interfaces.GeneratedSubmissionBatch, sourceWork, targetWork string) {
+func assertSubmissionHookReplayedDependencyRelation(t *testing.T, batch work.GeneratedSubmissionBatch, sourceWork, targetWork string) {
 	t.Helper()
 	if len(batch.Request.Relations) != 1 {
 		t.Fatalf("replayed relation count = %d, want 1", len(batch.Request.Relations))
@@ -134,20 +135,20 @@ func assertSubmissionHookReplayedDependencyRelation(t *testing.T, batch interfac
 	}
 }
 
-func replayWorkContentForDeliveryTest(t *testing.T, parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
+func replayWorkContentForDeliveryTest(t *testing.T, parts []work.WorkContentPart) *factoryapi.WorkContent {
 	t.Helper()
 	content := make(factoryapi.WorkContent, 0, len(parts))
 	for _, part := range parts {
 		var generated factoryapi.WorkContentPart
 		switch part.Type {
-		case interfaces.WorkContentPartTypeText:
+		case work.WorkContentPartTypeText:
 			if err := generated.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
 				Type: factoryapi.WorkContentPartTypeText,
 				Text: part.Text,
 			}); err != nil {
 				t.Fatalf("encode text content: %v", err)
 			}
-		case interfaces.WorkContentPartTypeImage:
+		case work.WorkContentPartTypeImage:
 			if err := generated.FromWorkImageContentPart(factoryapi.WorkImageContentPart{
 				Type: factoryapi.WorkContentPartTypeImage,
 				Url:  factoryapi.WorkContentURLProperty(contentURLForTestPath(part.URL, part.File)),
@@ -283,12 +284,12 @@ func TestCompletionDeliveryPlan_DispatchIdentityMismatchReportsDivergence(t *tes
 		t.Fatalf("NewCompletionDeliveryPlan: %v", err)
 	}
 
-	_, _, err = plan.DeliveryTickForDispatch(interfaces.WorkDispatch{
+	_, _, err = plan.DeliveryTickForDispatch(work.WorkDispatch{
 		DispatchID:      "observed-dispatch",
 		TransitionID:    "review",
 		WorkstationName: "review",
 		InputTokens:     workers.InputTokens(interfaces.Token{ID: "tok-1"}),
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			DispatchCreatedTick: 2,
 			ReplayKey:           "review/trace-1/work-1",
 			TraceID:             "trace-1",
@@ -411,12 +412,12 @@ func TestCompletionDeliveryPlan_LineageMismatchReportsDivergence(t *testing.T) {
 		t.Fatalf("NewCompletionDeliveryPlan: %v", err)
 	}
 
-	_, _, err = plan.DeliveryTickForDispatch(interfaces.WorkDispatch{
+	_, _, err = plan.DeliveryTickForDispatch(work.WorkDispatch{
 		DispatchID:      "observed-dispatch",
 		TransitionID:    "process",
 		WorkstationName: "process",
 		InputTokens:     workers.InputTokens(interfaces.Token{ID: "tok-different"}),
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			DispatchCreatedTick: 2,
 			ReplayKey:           "process/trace-1/work-1",
 			TraceID:             "trace-1",
@@ -509,7 +510,7 @@ func requireDivergence(t *testing.T, err error) DivergenceReport {
 	return divergence.Report
 }
 
-func deliveryArtifact(t *testing.T, dispatch interfaces.WorkDispatch, completion interfaces.WorkResult) *interfaces.ReplayArtifact {
+func deliveryArtifact(t *testing.T, dispatch work.WorkDispatch, completion interfaces.WorkResult) *interfaces.ReplayArtifact {
 	t.Helper()
 	return testReplayArtifact(
 		t,
@@ -578,13 +579,13 @@ func TestWorkStateChangeHook_ReplaysOperatorMoveAtRecordedTick(t *testing.T) {
 	}
 }
 
-func replayTestDispatch(dispatchID, transitionID string, tick int, traceID, workID, tokenID string) interfaces.WorkDispatch {
-	return interfaces.WorkDispatch{
+func replayTestDispatch(dispatchID, transitionID string, tick int, traceID, workID, tokenID string) work.WorkDispatch {
+	return work.WorkDispatch{
 		DispatchID:      dispatchID,
 		TransitionID:    transitionID,
 		WorkstationName: transitionID,
 		InputTokens:     workers.InputTokens(interfaces.Token{ID: tokenID}),
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			DispatchCreatedTick: tick,
 			ReplayKey:           transitionID + "/" + traceID + "/" + workID,
 			TraceID:             traceID,

@@ -24,13 +24,14 @@ import (
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
@@ -624,7 +625,7 @@ type recordingDiagnosticsCommandRunner struct{}
 func (recordingDiagnosticsCommandRunner) Run(_ context.Context, _ workers.CommandRequest) (workers.CommandResult, error) {
 	return workers.CommandResult{Stdout: []byte("script done\n"), Stderr: []byte("script details\n")}, nil
 }
-func serviceReplayDispatchCreatedEvent(t *testing.T, dispatch interfaces.WorkDispatch, tick int) factoryapi.FactoryEvent {
+func serviceReplayDispatchCreatedEvent(t *testing.T, dispatch work.WorkDispatch, tick int) factoryapi.FactoryEvent {
 	t.Helper()
 	metadata := map[string]string{}
 	if dispatch.Execution.ReplayKey != "" {
@@ -804,7 +805,7 @@ type serviceReplayInferenceResponseRecord struct {
 	Payload factoryapi.InferenceResponseEventPayload
 }
 
-func serviceReplayWorksFromDispatch(dispatch interfaces.WorkDispatch) []factoryapi.Work {
+func serviceReplayWorksFromDispatch(dispatch work.WorkDispatch) []factoryapi.Work {
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	works := make([]factoryapi.Work, 0, len(tokens))
 	for _, token := range tokens {
@@ -833,7 +834,7 @@ func serviceReplayWorksFromDispatch(dispatch interfaces.WorkDispatch) []factorya
 	return works
 }
 
-func serviceReplayDispatchInputRefsFromDispatch(dispatch interfaces.WorkDispatch) []factoryapi.DispatchConsumedWorkRef {
+func serviceReplayDispatchInputRefsFromDispatch(dispatch work.WorkDispatch) []factoryapi.DispatchConsumedWorkRef {
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	refs := make([]factoryapi.DispatchConsumedWorkRef, 0, len(tokens))
 	for _, token := range tokens {
@@ -857,7 +858,7 @@ func serviceReplayDispatchInputRefsFromDispatch(dispatch interfaces.WorkDispatch
 	return refs
 }
 
-func serviceReplayResourcesFromDispatch(dispatch interfaces.WorkDispatch) *[]factoryapi.Resource {
+func serviceReplayResourcesFromDispatch(dispatch work.WorkDispatch) *[]factoryapi.Resource {
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	resources := make([]factoryapi.Resource, 0, len(tokens))
 	for _, token := range tokens {
@@ -1159,7 +1160,7 @@ type prefixBlockingExecutor struct {
 	release     chan struct{}
 }
 
-func (e *prefixBlockingExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *prefixBlockingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	workID := ""
 	if len(dispatch.Execution.WorkIDs) > 0 {
 		workID = dispatch.Execution.WorkIDs[0]
@@ -1696,7 +1697,7 @@ func executeProviderBackedWorker(
 		t.Fatalf("expected *workers.WorkstationExecutor, got %T", exec)
 	}
 
-	if _, err := wsExec.Execute(context.Background(), interfaces.WorkDispatch{
+	if _, err := wsExec.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "dispatch-skip-permissions",
 		TransitionID:    "transition-skip-permissions",
 		WorkerType:      workerName,

@@ -10,6 +10,7 @@ import (
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestBuildFactoryWorldView_ProjectsFailedTerminalWorkFailureDetails(t *testing.T) {
@@ -60,7 +61,7 @@ func TestBuildFactoryWorldView_HidesSystemTimeWorkFromNormalDashboardProjection(
 	t0 := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
 		systemTimeInitialStructureEvent(t0),
-		workInputEventWithToken(1, t0.Add(time.Second), "tok-time", interfaces.FactoryWorkItem{
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-time", work.FactoryWorkItem{
 			ID:          "time-daily-refresh",
 			WorkTypeID:  interfaces.SystemTimeWorkTypeID,
 			DisplayName: "daily-refresh tick",
@@ -71,7 +72,7 @@ func TestBuildFactoryWorldView_HidesSystemTimeWorkFromNormalDashboardProjection(
 				interfaces.TimeWorkTagKeyDueAt:           t0.Add(time.Second).Format(time.RFC3339Nano),
 			},
 		}),
-		workInputEventWithToken(1, t0.Add(time.Second), "tok-story", interfaces.FactoryWorkItem{
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-story", work.FactoryWorkItem{
 			ID:          "work-1",
 			WorkTypeID:  "task",
 			DisplayName: "Customer story",
@@ -151,7 +152,7 @@ func TestBuildFactoryWorldView_LabelsSystemTimeExpiryDispatchForDashboard(t *tes
 	t0 := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
 		systemTimeInitialStructureEvent(t0),
-		workInputEventWithToken(1, t0.Add(time.Second), "tok-time", interfaces.FactoryWorkItem{
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-time", work.FactoryWorkItem{
 			ID:          "time-daily-refresh",
 			WorkTypeID:  interfaces.SystemTimeWorkTypeID,
 			DisplayName: "daily-refresh tick",
@@ -170,7 +171,7 @@ func TestBuildFactoryWorldView_LabelsSystemTimeExpiryDispatchForDashboard(t *tes
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID: "tok-time",
 				PlaceID: interfaces.SystemTimePendingPlaceID,
-				WorkItem: &interfaces.FactoryWorkItem{
+				WorkItem: &work.FactoryWorkItem{
 					ID:         "time-daily-refresh",
 					WorkTypeID: interfaces.SystemTimeWorkTypeID,
 					TraceID:    "trace-time",
@@ -230,7 +231,7 @@ func TestBuildFactoryWorldView_HidesSystemTimeOnlyDispatchesFromSessionCounts(t 
 	t0 := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
 		systemTimeInitialStructureEvent(t0),
-		workInputEventWithToken(1, t0.Add(time.Second), "tok-time", interfaces.FactoryWorkItem{
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-time", work.FactoryWorkItem{
 			ID:          "time-expired",
 			WorkTypeID:  interfaces.SystemTimeWorkTypeID,
 			DisplayName: "expired cron tick",
@@ -245,7 +246,7 @@ func TestBuildFactoryWorldView_HidesSystemTimeOnlyDispatchesFromSessionCounts(t 
 				{
 					TokenID: "tok-time",
 					PlaceID: interfaces.SystemTimePendingPlaceID,
-					WorkItem: &interfaces.FactoryWorkItem{
+					WorkItem: &work.FactoryWorkItem{
 						ID:         "time-expired",
 						WorkTypeID: interfaces.SystemTimeWorkTypeID,
 						TraceID:    "trace-time",
@@ -298,7 +299,7 @@ func buildWorldViewExecutionWithSystemTimeConsumedInput(t *testing.T) interfaces
 	t0 := time.Date(2026, 4, 18, 9, 0, 0, 0, time.UTC)
 	events := []factoryapi.FactoryEvent{
 		systemTimeInitialStructureEvent(t0),
-		workInputEventWithToken(1, t0.Add(time.Second), "tok-time", interfaces.FactoryWorkItem{
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-time", work.FactoryWorkItem{
 			ID:          "time-daily-refresh",
 			WorkTypeID:  interfaces.SystemTimeWorkTypeID,
 			DisplayName: "daily-refresh tick",
@@ -311,7 +312,7 @@ func buildWorldViewExecutionWithSystemTimeConsumedInput(t *testing.T) interfaces
 				interfaces.TimeWorkTagKeyExpiresAt:       t0.Add(time.Minute).Format(time.RFC3339Nano),
 			},
 		}),
-		workInputEventWithToken(1, t0.Add(time.Second), "tok-story", interfaces.FactoryWorkItem{
+		workInputEventWithToken(1, t0.Add(time.Second), "tok-story", work.FactoryWorkItem{
 			ID:          "work-1",
 			WorkTypeID:  "task",
 			DisplayName: "Customer story",
@@ -326,12 +327,12 @@ func buildWorldViewExecutionWithSystemTimeConsumedInput(t *testing.T) interfaces
 				{
 					TokenID:  "tok-story",
 					PlaceID:  "task:init",
-					WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Customer story", TraceID: "trace-1", PlaceID: "task:init"},
+					WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Customer story", TraceID: "trace-1", PlaceID: "task:init"},
 				},
 				{
 					TokenID: "tok-time",
 					PlaceID: interfaces.SystemTimePendingPlaceID,
-					WorkItem: &interfaces.FactoryWorkItem{
+					WorkItem: &work.FactoryWorkItem{
 						ID:         "time-daily-refresh",
 						WorkTypeID: interfaces.SystemTimeWorkTypeID,
 						TraceID:    "trace-time",
@@ -371,7 +372,7 @@ func requireSystemTimeConsumedInput(t *testing.T, execution interfaces.FactoryWo
 func failedTerminalWorkProjectionEvents(t0 time.Time) []factoryapi.FactoryEvent {
 	return []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
-		workInputEvent(1, t0.Add(time.Second), interfaces.FactoryWorkItem{
+		workInputEvent(1, t0.Add(time.Second), work.FactoryWorkItem{
 			ID:          "work-failed",
 			WorkTypeID:  "task",
 			DisplayName: "Blocked story",
@@ -385,7 +386,7 @@ func failedTerminalWorkProjectionEvents(t0 time.Time) []factoryapi.FactoryEvent 
 			Inputs: []interfaces.WorkstationInput{{
 				TokenID:  "work-failed",
 				PlaceID:  "task:init",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", PlaceID: "task:init"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", PlaceID: "task:init"},
 			}},
 		}),
 		inferenceResponseEvent(3, t0.Add(2500*time.Millisecond), factoryapi.InferenceResponseEventPayload{
@@ -416,11 +417,11 @@ func failedTerminalWorkProjectionEvents(t0 time.Time) []factoryapi.FactoryEvent 
 				Type:     string(interfaces.MutationMove),
 				TokenID:  "work-failed-terminal",
 				ToPlace:  "task:failed",
-				WorkItem: &interfaces.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", PlaceID: "task:failed"},
+				WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", PlaceID: "task:failed"},
 			}},
 			TraceData: &interfaces.FactoryTraceData{TraceID: "trace-failed", WorkIDs: []string{"work-failed"}},
 			TerminalWork: &interfaces.FactoryTerminalWork{
-				WorkItem: interfaces.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", PlaceID: "task:failed"},
+				WorkItem: work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "task", DisplayName: "Blocked story", TraceID: "trace-failed", PlaceID: "task:failed"},
 				Status:   "FAILED",
 			},
 		}),
@@ -448,7 +449,7 @@ func assertFailedTerminalWorkProjection(t *testing.T, failedView interfaces.Fact
 }
 
 func canonicalDispatchProviderSessionProjectionEvents(t0 time.Time) []factoryapi.FactoryEvent {
-	input := interfaces.FactoryWorkItem{
+	input := work.FactoryWorkItem{
 		ID:          "work-1",
 		WorkTypeID:  "task",
 		DisplayName: "Review draft",
@@ -456,7 +457,7 @@ func canonicalDispatchProviderSessionProjectionEvents(t0 time.Time) []factoryapi
 		PlaceID:     "task:init",
 		Tags:        map[string]string{"priority": "high"},
 	}
-	output := interfaces.FactoryWorkItem{
+	output := work.FactoryWorkItem{
 		ID:          "work-1",
 		WorkTypeID:  "task",
 		DisplayName: "Reviewed draft",
@@ -496,7 +497,7 @@ func canonicalDispatchProviderSessionProjectionEvents(t0 time.Time) []factoryapi
 			Workstation:     interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
 			Result:          interfaces.WorkstationResult{Outcome: "ACCEPTED"},
 			DurationMillis:  1200,
-			OutputWork:      []interfaces.FactoryWorkItem{output},
+			OutputWork:      []work.FactoryWorkItem{output},
 			TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
 			ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"},
 			TerminalWork:    &interfaces.FactoryTerminalWork{WorkItem: output, Status: "TERMINAL"},

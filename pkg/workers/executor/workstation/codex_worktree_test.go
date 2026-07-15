@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
@@ -64,7 +65,7 @@ func TestWorkstationExecutor_CodexWorktreePreparation_SetsMaterializedWorkingDir
 		},
 	}, mock)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-codex-worktree",
 		TransitionID:    "t-codex-worktree",
 		WorkerType:      "codex-worker",
@@ -126,7 +127,7 @@ func TestWorkstationExecutor_LegacyClaudeWorktree_SkipsCodexFactoryPreparation(t
 		},
 	}, mock)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-claude-worktree",
 		TransitionID:    "t-claude-worktree",
 		WorkerType:      "claude-worker",
@@ -189,7 +190,7 @@ func TestWorkstationExecutor_CodexWorktreePreparation_SkipsWhenWorkingDirectoryA
 		},
 	}, mock)
 
-	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	_, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-codex-conflict",
 		TransitionID:    "t-codex-conflict",
 		WorkerType:      "codex-worker",

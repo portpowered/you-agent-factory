@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -47,7 +48,7 @@ Process {{ (index .Inputs 0).Name }} from the current working directory.
 		t.Fatalf("create expected work dir: %v", err)
 	}
 
-	testutil.WriteSeedRequest(t, factoryDir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, factoryDir, work.SubmitRequest{
 		Name:       workName,
 		WorkID:     "work-relative-working-directory",
 		WorkTypeID: "task",

@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/testkit"
@@ -35,7 +36,7 @@ func TestFullStreamAdapterConformance(t *testing.T) {
 	testkit.RunFullStream(t, testkit.FullStreamFixture{
 		NewAdapter: func() adapter.Adapter { return fullStreamAdapter{} },
 		Request: interfaces.ProviderInferenceRequest{
-			Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-conformance"},
+			Dispatch: work.WorkDispatch{DispatchID: "dispatch-conformance"},
 			Model:    "fixture-model", UserMessage: privatePrompt,
 		},
 		ContentAndTools: observations(
@@ -130,7 +131,7 @@ func TestFullStreamAdapterConformanceSupportsSnapshotOnlyNativeStreams(t *testin
 	testkit.RunFullStream(t, testkit.FullStreamFixture{
 		NewAdapter: func() adapter.Adapter { return snapshotStreamAdapter{} },
 		Request: interfaces.ProviderInferenceRequest{
-			Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-snapshot-conformance"},
+			Dispatch: work.WorkDispatch{DispatchID: "dispatch-snapshot-conformance"},
 			Model:    "fixture-model", UserMessage: privatePrompt,
 		},
 		ContentAndTools: observations(

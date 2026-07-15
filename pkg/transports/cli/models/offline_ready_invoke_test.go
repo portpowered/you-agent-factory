@@ -17,7 +17,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 )
 
@@ -74,8 +75,8 @@ func (h readyLocalModelHandle) Invoke(context.Context, localmodels.InvocationReq
 }
 
 func mustOfflineReadyAudioContentResponse(audioPath string) string {
-	content := []interfaces.WorkContentPart{{
-		Type:        interfaces.WorkContentPartTypeAudio,
+	content := []work.WorkContentPart{{
+		Type:        work.WorkContentPartTypeAudio,
 		File:        audioPath,
 		ContentType: "audio/wav",
 	}}

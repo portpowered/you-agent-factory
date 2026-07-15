@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
@@ -108,7 +109,7 @@ func TestStartHostedLinearPoller_StopsOnContextCancellation(t *testing.T) {
 
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	var sidecars sync.WaitGroup
-	svc.StartHostedLinearPoller(sidecarCtx, &sidecars, runtimeCfg, poller, worker, func(context.Context, interfaces.WorkRequest) error {
+	svc.StartHostedLinearPoller(sidecarCtx, &sidecars, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
 		return nil
 	})
 

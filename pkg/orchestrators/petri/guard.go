@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // Guard is a predicate evaluated against tokens in a place to determine
@@ -338,7 +339,7 @@ func (g *DependencyGuard) Evaluate(candidates []interfaces.Token, _ map[string]*
 // satisfied: the target token exists and is in the required state place.
 func (g *DependencyGuard) allDependenciesMet(tok interfaces.Token, workIndex map[string]*interfaces.Token) bool {
 	for _, rel := range tok.Color.Relations {
-		if rel.Type != interfaces.RelationDependsOn {
+		if rel.Type != work.RelationDependsOn {
 			continue
 		}
 		dep, ok := workIndex[rel.TargetWorkID]

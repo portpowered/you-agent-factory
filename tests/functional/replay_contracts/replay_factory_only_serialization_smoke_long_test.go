@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -24,7 +25,7 @@ func TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPa
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "repeater_resource"))
 	artifactPath := filepath.Join(t.TempDir(), "factory-only-serialization.replay.json")
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "factory-only serialization smoke",
 		WorkID:     "work-factory-only-serialization-smoke",
 		WorkTypeID: "task",

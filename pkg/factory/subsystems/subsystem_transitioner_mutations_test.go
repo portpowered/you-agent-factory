@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type calculateMutationsFixture struct {
@@ -127,8 +128,8 @@ func assertCalculatedMutation(t *testing.T, mutations []interfaces.MarkingMutati
 func TestCalculateMutations_PreserveInput_KeepsConsumedPayloadForDownstreamWork(t *testing.T) {
 	fixture := newCalculateMutationsFixture()
 	fixture.consumed[0].Color.Payload = []byte("input-payload")
-	fixture.consumed[0].Color.Content = []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	fixture.consumed[0].Color.Content = []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: "input-content",
 	}}
 	fixture.consumed[0].Color.Tags = map[string]string{"objective": "goal-1"}
@@ -199,8 +200,8 @@ func preserveInputWorkstation() *interfaces.FactoryWorkstationConfig {
 func TestCalculateMutations_PreserveInput_OutcomeLanes_KeepConsumedWorkData(t *testing.T) {
 	fixture := newCalculateMutationsFixture()
 	fixture.consumed[0].Color.Payload = []byte("input-payload")
-	fixture.consumed[0].Color.Content = []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	fixture.consumed[0].Color.Content = []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: "input-content",
 	}}
 	fixture.consumed[0].Color.Tags = map[string]string{"objective": "goal-1"}
@@ -362,8 +363,8 @@ func TestCalculateMutations_PreserveInput_MultiOutput_AllLanesKeepConsumedWorkDa
 			WorkID:     "work-code-1",
 			WorkTypeID: "wt-code",
 			Payload:    []byte("input-payload"),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
 				Text: "input-content",
 			}},
 			Tags: map[string]string{"objective": "goal-1"},
@@ -415,8 +416,8 @@ func TestCalculateMutations_PreserveInput_MultiOutput_AllLanesKeepConsumedWorkDa
 func TestCalculateMutations_PreserveInput_RecordedOutputWork_KeepsExplicitContent(t *testing.T) {
 	fixture := newCalculateMutationsFixture()
 	fixture.consumed[0].Color.Payload = []byte("input-payload")
-	fixture.consumed[0].Color.Content = []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	fixture.consumed[0].Color.Content = []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: "input-content",
 	}}
 	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
@@ -427,12 +428,12 @@ func TestCalculateMutations_PreserveInput_RecordedOutputWork_KeepsExplicitConten
 			transitionID: "t1",
 			outcome:      interfaces.OutcomeAccepted,
 			output:       "worker-output",
-			recordedOutputWork: []interfaces.FactoryWorkItem{{
+			recordedOutputWork: []work.FactoryWorkItem{{
 				ID:          "work-review-99",
 				WorkTypeID:  "wt-review",
 				DisplayName: "review-override",
-				Content: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
+				Content: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText,
 					Text: "recorded-content",
 				}},
 			}},
@@ -475,8 +476,8 @@ func (f calculateMutationsFixture) calculateWithWorkstation(
 func TestCalculateMutations_OutputAsPayloadExplicit_UsesWorkerOutputPayload(t *testing.T) {
 	fixture := newCalculateMutationsFixture()
 	fixture.consumed[0].Color.Payload = []byte("input-payload")
-	fixture.consumed[0].Color.Content = []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	fixture.consumed[0].Color.Content = []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: "input-content",
 	}}
 	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
@@ -509,8 +510,8 @@ func TestCalculateMutations_OutputAsPayloadExplicit_UsesWorkerOutputPayload(t *t
 func TestCalculateMutations_OutputAsPayload_Continue_UsesNextTurnContent(t *testing.T) {
 	fixture := newCalculateMutationsFixture()
 	fixture.consumed[0].Color.Payload = []byte("input-payload")
-	fixture.consumed[0].Color.Content = []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	fixture.consumed[0].Color.Content = []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: "input-content",
 	}}
 	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
@@ -551,8 +552,8 @@ func TestCalculateMutations_OutputAsPayload_Continue_UsesNextTurnContent(t *test
 func TestCalculateMutations_OutputAsPayload_Failed_PreservesRequestContentAndDiagnostics(t *testing.T) {
 	fixture := newCalculateMutationsFixture()
 	fixture.consumed[0].Color.Payload = []byte("input-payload")
-	fixture.consumed[0].Color.Content = []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	fixture.consumed[0].Color.Content = []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: "input-content",
 	}}
 	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
@@ -682,7 +683,7 @@ func TestCalculateMutations_PackagedTTSReplacesTerminalContentWithMetadata(t *te
 	}
 
 	token := mutations[0].NewToken
-	if len(token.Color.Content) != 1 || token.Color.Content[0].Type != interfaces.WorkContentPartTypeText {
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Type != work.WorkContentPartTypeText {
 		t.Fatalf("terminal content = %#v, want one text metadata part", token.Color.Content)
 	}
 	if len(token.Color.Payload) != 0 {
@@ -786,7 +787,7 @@ func TestCalculateMutations_PackagedGoalReplacesTerminalContentWithSummary(t *te
 	}
 
 	token := mutations[0].NewToken
-	if len(token.Color.Content) != 1 || token.Color.Content[0].Type != interfaces.WorkContentPartTypeText {
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Type != work.WorkContentPartTypeText {
 		t.Fatalf("terminal content = %#v, want one text summary part", token.Color.Content)
 	}
 	if token.Color.Content[0].Text != "Final goal summary." {
@@ -835,7 +836,7 @@ func TestCalculateMutations_PackagedSubagentReplacesTerminalContentWithAgentResp
 	}
 
 	token := mutations[0].NewToken
-	if len(token.Color.Content) != 1 || token.Color.Content[0].Type != interfaces.WorkContentPartTypeText {
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Type != work.WorkContentPartTypeText {
 		t.Fatalf("terminal content = %#v, want one text agent response part", token.Color.Content)
 	}
 	if token.Color.Content[0].Text != "mock worker accepted" {
@@ -913,7 +914,7 @@ func TestCalculateMutations_PackagedGoalReviewClassifierPreservesCarriedSummary(
 	}
 
 	token := mutations[0].NewToken
-	if len(token.Color.Content) != 1 || token.Color.Content[0].Type != interfaces.WorkContentPartTypeText {
+	if len(token.Color.Content) != 1 || token.Color.Content[0].Type != work.WorkContentPartTypeText {
 		t.Fatalf("terminal content = %#v, want one carried text summary part", token.Color.Content)
 	}
 	if token.Color.Content[0].Text != "Final goal summary." {

@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -135,7 +136,7 @@ func TestAutomatPortabilityFixture_ExpandedLayoutIsDispatchReadyForBoundedSmoke(
 		t.Fatalf("expected authored fixture to be removed before readiness smoke, stat err = %v", err)
 	}
 
-	testutil.WriteSeedRequest(t, expandedDir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, expandedDir, work.SubmitRequest{
 		WorkID:     automatDispatchReadyWorkID,
 		WorkTypeID: "chapter",
 		TraceID:    "trace-automat-ready",

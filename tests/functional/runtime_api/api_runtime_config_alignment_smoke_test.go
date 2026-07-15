@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -170,7 +171,7 @@ func startRuntimeConfigAlignmentSmokeServer(
 ) (*functionalAPIServer, *runtimeConfigAlignmentProviderRunner, *runtimeConfigAlignmentScriptRunner) {
 	t.Helper()
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "runtime-config-alignment-work",
 		WorkTypeID: "task",
 		TraceID:    "runtime-config-alignment-trace",
@@ -178,13 +179,13 @@ func startRuntimeConfigAlignmentSmokeServer(
 	})
 	dueAt := time.Now().UTC().Add(-time.Second)
 	expiresAt := dueAt.Add(time.Hour)
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "runtime-config-alignment-cron-work",
 		WorkTypeID: "scheduled",
 		TraceID:    "runtime-config-alignment-cron-trace",
 		Payload:    []byte(`{"title":"runtime config alignment cron smoke"}`),
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:      "runtime-config-alignment-cron-time",
 		Name:        "cron:" + runtimeConfigAlignmentCronWorkstation,
 		WorkTypeID:  interfaces.SystemTimeWorkTypeID,

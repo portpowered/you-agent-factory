@@ -5,13 +5,14 @@ import (
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // MockExecutor returns predetermined WorkResults in sequence.
 // When the sequence is exhausted, returns a default result.
 type MockExecutor struct {
 	results  []interfaces.WorkResult
-	calls    []interfaces.WorkDispatch
+	calls    []work.WorkDispatch
 	mu       sync.Mutex
 	index    int
 	defaultR interfaces.WorkResult
@@ -29,7 +30,7 @@ func NewMockExecutor(results ...interfaces.WorkResult) *MockExecutor {
 }
 
 // Execute records the dispatch and returns the next predetermined result.
-func (m *MockExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (m *MockExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -51,11 +52,11 @@ func (m *MockExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispat
 }
 
 // Calls returns all WorkDispatches received by this executor, in order.
-func (m *MockExecutor) Calls() []interfaces.WorkDispatch {
+func (m *MockExecutor) Calls() []work.WorkDispatch {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	out := make([]interfaces.WorkDispatch, len(m.calls))
+	out := make([]work.WorkDispatch, len(m.calls))
 	copy(out, m.calls)
 	return out
 }
@@ -69,7 +70,7 @@ func (m *MockExecutor) CallCount() int {
 }
 
 // LastCall returns the most recent WorkDispatch, or panics if none.
-func (m *MockExecutor) LastCall() interfaces.WorkDispatch {
+func (m *MockExecutor) LastCall() work.WorkDispatch {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

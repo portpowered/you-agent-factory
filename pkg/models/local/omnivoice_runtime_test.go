@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -52,7 +53,7 @@ func TestOmniVoiceLocalRuntime_LoadAndInvoke_ReturnsAudioContentFromOutputFile(t
 	workdir := t.TempDir()
 	response, err := handle.Invoke(context.Background(), InvocationRequest{
 		Request: interfaces.RunnerExecutionRequest{
-			Dispatch: interfaces.WorkDispatch{
+			Dispatch: work.WorkDispatch{
 				DispatchID:      "dispatch-1",
 				TransitionID:    "transition-1",
 				WorkerType:      "tts-worker",
@@ -63,8 +64,8 @@ func TestOmniVoiceLocalRuntime_LoadAndInvoke_ReturnsAudioContentFromOutputFile(t
 			ModelBindings: []interfaces.ResolvedModelOperationBinding{{
 				Slot:   "text",
 				Source: interfaces.ModelOperationBindingSourceInput,
-				Content: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
+				Content: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText,
 					Text: "hello local runtime",
 				}},
 			}},
@@ -139,8 +140,8 @@ func TestOmniVoiceLocalRuntime_Invoke_PropagatesRuntimeExitFailure(t *testing.T)
 			ModelBindings: []interfaces.ResolvedModelOperationBinding{{
 				Slot:   "text",
 				Source: interfaces.ModelOperationBindingSourceInput,
-				Content: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
+				Content: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText,
 					Text: "fail me",
 				}},
 			}},
@@ -193,8 +194,8 @@ func TestOmniVoiceLocalRuntime_Invoke_PropagatesRunnerError(t *testing.T) {
 			ModelBindings: []interfaces.ResolvedModelOperationBinding{{
 				Slot:   "text",
 				Source: interfaces.ModelOperationBindingSourceInput,
-				Content: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
+				Content: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText,
 					Text: "hello",
 				}},
 			}},
@@ -236,14 +237,14 @@ func assertOmniVoiceInvocationPayload(t *testing.T, stdin []byte) {
 
 func assertOmniVoiceResponseContent(t *testing.T, responseContent string) {
 	t.Helper()
-	var content []interfaces.WorkContentPart
+	var content []work.WorkContentPart
 	if err := json.Unmarshal([]byte(responseContent), &content); err != nil {
 		t.Fatalf("decode response content: %v", err)
 	}
 	if len(content) != 1 {
 		t.Fatalf("content count = %d, want 1", len(content))
 	}
-	if content[0].Type != interfaces.WorkContentPartTypeAudio || content[0].ContentType != OmniVoiceAudioContentType || strings.TrimSpace(content[0].File) == "" {
+	if content[0].Type != work.WorkContentPartTypeAudio || content[0].ContentType != OmniVoiceAudioContentType || strings.TrimSpace(content[0].File) == "" {
 		t.Fatalf("content = %#v, want AUDIO content with output file", content)
 	}
 	if _, err := os.Stat(content[0].File); err != nil {
@@ -377,8 +378,8 @@ func TestOmniVoiceLocalRuntime_LoadAndInvoke_UsesSupervisedServingEndpoint(t *te
 			ModelBindings: []interfaces.ResolvedModelOperationBinding{{
 				Slot:   "text",
 				Source: interfaces.ModelOperationBindingSourceInput,
-				Content: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
+				Content: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText,
 					Text: "hello supervised runtime",
 				}},
 			}},

@@ -9,12 +9,13 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-type executorFunc func(ctx context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error)
+type executorFunc func(ctx context.Context, d work.WorkDispatch) (interfaces.WorkResult, error)
 
-func (f executorFunc) Execute(ctx context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (f executorFunc) Execute(ctx context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
 	return f(ctx, d)
 }
 
@@ -72,7 +73,7 @@ func TestServiceHarness_SetCustomExecutor(t *testing.T) {
 	mockB := h.MockWorker("worker-b", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
 
 	var customCalled bool
-	h.SetCustomExecutor("worker-a", executorFunc(func(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	h.SetCustomExecutor("worker-a", executorFunc(func(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
 		customCalled = true
 		return interfaces.WorkResult{
 			DispatchID:   d.DispatchID,
@@ -106,7 +107,7 @@ func TestServiceHarness_CustomExecutor_Precedence(t *testing.T) {
 	h.MockWorker("worker-b", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
 
 	var customCalled bool
-	h.SetCustomExecutor("worker-a", executorFunc(func(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+	h.SetCustomExecutor("worker-a", executorFunc(func(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
 		customCalled = true
 		return interfaces.WorkResult{
 			DispatchID:   d.DispatchID,

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -49,7 +50,7 @@ func TestSubmitWork(t *testing.T) {
 	if len(mf.WorkRequests) != 1 {
 		t.Fatalf("expected 1 work request, got %d", len(mf.WorkRequests))
 	}
-	if mf.WorkRequests[0].Type != interfaces.WorkRequestTypeFactoryRequestBatch {
+	if mf.WorkRequests[0].Type != work.WorkRequestTypeFactoryRequestBatch {
 		t.Fatalf("work request type = %q, want FACTORY_REQUEST_BATCH", mf.WorkRequests[0].Type)
 	}
 	if len(mf.Submitted) != 1 {
@@ -144,19 +145,19 @@ func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
 	if len(mf.Submitted[0].Content) != 2 {
 		t.Fatalf("content count = %d, want 2", len(mf.Submitted[0].Content))
 	}
-	if mf.Submitted[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
+	if mf.Submitted[0].Content[0].Type != work.WorkContentPartTypeText || mf.Submitted[0].Content[0].Text != "Review this UI." {
 		t.Fatalf("submitted content[0] = %#v, want canonical text content", mf.Submitted[0].Content[0])
 	}
-	if mf.Submitted[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.Submitted[0].Content[1].URL != "file://fixtures/ui.png" {
+	if mf.Submitted[0].Content[1].Type != work.WorkContentPartTypeImage || mf.Submitted[0].Content[1].URL != "file://fixtures/ui.png" {
 		t.Fatalf("submitted content[1] = %#v, want canonical image content", mf.Submitted[0].Content[1])
 	}
 	if len(mf.WorkRequests[0].Works[0].Content) != 2 {
 		t.Fatalf("submitted work request content count = %d, want 2", len(mf.WorkRequests[0].Works[0].Content))
 	}
-	if mf.WorkRequests[0].Works[0].Content[0].Type != interfaces.WorkContentPartTypeText || mf.WorkRequests[0].Works[0].Content[0].Text != "Review this UI." {
+	if mf.WorkRequests[0].Works[0].Content[0].Type != work.WorkContentPartTypeText || mf.WorkRequests[0].Works[0].Content[0].Text != "Review this UI." {
 		t.Fatalf("submitted work request content[0] = %#v, want canonical text content", mf.WorkRequests[0].Works[0].Content[0])
 	}
-	if mf.WorkRequests[0].Works[0].Content[1].Type != interfaces.WorkContentPartTypeImage || mf.WorkRequests[0].Works[0].Content[1].URL != "file://fixtures/ui.png" {
+	if mf.WorkRequests[0].Works[0].Content[1].Type != work.WorkContentPartTypeImage || mf.WorkRequests[0].Works[0].Content[1].URL != "file://fixtures/ui.png" {
 		t.Fatalf("submitted work request content[1] = %#v, want canonical image content", mf.WorkRequests[0].Works[0].Content[1])
 	}
 }
@@ -189,20 +190,20 @@ func assertStructuredSubmitWorkSubmission(t *testing.T, mf *testutil.MockFactory
 	assertStructuredSubmitWorkStagedImagePart(t, mf.Submitted[0].Content[1], staged)
 }
 
-func assertStructuredSubmitWorkTextPart(t *testing.T, part interfaces.WorkContentPart) {
+func assertStructuredSubmitWorkTextPart(t *testing.T, part work.WorkContentPart) {
 	t.Helper()
-	if part.Type != interfaces.WorkContentPartTypeText || part.Text != "Review this UI." {
+	if part.Type != work.WorkContentPartTypeText || part.Text != "Review this UI." {
 		t.Fatalf("submitted content[0] = %#v, want canonical text content", part)
 	}
 }
 
 func assertStructuredSubmitWorkStagedImagePart(
 	t *testing.T,
-	part interfaces.WorkContentPart,
+	part work.WorkContentPart,
 	staged factoryapi.StageSubmitWorkFileResponse,
 ) {
 	t.Helper()
-	if part.Type != interfaces.WorkContentPartTypeImage || part.ContentType != "image/png" {
+	if part.Type != work.WorkContentPartTypeImage || part.ContentType != "image/png" {
 		t.Fatalf("submitted content[1] = %#v, want canonical staged image content", part)
 	}
 	if part.File != "" {
@@ -266,16 +267,16 @@ func assertUppercaseExtendedCanonicalSubmission(t *testing.T, mf *testutil.MockF
 	}
 }
 
-func assertUppercaseExtendedTextPart(t *testing.T, part interfaces.WorkContentPart) {
+func assertUppercaseExtendedTextPart(t *testing.T, part work.WorkContentPart) {
 	t.Helper()
-	if part.Type != interfaces.WorkContentPartTypeText || part.Label != "prompt" {
+	if part.Type != work.WorkContentPartTypeText || part.Label != "prompt" {
 		t.Fatalf("submitted content[0] = %#v, want normalized text part with label", part)
 	}
 }
 
-func assertUppercaseExtendedAudioPart(t *testing.T, part interfaces.WorkContentPart) {
+func assertUppercaseExtendedAudioPart(t *testing.T, part work.WorkContentPart) {
 	t.Helper()
-	if part.Type != interfaces.WorkContentPartTypeAudio || part.URL != "file://artifacts/output.wav" || part.ContentType != "audio/wav" || part.ArtifactID != "artifact-audio-1" {
+	if part.Type != work.WorkContentPartTypeAudio || part.URL != "file://artifacts/output.wav" || part.ContentType != "audio/wav" || part.ArtifactID != "artifact-audio-1" {
 		t.Fatalf("submitted content[1] = %#v, want canonical audio content", part)
 	}
 	audioMetadata, _ := json.Marshal(part.Metadata)
@@ -284,13 +285,13 @@ func assertUppercaseExtendedAudioPart(t *testing.T, part interfaces.WorkContentP
 	}
 }
 
-func assertUppercaseExtendedJSONPart(t *testing.T, part interfaces.WorkContentPart) {
+func assertUppercaseExtendedJSONPart(t *testing.T, part work.WorkContentPart) {
 	t.Helper()
 	jsonValue := map[string]any{}
 	if err := json.Unmarshal(part.JSON, &jsonValue); err != nil {
 		t.Fatalf("decode json content: %v", err)
 	}
-	if part.Type != interfaces.WorkContentPartTypeJSON || jsonValue["voice"] != "alloy" || jsonValue["speed"] != float64(1) {
+	if part.Type != work.WorkContentPartTypeJSON || jsonValue["voice"] != "alloy" || jsonValue["speed"] != float64(1) {
 		t.Fatalf("submitted content[2] = %#v, want canonical json content", part)
 	}
 }
@@ -566,7 +567,7 @@ func TestSubmitWork_PreservesRuntimeRelations(t *testing.T) {
 		t.Fatalf("submitted relations = %#v, want one", mf.Submitted)
 	}
 	relation := mf.Submitted[0].Relations[0]
-	if relation.Type != interfaces.RelationDependsOn || relation.TargetWorkID != "review-work" || relation.RequiredState != "complete" {
+	if relation.Type != work.RelationDependsOn || relation.TargetWorkID != "review-work" || relation.RequiredState != "complete" {
 		t.Fatalf("submitted relation = %#v, want dependency on review-work at complete", relation)
 	}
 }
@@ -886,9 +887,9 @@ func assertSubmitSurfaceSmokeEvents(t *testing.T, serverURL string) {
 
 func TestSubmitWorkResponseFromResult_IdempotentReplayPreservesWorkIdentity(t *testing.T) {
 	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-idem-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{{
 			Name:       "draft-prd",
 			WorkTypeID: "prd",
@@ -954,7 +955,7 @@ func TestSubmitWork_AcceptsLegacyFileOnlyContent(t *testing.T) {
 		t.Fatalf("submitted = %#v, want one normalized image part", mf.Submitted)
 	}
 	part := mf.Submitted[0].Content[0]
-	if part.Type != interfaces.WorkContentPartTypeImage || part.URL != "file://fixtures/ui.png" {
+	if part.Type != work.WorkContentPartTypeImage || part.URL != "file://fixtures/ui.png" {
 		t.Fatalf("content[0] = %#v, want image with normalized url", part)
 	}
 	if part.File != "" {

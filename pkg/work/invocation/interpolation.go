@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 var invocationInterpolationPattern = regexp.MustCompile(`\$\{([A-Za-z0-9_.-]+)\}`)
@@ -24,7 +25,7 @@ type FileReader func(string) ([]byte, error)
 func RuntimeInvocationArguments(
 	signature *interfaces.InvocationSignatureConfig,
 	normalized *NormalizedArguments,
-) *interfaces.InvocationArguments {
+) *work.InvocationArguments {
 	if signature == nil || normalized == nil || len(normalized.Arguments) == 0 {
 		return nil
 	}
@@ -36,19 +37,19 @@ func RuntimeInvocationArguments(
 		}
 		valueModes[name] = normalizedValueMode(parameter.ValueMode)
 	}
-	args := &interfaces.InvocationArguments{
-		Arguments: make(map[string]interfaces.InvocationArgument, len(normalized.Arguments)),
+	args := &work.InvocationArguments{
+		Arguments: make(map[string]work.InvocationArgument, len(normalized.Arguments)),
 	}
 	for name, argument := range normalized.Arguments {
-		next := interfaces.InvocationArgument{
+		next := work.InvocationArgument{
 			Values:    append([]string(nil), argument.Values...),
 			ValueMode: valueModes[name],
 			Sensitive: argument.Sensitive,
 		}
 		if len(argument.Sources) > 0 {
-			next.Sources = make([]interfaces.InvocationArgumentSource, len(argument.Sources))
+			next.Sources = make([]work.InvocationArgumentSource, len(argument.Sources))
 			for i, source := range argument.Sources {
-				next.Sources[i] = interfaces.InvocationArgumentSource{
+				next.Sources[i] = work.InvocationArgumentSource{
 					Kind:   string(source.Kind),
 					Name:   source.Name,
 					Redact: source.Redact,
@@ -66,7 +67,7 @@ func RuntimeInvocationArguments(
 // ValidateInvocationInterpolation verifies that runtime-supported invocation
 // interpolation can resolve the authored worker and workstation fields for the
 // supplied normalized argument set without mutating the canonical runtime config.
-func ValidateInvocationInterpolation(cfg *interfaces.FactoryConfig, args *interfaces.InvocationArguments, readFile FileReader) error {
+func ValidateInvocationInterpolation(cfg *interfaces.FactoryConfig, args *work.InvocationArguments, readFile FileReader) error {
 	if cfg == nil || args == nil {
 		return nil
 	}
@@ -90,7 +91,7 @@ func ValidateInvocationInterpolation(cfg *interfaces.FactoryConfig, args *interf
 
 // InterpolateWorkerConfig resolves supported `${parameter}` placeholders on one
 // effective worker definition using runtime invocation arguments.
-func InterpolateWorkerConfig(worker interfaces.WorkerConfig, args *interfaces.InvocationArguments, readFile FileReader) (interfaces.WorkerConfig, error) {
+func InterpolateWorkerConfig(worker interfaces.WorkerConfig, args *work.InvocationArguments, readFile FileReader) (interfaces.WorkerConfig, error) {
 	next := cloneWorkerForInterpolation(worker)
 	var err error
 	if next.Provider, err = interpolateInvocationField(next.Provider, args, "worker.provider", false, readFile); err != nil {
@@ -130,7 +131,7 @@ func InterpolateWorkerConfig(worker interfaces.WorkerConfig, args *interfaces.In
 
 // InterpolateWorkstationConfig resolves supported `${parameter}` placeholders on
 // one effective workstation definition using runtime invocation arguments.
-func InterpolateWorkstationConfig(workstation interfaces.FactoryWorkstationConfig, args *interfaces.InvocationArguments, readFile FileReader) (interfaces.FactoryWorkstationConfig, error) {
+func InterpolateWorkstationConfig(workstation interfaces.FactoryWorkstationConfig, args *work.InvocationArguments, readFile FileReader) (interfaces.FactoryWorkstationConfig, error) {
 	next := cloneWorkstationForInterpolation(workstation)
 	var err error
 	if next.WorkerTypeName, err = interpolateInvocationField(next.WorkerTypeName, args, "workstation.worker", false, readFile); err != nil {
@@ -173,7 +174,7 @@ func InterpolateWorkstationConfig(workstation interfaces.FactoryWorkstationConfi
 	return next, nil
 }
 
-func validateInvocationOutputContract(output *interfaces.InvocationOutputContractConfig, args *interfaces.InvocationArguments, readFile FileReader) error {
+func validateInvocationOutputContract(output *interfaces.InvocationOutputContractConfig, args *work.InvocationArguments, readFile FileReader) error {
 	if output == nil {
 		return nil
 	}
@@ -200,7 +201,7 @@ func validateInvocationOutputContract(output *interfaces.InvocationOutputContrac
 
 func interpolateInvocationField(
 	authored string,
-	args *interfaces.InvocationArguments,
+	args *work.InvocationArguments,
 	fieldDescriptor string,
 	allowsRepeated bool,
 	readFile FileReader,
@@ -247,15 +248,15 @@ func interpolateInvocationField(
 	return builder.String(), nil
 }
 
-func invocationArgumentByName(args *interfaces.InvocationArguments, name string) (interfaces.InvocationArgument, bool) {
+func invocationArgumentByName(args *work.InvocationArguments, name string) (work.InvocationArgument, bool) {
 	if args == nil || len(args.Arguments) == 0 {
-		return interfaces.InvocationArgument{}, false
+		return work.InvocationArgument{}, false
 	}
 	argument, ok := args.Arguments[strings.TrimSpace(name)]
 	return argument, ok
 }
 
-func invocationArgumentScalar(argument interfaces.InvocationArgument, parameterName, fieldDescriptor string, readFile FileReader) (string, error) {
+func invocationArgumentScalar(argument work.InvocationArgument, parameterName, fieldDescriptor string, readFile FileReader) (string, error) {
 	if len(argument.Values) != 1 {
 		return "", &ArgumentError{
 			Code:      ArgumentErrorCodeInvalidInterpolation,
@@ -306,7 +307,7 @@ func cloneWorkstationForInterpolation(workstation interfaces.FactoryWorkstationC
 // values.
 func InvocationDiagnostic(
 	signature *interfaces.InvocationSignatureConfig,
-	args *interfaces.InvocationArguments,
+	args *work.InvocationArguments,
 ) *interfaces.InvocationDiagnostic {
 	if signature == nil && (args == nil || len(args.Arguments) == 0) {
 		return nil

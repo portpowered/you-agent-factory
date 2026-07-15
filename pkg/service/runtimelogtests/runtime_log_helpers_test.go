@@ -12,11 +12,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
-func writeWorkRequestFile(t *testing.T, path string, req interfaces.SubmitRequest) {
+func writeWorkRequestFile(t *testing.T, path string, req work.SubmitRequest) {
 	t.Helper()
-	data, err := json.Marshal(requests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{req}))
+	data, err := json.Marshal(requests.WorkRequestFromSubmitRequests([]work.SubmitRequest{req}))
 	if err != nil {
 		t.Fatalf("marshal work request file: %v", err)
 	}

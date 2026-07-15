@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 var (
@@ -22,10 +23,10 @@ var (
 
 // MoveWork validates and applies a synchronous operator relocation for one work item.
 // It does not emit dispatch events or require the factory lifecycle to be running.
-func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName string) (interfaces.OperatorMoveResult, error) {
+func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName string) (work.OperatorMoveResult, error) {
 	select {
 	case <-ctx.Done():
-		return interfaces.OperatorMoveResult{}, ctx.Err()
+		return work.OperatorMoveResult{}, ctx.Err()
 	default:
 	}
 
@@ -33,30 +34,30 @@ func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName s
 	defer e.mu.Unlock()
 
 	if !e.acceptingSubmits {
-		return interfaces.OperatorMoveResult{}, ErrMoveWorkEngineTerminated
+		return work.OperatorMoveResult{}, ErrMoveWorkEngineTerminated
 	}
 
 	token, ok := findWorkTokenByID(e.runtimeState.Marking.Tokens, workID)
 	if !ok {
-		return interfaces.OperatorMoveResult{}, ErrMoveWorkNotFound
+		return work.OperatorMoveResult{}, ErrMoveWorkNotFound
 	}
 
 	if workIDInActiveDispatches(e.runtimeState.Dispatches, workID) {
-		return interfaces.OperatorMoveResult{}, ErrMoveWorkInFlightDispatch
+		return work.OperatorMoveResult{}, ErrMoveWorkInFlightDispatch
 	}
 
 	toPlaceID, err := resolveTargetPlace(e.state, token.Color.WorkTypeID, stateName)
 	if err != nil {
-		return interfaces.OperatorMoveResult{}, err
+		return work.OperatorMoveResult{}, err
 	}
 
 	fromPlaceID := token.PlaceID
 	fromState := stateValueForPlace(e.state, fromPlaceID)
 	if fromState == "" {
-		return interfaces.OperatorMoveResult{}, fmt.Errorf("resolve current state for place %q: place not found", fromPlaceID)
+		return work.OperatorMoveResult{}, fmt.Errorf("resolve current state for place %q: place not found", fromPlaceID)
 	}
 	if fromPlaceID == toPlaceID {
-		return interfaces.OperatorMoveResult{
+		return work.OperatorMoveResult{
 			WorkID:      workID,
 			WorkTypeID:  token.Color.WorkTypeID,
 			FromState:   fromState,
@@ -79,11 +80,11 @@ func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName s
 		Reason:    fmt.Sprintf("operator move to %s", stateName),
 	}
 	if err := applyMutations(e.runtimeState.Marking, e.state.Places, []interfaces.MarkingMutation{mutation}); err != nil {
-		return interfaces.OperatorMoveResult{}, fmt.Errorf("apply operator move: %w", err)
+		return work.OperatorMoveResult{}, fmt.Errorf("apply operator move: %w", err)
 	}
 	e.wakeForOperatorControl()
 
-	return interfaces.OperatorMoveResult{
+	return work.OperatorMoveResult{
 		WorkID:      workID,
 		WorkTypeID:  token.Color.WorkTypeID,
 		FromState:   fromState,

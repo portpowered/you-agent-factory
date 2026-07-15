@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
@@ -66,7 +67,7 @@ type OutputTokenInput struct {
 
 // InitialTokenFromSubmit converts a submit request into a token placed in the
 // work type's initial place unless the request targets a specific state.
-func (t *Transformer) InitialTokenFromSubmit(req interfaces.SubmitRequest, now time.Time) (*interfaces.Token, error) {
+func (t *Transformer) InitialTokenFromSubmit(req work.SubmitRequest, now time.Time) (*interfaces.Token, error) {
 	placeID, err := t.submitPlaceID(req)
 	if err != nil {
 		return nil, err
@@ -88,7 +89,7 @@ func (t *Transformer) InitialTokenFromSubmit(req interfaces.SubmitRequest, now t
 			DataType:                 interfaces.DataTypeWork,
 			ChainingTraceDepth:       chainingTraceDepthForSubmit(req),
 			CurrentChainingTraceID:   firstNonEmpty(req.CurrentChainingTraceID, req.TraceID),
-			PreviousChainingTraceIDs: interfaces.CanonicalChainingTraceIDs(req.PreviousChainingTraceIDs),
+			PreviousChainingTraceIDs: work.CanonicalChainingTraceIDs(req.PreviousChainingTraceIDs),
 			TraceID:                  req.TraceID,
 			ParentID:                 submitParentID(req.Relations),
 			Tags:                     factorypkg.CloneRuntimeTags(req.Tags),
@@ -284,7 +285,7 @@ func applyWorkerOutputContent(color *interfaces.TokenColor, output string) error
 		return fmt.Errorf("shape workstation response content: %w", err)
 	}
 	if len(content) > 0 {
-		color.Content = interfaces.CloneWorkContentParts(content)
+		color.Content = work.CloneWorkContentParts(content)
 	}
 	return nil
 }
@@ -336,7 +337,7 @@ func ApplyPreservedInputToColor(
 	}
 	color.Payload = factorypkg.CloneRuntimePayload(source.Payload)
 	if len(color.Content) == 0 && len(source.Content) > 0 {
-		color.Content = interfaces.CloneWorkContentParts(source.Content)
+		color.Content = work.CloneWorkContentParts(source.Content)
 	}
 	if len(color.Tags) == 0 && len(source.Tags) > 0 {
 		color.Tags = factorypkg.CloneRuntimeTags(source.Tags)
@@ -426,7 +427,7 @@ func (t *Transformer) initialPlaceID(workTypeID string) (string, error) {
 	return "", fmt.Errorf("initial place not found for work type %q", workTypeID)
 }
 
-func (t *Transformer) submitPlaceID(req interfaces.SubmitRequest) (string, error) {
+func (t *Transformer) submitPlaceID(req work.SubmitRequest) (string, error) {
 	if req.TargetState == "" {
 		return t.initialPlaceID(req.WorkTypeID)
 	}
@@ -571,11 +572,11 @@ func createdAtForOutputToken(consumedTokens []interfaces.Token, outputColor inte
 	return now
 }
 
-func cloneWorkContent(content []interfaces.WorkContentPart) []interfaces.WorkContentPart {
+func cloneWorkContent(content []work.WorkContentPart) []work.WorkContentPart {
 	if len(content) == 0 {
 		return nil
 	}
-	clone := make([]interfaces.WorkContentPart, len(content))
+	clone := make([]work.WorkContentPart, len(content))
 	copy(clone, content)
 	return clone
 }
@@ -597,7 +598,7 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func chainingTraceDepthForSubmit(req interfaces.SubmitRequest) int {
+func chainingTraceDepthForSubmit(req work.SubmitRequest) int {
 	if req.ChainingTraceDepth > 0 {
 		return req.ChainingTraceDepth
 	}
@@ -607,9 +608,9 @@ func chainingTraceDepthForSubmit(req interfaces.SubmitRequest) int {
 	return 0
 }
 
-func submitParentID(relations []interfaces.Relation) string {
+func submitParentID(relations []work.Relation) string {
 	for _, relation := range relations {
-		if relation.Type == interfaces.RelationParentChild && relation.TargetWorkID != "" {
+		if relation.Type == work.RelationParentChild && relation.TargetWorkID != "" {
 			return relation.TargetWorkID
 		}
 	}

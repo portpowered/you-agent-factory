@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 const (
@@ -30,7 +31,7 @@ func agentRunID(dispatchID string) string {
 }
 
 func agentRunResponseEvent(
-	dispatch interfaces.WorkDispatch,
+	dispatch work.WorkDispatch,
 	result interfaces.WorkResult,
 	duration time.Duration,
 	transcript []messages.Message,

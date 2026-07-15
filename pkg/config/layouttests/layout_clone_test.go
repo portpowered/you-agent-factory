@@ -1,9 +1,11 @@
 package layouttests
 
 import (
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"reflect"
 	"testing"
+
+	. "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
@@ -193,26 +195,26 @@ func TestCloneFactoryConfig_ClonesModelOperationBindingWorkContent(t *testing.T)
 			Operation: "MODEL_INVOKE",
 			OperationBindings: []interfaces.ModelOperationBinding{{
 				Slot: "draft",
-				Config: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
+				Config: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText,
 					Text: "configured prompt",
 				}, {
-					Type:  interfaces.WorkContentPartTypeImage,
+					Type:  work.WorkContentPartTypeImage,
 					File:  "configured-diagram.png",
 					Label: "Configured diagram",
 				}},
-				DefaultContent: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
+				DefaultContent: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText,
 					Text: "fallback prompt",
 				}, {
-					Type:  interfaces.WorkContentPartTypeImage,
+					Type:  work.WorkContentPartTypeImage,
 					File:  "fallback-diagram.png",
 					Label: "Fallback diagram",
 				}},
 			}, {
 				Slot:           "empty",
-				Config:         []interfaces.WorkContentPart{},
-				DefaultContent: []interfaces.WorkContentPart{},
+				Config:         []work.WorkContentPart{},
+				DefaultContent: []work.WorkContentPart{},
 			}},
 		}},
 	}
@@ -313,7 +315,7 @@ func TestCloneWorkerConfig_DetachesHostedNestedConfig(t *testing.T) {
 
 func assertBindingMultiPartContent(
 	t *testing.T,
-	parts []interfaces.WorkContentPart,
+	parts []work.WorkContentPart,
 	wantText string,
 	wantFile string,
 	wantLabel string,

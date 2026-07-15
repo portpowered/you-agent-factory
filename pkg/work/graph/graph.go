@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // Node is one work item in a derived dependency graph.
@@ -29,16 +29,16 @@ type Graph struct {
 }
 
 // DeriveFromWorkRequest projects a parsed batch request into a dependency graph.
-func DeriveFromWorkRequest(req interfaces.WorkRequest) (Graph, error) {
+func DeriveFromWorkRequest(req work.WorkRequest) (Graph, error) {
 	if err := validateBatchForGraph(req); err != nil {
 		return Graph{}, err
 	}
 	return buildGraph(req), nil
 }
 
-func validateBatchForGraph(req interfaces.WorkRequest) error {
-	if req.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
-		return fmt.Errorf("batch type must be %q", interfaces.WorkRequestTypeFactoryRequestBatch)
+func validateBatchForGraph(req work.WorkRequest) error {
+	if req.Type != work.WorkRequestTypeFactoryRequestBatch {
+		return fmt.Errorf("batch type must be %q", work.WorkRequestTypeFactoryRequestBatch)
 	}
 	if strings.TrimSpace(req.RequestID) == "" {
 		return fmt.Errorf("batch requestId is required")
@@ -72,7 +72,7 @@ func validateBatchForGraph(req interfaces.WorkRequest) error {
 			return fmt.Errorf("relations[%d] references unknown targetWorkName %q", i, rel.TargetWorkName)
 		}
 		switch rel.Type {
-		case interfaces.WorkRelationDependsOn, interfaces.WorkRelationParentChild:
+		case work.WorkRelationDependsOn, work.WorkRelationParentChild:
 		case "":
 			return fmt.Errorf("relations[%d] is missing type", i)
 		default:
@@ -82,7 +82,7 @@ func validateBatchForGraph(req interfaces.WorkRequest) error {
 	return nil
 }
 
-func buildGraph(req interfaces.WorkRequest) Graph {
+func buildGraph(req work.WorkRequest) Graph {
 	nodes := make([]Node, 0, len(req.Works))
 	for i, work := range req.Works {
 		nodes = append(nodes, Node{
@@ -107,7 +107,7 @@ func buildGraph(req interfaces.WorkRequest) Graph {
 	}
 }
 
-func stableNodeID(work interfaces.Work, index int) string {
+func stableNodeID(work work.Work, index int) string {
 	if strings.TrimSpace(work.Name) != "" {
 		return work.Name
 	}
@@ -117,7 +117,7 @@ func stableNodeID(work interfaces.Work, index int) string {
 	return fmt.Sprintf("work-%d", index+1)
 }
 
-func nodeLabel(work interfaces.Work, index int) string {
+func nodeLabel(work work.Work, index int) string {
 	if strings.TrimSpace(work.Name) != "" {
 		return work.Name
 	}

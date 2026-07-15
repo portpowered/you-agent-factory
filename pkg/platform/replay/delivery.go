@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -262,16 +263,16 @@ func (h *SubmissionHook) OnTick(ctx context.Context, input interfaces.Submission
 	}, nil
 }
 
-func generatedBatchesFromReplaySubmissions(records []replaySubmission) []interfaces.GeneratedSubmissionBatch {
-	batches := make([]interfaces.GeneratedSubmissionBatch, 0, len(records))
+func generatedBatchesFromReplaySubmissions(records []replaySubmission) []work.GeneratedSubmissionBatch {
+	batches := make([]work.GeneratedSubmissionBatch, 0, len(records))
 	for i, record := range records {
 		request := record.request
 		if request.RequestID == "" {
 			request.RequestID = fmt.Sprintf("%s/%d", record.eventID, i)
 		}
-		batches = append(batches, interfaces.GeneratedSubmissionBatch{
+		batches = append(batches, work.GeneratedSubmissionBatch{
 			Request: request,
-			Metadata: interfaces.GeneratedSubmissionBatchMetadata{
+			Metadata: work.GeneratedSubmissionBatchMetadata{
 				Source: record.source,
 			},
 		})
@@ -339,7 +340,7 @@ func (h *WorkStateChangeHook) OnTick(ctx context.Context, input interfaces.Submi
 
 func replayWorkStateChangeMutation(
 	snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	change interfaces.WorkStateChangeRecord,
+	change work.WorkStateChangeRecord,
 ) (interfaces.MarkingMutation, bool) {
 	if change.WorkID == "" || change.FromPlaceID == "" || change.ToPlaceID == "" {
 		return interfaces.MarkingMutation{}, false
@@ -448,7 +449,7 @@ func NewCompletionDeliveryPlan(artifact *interfaces.ReplayArtifact) (*Completion
 	}, nil
 }
 
-func (p *CompletionDeliveryPlan) DeliveryTickForDispatch(dispatch interfaces.WorkDispatch) (int, bool, error) {
+func (p *CompletionDeliveryPlan) DeliveryTickForDispatch(dispatch work.WorkDispatch) (int, bool, error) {
 	if p == nil {
 		return 0, false, nil
 	}
@@ -512,7 +513,7 @@ func (p *CompletionDeliveryPlan) ValidateReplayTick(currentTick int) error {
 	return nil
 }
 
-func (p *CompletionDeliveryPlan) PlannedResultForDispatch(dispatch interfaces.WorkDispatch) (interfaces.WorkResult, bool, error) {
+func (p *CompletionDeliveryPlan) PlannedResultForDispatch(dispatch work.WorkDispatch) (interfaces.WorkResult, bool, error) {
 	if p == nil {
 		return interfaces.WorkResult{}, false, nil
 	}
@@ -542,18 +543,18 @@ func cloneReplayPlannedResult(result interfaces.WorkResult) interfaces.WorkResul
 	return clone
 }
 
-func cloneReplayFactoryWorkItems(items []interfaces.FactoryWorkItem) []interfaces.FactoryWorkItem {
+func cloneReplayFactoryWorkItems(items []work.FactoryWorkItem) []work.FactoryWorkItem {
 	if len(items) == 0 {
 		return nil
 	}
-	out := make([]interfaces.FactoryWorkItem, len(items))
+	out := make([]work.FactoryWorkItem, len(items))
 	for i := range items {
 		out[i] = items[i]
 		if items[i].PreviousChainingTraceIDs != nil {
 			out[i].PreviousChainingTraceIDs = append([]string(nil), items[i].PreviousChainingTraceIDs...)
 		}
 		if items[i].Content != nil {
-			out[i].Content = append([]interfaces.WorkContentPart(nil), items[i].Content...)
+			out[i].Content = append([]work.WorkContentPart(nil), items[i].Content...)
 		}
 		if items[i].Tags != nil {
 			out[i].Tags = cloneStringMap(items[i].Tags)
@@ -562,7 +563,7 @@ func cloneReplayFactoryWorkItems(items []interfaces.FactoryWorkItem) []interface
 	return out
 }
 
-func (p *CompletionDeliveryPlan) expectedForObservedDispatchLocked(observed interfaces.WorkDispatch) (completionDeliveryRecord, bool) {
+func (p *CompletionDeliveryPlan) expectedForObservedDispatchLocked(observed work.WorkDispatch) (completionDeliveryRecord, bool) {
 	for _, record := range p.records {
 		if record.used {
 			continue
@@ -582,11 +583,11 @@ func (p *CompletionDeliveryPlan) expectedForObservedDispatchLocked(observed inte
 	return completionDeliveryRecord{}, false
 }
 
-func recordedDispatchMatches(recorded replayDispatch, observed interfaces.WorkDispatch) bool {
+func recordedDispatchMatches(recorded replayDispatch, observed work.WorkDispatch) bool {
 	return dispatchMatches(recorded.dispatch, observed)
 }
 
-func dispatchMatches(recorded, observed interfaces.WorkDispatch) bool {
+func dispatchMatches(recorded, observed work.WorkDispatch) bool {
 	if recorded.TransitionID != "" && observed.TransitionID != recorded.TransitionID {
 		return false
 	}
@@ -666,7 +667,7 @@ func resourceTokenName(token interfaces.Token) string {
 	return token.ID
 }
 
-func dispatchSummary(dispatch interfaces.WorkDispatch) string {
+func dispatchSummary(dispatch work.WorkDispatch) string {
 	return fmt.Sprintf(
 		"dispatch_id=%s transition=%s workstation=%s replay_key=%s trace_id=%s work_ids=%v input_tokens=%v",
 		dispatch.DispatchID,

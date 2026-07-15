@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type wsMockExecutor struct {
@@ -69,7 +70,7 @@ func TestWorkstationExecutor_ModelWorkstation_RendersPromptAndDelegates(t *testi
 		mock,
 	)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-1",
 		TransitionID:    "t-1",
 		WorkerType:      "worker-a",
@@ -128,7 +129,7 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 		mock,
 	)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-interpolate",
 		TransitionID:    "t-interpolate",
 		WorkerType:      "worker-a",
@@ -137,15 +138,15 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 			ID: "tok-1",
 			Color: interfaces.TokenColor{
 				WorkID: "work-1",
-				InvocationArguments: &interfaces.InvocationArguments{
-					Arguments: map[string]interfaces.InvocationArgument{
+				InvocationArguments: &work.InvocationArguments{
+					Arguments: map[string]work.InvocationArgument{
 						"input":    {Values: []string{"draft"}},
 						"provider": {Values: []string{"cursor"}},
 						"model":    {Values: []string{"gpt-5.5"}},
 						"apiKey": {
 							Values:    []string{"secret"},
 							Sensitive: true,
-							Sources:   []interfaces.InvocationArgumentSource{{Kind: "NAMED", Redact: true}},
+							Sources:   []work.InvocationArgumentSource{{Kind: "NAMED", Redact: true}},
 						},
 					},
 				},
@@ -243,9 +244,9 @@ func TestResolveModelOperationBindings_UsesInputThenConfigThenDefaultAndRecordsS
 			{
 				Slot:     "voice",
 				Selector: &interfaces.ModelOperationBindingSelector{Role: "voice"},
-				Config:   []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeJSON, Role: "voice", JSON: []byte(`{"name":"alloy"}`)}},
+				Config:   []work.WorkContentPart{{Type: work.WorkContentPartTypeJSON, Role: "voice", JSON: []byte(`{"name":"alloy"}`)}},
 			},
-			{Slot: "style", DefaultContent: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "neutral", Slot: "style"}}},
+			{Slot: "style", DefaultContent: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "neutral", Slot: "style"}}},
 		},
 	}
 	worker := &interfaces.WorkerConfig{
@@ -257,9 +258,9 @@ func TestResolveModelOperationBindings_UsesInputThenConfigThenDefaultAndRecordsS
 	}
 	inputs := []interfaces.Token{{
 		ID: "tok-1",
-		Color: interfaces.TokenColor{Content: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Slot: "ignored", Label: "utterance", Text: "first"},
-			{Type: interfaces.WorkContentPartTypeText, Slot: "text", Label: "utterance", Text: "second"},
+		Color: interfaces.TokenColor{Content: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Slot: "ignored", Label: "utterance", Text: "first"},
+			{Type: work.WorkContentPartTypeText, Slot: "text", Label: "utterance", Text: "second"},
 		}},
 	}}
 
@@ -296,7 +297,7 @@ func TestResolveModelOperationBindings_ImplicitlyMatchesBySlotAndRejectsMissingR
 
 	got, err := resolveModelOperationBindings(workstation, worker, []interfaces.Token{{
 		ID:    "tok-1",
-		Color: interfaces.TokenColor{Content: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Slot: "text", Text: "hello"}}},
+		Color: interfaces.TokenColor{Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Slot: "text", Text: "hello"}}},
 	}})
 	if err != nil {
 		t.Fatalf("resolveModelOperationBindings implicit slot: %v", err)
@@ -313,7 +314,7 @@ func TestResolveModelOperationBindings_ImplicitlyMatchesBySlotAndRejectsMissingR
 
 func TestInferenceRequestForExecutionRequest_AuthoredWorkingDirectoryRequiresRunnerCapability(t *testing.T) {
 	req := testAgentRequest(
-		interfaces.WorkDispatch{DispatchID: "d-authored-workdir", TransitionID: "t-authored-workdir", WorkerType: "worker-a", WorkstationName: "review"},
+		work.WorkDispatch{DispatchID: "d-authored-workdir", TransitionID: "t-authored-workdir", WorkerType: "worker-a", WorkstationName: "review"},
 		withAgentPrompts("System prompt", "Review"),
 		withAgentWorkingDirectory("/tmp/authored"),
 		func(req *interfaces.WorkstationExecutionRequest) {
@@ -349,7 +350,7 @@ func TestWorkstationExecutor_ModelWorkstation_PreservesDistinctMultiInputCanonic
 		mock,
 	)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-multi-content",
 		TransitionID:    "t-multi-content",
 		WorkerType:      "worker-a",
@@ -359,8 +360,8 @@ func TestWorkstationExecutor_ModelWorkstation_PreservesDistinctMultiInputCanonic
 				ID: "tok-text",
 				Color: interfaces.TokenColor{
 					WorkID: "work-text",
-					Content: []interfaces.WorkContentPart{
-						{Type: interfaces.WorkContentPartTypeText, Text: "plan"},
+					Content: []work.WorkContentPart{
+						{Type: work.WorkContentPartTypeText, Text: "plan"},
 					},
 					Payload: []byte("plan"),
 				},
@@ -369,9 +370,9 @@ func TestWorkstationExecutor_ModelWorkstation_PreservesDistinctMultiInputCanonic
 				ID: "tok-mixed",
 				Color: interfaces.TokenColor{
 					WorkID: "work-mixed",
-					Content: []interfaces.WorkContentPart{
-						{Type: interfaces.WorkContentPartTypeText, Text: "caption"},
-						{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
+					Content: []work.WorkContentPart{
+						{Type: work.WorkContentPartTypeText, Text: "caption"},
+						{Type: work.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
 					},
 					Payload: []byte("caption"),
 				},
@@ -404,7 +405,7 @@ func TestWorkstationExecutor_ModelWorkstation_PreservesDistinctMultiInputCanonic
 	if inputTokens[1].Color.WorkID != "work-mixed" || len(inputTokens[1].Color.Content) != 2 {
 		t.Fatalf("second forwarded input = %#v, want mixed-content input preserved", inputTokens[1].Color)
 	}
-	if inputTokens[1].Color.Content[1].Type != interfaces.WorkContentPartTypeImage || inputTokens[1].Color.Content[1].File != "fixtures/mockup.png" {
+	if inputTokens[1].Color.Content[1].Type != work.WorkContentPartTypeImage || inputTokens[1].Color.Content[1].File != "fixtures/mockup.png" {
 		t.Fatalf("second forwarded input content = %#v, want ordered image part", inputTokens[1].Color.Content)
 	}
 }
@@ -463,7 +464,7 @@ func TestWorkstationExecutor_ResolvesRelativeWorkingDirectoryAgainstRuntimeConfi
 		mock,
 	)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-relative",
 		TransitionID:    "t-relative",
 		WorkerType:      "worker-a",
@@ -508,7 +509,7 @@ func TestWorkstationExecutor_ResolvesRelativeWorkingDirectoryAgainstRuntimeBaseD
 		mock,
 	)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-relative-runtime-base",
 		TransitionID:    "t-relative-runtime-base",
 		WorkerType:      "worker-a",
@@ -551,7 +552,7 @@ func TestWorkstationExecutor_ResolvesPortableRootedWorkingDirectoryAgainstRuntim
 		mock,
 	)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-portable-rooted",
 		TransitionID:    "t-portable-rooted",
 		WorkerType:      "worker-a",
@@ -598,7 +599,7 @@ func TestWorkstationExecutor_PreservesExistingUnixAbsoluteWorkingDirectory(t *te
 		mock,
 	)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-unix-absolute",
 		TransitionID:    "t-unix-absolute",
 		WorkerType:      "worker-a",
@@ -634,7 +635,7 @@ func TestWorkstationExecutor_LoadedRuntimeConfigRuntimeBaseDirOverrideDrivesRela
 	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(runtimeCfg, mock)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-loaded-runtime-base",
 		TransitionID:    "t-loaded-runtime-base",
 		WorkerType:      "worker-a",
@@ -765,8 +766,8 @@ func canonicalWorkstationRuntimeConfig(factoryDir string) staticRuntimeConfig {
 	}
 }
 
-func canonicalWorkstationDispatch() interfaces.WorkDispatch {
-	return interfaces.WorkDispatch{
+func canonicalWorkstationDispatch() work.WorkDispatch {
+	return work.WorkDispatch{
 		DispatchID:      "d-canonical",
 		TransitionID:    "t-review",
 		WorkerType:      "stale-worker",
@@ -793,7 +794,7 @@ func TestWorkstationExecutor_LogicalMove_DoesNotCallExecutor(t *testing.T) {
 		mock,
 	)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{DispatchID: "d-1", TransitionID: "t-logical", WorkstationName: "logical"})
+	result, err := we.Execute(context.Background(), work.WorkDispatch{DispatchID: "d-1", TransitionID: "t-logical", WorkstationName: "logical"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -819,7 +820,7 @@ func TestWorkstationExecutor_ExecutorError_ReturnsFailedResult(t *testing.T) {
 		mock,
 	)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-1",
 		TransitionID:    "t-1",
 		WorkerType:      "worker-a",
@@ -851,7 +852,7 @@ func TestWorkstationExecutor_ClassifierTrimsLabelAndIgnoresNonFailureOutcomeKind
 		mock,
 	)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-classifier-trim",
 		TransitionID:    "t-classifier-trim",
 		WorkerType:      "worker-a",
@@ -883,7 +884,7 @@ func TestWorkstationExecutor_ClassifierRejectsJSONStringLabel(t *testing.T) {
 		mock,
 	)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-classifier-json-string",
 		TransitionID:    "t-classifier-json-string",
 		WorkerType:      "worker-a",
@@ -926,7 +927,7 @@ func TestWorkstationExecutor_ClassifierRejectsEmptyOrNonStringOutput(t *testing.
 				mock,
 			)
 
-			result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+			result, err := we.Execute(context.Background(), work.WorkDispatch{
 				DispatchID:      "d-classifier-invalid",
 				TransitionID:    "t-classifier-invalid",
 				WorkerType:      "worker-a",
@@ -963,7 +964,7 @@ func TestWorkstationExecutor_PromptRenderFailure_ReturnsFailedResult(t *testing.
 		mock,
 	)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-prompt-failure",
 		TransitionID:    "t-prompt-failure",
 		WorkerType:      "worker-a",
@@ -1001,7 +1002,7 @@ func TestWorkstationExecutor_ResolvesWorkerAndWorkstationPerDispatch(t *testing.
 		Renderer: &DefaultPromptRenderer{},
 	}
 
-	first, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	first, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-1",
 		TransitionID:    "t-1",
 		WorkerType:      "worker-a",
@@ -1021,7 +1022,7 @@ func TestWorkstationExecutor_ResolvesWorkerAndWorkstationPerDispatch(t *testing.
 		t.Fatalf("first user message = %q", got)
 	}
 
-	second, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	second, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-2",
 		TransitionID:    "t-2",
 		WorkerType:      "worker-b",

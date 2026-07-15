@@ -7,13 +7,14 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestFactoryRelationsFromGenerated_PreservesRequestNameAndContextResolution(t *testing.T) {
 	reducer := newFactoryWorldReducer(1)
 	reducer.stateValue.WorkRequestsByID["request-1"] = interfaces.WorkRequestPayload{
 		RequestID: "request-1",
-		WorkItems: []interfaces.FactoryWorkItem{
+		WorkItems: []work.FactoryWorkItem{
 			{ID: "work-parent", DisplayName: "parent"},
 			{ID: "work-child", DisplayName: "child"},
 			{ID: "work-prerequisite", DisplayName: "prerequisite"},
@@ -66,8 +67,8 @@ func TestFactoryRelationsFromGenerated_PreservesNilInput(t *testing.T) {
 
 func TestFactoryWorldReducer_RemoveTokenCleansWorkIndexes(t *testing.T) {
 	reducer := newFactoryWorldReducer(0)
-	firstItem := interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}
-	secondItem := interfaces.FactoryWorkItem{ID: "work-2", WorkTypeID: "task", TraceID: "trace-2", PlaceID: "task:init"}
+	firstItem := work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}
+	secondItem := work.FactoryWorkItem{ID: "work-2", WorkTypeID: "task", TraceID: "trace-2", PlaceID: "task:init"}
 
 	reducer.addWorkToken("tok-work-1", "task:init", firstItem)
 	reducer.addWorkToken("tok-work-2", "task:init", secondItem)
@@ -119,7 +120,7 @@ func TestFactoryWorldReducer_RemoveTokenCleansResourceIndexes(t *testing.T) {
 
 func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t *testing.T) {
 	t0 := time.Date(2026, 5, 19, 9, 0, 0, 0, time.UTC)
-	input := interfaces.FactoryWorkItem{
+	input := work.FactoryWorkItem{
 		ID:                       "work-1",
 		WorkTypeID:               "task",
 		DisplayName:              "Draft",
@@ -237,7 +238,7 @@ func projectionReducerInitialStructureEvent(eventTime time.Time) factoryapi.Fact
 	return projectionReducerGeneratedEvent(factoryapi.FactoryEventTypeInitialStructureRequest, "initial", 0, eventTime, factoryapi.FactoryEventContext{}, payload)
 }
 
-func projectionReducerWorkInputEvent(tick int, eventTime time.Time, _ string, item interfaces.FactoryWorkItem) factoryapi.FactoryEvent {
+func projectionReducerWorkInputEvent(tick int, eventTime time.Time, _ string, item work.FactoryWorkItem) factoryapi.FactoryEvent {
 	requestID := "request/" + item.ID
 	context := factoryapi.FactoryEventContext{
 		RequestId: stringPtrForProjectionTest(requestID),
@@ -254,7 +255,7 @@ func projectionReducerWorkInputEvent(tick int, eventTime time.Time, _ string, it
 func projectionReducerWorkstationRequestEvent(tick int, eventTime time.Time, payload interfaces.WorkstationRequestPayload) factoryapi.FactoryEvent {
 	works := make([]factoryapi.Work, 0, len(payload.Inputs))
 	inputRefs := make([]factoryapi.DispatchConsumedWorkRef, 0, len(payload.Inputs))
-	inputWorkItems := make([]interfaces.FactoryWorkItem, 0, len(payload.Inputs))
+	inputWorkItems := make([]work.FactoryWorkItem, 0, len(payload.Inputs))
 	for _, input := range payload.Inputs {
 		if input.WorkItem == nil {
 			continue
@@ -265,8 +266,8 @@ func projectionReducerWorkstationRequestEvent(tick int, eventTime time.Time, pay
 	}
 	context := factoryapi.FactoryEventContext{
 		DispatchId:               stringPtrForProjectionTest(payload.DispatchID),
-		CurrentChainingTraceId:   stringPtrForProjectionTest(interfaces.CurrentChainingTraceIDFromWorkItems(inputWorkItems)),
-		PreviousChainingTraceIds: stringSlicePtrForProjectionTest(interfaces.PreviousChainingTraceIDsFromWorkItems(inputWorkItems)),
+		CurrentChainingTraceId:   stringPtrForProjectionTest(work.CurrentChainingTraceIDFromWorkItems(inputWorkItems)),
+		PreviousChainingTraceIds: stringSlicePtrForProjectionTest(work.PreviousChainingTraceIDsFromWorkItems(inputWorkItems)),
 		TraceIds:                 stringSlicePtrForProjectionTest(projectionReducerTraceIDs(works)),
 		WorkIds:                  stringSlicePtrForProjectionTest(projectionReducerWorkIDs(works)),
 	}
@@ -335,7 +336,7 @@ func projectionReducerGeneratedEvent(eventType factoryapi.FactoryEventType, id s
 	return event
 }
 
-func projectionReducerGeneratedWork(item interfaces.FactoryWorkItem, requestID string) factoryapi.Work {
+func projectionReducerGeneratedWork(item work.FactoryWorkItem, requestID string) factoryapi.Work {
 	return factoryapi.Work{
 		Name:                     item.DisplayName,
 		RequestId:                stringPtrForProjectionTest(requestID),
@@ -449,9 +450,9 @@ func TestGeneratedWorkContentToDomain_PreservesNilEmptyAndOrderedParts(t *testin
 	}
 
 	got := generatedWorkContentToDomain(&content)
-	want := []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "outline"},
-		{Type: interfaces.WorkContentPartTypeImage, URL: "file://diagram.png"},
+	want := []work.WorkContentPart{
+		{Type: work.WorkContentPartTypeText, Text: "outline"},
+		{Type: work.WorkContentPartTypeImage, URL: "file://diagram.png"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("content part count = %d, want %d (%#v)", len(got), len(want), got)
@@ -529,7 +530,7 @@ func workImageContentPartForProjectionTest(t *testing.T, file string) factoryapi
 	return part
 }
 
-func projectionWorkContentPartEqual(left, right interfaces.WorkContentPart) bool {
+func projectionWorkContentPartEqual(left, right work.WorkContentPart) bool {
 	if left.Type != right.Type ||
 		left.Text != right.Text ||
 		left.URL != right.URL ||
@@ -547,13 +548,13 @@ func projectionWorkContentPartEqual(left, right interfaces.WorkContentPart) bool
 }
 
 func TestWorkItemRefsForProjectionOwners_FilterCustomerWorkAndPreserveLineage(t *testing.T) {
-	itemsByID := map[string]interfaces.FactoryWorkItem{
+	itemsByID := map[string]work.FactoryWorkItem{
 		"work-2": {ID: "work-2", WorkTypeID: "task", DisplayName: "Second", CurrentChainingTraceID: "chain-2", PreviousChainingTraceIDs: []string{"chain-0", "chain-1"}, TraceID: "trace-2"},
 		"work-1": {ID: "work-1", WorkTypeID: "task", DisplayName: "First", CurrentChainingTraceID: "chain-1", PreviousChainingTraceIDs: []string{"chain-0"}, TraceID: "trace-1"},
 		"time-1": {ID: "time-1", WorkTypeID: interfaces.SystemTimeWorkTypeID, DisplayName: "tick"},
 	}
 
-	refsByID := workItemRefsForIDs(interfaces.WorkPayloadLineageProjection{}, []string{"work-2", "time-1", "work-1", "work-2"}, itemsByID)
+	refsByID := workItemRefsForIDs(work.WorkPayloadLineageProjection{}, []string{"work-2", "time-1", "work-1", "work-2"}, itemsByID)
 	if len(refsByID) != 2 || refsByID[0].WorkID != "work-1" || refsByID[1].WorkID != "work-2" {
 		t.Fatalf("workItemRefsForIDs = %#v, want sorted customer refs", refsByID)
 	}
@@ -564,7 +565,7 @@ func TestWorkItemRefsForProjectionOwners_FilterCustomerWorkAndPreserveLineage(t 
 		t.Fatalf("workItemRefsForIDs unexpected implicit depth = %#v, want zero when source depth absent", refsByID)
 	}
 
-	refsForItems := workItemRefsForItems(interfaces.WorkPayloadLineageProjection{}, []interfaces.FactoryWorkItem{
+	refsForItems := workItemRefsForItems(work.WorkPayloadLineageProjection{}, []work.FactoryWorkItem{
 		itemsByID["work-2"],
 		itemsByID["time-1"],
 		itemsByID["work-2"],
@@ -574,11 +575,11 @@ func TestWorkItemRefsForProjectionOwners_FilterCustomerWorkAndPreserveLineage(t 
 		t.Fatalf("workItemRefsForItems = %#v, want first-occurrence customer refs", refsForItems)
 	}
 
-	refsForInputs := workItemRefsForInputs(interfaces.WorkPayloadLineageProjection{}, []interfaces.WorkstationInput{
-		{WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "First", CurrentChainingTraceID: "chain-1", PreviousChainingTraceIDs: []string{"chain-0"}}},
-		{WorkItem: &interfaces.FactoryWorkItem{ID: "time-1", WorkTypeID: interfaces.SystemTimeWorkTypeID, DisplayName: "tick"}},
-		{WorkItem: &interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "First", CurrentChainingTraceID: "chain-1", PreviousChainingTraceIDs: []string{"chain-0"}}},
-		{WorkItem: &interfaces.FactoryWorkItem{ID: "work-2", WorkTypeID: "task", DisplayName: "Second", CurrentChainingTraceID: "chain-2", PreviousChainingTraceIDs: []string{"chain-0", "chain-1"}}},
+	refsForInputs := workItemRefsForInputs(work.WorkPayloadLineageProjection{}, []interfaces.WorkstationInput{
+		{WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "First", CurrentChainingTraceID: "chain-1", PreviousChainingTraceIDs: []string{"chain-0"}}},
+		{WorkItem: &work.FactoryWorkItem{ID: "time-1", WorkTypeID: interfaces.SystemTimeWorkTypeID, DisplayName: "tick"}},
+		{WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "First", CurrentChainingTraceID: "chain-1", PreviousChainingTraceIDs: []string{"chain-0"}}},
+		{WorkItem: &work.FactoryWorkItem{ID: "work-2", WorkTypeID: "task", DisplayName: "Second", CurrentChainingTraceID: "chain-2", PreviousChainingTraceIDs: []string{"chain-0", "chain-1"}}},
 	})
 	if len(refsForInputs) != 2 || refsForInputs[0].WorkID != "work-1" || refsForInputs[1].WorkID != "work-2" {
 		t.Fatalf("workItemRefsForInputs = %#v, want first-occurrence customer refs", refsForInputs)

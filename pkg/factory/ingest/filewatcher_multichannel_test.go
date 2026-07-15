@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 )
 
@@ -118,7 +118,7 @@ func TestFileWatcher_MultiChannel_BatchDefaultDir(t *testing.T) {
 	if len(requests) != 1 {
 		t.Fatalf("expected 1 work request, got %d", len(requests))
 	}
-	if requests[0].Type != interfaces.WorkRequestTypeFactoryRequestBatch {
+	if requests[0].Type != work.WorkRequestTypeFactoryRequestBatch {
 		t.Fatalf("request type = %q, want FACTORY_REQUEST_BATCH", requests[0].Type)
 	}
 	if len(requests[0].Works) != 2 {
@@ -130,8 +130,8 @@ func TestFileWatcher_MultiChannel_BatchDefaultDir(t *testing.T) {
 	if len(requests[0].Relations) != 1 {
 		t.Fatalf("expected 1 batch relation, got %d", len(requests[0].Relations))
 	}
-	if requests[0].Relations[0].Type != interfaces.WorkRelationParentChild {
-		t.Fatalf("request relation type = %q, want %q", requests[0].Relations[0].Type, interfaces.WorkRelationParentChild)
+	if requests[0].Relations[0].Type != work.WorkRelationParentChild {
+		t.Fatalf("request relation type = %q, want %q", requests[0].Relations[0].Type, work.WorkRelationParentChild)
 	}
 	if len(submitted) != 2 {
 		t.Fatalf("expected 2 submitted works, got %d", len(submitted))
@@ -145,8 +145,8 @@ func TestFileWatcher_MultiChannel_BatchDefaultDir(t *testing.T) {
 	if len(submitted[1].Relations) != 1 {
 		t.Fatalf("expected child relation on second work, got %d", len(submitted[1].Relations))
 	}
-	if submitted[1].Relations[0].Type != interfaces.RelationParentChild {
-		t.Fatalf("normalized relation type = %q, want %q", submitted[1].Relations[0].Type, interfaces.RelationParentChild)
+	if submitted[1].Relations[0].Type != work.RelationParentChild {
+		t.Fatalf("normalized relation type = %q, want %q", submitted[1].Relations[0].Type, work.RelationParentChild)
 	}
 }
 

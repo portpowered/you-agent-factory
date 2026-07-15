@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
+	"github.com/portpowered/infinite-you/pkg/work"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
@@ -747,7 +747,7 @@ func projectPrimaryJSON(t *testing.T, sessionID string, value workflowresult.Typ
 	if projection.HasIssues() {
 		t.Fatalf("primary projection validation = %#v", projection.Issues)
 	}
-	if len(parts) != 1 || parts[0].Type != interfaces.WorkContentPartTypeJSON {
+	if len(parts) != 1 || parts[0].Type != work.WorkContentPartTypeJSON {
 		t.Fatalf("parts = %#v", parts)
 	}
 	var projected map[string]any

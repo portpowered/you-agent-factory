@@ -5,13 +5,14 @@ import (
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 
 // ProjectPrimaryResult maps one validated workflow result to WorkContent parts.
-func ProjectPrimaryResult(sessionID string, value TypedValue, artifacts []interfaces.FactorySessionArtifactState) ([]interfaces.WorkContentPart, Result) {
+func ProjectPrimaryResult(sessionID string, value TypedValue, artifacts []interfaces.FactorySessionArtifactState) ([]work.WorkContentPart, Result) {
 	validation := ValidateTypedValue(value)
 	if validation.HasIssues() {
 		return nil, validation
@@ -148,36 +149,36 @@ func projectDecodedValue(
 	value any,
 	artifacts []interfaces.FactorySessionArtifactState,
 	path string,
-) ([]interfaces.WorkContentPart, []Issue) {
+) ([]work.WorkContentPart, []Issue) {
 	switch typed := value.(type) {
 	case nil:
-		return []interfaces.WorkContentPart{jsonPart(nil, path)}, nil
+		return []work.WorkContentPart{jsonPart(nil, path)}, nil
 	case bool, float64, json.Number:
-		return []interfaces.WorkContentPart{jsonPart(typed, path)}, nil
+		return []work.WorkContentPart{jsonPart(typed, path)}, nil
 	case string:
 		if issues := validateEmbeddedArtifactURI(sessionID, typed, path); len(issues) > 0 {
 			return nil, issues
 		}
 		if artifact, ok := artifactForEmbeddedString(sessionID, typed, artifacts); ok {
-			return []interfaces.WorkContentPart{artifactBackedPart(sessionID, artifact, typed)}, nil
+			return []work.WorkContentPart{artifactBackedPart(sessionID, artifact, typed)}, nil
 		}
 		if len(typed) > DefaultMaxEmbeddedBytes {
 			if artifact := syntheticLargeTextArtifact(typed, path); artifact.ID != "" {
-				return []interfaces.WorkContentPart{artifactBackedPart(sessionID, artifact, typed)}, nil
+				return []work.WorkContentPart{artifactBackedPart(sessionID, artifact, typed)}, nil
 			}
 		}
-		return []interfaces.WorkContentPart{jsonPart(typed, path)}, nil
+		return []work.WorkContentPart{jsonPart(typed, path)}, nil
 	case []any:
-		return []interfaces.WorkContentPart{jsonPart(typed, path)}, nil
+		return []work.WorkContentPart{jsonPart(typed, path)}, nil
 	case map[string]any:
 		if artifactID, ok := typed["artifactId"].(string); ok {
 			if artifact, found := findArtifact(artifacts, artifactID); found {
-				return []interfaces.WorkContentPart{artifactBackedPart(sessionID, artifact, "")}, nil
+				return []work.WorkContentPart{artifactBackedPart(sessionID, artifact, "")}, nil
 			}
 		}
-		return []interfaces.WorkContentPart{jsonPart(typed, path)}, nil
+		return []work.WorkContentPart{jsonPart(typed, path)}, nil
 	default:
-		return []interfaces.WorkContentPart{jsonPart(typed, path)}, nil
+		return []work.WorkContentPart{jsonPart(typed, path)}, nil
 	}
 }
 
@@ -198,13 +199,13 @@ func validateEmbeddedArtifactURI(sessionID, value, path string) []Issue {
 	return issues
 }
 
-func jsonPart(value any, path string) interfaces.WorkContentPart {
+func jsonPart(value any, path string) work.WorkContentPart {
 	raw, err := json.Marshal(value)
 	if err != nil {
 		raw = []byte("null")
 	}
-	part := interfaces.WorkContentPart{
-		Type: interfaces.WorkContentPartTypeJSON,
+	part := work.WorkContentPart{
+		Type: work.WorkContentPartTypeJSON,
 		JSON: raw,
 	}
 	if path != "" && path != "$" {
@@ -213,30 +214,30 @@ func jsonPart(value any, path string) interfaces.WorkContentPart {
 	return part
 }
 
-func artifactBackedPart(sessionID string, artifact interfaces.FactorySessionArtifactState, text string) interfaces.WorkContentPart {
+func artifactBackedPart(sessionID string, artifact interfaces.FactorySessionArtifactState, text string) work.WorkContentPart {
 	artifactID := strings.TrimSpace(artifact.ID)
 	uri := FormatArtifactURI(sessionID, artifactID)
 	kind := strings.ToUpper(strings.TrimSpace(artifact.Kind))
 	switch kind {
 	case "IMAGE":
-		return interfaces.WorkContentPart{
-			Type:        interfaces.WorkContentPartTypeImage,
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeImage,
 			URL:         uri,
 			ArtifactID:  artifactID,
 			Label:       artifact.Label,
 			ContentType: artifactContentType(artifact),
 		}
 	case "AUDIO":
-		return interfaces.WorkContentPart{
-			Type:        interfaces.WorkContentPartTypeAudio,
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeAudio,
 			URL:         uri,
 			ArtifactID:  artifactID,
 			Label:       artifact.Label,
 			ContentType: artifactContentType(artifact),
 		}
 	case "BINARY", "PATCH", "DATASET":
-		return interfaces.WorkContentPart{
-			Type:        interfaces.WorkContentPartTypeBinary,
+		return work.WorkContentPart{
+			Type:        work.WorkContentPartTypeBinary,
 			URL:         uri,
 			ArtifactID:  artifactID,
 			Label:       artifact.Label,
@@ -244,30 +245,30 @@ func artifactBackedPart(sessionID string, artifact interfaces.FactorySessionArti
 		}
 	case "LOG", "FINDING", "CHECKPOINT", "CHILD_RESULT", "WORKTREE_SUMMARY":
 		if strings.TrimSpace(text) != "" && len(text) <= DefaultMaxEmbeddedBytes {
-			return interfaces.WorkContentPart{
-				Type:       interfaces.WorkContentPartTypeText,
+			return work.WorkContentPart{
+				Type:       work.WorkContentPartTypeText,
 				Text:       text,
 				ArtifactID: artifactID,
 				Label:      artifact.Label,
 			}
 		}
-		return interfaces.WorkContentPart{
-			Type:       interfaces.WorkContentPartTypeText,
+		return work.WorkContentPart{
+			Type:       work.WorkContentPartTypeText,
 			Text:       uri,
 			ArtifactID: artifactID,
 			Label:      artifact.Label,
 		}
 	default:
 		if strings.TrimSpace(text) != "" && len(text) <= DefaultMaxEmbeddedBytes {
-			return interfaces.WorkContentPart{
-				Type:       interfaces.WorkContentPartTypeText,
+			return work.WorkContentPart{
+				Type:       work.WorkContentPartTypeText,
 				Text:       text,
 				ArtifactID: artifactID,
 				Label:      firstNonEmpty(artifact.Label, "result"),
 			}
 		}
-		return interfaces.WorkContentPart{
-			Type:       interfaces.WorkContentPartTypeText,
+		return work.WorkContentPart{
+			Type:       work.WorkContentPartTypeText,
 			Text:       uri,
 			ArtifactID: artifactID,
 			Label:      firstNonEmpty(artifact.Label, "result"),

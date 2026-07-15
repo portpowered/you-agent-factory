@@ -21,6 +21,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
@@ -981,7 +982,7 @@ func TestFactorySessionsAPI_InvokeFactorySession(t *testing.T) {
 				RequestID:     "invoke-1",
 				TraceID:       "trace-invoke-1",
 				Status:        factoryapi.InvocationTerminalStatusCompleted,
-				PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "primary output"}},
+				PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "primary output"}},
 			},
 		},
 		{
@@ -991,8 +992,8 @@ func TestFactorySessionsAPI_InvokeFactorySession(t *testing.T) {
 				RequestID: "request-goal-parity-success",
 				TraceID:   "trace-goal-parity-success",
 				Status:    factoryapi.InvocationTerminalStatusCompleted,
-				PrimaryResult: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
+				PrimaryResult: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText,
 					Text: "goal parity completed",
 				}},
 			},
@@ -1022,8 +1023,8 @@ func TestFactorySessionsAPI_InvokeFactorySession_DecodesStructuredArgs(t *testin
 			RequestID: "invoke-structured-1",
 			TraceID:   "trace-structured-1",
 			Status:    factoryapi.InvocationTerminalStatusCompleted,
-			PrimaryResult: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			PrimaryResult: []work.WorkContentPart{{
+				Type: work.WorkContentPartTypeText,
 				Text: "ok",
 			}},
 		},

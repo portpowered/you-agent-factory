@@ -10,6 +10,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
@@ -190,9 +191,9 @@ func assertPortableExpandedExecution(t *testing.T, targetDir string, loaded *fac
 	}
 }
 
-func portableWorkDispatch() interfaces.WorkDispatch {
+func portableWorkDispatch() work.WorkDispatch {
 	now := time.Now()
-	return interfaces.WorkDispatch{
+	return work.WorkDispatch{
 		DispatchID:      "dispatch-1",
 		TransitionID:    "transition-1",
 		WorkerType:      "executor",

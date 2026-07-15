@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/work/content"
 )
 
@@ -47,8 +47,8 @@ func TestFilesystemPathToContentURL(t *testing.T) {
 func TestNormalizeFileBackedContentPart_LegacyFileOnly(t *testing.T) {
 	t.Parallel()
 
-	part, err := content.NormalizeFileBackedContentPart(interfaces.WorkContentPart{
-		Type: interfaces.WorkContentPartTypeImage,
+	part, err := content.NormalizeFileBackedContentPart(work.WorkContentPart{
+		Type: work.WorkContentPartTypeImage,
 		File: "fixtures/ui.png",
 	})
 	if err != nil {
@@ -65,8 +65,8 @@ func TestNormalizeFileBackedContentPart_LegacyFileOnly(t *testing.T) {
 func TestNormalizeFileBackedContentPart_URLAndFileConflict(t *testing.T) {
 	t.Parallel()
 
-	_, err := content.NormalizeFileBackedContentPart(interfaces.WorkContentPart{
-		Type: interfaces.WorkContentPartTypeAudio,
+	_, err := content.NormalizeFileBackedContentPart(work.WorkContentPart{
+		Type: work.WorkContentPartTypeAudio,
 		URL:  "file://voice.wav",
 		File: "voice.wav",
 	})

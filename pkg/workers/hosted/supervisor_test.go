@@ -16,6 +16,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -56,7 +57,7 @@ func TestStartLinearPoller_SubmitsIssuesThroughSubmitter(t *testing.T) {
 
 	var submitCalls atomic.Int32
 	var submittedWorkID string
-	submitter := Submitter(func(_ context.Context, request interfaces.WorkRequest) error {
+	submitter := Submitter(func(_ context.Context, request work.WorkRequest) error {
 		submitCalls.Add(1)
 		if len(request.Works) > 0 {
 			submittedWorkID = request.Works[0].WorkID
@@ -171,7 +172,7 @@ func TestStartLinearPoller_StopsAndLogsLifecycle(t *testing.T) {
 
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	var sidecars sync.WaitGroup
-	StartLinearPoller(sidecarCtx, &sidecars, pollerCfg, runtimeCfg, poller, worker, func(context.Context, interfaces.WorkRequest) error {
+	StartLinearPoller(sidecarCtx, &sidecars, pollerCfg, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
 		return nil
 	})
 
@@ -221,7 +222,7 @@ func TestStartLinearPoller_RestartsOnMissingAuthConfig(t *testing.T) {
 	sidecarCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var sidecars sync.WaitGroup
-	StartLinearPoller(sidecarCtx, &sidecars, pollerCfg, runtimeCfg, poller, worker, func(context.Context, interfaces.WorkRequest) error {
+	StartLinearPoller(sidecarCtx, &sidecars, pollerCfg, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
 		return nil
 	})
 
@@ -267,7 +268,7 @@ func TestStartLinearPoller_KeepsPollingOverTime(t *testing.T) {
 	var submitCalls atomic.Int32
 	var submittedWorkIDs []string
 	var submitMu sync.Mutex
-	submitter := Submitter(func(_ context.Context, request interfaces.WorkRequest) error {
+	submitter := Submitter(func(_ context.Context, request work.WorkRequest) error {
 		submitMu.Lock()
 		defer submitMu.Unlock()
 		submitCalls.Add(1)
@@ -338,7 +339,7 @@ func TestStartLinearPoller_RestartsOnProviderHTTPFailure(t *testing.T) {
 	writeHostedLinearSecretForTest(t, factoryDir)
 
 	var submitCalls atomic.Int32
-	submitter := Submitter(func(_ context.Context, request interfaces.WorkRequest) error {
+	submitter := Submitter(func(_ context.Context, request work.WorkRequest) error {
 		submitCalls.Add(1)
 		return nil
 	})

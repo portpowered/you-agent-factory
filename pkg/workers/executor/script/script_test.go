@@ -7,12 +7,13 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
-func testScriptRequest(dispatch interfaces.WorkDispatch, opts ...func(*interfaces.WorkstationExecutionRequest)) interfaces.WorkstationExecutionRequest {
+func testScriptRequest(dispatch work.WorkDispatch, opts ...func(*interfaces.WorkstationExecutionRequest)) interfaces.WorkstationExecutionRequest {
 	req := interfaces.WorkstationExecutionRequest{
-		Dispatch:    interfaces.CloneWorkDispatch(dispatch),
+		Dispatch:    work.CloneWorkDispatch(dispatch),
 		WorkerType:  dispatch.WorkerType,
 		ProjectID:   dispatch.ProjectID,
 		InputTokens: append([]any(nil), dispatch.InputTokens...),
@@ -41,7 +42,7 @@ func TestScriptExecutor_SuccessfulEcho_PopulatesOutput(t *testing.T) {
 	cmd, args := echoCommand("hello world")
 	executor := &executor.ScriptExecutor{Command: cmd, Args: args}
 
-	result, err := executor.Execute(context.Background(), testScriptRequest(interfaces.WorkDispatch{DispatchID: "d-1", TransitionID: "t-1"}))
+	result, err := executor.Execute(context.Background(), testScriptRequest(work.WorkDispatch{DispatchID: "d-1", TransitionID: "t-1"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -58,7 +59,7 @@ func TestScriptExecutor_FailingCommand_ReturnsFailedResult(t *testing.T) {
 	cmd, args := failCommand("something went wrong")
 	executor := &executor.ScriptExecutor{Command: cmd, Args: args}
 
-	result, err := executor.Execute(context.Background(), testScriptRequest(interfaces.WorkDispatch{DispatchID: "d-1", TransitionID: "t-2"}))
+	result, err := executor.Execute(context.Background(), testScriptRequest(work.WorkDispatch{DispatchID: "d-1", TransitionID: "t-2"}))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

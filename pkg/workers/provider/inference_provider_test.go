@@ -15,6 +15,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
 
@@ -345,8 +346,7 @@ func TestScriptWrapProvider_Infer_PropagatesExecutionMetadataToProviderCommand(t
 		result: CommandResult{Stdout: []byte("provider output")},
 	}
 	provider := NewScriptWrapProvider(WithProviderCommandRunner(fakeExec))
-
-	want := interfaces.ExecutionMetadata{
+	want := work.ExecutionMetadata{
 		DispatchCreatedTick: 3,
 		CurrentTick:         4,
 		TraceID:             "trace-1",
@@ -357,7 +357,7 @@ func TestScriptWrapProvider_Infer_PropagatesExecutionMetadataToProviderCommand(t
 		ModelProvider: string(interfaces.ModelProviderClaude),
 		Model:         "claude-sonnet-4-5-20250514",
 		UserMessage:   "fix it",
-		Dispatch:      interfaces.WorkDispatch{Execution: want},
+		Dispatch:      work.WorkDispatch{Execution: want},
 	})
 	if err != nil {
 		t.Fatalf("Infer returned error: %v", err)
@@ -380,9 +380,9 @@ func TestScriptWrapProvider_Infer_LogsSafePreparedInvocationBeforeExecution(t *t
 	req := interfaces.ProviderInferenceRequest{
 		ModelProvider: string(interfaces.ModelProviderCodex),
 		UserMessage:   prompt,
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID: "dispatch-1",
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				RequestID: "request-1", TraceID: "trace-1", WorkIDs: []string{"work-1", "work-2"},
 			},
 		},
@@ -622,9 +622,9 @@ func TestScriptWrapProvider_Infer_ClaudeRejectsImageContentBeforeRunner(t *testi
 		InputTokens: InputTokens(interfaces.Token{
 			ID: "token-1",
 			Color: interfaces.TokenColor{
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeText, Text: "caption"},
-					{Type: interfaces.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeText, Text: "caption"},
+					{Type: work.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
 				},
 			},
 		}),
@@ -825,7 +825,7 @@ func TestScriptWrapProvider_Infer_ConsumesCanonicalWorkDispatchInputTokens(t *te
 	}
 
 	_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			WorkerType:      "worker-a",
 			WorkstationName: "review",
 			InputTokens:     InputTokens(inputToken),

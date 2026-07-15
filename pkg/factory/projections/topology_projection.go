@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // ProjectInitialStructure projects the static net topology into the canonical
@@ -596,23 +597,23 @@ func factoryPlaces(places map[string]*petri.Place, net *state.Net) []interfaces.
 	return out
 }
 
-func topologyRelations(transitions map[string]*petri.Transition) []interfaces.FactoryRelation {
+func topologyRelations(transitions map[string]*petri.Transition) []work.FactoryRelation {
 	ids := sortedKeys(transitions)
-	out := make([]interfaces.FactoryRelation, 0, len(ids))
+	out := make([]work.FactoryRelation, 0, len(ids))
 	for _, id := range ids {
 		transition := transitions[id]
 		if transition == nil {
 			continue
 		}
 		for _, arc := range transition.InputArcs {
-			out = append(out, interfaces.FactoryRelation{
+			out = append(out, work.FactoryRelation{
 				Type:          "INPUT",
 				TargetWorkID:  arc.PlaceID,
 				RequiredState: arc.Name,
 			})
 		}
 		for _, arc := range transition.OutputArcs {
-			out = append(out, interfaces.FactoryRelation{
+			out = append(out, work.FactoryRelation{
 				Type:         "OUTPUT",
 				SourceWorkID: transition.ID,
 				TargetWorkID: arc.PlaceID,

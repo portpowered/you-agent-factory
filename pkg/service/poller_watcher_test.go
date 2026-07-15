@@ -22,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
@@ -671,7 +672,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_WaitsForScriptPollerSubmitBefore
 	submitStarted := make(chan struct{})
 	releaseSubmit := make(chan struct{})
 	oldFactory := &aggregateSnapshotFactory{
-		submitFunc: func(context.Context, interfaces.WorkRequest) error {
+		submitFunc: func(context.Context, work.WorkRequest) error {
 			close(submitStarted)
 			<-releaseSubmit
 			return nil
@@ -1194,7 +1195,7 @@ func waitForObservedLogMessage(t *testing.T, logs *observer.ObservedLogs, messag
 func TestFactoryService_RequiredInputCronKeepsTimeWorkPendingWhenInputMissing(t *testing.T) {
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 16)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 16)
 	svc, runCtx, errCh, cancelRun := buildCronServiceForIngressTest(
 		t,
 		fakeClock,
@@ -1256,13 +1257,13 @@ func TestFactoryService_BatchModeDoesNotStartCronWatchers(t *testing.T) {
 		t.Fatalf("create inputs dir: %v", err)
 	}
 
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 1)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 1)
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:               dir,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
 		ExtraOptions: []factory.FactoryOption{
-			factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
+			factory.WithSubmissionRecorder(func(record work.FactorySubmissionRecord) {
 				observedSubmissions <- record
 			}),
 		},
@@ -1488,8 +1489,8 @@ func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCron
 			validCron.Name: &validCron,
 		},
 	)
-	observedRequests := make(chan interfaces.WorkRequest, 8)
-	replacementFactory.submitFunc = func(_ context.Context, request interfaces.WorkRequest) error {
+	observedRequests := make(chan work.WorkRequest, 8)
+	replacementFactory.submitFunc = func(_ context.Context, request work.WorkRequest) error {
 		select {
 		case observedRequests <- request:
 		default:
@@ -1551,7 +1552,7 @@ func TestFactoryService_ServiceModeCronSchedulerUsesFakeClockAndStopsOnCancel(t 
 		t.Fatalf("create inputs dir: %v", err)
 	}
 
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 8)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 8)
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:               dir,
 		RuntimeMode:       interfaces.RuntimeModeService,
@@ -1610,7 +1611,7 @@ func TestFactoryService_ServiceModeCronTriggerAtStartSubmitsOnceAndKeepsSchedule
 		t.Fatalf("create inputs dir: %v", err)
 	}
 
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 8)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 8)
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:               dir,
 		RuntimeMode:       interfaces.RuntimeModeService,
@@ -1693,7 +1694,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_BindsCronTriggerAtStartToReplac
 func TestFactoryService_CronTickSubmitsThroughEngineIngressAndAppearsInSnapshot(t *testing.T) {
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 16)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 16)
 	svc, runCtx, errCh, cancelRun := buildCronServiceForIngressTest(t, fakeClock, cronFactoryConfig("* * * * *"), observedSubmissions)
 	defer cancelRun()
 
@@ -1734,7 +1735,7 @@ func buildCronServiceForIngressTest(
 	t *testing.T,
 	fakeClock *clockwork.FakeClock,
 	cfg map[string]any,
-	observedSubmissions chan interfaces.FactorySubmissionRecord,
+	observedSubmissions chan work.FactorySubmissionRecord,
 ) (*FactoryService, context.Context, <-chan error, context.CancelFunc) {
 	t.Helper()
 
@@ -1781,7 +1782,7 @@ func buildCronServiceForIngressTest(
 	return svc, runCtx, errCh, cancelRun
 }
 
-func assertCronSubmissionRecord(t *testing.T, record interfaces.FactorySubmissionRecord, workstation string) {
+func assertCronSubmissionRecord(t *testing.T, record work.FactorySubmissionRecord, workstation string) {
 	t.Helper()
 	if record.Source != "external-submit" {
 		t.Fatalf("cron submission source = %q, want external-submit", record.Source)
@@ -1851,7 +1852,7 @@ func waitForFakeClockWaiters(t *testing.T, fakeClock *clockwork.FakeClock, waite
 	}
 }
 
-func waitForCronSubmission(t *testing.T, submissions <-chan interfaces.FactorySubmissionRecord, timeout time.Duration) interfaces.FactorySubmissionRecord {
+func waitForCronSubmission(t *testing.T, submissions <-chan work.FactorySubmissionRecord, timeout time.Duration) work.FactorySubmissionRecord {
 	t.Helper()
 	select {
 	case record := <-submissions:
@@ -1862,14 +1863,14 @@ func waitForCronSubmission(t *testing.T, submissions <-chan interfaces.FactorySu
 	case <-time.After(timeout):
 		t.Fatal("timed out waiting for cron submission")
 	}
-	return interfaces.FactorySubmissionRecord{}
+	return work.FactorySubmissionRecord{}
 }
 
-func assertCronSubmissionNominalAt(t *testing.T, record interfaces.FactorySubmissionRecord, want time.Time) {
+func assertCronSubmissionNominalAt(t *testing.T, record work.FactorySubmissionRecord, want time.Time) {
 	assertCronSubmissionNominalAtForWorkstation(t, record, want, "poll-for-work")
 }
 
-func assertCronSubmissionNominalAtForWorkstation(t *testing.T, record interfaces.FactorySubmissionRecord, want time.Time, workstation string) {
+func assertCronSubmissionNominalAtForWorkstation(t *testing.T, record work.FactorySubmissionRecord, want time.Time, workstation string) {
 	t.Helper()
 	got := record.Request.Tags[interfaces.TimeWorkTagKeyNominalAt]
 	if got != want.Format(time.RFC3339Nano) {
@@ -1880,7 +1881,7 @@ func assertCronSubmissionNominalAtForWorkstation(t *testing.T, record interfaces
 	}
 }
 
-func assertNoCronSubmissionQueued(t *testing.T, submissions <-chan interfaces.FactorySubmissionRecord) {
+func assertNoCronSubmissionQueued(t *testing.T, submissions <-chan work.FactorySubmissionRecord) {
 	t.Helper()
 	select {
 	case record := <-submissions:
@@ -1889,7 +1890,7 @@ func assertNoCronSubmissionQueued(t *testing.T, submissions <-chan interfaces.Fa
 	}
 }
 
-func waitForCronWorkRequest(t *testing.T, requests <-chan interfaces.WorkRequest, timeout time.Duration) interfaces.WorkRequest {
+func waitForCronWorkRequest(t *testing.T, requests <-chan work.WorkRequest, timeout time.Duration) work.WorkRequest {
 	t.Helper()
 	select {
 	case request := <-requests:
@@ -1900,17 +1901,17 @@ func waitForCronWorkRequest(t *testing.T, requests <-chan interfaces.WorkRequest
 	case <-time.After(timeout):
 		t.Fatal("timed out waiting for cron work request")
 	}
-	return interfaces.WorkRequest{}
+	return work.WorkRequest{}
 }
 
-func assertCronWorkRequestNominalAt(t *testing.T, request interfaces.WorkRequest, want time.Time) {
+func assertCronWorkRequestNominalAt(t *testing.T, request work.WorkRequest, want time.Time) {
 	t.Helper()
 	if got := request.Works[0].Tags[interfaces.TimeWorkTagKeyNominalAt]; got != want.Format(time.RFC3339Nano) {
 		t.Fatalf("cron nominal_at tag = %q, want %q", got, want.Format(time.RFC3339Nano))
 	}
 }
 
-func assertNoCronWorkRequestQueued(t *testing.T, requests <-chan interfaces.WorkRequest) {
+func assertNoCronWorkRequestQueued(t *testing.T, requests <-chan work.WorkRequest) {
 	t.Helper()
 	select {
 	case request := <-requests:
@@ -1969,8 +1970,8 @@ func consumedTokenWithWorkID(tokens []interfaces.Token, workID string) *interfac
 	return nil
 }
 
-func nonBlockingSubmissionRecorder(records chan<- interfaces.FactorySubmissionRecord) func(interfaces.FactorySubmissionRecord) {
-	return func(record interfaces.FactorySubmissionRecord) {
+func nonBlockingSubmissionRecorder(records chan<- work.FactorySubmissionRecord) func(work.FactorySubmissionRecord) {
+	return func(record work.FactorySubmissionRecord) {
 		select {
 		case records <- record:
 		default:
@@ -2000,7 +2001,7 @@ func waitForTokenInPlaceByParent(t *testing.T, svc *FactoryService, placeID stri
 func TestFactoryService_CronTickTargetsInternalTimePlaceDespiteConfiguredOutputState(t *testing.T) {
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 16)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 16)
 	svc, runCtx, errCh, cancelRun := buildCronServiceForIngressTest(t, fakeClock, cronFactoryConfigWithOutputState("* * * * *", "ready"), observedSubmissions)
 	defer cancelRun()
 
@@ -2025,14 +2026,14 @@ func TestFactoryService_CronTickTargetsInternalTimePlaceDespiteConfiguredOutputS
 
 type rejectingWorkerExecutor struct{}
 
-func (rejectingWorkerExecutor) Execute(context.Context, interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (rejectingWorkerExecutor) Execute(context.Context, work.WorkDispatch) (interfaces.WorkResult, error) {
 	return interfaces.WorkResult{}, errors.New("worker executor must not be invoked for workerless cron logical move")
 }
 
 func TestFactoryService_LogicalMoveCronTickConsumesTimeWorkWithoutWorkerExecutor(t *testing.T) {
 	start := time.Date(2026, time.June, 3, 12, 0, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 16)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 16)
 
 	dir := t.TempDir()
 	writeFactoryJSON(t, dir, logicalMoveCronFactoryConfig("* * * * *"))

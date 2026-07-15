@@ -10,6 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -27,9 +28,9 @@ func TestLegacyUnaryRetirementSmoke_ReplaySubmitsCanonicalBatchWorkRequests(t *t
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 		testutil.WithRecordPath(artifactPath),
 	)
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-retired-unary-replay",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		Works: []interfaces.Work{{
 			Name:       "replayed",
 			WorkID:     "work-retired-unary-replay",

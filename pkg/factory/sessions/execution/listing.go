@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // IsPersistedListCandidate reports whether one durable session belongs in the
@@ -687,7 +687,7 @@ func canonicalPrimaryResultPayload(primaryResult json.RawMessage) any {
 	if len(primaryResult) == 0 {
 		return nil
 	}
-	var payload []interfaces.WorkContentPart
+	var payload []work.WorkContentPart
 	if err := json.Unmarshal(primaryResult, &payload); err != nil || payload == nil {
 		return nil
 	}

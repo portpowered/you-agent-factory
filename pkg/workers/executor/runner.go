@@ -8,6 +8,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // WorkerRunner is an active goroutine that processes work for a specific worker type.
@@ -17,7 +18,7 @@ type WorkerRunner struct {
 	workerType string
 	executor   WorkerExecutor
 	logger     logging.Logger
-	dispatchCh chan interfaces.WorkDispatch
+	dispatchCh chan work.WorkDispatch
 	resultCh   chan<- interfaces.WorkResult
 	stopOnce   sync.Once
 }
@@ -29,7 +30,7 @@ func NewWorkerRunner(workerType string, executor WorkerExecutor, resultCh chan<-
 		workerType: workerType,
 		executor:   executor,
 		logger:     logging.EnsureLogger(logger),
-		dispatchCh: make(chan interfaces.WorkDispatch, 16),
+		dispatchCh: make(chan work.WorkDispatch, 16),
 		resultCh:   resultCh,
 	}
 }
@@ -54,7 +55,7 @@ func (r *WorkerRunner) run() {
 	var wg sync.WaitGroup
 	for dispatch := range r.dispatchCh {
 		wg.Add(1)
-		go func(d interfaces.WorkDispatch) {
+		go func(d work.WorkDispatch) {
 			defer wg.Done()
 			result := r.executeWithTimeout(d)
 			r.resultCh <- result
@@ -73,7 +74,7 @@ func (r *WorkerRunner) run() {
 
 // executeWithTimeout executes a single dispatch. Workstation-specific timeout
 // handling is resolved inside WorkstationExecutor from runtime config.
-func (r *WorkerRunner) executeWithTimeout(dispatch interfaces.WorkDispatch) (result interfaces.WorkResult) {
+func (r *WorkerRunner) executeWithTimeout(dispatch work.WorkDispatch) (result interfaces.WorkResult) {
 	ctx := context.Background()
 	start := time.Now()
 	defer func() {
@@ -148,7 +149,7 @@ func (r *WorkerRunner) executeWithTimeout(dispatch interfaces.WorkDispatch) (res
 	return result
 }
 
-func PanicAsFailedResult(dispatch interfaces.WorkDispatch, recovered any, duration time.Duration) interfaces.WorkResult {
+func PanicAsFailedResult(dispatch work.WorkDispatch, recovered any, duration time.Duration) interfaces.WorkResult {
 	return interfaces.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -58,8 +59,8 @@ type SessionAPI interface {
 
 // WorkAPI is the session-scoped work submission, operator move, and runtime observability seam.
 type WorkAPI interface {
-	SubmitWorkRequestForSession(ctx context.Context, sessionID string, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error)
-	MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error)
+	SubmitWorkRequestForSession(ctx context.Context, sessionID string, request work.WorkRequest) (work.WorkRequestSubmitResult, error)
+	MoveWorkForSession(ctx context.Context, sessionID, workID, stateName, requestID string) (work.OperatorMoveResult, error)
 	SubscribeFactoryEventsForSession(ctx context.Context, sessionID string, reconnect *interfaces.FactoryEventReconnectCursor) (*interfaces.FactoryEventStream, error)
 	GetEngineStateSnapshotForSession(ctx context.Context, sessionID string) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 }
@@ -929,7 +930,7 @@ type ModelInvocationResult struct {
 	Worker            string
 	Operation         string
 	ProviderLocality  string
-	Content           []interfaces.WorkContentPart
+	Content           []work.WorkContentPart
 	Bindings          []interfaces.ResolvedModelOperationBinding
 	StreamFile        string
 	StreamContentType string

@@ -16,6 +16,7 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/transports/http/workstationprojection"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestPolicyToolExecutor_DisabledDeniesToolCalls(t *testing.T) {
@@ -395,7 +396,7 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 		t.Fatal("expected tool failure")
 	}
 
-	dispatch := interfaces.WorkDispatch{
+	dispatch := work.WorkDispatch{
 		DispatchID:      "dispatch-tool-fail",
 		TransitionID:    "execute",
 		WorkstationName: "Execute",
@@ -435,7 +436,7 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 		t.Fatalf("dispatch failure message leaks absolute working directory %q: %q", caseDir, payload.FailureDetail.Message)
 	}
 
-	workItem := interfaces.FactoryWorkItem{
+	workItem := work.FactoryWorkItem{
 		ID:          "work-tool-fail",
 		WorkTypeID:  "task",
 		DisplayName: "Tool failure story",
@@ -444,7 +445,7 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 	}
 	completedAt := time.Unix(1, 0).UTC()
 	state := interfaces.FactoryWorldState{
-		WorkItemsByID: map[string]interfaces.FactoryWorkItem{
+		WorkItemsByID: map[string]work.FactoryWorkItem{
 			workItem.ID: workItem,
 		},
 		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{

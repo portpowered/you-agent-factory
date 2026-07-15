@@ -9,6 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/work/content"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
 )
@@ -180,8 +181,8 @@ func TestCodexProviderBehavior_BuildArgs_MaterializesLocalFileURLWithoutCopy(t *
 		InputTokens: InputTokens(interfaces.Token{
 			ID: "token-1",
 			Color: interfaces.TokenColor{
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeImage, URL: rawURL},
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeImage, URL: rawURL},
 				},
 			},
 		}),
@@ -582,8 +583,8 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 	token := interfaces.Token{
 		ID: "token-1",
 		Color: interfaces.TokenColor{
-			Content: []interfaces.WorkContentPart{
-				{Type: interfaces.WorkContentPartTypeText, Text: "hello"},
+			Content: []work.WorkContentPart{
+				{Type: work.WorkContentPartTypeText, Text: "hello"},
 			},
 		},
 	}

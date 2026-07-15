@@ -10,19 +10,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryboundary "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
 type passExecutor struct{}
 
-func (e *passExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *passExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	return interfaces.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
@@ -36,7 +37,7 @@ type blockingExecutor struct {
 	release chan struct{}
 }
 
-func (e *blockingExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *blockingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	close(e.started)
 	<-e.release
 	return interfaces.WorkResult{
@@ -49,7 +50,7 @@ func (e *blockingExecutor) Execute(_ context.Context, dispatch interfaces.WorkDi
 
 type safeDiagnosticsBoundaryExecutor struct{}
 
-func (e *safeDiagnosticsBoundaryExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *safeDiagnosticsBoundaryExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
 	workID := safeBoundaryWorkID(dispatch)
 	switch workID {
 	case "work-safe-success":
@@ -91,11 +92,11 @@ type fixedCompletionDeliveryPlanner struct {
 	plannedResult interfaces.WorkResult
 }
 
-func (p fixedCompletionDeliveryPlanner) DeliveryTickForDispatch(interfaces.WorkDispatch) (int, bool, error) {
+func (p fixedCompletionDeliveryPlanner) DeliveryTickForDispatch(work.WorkDispatch) (int, bool, error) {
 	return p.tick, true, nil
 }
 
-func (p fixedCompletionDeliveryPlanner) PlannedResultForDispatch(dispatch interfaces.WorkDispatch) (interfaces.WorkResult, bool, error) {
+func (p fixedCompletionDeliveryPlanner) PlannedResultForDispatch(dispatch work.WorkDispatch) (interfaces.WorkResult, bool, error) {
 	if p.plannedResult.DispatchID == "" && p.plannedResult.TransitionID == "" && p.plannedResult.Output == "" && p.plannedResult.Outcome == "" {
 		return interfaces.WorkResult{}, false, nil
 	}
@@ -105,7 +106,7 @@ func (p fixedCompletionDeliveryPlanner) PlannedResultForDispatch(dispatch interf
 	return result, true, nil
 }
 
-func submitWorkRequests(ctx context.Context, f factory.Factory, reqs []interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+func submitWorkRequests(ctx context.Context, f factory.Factory, reqs []work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
 	return f.SubmitWorkRequest(ctx, requests.WorkRequestFromSubmitRequests(reqs))
 }
 
@@ -125,7 +126,7 @@ func (s *runtimeAwareScheduler) SetRuntimeConfig(runtimeConfig interfaces.Runtim
 }
 
 type generatedBatchHook struct {
-	batch   interfaces.GeneratedSubmissionBatch
+	batch   work.GeneratedSubmissionBatch
 	emitted bool
 }
 
@@ -143,7 +144,7 @@ func (h *generatedBatchHook) OnTick(context.Context, interfaces.SubmissionHookCo
 	}
 	h.emitted = true
 	return interfaces.SubmissionHookResult{
-		GeneratedBatches: []interfaces.GeneratedSubmissionBatch{h.batch},
+		GeneratedBatches: []work.GeneratedSubmissionBatch{h.batch},
 	}, nil
 }
 
@@ -474,7 +475,7 @@ func assertSafeBoundaryRequestView(
 	}
 }
 
-func safeBoundaryWorkID(dispatch interfaces.WorkDispatch) string {
+func safeBoundaryWorkID(dispatch work.WorkDispatch) string {
 	for _, token := range workers.WorkDispatchInputTokens(dispatch) {
 		if token.Color.DataType == interfaces.DataTypeResource {
 			continue
@@ -495,7 +496,7 @@ func safeBoundaryWorkID(dispatch interfaces.WorkDispatch) string {
 }
 
 func safeBoundaryResult(
-	dispatch interfaces.WorkDispatch,
+	dispatch work.WorkDispatch,
 	workID string,
 	outcome interfaces.WorkOutcome,
 	errText string,
@@ -715,7 +716,7 @@ func (h *serviceModeRunHarness) stop() {
 
 func submitPausedBufferTask(t *testing.T, f factory.Factory, requestID, traceID string) {
 	t.Helper()
-	result, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	result, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		RequestID:  requestID,
 		WorkTypeID: "task",
 		TraceID:    traceID,
@@ -880,7 +881,7 @@ func countTokensAtPlace(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapsh
 
 func submitTaskWithWorkID(t *testing.T, f factory.Factory, workID, traceID string) {
 	t.Helper()
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID:     workID,
 		WorkTypeID: "task",
 		TraceID:    traceID,

@@ -17,8 +17,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -43,16 +44,16 @@ type resolvedWorkResult struct {
 	selectedClassificationLabel string
 	output                      string
 	spawnedWork                 []interfaces.TokenColor
-	recordedOutputWork          []interfaces.FactoryWorkItem
+	recordedOutputWork          []work.FactoryWorkItem
 	err                         string
 	feedback                    string
 	failureMetadata             *interfaces.WorkFailureMetadata
 }
 
 type generatedBatchWork struct {
-	request  interfaces.WorkRequest
-	submits  []interfaces.SubmitRequest
-	metadata interfaces.GeneratedSubmissionBatchMetadata
+	request  work.WorkRequest
+	submits  []work.SubmitRequest
+	metadata work.GeneratedSubmissionBatchMetadata
 }
 
 type mutationCalculationInput struct {
@@ -134,7 +135,7 @@ func (t *TransitionerSubsystem) Execute(_ context.Context, snapshot *interfaces.
 	t.logger.Debug("transitioner: processing results", "count", len(results))
 
 	var mutations []interfaces.MarkingMutation
-	var generatedBatches []interfaces.GeneratedSubmissionBatch
+	var generatedBatches []work.GeneratedSubmissionBatch
 	var completedDispatches []interfaces.CompletedDispatch
 	for i := range results {
 		muts, completedDispatch, batchRecords, err := t.mapToCorrespondingTokenMutations(snapshot, &results[i])
@@ -162,7 +163,7 @@ func (t *TransitionerSubsystem) Execute(_ context.Context, snapshot *interfaces.
 // arc set and creates new tokens with embedded history.
 // TODO: we should break out the logic here to be referentially transparent and testable independent of the subsystem. Right now its too reliant on internal state.
 // Break out dependency on ID generation as well as the logger/mocker.
-func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], result *interfaces.WorkResult) ([]interfaces.MarkingMutation, interfaces.CompletedDispatch, []interfaces.GeneratedSubmissionBatch, error) {
+func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], result *interfaces.WorkResult) ([]interfaces.MarkingMutation, interfaces.CompletedDispatch, []work.GeneratedSubmissionBatch, error) {
 	currentTransition, ok := t.netDefinition.Transitions[result.TransitionID]
 	if !ok {
 		t.logger.Error("transitioner: unknown transition in result", "transitionID", result.TransitionID)
@@ -190,12 +191,12 @@ func (t *TransitionerSubsystem) mapToCorrespondingTokenMutations(snapshot *inter
 		} else if detectedBatch {
 			mutations := t.releaseResourceTokens(consumedTokens, map[string]int{}, result.TransitionID, now)
 			completed := t.buildCompletedDispatch(snapshot, result, resolved, consumedTokens, mutations, now)
-			batch := interfaces.GeneratedSubmissionBatch{
+			batch := work.GeneratedSubmissionBatch{
 				Request:     generatedBatch.request,
 				Metadata:    generatedBatch.metadata,
 				Submissions: generatedBatch.submits,
 			}
-			return mutations, completed, []interfaces.GeneratedSubmissionBatch{batch}, nil
+			return mutations, completed, []work.GeneratedSubmissionBatch{batch}, nil
 		}
 	}
 
@@ -390,19 +391,19 @@ func mutationRecordsForDispatch(
 	return records
 }
 
-func cloneFactoryWorkItems(items []interfaces.FactoryWorkItem) []interfaces.FactoryWorkItem {
+func cloneFactoryWorkItems(items []work.FactoryWorkItem) []work.FactoryWorkItem {
 	if len(items) == 0 {
 		return nil
 	}
 
-	clone := make([]interfaces.FactoryWorkItem, len(items))
+	clone := make([]work.FactoryWorkItem, len(items))
 	for i := range items {
 		clone[i] = items[i]
 		if items[i].PreviousChainingTraceIDs != nil {
 			clone[i].PreviousChainingTraceIDs = append([]string(nil), items[i].PreviousChainingTraceIDs...)
 		}
 		if items[i].Content != nil {
-			clone[i].Content = append([]interfaces.WorkContentPart(nil), items[i].Content...)
+			clone[i].Content = append([]work.WorkContentPart(nil), items[i].Content...)
 		}
 		if items[i].Tags != nil {
 			clone[i].Tags = cloneTags(items[i].Tags)
@@ -434,7 +435,7 @@ func cloneRuntimeTokenColors(colors []interfaces.TokenColor) []interfaces.TokenC
 		cloned[i].PreviousChainingTraceIDs = append([]string(nil), colors[i].PreviousChainingTraceIDs...)
 		cloned[i].Tags = factory.CloneRuntimeTags(colors[i].Tags)
 		cloned[i].Relations = factory.CloneRuntimeRelations(colors[i].Relations)
-		cloned[i].Content = interfaces.CloneWorkContentParts(colors[i].Content)
+		cloned[i].Content = work.CloneWorkContentParts(colors[i].Content)
 		cloned[i].Payload = factory.CloneRuntimePayload(colors[i].Payload)
 		cloned[i].InvocationArguments = interfaces.CloneInvocationArguments(colors[i].InvocationArguments)
 	}
@@ -481,14 +482,14 @@ func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult
 		return generatedBatchWork{}, false, nil
 	}
 
-	var request interfaces.WorkRequest
+	var request work.WorkRequest
 	if err := json.Unmarshal(rawRequest, &request); err != nil {
-		if strings.Contains(string(rawRequest), string(interfaces.WorkRequestTypeFactoryRequestBatch)) {
+		if strings.Contains(string(rawRequest), string(work.WorkRequestTypeFactoryRequestBatch)) {
 			return generatedBatchWork{}, true, fmt.Errorf("worker-emitted work request batch: %w", err)
 		}
 		return generatedBatchWork{}, false, nil
 	}
-	if request.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
+	if request.Type != work.WorkRequestTypeFactoryRequestBatch {
 		return generatedBatchWork{}, false, nil
 	}
 
@@ -502,19 +503,19 @@ func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult
 	}
 	enrichWorkerEmittedBatchRequest(&request, inputColors, result)
 
-	metadata := interfaces.GeneratedSubmissionBatchMetadata{Source: "worker-output:" + result.dispatchID}
+	metadata := work.GeneratedSubmissionBatchMetadata{Source: "worker-output:" + result.dispatchID}
 	if envelope.Metadata != nil {
 		metadata = *envelope.Metadata
 		if metadata.Source == "" {
 			metadata.Source = "worker-output:" + result.dispatchID
 		}
 	}
-	batch := interfaces.GeneratedSubmissionBatch{
+	batch := work.GeneratedSubmissionBatch{
 		Request:     request,
 		Metadata:    metadata,
 		Submissions: envelope.Submissions,
 	}
-	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, work.WorkRequestNormalizeOptions{
 		ValidWorkTypes: t.validWorkTypes(),
 	})
 	if err != nil {
@@ -524,9 +525,9 @@ func (t *TransitionerSubsystem) workerEmittedBatchWork(result resolvedWorkResult
 }
 
 type workerEmittedBatchEnvelope struct {
-	Request     interfaces.WorkRequest                       `json:"request"`
-	Submissions []interfaces.SubmitRequest                   `json:"submissions"`
-	Metadata    *interfaces.GeneratedSubmissionBatchMetadata `json:"metadata"`
+	Request     work.WorkRequest                       `json:"request"`
+	Submissions []work.SubmitRequest                   `json:"submissions"`
+	Metadata    *work.GeneratedSubmissionBatchMetadata `json:"metadata"`
 }
 
 func workerEmittedBatchRequestPayload(output string) (json.RawMessage, bool, error) {
@@ -534,7 +535,7 @@ func workerEmittedBatchRequestPayload(output string) (json.RawMessage, bool, err
 		Request json.RawMessage `json:"request"`
 	}
 	if err := json.Unmarshal([]byte(output), &rawEnvelope); err != nil {
-		if strings.Contains(output, `"request"`) && strings.Contains(output, string(interfaces.WorkRequestTypeFactoryRequestBatch)) {
+		if strings.Contains(output, `"request"`) && strings.Contains(output, string(work.WorkRequestTypeFactoryRequestBatch)) {
 			return nil, false, fmt.Errorf("worker-emitted work request batch: %w", err)
 		}
 		return nil, false, nil
@@ -558,7 +559,7 @@ func deterministicWorkerBatchRequestID(result resolvedWorkResult, output string)
 	return "generated-request-" + hex.EncodeToString(sum[:8])
 }
 
-func enrichWorkerEmittedBatchRequest(request *interfaces.WorkRequest, inputColors []interfaces.TokenColor, result resolvedWorkResult) {
+func enrichWorkerEmittedBatchRequest(request *work.WorkRequest, inputColors []interfaces.TokenColor, result resolvedWorkResult) {
 	source := firstNonResourceInput(inputColors)
 	previousChainingTraceIDs := interfaces.PreviousChainingTraceIDsFromTokenColors(inputColors)
 	chainingTraceDepth := interfaces.ChainingTraceDepthFromTokenColors(inputColors)
@@ -807,7 +808,7 @@ func consumedResourceTokenCountForPlace(consumedTokens []interfaces.Token, place
 	return count
 }
 
-func applyRecordedOutputWorkIdentity(token *interfaces.Token, recorded interfaces.FactoryWorkItem) {
+func applyRecordedOutputWorkIdentity(token *interfaces.Token, recorded work.FactoryWorkItem) {
 	if token == nil {
 		return
 	}
@@ -843,7 +844,7 @@ func applyRecordedOutputWorkIdentity(token *interfaces.Token, recorded interface
 		token.Color.Tags = cloneTags(recorded.Tags)
 	}
 	if len(recorded.Content) > 0 {
-		token.Color.Content = interfaces.CloneWorkContentParts(recorded.Content)
+		token.Color.Content = work.CloneWorkContentParts(recorded.Content)
 	}
 }
 

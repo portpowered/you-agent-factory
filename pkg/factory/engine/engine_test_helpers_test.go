@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // mockSubsystem records calls and returns configured results.
@@ -29,7 +30,7 @@ func (m *mockSubsystem) Execute(ctx context.Context, snap *interfaces.EngineStat
 	return &interfaces.TickResult{}, nil
 }
 
-func submitWorkRequests(ctx context.Context, engine *FactoryEngine, reqs []interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+func submitWorkRequests(ctx context.Context, engine *FactoryEngine, reqs []work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
 	return engine.SubmitWorkRequest(ctx, requests.WorkRequestFromSubmitRequests(reqs))
 }
 
@@ -56,9 +57,9 @@ func (h *testSubmissionHook) OnTick(ctx context.Context, input interfaces.Submis
 
 type testDispatchResultHook struct {
 	waitCh   chan struct{}
-	submit   func(context.Context, interfaces.WorkDispatch) error
+	submit   func(context.Context, work.WorkDispatch) error
 	onTick   func(context.Context, interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]interfaces.WorkResult, error)
-	submits  []interfaces.WorkDispatch
+	submits  []work.WorkDispatch
 	results  []interfaces.WorkResult
 	waitOnce bool
 }
@@ -67,7 +68,7 @@ func newTestDispatchResultHook() *testDispatchResultHook {
 	return &testDispatchResultHook{waitCh: make(chan struct{}, 1)}
 }
 
-func (h *testDispatchResultHook) SubmitDispatch(ctx context.Context, dispatch interfaces.WorkDispatch) error {
+func (h *testDispatchResultHook) SubmitDispatch(ctx context.Context, dispatch work.WorkDispatch) error {
 	h.submits = append(h.submits, dispatch)
 	if h.submit != nil {
 		return h.submit(ctx, dispatch)
