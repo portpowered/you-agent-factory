@@ -130,7 +130,6 @@ func executeSubmitBatchCommand(
 	cfg.Args = args
 	cfg.Stdin = cmd.InOrStdin()
 	cfg.Output = cmd.OutOrStdout()
-	cfg.Diagnostics = diagnostics.writer(cmd)
 	cfg.Verbose = diagnostics.verboseEnabled()
 	cfg.Debug = diagnostics.debug
 	return batchHandler(*cfg)

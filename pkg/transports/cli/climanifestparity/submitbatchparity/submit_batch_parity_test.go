@@ -99,7 +99,7 @@ func TestGeneratedVsLegacySubmitBatchHTTPAndOutputParity(t *testing.T) {
 		wantJSON    bool
 	}{
 		{name: "default session human output", wantPath: "/factory-sessions/~default/work-requests/batch-http"},
-		{name: "explicit session JSON output and diagnostics", globalFlags: []string{"--json", "--verbose", "--debug"}, localFlags: []string{"--session", "session-beta"}, wantPath: "/factory-sessions/session-beta/work-requests/batch-http", wantJSON: true},
+		{name: "explicit session JSON output with silent diagnostics", globalFlags: []string{"--json", "--verbose", "--debug"}, localFlags: []string{"--session", "session-beta"}, wantPath: "/factory-sessions/session-beta/work-requests/batch-http", wantJSON: true},
 	}
 
 	for _, tc := range tests {
@@ -132,8 +132,13 @@ func TestGeneratedVsLegacySubmitBatchHTTPAndOutputParity(t *testing.T) {
 				t.Fatalf("HTTP request = %+v, want PUT %s with canonical body", requests[0], tc.wantPath)
 			}
 			assertSuccessOutput(t, legacy.stdout, tc.wantJSON, tc.wantPath)
-			if len(tc.globalFlags) > 0 && (!strings.Contains(legacy.stderr, "submit batch request") || strings.Contains(legacy.stderr, `"payload"`)) {
-				t.Fatalf("diagnostics = %q, want request metadata without payload", legacy.stderr)
+			if len(tc.globalFlags) > 0 {
+				if legacy.config.DiagnosticsSet || generated.config.DiagnosticsSet {
+					t.Fatalf("diagnostic writers legacy=%t generated=%t, want pre-migration nil writers", legacy.config.DiagnosticsSet, generated.config.DiagnosticsSet)
+				}
+				if legacy.stderr != "" || generated.stderr != "" {
+					t.Fatalf("stderr legacy=%q generated=%q, want pre-migration silence", legacy.stderr, generated.stderr)
+				}
 			}
 		})
 	}

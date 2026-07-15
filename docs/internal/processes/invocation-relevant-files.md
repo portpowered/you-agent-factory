@@ -43,7 +43,10 @@ primary-result behavior.
   transport through `RootCommandOptions.SubmitBatch` so parity roots receive
   independent Cobra stdin/stdout/stderr streams while proving `--file`,
   positional file, inline JSON, explicit or implicit stdin, dry-run, session
-  routing, request, output, diagnostic, and failure behavior. Run-specific
+  routing, request, output, diagnostic, and failure behavior. When both parity
+  roots share a migrated execution helper, also assert fixed pre-migration
+  outcomes (including nil optional sinks and exact stdout/stderr) so changing
+  that helper cannot redefine the legacy oracle. Run-specific
   coverage lives in `pkg/transports/cli/climanifestparity/runparity/run_parity_test.go`;
   unary and batch submit coverage lives in the sibling `submitparity` and
   `submitbatchparity` packages.
