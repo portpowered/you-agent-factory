@@ -13,6 +13,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const (
@@ -66,7 +68,7 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_UsesTerminalWorkFall
 			Workstation:  interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
 			StartedAt:    time.Date(2026, 4, 22, 19, 0, 0, 0, time.UTC),
 			CompletedAt:  time.Date(2026, 4, 22, 19, 0, 1, 0, time.UTC),
-			Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+			Result:       interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
 			WorkItemIDs:  []string{completedInput.ID},
 			ConsumedInputs: []interfaces.WorkstationInput{{
 				TokenID:  "token-completed",
@@ -104,14 +106,14 @@ func TestWorkstationDispatchViewFromCompletion_OmitsInferenceOwnedSummaryFields(
 		Workstation:  interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
 		StartedAt:    time.Date(2026, 4, 22, 19, 0, 0, 0, time.UTC),
 		CompletedAt:  time.Date(2026, 4, 22, 19, 0, 1, 0, time.UTC),
-		Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		Result:       interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "openai",
 			Kind:     "session_id",
 			ID:       "session-fallback",
 		},
-		Diagnostics: &interfaces.SafeWorkDiagnostics{
-			Provider: &interfaces.SafeProviderDiagnostic{
+		Diagnostics: &workerdiagnostics.SafeWorkDiagnostics{
+			Provider: &workerdiagnostics.SafeProviderDiagnostic{
 				Provider:         "openai",
 				Model:            "gpt-5.4",
 				RequestMetadata:  map[string]string{"working_directory": "/fallback/workdir"},
@@ -328,7 +330,7 @@ func TestBuildFactoryWorldWorkstationRequestProjectionSlice_UsesDispatchTimeCons
 			Workstation:  interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
 			StartedAt:    time.Date(2026, 4, 22, 18, 0, 0, 0, time.UTC),
 			CompletedAt:  time.Date(2026, 4, 22, 18, 0, 1, 0, time.UTC),
-			Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+			Result:       interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
 			WorkItemIDs:  []string{latest.ID},
 			ConsumedInputs: []interfaces.WorkstationInput{{
 				TokenID:  "token-consumed-lineage",
@@ -484,7 +486,7 @@ func workContentProjectionCompletion(
 		Workstation:  interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
 		StartedAt:    startedAt,
 		CompletedAt:  startedAt.Add(time.Second),
-		Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+		Result:       interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
 		WorkItemIDs:  []string{item.ID},
 		ConsumedInputs: []interfaces.WorkstationInput{{
 			TokenID:  "token-" + strings.TrimPrefix(dispatchID, "dispatch-"),
@@ -626,12 +628,12 @@ func workstationRequestProjectionStateFixture() interfaces.FactoryWorldState {
 		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
 			DispatchID: "dispatch-completed", TransitionID: "review", Workstation: interfaces.FactoryWorkstationRef{ID: "review", Name: "Review"},
 			StartedAt: t0.Add(2 * time.Second), CompletedAt: t0.Add(4 * time.Second), DurationMillis: 1200, WorkItemIDs: []string{completedInput.ID},
-			Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted), Feedback: "ready", Output: "fallback output", SelectedClassificationLabel: "approved"},
+			Result:         interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted), Feedback: "ready", Output: "fallback output", SelectedClassificationLabel: "approved"},
 			ConsumedInputs: []interfaces.WorkstationInput{{TokenID: "token-completed", PlaceID: completedInput.PlaceID, WorkItem: &completedInput}},
 			InputWorkItems: []work.FactoryWorkItem{completedInput}, OutputWorkItems: []work.FactoryWorkItem{completedOutput},
 			CurrentChainingTraceID: "chain-parent-a", PreviousChainingTraceIDs: []string{"chain-parent-a", "chain-parent-z"}, TraceIDs: []string{completedInput.TraceID},
-			ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "openai", Kind: "session_id", ID: "session-1"},
-			Diagnostics: &interfaces.SafeWorkDiagnostics{Provider: &interfaces.SafeProviderDiagnostic{
+			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "session_id", ID: "session-1"},
+			Diagnostics: &workerdiagnostics.SafeWorkDiagnostics{Provider: &workerdiagnostics.SafeProviderDiagnostic{
 				Provider: "openai", Model: "gpt-5.4", RequestMetadata: map[string]string{"prompt_source": "factory-renderer"}, ResponseMetadata: map[string]string{"provider_session_id": "session-1", "retry_count": "0"},
 			}},
 			TerminalWork: &interfaces.FactoryTerminalWork{WorkItem: completedOutput, Status: "TERMINAL"},
@@ -800,7 +802,7 @@ func scriptProjectionStateFixture() interfaces.FactoryWorldState {
 		CompletedDispatches: []interfaces.FactoryWorldDispatchCompletion{{
 			DispatchID: scriptProjectionCompletedDispatchID, TransitionID: "script-review", Workstation: interfaces.FactoryWorkstationRef{ID: "script-review", Name: "Script Review"},
 			StartedAt: t0.Add(time.Minute), CompletedAt: t0.Add(2 * time.Minute), DurationMillis: 12_000, WorkItemIDs: []string{workItem.ID},
-			Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeRejected), FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeUnknown, Message: "script timed out"}},
+			Result:         interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeRejected), FailureDetail: &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeUnknown, Message: "script timed out"}},
 			ConsumedInputs: []interfaces.WorkstationInput{{TokenID: "token-script-completed", PlaceID: workItem.PlaceID, WorkItem: &workItem}},
 			InputWorkItems: []work.FactoryWorkItem{workItem}, TraceIDs: []string{workItem.TraceID},
 		}},

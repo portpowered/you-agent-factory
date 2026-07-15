@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 var approvedWorkDispatchFields = map[string]string{
@@ -43,7 +45,7 @@ var retiredWorkDispatchWorkerFields = []string{
 func TestWorkDispatchContractGuard_FieldInventoryStaysDispatchOwned(t *testing.T) {
 	t.Parallel()
 
-	workDispatchType := reflect.TypeOf(interfaces.WorkDispatch{})
+	workDispatchType := reflect.TypeOf(work.WorkDispatch{})
 	seen := make(map[string]struct{}, workDispatchType.NumField())
 	for i := 0; i < workDispatchType.NumField(); i++ {
 		field := workDispatchType.Field(i)
@@ -68,7 +70,7 @@ func TestWorkDispatchContractGuard_FieldInventoryStaysDispatchOwned(t *testing.T
 func TestWorkDispatchContractGuard_WorkerOwnedFieldsStayDeleted(t *testing.T) {
 	t.Parallel()
 
-	workDispatchType := reflect.TypeOf(interfaces.WorkDispatch{})
+	workDispatchType := reflect.TypeOf(work.WorkDispatch{})
 	for _, fieldName := range retiredWorkDispatchWorkerFields {
 		if _, ok := workDispatchType.FieldByName(fieldName); ok {
 			t.Fatalf("WorkDispatch must not reintroduce worker-owned field %s", fieldName)
@@ -153,11 +155,11 @@ func (s *runtimeFactoryConfigLookupStub) FactoryConfig() *interfaces.FactoryConf
 }
 
 type runtimeLookupDefinitionStub struct {
-	workers      map[string]*interfaces.WorkerConfig
+	workers      map[string]*workerconfig.Config
 	workstations map[string]*interfaces.FactoryWorkstationConfig
 }
 
-func (s *runtimeLookupDefinitionStub) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (s *runtimeLookupDefinitionStub) Worker(name string) (*workerconfig.Config, bool) {
 	worker, ok := s.workers[name]
 	return worker, ok
 }
@@ -180,12 +182,12 @@ func TestFirstRuntimeDefinitionLookup_ReturnsFirstNonNilCandidate(t *testing.T) 
 	t.Parallel()
 
 	first := &runtimeLookupDefinitionStub{
-		workers: map[string]*interfaces.WorkerConfig{
+		workers: map[string]*workerconfig.Config{
 			"planner": {Type: "planner"},
 		},
 	}
 	second := &runtimeLookupDefinitionStub{
-		workers: map[string]*interfaces.WorkerConfig{
+		workers: map[string]*workerconfig.Config{
 			"reviewer": {Type: "reviewer"},
 		},
 	}

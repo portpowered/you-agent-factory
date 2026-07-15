@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -41,13 +42,13 @@ func runtimeLogStartTimeString(value time.Time) string {
 	return value.UTC().Format(time.RFC3339Nano)
 }
 
-func modelEventDiagnostics(success *interfaces.WorkDiagnostics, err error) *factoryapi.SafeWorkDiagnostics {
+func modelEventDiagnostics(success *workerexecution.WorkDiagnostics, err error) *factoryapi.SafeWorkDiagnostics {
 	if success != nil {
-		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(success)
+		return workerdiagnostics.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(success)
 	}
 	var providerErr *workerprovider.ProviderError
 	if errors.As(err, &providerErr) {
-		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
+		return workerdiagnostics.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
 	}
 	return nil
 }

@@ -10,6 +10,9 @@ import (
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestReconstructFactoryWorldState_BeforeFirstEventReturnsEmptyState(t *testing.T) {
@@ -186,7 +189,7 @@ func canonicalCompletedDispatchProjectionEvents(t0 time.Time) []factoryapi.Facto
 				},
 			}},
 			TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-			ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
+			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
 			TerminalWork: &interfaces.FactoryTerminalWork{
 				WorkItem: work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
 				Status:   "TERMINAL",
@@ -209,7 +212,7 @@ func canonicalCompletedDispatchProjectionEvents(t0 time.Time) []factoryapi.Facto
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeSucceeded,
 			DurationMillis:     2500,
-			ProviderSession:    generatedProviderSessionForProjectionTest(&interfaces.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"}),
+			ProviderSession:    generatedProviderSessionForProjectionTest(&workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"}),
 		}),
 	}
 }
@@ -278,7 +281,7 @@ func safeResponseDiagnosticsProjectionEvents(t0 time.Time) []factoryapi.FactoryE
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeSucceeded,
 			DurationMillis:     1500,
-			ProviderSession:    generatedProviderSessionForProjectionTest(&interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-1"}),
+			ProviderSession:    generatedProviderSessionForProjectionTest(&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-1"}),
 			Diagnostics:        generatedWorkDiagnosticsForProjectionTest(diagnostics),
 		}),
 		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
@@ -288,15 +291,15 @@ func safeResponseDiagnosticsProjectionEvents(t0 time.Time) []factoryapi.FactoryE
 			Result:          interfaces.WorkstationResult{Outcome: "ACCEPTED"},
 			DurationMillis:  1500,
 			TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-			ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-1"},
+			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-1"},
 			Diagnostics:     diagnostics,
 		}),
 	}
 }
 
-func projectionSafeResponseDiagnostics() *interfaces.SafeWorkDiagnostics {
-	return &interfaces.SafeWorkDiagnostics{
-		RenderedPrompt: &interfaces.SafeRenderedPromptDiagnostic{
+func projectionSafeResponseDiagnostics() *workerdiagnostics.SafeWorkDiagnostics {
+	return &workerdiagnostics.SafeWorkDiagnostics{
+		RenderedPrompt: &workerdiagnostics.SafeRenderedPromptDiagnostic{
 			SystemPromptHash: "system-hash",
 			UserMessageHash:  "user-hash",
 			Variables: map[string]string{
@@ -304,7 +307,7 @@ func projectionSafeResponseDiagnostics() *interfaces.SafeWorkDiagnostics {
 				"work_type_name": "task",
 			},
 		},
-		Provider: &interfaces.SafeProviderDiagnostic{
+		Provider: &workerdiagnostics.SafeProviderDiagnostic{
 			Provider: "codex",
 			Model:    "gpt-5.4",
 			RequestMetadata: map[string]string{
@@ -510,14 +513,14 @@ func failureDetailForProjectionTest(reason, message string) *factoryapi.FailureD
 	return &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureType(reason), Message: message}
 }
 
-func failureDetailForProjectionTestValue(detail *interfaces.FailureDetail) *factoryapi.FailureDetail {
+func failureDetailForProjectionTestValue(detail *workerexecution.FailureDetail) *factoryapi.FailureDetail {
 	if detail == nil {
 		return nil
 	}
 	return failureDetailForProjectionTest(string(detail.Reason), detail.Message)
 }
 
-func worldFailureDetailHasReason(detail interfaces.FactoryWorldFailureDetail, reason interfaces.WorkFailureType) bool {
+func worldFailureDetailHasReason(detail interfaces.FactoryWorldFailureDetail, reason workerexecution.WorkFailureType) bool {
 	return detail.FailureDetail != nil && detail.FailureDetail.Reason == reason
 }
 
@@ -541,7 +544,7 @@ func workstationResponseEvent(tick int, eventTime time.Time, payload interfaces.
 		Feedback:                    stringPtrForProjectionTest(payload.Result.Feedback),
 		SelectedClassificationLabel: stringPtrForProjectionTest(payload.Result.SelectedClassificationLabel),
 		FailureDetail:               failureDetailForProjectionTestValue(payload.Result.FailureDetail),
-		ProviderFailure:             interfaces.GeneratedWorkFailureMetadata(payload.Result.FailureMetadata),
+		ProviderFailure:             workerdiagnostics.GeneratedWorkFailureMetadata(payload.Result.FailureMetadata),
 		DurationMillis:              int64PtrForProjectionTest(payload.DurationMillis),
 		OutputWork:                  &outputWork,
 		OutputResources:             generatedResourcesForProjectionTest(payload.OutputResources),
@@ -818,7 +821,7 @@ func generatedResourcesForProjectionTest(resources []interfaces.FactoryResourceU
 	return &out
 }
 
-func generatedProviderSessionForProjectionTest(session *interfaces.ProviderSessionMetadata) *factoryapi.ProviderSessionMetadata {
+func generatedProviderSessionForProjectionTest(session *workerexecution.ProviderSessionMetadata) *factoryapi.ProviderSessionMetadata {
 	if session == nil {
 		return nil
 	}
@@ -829,8 +832,8 @@ func generatedProviderSessionForProjectionTest(session *interfaces.ProviderSessi
 	}
 }
 
-func generatedWorkDiagnosticsForProjectionTest(diagnostics *interfaces.SafeWorkDiagnostics) *factoryapi.SafeWorkDiagnostics {
-	return interfaces.GeneratedSafeWorkDiagnostics(diagnostics)
+func generatedWorkDiagnosticsForProjectionTest(diagnostics *workerdiagnostics.SafeWorkDiagnostics) *factoryapi.SafeWorkDiagnostics {
+	return workerdiagnostics.GeneratedSafeWorkDiagnostics(diagnostics)
 }
 
 func generatedStringMapForProjectionTest(values map[string]string) *factoryapi.StringMap {
@@ -882,14 +885,6 @@ func stringSlicePtrForProjectionTest(values []string) *[]string {
 	return &values
 }
 
-func int64PtrForProjectionTest(value int64) *int64 {
-	return &value
-}
-
-func intPtrForProjectionTest(value int) *int {
-	return &value
-}
-
 func assertWorkStateChangeRecord(
 	t *testing.T,
 	records []interfaces.FactoryWorldWorkStateChangeRecord,
@@ -917,15 +912,15 @@ func assertWorkStateChangeRecord(
 
 func TestReconstructFactoryWorldState_PreservesAgentRunInspectionDiagnostics(t *testing.T) {
 	t0 := time.Date(2026, 6, 30, 12, 0, 0, 0, time.UTC)
-	agentRunDiagnostics := generatedWorkDiagnosticsForProjectionTest(&interfaces.SafeWorkDiagnostics{
-		AgentRun: &interfaces.SafeAgentRunDiagnostic{
-			ExecutionBehavior: interfaces.AgentRunExecutionBehavior,
-			ToolPolicy:        interfaces.AgentWorkerToolPolicyEnabled,
+	agentRunDiagnostics := generatedWorkDiagnosticsForProjectionTest(&workerdiagnostics.SafeWorkDiagnostics{
+		AgentRun: &workerdiagnostics.SafeAgentRunDiagnostic{
+			ExecutionBehavior: workerdiagnostics.AgentRunExecutionBehavior,
+			ToolPolicy:        workerconfig.AgentToolPolicyEnabled,
 			ToolCallCount:     1,
-			ToolDiagnostics: []interfaces.AgentRunToolDiagnostic{
+			ToolDiagnostics: []workerdiagnostics.AgentRunToolDiagnostic{
 				{ToolName: "read_file", Phase: "success", Detail: "bytes=12"},
 			},
-			Transcript: []interfaces.AgentRunTranscriptEntry{
+			Transcript: []workerdiagnostics.AgentRunTranscriptEntry{
 				{Role: "assistant", Summary: "done"},
 			},
 		},
@@ -958,7 +953,7 @@ func TestReconstructFactoryWorldState_PreservesAgentRunInspectionDiagnostics(t *
 			DispatchID:   "dispatch-agent-1",
 			TransitionID: "execute-story",
 			Result: interfaces.WorkstationResult{
-				Outcome: string(interfaces.OutcomeAccepted),
+				Outcome: string(workerexecution.OutcomeAccepted),
 				Output:  "done",
 			},
 			DurationMillis: 1200,
@@ -976,7 +971,7 @@ func TestReconstructFactoryWorldState_PreservesAgentRunInspectionDiagnostics(t *
 	if diagnostics == nil || diagnostics.AgentRun == nil {
 		t.Fatalf("dispatch diagnostics = %#v, want agentRun inspection", diagnostics)
 	}
-	if diagnostics.AgentRun.ToolPolicy != interfaces.AgentWorkerToolPolicyEnabled {
+	if diagnostics.AgentRun.ToolPolicy != workerconfig.AgentToolPolicyEnabled {
 		t.Fatalf("tool policy = %q, want ENABLED", diagnostics.AgentRun.ToolPolicy)
 	}
 	if len(diagnostics.AgentRun.Transcript) != 1 || diagnostics.AgentRun.Transcript[0].Summary != "done" {

@@ -24,10 +24,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
@@ -50,7 +52,7 @@ type factoryImpl struct {
 	cfg          *factory.FactoryConfig
 	topology     *state.Net
 	logger       logging.Logger
-	resultBuffer *buffers.TypedBuffer[interfaces.WorkResult]
+	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]
 	dispatchHook *workerPoolDispatchResultHook
 	eventHistory *factoryevents.FactoryEventHistory
 	state        interfaces.FactoryState
@@ -94,7 +96,7 @@ func New(opts ...factory.FactoryOption) (factory.Factory, error) {
 	logger := logging.EnsureLogger(cfg.Logger)
 	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, logger)
 	marking := buildRuntimeMarking(cfg)
-	resultBuffer := buffers.NewTypedBuffer[interfaces.WorkResult](defaultRuntimeBufferSize)
+	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	eventHistory := ensureEventHistory(cfg)
 	engineOpts := buildRuntimeEngineOptions(cfg, logger, sharedTransformer, resultBuffer, eventHistory)
 	usePool := !cfg.IsInlineDispatch()
@@ -258,7 +260,7 @@ func (f *factoryImpl) recordSessionLifecycleResume() {
 	}, f.clock.Now())
 }
 
-func buildRuntimeEngineOptions(cfg *factory.FactoryConfig, logger logging.Logger, sharedTransformer *token_transformer.Transformer, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], eventHistory *factoryevents.FactoryEventHistory) []engine.Option {
+func buildRuntimeEngineOptions(cfg *factory.FactoryConfig, logger logging.Logger, sharedTransformer *token_transformer.Transformer, resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult], eventHistory *factoryevents.FactoryEventHistory) []engine.Option {
 	engineOpts := []engine.Option{
 		engine.WithLogger(logger),
 		engine.WithClock(cfg.Clock),
@@ -267,10 +269,10 @@ func buildRuntimeEngineOptions(cfg *factory.FactoryConfig, logger logging.Logger
 		engine.WithWorkRequestRecorder(func(tick int, record work.WorkRequestRecord) {
 			eventHistory.RecordWorkRequest(tick, record, cfg.Clock.Now())
 		}),
-		engine.WithWorkInputRecorder(func(tick int, req work.SubmitRequest, token interfaces.Token) {
+		engine.WithWorkInputRecorder(func(tick int, req work.SubmitRequest, token factorytoken.Token) {
 			eventHistory.RecordWorkInput(tick, req, token, cfg.Clock.Now())
 		}),
-		engine.WithWorkstationResponseRecorder(func(tick int, result interfaces.WorkResult, completed interfaces.CompletedDispatch) {
+		engine.WithWorkstationResponseRecorder(func(tick int, result workerexecution.WorkResult, completed interfaces.CompletedDispatch) {
 			eventHistory.RecordWorkstationResponse(tick, result, completed)
 		}),
 		engine.WithDispatchRecorder(func(record interfaces.FactoryDispatchRecord) {
@@ -297,7 +299,7 @@ func buildRuntimeEngineOptions(cfg *factory.FactoryConfig, logger logging.Logger
 	return engineOpts
 }
 
-func configureRuntimeDispatch(cfg *factory.FactoryConfig, logger logging.Logger, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], usePool bool, engineOpts []engine.Option) (*workers.WorkerPool, *workerPoolDispatchResultHook, []engine.Option) {
+func configureRuntimeDispatch(cfg *factory.FactoryConfig, logger logging.Logger, resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult], usePool bool, engineOpts []engine.Option) (*workers.WorkerPool, *workerPoolDispatchResultHook, []engine.Option) {
 	if !usePool {
 		return nil, nil, append(engineOpts, engine.WithDispatchHandler(inlineDispatchHandler(cfg, resultBuffer)))
 	}
@@ -317,7 +319,7 @@ func configureRuntimeDispatch(cfg *factory.FactoryConfig, logger logging.Logger,
 	return pool, dispatchHook, append(engineOpts, engine.WithDispatchResultHook(dispatchHook))
 }
 
-func inlineDispatchHandler(cfg *factory.FactoryConfig, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult]) func(work.WorkDispatch) {
+func inlineDispatchHandler(cfg *factory.FactoryConfig, resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]) func(work.WorkDispatch) {
 	executors := cfg.WorkerExecutors
 	net := cfg.GetNet()
 	return func(d work.WorkDispatch) {
@@ -328,7 +330,7 @@ func inlineDispatchHandler(cfg *factory.FactoryConfig, resultBuffer *buffers.Typ
 	}
 }
 
-func newFactoryImpl(cfg *factory.FactoryConfig, eng *engine.FactoryEngine, pool *workers.WorkerPool, logger logging.Logger, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], dispatchHook *workerPoolDispatchResultHook, eventHistory *factoryevents.FactoryEventHistory, usePool bool) *factoryImpl {
+func newFactoryImpl(cfg *factory.FactoryConfig, eng *engine.FactoryEngine, pool *workers.WorkerPool, logger logging.Logger, resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult], dispatchHook *workerPoolDispatchResultHook, eventHistory *factoryevents.FactoryEventHistory, usePool bool) *factoryImpl {
 	return &factoryImpl{
 		engine:               eng,
 		pool:                 pool,
@@ -754,7 +756,7 @@ func hasNonTerminalWork(marking petri.MarkingSnapshot, topology *state.Net) bool
 	}
 
 	for _, token := range marking.Tokens {
-		if token == nil || token.Color.DataType == interfaces.DataTypeResource || token.Color.WorkTypeID == "" {
+		if token == nil || token.Color.DataType == factorytoken.DataTypeResource || token.Color.WorkTypeID == "" {
 			continue
 		}
 

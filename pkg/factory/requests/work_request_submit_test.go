@@ -3,7 +3,6 @@ package requests
 import (
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
 
@@ -86,7 +85,7 @@ func assertCanonicalBatchEnvelope(t *testing.T, workRequest work.WorkRequest) {
 	}
 }
 
-func assertCanonicalFirstWork(t *testing.T, first interfaces.Work) {
+func assertCanonicalFirstWork(t *testing.T, first work.Work) {
 	t.Helper()
 
 	if first.Name != "draft" {
@@ -112,7 +111,7 @@ func assertCanonicalFirstWork(t *testing.T, first interfaces.Work) {
 	}
 }
 
-func assertCanonicalSecondWork(t *testing.T, second interfaces.Work) {
+func assertCanonicalSecondWork(t *testing.T, second work.Work) {
 	t.Helper()
 
 	if second.Name != "draft-2" {
@@ -126,7 +125,7 @@ func assertCanonicalSecondWork(t *testing.T, second interfaces.Work) {
 	}
 }
 
-func assertCanonicalFirstWorkClones(t *testing.T, first interfaces.Work) {
+func assertCanonicalFirstWorkClones(t *testing.T, first work.Work) {
 	t.Helper()
 
 	if string(first.Payload.([]byte)) != `{"title":"first"}` {

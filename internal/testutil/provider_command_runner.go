@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // ProviderCommandRunner is a test double for ScriptWrapProvider's shared command seam.
@@ -40,7 +40,7 @@ func (r *ProviderCommandRunner) Run(_ context.Context, req workers.CommandReques
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.requests = append(r.requests, workers.CommandRequest(interfaces.CloneSubprocessExecutionRequest(req)))
+	r.requests = append(r.requests, workers.CommandRequest(workerexecution.CloneSubprocessExecutionRequest(req)))
 
 	if r.index < len(r.results) {
 		result := r.results[r.index]

@@ -8,7 +8,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 var exactInvocationInterpolationPattern = regexp.MustCompile(`^\$\{([A-Za-z0-9_.-]+)\}$`)
@@ -27,7 +29,7 @@ func ApplyToLoadedConfig(loaded *config.LoadedFactoryConfig, defaults operatorco
 	}
 	defaultModel := strings.TrimSpace(defaults.WorkerModel)
 
-	return loaded.MutateWorkers(func(worker *interfaces.WorkerConfig) error {
+	return loaded.MutateWorkers(func(worker *workerconfig.Config) error {
 		return applyOperatorDefaultsToWorker(worker, defaultProvider, defaultModel)
 	})
 }
@@ -50,7 +52,7 @@ func ValidateModelWorkerRuntimeProviders(loaded *config.LoadedFactoryConfig) err
 	return nil
 }
 
-func applyOperatorDefaultsToWorker(worker *interfaces.WorkerConfig, defaultProvider, defaultModel string) error {
+func applyOperatorDefaultsToWorker(worker *workerconfig.Config, defaultProvider, defaultModel string) error {
 	if worker == nil || !isModelWorkerType(worker.Type) {
 		return nil
 	}
@@ -119,7 +121,7 @@ func isSupportedRuntimeModelProvider(value string) bool {
 	if trimmed == "" {
 		return true
 	}
-	for _, provider := range interfaces.SupportedModelProviders() {
+	for _, provider := range modelprovider.Supported() {
 		if string(provider) == trimmed {
 			return true
 		}

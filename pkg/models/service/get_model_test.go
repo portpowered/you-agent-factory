@@ -11,7 +11,7 @@ import (
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestService_GetModel_ReturnsMissingWhenManagedCacheNotInstalled(t *testing.T) {

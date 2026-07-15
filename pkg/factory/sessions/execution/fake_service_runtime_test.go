@@ -24,6 +24,7 @@ import (
 	jsstore "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store"
 	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func int64Ptr(value int64) *int64 {
@@ -1206,7 +1207,7 @@ func testExecutionServiceChildExecutorHelpers(t *testing.T) {
 	}
 
 	smoke := SmokeLiveChildProvider()
-	response, err := smoke.Infer(context.Background(), interfaces.ProviderInferenceRequest{})
+	response, err := smoke.Infer(context.Background(), workerexecution.ProviderInferenceRequest{})
 	if err != nil {
 		t.Fatalf("SmokeLiveChildProvider().Infer: %v", err)
 	}
@@ -3061,7 +3062,7 @@ func newResumeCoverageBlockingProvider() *resumeCoverageBlockingProvider {
 	return &resumeCoverageBlockingProvider{}
 }
 
-func (p *resumeCoverageBlockingProvider) Infer(ctx context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *resumeCoverageBlockingProvider) Infer(ctx context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	p.callCount++
 	call := p.callCount
@@ -3069,9 +3070,9 @@ func (p *resumeCoverageBlockingProvider) Infer(ctx context.Context, _ interfaces
 	p.mu.Unlock()
 
 	if call == 1 {
-		return interfaces.InferenceResponse{
+		return workerexecution.InferenceResponse{
 			Content: `{"text":"live:resumable-two-step-fake-children:step-one:step-one:workflows","label":"step-one"}`,
-			ProviderSession: &interfaces.ProviderSessionMetadata{
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
 				Provider: "mock",
 				Kind:     "session_id",
 				ID:       "live-provider-session-1",
@@ -3088,12 +3089,12 @@ func (p *resumeCoverageBlockingProvider) Infer(ctx context.Context, _ interfaces
 		p.mu.Lock()
 		p.contextCanceled++
 		p.mu.Unlock()
-		return interfaces.InferenceResponse{}, ctx.Err()
+		return workerexecution.InferenceResponse{}, ctx.Err()
 	}
 
-	return interfaces.InferenceResponse{
+	return workerexecution.InferenceResponse{
 		Content: `{"text":"live:resumable-two-step-fake-children:step-two:step-two:workflows","label":"step-two"}`,
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "mock",
 			Kind:     "session_id",
 			ID:       "live-provider-session-2",

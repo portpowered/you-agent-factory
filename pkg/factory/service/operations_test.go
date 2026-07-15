@@ -139,7 +139,7 @@ func newOperationsTestBundle() (*operationsFactory, *factoryservice.Bundle, chan
 func assertSubmitDelegated(t *testing.T, bundle *factoryservice.Bundle) {
 	t.Helper()
 	submitResult, err := factoryservice.SubmitWorkRequest(context.Background(), bundle, work.WorkRequest{
-		Works: []interfaces.Work{{WorkID: "work-1"}},
+		Works: []work.Work{{WorkID: "work-1"}},
 	})
 	if err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)

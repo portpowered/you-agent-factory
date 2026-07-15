@@ -4,12 +4,14 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workercompatibility "github.com/portpowered/infinite-you/pkg/workers/compatibility"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestPublicWorkerTypeForFactoryUsage(t *testing.T) {
 	t.Parallel()
 
-	agentWorker := interfaces.WorkerConfig{Name: "executor", Type: interfaces.WorkerTypeModel}
+	agentWorker := workerconfig.Config{Name: "executor", Type: interfaces.WorkerTypeModel}
 	agentWorkstations := []interfaces.FactoryWorkstationConfig{{
 		Name:           "execute-story",
 		Type:           interfaces.WorkstationTypeModel,
@@ -20,7 +22,7 @@ func TestPublicWorkerTypeForFactoryUsage(t *testing.T) {
 		t.Fatalf("agent factory usage = %q, want %q", got, interfaces.WorkerTypeAgent)
 	}
 
-	inferenceWorker := interfaces.WorkerConfig{Name: "executor", Type: interfaces.WorkerTypeModel}
+	inferenceWorker := workerconfig.Config{Name: "executor", Type: interfaces.WorkerTypeModel}
 	inferenceWorkstations := []interfaces.FactoryWorkstationConfig{{
 		Name:           "invoke-story",
 		Type:           interfaces.WorkstationTypeInvoke,
@@ -30,7 +32,7 @@ func TestPublicWorkerTypeForFactoryUsage(t *testing.T) {
 		t.Fatalf("inference factory usage = %q, want %q", got, interfaces.WorkerTypeInference)
 	}
 
-	mixedWorker := interfaces.WorkerConfig{Name: "executor", Type: interfaces.WorkerTypeModel}
+	mixedWorker := workerconfig.Config{Name: "executor", Type: interfaces.WorkerTypeModel}
 	mixedWorkstations := []interfaces.FactoryWorkstationConfig{
 		{
 			Name:           "execute-story",
@@ -222,13 +224,13 @@ func TestWorkerWorkstationBehaviorHelpers(t *testing.T) {
 
 	t.Run("worker behavior class mapping", func(t *testing.T) {
 		t.Parallel()
-		cases := map[string]interfaces.WorkerWorkstationBehaviorClass{
-			interfaces.WorkerTypeInference: interfaces.WorkerWorkstationBehaviorInference,
-			interfaces.WorkerTypeModel:     interfaces.WorkerWorkstationBehaviorInference,
-			interfaces.WorkerTypeAgent:     interfaces.WorkerWorkstationBehaviorAgent,
-			interfaces.WorkerTypeScript:    interfaces.WorkerWorkstationBehaviorScript,
-			interfaces.WorkerTypePoller:    interfaces.WorkerWorkstationBehaviorPoller,
-			interfaces.WorkerTypeHosted:    interfaces.WorkerWorkstationBehaviorPoller,
+		cases := map[string]workercompatibility.WorkerWorkstationBehaviorClass{
+			interfaces.WorkerTypeInference: workercompatibility.WorkerWorkstationBehaviorInference,
+			interfaces.WorkerTypeModel:     workercompatibility.WorkerWorkstationBehaviorInference,
+			interfaces.WorkerTypeAgent:     workercompatibility.WorkerWorkstationBehaviorAgent,
+			interfaces.WorkerTypeScript:    workercompatibility.WorkerWorkstationBehaviorScript,
+			interfaces.WorkerTypePoller:    workercompatibility.WorkerWorkstationBehaviorPoller,
+			interfaces.WorkerTypeHosted:    workercompatibility.WorkerWorkstationBehaviorPoller,
 		}
 		for workerType, want := range cases {
 			got, ok := interfaces.WorkerBehaviorClass(workerType)
@@ -249,28 +251,28 @@ func TestExpectedWorkerBehaviorClassForWorkstation(t *testing.T) {
 		name        string
 		workstation interfaces.FactoryWorkstationConfig
 		workerType  string
-		want        interfaces.WorkerWorkstationBehaviorClass
+		want        workercompatibility.WorkerWorkstationBehaviorClass
 		wantOK      bool
 	}{
 		{
 			name:        "inference workstation",
 			workstation: interfaces.FactoryWorkstationConfig{Type: interfaces.WorkstationTypeInference},
 			workerType:  interfaces.WorkerTypeInference,
-			want:        interfaces.WorkerWorkstationBehaviorInference,
+			want:        workercompatibility.WorkerWorkstationBehaviorInference,
 			wantOK:      true,
 		},
 		{
 			name:        "legacy model workstation with script worker projects to script",
 			workstation: interfaces.FactoryWorkstationConfig{Type: interfaces.WorkstationTypeModel},
 			workerType:  interfaces.WorkerTypeScript,
-			want:        interfaces.WorkerWorkstationBehaviorScript,
+			want:        workercompatibility.WorkerWorkstationBehaviorScript,
 			wantOK:      true,
 		},
 		{
 			name:        "poller kind blank type",
 			workstation: interfaces.FactoryWorkstationConfig{Kind: interfaces.WorkstationKindPoller},
 			workerType:  interfaces.WorkerTypeHosted,
-			want:        interfaces.WorkerWorkstationBehaviorPoller,
+			want:        workercompatibility.WorkerWorkstationBehaviorPoller,
 			wantOK:      true,
 		},
 		{
@@ -373,14 +375,14 @@ func TestPublicWorkerTypeForFactoryUsage_Fallbacks(t *testing.T) {
 	t.Parallel()
 
 	if got := interfaces.PublicWorkerTypeForFactoryUsage(
-		interfaces.WorkerConfig{Name: "", Type: interfaces.WorkerTypeModel},
+		workerconfig.Config{Name: "", Type: interfaces.WorkerTypeModel},
 		[]interfaces.FactoryWorkstationConfig{{Type: interfaces.WorkstationTypeAgent, WorkerTypeName: "executor"}},
 	); got != interfaces.WorkerTypeInference {
 		t.Fatalf("model worker without name = %q, want %q", got, interfaces.WorkerTypeInference)
 	}
 
 	if got := interfaces.PublicWorkerTypeForFactoryUsage(
-		interfaces.WorkerConfig{Name: "executor", Type: interfaces.WorkerTypeAgent},
+		workerconfig.Config{Name: "executor", Type: interfaces.WorkerTypeAgent},
 		nil,
 	); got != interfaces.WorkerTypeAgent {
 		t.Fatalf("non-model worker type projection = %q, want %q", got, interfaces.WorkerTypeAgent)

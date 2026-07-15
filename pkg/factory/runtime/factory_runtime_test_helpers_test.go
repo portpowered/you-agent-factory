@@ -16,18 +16,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type passExecutor struct{}
 
-func (e *passExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{
+func (e *passExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "done",
 	}, nil
 }
@@ -37,51 +39,51 @@ type blockingExecutor struct {
 	release chan struct{}
 }
 
-func (e *blockingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *blockingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	close(e.started)
 	<-e.release
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "done",
 	}, nil
 }
 
 type safeDiagnosticsBoundaryExecutor struct{}
 
-func (e *safeDiagnosticsBoundaryExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *safeDiagnosticsBoundaryExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	workID := safeBoundaryWorkID(dispatch)
 	switch workID {
 	case "work-safe-success":
-		return safeBoundaryResult(dispatch, workID, interfaces.OutcomeAccepted, "", nil, &interfaces.ProviderSessionMetadata{
+		return safeBoundaryResult(dispatch, workID, workerexecution.OutcomeAccepted, "", nil, &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "response_id",
 			ID:       "resp-safe-success",
 		}, "1"), nil
 	case "work-safe-failure":
-		return safeBoundaryResult(dispatch, workID, interfaces.OutcomeFailed, "provider timed out", &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyRetryable,
-			Type:   interfaces.WorkFailureTypeTimeout,
-		}, &interfaces.ProviderSessionMetadata{
+		return safeBoundaryResult(dispatch, workID, workerexecution.OutcomeFailed, "provider timed out", &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyRetryable,
+			Type:   workerexecution.WorkFailureTypeTimeout,
+		}, &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-safe-failure",
 		}, "2"), nil
 	case "work-safe-windows-process-failure":
-		return safeBoundaryResult(dispatch, workID, interfaces.OutcomeFailed, "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)", &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyRetryable,
-			Type:   interfaces.WorkFailureTypeInternalServerError,
-		}, &interfaces.ProviderSessionMetadata{
+		return safeBoundaryResult(dispatch, workID, workerexecution.OutcomeFailed, "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)", &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyRetryable,
+			Type:   workerexecution.WorkFailureTypeInternalServerError,
+		}, &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-safe-windows-4294967295",
 		}, "2"), nil
 	default:
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 			Output:       "done",
 		}, nil
 	}
@@ -89,16 +91,16 @@ func (e *safeDiagnosticsBoundaryExecutor) Execute(_ context.Context, dispatch wo
 
 type fixedCompletionDeliveryPlanner struct {
 	tick          int
-	plannedResult interfaces.WorkResult
+	plannedResult workerexecution.WorkResult
 }
 
 func (p fixedCompletionDeliveryPlanner) DeliveryTickForDispatch(work.WorkDispatch) (int, bool, error) {
 	return p.tick, true, nil
 }
 
-func (p fixedCompletionDeliveryPlanner) PlannedResultForDispatch(dispatch work.WorkDispatch) (interfaces.WorkResult, bool, error) {
+func (p fixedCompletionDeliveryPlanner) PlannedResultForDispatch(dispatch work.WorkDispatch) (workerexecution.WorkResult, bool, error) {
 	if p.plannedResult.DispatchID == "" && p.plannedResult.TransitionID == "" && p.plannedResult.Output == "" && p.plannedResult.Outcome == "" {
-		return interfaces.WorkResult{}, false, nil
+		return workerexecution.WorkResult{}, false, nil
 	}
 	result := p.plannedResult
 	result.DispatchID = dispatch.DispatchID
@@ -477,7 +479,7 @@ func assertSafeBoundaryRequestView(
 
 func safeBoundaryWorkID(dispatch work.WorkDispatch) string {
 	for _, token := range workers.WorkDispatchInputTokens(dispatch) {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		if token.Color.WorkID != "" {
@@ -498,13 +500,13 @@ func safeBoundaryWorkID(dispatch work.WorkDispatch) string {
 func safeBoundaryResult(
 	dispatch work.WorkDispatch,
 	workID string,
-	outcome interfaces.WorkOutcome,
+	outcome workerexecution.WorkOutcome,
 	errText string,
-	providerFailure *interfaces.WorkFailureMetadata,
-	providerSession *interfaces.ProviderSessionMetadata,
+	providerFailure *workerexecution.WorkFailureMetadata,
+	providerSession *workerexecution.ProviderSessionMetadata,
 	retryCount string,
-) interfaces.WorkResult {
-	return interfaces.WorkResult{
+) workerexecution.WorkResult {
+	return workerexecution.WorkResult{
 		DispatchID:      dispatch.DispatchID,
 		TransitionID:    dispatch.TransitionID,
 		Outcome:         outcome,
@@ -512,8 +514,8 @@ func safeBoundaryResult(
 		Error:           errText,
 		FailureMetadata: providerFailure,
 		ProviderSession: providerSession,
-		Diagnostics: &interfaces.WorkDiagnostics{
-			RenderedPrompt: &interfaces.RenderedPromptDiagnostic{
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{
 				SystemPromptHash: "system-hash-" + workID,
 				UserMessageHash:  "user-hash-" + workID,
 				Variables: map[string]string{
@@ -525,7 +527,7 @@ func safeBoundaryResult(
 					"env":            "raw rendered environment must stay private",
 				},
 			},
-			Provider: &interfaces.ProviderDiagnostic{
+			Provider: &workerexecution.ProviderDiagnostic{
 				Provider: "codex",
 				Model:    "gpt-5.4",
 				RequestMetadata: map[string]string{
@@ -545,14 +547,14 @@ func safeBoundaryResult(
 					"env_secret":          "raw response env secret must stay private",
 				},
 			},
-			Command: &interfaces.CommandDiagnostic{
+			Command: &workerexecution.CommandDiagnostic{
 				Command: "echo",
 				Stdin:   "raw command stdin must stay private",
 				Env: map[string]string{
 					"AGENT_FACTORY_AUTH_TOKEN": "raw environment value must stay private",
 				},
 			},
-			Panic: &interfaces.PanicDiagnostic{Stack: "panic stack should not be stored"},
+			Panic: &workerexecution.PanicDiagnostic{Stack: "panic stack should not be stored"},
 		},
 	}
 }

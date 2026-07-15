@@ -8,12 +8,12 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type recordingLogger struct {
@@ -251,9 +251,9 @@ func TestResume_DiagnosticsLogPostResumeBufferedDrain(t *testing.T) {
 	}
 
 	impl := f.(*factoryImpl)
-	if !impl.resultBuffer.Write(ctx, interfaces.WorkResult{
+	if !impl.resultBuffer.Write(ctx, workerexecution.WorkResult{
 		DispatchID: "dispatch-drain",
-		Outcome:    interfaces.OutcomeAccepted,
+		Outcome:    workerexecution.OutcomeAccepted,
 	}) {
 		t.Fatal("buffered result write failed")
 	}

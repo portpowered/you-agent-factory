@@ -21,6 +21,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -551,7 +552,7 @@ func dashboardTraceTokenFromWorkItem(item work.FactoryWorkItem, tokenID string, 
 	}
 }
 
-func dashboardProviderSessionMetadata(session *interfaces.ProviderSessionMetadata) *ProviderSessionMetadata {
+func dashboardProviderSessionMetadata(session *workerexecution.ProviderSessionMetadata) *ProviderSessionMetadata {
 	if session == nil || session.ID == "" {
 		return nil
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 // ProjectInitialStructure projects the static net topology into the canonical
@@ -155,7 +156,7 @@ func transitionWorkerIDs(transitions map[string]*petri.Transition) []string {
 	return ids
 }
 
-func factoryWorkerWithUsage(workerID string, def *interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) interfaces.FactoryWorker {
+func factoryWorkerWithUsage(workerID string, def *workerconfig.Config, workstations []interfaces.FactoryWorkstationConfig) interfaces.FactoryWorker {
 	return interfaces.FactoryWorker{
 		ID:            workerID,
 		Name:          workerID,
@@ -166,7 +167,7 @@ func factoryWorkerWithUsage(workerID string, def *interfaces.WorkerConfig, works
 	}
 }
 
-func workerConfigWithUsage(def *interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) map[string]string {
+func workerConfigWithUsage(def *workerconfig.Config, workstations []interfaces.FactoryWorkstationConfig) map[string]string {
 	if def == nil {
 		return nil
 	}

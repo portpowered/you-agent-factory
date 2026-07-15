@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestSimpleDashboardRenderDataFromWorldState_CountsFailedWorkItemsForCustomerSummary(t *testing.T) {
@@ -20,7 +21,7 @@ func TestSimpleDashboardRenderDataFromWorldState_CountsFailedWorkItemsForCustome
 		TransitionID: "review",
 		WorkItemIDs:  []string{"work-1", "work-2", "work-3"},
 		Workstation:  interfaces.FactoryWorkstationRef{Name: "Review"},
-		Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed)},
+		Result:       interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeFailed)},
 	}
 	worldState := interfaces.FactoryWorldState{
 		WorkItemsByID: map[string]work.FactoryWorkItem{
@@ -72,7 +73,7 @@ func TestSimpleDashboardRenderDataFromWorldState_ReplaysWeirdNumberSummaryFixtur
 	if renderData.Session.FailedCount != 3 {
 		t.Fatalf("FailedCount = %d, want 3 failed work items", renderData.Session.FailedCount)
 	}
-	if len(renderData.Session.DispatchHistory) != 1 || renderData.Session.DispatchHistory[0].Result.Outcome != string(interfaces.OutcomeFailed) {
+	if len(renderData.Session.DispatchHistory) != 1 || renderData.Session.DispatchHistory[0].Result.Outcome != string(workerexecution.OutcomeFailed) {
 		t.Fatalf("DispatchHistory = %#v, want retained failed dispatch", renderData.Session.DispatchHistory)
 	}
 }

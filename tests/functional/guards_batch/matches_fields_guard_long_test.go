@@ -15,6 +15,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -106,7 +107,7 @@ func TestMatchesFieldsGuard_FixtureBoundaryMapsToRuntimeConfig(t *testing.T) {
 func TestMatchesFieldsGuard_SingleInputResolvedNameCompletes(t *testing.T) {
 	support.SkipLongFunctional(t, "slow matches-fields single-input sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "matches_fields_single_input_dir"))
-	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "single COMPLETE"})
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "single COMPLETE"})
 
 	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -142,7 +143,7 @@ func TestMatchesFieldsGuard_SingleInputResolvedNameCompletes(t *testing.T) {
 func TestMatchesFieldsGuard_TwoInputMatchingTagsCompletesJoin(t *testing.T) {
 	support.SkipLongFunctional(t, "slow matches-fields matching-tags sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "matches_fields_pair_guard_dir"))
-	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "pair COMPLETE"})
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "pair COMPLETE"})
 
 	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -187,7 +188,7 @@ func TestMatchesFieldsGuard_TwoInputMatchingTagsCompletesJoin(t *testing.T) {
 func TestMatchesFieldsGuard_TwoInputMismatchedTagsStayBlocked(t *testing.T) {
 	support.SkipLongFunctional(t, "slow matches-fields mismatched-tags sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "matches_fields_pair_guard_dir"))
-	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "pair COMPLETE"})
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "pair COMPLETE"})
 
 	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -212,7 +213,7 @@ func TestMatchesFieldsGuard_TwoInputMismatchedTagsStayBlocked(t *testing.T) {
 func TestMatchesFieldsGuard_ThreeInputNestedTagMismatchRejectsCandidateSet(t *testing.T) {
 	support.SkipLongFunctional(t, "slow matches-fields nested-tag mismatch sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "matches_fields_triple_guard_dir"))
-	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "triple COMPLETE"})
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "triple COMPLETE"})
 
 	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -247,7 +248,7 @@ func TestMatchesFieldsGuard_IntegrationSmoke_GroupedExecution(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "matches_fields_pair_guard_dir"))
 		assertMatchesFieldsPairFixtureContract(t, dir)
 
-		provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "pair COMPLETE"})
+		provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "pair COMPLETE"})
 		h := support.NewGuardsBatchHarness(t, dir,
 			testutil.WithProvider(provider),
 			testutil.WithFullWorkerPoolAndScriptWrap(),
@@ -293,7 +294,7 @@ func TestMatchesFieldsGuard_IntegrationSmoke_GroupedExecution(t *testing.T) {
 		dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "matches_fields_pair_guard_dir"))
 		assertMatchesFieldsPairFixtureContract(t, dir)
 
-		provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "pair COMPLETE"})
+		provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "pair COMPLETE"})
 		h := support.NewGuardsBatchHarness(t, dir,
 			testutil.WithProvider(provider),
 			testutil.WithFullWorkerPoolAndScriptWrap(),

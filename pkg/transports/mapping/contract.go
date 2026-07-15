@@ -13,13 +13,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
-// ModelAPI is the model catalog and direct-invocation seam for API handlers and
-// bounded test doubles.
+// ModelAPI is the model catalog and direct-invocation seam for API handlers and bounded test doubles.
 type ModelAPI interface {
 	ListModels(ctx context.Context) (factoryapi.ListModelsResponse, error)
 	GetModel(ctx context.Context, modelName string) (factoryapi.ModelDetail, error)
@@ -172,7 +173,7 @@ type stopSummaryWork struct {
 	name     string
 	workType string
 	state    string
-	token    *interfaces.Token
+	token    *factorytoken.Token
 }
 
 type stopSummaryRecovery struct {
@@ -227,7 +228,7 @@ func BuildFactorySessionStopSummary(
 func BuildWorkStopSummary(
 	sessionID string,
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	token *interfaces.Token,
+	token *factorytoken.Token,
 	sessionStopSummary *factoryapi.FactoryStopSummary,
 ) *factoryapi.FactoryStopSummary {
 	sessionID = strings.TrimSpace(sessionID)
@@ -516,7 +517,7 @@ func activeDispatchSummary(dispatchID string, entry interfaces.DispatchEntry) st
 func completedDispatchSummary(completed interfaces.CompletedDispatch) stopSummaryDispatch {
 	status := factoryapi.FactoryDispatchStatusCOMPLETED
 	switch completed.Outcome {
-	case interfaces.OutcomeFailed, interfaces.OutcomeRejected:
+	case workerexecution.OutcomeFailed, workerexecution.OutcomeRejected:
 		status = factoryapi.FactoryDispatchStatusFAILED
 	}
 	return stopSummaryDispatch{
@@ -620,7 +621,7 @@ func workByID(materialized materialize.PublicWorkTokens, workID string) *stopSum
 	return nil
 }
 
-func workFromToken(token *interfaces.Token, topology *state.Net) stopSummaryWork {
+func workFromToken(token *factorytoken.Token, topology *state.Net) stopSummaryWork {
 	if token == nil {
 		return stopSummaryWork{}
 	}
@@ -672,7 +673,7 @@ func snapshotTopology(
 	return snapshot.Topology
 }
 
-func dispatchTouchesWork(tokens []interfaces.Token, workID string) bool {
+func dispatchTouchesWork(tokens []factorytoken.Token, workID string) bool {
 	for _, token := range tokens {
 		if strings.TrimSpace(token.Color.WorkID) == workID {
 			return true
@@ -811,7 +812,7 @@ func failureMessageFromWork(work stopSummaryWork) string {
 	return firstNonEmpty(work.token.History.LastError, latestFailureLogMessage(work.token.History))
 }
 
-func latestFailureLogMessage(history interfaces.TokenHistory) string {
+func latestFailureLogMessage(history factorytoken.History) string {
 	if len(history.FailureLog) == 0 {
 		return ""
 	}
@@ -931,7 +932,7 @@ type ModelInvocationResult struct {
 	Operation         string
 	ProviderLocality  string
 	Content           []work.WorkContentPart
-	Bindings          []interfaces.ResolvedModelOperationBinding
+	Bindings          []workerexecution.ResolvedModelOperationBinding
 	StreamFile        string
 	StreamContentType string
 }

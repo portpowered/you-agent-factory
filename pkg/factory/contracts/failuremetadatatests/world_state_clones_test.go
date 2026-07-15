@@ -4,6 +4,9 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestCloneFactoryWorldDispatchCompletion_ResolvesFailureMetadataOnlyInput(t *testing.T) {
@@ -11,15 +14,15 @@ func TestCloneFactoryWorldDispatchCompletion_ResolvesFailureMetadataOnlyInput(t 
 		DispatchID: "dispatch-1",
 		Result: interfaces.WorkstationResult{
 			Outcome: "FAILED",
-			FailureMetadata: &interfaces.WorkFailureMetadata{
-				Family: interfaces.WorkFailureFamilyRetryable,
-				Type:   interfaces.WorkFailureTypeTimeout,
+			FailureMetadata: &workerexecution.WorkFailureMetadata{
+				Family: workerexecution.WorkFailureFamilyRetryable,
+				Type:   workerexecution.WorkFailureTypeTimeout,
 			},
 		},
 	}
 
 	cloned := interfaces.CloneFactoryWorldDispatchCompletion(original)
-	if cloned.Result.FailureMetadata == nil || cloned.Result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+	if cloned.Result.FailureMetadata == nil || cloned.Result.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("cloned failure metadata = %#v, want retryable timeout", cloned.Result.FailureMetadata)
 	}
 }
@@ -36,15 +39,15 @@ func testFactoryWorldDispatchCompletion() interfaces.FactoryWorldDispatchComplet
 		DispatchID: "dispatch-1",
 		Result: interfaces.WorkstationResult{
 			Outcome: "FAILED",
-			FailureMetadata: &interfaces.WorkFailureMetadata{
-				Family: interfaces.WorkFailureFamilyRetryable,
-				Type:   interfaces.WorkFailureTypeTimeout,
+			FailureMetadata: &workerexecution.WorkFailureMetadata{
+				Family: workerexecution.WorkFailureFamilyRetryable,
+				Type:   workerexecution.WorkFailureTypeTimeout,
 			},
 		},
 		WorkItemIDs: []string{"work-1"},
 		ConsumedInputs: []interfaces.WorkstationInput{{
 			TokenID: "token-1",
-			WorkItem: &interfaces.FactoryWorkItem{
+			WorkItem: &work.FactoryWorkItem{
 				ID:                       "work-1",
 				WorkTypeID:               "task",
 				PreviousChainingTraceIDs: []string{"chain-a"},
@@ -53,17 +56,17 @@ func testFactoryWorldDispatchCompletion() interfaces.FactoryWorldDispatchComplet
 		}},
 		PreviousChainingTraceIDs: []string{"chain-a", "chain-b"},
 		TraceIDs:                 []string{"trace-1"},
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-1",
 		},
-		Diagnostics: &interfaces.SafeWorkDiagnostics{
-			RenderedPrompt: &interfaces.SafeRenderedPromptDiagnostic{
+		Diagnostics: &workerdiagnostics.SafeWorkDiagnostics{
+			RenderedPrompt: &workerdiagnostics.SafeRenderedPromptDiagnostic{
 				SystemPromptHash: "system-hash",
 				Variables:        map[string]string{"prompt_source": "factory-renderer"},
 			},
-			Provider: &interfaces.SafeProviderDiagnostic{
+			Provider: &workerdiagnostics.SafeProviderDiagnostic{
 				Provider:         "openai",
 				Model:            "gpt-5.4",
 				RequestMetadata:  map[string]string{"session_id": "sess-1"},
@@ -71,7 +74,7 @@ func testFactoryWorldDispatchCompletion() interfaces.FactoryWorldDispatchComplet
 			},
 		},
 		TerminalWork: &interfaces.FactoryTerminalWork{
-			WorkItem: interfaces.FactoryWorkItem{
+			WorkItem: work.FactoryWorkItem{
 				ID:                       "work-1",
 				WorkTypeID:               "task",
 				PreviousChainingTraceIDs: []string{"chain-a"},
@@ -83,7 +86,7 @@ func testFactoryWorldDispatchCompletion() interfaces.FactoryWorldDispatchComplet
 }
 
 func mutateClonedDispatchCompletion(cloned *interfaces.FactoryWorldDispatchCompletion) {
-	cloned.Result.FailureMetadata.Family = interfaces.WorkFailureFamilyTerminal
+	cloned.Result.FailureMetadata.Family = workerexecution.WorkFailureFamilyTerminal
 	cloned.ProviderSession.ID = "sess-2"
 	cloned.Diagnostics.RenderedPrompt.Variables["prompt_source"] = "mutated"
 	cloned.Diagnostics.Provider.RequestMetadata["session_id"] = "sess-2"
@@ -97,7 +100,7 @@ func mutateClonedDispatchCompletion(cloned *interfaces.FactoryWorldDispatchCompl
 func assertOriginalDispatchCompletionUnchanged(t *testing.T, original interfaces.FactoryWorldDispatchCompletion) {
 	t.Helper()
 
-	if original.Result.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
+	if original.Result.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable {
 		t.Fatalf("original failure metadata = %#v, want retryable metadata unchanged", original.Result.FailureMetadata)
 	}
 	if original.ProviderSession.ID != "sess-1" {

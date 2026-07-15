@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -19,9 +19,9 @@ func TestMultiOutput_WithStopWord(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "request", []byte(`{"title": "Multi-output with stop word"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Here is the plan and tasks. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Finished. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Finished. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Here is the plan and tasks. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -43,7 +43,7 @@ func TestMultiOutput_WithoutStopWord(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "request", []byte(`{"title": "Multi-output without stop word"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "I tried but could not finish"},
+		workerexecution.InferenceResponse{Content: "I tried but could not finish"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -68,11 +68,11 @@ func TestMultiOutput_NoStopWordsConfigured(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	h.MockWorker("planner-worker",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 	h.MockWorker("finisher-worker",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	h.RunUntilComplete(t, 10*time.Second)
@@ -91,9 +91,9 @@ func TestMultiOutput_SecondStopWord(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "request", []byte(`{"title": "Second stop word"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "All tasks generated. DONE"},
-		interfaces.InferenceResponse{Content: "Finished. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Finished. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "All tasks generated. DONE"},
+		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -119,9 +119,9 @@ func TestMultiOutput_OutputTokensInheritInputLineage(t *testing.T) {
 	})
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Plan generated. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Finished. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Finished. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Plan generated. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Finished. COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),

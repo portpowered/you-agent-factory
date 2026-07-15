@@ -8,8 +8,10 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestSubmissionHook_GeneratedBatchRecordsCanonicalHistoryBeforeInjection(t *testing.T) {
@@ -33,7 +35,7 @@ func TestSubmissionHook_GeneratedBatchRecordsCanonicalHistoryBeforeInjection(t *
 				GeneratedBatches: []work.GeneratedSubmissionBatch{{
 					Request: work.WorkRequest{
 						Type: work.WorkRequestTypeFactoryRequestBatch,
-						Works: []interfaces.Work{{
+						Works: []work.Work{{
 							Name:       "hook-work",
 							WorkID:     "work-hook",
 							WorkTypeID: "task",
@@ -52,7 +54,7 @@ func TestSubmissionHook_GeneratedBatchRecordsCanonicalHistoryBeforeInjection(t *
 			order = append(order, "request:"+record.RequestID)
 			requestRecords = append(requestRecords, record)
 		}),
-		WithWorkInputRecorder(func(_ int, req work.SubmitRequest, _ interfaces.Token) {
+		WithWorkInputRecorder(func(_ int, req work.SubmitRequest, _ factorytoken.Token) {
 			order = append(order, "input:"+req.WorkID)
 			workInputs = append(workInputs, req)
 		}),
@@ -129,10 +131,10 @@ func TestSubmissionHook_ResultsAreVisibleToTick(t *testing.T) {
 		priority: 1,
 		onTick: func(_ context.Context, _ interfaces.SubmissionHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]) (interfaces.SubmissionHookResult, error) {
 			return interfaces.SubmissionHookResult{
-				Results: []interfaces.WorkResult{{
+				Results: []workerexecution.WorkResult{{
 					DispatchID:   "dispatch-1",
 					TransitionID: "transition-1",
-					Outcome:      interfaces.OutcomeAccepted,
+					Outcome:      workerexecution.OutcomeAccepted,
 				}},
 			}, nil
 		},
@@ -190,7 +192,7 @@ func TestTickResultGeneratedBatchesRecordedBeforeInputsAndIdempotent(t *testing.
 		Request: work.WorkRequest{
 			RequestID: "generated-request-1",
 			Type:      work.WorkRequestTypeFactoryRequestBatch,
-			Works: []interfaces.Work{
+			Works: []work.Work{
 				{Name: "draft", WorkID: "work-draft", WorkTypeID: "task", TraceID: "trace-generated"},
 				{Name: "review", WorkID: "work-review", WorkTypeID: "task"},
 			},
@@ -224,7 +226,7 @@ func TestTickResultGeneratedBatchesRecordedBeforeInputsAndIdempotent(t *testing.
 			order = append(order, "request:"+record.RequestID)
 			requests = append(requests, record)
 		}),
-		WithWorkInputRecorder(func(_ int, req work.SubmitRequest, _ interfaces.Token) {
+		WithWorkInputRecorder(func(_ int, req work.SubmitRequest, _ factorytoken.Token) {
 			order = append(order, "input:"+req.WorkID)
 			inputs = append(inputs, req)
 		}),
@@ -287,7 +289,7 @@ func assertIntSequence(t *testing.T, got, want []int, label string) {
 	}
 }
 
-func assertMarkingTokenIDs(t *testing.T, tokens []interfaces.Token, want []string, label string) {
+func assertMarkingTokenIDs(t *testing.T, tokens []factorytoken.Token, want []string, label string) {
 	t.Helper()
 	if len(tokens) != len(want) {
 		t.Fatalf("%s tokens = %#v, want ids %v", label, tokens, want)

@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -16,7 +16,7 @@ func TestEndToEndDispatch_CompletesThroughServiceHarness(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "E2E test"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "E2E done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "E2E done. COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),

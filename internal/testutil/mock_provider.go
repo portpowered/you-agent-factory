@@ -4,30 +4,30 @@ import (
 	"context"
 	"sync"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // MockProvider implements workers.Provider for testing. It returns
 // predetermined InferenceResponses in sequence. When the sequence is
 // exhausted, it returns a default response.
 type MockProvider struct {
-	responses []interfaces.InferenceResponse
+	responses []workerexecution.InferenceResponse
 	errors    []error
-	calls     []interfaces.ProviderInferenceRequest
+	calls     []workerexecution.ProviderInferenceRequest
 	mu        sync.Mutex
 	index     int
-	defaultR  interfaces.InferenceResponse
+	defaultR  workerexecution.InferenceResponse
 }
 
 // NewMockProvider creates a MockProvider that returns the given responses in order.
 // Each response can optionally have a paired error at the same index in the errors
 // slice. When the sequence is exhausted, returns a default InferenceResponse with
 // StopTokenFound=true (so MODEL_WORKER with stop tokens will ACCEPT by default).
-func NewMockProvider(responses ...interfaces.InferenceResponse) *MockProvider {
+func NewMockProvider(responses ...workerexecution.InferenceResponse) *MockProvider {
 	return &MockProvider{
 		responses: responses,
-		defaultR: interfaces.InferenceResponse{
+		defaultR: workerexecution.InferenceResponse{
 			Content: "default mock response",
 		},
 	}
@@ -35,18 +35,18 @@ func NewMockProvider(responses ...interfaces.InferenceResponse) *MockProvider {
 
 // NewMockProviderWithErrors creates a MockProvider with paired responses and errors.
 // The responses and errors slices must be the same length; a nil error means success.
-func NewMockProviderWithErrors(responses []interfaces.InferenceResponse, errors []error) *MockProvider {
+func NewMockProviderWithErrors(responses []workerexecution.InferenceResponse, errors []error) *MockProvider {
 	return &MockProvider{
 		responses: responses,
 		errors:    errors,
-		defaultR: interfaces.InferenceResponse{
+		defaultR: workerexecution.InferenceResponse{
 			Content: "default mock response",
 		},
 	}
 }
 
 // Infer records the request and returns the next predetermined response.
-func (m *MockProvider) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (m *MockProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -66,11 +66,11 @@ func (m *MockProvider) Infer(_ context.Context, req interfaces.ProviderInference
 }
 
 // Calls returns all InferenceRequests received by this provider, in order.
-func (m *MockProvider) Calls() []interfaces.ProviderInferenceRequest {
+func (m *MockProvider) Calls() []workerexecution.ProviderInferenceRequest {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	out := make([]interfaces.ProviderInferenceRequest, len(m.calls))
+	out := make([]workerexecution.ProviderInferenceRequest, len(m.calls))
 	copy(out, m.calls)
 	return out
 }
@@ -84,7 +84,7 @@ func (m *MockProvider) CallCount() int {
 }
 
 // LastCall returns the most recent InferenceRequest, or panics if none.
-func (m *MockProvider) LastCall() interfaces.ProviderInferenceRequest {
+func (m *MockProvider) LastCall() workerexecution.ProviderInferenceRequest {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

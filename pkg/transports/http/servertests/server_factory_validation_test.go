@@ -14,7 +14,8 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestFactoryValidation_EquivalentCanonicalTargetsAcrossPackageConfigAndAPIPaths(t *testing.T) {
@@ -104,7 +105,7 @@ func TestValidateFactory_OperationalCronRulesRemainConfigScoped(t *testing.T) {
 				{Name: "done", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "w1"}},
+		Workers: []workerconfig.Config{{Name: "w1"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "daily-refresh",
 			Kind:           interfaces.WorkstationKindCron,

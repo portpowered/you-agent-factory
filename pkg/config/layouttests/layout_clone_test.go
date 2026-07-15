@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestFactoryConfig_SharedSurfaceRetiresExhaustionRules(t *testing.T) {
@@ -245,7 +246,7 @@ func TestCloneFactoryConfig_ClonesModelOperationBindingWorkContent(t *testing.T)
 }
 
 func TestCloneWorkerConfig_PreservesNilHostedConfig(t *testing.T) {
-	cloned := CloneWorkerConfig(interfaces.WorkerConfig{
+	cloned := CloneWorkerConfig(workerconfig.Config{
 		Name:     "hosted-linear",
 		Type:     interfaces.WorkerTypeHosted,
 		Provider: interfaces.HostedWorkerProviderLinear,
@@ -260,18 +261,18 @@ func TestCloneWorkerConfig_PreservesNilHostedConfig(t *testing.T) {
 }
 
 func TestCloneWorkerConfig_DetachesHostedNestedConfig(t *testing.T) {
-	source := interfaces.WorkerConfig{
+	source := workerconfig.Config{
 		Name:     "hosted-linear",
 		Type:     interfaces.WorkerTypeHosted,
 		Provider: interfaces.HostedWorkerProviderLinear,
-		Auth: &interfaces.HostedWorkerAuthConfig{
+		Auth: &workerconfig.HostedWorkerAuthConfig{
 			SecretRef: "linear-secret",
 		},
-		Linear: &interfaces.HostedLinearWorkerConfig{
+		Linear: &workerconfig.HostedLinearWorkerConfig{
 			PollInterval: "30s",
 			TeamIDs:      []string{"team-1", "team-2"},
 			StateIDs:     []string{"state-1", "state-2"},
-			Claim: &interfaces.HostedLinearWorkerClaimConfig{
+			Claim: &workerconfig.HostedLinearWorkerClaimConfig{
 				AssigneeField: "owner",
 			},
 		},

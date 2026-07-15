@@ -8,6 +8,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestFactoryRelationsFromGenerated_PreservesRequestNameAndContextResolution(t *testing.T) {
@@ -146,7 +147,7 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 		Result:          interfaces.WorkstationResult{Outcome: "ACCEPTED"},
 		DurationMillis:  800,
 		TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-		ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"},
+		ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"},
 	})
 	inference := projectionReducerGeneratedEvent(
 		factoryapi.FactoryEventTypeInferenceResponse,
@@ -159,7 +160,7 @@ func TestFactoryWorldReducer_DetachesCompletedConsumedInputsFromDispatchSource(t
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeSucceeded,
 			DurationMillis:     700,
-			ProviderSession:    projectionReducerProviderSession(&interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"}),
+			ProviderSession:    projectionReducerProviderSession(&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"}),
 		},
 	)
 
@@ -365,7 +366,7 @@ func projectionReducerGeneratedOutputWork(payload interfaces.WorkstationResponse
 	return works
 }
 
-func projectionReducerProviderSession(session *interfaces.ProviderSessionMetadata) *factoryapi.ProviderSessionMetadata {
+func projectionReducerProviderSession(session *workerexecution.ProviderSessionMetadata) *factoryapi.ProviderSessionMetadata {
 	if session == nil {
 		return nil
 	}

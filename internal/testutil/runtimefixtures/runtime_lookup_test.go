@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestRuntimeWorkstationLookupFixture_Workstation(t *testing.T) {
@@ -46,7 +47,7 @@ func TestRuntimeConfigLookupFixture_ImplementsLayeredContract(t *testing.T) {
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"router": {Name: "Router", Type: interfaces.WorkstationTypeLogical},
 		},
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"writer": {Model: "gpt-5.4"},
 		},
 		FactoryPath: "/tmp/factory",

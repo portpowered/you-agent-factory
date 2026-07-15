@@ -13,17 +13,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type calculateMutationsFixture struct {
 	now         time.Time
-	baseHistory interfaces.TokenHistory
+	baseHistory factorytoken.History
 	transition  *petri.Transition
-	consumed    []interfaces.Token
-	inputColors []interfaces.TokenColor
+	consumed    []factorytoken.Token
+	inputColors []factorytoken.Color
 	transformer *token_transformer.Transformer
 }
 
@@ -40,17 +43,17 @@ func newCalculateMutationsFixture() calculateMutationsFixture {
 		"wt-code":   {ID: "wt-code"},
 		"wt-review": {ID: "wt-review"},
 	}
-	consumed := []interfaces.Token{{
+	consumed := []factorytoken.Token{{
 		ID:        "tok-1",
 		PlaceID:   "wt-code:init",
 		CreatedAt: createdAt,
 		EnteredAt: createdAt,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "w1",
 			WorkTypeID: "wt-code",
 			Name:       "story-1",
 		},
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -58,7 +61,7 @@ func newCalculateMutationsFixture() calculateMutationsFixture {
 	}}
 	return calculateMutationsFixture{
 		now: now,
-		baseHistory: interfaces.TokenHistory{
+		baseHistory: factorytoken.History{
 			TotalVisits:         map[string]int{"t0": 1},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{"wt-code:init": 1},
@@ -139,7 +142,7 @@ func TestCalculateMutations_PreserveInput_KeepsConsumedPayloadForDownstreamWork(
 		[]petri.Arc{{ID: "out", PlaceID: "wt-code:done"}},
 		resolvedWorkResult{
 			transitionID: "t1",
-			outcome:      interfaces.OutcomeAccepted,
+			outcome:      workerexecution.OutcomeAccepted,
 			output:       "worker-output",
 		},
 		&interfaces.FactoryWorkstationConfig{
@@ -174,7 +177,7 @@ func TestCalculateMutations_OmittedWorkPropagation_UsesWorkerOutputPayload(t *te
 		[]petri.Arc{{ID: "out", PlaceID: "wt-code:done"}},
 		resolvedWorkResult{
 			transitionID: "t1",
-			outcome:      interfaces.OutcomeAccepted,
+			outcome:      workerexecution.OutcomeAccepted,
 			output:       "worker-output",
 		},
 	)
@@ -217,7 +220,7 @@ func TestCalculateMutations_PreserveInput_OutcomeLanes_KeepConsumedWorkData(t *t
 			arcs: []petri.Arc{{ID: "continue", PlaceID: "wt-code:init"}},
 			result: resolvedWorkResult{
 				transitionID: "t1",
-				outcome:      interfaces.OutcomeContinue,
+				outcome:      workerexecution.OutcomeContinue,
 				output:       "worker-output",
 				feedback:     "needs revision",
 			},
@@ -227,7 +230,7 @@ func TestCalculateMutations_PreserveInput_OutcomeLanes_KeepConsumedWorkData(t *t
 			arcs: []petri.Arc{{ID: "reject", PlaceID: "wt-code:init"}},
 			result: resolvedWorkResult{
 				transitionID: "t1",
-				outcome:      interfaces.OutcomeRejected,
+				outcome:      workerexecution.OutcomeRejected,
 				output:       "worker-output",
 				feedback:     "rejected",
 			},
@@ -237,7 +240,7 @@ func TestCalculateMutations_PreserveInput_OutcomeLanes_KeepConsumedWorkData(t *t
 			arcs: []petri.Arc{{ID: "fail", PlaceID: "wt-code:failed"}},
 			result: resolvedWorkResult{
 				transitionID: "t1",
-				outcome:      interfaces.OutcomeFailed,
+				outcome:      workerexecution.OutcomeFailed,
 				output:       "worker-output",
 				err:          "agent crashed",
 			},
@@ -269,11 +272,11 @@ func TestCalculateMutations_PreserveInput_OutcomeLanes_KeepConsumedWorkData(t *t
 
 func TestCalculateMutations_PreserveInput_MultiInput_UsesPrimaryNonResourceInput(t *testing.T) {
 	fixture := newCalculateMutationsFixture()
-	fixture.consumed = []interfaces.Token{
+	fixture.consumed = []factorytoken.Token{
 		{
 			ID:      "tok-primary",
 			PlaceID: "wt-objective:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-objective",
 				WorkTypeID: "wt-objective",
 				Payload:    []byte("primary-input-payload"),
@@ -281,7 +284,7 @@ func TestCalculateMutations_PreserveInput_MultiInput_UsesPrimaryNonResourceInput
 			},
 			CreatedAt: fixture.now.Add(-2 * time.Hour),
 			EnteredAt: fixture.now.Add(-2 * time.Hour),
-			History: interfaces.TokenHistory{
+			History: factorytoken.History{
 				TotalVisits:         map[string]int{},
 				ConsecutiveFailures: map[string]int{},
 				PlaceVisits:         map[string]int{},
@@ -290,7 +293,7 @@ func TestCalculateMutations_PreserveInput_MultiInput_UsesPrimaryNonResourceInput
 		{
 			ID:      "tok-secondary",
 			PlaceID: "wt-context:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-context",
 				WorkTypeID: "wt-context",
 				Payload:    []byte("secondary-input-payload"),
@@ -298,7 +301,7 @@ func TestCalculateMutations_PreserveInput_MultiInput_UsesPrimaryNonResourceInput
 			},
 			CreatedAt: fixture.now.Add(-time.Hour),
 			EnteredAt: fixture.now.Add(-time.Hour),
-			History: interfaces.TokenHistory{
+			History: factorytoken.History{
 				TotalVisits:         map[string]int{},
 				ConsecutiveFailures: map[string]int{},
 				PlaceVisits:         map[string]int{},
@@ -322,7 +325,7 @@ func TestCalculateMutations_PreserveInput_MultiInput_UsesPrimaryNonResourceInput
 		[]petri.Arc{{ID: "cross", PlaceID: "wt-review:init"}},
 		resolvedWorkResult{
 			transitionID: "t1",
-			outcome:      interfaces.OutcomeAccepted,
+			outcome:      workerexecution.OutcomeAccepted,
 			output:       "worker-output",
 		},
 		preserveInputWorkstation(),
@@ -356,10 +359,10 @@ func TestCalculateMutations_PreserveInput_MultiOutput_AllLanesKeepConsumedWorkDa
 		"wt-review-b": {ID: "wt-review-b"},
 		"wt-review-c": {ID: "wt-review-c"},
 	}
-	consumed := []interfaces.Token{{
+	consumed := []factorytoken.Token{{
 		ID:      "tok-1",
 		PlaceID: "wt-code:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "work-code-1",
 			WorkTypeID: "wt-code",
 			Payload:    []byte("input-payload"),
@@ -371,7 +374,7 @@ func TestCalculateMutations_PreserveInput_MultiOutput_AllLanesKeepConsumedWorkDa
 		},
 		CreatedAt: now.Add(-time.Hour),
 		EnteredAt: now.Add(-time.Hour),
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -387,9 +390,9 @@ func TestCalculateMutations_PreserveInput_MultiOutput_AllLanesKeepConsumedWorkDa
 			{ID: "review-c", PlaceID: "wt-review-c:init"},
 		},
 		consumed:    consumed,
-		result:      resolvedWorkResult{transitionID: "t1", outcome: interfaces.OutcomeAccepted, output: "worker-output"},
+		result:      resolvedWorkResult{transitionID: "t1", outcome: workerexecution.OutcomeAccepted, output: "worker-output"},
 		now:         now,
-		history:     interfaces.TokenHistory{},
+		history:     factorytoken.History{},
 		inputColors: tokenColorsFromTokens(consumed),
 		transformer: token_transformer.New(places, workTypes, token_transformer.WithWorkIDGenerator(petri.NewWorkIDGenerator())),
 	})
@@ -426,7 +429,7 @@ func TestCalculateMutations_PreserveInput_RecordedOutputWork_KeepsExplicitConten
 		[]petri.Arc{{ID: "cross", PlaceID: "wt-review:init"}},
 		resolvedWorkResult{
 			transitionID: "t1",
-			outcome:      interfaces.OutcomeAccepted,
+			outcome:      workerexecution.OutcomeAccepted,
 			output:       "worker-output",
 			recordedOutputWork: []work.FactoryWorkItem{{
 				ID:          "work-review-99",
@@ -486,7 +489,7 @@ func TestCalculateMutations_OutputAsPayloadExplicit_UsesWorkerOutputPayload(t *t
 		[]petri.Arc{{ID: "out", PlaceID: "wt-code:done"}},
 		resolvedWorkResult{
 			transitionID: "t1",
-			outcome:      interfaces.OutcomeAccepted,
+			outcome:      workerexecution.OutcomeAccepted,
 			output:       "worker-output",
 		},
 		&interfaces.FactoryWorkstationConfig{
@@ -520,7 +523,7 @@ func TestCalculateMutations_OutputAsPayload_Continue_UsesNextTurnContent(t *test
 		[]petri.Arc{{ID: "continue", PlaceID: "wt-code:init"}},
 		resolvedWorkResult{
 			transitionID: "t1",
-			outcome:      interfaces.OutcomeContinue,
+			outcome:      workerexecution.OutcomeContinue,
 			output:       "next-turn-output",
 			feedback:     "needs revision",
 		},
@@ -562,7 +565,7 @@ func TestCalculateMutations_OutputAsPayload_Failed_PreservesRequestContentAndDia
 		[]petri.Arc{{ID: "fail", PlaceID: "wt-code:failed"}},
 		resolvedWorkResult{
 			transitionID: "t1",
-			outcome:      interfaces.OutcomeFailed,
+			outcome:      workerexecution.OutcomeFailed,
 			output:       "worker-output",
 			err:          "agent crashed",
 		},
@@ -600,7 +603,7 @@ func TestCalculateMutations_PreserveInput_WithoutConsumedWorkInput_ReturnsDiagno
 		[]petri.Arc{{ID: "out", PlaceID: "wt-code:done"}},
 		resolvedWorkResult{
 			transitionID: "t1",
-			outcome:      interfaces.OutcomeAccepted,
+			outcome:      workerexecution.OutcomeAccepted,
 			output:       "worker-output",
 		},
 		&interfaces.FactoryWorkstationConfig{
@@ -620,13 +623,13 @@ func TestCalculateMutations_PreserveInput_WithoutConsumedWorkInput_ReturnsDiagno
 
 func TestCalculateMutations_PreserveInput_OnlyResourceInputs_ReturnsDiagnostic(t *testing.T) {
 	fixture := newCalculateMutationsFixture()
-	fixture.consumed = []interfaces.Token{{
+	fixture.consumed = []factorytoken.Token{{
 		ID:      "resource-1",
 		PlaceID: "resource:available",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "resource-1",
 			WorkTypeID: "resource",
-			DataType:   interfaces.DataTypeResource,
+			DataType:   factorytoken.DataTypeResource,
 		},
 	}}
 	fixture.inputColors = tokenColorsFromTokens(fixture.consumed)
@@ -635,7 +638,7 @@ func TestCalculateMutations_PreserveInput_OnlyResourceInputs_ReturnsDiagnostic(t
 		[]petri.Arc{{ID: "out", PlaceID: "wt-code:done"}},
 		resolvedWorkResult{
 			transitionID: "t1",
-			outcome:      interfaces.OutcomeAccepted,
+			outcome:      workerexecution.OutcomeAccepted,
 			output:       "worker-output",
 		},
 		&interfaces.FactoryWorkstationConfig{
@@ -669,7 +672,7 @@ func TestCalculateMutations_PackagedTTSReplacesTerminalContentWithMetadata(t *te
 			PlaceID: "wt-code:done",
 		}},
 		consumed:    fixture.consumed,
-		result:      resolvedWorkResult{outcome: interfaces.OutcomeContinue, output: audioOutput},
+		result:      resolvedWorkResult{outcome: workerexecution.OutcomeContinue, output: audioOutput},
 		now:         fixture.now,
 		history:     fixture.baseHistory,
 		inputColors: fixture.inputColors,
@@ -719,13 +722,13 @@ func TestCalculateMutations_PackagedTTSUsesEditedWorkerBackendFromRuntimeConfig(
 			PlaceID: "wt-code:done",
 		}},
 		consumed:    fixture.consumed,
-		result:      resolvedWorkResult{outcome: interfaces.OutcomeContinue, output: audioOutput},
+		result:      resolvedWorkResult{outcome: workerexecution.OutcomeContinue, output: audioOutput},
 		now:         fixture.now,
 		history:     fixture.baseHistory,
 		inputColors: fixture.inputColors,
 		transformer: fixture.transformer,
 		runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"tts-executor": {
 					Name:  "tts-executor",
 					Model: "CUSTOMER_EDITED_TTS_MODEL",
@@ -765,13 +768,13 @@ func TestCalculateMutations_PackagedGoalReplacesTerminalContentWithSummary(t *te
 			PlaceID: "goal:complete",
 		}},
 		consumed:    fixture.consumed,
-		result:      resolvedWorkResult{outcome: interfaces.OutcomeAccepted, output: workerOutput},
+		result:      resolvedWorkResult{outcome: workerexecution.OutcomeAccepted, output: workerOutput},
 		now:         fixture.now,
 		history:     fixture.baseHistory,
 		inputColors: fixture.inputColors,
 		transformer: fixture.transformer,
 		runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"goal-executor": {
 					Name:      "goal-executor",
 					StopToken: "COMPLETE",
@@ -814,13 +817,13 @@ func TestCalculateMutations_PackagedSubagentReplacesTerminalContentWithAgentResp
 			PlaceID: subagent.PackagedWorkTypeName + ":complete",
 		}},
 		consumed:    fixture.consumed,
-		result:      resolvedWorkResult{outcome: interfaces.OutcomeAccepted, output: workerOutput},
+		result:      resolvedWorkResult{outcome: workerexecution.OutcomeAccepted, output: workerOutput},
 		now:         fixture.now,
 		history:     fixture.baseHistory,
 		inputColors: fixture.inputColors,
 		transformer: fixture.transformer,
 		runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				subagent.PackagedWorkerName: {
 					Name:      subagent.PackagedWorkerName,
 					StopToken: "COMPLETE",
@@ -861,18 +864,18 @@ func TestCalculateMutations_PackagedGoalReviewClassifierPreservesCarriedSummary(
 	if err != nil {
 		t.Fatalf("SummaryContentFromWorkerOutput: %v", err)
 	}
-	consumed := []interfaces.Token{{
+	consumed := []factorytoken.Token{{
 		ID:        "tok-1",
 		PlaceID:   "goal:review",
 		CreatedAt: createdAt,
 		EnteredAt: createdAt,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "w1",
 			WorkTypeID: goal.PackagedGoalWorkTypeName,
 			Name:       "story-1",
 			Content:    summaryContent,
 		},
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -892,13 +895,13 @@ func TestCalculateMutations_PackagedGoalReviewClassifierPreservesCarriedSummary(
 			PlaceID: "goal:complete",
 		}},
 		consumed:    consumed,
-		result:      resolvedWorkResult{outcome: interfaces.OutcomeAccepted, output: "accepted"},
+		result:      resolvedWorkResult{outcome: workerexecution.OutcomeAccepted, output: "accepted"},
 		now:         now,
 		history:     consumed[0].History,
 		inputColors: tokenColorsFromTokens(consumed),
 		transformer: token_transformer.New(places, workTypes, token_transformer.WithWorkIDGenerator(petri.NewWorkIDGenerator())),
 		runtimeConfig: runtimefixtures.RuntimeDefinitionLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"goal-reviewer": {
 					Name:      "goal-reviewer",
 					StopToken: "COMPLETE",

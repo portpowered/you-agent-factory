@@ -6,6 +6,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestWorkstationResponsePayload_SerializesProjectionFields(t *testing.T) {
@@ -28,7 +29,7 @@ func TestWorkstationResponsePayload_SerializesProjectionFields(t *testing.T) {
 			},
 		}},
 		TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-		ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-1"},
+		ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-1"},
 		TerminalWork: &interfaces.FactoryTerminalWork{
 			WorkItem: work.FactoryWorkItem{ID: "work-1", WorkTypeID: "story"},
 			Status:   "completed",

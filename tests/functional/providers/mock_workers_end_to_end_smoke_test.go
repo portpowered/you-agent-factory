@@ -16,6 +16,7 @@ import (
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
@@ -220,25 +221,25 @@ func assertMockWorkersSmokeRecordedOutcomes(t *testing.T, artifact *interfaces.R
 		outcomes[completion.TransitionId] = completion
 	}
 
-	if got := outcomes["accept-process"].Outcome; got != factoryapi.WorkOutcome(interfaces.OutcomeAccepted) {
-		t.Fatalf("accept-process outcome = %s, want %s", got, interfaces.OutcomeAccepted)
+	if got := outcomes["accept-process"].Outcome; got != factoryapi.WorkOutcome(workerexecution.OutcomeAccepted) {
+		t.Fatalf("accept-process outcome = %s, want %s", got, workerexecution.OutcomeAccepted)
 	}
 	rejectResult := outcomes["reject-process"]
-	if rejectResult.Outcome != factoryapi.WorkOutcome(interfaces.OutcomeFailed) {
-		t.Fatalf("reject-process outcome = %s, want %s", rejectResult.Outcome, interfaces.OutcomeFailed)
+	if rejectResult.Outcome != factoryapi.WorkOutcome(workerexecution.OutcomeFailed) {
+		t.Fatalf("reject-process outcome = %s, want %s", rejectResult.Outcome, workerexecution.OutcomeFailed)
 	}
 	if rejectResult.FailureDetail == nil || rejectResult.FailureDetail.Reason == "" {
 		t.Fatal("reject-process result missing failure reason")
 	}
-	if string(rejectResult.FailureDetail.Reason) != string(interfaces.WorkFailureTypeUnknown) {
-		t.Fatalf("reject-process failure reason = %q, want stable %q", rejectResult.FailureDetail.Reason, interfaces.WorkFailureTypeUnknown)
+	if string(rejectResult.FailureDetail.Reason) != string(workerexecution.WorkFailureTypeUnknown) {
+		t.Fatalf("reject-process failure reason = %q, want stable %q", rejectResult.FailureDetail.Reason, workerexecution.WorkFailureTypeUnknown)
 	}
 	if !strings.Contains(stringPointerValue(rejectResult.Error), "provider error: unknown: Codex reported a terminal error.") {
 		t.Fatalf("reject-process error = %q, want stable unknown code with audited message", stringPointerValue(rejectResult.Error))
 	}
 	scriptResult := outcomes["script-process"]
-	if scriptResult.Outcome != factoryapi.WorkOutcome(interfaces.OutcomeAccepted) {
-		t.Fatalf("script-process outcome = %s, want %s", scriptResult.Outcome, interfaces.OutcomeAccepted)
+	if scriptResult.Outcome != factoryapi.WorkOutcome(workerexecution.OutcomeAccepted) {
+		t.Fatalf("script-process outcome = %s, want %s", scriptResult.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if !strings.Contains(stringPointerValue(scriptResult.Output), "mock script helper wrote file") {
 		t.Fatalf("script-process output = %q, want helper output", stringPointerValue(scriptResult.Output))

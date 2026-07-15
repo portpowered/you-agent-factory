@@ -15,6 +15,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -22,6 +24,8 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type staticModelAssetPuller struct {
@@ -36,11 +40,11 @@ func (s staticModelAssetPuller) PullModel(_ context.Context, _ *factoryconfig.Lo
 	return s.pullResult, s.pullErr
 }
 
-func (s staticModelAssetPuller) EnsureModelAvailable(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *interfaces.WorkerConfig) error {
+func (s staticModelAssetPuller) EnsureModelAvailable(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *workerconfig.Config) error {
 	return s.ensureErr
 }
 
-func (s staticModelAssetPuller) ResolveModelCache(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *interfaces.WorkerConfig) (localModelCacheLayout, error) {
+func (s staticModelAssetPuller) ResolveModelCache(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *workerconfig.Config) (localModelCacheLayout, error) {
 	return s.cache, s.cacheErr
 }
 
@@ -61,12 +65,12 @@ type fakeLocalModelRuntime struct {
 	mu          sync.Mutex
 	loads       []localModelLoadRequest
 	invocations []localModelInvocationRequest
-	response    interfaces.InferenceResponse
+	response    workerexecution.InferenceResponse
 	loadErr     error
 	invokeErr   error
 }
 
-func (r *fakeLocalModelRuntime) Supports(resource interfaces.ResourceConfig, worker *interfaces.WorkerConfig) bool {
+func (r *fakeLocalModelRuntime) Supports(resource factoryresource.Config, worker *workerconfig.Config) bool {
 	return localmodels.CanonicalBackendName(resource.Backend) == "LLAMACPP" && localmodels.CanonicalModelName(worker.Model) == localmodels.CanonicalModelName("OMNIVOICE_Q4_K_M")
 }
 
@@ -97,13 +101,13 @@ type fakeLocalModelHandle struct {
 	runtime *fakeLocalModelRuntime
 }
 
-func (h fakeLocalModelHandle) Invoke(_ context.Context, request localModelInvocationRequest) (interfaces.InferenceResponse, error) {
+func (h fakeLocalModelHandle) Invoke(_ context.Context, request localModelInvocationRequest) (workerexecution.InferenceResponse, error) {
 	h.runtime.mu.Lock()
 	defer h.runtime.mu.Unlock()
 
 	h.runtime.invocations = append(h.runtime.invocations, request)
 	if h.runtime.invokeErr != nil {
-		return interfaces.InferenceResponse{}, h.runtime.invokeErr
+		return workerexecution.InferenceResponse{}, h.runtime.invokeErr
 	}
 	return h.runtime.response, nil
 }
@@ -116,7 +120,7 @@ func TestInvokeModel_UsesModelHostLeasesAndReusesLoadedRuntime(t *testing.T) {
 
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
@@ -198,9 +202,9 @@ func TestLoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath(t *testing
 		TransitionID:    "transition-tts",
 		WorkerType:      "tts-worker",
 		WorkstationName: "speak",
-		InputTokens: workers.InputTokens(interfaces.Token{
+		InputTokens: workers.InputTokens(factorytoken.Token{
 			ID: "token-tts",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-tts",
 				Content: []work.WorkContentPart{{
 					Type:  work.WorkContentPartTypeText,
@@ -213,8 +217,8 @@ func TestLoadWorkersFromConfig_LocalModelWorkerUsesManagedRuntimePath(t *testing
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if runtime.loadCount() != 1 || runtime.invocationCount() != 1 {
 		t.Fatalf("runtime load/invoke counts = %d/%d, want 1/1", runtime.loadCount(), runtime.invocationCount())
@@ -238,9 +242,9 @@ func TestLoadWorkersFromConfig_LocalModelWorkerRecordsModelExecutionEvents(t *te
 			TraceID:     "trace-tts",
 			WorkIDs:     []string{"work-tts"},
 		},
-		InputTokens: workers.InputTokens(interfaces.Token{
+		InputTokens: workers.InputTokens(factorytoken.Token{
 			ID: "token-tts",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-tts",
 				Content: []work.WorkContentPart{{
 					Type:  work.WorkContentPartTypeText,
@@ -253,8 +257,8 @@ func TestLoadWorkersFromConfig_LocalModelWorkerRecordsModelExecutionEvents(t *te
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	assertRecordedLocalModelExecutionEvents(t, history.Events(), audioPath)
 }
@@ -262,7 +266,7 @@ func TestLoadWorkersFromConfig_LocalModelWorkerRecordsModelExecutionEvents(t *te
 func TestLoadWorkersFromConfig_LocalModelWorkerDetachesClonedWorkerRequestsFromLaterSourceMutation(t *testing.T) {
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
@@ -279,7 +283,7 @@ func TestLoadWorkersFromConfig_LocalModelWorkerDetachesClonedWorkerRequestsFromL
 				Slot: "text",
 				Selector: &interfaces.ModelOperationBindingSelector{
 					Label: "utterance",
-					Type:  interfaces.ModelOperationContentTypeText,
+					Type:  workerconfig.ModelOperationContentTypeText,
 				},
 			}},
 		},
@@ -330,8 +334,8 @@ func TestLoadWorkersFromConfig_LocalModelWorkerDetachesClonedWorkerRequestsFromL
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if runtime.loadCount() != 1 || runtime.invocationCount() != 1 {
 		t.Fatalf("runtime load/invoke counts = %d/%d, want 1/1", runtime.loadCount(), runtime.invocationCount())
@@ -361,8 +365,8 @@ func TestNewRecordingModelRunner_LocalModelWorkerEventsStayDetachedFromLaterSour
 	workerDef := localModelRuntimeWorkersWithCloneCoverage()["tts-worker"]
 	var events []factoryapi.FactoryEvent
 	runner := newRecordingModelRunner(
-		recordingModelRunnerFunc(func(_ context.Context, _ interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
-			return interfaces.RunnerExecutionResult{
+		recordingModelRunnerFunc(func(_ context.Context, _ workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+			return workerexecution.RunnerExecutionResult{
 				Content: mustMarshalAudioContentResponse(t, filepath.Join(t.TempDir(), "speech.wav")),
 			}, nil
 		}),
@@ -376,7 +380,7 @@ func TestNewRecordingModelRunner_LocalModelWorkerEventsStayDetachedFromLaterSour
 
 	mutateLocalModelWorkerCloneSource(workerDef)
 
-	_, err := runner.Execute(context.Background(), interfaces.RunnerExecutionRequest{
+	_, err := runner.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
 		Dispatch: work.WorkDispatch{
 			DispatchID: "dispatch-tts",
 			Execution: work.ExecutionMetadata{
@@ -405,8 +409,8 @@ func TestNewRecordingModelRunner_LocalModelWorkerEventsStayDetachedFromLaterSour
 	if requestPayload.Model != "OMNIVOICE_Q4_K_M" {
 		t.Fatalf("request model = %q, want OMNIVOICE_Q4_K_M", requestPayload.Model)
 	}
-	if requestPayload.ProviderLocality != interfaces.ModelLocalityLocal {
-		t.Fatalf("request locality = %q, want %q", requestPayload.ProviderLocality, interfaces.ModelLocalityLocal)
+	if requestPayload.ProviderLocality != workerconfig.ModelLocalityLocal {
+		t.Fatalf("request locality = %q, want %q", requestPayload.ProviderLocality, workerconfig.ModelLocalityLocal)
 	}
 	if requestPayload.Resources == nil || len(*requestPayload.Resources) != 1 || (*requestPayload.Resources)[0].Name != "omnivoice-cache" {
 		t.Fatalf("request resources = %#v, want omnivoice-cache", requestPayload.Resources)
@@ -424,7 +428,7 @@ func localModelManagedRuntimeWorkerExecutor(t *testing.T, provider *providerCall
 	t.Helper()
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
@@ -440,7 +444,7 @@ func localModelManagedRuntimeWorkerExecutor(t *testing.T, provider *providerCall
 				Slot: "text",
 				Selector: &interfaces.ModelOperationBindingSelector{
 					Label: "utterance",
-					Type:  interfaces.ModelOperationContentTypeText,
+					Type:  workerconfig.ModelOperationContentTypeText,
 				},
 			}},
 		},
@@ -497,7 +501,7 @@ func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*wor
 	t.Helper()
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
@@ -513,7 +517,7 @@ func localModelExecutionRecorderFixture(t *testing.T, eventTime time.Time) (*wor
 				Slot: "text",
 				Selector: &interfaces.ModelOperationBindingSelector{
 					Label: "utterance",
-					Type:  interfaces.ModelOperationContentTypeText,
+					Type:  workerconfig.ModelOperationContentTypeText,
 				},
 			}},
 		},
@@ -562,7 +566,7 @@ func assertRecordedLocalModelExecutionEvents(t *testing.T, events []factoryapi.F
 
 func TestModelEventContext_NormalizesEventTimeToUTC(t *testing.T) {
 	localZone := time.FixedZone("Model/Local", 9*60*60)
-	context := modelEventContext(interfaces.RunnerExecutionRequest{
+	context := modelEventContext(workerexecution.RunnerExecutionRequest{
 		Dispatch: work.WorkDispatch{
 			DispatchID: "dispatch-model",
 			Execution:  work.ExecutionMetadata{CurrentTick: 6},
@@ -620,9 +624,9 @@ func assertRecordedLocalModelResponsePayload(t *testing.T, event factoryapi.Fact
 
 func localModelFactoryConfig() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "LLAMACPP",
@@ -632,81 +636,81 @@ func localModelFactoryConfig() *interfaces.FactoryConfig {
 			Name:           "speak",
 			WorkerTypeName: "tts-worker",
 		}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name: "tts-worker",
 		}},
 	}
 }
 
-func localModelRuntimeWorkers() map[string]*interfaces.WorkerConfig {
+func localModelRuntimeWorkers() map[string]*workerconfig.Config {
 	return localModelRuntimeWorkersWithHealthEndpoint("")
 }
 
-func localModelRuntimeWorkersWithHealthEndpoint(healthEndpoint string) map[string]*interfaces.WorkerConfig {
-	worker := &interfaces.WorkerConfig{
+func localModelRuntimeWorkersWithHealthEndpoint(healthEndpoint string) map[string]*workerconfig.Config {
+	worker := &workerconfig.Config{
 		Name:          "tts-worker",
 		Type:          interfaces.WorkerTypeModel,
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelProvider: interfaces.RunnerIDCodex,
-		ModelLocality: interfaces.ModelLocalityLocal,
-		Resources: []interfaces.ResourceConfig{{
+		ModelProvider: workerexecution.RunnerIDCodex,
+		ModelLocality: workerconfig.ModelLocalityLocal,
+		Resources: []factoryresource.Config{{
 			Name:     "omnivoice-cache",
 			Capacity: 1,
 		}},
-		Operations: []interfaces.ModelOperation{{
+		Operations: []workerconfig.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{
+			Inputs: []workerconfig.ModelOperationSlot{{
 				Name:         "text",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 				Required:     true,
 			}},
-			Outputs: []interfaces.ModelOperationSlot{{
+			Outputs: []workerconfig.ModelOperationSlot{{
 				Name:         "audio",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}
 	if strings.TrimSpace(healthEndpoint) != "" {
 		worker.Args = []string{"--health-endpoint", healthEndpoint}
 	}
-	return map[string]*interfaces.WorkerConfig{
+	return map[string]*workerconfig.Config{
 		"tts-worker": worker,
 	}
 }
 
-func localModelRuntimeWorkersWithCloneCoverage() map[string]*interfaces.WorkerConfig {
-	return map[string]*interfaces.WorkerConfig{
+func localModelRuntimeWorkersWithCloneCoverage() map[string]*workerconfig.Config {
+	return map[string]*workerconfig.Config{
 		"tts-worker": {
 			Name:          "tts-worker",
 			Type:          interfaces.WorkerTypeModel,
 			Model:         "OMNIVOICE_Q4_K_M",
-			ModelProvider: interfaces.RunnerIDCodex,
-			ModelLocality: interfaces.ModelLocalityLocal,
+			ModelProvider: workerexecution.RunnerIDCodex,
+			ModelLocality: workerconfig.ModelLocalityLocal,
 			Args:          []string{"--voice", "alloy"},
-			Resources: []interfaces.ResourceConfig{{
+			Resources: []factoryresource.Config{{
 				Name:     "omnivoice-cache",
 				Capacity: 1,
 			}},
-			Operations: []interfaces.ModelOperation{{
+			Operations: []workerconfig.ModelOperation{{
 				Name: "TTS",
-				Inputs: []interfaces.ModelOperationSlot{{
+				Inputs: []workerconfig.ModelOperationSlot{{
 					Name:         "text",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+					ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 					Required:     true,
 				}},
-				Outputs: []interfaces.ModelOperationSlot{{
+				Outputs: []workerconfig.ModelOperationSlot{{
 					Name:         "audio",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+					ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 				}},
 			}},
-			Auth: &interfaces.HostedWorkerAuthConfig{
+			Auth: &workerconfig.HostedWorkerAuthConfig{
 				SecretRef: "secret/local-model",
 			},
-			Linear: &interfaces.HostedLinearWorkerConfig{
+			Linear: &workerconfig.HostedLinearWorkerConfig{
 				PollInterval: "30s",
 				TeamIDs:      []string{"team-a"},
 				StateIDs:     []string{"state-ready"},
-				Claim: &interfaces.HostedLinearWorkerClaimConfig{
+				Claim: &workerconfig.HostedLinearWorkerClaimConfig{
 					AssigneeField: "owner",
 				},
 			},
@@ -764,9 +768,9 @@ func localModelDispatch() work.WorkDispatch {
 		TransitionID:    "transition-tts",
 		WorkerType:      "tts-worker",
 		WorkstationName: "speak",
-		InputTokens: workers.InputTokens(interfaces.Token{
+		InputTokens: workers.InputTokens(factorytoken.Token{
 			ID: "token-tts",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-tts",
 				Content: []work.WorkContentPart{{
 					Type:  work.WorkContentPartTypeText,
@@ -778,21 +782,21 @@ func localModelDispatch() work.WorkDispatch {
 	}
 }
 
-func mutateLocalModelWorkerCloneSource(worker *interfaces.WorkerConfig) {
+func mutateLocalModelWorkerCloneSource(worker *workerconfig.Config) {
 	worker.Args[0] = "--mutated"
 	worker.Resources[0].Name = "mutated-cache"
 	worker.Resources[0].Capacity = 9
-	worker.Operations[0].Inputs[0].ContentTypes[0] = interfaces.ModelOperationContentTypeJSON
-	worker.Operations[0].Outputs[0].ContentTypes[0] = interfaces.ModelOperationContentTypeBinary
+	worker.Operations[0].Inputs[0].ContentTypes[0] = workerconfig.ModelOperationContentTypeJSON
+	worker.Operations[0].Outputs[0].ContentTypes[0] = workerconfig.ModelOperationContentTypeBinary
 	worker.Auth.SecretRef = "secret/mutated"
 	worker.Linear.TeamIDs[0] = "team-b"
 	worker.Linear.StateIDs[0] = "state-done"
 	worker.Linear.Claim.AssigneeField = "mutated-owner"
 	worker.Model = "mutated-model"
-	worker.ModelLocality = interfaces.ModelLocalityCloud
+	worker.ModelLocality = workerconfig.ModelLocalityCloud
 }
 
-func assertLocalModelCloneCoverageWorker(t *testing.T, worker *interfaces.WorkerConfig) {
+func assertLocalModelCloneCoverageWorker(t *testing.T, worker *workerconfig.Config) {
 	t.Helper()
 	if worker == nil {
 		t.Fatal("expected cloned worker, got nil")
@@ -804,38 +808,38 @@ func assertLocalModelCloneCoverageWorker(t *testing.T, worker *interfaces.Worker
 	assertLocalModelCloneCoverageLinear(t, worker)
 }
 
-func assertLocalModelCloneCoverageArgs(t *testing.T, worker *interfaces.WorkerConfig) {
+func assertLocalModelCloneCoverageArgs(t *testing.T, worker *workerconfig.Config) {
 	t.Helper()
 	if len(worker.Args) != 2 || worker.Args[0] != "--voice" || worker.Args[1] != "alloy" {
 		t.Fatalf("worker args = %#v, want [--voice alloy]", worker.Args)
 	}
 }
 
-func assertLocalModelCloneCoverageResources(t *testing.T, worker *interfaces.WorkerConfig) {
+func assertLocalModelCloneCoverageResources(t *testing.T, worker *workerconfig.Config) {
 	t.Helper()
 	if len(worker.Resources) != 1 || worker.Resources[0].Name != "omnivoice-cache" || worker.Resources[0].Capacity != 1 {
 		t.Fatalf("worker resources = %#v, want omnivoice-cache capacity 1", worker.Resources)
 	}
 }
 
-func assertLocalModelCloneCoverageOperations(t *testing.T, worker *interfaces.WorkerConfig) {
+func assertLocalModelCloneCoverageOperations(t *testing.T, worker *workerconfig.Config) {
 	t.Helper()
-	if len(worker.Operations) != 1 || len(worker.Operations[0].Inputs) != 1 || len(worker.Operations[0].Inputs[0].ContentTypes) != 1 || worker.Operations[0].Inputs[0].ContentTypes[0] != interfaces.ModelOperationContentTypeText {
+	if len(worker.Operations) != 1 || len(worker.Operations[0].Inputs) != 1 || len(worker.Operations[0].Inputs[0].ContentTypes) != 1 || worker.Operations[0].Inputs[0].ContentTypes[0] != workerconfig.ModelOperationContentTypeText {
 		t.Fatalf("worker input operations = %#v, want text input content type", worker.Operations)
 	}
-	if len(worker.Operations[0].Outputs) != 1 || len(worker.Operations[0].Outputs[0].ContentTypes) != 1 || worker.Operations[0].Outputs[0].ContentTypes[0] != interfaces.ModelOperationContentTypeAudio {
+	if len(worker.Operations[0].Outputs) != 1 || len(worker.Operations[0].Outputs[0].ContentTypes) != 1 || worker.Operations[0].Outputs[0].ContentTypes[0] != workerconfig.ModelOperationContentTypeAudio {
 		t.Fatalf("worker output operations = %#v, want audio output content type", worker.Operations)
 	}
 }
 
-func assertLocalModelCloneCoverageAuth(t *testing.T, worker *interfaces.WorkerConfig) {
+func assertLocalModelCloneCoverageAuth(t *testing.T, worker *workerconfig.Config) {
 	t.Helper()
 	if worker.Auth == nil || worker.Auth.SecretRef != "secret/local-model" {
 		t.Fatalf("worker auth = %#v, want secret/local-model", worker.Auth)
 	}
 }
 
-func assertLocalModelCloneCoverageLinear(t *testing.T, worker *interfaces.WorkerConfig) {
+func assertLocalModelCloneCoverageLinear(t *testing.T, worker *workerconfig.Config) {
 	t.Helper()
 	if worker.Linear == nil {
 		t.Fatal("worker linear config = nil, want values")
@@ -851,9 +855,9 @@ func assertLocalModelCloneCoverageLinear(t *testing.T, worker *interfaces.Worker
 	}
 }
 
-type recordingModelRunnerFunc func(context.Context, interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error)
+type recordingModelRunnerFunc func(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error)
 
-func (fn recordingModelRunnerFunc) Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
+func (fn recordingModelRunnerFunc) Execute(ctx context.Context, request workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	return fn(ctx, request)
 }
 
@@ -872,7 +876,7 @@ func newBlockingRunner() *blockingRunner {
 	}
 }
 
-func (r *blockingRunner) Execute(_ context.Context, _ interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
+func (r *blockingRunner) Execute(_ context.Context, _ workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	r.mu.Lock()
 	r.current++
 	if r.current > r.maxObserved {
@@ -886,7 +890,7 @@ func (r *blockingRunner) Execute(_ context.Context, _ interfaces.RunnerExecution
 	r.mu.Lock()
 	r.current--
 	r.mu.Unlock()
-	return interfaces.RunnerExecutionResult{Content: "ok"}, nil
+	return workerexecution.RunnerExecutionResult{Content: "ok"}, nil
 }
 
 func (r *blockingRunner) MaxObserved() int {
@@ -898,19 +902,19 @@ func (r *blockingRunner) MaxObserved() int {
 func TestLocalModelResourceLimiter_BoundsSharedLocalModelConcurrencyAcrossSessions(t *testing.T) {
 	limiter := newLocalModelResourceLimiter()
 	factoryCfg := &interfaces.FactoryConfig{
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "LLAMACPP",
 			LoadPolicy: "ON_DEMAND",
 		}},
 	}
-	workerDef := &interfaces.WorkerConfig{
+	workerDef := &workerconfig.Config{
 		Name:          "tts-worker",
-		ModelLocality: interfaces.ModelLocalityLocal,
-		Resources:     []interfaces.ResourceConfig{{Name: "omnivoice-cache", Capacity: 1}},
+		ModelLocality: workerconfig.ModelLocalityLocal,
+		Resources:     []factoryresource.Config{{Name: "omnivoice-cache", Capacity: 1}},
 	}
 
 	inner := newBlockingRunner()
@@ -921,7 +925,7 @@ func TestLocalModelResourceLimiter_BoundsSharedLocalModelConcurrencyAcrossSessio
 	firstDone := make(chan struct{})
 	go func() {
 		defer close(firstDone)
-		_, _ = first.Execute(ctx, interfaces.RunnerExecutionRequest{})
+		_, _ = first.Execute(ctx, workerexecution.RunnerExecutionRequest{})
 	}()
 
 	select {
@@ -933,7 +937,7 @@ func TestLocalModelResourceLimiter_BoundsSharedLocalModelConcurrencyAcrossSessio
 	secondDone := make(chan struct{})
 	go func() {
 		defer close(secondDone)
-		_, _ = second.Execute(ctx, interfaces.RunnerExecutionRequest{})
+		_, _ = second.Execute(ctx, workerexecution.RunnerExecutionRequest{})
 	}()
 
 	select {

@@ -8,9 +8,9 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	cliworkflowsource "github.com/portpowered/infinite-you/pkg/transports/cli/workflowsource"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 const validWorkflowSource = `

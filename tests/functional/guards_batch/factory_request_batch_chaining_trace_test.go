@@ -10,8 +10,11 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -65,7 +68,7 @@ func newChainingTraceFanInHarness(t *testing.T) (*testutil.ServiceTestHarness, *
 	})
 	support.WriteWorkstationConfig(t, dir, "merge", "---\ntype: MODEL_WORKSTATION\n---\nMerge the completed work.\n")
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "merged lineage COMPLETE"}},
 	})
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -80,16 +83,16 @@ func newThreeWorkstationChainingTraceHarness(t *testing.T) *testutil.ServiceTest
 
 	dir := testutil.ScaffoldFactoryDir(t, threeWorkstationChainingTraceFactoryConfig())
 	h := testutil.NewServiceTestHarness(t, dir)
-	h.MockWorker("preparer", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("preparer", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 	h.SetCustomExecutor("splitter", newGeneratedBatchExecutor(t, threeWorkstationChainingTraceGeneratedBatch()))
-	h.MockWorker("merger", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("merger", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 	return h
 }
 
 func threeWorkstationChainingTraceFactoryConfig() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
 		Name: "three-workstation-chaining-trace",
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:     "slot",
 			Capacity: 1,
 		}},
@@ -126,7 +129,7 @@ func threeWorkstationChainingTraceFactoryConfig() *interfaces.FactoryConfig {
 				},
 			},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "preparer"},
 			{Name: "splitter"},
 			{Name: "merger"},
@@ -152,7 +155,7 @@ func threeWorkstationChainingTraceFactoryConfig() *interfaces.FactoryConfig {
 					{WorkTypeName: "right", StateName: "init"},
 				},
 				Outputs:   []interfaces.IOConfig{{WorkTypeName: "merged", StateName: "complete"}},
-				Resources: []interfaces.ResourceConfig{{Name: "slot", Capacity: 1}},
+				Resources: []factoryresource.Config{{Name: "slot", Capacity: 1}},
 			},
 		},
 	}
@@ -163,7 +166,7 @@ func threeWorkstationChainingTraceGeneratedBatch() work.GeneratedSubmissionBatch
 		Request: work.WorkRequest{
 			RequestID: "request-generated-branches",
 			Type:      work.WorkRequestTypeFactoryRequestBatch,
-			Works: []interfaces.Work{
+			Works: []work.Work{
 				{
 					Name:                   "branch-z",
 					WorkID:                 "work-branch-z",
@@ -235,7 +238,7 @@ func submitChainingTraceFanInWork(t *testing.T, h *testutil.ServiceTestHarness) 
 	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-chaining-fan-in-smoke",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{
 				Name:                   "lineage-z",
 				WorkID:                 "work-lineage-z",
@@ -263,7 +266,7 @@ func submitThreeWorkstationChainingTraceWork(t *testing.T, h *testutil.ServiceTe
 	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-three-workstation-lineage",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Works: []work.Work{{
 			Name:                   "seed-root",
 			WorkID:                 "work-seed-root",
 			WorkTypeID:             "seed",

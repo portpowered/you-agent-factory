@@ -12,8 +12,9 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -30,7 +31,7 @@ func TestNamePropagation_InPromptTemplate(t *testing.T) {
 	})
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Reviewed. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Reviewed. COMPLETE"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -59,7 +60,7 @@ func TestNamePropagation_MarkdownFile(t *testing.T) {
 		[]byte("# Architecture Review\n\nPlease review the system architecture."))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Reviewed. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Reviewed. COMPLETE"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -99,16 +100,16 @@ type spawningExecutor struct {
 	calls []work.WorkDispatch
 }
 
-func (s *spawningExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (s *spawningExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	s.mu.Lock()
 	s.calls = append(s.calls, dispatch)
 	callNum := len(s.calls)
 	s.mu.Unlock()
 
-	result := interfaces.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}
 
 	if callNum == 1 {
@@ -116,11 +117,11 @@ func (s *spawningExecutor) Execute(_ context.Context, dispatch work.WorkDispatch
 		if len(dispatch.InputTokens) > 0 {
 			parentWorkID = firstInputToken(dispatch.InputTokens).Color.WorkID
 		}
-		result.SpawnedWork = []interfaces.TokenColor{{
+		result.SpawnedWork = []factorytoken.Color{{
 			WorkTypeID: "task",
 			WorkID:     fmt.Sprintf("%s-child", parentWorkID),
 			Name:       "spawned-subtask",
-			DataType:   interfaces.DataTypeWork,
+			DataType:   factorytoken.DataTypeWork,
 			ParentID:   parentWorkID,
 			Payload:    []byte(`child payload`),
 		}}
@@ -149,7 +150,7 @@ func TestNamePropagation_SpawnedChildWork(t *testing.T) {
 
 	spawnExec := &spawningExecutor{}
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Child done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Child done. COMPLETE"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,

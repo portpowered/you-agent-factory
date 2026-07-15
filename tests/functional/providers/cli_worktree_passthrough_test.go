@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -71,8 +71,8 @@ Process the input task.
 		t.Fatalf("expected provider runner called 1 time, got %d", runner.CallCount())
 	}
 	call := runner.LastRequest()
-	if call.Command != string(interfaces.ModelProviderClaude) {
-		t.Fatalf("expected command %q, got %q", interfaces.ModelProviderClaude, call.Command)
+	if call.Command != string(modelprovider.Claude) {
+		t.Fatalf("expected command %q, got %q", modelprovider.Claude, call.Command)
 	}
 	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "my-feature-branch"})
 	support.AssertArgsContainSequence(t, call.Args, []string{"--model", "test-model"})

@@ -28,9 +28,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -457,7 +459,7 @@ func newSessionScopedMockFactory(
 ) *testutil.MockFactory {
 	return &testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
-			Tokens: map[string]*interfaces.Token{
+			Tokens: map[string]*factorytoken.Token{
 				tokenID: listWorkToken(tokenID, workID, "task:init", "task", now),
 			},
 		},
@@ -634,7 +636,7 @@ func requireHTTPSuccess(
 func TestSessionScopedAPI_UnknownSessionReturnsNotFound(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
 		SessionFactories: map[string]*testutil.MockFactory{
-			"~default": {Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}},
+			"~default": {Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}},
 		},
 	})
 
@@ -1336,7 +1338,7 @@ func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnostic(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	srv := NewServerWithOptions(&testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
-			Tokens: make(map[string]*interfaces.Token),
+			Tokens: make(map[string]*factorytoken.Token),
 		},
 	}, 8080, zap.New(core), ServerOptions{CursorSessionsRoot: root})
 
@@ -1390,7 +1392,7 @@ func TestGetProviderSessionDetails_CursorNotFoundLogsDiagnosticWhenRootUnconfigu
 	missingRoot := filepath.Join(t.TempDir(), "cursor-root-unavailable")
 	srv := NewServerWithOptions(&testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
-			Tokens: make(map[string]*interfaces.Token),
+			Tokens: make(map[string]*factorytoken.Token),
 		},
 	}, 8080, zap.New(core), ServerOptions{CursorSessionsRoot: missingRoot})
 
@@ -1692,7 +1694,7 @@ func TestGetProviderSessionDetails_EventRefRoundTripLoadsCursorAndCodex(t *testi
 	}
 	assertProviderSessionDetailLoadsFromEventRef(t, srv, legacyAgentEventRef, factoryapi.Cursor)
 
-	canonicalizedLegacyRef := loadableProviderSessionRefFromEventMetadata(interfaces.ProviderSessionMetadata{
+	canonicalizedLegacyRef := loadableProviderSessionRefFromEventMetadata(workerexecution.ProviderSessionMetadata{
 		Provider: "agent",
 		Kind:     "session_id",
 		ID:       cursorSessionID,

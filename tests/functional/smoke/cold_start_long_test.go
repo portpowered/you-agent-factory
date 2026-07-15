@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -17,7 +17,7 @@ func TestColdStart_SingleTokenReachesTerminal(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "fix-bug"}`))
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"swe":      {{Content: "Done. COMPLETE"}},
 		"reviewer": {{Content: "Done. COMPLETE"}},
 	})

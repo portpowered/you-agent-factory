@@ -3,8 +3,8 @@ package apisurface
 import (
 	"strings"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 // ManagedRuntimePullResultFromService maps a service-owned pull result into the
@@ -28,7 +28,7 @@ func ManagedRuntimePullResultFromService(result ModelPullResult, files []factory
 	if diagnostics := managedRuntimePullSourceDiagnostics(result); diagnostics != nil {
 		pull.SourceDiagnostics = diagnostics
 	}
-	if strings.TrimSpace(result.ProviderLocality) == interfaces.ModelLocalityCloud {
+	if strings.TrimSpace(result.ProviderLocality) == workerconfig.ModelLocalityCloud {
 		pull.ReadinessState = factoryapi.ManagedRuntimeReadinessStateREADY
 		pull.PullOutcome = factoryapi.ManagedRuntimePullOutcomeALREADYREADY
 	}

@@ -5,7 +5,6 @@ import (
 	"reflect"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
 
@@ -13,7 +12,7 @@ func TestDeriveFromWorkRequest_ThreeWorksTwoDependencies(t *testing.T) {
 	req := work.WorkRequest{
 		RequestID: "graph-test",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{Name: "alpha", WorkTypeID: "task"},
 			{Name: "beta", WorkTypeID: "task"},
 			{Name: "gamma", WorkTypeID: "task"},
@@ -48,7 +47,7 @@ func TestDeriveFromWorkRequest_StandaloneWorkPreserved(t *testing.T) {
 	req := work.WorkRequest{
 		RequestID: "standalone-test",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{Name: "solo-a", WorkTypeID: "task"},
 			{Name: "solo-b", WorkTypeID: "task"},
 		},
@@ -77,7 +76,7 @@ func TestDeriveFromWorkRequest_DeterministicAcrossRuns(t *testing.T) {
 	req := work.WorkRequest{
 		RequestID: "deterministic-test",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{Name: "z-last", WorkTypeID: "task"},
 			{Name: "a-first", WorkTypeID: "task"},
 			{Name: "m-middle", WorkTypeID: "task"},
@@ -105,7 +104,7 @@ func TestDeriveFromWorkRequest_NodeLabelsPreferWorkNames(t *testing.T) {
 	req := work.WorkRequest{
 		RequestID: "label-test",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{Name: "Customer Task", WorkTypeID: "task"},
 		},
 	}
@@ -123,11 +122,11 @@ func TestDeriveFromWorkRequest_NodeLabelsPreferWorkNames(t *testing.T) {
 }
 
 func TestNodeLabelFallbackUsesStableIndex(t *testing.T) {
-	work := interfaces.Work{WorkID: "batch-request-work-1"}
-	if got := nodeLabel(work, 0); got != "batch-request-work-1" {
+	item := work.Work{WorkID: "batch-request-work-1"}
+	if got := nodeLabel(item, 0); got != "batch-request-work-1" {
 		t.Fatalf("nodeLabel with workId = %q, want batch-request-work-1", got)
 	}
-	if got := nodeLabel(interfaces.Work{}, 2); got != "work-3" {
+	if got := nodeLabel(work.Work{}, 2); got != "work-3" {
 		t.Fatalf("nodeLabel without name/workId = %q, want work-3", got)
 	}
 }
@@ -141,7 +140,7 @@ func TestDeriveFromWorkRequest_MissingRequiredFields(t *testing.T) {
 		{
 			name: "missing requestId",
 			req: work.WorkRequest{Type: work.WorkRequestTypeFactoryRequestBatch,
-				Works: []interfaces.Work{{Name: "a", WorkTypeID: "task"}}},
+				Works: []work.Work{{Name: "a", WorkTypeID: "task"}}},
 			want: "batch requestId is required",
 		},
 		{
@@ -152,7 +151,7 @@ func TestDeriveFromWorkRequest_MissingRequiredFields(t *testing.T) {
 		{
 			name: "missing work name",
 			req: work.WorkRequest{RequestID: "x", Type: work.WorkRequestTypeFactoryRequestBatch,
-				Works: []interfaces.Work{{WorkTypeID: "task"}}},
+				Works: []work.Work{{WorkTypeID: "task"}}},
 			want: "works[0] is missing required name",
 		},
 	}
@@ -173,7 +172,7 @@ func TestDeriveFromWorkRequest_UnknownDependencyReference(t *testing.T) {
 	req := work.WorkRequest{
 		RequestID: "unknown-ref",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works:     []interfaces.Work{{Name: "alpha", WorkTypeID: "task"}},
+		Works:     []work.Work{{Name: "alpha", WorkTypeID: "task"}},
 		Relations: []work.WorkRelation{{
 			Type: work.WorkRelationDependsOn, SourceWorkName: "alpha", TargetWorkName: "missing",
 		}},
@@ -192,7 +191,7 @@ func TestDeriveFromWorkRequest_ParentChildRelationIncluded(t *testing.T) {
 	req := work.WorkRequest{
 		RequestID: "parent-child",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{Name: "child", WorkTypeID: "task"},
 			{Name: "parent", WorkTypeID: "task"},
 		},
@@ -216,7 +215,7 @@ func TestDeriveFromWorkRequest_EdgesSortedDeterministically(t *testing.T) {
 	req := work.WorkRequest{
 		RequestID: "edge-order",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{Name: "a", WorkTypeID: "task"},
 			{Name: "b", WorkTypeID: "task"},
 			{Name: "c", WorkTypeID: "task"},

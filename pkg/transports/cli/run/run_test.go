@@ -22,6 +22,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -92,15 +93,15 @@ func setUserHomeForTest(t *testing.T, homeDir string) {
 func TestCountTokenStates(t *testing.T) {
 	tests := []struct {
 		name     string
-		tokens   map[string]*interfaces.Token
+		tokens   map[string]*factorytoken.Token
 		wantWIP  int
 		wantDone int
 		wantFail int
 	}{
-		{name: "empty marking", tokens: map[string]*interfaces.Token{}},
+		{name: "empty marking", tokens: map[string]*factorytoken.Token{}},
 		{
 			name: "mixed states",
-			tokens: map[string]*interfaces.Token{
+			tokens: map[string]*factorytoken.Token{
 				"t1": {ID: "t1", PlaceID: "task:todo"},
 				"t2": {ID: "t2", PlaceID: "task:in-progress"},
 				"t3": {ID: "t3", PlaceID: "task:completed"},
@@ -113,7 +114,7 @@ func TestCountTokenStates(t *testing.T) {
 		},
 		{
 			name: "all completed",
-			tokens: map[string]*interfaces.Token{
+			tokens: map[string]*factorytoken.Token{
 				"t1": {ID: "t1", PlaceID: "page:completed"},
 				"t2": {ID: "t2", PlaceID: "page:completed"},
 			},
@@ -121,7 +122,7 @@ func TestCountTokenStates(t *testing.T) {
 		},
 		{
 			name: "all failed",
-			tokens: map[string]*interfaces.Token{
+			tokens: map[string]*factorytoken.Token{
 				"t1": {ID: "t1", PlaceID: "task:failed"},
 				"t2": {ID: "t2", PlaceID: "task:failed"},
 				"t3": {ID: "t3", PlaceID: "task:failed"},
@@ -130,7 +131,7 @@ func TestCountTokenStates(t *testing.T) {
 		},
 		{
 			name: "work type prefix stays local to suffix classification",
-			tokens: map[string]*interfaces.Token{
+			tokens: map[string]*factorytoken.Token{
 				"t1": {ID: "t1", PlaceID: "story:phase:completed"},
 				"t2": {ID: "t2", PlaceID: "story:phase:failed"},
 				"t3": {ID: "t3", PlaceID: "story:phase:queued"},

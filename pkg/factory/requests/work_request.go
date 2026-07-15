@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/work"
 	workcontent "github.com/portpowered/infinite-you/pkg/work/content"
@@ -198,7 +197,7 @@ func WorkRequestFromSubmitRequests(requests []workdomain.SubmitRequest) workdoma
 
 	requestID := sharedSubmitRequestID(requests)
 	usedNames := make(map[string]int, len(requests))
-	works := make([]interfaces.Work, 0, len(requests))
+	works := make([]work.Work, 0, len(requests))
 	for i, req := range requests {
 		itemRequestID := req.RequestID
 		if itemRequestID == "" {
@@ -206,7 +205,7 @@ func WorkRequestFromSubmitRequests(requests []workdomain.SubmitRequest) workdoma
 		}
 		currentChainingTraceID := ResolveWorkRequestCurrentChainingTraceID(req.CurrentChainingTraceID, req.TraceID)
 		name := uniqueSubmitWorkName(req, i, usedNames)
-		works = append(works, interfaces.Work{
+		works = append(works, work.Work{
 			Name:                     name,
 			WorkID:                   req.WorkID,
 			RequestID:                itemRequestID,

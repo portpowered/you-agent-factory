@@ -10,6 +10,7 @@ import (
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestReconstructFactoryWorldState_JavaScriptDispatchLifecycleReconstructsQueueInterruptReconcileAndArtifact(t *testing.T) {
@@ -104,7 +105,7 @@ func TestReconstructFactoryWorldState_PetriDispatchRequestResponseRemainsReprese
 		workstationResponseEvent(2, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
 			DispatchID:   "dispatch-petri-1",
 			TransitionID: "t-review",
-			Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeContinue)},
+			Result:       interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeContinue)},
 		}),
 	}
 
@@ -184,7 +185,7 @@ func TestReconstructFactoryWorldState_ContinueDispatchReplaysNextTurnContent(t *
 		t.Fatalf("completed dispatches = %#v, want one continue dispatch", worldState.CompletedDispatches)
 	}
 	dispatch := worldState.CompletedDispatches[0]
-	if dispatch.Result.Outcome != string(interfaces.OutcomeContinue) {
+	if dispatch.Result.Outcome != string(workerexecution.OutcomeContinue) {
 		t.Fatalf("dispatch outcome = %s, want CONTINUE", dispatch.Result.Outcome)
 	}
 	if len(dispatch.OutputWorkItems) != 1 {
@@ -262,7 +263,7 @@ func TestReconstructFactoryWorldState_FailedDispatchReplaysRequestContent(t *tes
 		t.Fatalf("failed dispatches = %#v, want one failed dispatch", worldState.FailedDispatches)
 	}
 	dispatch := worldState.FailedDispatches[0]
-	if dispatch.Result.Outcome != string(interfaces.OutcomeFailed) {
+	if dispatch.Result.Outcome != string(workerexecution.OutcomeFailed) {
 		t.Fatalf("dispatch outcome = %s, want FAILED", dispatch.Result.Outcome)
 	}
 	if len(dispatch.OutputWorkItems) != 1 {

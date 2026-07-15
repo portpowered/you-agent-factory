@@ -5,19 +5,19 @@ import (
 	"errors"
 	"sync"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // MockProvider implements workers.Provider for testing. It returns
 // predetermined InferenceResponses in sequence. When the sequence is
 // exhausted, it returns a default response.
 type MockWorkerMapProvider struct {
-	workerCalls     map[string][]interfaces.ProviderInferenceRequest
+	workerCalls     map[string][]workerexecution.ProviderInferenceRequest
 	mu              sync.Mutex
 	workerIndex     map[string]int            // tracks call count per worker type for response sequencing
 	workerResponses map[string][]WorkResponse // optional: different response sequences per worker type
-	defaultR        interfaces.InferenceResponse
+	defaultR        workerexecution.InferenceResponse
 }
 
 // response from a provider can either be content or an error.
@@ -33,11 +33,11 @@ type MockWorkerMapProviderOption func(*MockWorkerMapProvider)
 // Each response can optionally have a paired error at the same index in the errors
 // slice. When the sequence is exhausted, returns a default InferenceResponse with
 // StopTokenFound=true (so MODEL_WORKER with stop tokens will ACCEPT by default).
-func NewMockWorkerMapProvider(responses map[string][]interfaces.InferenceResponse) *MockWorkerMapProvider {
+func NewMockWorkerMapProvider(responses map[string][]workerexecution.InferenceResponse) *MockWorkerMapProvider {
 	return NewMockWorkerMapProviderWithDefault(mapResponses(responses))
 }
 
-func mapResponses(input map[string][]interfaces.InferenceResponse) map[string][]WorkResponse {
+func mapResponses(input map[string][]workerexecution.InferenceResponse) map[string][]WorkResponse {
 	mapped := make(map[string][]WorkResponse)
 	for workerType, resps := range input {
 		mapped[workerType] = make([]WorkResponse, len(resps))
@@ -51,16 +51,16 @@ func mapResponses(input map[string][]interfaces.InferenceResponse) map[string][]
 func NewMockWorkerMapProviderWithDefault(responses map[string][]WorkResponse) *MockWorkerMapProvider {
 	return &MockWorkerMapProvider{
 		workerResponses: responses,
-		defaultR: interfaces.InferenceResponse{
+		defaultR: workerexecution.InferenceResponse{
 			Content: "default mock response",
 		},
 		workerIndex: make(map[string]int),
-		workerCalls: make(map[string][]interfaces.ProviderInferenceRequest),
+		workerCalls: make(map[string][]workerexecution.ProviderInferenceRequest),
 	}
 }
 
 // Infer records the request and returns the next predetermined response.
-func (m *MockWorkerMapProvider) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (m *MockWorkerMapProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -76,25 +76,25 @@ func (m *MockWorkerMapProvider) Infer(_ context.Context, req interfaces.Provider
 			resp := m.workerResponses[workerType][index]
 			m.workerIndex[workerType]++
 			if resp.Error != nil {
-				return interfaces.InferenceResponse{}, resp.Error
+				return workerexecution.InferenceResponse{}, resp.Error
 			} else {
-				return interfaces.InferenceResponse{
+				return workerexecution.InferenceResponse{
 					Content: resp.Content,
 				}, nil
 			}
 		}
 	} else {
-		return interfaces.InferenceResponse{}, errors.New("failed")
+		return workerexecution.InferenceResponse{}, errors.New("failed")
 	}
 	return m.defaultR, nil
 }
 
 // Calls returns all InferenceRequests received by this provider, in order.
-func (m *MockWorkerMapProvider) Calls(workerType string) []interfaces.ProviderInferenceRequest {
+func (m *MockWorkerMapProvider) Calls(workerType string) []workerexecution.ProviderInferenceRequest {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	out := make([]interfaces.ProviderInferenceRequest, len(m.workerCalls[workerType]))
+	out := make([]workerexecution.ProviderInferenceRequest, len(m.workerCalls[workerType]))
 	copy(out, m.workerCalls[workerType])
 	return out
 }
@@ -108,7 +108,7 @@ func (m *MockWorkerMapProvider) CallCount(workerType string) int {
 }
 
 // LastCall returns the most recent InferenceRequest, or panics if none.
-func (m *MockWorkerMapProvider) LastCall(workerType string) interfaces.ProviderInferenceRequest {
+func (m *MockWorkerMapProvider) LastCall(workerType string) workerexecution.ProviderInferenceRequest {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

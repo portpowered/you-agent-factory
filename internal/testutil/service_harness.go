@@ -16,12 +16,14 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 )
 
@@ -395,7 +397,7 @@ type delegatingExecutor struct {
 	fallback   workers.WorkerExecutor
 }
 
-func (d *delegatingExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (d *delegatingExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	if custom, ok := d.customs[d.workerType]; ok {
 		return custom.Execute(ctx, dispatch)
 	}
@@ -405,10 +407,10 @@ func (d *delegatingExecutor) Execute(ctx context.Context, dispatch work.WorkDisp
 	if d.fallback != nil {
 		return d.fallback.Execute(ctx, dispatch)
 	}
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        fmt.Sprintf("no executor registered for worker type %q (transition %s)", d.workerType, dispatch.TransitionID),
 	}, nil
 }
@@ -435,7 +437,7 @@ func buildAsyncMockOverrides(mocks map[string]*MockExecutor, customExecs map[str
 // If the worker type was already registered, returns the existing mock.
 // In inline mode, mocks execute during Tick. In async mode (WithRunAsync),
 // mocks execute in the worker pool via the delegating executor.
-func (h *ServiceTestHarness) MockWorker(workerType string, results ...interfaces.WorkResult) *MockExecutor {
+func (h *ServiceTestHarness) MockWorker(workerType string, results ...workerexecution.WorkResult) *MockExecutor {
 	if existing, ok := h.mocks[workerType]; ok {
 		return existing
 	}
@@ -664,7 +666,7 @@ func cloneMarkingSnapshot(snapshot *petri.MarkingSnapshot) *petri.MarkingSnapsho
 		return nil
 	}
 
-	tokens := make(map[string]*interfaces.Token, len(snapshot.Tokens))
+	tokens := make(map[string]*factorytoken.Token, len(snapshot.Tokens))
 	for id, token := range snapshot.Tokens {
 		if token == nil {
 			tokens[id] = nil

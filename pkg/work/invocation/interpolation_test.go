@@ -6,10 +6,11 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestInterpolateWorkerConfig_OmitsExactOptionalParameter(t *testing.T) {
-	worker, err := InterpolateWorkerConfig(interfaces.WorkerConfig{
+	worker, err := InterpolateWorkerConfig(workerconfig.Config{
 		Model: "${model}",
 		Body:  "Use ${input}",
 	}, &work.InvocationArguments{
@@ -53,7 +54,7 @@ func TestInterpolateWorkerConfig_ResolvesFileContentsValueMode(t *testing.T) {
 		return []byte("from-file"), nil
 	}
 
-	worker, err := InterpolateWorkerConfig(interfaces.WorkerConfig{
+	worker, err := InterpolateWorkerConfig(workerconfig.Config{
 		Body: "${input}",
 	}, &work.InvocationArguments{
 		Arguments: map[string]work.InvocationArgument{

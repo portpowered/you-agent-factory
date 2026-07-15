@@ -6,6 +6,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func anyChildFailedFactoryConfig() *interfaces.FactoryConfig {
@@ -27,7 +28,7 @@ func anyChildFailedFactoryConfig() *interfaces.FactoryConfig {
 				},
 			},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "check-worker"},
 		},
 		Workstations: []interfaces.FactoryWorkstationConfig{

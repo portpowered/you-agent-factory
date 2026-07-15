@@ -21,9 +21,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -145,7 +148,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndResta
 		scriptPollerRuntimeConfigOptions{
 			poller:       poller,
 			pollerWorker: newCanonicalScriptPollerWorker("--mode", "watch"),
-			additionalWorkers: []*interfaces.WorkerConfig{
+			additionalWorkers: []*workerconfig.Config{
 				{
 					Name:    "non-poller-script",
 					Type:    interfaces.WorkerTypeScript,
@@ -284,18 +287,18 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 		t,
 		factoryDir,
 		&interfaces.FactoryConfig{
-			Workers:      []interfaces.WorkerConfig{{Name: "linear-poller"}},
+			Workers:      []workerconfig.Config{{Name: "linear-poller"}},
 			Workstations: []interfaces.FactoryWorkstationConfig{poller},
 		},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"linear-poller": {
 				Name:     "linear-poller",
 				Type:     interfaces.WorkerTypeHosted,
 				Provider: interfaces.HostedWorkerProviderLinear,
-				Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
-				Linear: &interfaces.HostedLinearWorkerConfig{
+				Auth:     &workerconfig.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+				Linear: &workerconfig.HostedLinearWorkerConfig{
 					PollInterval: "1h",
-					Mapping: interfaces.HostedLinearWorkerMappingConfig{
+					Mapping: workerconfig.HostedLinearWorkerMappingConfig{
 						WorkType: "story",
 						State:    "init",
 					},
@@ -340,7 +343,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_SubmitsMultipleHostedLinearIssu
 	)
 	defer server.Close()
 
-	fixture := newHostedLinearPollerServiceFixture(t, server, func(linear *interfaces.HostedLinearWorkerConfig) {
+	fixture := newHostedLinearPollerServiceFixture(t, server, func(linear *workerconfig.HostedLinearWorkerConfig) {
 		linear.TeamIDs = []string{"team-1"}
 		linear.StateIDs = []string{"state-1"}
 	})
@@ -409,18 +412,18 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLi
 		t,
 		factoryDir,
 		&interfaces.FactoryConfig{
-			Workers:      []interfaces.WorkerConfig{{Name: "linear-poller"}},
+			Workers:      []workerconfig.Config{{Name: "linear-poller"}},
 			Workstations: []interfaces.FactoryWorkstationConfig{poller},
 		},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"linear-poller": {
 				Name:     "linear-poller",
 				Type:     interfaces.WorkerTypeHosted,
 				Provider: interfaces.HostedWorkerProviderLinear,
-				Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
-				Linear: &interfaces.HostedLinearWorkerConfig{
+				Auth:     &workerconfig.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+				Linear: &workerconfig.HostedLinearWorkerConfig{
 					PollInterval: "1h",
-					Mapping: interfaces.HostedLinearWorkerMappingConfig{
+					Mapping: workerconfig.HostedLinearWorkerMappingConfig{
 						WorkType: "story",
 						State:    "init",
 					},
@@ -469,10 +472,10 @@ func TestFactoryService_StartLiveRuntimeSidecars_DisablesUnsupportedHostedProvid
 		t,
 		t.TempDir(),
 		&interfaces.FactoryConfig{
-			Workers:      []interfaces.WorkerConfig{{Name: "custom-hosted"}},
+			Workers:      []workerconfig.Config{{Name: "custom-hosted"}},
 			Workstations: []interfaces.FactoryWorkstationConfig{poller},
 		},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"custom-hosted": {
 				Name:     "custom-hosted",
 				Type:     interfaces.WorkerTypeHosted,
@@ -774,8 +777,8 @@ func newCanonicalScriptPollerWorkstation() interfaces.FactoryWorkstationConfig {
 	}
 }
 
-func newCanonicalScriptPollerWorker(args ...string) *interfaces.WorkerConfig {
-	return &interfaces.WorkerConfig{
+func newCanonicalScriptPollerWorker(args ...string) *workerconfig.Config {
+	return &workerconfig.Config{
 		Name:    canonicalScriptPollerWorkerName,
 		Type:    interfaces.WorkerTypeScript,
 		Command: canonicalScriptPollerCommand,
@@ -785,8 +788,8 @@ func newCanonicalScriptPollerWorker(args ...string) *interfaces.WorkerConfig {
 
 type scriptPollerRuntimeConfigOptions struct {
 	poller                 interfaces.FactoryWorkstationConfig
-	pollerWorker           *interfaces.WorkerConfig
-	additionalWorkers      []*interfaces.WorkerConfig
+	pollerWorker           *workerconfig.Config
+	additionalWorkers      []*workerconfig.Config
 	additionalWorkstations []interfaces.FactoryWorkstationConfig
 }
 
@@ -807,10 +810,10 @@ func newScriptPollerLoadedRuntimeConfigForServiceTest(
 	}
 
 	factoryCfg := &interfaces.FactoryConfig{
-		Workers:      []interfaces.WorkerConfig{{Name: pollerWorker.Name}},
+		Workers:      []workerconfig.Config{{Name: pollerWorker.Name}},
 		Workstations: []interfaces.FactoryWorkstationConfig{poller},
 	}
-	workerConfigs := map[string]*interfaces.WorkerConfig{
+	workerConfigs := map[string]*workerconfig.Config{
 		pollerWorker.Name: pollerWorker,
 	}
 	workstationConfigs := map[string]*interfaces.FactoryWorkstationConfig{
@@ -821,7 +824,7 @@ func newScriptPollerLoadedRuntimeConfigForServiceTest(
 		if worker == nil {
 			continue
 		}
-		factoryCfg.Workers = append(factoryCfg.Workers, interfaces.WorkerConfig{Name: worker.Name})
+		factoryCfg.Workers = append(factoryCfg.Workers, workerconfig.Config{Name: worker.Name})
 		workerConfigs[worker.Name] = worker
 	}
 	for i := range options.additionalWorkstations {
@@ -969,7 +972,7 @@ func writeHostedLinearSecretForServiceTest(t *testing.T, factoryDir string) {
 func newHostedLinearPollerServiceFixture(
 	t *testing.T,
 	server *httptest.Server,
-	mutateLinear func(*interfaces.HostedLinearWorkerConfig),
+	mutateLinear func(*workerconfig.HostedLinearWorkerConfig),
 ) hostedLinearPollerServiceFixture {
 	t.Helper()
 
@@ -981,9 +984,9 @@ func newHostedLinearPollerServiceFixture(
 		HostedPollerHTTPClient: server.Client(),
 		HostedLinearEndpoint:   server.URL,
 	}
-	linearCfg := &interfaces.HostedLinearWorkerConfig{
+	linearCfg := &workerconfig.HostedLinearWorkerConfig{
 		PollInterval: "1h",
-		Mapping: interfaces.HostedLinearWorkerMappingConfig{
+		Mapping: workerconfig.HostedLinearWorkerMappingConfig{
 			WorkType: "story",
 			State:    "init",
 		},
@@ -1000,15 +1003,15 @@ func newHostedLinearPollerServiceFixture(
 		t,
 		factoryDir,
 		&interfaces.FactoryConfig{
-			Workers:      []interfaces.WorkerConfig{{Name: "linear-poller"}},
+			Workers:      []workerconfig.Config{{Name: "linear-poller"}},
 			Workstations: []interfaces.FactoryWorkstationConfig{poller},
 		},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"linear-poller": {
 				Name:     "linear-poller",
 				Type:     interfaces.WorkerTypeHosted,
 				Provider: interfaces.HostedWorkerProviderLinear,
-				Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+				Auth:     &workerconfig.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
 				Linear:   linearCfg,
 			},
 		},
@@ -1061,21 +1064,21 @@ func newConcurrentHostedAndScriptPollerFixture(t *testing.T, server *httptest.Se
 		t,
 		factoryDir,
 		&interfaces.FactoryConfig{
-			Workers: []interfaces.WorkerConfig{
+			Workers: []workerconfig.Config{
 				{Name: "linear-poller"},
 				{Name: canonicalScriptPollerWorkerName},
 			},
 			Workstations: []interfaces.FactoryWorkstationConfig{hostedPoller, scriptPoller},
 		},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"linear-poller": {
 				Name:     "linear-poller",
 				Type:     interfaces.WorkerTypeHosted,
 				Provider: interfaces.HostedWorkerProviderLinear,
-				Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
-				Linear: &interfaces.HostedLinearWorkerConfig{
+				Auth:     &workerconfig.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+				Linear: &workerconfig.HostedLinearWorkerConfig{
 					PollInterval: "1h",
-					Mapping: interfaces.HostedLinearWorkerMappingConfig{
+					Mapping: workerconfig.HostedLinearWorkerMappingConfig{
 						WorkType: "story",
 						State:    "init",
 					},
@@ -1920,7 +1923,7 @@ func assertNoCronWorkRequestQueued(t *testing.T, requests <-chan work.WorkReques
 	}
 }
 
-func matchedTokenSnapshotTokensInPlace(t *testing.T, svc *FactoryService, placeID string) []interfaces.Token {
+func matchedTokenSnapshotTokensInPlace(t *testing.T, svc *FactoryService, placeID string) []factorytoken.Token {
 	t.Helper()
 	snap, err := svc.GetEngineStateSnapshot(context.Background())
 	if err != nil {
@@ -1961,7 +1964,7 @@ func waitForCompletedDispatchConsumingWorkID(t *testing.T, svc *FactoryService, 
 	return interfaces.CompletedDispatch{}
 }
 
-func consumedTokenWithWorkID(tokens []interfaces.Token, workID string) *interfaces.Token {
+func consumedTokenWithWorkID(tokens []factorytoken.Token, workID string) *factorytoken.Token {
 	for i := range tokens {
 		if tokens[i].Color.WorkID == workID {
 			return &tokens[i]
@@ -1979,7 +1982,7 @@ func nonBlockingSubmissionRecorder(records chan<- work.FactorySubmissionRecord) 
 	}
 }
 
-func waitForTokenInPlaceByParent(t *testing.T, svc *FactoryService, placeID string, parentID string, timeout time.Duration) interfaces.Token {
+func waitForTokenInPlaceByParent(t *testing.T, svc *FactoryService, placeID string, parentID string, timeout time.Duration) factorytoken.Token {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -1995,7 +1998,7 @@ func waitForTokenInPlaceByParent(t *testing.T, svc *FactoryService, placeID stri
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for token in %s with parent %q", placeID, parentID)
-	return interfaces.Token{}
+	return factorytoken.Token{}
 }
 
 func TestFactoryService_CronTickTargetsInternalTimePlaceDespiteConfiguredOutputState(t *testing.T) {
@@ -2026,8 +2029,8 @@ func TestFactoryService_CronTickTargetsInternalTimePlaceDespiteConfiguredOutputS
 
 type rejectingWorkerExecutor struct{}
 
-func (rejectingWorkerExecutor) Execute(context.Context, work.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{}, errors.New("worker executor must not be invoked for workerless cron logical move")
+func (rejectingWorkerExecutor) Execute(context.Context, work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{}, errors.New("worker executor must not be invoked for workerless cron logical move")
 }
 
 func TestFactoryService_LogicalMoveCronTickConsumesTimeWorkWithoutWorkerExecutor(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -21,7 +22,7 @@ func TestIntegrationSmoke_GuardedLoopBreakerRoutesOverLimitExampleWorkToFailed(t
 	support.ClearSeedInputs(t, dir)
 	assertFactoryHasNoTopLevelExhaustionRules(t, dir)
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"executor": {
 			{Content: "<result>ACCEPTED</result>"},
 			{Content: "<result>ACCEPTED</result>"},

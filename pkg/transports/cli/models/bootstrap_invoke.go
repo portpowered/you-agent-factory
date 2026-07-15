@@ -18,9 +18,9 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 )
 
@@ -212,7 +212,7 @@ func derefGeneratedWorkContent(content *factoryapi.WorkContent) factoryapi.WorkC
 	return *content
 }
 
-func generatedResolvedModelInvocationBindings(values []interfaces.ResolvedModelOperationBinding) []factoryapi.ResolvedModelOperationBinding {
+func generatedResolvedModelInvocationBindings(values []workerexecution.ResolvedModelOperationBinding) []factoryapi.ResolvedModelOperationBinding {
 	if len(values) == 0 {
 		return nil
 	}

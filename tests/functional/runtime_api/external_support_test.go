@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func twoStagePipelineConfig() map[string]any {
@@ -48,16 +48,16 @@ type blockingExecutor struct {
 	calls     *int
 }
 
-func (e *blockingExecutor) Execute(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *blockingExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.mu.Lock()
 	*e.calls++
 	e.mu.Unlock()
 
 	<-e.releaseCh
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   d.DispatchID,
 		TransitionID: d.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}, nil
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -103,7 +104,7 @@ func scaffoldPackagedGoalInvocationFactoryForSmoke(t *testing.T) string {
 		t,
 		dir,
 		"goal-executor",
-		support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"),
+		support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"),
 	)
 	return dir
 }

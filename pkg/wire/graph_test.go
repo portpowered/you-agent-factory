@@ -9,7 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	factorysessionsservice "github.com/portpowered/infinite-you/pkg/factory/sessions/service"
 	modelservice "github.com/portpowered/infinite-you/pkg/models/service"

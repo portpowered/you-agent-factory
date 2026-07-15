@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -27,9 +27,9 @@ func TestFullIdeationPipeline_HappyPath(t *testing.T) {
 	})
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "PRD created. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Code written. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Looks good. ACCEPTED"},
+		workerexecution.InferenceResponse{Content: "PRD created. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Code written. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Looks good. ACCEPTED"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -70,13 +70,13 @@ func TestFullIdeationPipeline_RejectionLoop(t *testing.T) {
 	})
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "PRD created. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Code written. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Needs more work. REJECTED"},
-		interfaces.InferenceResponse{Content: "Code revised. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Still not right. REJECTED"},
-		interfaces.InferenceResponse{Content: "Code revised again. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Looks good now. ACCEPTED"},
+		workerexecution.InferenceResponse{Content: "PRD created. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Code written. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Needs more work. REJECTED"},
+		workerexecution.InferenceResponse{Content: "Code revised. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Still not right. REJECTED"},
+		workerexecution.InferenceResponse{Content: "Code revised again. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Looks good now. ACCEPTED"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -118,9 +118,9 @@ func TestFullIdeationPipeline_CrossWorkTypeLineage(t *testing.T) {
 	})
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "PRD created. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Code written. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Looks good. ACCEPTED"},
+		workerexecution.InferenceResponse{Content: "PRD created. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Code written. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Looks good. ACCEPTED"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,

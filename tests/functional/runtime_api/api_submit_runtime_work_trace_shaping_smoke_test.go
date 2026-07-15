@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -129,9 +129,9 @@ func waitForRuntimeAPIWorkRequestEvent(
 
 func requireRuntimeAPITokenByWorkID(
 	t *testing.T,
-	tokens map[string]*interfaces.Token,
+	tokens map[string]*factorytoken.Token,
 	workID string,
-) *interfaces.Token {
+) *factorytoken.Token {
 	t.Helper()
 
 	for _, token := range tokens {

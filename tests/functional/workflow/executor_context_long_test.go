@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -73,12 +73,12 @@ func TestExecutorContext_RejectionFeedback(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	sweMock := h.MockWorker("swe",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 	h.MockWorker("reviewer",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected, Feedback: "needs unit tests"},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: "needs unit tests"},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	h.RunUntilComplete(t, 10*time.Second)

@@ -4,39 +4,39 @@ import (
 	"context"
 	"sync"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // MockExecutor returns predetermined WorkResults in sequence.
 // When the sequence is exhausted, returns a default result.
 type MockExecutor struct {
-	results  []interfaces.WorkResult
+	results  []workerexecution.WorkResult
 	calls    []work.WorkDispatch
 	mu       sync.Mutex
 	index    int
-	defaultR interfaces.WorkResult
+	defaultR workerexecution.WorkResult
 }
 
 // NewMockExecutor creates a MockExecutor that returns the given results in order.
 // When the sequence is exhausted, it returns a default WorkResult with OutcomeAccepted.
-func NewMockExecutor(results ...interfaces.WorkResult) *MockExecutor {
+func NewMockExecutor(results ...workerexecution.WorkResult) *MockExecutor {
 	return &MockExecutor{
 		results: results,
-		defaultR: interfaces.WorkResult{
-			Outcome: interfaces.OutcomeAccepted,
+		defaultR: workerexecution.WorkResult{
+			Outcome: workerexecution.OutcomeAccepted,
 		},
 	}
 }
 
 // Execute records the dispatch and returns the next predetermined result.
-func (m *MockExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (m *MockExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	m.calls = append(m.calls, dispatch)
 
-	var result interfaces.WorkResult
+	var result workerexecution.WorkResult
 	if m.index < len(m.results) {
 		result = m.results[m.index]
 		m.index++

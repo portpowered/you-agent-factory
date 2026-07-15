@@ -17,12 +17,14 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	"go.uber.org/zap"
 )
 
@@ -370,7 +372,7 @@ func TestPullModel_ErrorMappings(t *testing.T) {
 			pullErr: &apisurface.ManagedRuntimePullError{
 				Result: apisurface.ModelPullResult{
 					ModelName:          "OMNIVOICE_Q4_K_M",
-					ProviderLocality:   interfaces.ModelLocalityLocal,
+					ProviderLocality:   workerconfig.ModelLocalityLocal,
 					ManagedPullOutcome: "TIMED_OUT",
 					ReadinessState:     "FAILED",
 				},
@@ -463,11 +465,11 @@ func (listModelsWiringAssetPuller) PullModel(context.Context, *factoryconfig.Loa
 	return apisurface.ModelPullResult{}, nil
 }
 
-func (listModelsWiringAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+func (listModelsWiringAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) error {
 	return nil
 }
 
-func (listModelsWiringAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
+func (listModelsWiringAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) (localmodels.CacheLayout, error) {
 	return localmodels.CacheLayout{}, nil
 }
 
@@ -532,17 +534,17 @@ func modelWiringFactoryConfig(includeResource bool) map[string]any {
 		"type":          interfaces.WorkerTypeModel,
 		"modelProvider": "CODEX",
 		"model":         "OMNIVOICE_Q4_K_M",
-		"modelLocality": interfaces.ModelLocalityLocal,
+		"modelLocality": workerconfig.ModelLocalityLocal,
 		"operations": []map[string]any{{
 			"name": "TTS",
 			"inputs": []map[string]any{{
 				"name":         "text",
-				"contentTypes": []string{interfaces.ModelOperationContentTypeText},
+				"contentTypes": []string{workerconfig.ModelOperationContentTypeText},
 				"required":     true,
 			}},
 			"outputs": []map[string]any{{
 				"name":         "audio",
-				"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
+				"contentTypes": []string{workerconfig.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}
@@ -554,7 +556,7 @@ func modelWiringFactoryConfig(includeResource bool) map[string]any {
 		worker["resources"] = []map[string]any{{"name": "omnivoice-cache", "capacity": 1}}
 		cfg["resources"] = []map[string]any{{
 			"name":       "omnivoice-cache",
-			"type":       interfaces.ResourceTypeModel,
+			"type":       factoryresource.TypeModel,
 			"capacity":   1,
 			"model":      "OMNIVOICE_Q4_K_M",
 			"backend":    "LLAMACPP",

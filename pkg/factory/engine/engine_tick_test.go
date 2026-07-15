@@ -9,8 +9,10 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestTickCallsSubsystem(t *testing.T) {
@@ -158,16 +160,16 @@ func TestTickWhileAutomaticTicksPaused_SkipsSubsystemExecution(t *testing.T) {
 func TestTickWhileAutomaticTicksPaused_SkipsCascadeMutations(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
-	marking.AddToken(&interfaces.Token{
+	marking.AddToken(&factorytoken.Token{
 		ID:      "parent-tok",
 		PlaceID: "task:failed",
-		Color:   interfaces.TokenColor{WorkID: "parent-work", WorkTypeID: "task"},
+		Color:   factorytoken.Color{WorkID: "parent-work", WorkTypeID: "task"},
 		History: newTestTokenHistory(),
 	})
-	marking.AddToken(&interfaces.Token{
+	marking.AddToken(&factorytoken.Token{
 		ID:      "child-tok",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "child-work",
 			WorkTypeID: "task",
 			Relations: []work.Relation{{
@@ -198,8 +200,8 @@ func TestTickWhileAutomaticTicksPaused_SkipsCascadeMutations(t *testing.T) {
 	}
 }
 
-func newTestTokenHistory() interfaces.TokenHistory {
-	return interfaces.TokenHistory{
+func newTestTokenHistory() factorytoken.History {
+	return factorytoken.History{
 		TotalVisits:         make(map[string]int),
 		ConsecutiveFailures: make(map[string]int),
 		PlaceVisits:         make(map[string]int),
@@ -209,11 +211,11 @@ func newTestTokenHistory() interfaces.TokenHistory {
 func TestMutationsAppliedBetweenSubsystems(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
-	marking.AddToken(&interfaces.Token{
+	marking.AddToken(&factorytoken.Token{
 		ID:      "tok-1",
 		PlaceID: "task:init",
-		Color:   interfaces.TokenColor{WorkTypeID: "task"},
-		History: interfaces.TokenHistory{
+		Color:   factorytoken.Color{WorkTypeID: "task"},
+		History: factorytoken.History{
 			TotalVisits:         make(map[string]int),
 			ConsecutiveFailures: make(map[string]int),
 			PlaceVisits:         make(map[string]int),
@@ -350,10 +352,10 @@ func TestWakeForPendingProcessing_SignalsDispatchHookBacklogAfterPausedWake(t *t
 	}
 
 	paused = true
-	hook.results = []interfaces.WorkResult{{
+	hook.results = []workerexecution.WorkResult{{
 		DispatchID:   "d-hook-paused-wake",
 		TransitionID: "t1",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}}
 	hook.SignalBufferedResults()
 
@@ -455,10 +457,10 @@ func TestRepeatedPausedWakePreservesBufferedResult(t *testing.T) {
 	}
 
 	paused = true
-	engine.GetResultBuffer().Write(context.Background(), interfaces.WorkResult{
+	engine.GetResultBuffer().Write(context.Background(), workerexecution.WorkResult{
 		DispatchID:   "dispatch-repeated-pause",
 		TransitionID: "t1",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	})
 	engine.NotifyResult()
 	for range 3 {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	workdomain "github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -23,7 +24,7 @@ const (
 // requested provider/model pair plus the corresponding service harness.
 type ProviderErrorSmokeHarness struct {
 	Dir        string
-	Provider   interfaces.ModelProvider
+	Provider   modelprovider.ID
 	Model      string
 	WorkerName string
 
@@ -65,7 +66,7 @@ func WithProviderErrorSmokeServiceOptions(opts ...ServiceTestHarnessOption) Prov
 func NewProviderErrorSmokeHarness(
 	t *testing.T,
 	fixtureDir string,
-	provider interfaces.ModelProvider,
+	provider modelprovider.ID,
 	model string,
 	opts ...ProviderErrorSmokeHarnessOption,
 ) *ProviderErrorSmokeHarness {
@@ -137,7 +138,7 @@ func writeProviderErrorSmokeWorkerConfig(
 	t *testing.T,
 	dir string,
 	workerName string,
-	provider interfaces.ModelProvider,
+	provider modelprovider.ID,
 	model string,
 	promptBody string,
 ) {
@@ -183,7 +184,7 @@ func submitRequestFromProviderErrorSmokeWork(work ProviderErrorSmokeWork) workdo
 	}
 }
 
-func providerErrorSmokeWorkerConfig(provider interfaces.ModelProvider, model string, promptBody string) string {
+func providerErrorSmokeWorkerConfig(provider modelprovider.ID, model string, promptBody string) string {
 	return `---
 type: MODEL_WORKER
 model: ` + model + `

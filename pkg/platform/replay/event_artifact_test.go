@@ -8,7 +8,9 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestRunStartedPayloadFromEvent_RejectsRetiredFactoryAliases(t *testing.T) {
@@ -169,7 +171,7 @@ func TestMergeGeneratedWorkers_ReplacesExistingEntriesAndAppendsRuntimeOnlyInSor
 		},
 	}
 
-	runtimeWorkers := map[string]interfaces.WorkerConfig{
+	runtimeWorkers := map[string]workerconfig.Config{
 		"charlie": {
 			Type:      string(factoryapi.WorkerTypeScriptWorker),
 			Command:   "charlie-command",
@@ -269,7 +271,7 @@ func mergeGeneratedWorkstationsFixture() (*factoryapi.Factory, map[string]interf
 				Inputs:           []interfaces.IOConfig{{WorkTypeName: "story", StateName: "review"}},
 				Outputs:          []interfaces.IOConfig{{WorkTypeName: "story", StateName: "complete"}},
 				OnFailure:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
-				Resources:        []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 2}},
+				Resources:        []factoryresource.Config{{Name: "agent-slot", Capacity: 2}},
 				WorkingDirectory: "/repo/runtime",
 			},
 			"bravo": {
@@ -279,7 +281,7 @@ func mergeGeneratedWorkstationsFixture() (*factoryapi.Factory, map[string]interf
 				WorkerTypeName: "bravo-worker",
 				Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "ready"}},
 				Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
-				Resources:      []interfaces.ResourceConfig{{Name: "gpu", Capacity: 1}},
+				Resources:      []factoryresource.Config{{Name: "gpu", Capacity: 1}},
 			},
 		}
 }

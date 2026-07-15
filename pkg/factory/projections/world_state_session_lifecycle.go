@@ -8,6 +8,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func (r *factoryWorldReducer) applySessionLifecycleEvent(event factoryapi.FactoryEvent) (bool, error) {
@@ -142,8 +143,8 @@ func (r *factoryWorldReducer) applySessionCompletedEvent(event factoryapi.Factor
 		}
 	}
 	if payload.FailureDetail != nil {
-		bracket.FailureDetail = &interfaces.FailureDetail{
-			Reason:  interfaces.WorkFailureType(payload.FailureDetail.Reason),
+		bracket.FailureDetail = &workerexecution.FailureDetail{
+			Reason:  workerexecution.WorkFailureType(payload.FailureDetail.Reason),
 			Message: payload.FailureDetail.Message,
 		}
 	}

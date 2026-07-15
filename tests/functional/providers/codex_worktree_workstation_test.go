@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -89,8 +89,8 @@ Process the input task.
 
 			wantCheckout := filepath.Join(factoryDir, filepath.FromSlash(tc.wantParentRel), workName)
 			call := runner.LastRequest()
-			if call.Command != string(interfaces.ModelProviderCodex) {
-				t.Fatalf("command = %q, want %q", call.Command, interfaces.ModelProviderCodex)
+			if call.Command != string(modelprovider.Codex) {
+				t.Fatalf("command = %q, want %q", call.Command, modelprovider.Codex)
 			}
 			if call.WorkDir != wantCheckout {
 				t.Fatalf("work dir = %q, want materialized checkout %q", call.WorkDir, wantCheckout)

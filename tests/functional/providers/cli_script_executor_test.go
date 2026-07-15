@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -420,14 +420,14 @@ func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t
 	if len(engineState.DispatchHistory) < 2 {
 		t.Fatalf("DispatchHistory length = %d, want at least 2", len(engineState.DispatchHistory))
 	}
-	if engineState.DispatchHistory[0].Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("first DispatchHistory outcome = %s, want %s", engineState.DispatchHistory[0].Outcome, interfaces.OutcomeFailed)
+	if engineState.DispatchHistory[0].Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("first DispatchHistory outcome = %s, want %s", engineState.DispatchHistory[0].Outcome, workerexecution.OutcomeFailed)
 	}
 	if engineState.DispatchHistory[0].Reason != "execution timeout" {
 		t.Fatalf("first DispatchHistory reason = %q, want %q", engineState.DispatchHistory[0].Reason, "execution timeout")
 	}
-	if engineState.DispatchHistory[len(engineState.DispatchHistory)-1].Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("last DispatchHistory outcome = %s, want %s", engineState.DispatchHistory[len(engineState.DispatchHistory)-1].Outcome, interfaces.OutcomeAccepted)
+	if engineState.DispatchHistory[len(engineState.DispatchHistory)-1].Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("last DispatchHistory outcome = %s, want %s", engineState.DispatchHistory[len(engineState.DispatchHistory)-1].Outcome, workerexecution.OutcomeAccepted)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 var defaultFactoryConfigMapper = NewFactoryConfigMapper()
@@ -490,7 +491,7 @@ func normalizeFactoryWorkerTypesForFactoryUsage(root map[string]any) error {
 		if interfaces.InternalRuntimeWorkerTypeFromPublic(workerType) != interfaces.WorkerTypeModel {
 			continue
 		}
-		publicType := interfaces.PublicWorkerTypeForFactoryUsage(interfaces.WorkerConfig{
+		publicType := interfaces.PublicWorkerTypeForFactoryUsage(workerconfig.Config{
 			Name: workerName,
 			Type: interfaces.WorkerTypeModel,
 		}, workstations)

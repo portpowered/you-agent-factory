@@ -41,12 +41,16 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	providerstructured "github.com/portpowered/infinite-you/pkg/workers/provider/structured"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"github.com/portpowered/infinite-you/pkg/workers/skippermissions"
 	"go.uber.org/zap"
@@ -624,7 +628,7 @@ func wrapLocalModelRunner(
 	inner workers.Runner,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	modelDomain LocalModelDomain,
 ) workers.Runner {
 	return factoryservice.WrapLocalModelRunner(inner, runtimeCfg, factoryCfg, workerDef, modelDomain)
@@ -708,13 +712,13 @@ func (fs *FactoryService) simpleDashboardRenderData(
 }
 
 func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryConfig) string {
-	if runner := interfaces.NormalizeRunnerID(override); runner != "" {
+	if runner := workerrunner.NormalizeRunnerID(override); runner != "" {
 		return runner
 	}
 	if factoryCfg == nil {
 		return ""
 	}
-	return interfaces.NormalizeRunnerID(factoryCfg.Runner)
+	return workerrunner.NormalizeRunnerID(factoryCfg.Runner)
 }
 
 // loadWorkersFromConfig instantiates worker executors from the loaded runtime config.
@@ -882,7 +886,7 @@ func buildWorkerExecutor(
 func buildProviderBackedWorkerExecutor(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	factoryCfg *interfaces.FactoryConfig,
-	def *interfaces.WorkerConfig,
+	def *workerconfig.Config,
 	factoryRunnerID string,
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
@@ -932,7 +936,7 @@ func buildProviderBackedWorkerExecutor(
 
 func providerBackedRunner(
 	runtimeCfg interfaces.RuntimeConfigLookup,
-	def *interfaces.WorkerConfig,
+	def *workerconfig.Config,
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
@@ -950,7 +954,7 @@ func providerBackedRunner(
 
 func newProviderRunner(
 	runtimeCfg interfaces.RuntimeConfigLookup,
-	def *interfaces.WorkerConfig,
+	def *workerconfig.Config,
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
@@ -972,7 +976,7 @@ func newProviderRunner(
 
 func providerRunnerOptions(
 	runtimeCfg interfaces.RuntimeConfigLookup,
-	def *interfaces.WorkerConfig,
+	def *workerconfig.Config,
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
@@ -1026,7 +1030,7 @@ func wrapRecordingProviderRunner(
 
 func buildScriptWorkerExecutor(
 	runtimeCfg interfaces.RuntimeConfigLookup,
-	def *interfaces.WorkerConfig,
+	def *workerconfig.Config,
 	factoryRunnerID string,
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
@@ -1073,12 +1077,12 @@ func validateConfiguredWorkstationRunners(factoryCfg *interfaces.FactoryConfig, 
 			workerModelProvider = worker.ModelProvider
 		}
 
-		selection := interfaces.ResolveRunnerSelection(workstation.Runner, factoryRunnerID, workerModelProvider)
+		selection := workerrunner.ResolveRunnerSelection(workstation.Runner, factoryRunnerID, workerModelProvider)
 		workerOpenCodeAgent := ""
 		if worker != nil {
 			workerOpenCodeAgent = worker.OpenCodeAgent
 		}
-		if err := interfaces.ValidateOpenCodeAgentForRunnerSelection(workstation.OpenCodeAgent, workerOpenCodeAgent, selection); err != nil {
+		if err := workerrunner.ValidateOpenCodeAgentForRunnerSelection(workstation.OpenCodeAgent, workerOpenCodeAgent, selection); err != nil {
 			return fmt.Errorf("workstations[%d](%s).openCodeAgent: %w", i, workstation.Name, err)
 		}
 		if !runnerSelectionRequiresValidation(selection) {
@@ -1095,12 +1099,12 @@ type runnerSelectionPreflight struct {
 	skipCommandAvailability bool
 }
 
-func runnerSelectionRequiresValidation(selection interfaces.ResolvedRunnerSelection) bool {
-	return selection.Source != interfaces.RunnerSelectionSourceDefault
+func runnerSelectionRequiresValidation(selection workerexecution.ResolvedRunnerSelection) bool {
+	return selection.Source != workerexecution.RunnerSelectionSourceDefault
 }
 
-func validateResolvedRunnerSelection(selection interfaces.ResolvedRunnerSelection, preflight runnerSelectionPreflight) error {
-	if _, ok := interfaces.BuiltInRunnerMetadata(selection.RunnerID); !ok {
+func validateResolvedRunnerSelection(selection workerexecution.ResolvedRunnerSelection, preflight runnerSelectionPreflight) error {
+	if _, ok := workerrunner.BuiltInRunnerMetadata(selection.RunnerID); !ok {
 		return fmt.Errorf("unknown runner %q", selection.RunnerID)
 	}
 	if status, ok := workers.BuiltInRunnerStatus(selection.RunnerID); ok && !status.Available {
@@ -1273,13 +1277,13 @@ func (fs *FactoryService) modelPullMetricsRecorder() ModelPullMetricsRecorder {
 	return fs.cfg.ModelPullMetricsRecorder
 }
 
-func modelEventDiagnostics(success *interfaces.WorkDiagnostics, err error) *factoryapi.SafeWorkDiagnostics {
+func modelEventDiagnostics(success *workerexecution.WorkDiagnostics, err error) *factoryapi.SafeWorkDiagnostics {
 	if success != nil {
-		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(success)
+		return workerdiagnostics.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(success)
 	}
 	var providerErr *workerprovider.ProviderError
 	if errors.As(err, &providerErr) {
-		return interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
+		return workerdiagnostics.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics)
 	}
 	return nil
 }
@@ -1533,7 +1537,7 @@ func NewFactoryDefinitionServiceFromCore(core *runtimehost.Core) FactoryDefiniti
 }
 
 // StartupWorkerConfigFromCore returns the named worker from the composed startup runtime.
-func StartupWorkerConfigFromCore(core *runtimehost.Core, name string) (*interfaces.WorkerConfig, bool) {
+func StartupWorkerConfigFromCore(core *runtimehost.Core, name string) (*workerconfig.Config, bool) {
 	if core == nil {
 		return nil, false
 	}

@@ -7,6 +7,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/work"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func (r *factoryWorldReducer) applyDispatchCreated(event factoryapi.FactoryEvent, payload factoryapi.DispatchRequestEventPayload) {
@@ -128,13 +130,13 @@ func (r *factoryWorldReducer) applyInferenceResponse(event factoryapi.FactoryEve
 	current.DurationMillis = payload.DurationMillis
 	current.ExitCode = intPtrValue(payload.ExitCode)
 	if payload.FailureDetail != nil {
-		current.FailureDetail = &interfaces.FailureDetail{
-			Reason:  interfaces.WorkFailureType(payload.FailureDetail.Reason),
+		current.FailureDetail = &workerexecution.FailureDetail{
+			Reason:  workerexecution.WorkFailureType(payload.FailureDetail.Reason),
 			Message: payload.FailureDetail.Message,
 		}
 	}
-	current.ProviderSession = interfaces.ProviderSessionMetadataFromGenerated(payload.ProviderSession)
-	current.Diagnostics = interfaces.SafeWorkDiagnosticsFromGenerated(payload.Diagnostics)
+	current.ProviderSession = workerdiagnostics.ProviderSessionMetadataFromGenerated(payload.ProviderSession)
+	current.Diagnostics = workerdiagnostics.SafeWorkDiagnosticsFromGenerated(payload.Diagnostics)
 	current.ResponseTime = event.Context.EventTime
 	attempts[payload.InferenceRequestId] = current
 }
@@ -186,7 +188,7 @@ func (r *factoryWorldReducer) applyAgentRunResponse(event factoryapi.FactoryEven
 		AgentRunID:     payload.AgentRunId,
 		Outcome:        string(payload.Outcome),
 		DurationMillis: payload.DurationMillis,
-		Diagnostics:    interfaces.SafeWorkDiagnosticsFromGenerated(payload.Diagnostics),
+		Diagnostics:    workerdiagnostics.SafeWorkDiagnosticsFromGenerated(payload.Diagnostics),
 		ResponseTime:   event.Context.EventTime,
 	}
 }
@@ -502,14 +504,14 @@ func (r *factoryWorldReducer) latestInferenceAttemptForDispatch(dispatchID strin
 	return latest
 }
 
-func latestInferenceProviderSession(attempt *interfaces.FactoryWorldInferenceAttempt) *interfaces.ProviderSessionMetadata {
+func latestInferenceProviderSession(attempt *interfaces.FactoryWorldInferenceAttempt) *workerexecution.ProviderSessionMetadata {
 	if attempt == nil {
 		return nil
 	}
 	return interfaces.CloneProviderSessionMetadata(attempt.ProviderSession)
 }
 
-func latestInferenceDiagnostics(attempt *interfaces.FactoryWorldInferenceAttempt) *interfaces.SafeWorkDiagnostics {
+func latestInferenceDiagnostics(attempt *interfaces.FactoryWorldInferenceAttempt) *workerdiagnostics.SafeWorkDiagnostics {
 	if attempt == nil {
 		return nil
 	}
@@ -519,7 +521,7 @@ func latestInferenceDiagnostics(attempt *interfaces.FactoryWorldInferenceAttempt
 func dispatchCompletionDiagnostics(
 	agentRun *interfaces.FactoryWorldAgentRunResponse,
 	attempt *interfaces.FactoryWorldInferenceAttempt,
-) *interfaces.SafeWorkDiagnostics {
+) *workerdiagnostics.SafeWorkDiagnostics {
 	if agentRun != nil && agentRun.Diagnostics != nil {
 		return interfaces.CloneSafeWorkDiagnostics(agentRun.Diagnostics)
 	}

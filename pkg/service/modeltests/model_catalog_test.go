@@ -8,9 +8,11 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	"go.uber.org/zap"
 )
 
@@ -90,17 +92,17 @@ func modelCatalogConfig(includeResource bool) map[string]any {
 		"type":          interfaces.WorkerTypeModel,
 		"modelProvider": "CODEX",
 		"model":         "OMNIVOICE_Q4_K_M",
-		"modelLocality": interfaces.ModelLocalityLocal,
+		"modelLocality": workerconfig.ModelLocalityLocal,
 		"operations": []map[string]any{{
 			"name": "TTS",
 			"inputs": []map[string]any{{
 				"name":         "text",
-				"contentTypes": []string{interfaces.ModelOperationContentTypeText},
+				"contentTypes": []string{workerconfig.ModelOperationContentTypeText},
 				"required":     true,
 			}},
 			"outputs": []map[string]any{{
 				"name":         "audio",
-				"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
+				"contentTypes": []string{workerconfig.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}
@@ -112,7 +114,7 @@ func modelCatalogConfig(includeResource bool) map[string]any {
 		worker["resources"] = []map[string]any{{"name": "omnivoice-cache", "capacity": 1}}
 		cfg["resources"] = []map[string]any{{
 			"name":       "omnivoice-cache",
-			"type":       interfaces.ResourceTypeModel,
+			"type":       factoryresource.TypeModel,
 			"capacity":   1,
 			"model":      "OMNIVOICE_Q4_K_M",
 			"backend":    "LLAMACPP",

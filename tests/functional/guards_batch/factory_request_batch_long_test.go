@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -27,14 +28,14 @@ func TestFactoryRequestBatch_CreatesOneTokenPerWorkItem(t *testing.T) {
 	request := work.WorkRequest{
 		RequestID: "request-batch-1",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{Name: "alpha", WorkTypeID: "task", Tags: map[string]string{"project": "test-project"}},
 			{Name: "beta", WorkTypeID: "task", Tags: map[string]string{"project": "test-project"}},
 			{Name: "gamma", WorkTypeID: "task", Tags: map[string]string{"project": "test-project"}},
 		},
 	}
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 		"finisher":  {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})
@@ -60,13 +61,13 @@ func TestFactoryRequestBatch_TagsAccessibleInTokenPayload(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	checker := &capturingExecutor{
-		result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	}
 	h.SetCustomExecutor("checker", checker)
 	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-tags-1",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Works: []work.Work{{
 			Name:       "story-1",
 			WorkTypeID: "task",
 			TraceID:    "trace-tags-1",
@@ -115,7 +116,7 @@ func TestFactoryRequestBatch_FactoryProjectConfigWinsOverProjectTagForProviderCo
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "tags_test"))
 	support.SetWorkingDirectory(t, dir)
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"checker": {{Content: "checked COMPLETE"}},
 	})
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -125,7 +126,7 @@ func TestFactoryRequestBatch_FactoryProjectConfigWinsOverProjectTagForProviderCo
 	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-project-override-1",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Works: []work.Work{{
 			Name:       "story-project-override",
 			WorkID:     "work-project-override",
 			WorkTypeID: "task",
@@ -182,7 +183,7 @@ func TestFactoryRequestBatch_FactoryProjectConfigFlowsToProviderContext(t *testi
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "tags_test"))
 	support.SetWorkingDirectory(t, dir)
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"checker": {{Content: "checked COMPLETE"}},
 	})
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -192,7 +193,7 @@ func TestFactoryRequestBatch_FactoryProjectConfigFlowsToProviderContext(t *testi
 	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-project-config-1",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Works: []work.Work{{
 			Name:       "story-project-config",
 			WorkID:     "work-project-config",
 			WorkTypeID: "task",
@@ -253,7 +254,7 @@ func TestFactoryRequestBatch_DependsOnBlocksDispatch(t *testing.T) {
 	request := work.WorkRequest{
 		RequestID: "request-deps-1",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{Name: "A", WorkID: "work-A", WorkTypeID: "task", Payload: "A"},
 			{Name: "B", WorkID: "work-B", WorkTypeID: "task", Payload: "B"},
 		},
@@ -266,7 +267,7 @@ func TestFactoryRequestBatch_DependsOnBlocksDispatch(t *testing.T) {
 		},
 	}
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 		"finisher":  {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})
@@ -298,7 +299,7 @@ func TestFactoryRequestBatch_HarnessSnapshotObservesNormalizedWork(t *testing.T)
 	request := work.WorkRequest{
 		RequestID: "request-snapshot-1",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{Name: "first", WorkID: "work-snapshot-first", WorkTypeID: "task", TraceID: "trace-snapshot-1", Payload: "first"},
 			{Name: "second", WorkID: "work-snapshot-second", WorkTypeID: "task", TraceID: "trace-snapshot-1", Payload: "second"},
 		},
@@ -309,7 +310,7 @@ func TestFactoryRequestBatch_HarnessSnapshotObservesNormalizedWork(t *testing.T)
 		}},
 	}
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 		"finisher":  {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})
@@ -379,7 +380,7 @@ Finish the input task.
 `)
 
 	generatedBatchOutput := `{"request":{"requestId":"request-e2e-generated-batch","type":"FACTORY_REQUEST_BATCH","works":[{"name":"generated-alpha","workId":"work-e2e-generated-alpha","workTypeName":"task","payload":"generated alpha"},{"name":"generated-beta","workId":"work-e2e-generated-beta","workTypeName":"task","payload":"generated beta"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha"}]},"metadata":{"source":"generator:e2e-smoke","relationContext":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha","requiredState":"complete"}],"parentLineage":["request-e2e-batch-smoke","work-e2e-second"]},"submissions":[{"name":"generated-alpha","workId":"work-e2e-generated-alpha","tags":{"runtime":"alpha"}},{"name":"generated-beta","workId":"work-e2e-generated-beta","tags":{"runtime":"beta"}}]}`
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {
 			{Content: "external first complete COMPLETE"},
 			{Content: generatedBatchOutput},
@@ -400,7 +401,7 @@ Finish the input task.
 	request := work.WorkRequest{
 		RequestID: "request-e2e-batch-smoke",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{Name: "first", WorkID: "work-e2e-first", WorkTypeID: "task", TraceID: "trace-e2e-batch-smoke", Payload: "first"},
 			{Name: "second", WorkID: "work-e2e-second", WorkTypeID: "task", TraceID: "trace-e2e-batch-smoke", Payload: "second"},
 		},
@@ -428,7 +429,7 @@ Finish the input task.
 
 // capturingExecutor captures the last dispatch and returns a fixed result.
 type capturingExecutor struct {
-	result       interfaces.WorkResult
+	result       workerexecution.WorkResult
 	lastDispatch work.WorkDispatch
 	callCount    int
 }
@@ -447,16 +448,16 @@ func newGeneratedBatchExecutor(t *testing.T, batch work.GeneratedSubmissionBatch
 	return &generatedBatchExecutor{output: string(data)}
 }
 
-func (e *generatedBatchExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{
+func (e *generatedBatchExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       e.output,
 	}, nil
 }
 
-func (e *capturingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *capturingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.lastDispatch = dispatch
 	e.callCount++
 	result := e.result

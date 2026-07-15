@@ -13,11 +13,13 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this subscription contract test keeps replay ordering and live-stream assertions together at the runtime seam.
@@ -375,8 +377,8 @@ func TestNew_ReplayPlannerCanReplaceWorkerCompletionResult(t *testing.T) {
 		factory.WithWorkerExecutor("mock", &passExecutor{}),
 		factory.WithCompletionDeliveryPlanner(fixedCompletionDeliveryPlanner{
 			tick: 4,
-			plannedResult: interfaces.WorkResult{
-				Outcome: interfaces.OutcomeAccepted,
+			plannedResult: workerexecution.WorkResult{
+				Outcome: workerexecution.OutcomeAccepted,
 				Output:  "replayed-output",
 			},
 		}),
@@ -732,7 +734,7 @@ func (nextTickCompletionPlanner) DeliveryTickForDispatch(dispatch work.WorkDispa
 func workIDForCompletedDispatch(t *testing.T, dispatch interfaces.CompletedDispatch) string {
 	t.Helper()
 	for _, token := range dispatch.ConsumedTokens {
-		if token.Color.DataType != interfaces.DataTypeResource && token.Color.WorkID != "" {
+		if token.Color.DataType != factorytoken.DataTypeResource && token.Color.WorkID != "" {
 			return token.Color.WorkID
 		}
 	}

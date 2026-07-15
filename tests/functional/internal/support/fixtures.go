@@ -150,7 +150,7 @@ func WriteWorkRequestFile(t *testing.T, path string, request work.SubmitRequest)
 	data, err := json.Marshal(work.WorkRequest{
 		RequestID: request.RequestID,
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Works: []work.Work{{
 			Name:       workName,
 			WorkID:     request.WorkID,
 			RequestID:  request.RequestID,

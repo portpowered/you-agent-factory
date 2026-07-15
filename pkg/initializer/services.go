@@ -10,9 +10,9 @@ package initializer
 import (
 	"context"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 )
 
@@ -37,7 +37,7 @@ func Initialize(ctx context.Context, cfg *Config) (*Services, error) {
 }
 
 // StartupWorkerConfig returns the named worker from the composed startup runtime.
-func (s *Services) StartupWorkerConfig(name string) (*interfaces.WorkerConfig, bool) {
+func (s *Services) StartupWorkerConfig(name string) (*workerconfig.Config, bool) {
 	if s == nil {
 		return nil, false
 	}

@@ -13,13 +13,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type panicExecutor struct {
 	message string
 }
 
-func (e *panicExecutor) Execute(_ context.Context, _ work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *panicExecutor) Execute(_ context.Context, _ work.WorkDispatch) (workerexecution.WorkResult, error) {
 	panic(e.message)
 }
 
@@ -27,12 +28,12 @@ type recordingExecutor struct {
 	calls []work.WorkDispatch
 }
 
-func (e *recordingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *recordingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.calls = append(e.calls, dispatch)
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "executor-output",
 	}, nil
 }
@@ -46,7 +47,7 @@ func (immediateCompletionPlanner) DeliveryTickForDispatch(work.WorkDispatch) (in
 type plannedCompletionPlanner struct {
 	deliveryTick     int
 	hasDeliveryTick  bool
-	plannedResult    interfaces.WorkResult
+	plannedResult    workerexecution.WorkResult
 	hasPlannedResult bool
 }
 
@@ -60,13 +61,13 @@ type asyncRecordingExecutor struct {
 	release chan struct{}
 }
 
-func (e *asyncRecordingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *asyncRecordingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.started <- dispatch
 	<-e.release
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "async-executor-output",
 	}, nil
 }
@@ -84,9 +85,9 @@ func (p plannedCompletionPlanner) DeliveryTickForDispatch(work.WorkDispatch) (in
 	return p.deliveryTick, p.hasDeliveryTick, nil
 }
 
-func (p plannedCompletionPlanner) PlannedResultForDispatch(dispatch work.WorkDispatch) (interfaces.WorkResult, bool, error) {
+func (p plannedCompletionPlanner) PlannedResultForDispatch(dispatch work.WorkDispatch) (workerexecution.WorkResult, bool, error) {
 	if !p.hasPlannedResult {
-		return interfaces.WorkResult{}, false, nil
+		return workerexecution.WorkResult{}, false, nil
 	}
 	result := p.plannedResult
 	result.DispatchID = dispatch.DispatchID
@@ -108,8 +109,8 @@ func TestExecuteDispatchSynchronously_ExecutorPanicReturnsFailedResult(t *testin
 	if result.DispatchID != dispatch.DispatchID || result.TransitionID != dispatch.TransitionID {
 		t.Fatalf("panic result lost dispatch identity: %+v", result)
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("panic result outcome = %q, want %q", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("panic result outcome = %q, want %q", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if !strings.Contains(result.Error, "executor panic:") || !strings.Contains(result.Error, "simulated executor panic") {
 		t.Fatalf("panic result error = %q, want panic-derived failure message", result.Error)
@@ -201,8 +202,8 @@ func TestWorkerPoolDispatchResultHook_SubmitDispatchWithPlannerUsesPlannedResult
 		logging.NoopLogger{},
 		1,
 		plannedCompletionPlanner{
-			plannedResult: interfaces.WorkResult{
-				Outcome: interfaces.OutcomeAccepted,
+			plannedResult: workerexecution.WorkResult{
+				Outcome: workerexecution.OutcomeAccepted,
 				Output:  "planned-output",
 			},
 			hasPlannedResult: true,

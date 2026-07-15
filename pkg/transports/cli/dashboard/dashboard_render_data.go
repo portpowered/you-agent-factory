@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func dashboardQueueCountViewsFromRenderData(renderData dashboardrender.SimpleDashboardRenderData) []dashboardQueueCountView {
@@ -225,7 +226,7 @@ func worldViewFallbackWorkItems(
 	case worldViewFallbackCompletedWorkItemLane:
 		return collectWorldViewFallbackWorkItems(
 			completions,
-			interfaces.OutcomeAccepted,
+			workerexecution.OutcomeAccepted,
 			func(collector *worldViewFallbackWorkItemCollector, completion interfaces.FactoryWorldDispatchCompletion) {
 				if collector.addTerminalWork(completion.TerminalWork, func(status string) bool {
 					return status != "FAILED"
@@ -238,7 +239,7 @@ func worldViewFallbackWorkItems(
 	case worldViewFallbackFailedWorkItemLane:
 		return collectWorldViewFallbackWorkItems(
 			completions,
-			interfaces.OutcomeFailed,
+			workerexecution.OutcomeFailed,
 			func(collector *worldViewFallbackWorkItemCollector, completion interfaces.FactoryWorldDispatchCompletion) {
 				if collector.addTerminalWork(completion.TerminalWork, func(string) bool {
 					return true
@@ -260,14 +261,14 @@ type worldViewFallbackWorkItemCollector struct {
 
 func collectWorldViewFallbackWorkItems(
 	completions []interfaces.FactoryWorldDispatchCompletion,
-	outcome interfaces.WorkOutcome,
+	outcome workerexecution.WorkOutcome,
 	collect func(*worldViewFallbackWorkItemCollector, interfaces.FactoryWorldDispatchCompletion),
 ) []interfaces.FactoryWorldWorkItemRef {
 	collector := worldViewFallbackWorkItemCollector{
 		workItemsByID: make(map[string]interfaces.FactoryWorldWorkItemRef),
 	}
 	for _, completion := range completions {
-		if interfaces.WorkOutcome(completion.Result.Outcome) != outcome {
+		if workerexecution.WorkOutcome(completion.Result.Outcome) != outcome {
 			continue
 		}
 		collect(&collector, completion)
@@ -320,7 +321,7 @@ func dashboardFailedWorkDetailsFromRenderData(
 	}
 	completionByWorkID := make(map[string]interfaces.FactoryWorldDispatchCompletion)
 	for _, completion := range completions {
-		if interfaces.WorkOutcome(completion.Result.Outcome) != interfaces.OutcomeFailed {
+		if workerexecution.WorkOutcome(completion.Result.Outcome) != workerexecution.OutcomeFailed {
 			continue
 		}
 		for _, workID := range worldFailedWorkIDsForDispatch(completion) {
@@ -378,7 +379,7 @@ func sortedWorldWorkItemRefs(
 	return workItems
 }
 
-func cloneProviderSessionMetadata(session *interfaces.ProviderSessionMetadata) *interfaces.ProviderSessionMetadata {
+func cloneProviderSessionMetadata(session *workerexecution.ProviderSessionMetadata) *workerexecution.ProviderSessionMetadata {
 	if session == nil || session.ID == "" {
 		return nil
 	}

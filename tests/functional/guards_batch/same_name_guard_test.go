@@ -14,6 +14,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -83,7 +84,7 @@ func TestSameNameGuard_FixtureBoundaryMapsToRuntimeConfig(t *testing.T) {
 
 func TestSameNameGuard_MatchingNamesCompletesJoin(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_name_guard_dir"))
-	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "joined COMPLETE"})
 
 	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -125,7 +126,7 @@ func TestSameNameGuard_MatchingNamesCompletesJoin(t *testing.T) {
 
 func TestSameNameGuard_NonMatchingNamesStayBlocked(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_name_guard_dir"))
-	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "joined COMPLETE"})
 
 	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -174,7 +175,7 @@ func TestSameNameGuard_LaterMatchingTokenStillCompletesJoin(t *testing.T) {
 	dir := scaffoldLaterMatchingSameNameGuardFactory(t)
 
 	h := support.NewGuardsBatchHarness(t, dir)
-	matcher := h.MockWorker("matcher", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	matcher := h.MockWorker("matcher", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	submitLaterMatchingSameNameGuardWork(h)
 

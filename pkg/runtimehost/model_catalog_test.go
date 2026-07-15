@@ -12,11 +12,13 @@ import (
 	"github.com/jonboulle/clockwork"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -165,10 +167,10 @@ func runtimeHostModelConfig(t *testing.T) *factoryconfig.LoadedFactoryConfig {
 	t.Helper()
 	cfg, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), &interfaces.FactoryConfig{
 		Name: "runtime-host-models",
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name: "voice-worker", Type: interfaces.WorkerTypeModel, Model: "voice-model",
-			ModelLocality: interfaces.ModelLocalityLocal,
-			Operations:    []interfaces.ModelOperation{{Name: "TTS"}},
+			ModelLocality: workerconfig.ModelLocalityLocal,
+			Operations:    []workerconfig.ModelOperation{{Name: "TTS"}},
 		}},
 	}, nil)
 	if err != nil {
@@ -195,10 +197,10 @@ type runtimeHostModelPuller struct {
 func (p *runtimeHostModelPuller) PullModel(context.Context, *factoryconfig.LoadedFactoryConfig, string) (apisurface.ModelPullResult, error) {
 	return p.result, p.err
 }
-func (p *runtimeHostModelPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+func (p *runtimeHostModelPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) error {
 	return nil
 }
-func (p *runtimeHostModelPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
+func (p *runtimeHostModelPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) (localmodels.CacheLayout, error) {
 	return localmodels.CacheLayout{}, nil
 }
 func (p *runtimeHostModelPuller) InspectRuntimeCache(context.Context, *factoryconfig.LoadedFactoryConfig, string) (localmodels.RuntimeCacheInspection, error) {
@@ -251,14 +253,14 @@ func (r *runtimeHostPullMetricsRecorder) names() []string {
 
 type runtimeHostInvocationProvider struct {
 	mu       sync.Mutex
-	requests []interfaces.ProviderInferenceRequest
+	requests []workerexecution.ProviderInferenceRequest
 }
 
-func (p *runtimeHostInvocationProvider) Infer(_ context.Context, request interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *runtimeHostInvocationProvider) Infer(_ context.Context, request workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.requests = append(p.requests, request)
-	return interfaces.InferenceResponse{Content: "spoken response"}, nil
+	return workerexecution.InferenceResponse{Content: "spoken response"}, nil
 }
 func (p *runtimeHostInvocationProvider) runnerIDs() []string {
 	p.mu.Lock()

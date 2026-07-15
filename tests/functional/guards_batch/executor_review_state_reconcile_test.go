@@ -11,12 +11,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestExecutorReviewStateReconcile_ReviewCompletionCollapsesDuplicateReviewInit(t *testing.T) {
 	dir := scaffoldExecutorReviewReconcileFactory(t)
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "<COMPLETE>\n"}},
 	})
 	h := support.NewGuardsBatchHarness(t, dir,

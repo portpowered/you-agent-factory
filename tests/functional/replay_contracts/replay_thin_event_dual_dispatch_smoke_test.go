@@ -13,6 +13,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -58,7 +59,7 @@ func runThinEventDualDispatchSmoke(t *testing.T) dualDispatchSmokeFixture {
 	configureThinEventDualDispatchFixture(t, dir)
 
 	artifactPath := filepath.Join(t.TempDir(), "thin-event-dual-dispatch.replay.json")
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"worker-a": {{
 			Content: "model draft complete. COMPLETE",
 		}},
@@ -83,7 +84,7 @@ func runThinEventDualDispatchSmoke(t *testing.T) dualDispatchSmokeFixture {
 	harness.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: smoke.requestID,
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{
 				Name:       "model-path",
 				WorkID:     smoke.modelWorkID,

@@ -26,6 +26,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/replay"
@@ -34,6 +35,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
@@ -295,9 +298,9 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureDispatchOutcomes(t 
 		retries  float64
 		cost     float64
 	}{
-		{workID: "work-dispatch-accepted", traceID: "trace-dispatch-accepted", placeID: "task:complete", outcome: string(interfaces.OutcomeAccepted), duration: 250, retries: 2, cost: 1.25},
-		{workID: "work-dispatch-rejected", traceID: "trace-dispatch-rejected", placeID: "task:rejected", outcome: string(interfaces.OutcomeRejected), duration: 125, retries: 1},
-		{workID: "work-dispatch-failed", traceID: "trace-dispatch-failed", placeID: "task:failed", outcome: string(interfaces.OutcomeFailed), duration: 500, retries: 3},
+		{workID: "work-dispatch-accepted", traceID: "trace-dispatch-accepted", placeID: "task:complete", outcome: string(workerexecution.OutcomeAccepted), duration: 250, retries: 2, cost: 1.25},
+		{workID: "work-dispatch-rejected", traceID: "trace-dispatch-rejected", placeID: "task:rejected", outcome: string(workerexecution.OutcomeRejected), duration: 125, retries: 1},
+		{workID: "work-dispatch-failed", traceID: "trace-dispatch-failed", placeID: "task:failed", outcome: string(workerexecution.OutcomeFailed), duration: 500, retries: 3},
 	}
 
 	for _, submission := range submissions {
@@ -442,10 +445,10 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureProviderAndScriptDi
 	}
 	waitForTokenInPlaceByWorkID(t, svc, "model-task:complete", "work-provider-metrics", time.Second)
 	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
-		return runtimeMetricMatchesProvider(record, runtimeMetricProviderRequest, "work-provider-metrics", string(interfaces.ModelProviderCodex), "")
+		return runtimeMetricMatchesProvider(record, runtimeMetricProviderRequest, "work-provider-metrics", string(modelprovider.Codex), "")
 	}, "provider request")
 	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
-		return runtimeMetricMatchesProvider(record, runtimeMetricProviderComplete, "work-provider-metrics", string(interfaces.ModelProviderCodex), string(interfaces.OutcomeAccepted))
+		return runtimeMetricMatchesProvider(record, runtimeMetricProviderComplete, "work-provider-metrics", string(modelprovider.Codex), string(workerexecution.OutcomeAccepted))
 	}, "provider completion")
 	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
 		return runtimeMetricMatchesProviderValue(record, runtimeMetricProviderDuration, "work-provider-metrics", float64(240), "ms")
@@ -471,8 +474,8 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureProviderAndScriptDi
 		t.Fatalf("SubmitWorkRequest(provider failure): %v", err)
 	}
 	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
-		return runtimeMetricMatchesProvider(record, runtimeMetricProviderFailed, "work-provider-failed", string(interfaces.ModelProviderCodex), string(interfaces.OutcomeFailed)) &&
-			metricRecordString(record, "reason") == string(interfaces.WorkFailureTypeInternalServerError)
+		return runtimeMetricMatchesProvider(record, runtimeMetricProviderFailed, "work-provider-failed", string(modelprovider.Codex), string(workerexecution.OutcomeFailed)) &&
+			metricRecordString(record, "reason") == string(workerexecution.WorkFailureTypeInternalServerError)
 	}, "provider failure")
 
 	err = submitWorkRequestsToService(context.Background(), svc, []work.SubmitRequest{{
@@ -489,18 +492,18 @@ func TestBuildFactoryService_ServiceModeRuntimeMetricsCaptureProviderAndScriptDi
 		return runtimeMetricMatchesWork(record, runtimeMetricScriptStarted, "work-script-metrics", "trace-script-metrics", "")
 	}, "script start")
 	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
-		return runtimeMetricMatchesWork(record, runtimeMetricScriptComplete, "work-script-metrics", "trace-script-metrics", string(interfaces.OutcomeFailed)) &&
+		return runtimeMetricMatchesWork(record, runtimeMetricScriptComplete, "work-script-metrics", "trace-script-metrics", string(workerexecution.OutcomeFailed)) &&
 			metricRecordString(record, "reason") == "timeout"
 	}, "script completion")
 	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
-		return runtimeMetricMatchesValue(record, runtimeMetricScriptDuration, "work-script-metrics", string(interfaces.OutcomeFailed), float64(875), "ms")
+		return runtimeMetricMatchesValue(record, runtimeMetricScriptDuration, "work-script-metrics", string(workerexecution.OutcomeFailed), float64(875), "ms")
 	}, "script duration")
 	waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
-		return runtimeMetricMatchesValue(record, runtimeMetricScriptTimedOut, "work-script-metrics", string(interfaces.OutcomeFailed), 1, "")
+		return runtimeMetricMatchesValue(record, runtimeMetricScriptTimedOut, "work-script-metrics", string(workerexecution.OutcomeFailed), 1, "")
 	}, "script timeout")
 
 	records := waitForRuntimeMetricsRecord(t, metricsPath, time.Second, func(record map[string]any) bool {
-		return runtimeMetricMatchesValue(record, runtimeMetricScriptTimedOut, "work-script-metrics", string(interfaces.OutcomeFailed), 1, "")
+		return runtimeMetricMatchesValue(record, runtimeMetricScriptTimedOut, "work-script-metrics", string(workerexecution.OutcomeFailed), 1, "")
 	}, "all provider and script metrics")
 	for _, record := range records {
 		encoded, err := json.Marshal(record)
@@ -1107,7 +1110,7 @@ func TestBuildReplacementFactoryRuntime_WiresLocalModelDelegationSeam(t *testing
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
 		LocalModelRuntimeOverride: &fakeLocalModelRuntime{
-			response: interfaces.InferenceResponse{Content: "ok"},
+			response: workerexecution.InferenceResponse{Content: "ok"},
 		},
 	})
 	if err != nil {
@@ -1515,11 +1518,11 @@ func (p *recordingServiceModelAssetPuller) PullModel(_ context.Context, _ *confi
 	return apisurface.ModelPullResult{ModelName: modelName}, nil
 }
 
-func (p *recordingServiceModelAssetPuller) EnsureModelAvailable(context.Context, *config.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+func (p *recordingServiceModelAssetPuller) EnsureModelAvailable(context.Context, *config.LoadedFactoryConfig, *workerconfig.Config) error {
 	return nil
 }
 
-func (p *recordingServiceModelAssetPuller) ResolveModelCache(context.Context, *config.LoadedFactoryConfig, *interfaces.WorkerConfig) (localModelCacheLayout, error) {
+func (p *recordingServiceModelAssetPuller) ResolveModelCache(context.Context, *config.LoadedFactoryConfig, *workerconfig.Config) (localModelCacheLayout, error) {
 	return localModelCacheLayout{}, nil
 }
 
@@ -2449,26 +2452,26 @@ func snapshotHasCompletedTaskToken(snap *interfaces.EngineStateSnapshot[petri.Ma
 
 type dispatchMetricsWorkerExecutor struct{}
 
-func (dispatchMetricsWorkerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
-	result := interfaces.WorkResult{
+func (dispatchMetricsWorkerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	result := workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "done",
-		Metrics:      interfaces.WorkMetrics{Duration: 250 * time.Millisecond, RetryCount: 2, Cost: 1.25},
+		Metrics:      workerexecution.WorkMetrics{Duration: 250 * time.Millisecond, RetryCount: 2, Cost: 1.25},
 	}
 	if len(dispatch.Execution.WorkIDs) == 0 {
 		return result, nil
 	}
 	switch dispatch.Execution.WorkIDs[0] {
 	case "work-dispatch-rejected":
-		result.Outcome = interfaces.OutcomeRejected
+		result.Outcome = workerexecution.OutcomeRejected
 		result.Feedback = "needs changes"
-		result.Metrics = interfaces.WorkMetrics{Duration: 125 * time.Millisecond, RetryCount: 1}
+		result.Metrics = workerexecution.WorkMetrics{Duration: 125 * time.Millisecond, RetryCount: 1}
 	case "work-dispatch-failed":
-		result.Outcome = interfaces.OutcomeFailed
+		result.Outcome = workerexecution.OutcomeFailed
 		result.Error = "worker crashed"
-		result.Metrics = interfaces.WorkMetrics{Duration: 500 * time.Millisecond, RetryCount: 3}
+		result.Metrics = workerexecution.WorkMetrics{Duration: 500 * time.Millisecond, RetryCount: 3}
 	}
 	return result, nil
 }
@@ -2497,41 +2500,41 @@ func runtimeMetricMatchesValue(record map[string]any, metricName, workID, outcom
 
 type providerMetricsWorkerExecutor struct{}
 
-func (providerMetricsWorkerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (providerMetricsWorkerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	if len(dispatch.Execution.WorkIDs) > 0 && dispatch.Execution.WorkIDs[0] == "work-provider-failed" {
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeFailed,
+			Outcome:      workerexecution.OutcomeFailed,
 			Error:        "provider 500",
-			FailureMetadata: &interfaces.WorkFailureMetadata{
-				Family: interfaces.WorkFailureFamilyRetryable,
-				Type:   interfaces.WorkFailureTypeInternalServerError,
+			FailureMetadata: &workerexecution.WorkFailureMetadata{
+				Family: workerexecution.WorkFailureFamilyRetryable,
+				Type:   workerexecution.WorkFailureTypeInternalServerError,
 			},
-			Diagnostics: &interfaces.WorkDiagnostics{
-				Provider: &interfaces.ProviderDiagnostic{
-					Provider: string(interfaces.ModelProviderCodex),
+			Diagnostics: &workerexecution.WorkDiagnostics{
+				Provider: &workerexecution.ProviderDiagnostic{
+					Provider: string(modelprovider.Codex),
 					Model:    "gpt-5-codex",
 					ResponseMetadata: map[string]string{
 						"duration_api_ms": "125",
 					},
 				},
-				Command: &interfaces.CommandDiagnostic{
+				Command: &workerexecution.CommandDiagnostic{
 					Stdout: "provider stdout secret",
 					Stderr: "provider stderr secret",
 				},
 			},
 		}, nil
 	}
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "provider done",
-		Metrics:      interfaces.WorkMetrics{Duration: 300 * time.Millisecond, Cost: 2.75},
-		Diagnostics: &interfaces.WorkDiagnostics{
-			Provider: &interfaces.ProviderDiagnostic{
-				Provider: string(interfaces.ModelProviderCodex),
+		Metrics:      workerexecution.WorkMetrics{Duration: 300 * time.Millisecond, Cost: 2.75},
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Provider: &workerexecution.ProviderDiagnostic{
+				Provider: string(modelprovider.Codex),
 				Model:    "gpt-5-codex",
 				ResponseMetadata: map[string]string{
 					"duration_api_ms": "240",
@@ -2539,7 +2542,7 @@ func (providerMetricsWorkerExecutor) Execute(_ context.Context, dispatch work.Wo
 					"output_tokens":   "7",
 				},
 			},
-			Command: &interfaces.CommandDiagnostic{
+			Command: &workerexecution.CommandDiagnostic{
 				Stdout: "provider stdout secret",
 				Stderr: "provider stderr secret",
 			},
@@ -2549,19 +2552,19 @@ func (providerMetricsWorkerExecutor) Execute(_ context.Context, dispatch work.Wo
 
 type scriptMetricsWorkerExecutor struct{}
 
-func (scriptMetricsWorkerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{
+func (scriptMetricsWorkerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        "script timed out",
-		Metrics:      interfaces.WorkMetrics{Duration: 900 * time.Millisecond},
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyRetryable,
-			Type:   interfaces.WorkFailureTypeTimeout,
+		Metrics:      workerexecution.WorkMetrics{Duration: 900 * time.Millisecond},
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyRetryable,
+			Type:   workerexecution.WorkFailureTypeTimeout,
 		},
-		Diagnostics: &interfaces.WorkDiagnostics{
-			Command: &interfaces.CommandDiagnostic{
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Command: &workerexecution.CommandDiagnostic{
 				Duration: 875 * time.Millisecond,
 				TimedOut: true,
 				Stdout:   "script stdout secret",
@@ -2579,7 +2582,7 @@ func runtimeMetricMatchesProvider(record map[string]any, metricName, workID, pro
 }
 
 func runtimeMetricMatchesProviderValue(record map[string]any, metricName, workID string, value float64, unit string) bool {
-	if !runtimeMetricMatchesProvider(record, metricName, workID, string(interfaces.ModelProviderCodex), string(interfaces.OutcomeAccepted)) {
+	if !runtimeMetricMatchesProvider(record, metricName, workID, string(modelprovider.Codex), string(workerexecution.OutcomeAccepted)) {
 		return false
 	}
 	got, ok := record["value"].(float64)
@@ -2656,8 +2659,8 @@ func TestBuildFactoryService_AppliesOperatorDefaultsToOmittedModelWorkerFields(t
 	if !ok {
 		t.Fatal("expected executor worker")
 	}
-	if worker.ModelProvider != string(interfaces.ModelProviderCodex) {
-		t.Fatalf("modelProvider = %q, want %q", worker.ModelProvider, interfaces.ModelProviderCodex)
+	if worker.ModelProvider != string(modelprovider.Codex) {
+		t.Fatalf("modelProvider = %q, want %q", worker.ModelProvider, modelprovider.Codex)
 	}
 	if worker.Model != "gpt-5-codex" {
 		t.Fatalf("model = %q, want gpt-5-codex", worker.Model)
@@ -2712,8 +2715,8 @@ func TestBuildFactoryService_PreservesAuthoredModelWorkerFieldsOverOperatorDefau
 	if !ok {
 		t.Fatal("expected executor worker")
 	}
-	if worker.ModelProvider != string(interfaces.ModelProviderClaude) {
-		t.Fatalf("modelProvider = %q, want %q", worker.ModelProvider, interfaces.ModelProviderClaude)
+	if worker.ModelProvider != string(modelprovider.Claude) {
+		t.Fatalf("modelProvider = %q, want %q", worker.ModelProvider, modelprovider.Claude)
 	}
 	if worker.Model != "claude-sonnet-4-20250514" {
 		t.Fatalf("model = %q, want authored model", worker.Model)
@@ -2747,7 +2750,7 @@ func TestBuildReplacementFactoryRuntime_AppliesOperatorDefaults(t *testing.T) {
 	if !ok {
 		t.Fatal("expected alpha executor worker")
 	}
-	if alphaWorker.ModelProvider != string(interfaces.ModelProviderCodex) {
+	if alphaWorker.ModelProvider != string(modelprovider.Codex) {
 		t.Fatalf("alpha modelProvider = %q, want codex", alphaWorker.ModelProvider)
 	}
 
@@ -2762,7 +2765,7 @@ func TestBuildReplacementFactoryRuntime_AppliesOperatorDefaults(t *testing.T) {
 	if !ok {
 		t.Fatal("expected beta executor worker")
 	}
-	if betaWorker.ModelProvider != string(interfaces.ModelProviderCodex) {
+	if betaWorker.ModelProvider != string(modelprovider.Codex) {
 		t.Fatalf("beta modelProvider = %q, want codex", betaWorker.ModelProvider)
 	}
 	if betaWorker.Model != "gpt-5-codex" {

@@ -13,7 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
+	builtingoal "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 )

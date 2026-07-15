@@ -6,19 +6,23 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type projectionRuntimeLookupFixture struct {
 	factory      *interfaces.FactoryConfig
-	workers      map[string]*interfaces.WorkerConfig
+	workers      map[string]*workerconfig.Config
 	workstations map[string]*interfaces.FactoryWorkstationConfig
 }
 
-func (f projectionRuntimeLookupFixture) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (f projectionRuntimeLookupFixture) Worker(name string) (*workerconfig.Config, bool) {
 	worker, ok := f.workers[name]
 	return worker, ok
 }
@@ -35,10 +39,10 @@ func (f projectionRuntimeLookupFixture) FactoryConfig() *interfaces.FactoryConfi
 type stubGuard struct{}
 
 func (stubGuard) Evaluate(
-	_ []interfaces.Token,
-	_ map[string]*interfaces.Token,
+	_ []factorytoken.Token,
+	_ map[string]*factorytoken.Token,
 	_ *petri.MarkingSnapshot,
-) ([]interfaces.Token, bool) {
+) ([]factorytoken.Token, bool) {
 	return nil, false
 }
 
@@ -177,13 +181,13 @@ func buildWorldViewProviderSessions() []interfaces.FactoryWorldProviderSessionRe
 			TransitionID:    "t-review",
 			WorkItemIDs:     []string{"work-active"},
 			ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &work.FactoryWorkItem{ID: "work-active", WorkTypeID: "task"}}},
-			ProviderSession: interfaces.ProviderSessionMetadata{ID: "provider-session"},
+			ProviderSession: workerexecution.ProviderSessionMetadata{ID: "provider-session"},
 		},
 		{
 			DispatchID:      "dispatch-provider-system",
 			TransitionID:    interfaces.SystemTimeExpiryTransitionID,
 			WorkItemIDs:     []string{"time-work"},
-			ProviderSession: interfaces.ProviderSessionMetadata{ID: "provider-system"},
+			ProviderSession: workerexecution.ProviderSessionMetadata{ID: "provider-system"},
 		},
 	}
 }
@@ -210,7 +214,7 @@ func buildWorldViewSessionBracket(t0 time.Time) *interfaces.FactoryWorldSessionB
 		Terminal:      true,
 		FinalStatus:   "SUCCESS",
 		CompletedAt:   t0.Add(3 * time.Minute),
-		FailureDetail: &interfaces.FailureDetail{Reason: "none", Message: "none"},
+		FailureDetail: &workerexecution.FailureDetail{Reason: "none", Message: "none"},
 	}
 }
 
@@ -477,7 +481,7 @@ func newRuntimeLookupFixture() projectionRuntimeLookupFixture {
 				WorkerTypeName: "worker-review",
 			}},
 		},
-		workers: map[string]*interfaces.WorkerConfig{
+		workers: map[string]*workerconfig.Config{
 			"worker-review": {Type: interfaces.WorkerTypeModel, Concurrency: 2, Timeout: "30s"},
 		},
 		workstations: map[string]*interfaces.FactoryWorkstationConfig{
@@ -485,7 +489,7 @@ func newRuntimeLookupFixture() projectionRuntimeLookupFixture {
 				Name:           "Review",
 				Kind:           interfaces.WorkstationKindCron,
 				WorkerTypeName: "worker-review",
-				Resources:      []interfaces.ResourceConfig{{Name: "gpu", Capacity: 2}, {Name: "", Capacity: 4}},
+				Resources:      []factoryresource.Config{{Name: "gpu", Capacity: 2}, {Name: "", Capacity: 4}},
 				Guards:         []interfaces.GuardConfig{{Type: interfaces.GuardTypeVisitCount, Workstation: "other", MaxVisits: 3}, {}},
 				Cron:           &interfaces.CronConfig{Schedule: "* * * * *", TriggerAtStart: true, Jitter: "5s", ExpiryWindow: "1m"},
 				StopWords:      []string{"stop", "pause"},
@@ -526,7 +530,7 @@ func testTransitionAndWorkerMetadataHelpers(t *testing.T) {
 		t.Fatalf("transitionWorkerIDs() = %#v, want sorted unique ids", got)
 	}
 
-	if got := workerConfigWithUsage(&interfaces.WorkerConfig{Type: interfaces.WorkerTypeModel}, nil); !reflect.DeepEqual(got, map[string]string{"type": interfaces.WorkerTypeModel}) {
+	if got := workerConfigWithUsage(&workerconfig.Config{Type: interfaces.WorkerTypeModel}, nil); !reflect.DeepEqual(got, map[string]string{"type": interfaces.WorkerTypeModel}) {
 		t.Fatalf("workerConfigWithUsage() = %#v, want type", got)
 	}
 	if workerConfigWithUsage(nil, nil) != nil {
@@ -614,7 +618,7 @@ func TestSessionLifecycleHelperFunctions_ProjectStableCopies(t *testing.T) {
 			FinalStatus:    "FAILED",
 			CompletedAt:    time.Date(2026, 6, 17, 12, 1, 0, 0, time.UTC),
 			DurationMillis: 60000,
-			FailureDetail:  &interfaces.FailureDetail{Reason: "timeout", Message: "timed out"},
+			FailureDetail:  &workerexecution.FailureDetail{Reason: "timeout", Message: "timed out"},
 		},
 	}
 	projected := buildFactoryWorldSessionBracketProjection(state)

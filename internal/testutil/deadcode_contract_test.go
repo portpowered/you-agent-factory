@@ -75,7 +75,7 @@ func TestWriteSeedBatchFile_WritesCanonicalBatchSeed(t *testing.T) {
 	request := work.WorkRequest{
 		RequestID: "request-1",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Works: []work.Work{{
 			Name:       "seed",
 			WorkID:     "work-1",
 			WorkTypeID: "task",

@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -26,7 +26,7 @@ func TestRalphLoop_TemplateFieldsResolvePerIteration(t *testing.T) {
 		},
 	})
 
-	work := map[string][]interfaces.InferenceResponse{
+	work := map[string][]workerexecution.InferenceResponse{
 		"executor-worker": {
 			{Content: "code with missing error handling <COMPLETE>"},
 			{Content: "code with missing error handling <COMPLETE>"},

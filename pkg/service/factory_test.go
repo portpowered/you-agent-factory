@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -34,6 +35,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
@@ -4005,7 +4008,7 @@ func TestFactoryService_SaveFactoryForSession_UpsertReplaceDoesNotReturnAlreadyE
 func TestRuntimeModelService_PullThenInvoke_UsesManagedRuntimeReadiness(t *testing.T) {
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	runtime := &fakeLocalModelRuntime{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		},
 	}
@@ -4013,7 +4016,7 @@ func TestRuntimeModelService_PullThenInvoke_UsesManagedRuntimeReadiness(t *testi
 	puller := &managedPullMetricsAssetPuller{
 		result: apisurface.ModelPullResult{
 			ModelName:        "OMNIVOICE_Q4_K_M",
-			ProviderLocality: interfaces.ModelLocalityLocal,
+			ProviderLocality: workerconfig.ModelLocalityLocal,
 			Outcome:          "PULLED",
 			CachePath:        cache.CachePath,
 			Revision:         cache.Revision,
@@ -4071,16 +4074,16 @@ func TestRuntimeModelService_PullModel_RecordsManagedRuntimeMetrics(t *testing.T
 	logCore, observedLogs := observer.New(zap.InfoLevel)
 	runtimeCfg, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), &interfaces.FactoryConfig{
 		Name: "factory",
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:          "voice-local",
 			Type:          interfaces.WorkerTypeModel,
 			Model:         "OMNIVOICE_Q4_K_M",
-			ModelLocality: interfaces.ModelLocalityLocal,
-			Operations:    []interfaces.ModelOperation{{Name: "TTS"}},
+			ModelLocality: workerconfig.ModelLocalityLocal,
+			Operations:    []workerconfig.ModelOperation{{Name: "TTS"}},
 		}},
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:     "omnivoice-cache",
-			Type:     interfaces.ResourceTypeModel,
+			Type:     factoryresource.TypeModel,
 			Capacity: 1,
 			Model:    "OMNIVOICE_Q4_K_M",
 		}},
@@ -4130,16 +4133,16 @@ func TestRuntimeModelService_PullModel_RecordsSourceFailureMetric(t *testing.T) 
 	logCore, observedLogs := observer.New(zap.WarnLevel)
 	runtimeCfg, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), &interfaces.FactoryConfig{
 		Name: "factory",
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:          "voice-local",
 			Type:          interfaces.WorkerTypeModel,
 			Model:         "OMNIVOICE_Q4_K_M",
-			ModelLocality: interfaces.ModelLocalityLocal,
-			Operations:    []interfaces.ModelOperation{{Name: "TTS"}},
+			ModelLocality: workerconfig.ModelLocalityLocal,
+			Operations:    []workerconfig.ModelOperation{{Name: "TTS"}},
 		}},
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:     "omnivoice-cache",
-			Type:     interfaces.ResourceTypeModel,
+			Type:     factoryresource.TypeModel,
 			Capacity: 1,
 			Model:    "OMNIVOICE_Q4_K_M",
 		}},
@@ -4233,11 +4236,11 @@ func (p *managedPullMetricsAssetPuller) PullModel(context.Context, *factoryconfi
 	return p.result, p.err
 }
 
-func (p *managedPullMetricsAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+func (p *managedPullMetricsAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) error {
 	return nil
 }
 
-func (p *managedPullMetricsAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
+func (p *managedPullMetricsAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) (localmodels.CacheLayout, error) {
 	return p.cache, nil
 }
 
@@ -4464,8 +4467,8 @@ func TestModelEventHelpersAndModelHostAdapters(t *testing.T) {
 func testModelEventDiagnosticsBranches(t *testing.T) {
 	t.Helper()
 
-	successDiagnostics := &interfaces.WorkDiagnostics{
-		Provider: &interfaces.ProviderDiagnostic{
+	successDiagnostics := &workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
 			ResponseMetadata: map[string]string{"request_id": "req-1"},
 		},
 	}
@@ -4473,12 +4476,12 @@ func testModelEventDiagnosticsBranches(t *testing.T) {
 		t.Fatalf("success diagnostics = %#v", got)
 	}
 
-	providerDiagnostics := &interfaces.WorkDiagnostics{
-		Provider: &interfaces.ProviderDiagnostic{
+	providerDiagnostics := &workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
 			ResponseMetadata: map[string]string{"request_id": "req-2"},
 		},
 	}
-	providerErr := workerprovider.NewProviderError(interfaces.WorkFailureTypeTimeout, "timeout", errors.New("boom"))
+	providerErr := workerprovider.NewProviderError(workerexecution.WorkFailureTypeTimeout, "timeout", errors.New("boom"))
 	providerErr.Diagnostics = providerDiagnostics
 	if got := modelEventDiagnostics(nil, providerErr); got == nil || got.Provider == nil || got.Provider.ResponseMetadata == nil || (*got.Provider.ResponseMetadata)["request_id"] != "req-2" {
 		t.Fatalf("provider diagnostics = %#v", got)
@@ -4488,13 +4491,13 @@ func testModelEventDiagnosticsBranches(t *testing.T) {
 func testModelEventErrorClassBranches(t *testing.T) {
 	t.Helper()
 
-	providerErr := workerprovider.NewProviderError(interfaces.WorkFailureTypeTimeout, "timeout", errors.New("boom"))
+	providerErr := workerprovider.NewProviderError(workerexecution.WorkFailureTypeTimeout, "timeout", errors.New("boom"))
 	readinessErr := &apisurface.ManagedRuntimeInvocationError{ReadinessState: factoryapi.ManagedRuntimeReadinessStateLOADING}
 	if got := modelEventErrorClass(readinessErr); got != "MANAGED_RUNTIME_LOADING" {
 		t.Fatalf("managed runtime error class = %q, want MANAGED_RUNTIME_LOADING", got)
 	}
-	if got := modelEventErrorClass(providerErr); got != string(interfaces.WorkFailureTypeTimeout) {
-		t.Fatalf("provider error class = %q, want %q", got, interfaces.WorkFailureTypeTimeout)
+	if got := modelEventErrorClass(providerErr); got != string(workerexecution.WorkFailureTypeTimeout) {
+		t.Fatalf("provider error class = %q, want %q", got, workerexecution.WorkFailureTypeTimeout)
 	}
 	if got := modelEventErrorClass(errors.New("plain failure")); got != "MODEL_EXECUTION_FAILED" {
 		t.Fatalf("plain error class = %q, want MODEL_EXECUTION_FAILED", got)

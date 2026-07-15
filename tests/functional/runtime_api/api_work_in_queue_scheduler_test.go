@@ -14,9 +14,11 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -25,7 +27,7 @@ func TestWorkInQueueScheduler_BatchSubmissionPrioritizesWorkInProgressState(t *t
 	dir := workInProgressPriorityFixture(t)
 
 	var dispatches []interfaces.FactoryDispatchRecord
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "processing COMPLETE"}},
 		"finisher":  {{Content: "finish existing COMPLETE"}, {Content: "finish initial COMPLETE"}},
 	})
@@ -71,7 +73,7 @@ func TestWorkInQueueScheduler_RuntimeSmokeOrdersProcessingThenInitialThenCron(t 
 	expiresAt := dueAt.Add(time.Hour)
 
 	var dispatches []interfaces.FactoryDispatchRecord
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"finisher":    {{Content: "finish processing COMPLETE"}},
 		"starter":     {{Content: "start initial COMPLETE"}},
 		"cron-worker": {{Content: "cron initial COMPLETE"}},
@@ -109,7 +111,7 @@ func TestWorkInQueueScheduler_RuntimeSmokeCustomSchedulerReceivesRuntimeConfig(t
 	expiresAt := dueAt.Add(time.Hour)
 
 	var dispatches []interfaces.FactoryDispatchRecord
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"finisher":    {{Content: "finish processing COMPLETE"}},
 		"starter":     {{Content: "start initial COMPLETE"}},
 		"cron-worker": {{Content: "cron initial COMPLETE"}},
@@ -322,7 +324,7 @@ func (s *recordingWorkInQueueScheduler) SetRuntimeConfig(runtimeConfig interface
 	scheduler.ApplyRuntimeConfig(s.inner, runtimeConfig)
 }
 
-func tokenIDList(tokens []interfaces.Token) string {
+func tokenIDList(tokens []factorytoken.Token) string {
 	ids := make([]string, len(tokens))
 	for i := range tokens {
 		ids[i] = tokens[i].ID + ":" + string(tokens[i].Color.DataType)
@@ -425,7 +427,7 @@ func dispatchWorkStateCategory(dispatch interfaces.FactoryDispatchRecord, topolo
 	category := state.StateCategoryProcessing
 	found := false
 	for _, token := range workers.WorkDispatchInputTokens(dispatch.Dispatch) {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		tokenCategory := topology.StateCategoryForPlace(token.PlaceID)
@@ -478,7 +480,7 @@ func nonTerminalWorkItemsInSnapshot(snapshot *interfaces.EngineStateSnapshot[pet
 
 	var items []string
 	for _, token := range snapshot.Marking.Tokens {
-		if token == nil || token.Color.DataType != interfaces.DataTypeWork || token.Color.WorkID == "" {
+		if token == nil || token.Color.DataType != factorytoken.DataTypeWork || token.Color.WorkID == "" {
 			continue
 		}
 		category := snapshot.Topology.StateCategoryForPlace(token.PlaceID)

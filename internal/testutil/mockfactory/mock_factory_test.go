@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -35,7 +36,7 @@ func TestMockFactory_GetEngineStateSnapshot_ReturnsConfiguredEngineStateAndCount
 func TestMockFactory_GetEngineStateSnapshot_BuildsAggregateSnapshotFromConfiguredFields(t *testing.T) {
 	net := &state.Net{ID: "test-net"}
 	marking := &petri.MarkingSnapshot{
-		Tokens: map[string]*interfaces.Token{
+		Tokens: map[string]*factorytoken.Token{
 			"tok-1": {ID: "tok-1", PlaceID: "task:init"},
 		},
 		PlaceTokens: map[string][]string{"task:init": {"tok-1"}},

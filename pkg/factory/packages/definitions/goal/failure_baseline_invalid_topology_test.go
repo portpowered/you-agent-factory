@@ -6,7 +6,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
+	builtingoal "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 )
 

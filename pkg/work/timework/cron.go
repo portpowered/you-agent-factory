@@ -250,7 +250,7 @@ func CronTimeWorkRequest(workflowIdentity string, ws interfaces.FactoryWorkstati
 	request := work.WorkRequest{
 		RequestID: "request-" + workID,
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Works: []work.Work{{
 			WorkID:     workID,
 			Name:       cronSubmissionNamePrefix + ws.Name,
 			WorkTypeID: interfaces.SystemTimeWorkTypeID,

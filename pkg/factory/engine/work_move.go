@@ -7,6 +7,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
 
@@ -69,7 +70,7 @@ func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName s
 	}
 
 	if leavingFailedPlace(e.state, token.Color.WorkTypeID, fromState) {
-		interfaces.ClearGuardBlockingFields(&token.History)
+		factorytoken.ClearGuardBlockingFields(&token.History)
 	}
 
 	mutation := interfaces.MarkingMutation{
@@ -95,12 +96,12 @@ func (e *FactoryEngine) MoveWork(ctx context.Context, workID string, stateName s
 	}, nil
 }
 
-func findWorkTokenByID(tokens map[string]*interfaces.Token, workID string) (*interfaces.Token, bool) {
+func findWorkTokenByID(tokens map[string]*factorytoken.Token, workID string) (*factorytoken.Token, bool) {
 	for _, token := range tokens {
 		if token == nil || token.Color.WorkID != workID {
 			continue
 		}
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		return token, true

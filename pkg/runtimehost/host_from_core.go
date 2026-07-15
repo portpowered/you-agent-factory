@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // HostShell is the pre-factorysave Host assembly product for wire composition.

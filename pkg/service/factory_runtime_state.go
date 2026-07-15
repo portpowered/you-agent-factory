@@ -20,17 +20,21 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recording"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 )
 
@@ -45,7 +49,7 @@ type modelEventRecorder func(factoryapi.FactoryEvent)
 type recordingModelRunner struct {
 	inner      workers.Runner
 	factoryCfg *interfaces.FactoryConfig
-	workerDef  *interfaces.WorkerConfig
+	workerDef  *workerconfig.Config
 	recorder   modelEventRecorder
 	now        func() time.Time
 
@@ -71,7 +75,7 @@ type modelExecutionEventTraceKey struct{}
 func newRecordingModelRunner(
 	inner workers.Runner,
 	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	recorder modelEventRecorder,
 	now func() time.Time,
 ) workers.Runner {
@@ -84,7 +88,7 @@ func newRecordingModelRunner(
 	return &recordingModelRunner{
 		inner:      inner,
 		factoryCfg: factoryCfg,
-		workerDef: func() *interfaces.WorkerConfig {
+		workerDef: func() *workerconfig.Config {
 			cloned := factoryconfig.CloneWorkerConfig(*workerDef)
 			return &cloned
 		}(),
@@ -94,9 +98,9 @@ func newRecordingModelRunner(
 	}
 }
 
-func (r *recordingModelRunner) Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
+func (r *recordingModelRunner) Execute(ctx context.Context, request workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	if r == nil || r.inner == nil {
-		return interfaces.RunnerExecutionResult{}, fmt.Errorf("model event recorder requires an inner runner")
+		return workerexecution.RunnerExecutionResult{}, fmt.Errorf("model event recorder requires an inner runner")
 	}
 
 	attempt := r.nextAttempt(request.Dispatch.DispatchID)
@@ -159,9 +163,9 @@ func modelRequestID(dispatchID string, attempt int) string {
 }
 
 func modelRequestEvent(
-	request interfaces.RunnerExecutionRequest,
+	request workerexecution.RunnerExecutionRequest,
 	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	attempt int,
 	modelRequestID string,
 	eventTime time.Time,
@@ -196,11 +200,11 @@ func modelRequestEvent(
 }
 
 func modelResponseEvent(
-	request interfaces.RunnerExecutionRequest,
-	response interfaces.RunnerExecutionResult,
+	request workerexecution.RunnerExecutionRequest,
+	response workerexecution.RunnerExecutionResult,
 	err error,
 	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	trace *modelExecutionEventTrace,
 	attempt int,
 	modelRequestID string,
@@ -261,7 +265,7 @@ func modelResponseEvent(
 	}
 }
 
-func modelEventContext(request interfaces.RunnerExecutionRequest, eventTime time.Time) factoryapi.FactoryEventContext {
+func modelEventContext(request workerexecution.RunnerExecutionRequest, eventTime time.Time) factoryapi.FactoryEventContext {
 	return factoryapi.FactoryEventContext{
 		Tick:       workersExecutionTick(request.Dispatch.Execution),
 		EventTime:  interfaces.CanonicalEventTime(eventTime),
@@ -280,7 +284,7 @@ func snapshotHasActiveWork(snapshot *interfaces.EngineStateSnapshot[petri.Markin
 		return true
 	}
 	for _, token := range snapshot.Marking.Tokens {
-		if token == nil || token.Color.DataType == interfaces.DataTypeResource {
+		if token == nil || token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		if snapshot.Topology == nil {
@@ -319,28 +323,28 @@ func workersExecutionTick(metadata work.ExecutionMetadata) int {
 	return metadata.DispatchCreatedTick
 }
 
-func workerNameForModelEvents(workerDef *interfaces.WorkerConfig) string {
+func workerNameForModelEvents(workerDef *workerconfig.Config) string {
 	if workerDef == nil {
 		return ""
 	}
 	return strings.TrimSpace(workerDef.Name)
 }
 
-func modelNameForModelEvents(workerDef *interfaces.WorkerConfig) string {
+func modelNameForModelEvents(workerDef *workerconfig.Config) string {
 	if workerDef == nil {
 		return ""
 	}
 	return strings.TrimSpace(workerDef.Model)
 }
 
-func modelLocalityForModelEvents(workerDef *interfaces.WorkerConfig) string {
+func modelLocalityForModelEvents(workerDef *workerconfig.Config) string {
 	if workerDef == nil {
 		return ""
 	}
 	return strings.TrimSpace(workerDef.ModelLocality)
 }
 
-func modelEventResolvedBindings(bindings []interfaces.ResolvedModelOperationBinding) *[]factoryapi.ResolvedModelOperationBinding {
+func modelEventResolvedBindings(bindings []workerexecution.ResolvedModelOperationBinding) *[]factoryapi.ResolvedModelOperationBinding {
 	if len(bindings) == 0 {
 		return nil
 	}
@@ -355,11 +359,11 @@ func modelEventResolvedBindings(bindings []interfaces.ResolvedModelOperationBind
 	return &generated
 }
 
-func modelEventResourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef *interfaces.WorkerConfig) *[]factoryapi.ModelResourceSummary {
+func modelEventResourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef *workerconfig.Config) *[]factoryapi.ModelResourceSummary {
 	if factoryCfg == nil || workerDef == nil || len(workerDef.Resources) == 0 {
 		return nil
 	}
-	resourcesByName := make(map[string]interfaces.ResourceConfig, len(factoryCfg.Resources))
+	resourcesByName := make(map[string]factoryresource.Config, len(factoryCfg.Resources))
 	for _, resource := range factoryCfg.Resources {
 		resourcesByName[resource.Name] = resource
 	}
@@ -732,7 +736,7 @@ func (fs *FactoryService) currentRuntimeConfig() *factoryconfig.LoadedFactoryCon
 }
 
 // StartupWorkerConfig returns the named worker from the built startup runtime config.
-func (fs *FactoryService) StartupWorkerConfig(name string) (*interfaces.WorkerConfig, bool) {
+func (fs *FactoryService) StartupWorkerConfig(name string) (*workerconfig.Config, bool) {
 	runtimeCfg := fs.currentRuntimeConfig()
 	if runtimeCfg == nil {
 		return nil, false

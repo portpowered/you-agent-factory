@@ -10,10 +10,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // TestThroughputLargeScale verifies the engine handles a few hundred work items through
@@ -191,31 +192,31 @@ func TestSubmittedWorkPreservationDiagnostics_ReportsIdentityFailures(t *testing
 		"work-dup":     {WorkID: "work-dup", TraceID: "trace-dup"},
 		"work-stuck":   {WorkID: "work-stuck", TraceID: "trace-stuck"},
 	}
-	snap := &petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{
+	snap := &petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{
 		"tok-kept": {
 			ID:      "tok-kept",
 			PlaceID: "task:complete",
-			Color:   interfaces.TokenColor{DataType: interfaces.DataTypeWork, WorkTypeID: "task", WorkID: "work-kept", TraceID: "trace-kept"},
+			Color:   factorytoken.Color{DataType: factorytoken.DataTypeWork, WorkTypeID: "task", WorkID: "work-kept", TraceID: "trace-kept"},
 		},
 		"tok-dup-a": {
 			ID:      "tok-dup-a",
 			PlaceID: "task:complete",
-			Color:   interfaces.TokenColor{DataType: interfaces.DataTypeWork, WorkTypeID: "task", WorkID: "work-dup", TraceID: "trace-dup"},
+			Color:   factorytoken.Color{DataType: factorytoken.DataTypeWork, WorkTypeID: "task", WorkID: "work-dup", TraceID: "trace-dup"},
 		},
 		"tok-dup-b": {
 			ID:      "tok-dup-b",
 			PlaceID: "task:failed",
-			Color:   interfaces.TokenColor{DataType: interfaces.DataTypeWork, WorkTypeID: "task", WorkID: "work-dup", TraceID: "trace-dup"},
+			Color:   factorytoken.Color{DataType: factorytoken.DataTypeWork, WorkTypeID: "task", WorkID: "work-dup", TraceID: "trace-dup"},
 		},
 		"tok-stuck": {
 			ID:      "tok-stuck",
 			PlaceID: "task:step2",
-			Color:   interfaces.TokenColor{DataType: interfaces.DataTypeWork, WorkTypeID: "task", WorkID: "work-stuck", TraceID: "trace-stuck"},
+			Color:   factorytoken.Color{DataType: factorytoken.DataTypeWork, WorkTypeID: "task", WorkID: "work-stuck", TraceID: "trace-stuck"},
 		},
 		"resource-token": {
 			ID:      "resource-token",
 			PlaceID: "executor:available",
-			Color:   interfaces.TokenColor{DataType: interfaces.DataTypeResource, WorkID: "executor:0"},
+			Color:   factorytoken.Color{DataType: factorytoken.DataTypeResource, WorkID: "executor:0"},
 		},
 	}}
 
@@ -345,7 +346,7 @@ func diagnoseSubmittedWorkPreservation(
 	finalWorkCount := 0
 	terminalCount := 0
 	for _, tok := range snap.Tokens {
-		if tok.Color.DataType == interfaces.DataTypeResource {
+		if tok.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		if tok.Color.WorkID == "" {
@@ -431,7 +432,7 @@ type throughputExecutor struct {
 	calls   int
 }
 
-func (e *throughputExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *throughputExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	start := time.Now()
 
 	if e.delay > 0 {
@@ -445,10 +446,10 @@ func (e *throughputExecutor) Execute(_ context.Context, dispatch work.WorkDispat
 	elapsed := time.Since(start)
 	e.tracker.record(dispatch.TransitionID, elapsed)
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}, nil
 }
 

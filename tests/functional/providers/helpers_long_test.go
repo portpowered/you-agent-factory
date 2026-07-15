@@ -8,13 +8,13 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
-func buildModelWorkerConfig(provider interfaces.ModelProvider, model string) string {
+func buildModelWorkerConfig(provider modelprovider.ID, model string) string {
 	return fmt.Sprintf(`---
 type: MODEL_WORKER
 model: %s

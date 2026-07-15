@@ -23,6 +23,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 	"go.uber.org/zap"
 )
 
@@ -280,13 +281,13 @@ func runtimeWorkflowContext(cfg *interfaces.FactoryConfig, sessionID string) *fa
 }
 
 func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryConfig) string {
-	if runner := interfaces.NormalizeRunnerID(override); runner != "" {
+	if runner := workerrunner.NormalizeRunnerID(override); runner != "" {
 		return runner
 	}
 	if factoryCfg == nil {
 		return ""
 	}
-	return interfaces.NormalizeRunnerID(factoryCfg.Runner)
+	return workerrunner.NormalizeRunnerID(factoryCfg.Runner)
 }
 
 func dirExists(path string) bool {

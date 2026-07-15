@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/testharness"
@@ -24,6 +23,7 @@ import (
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 )
 
@@ -705,7 +705,7 @@ func (p *cliResumeSmokeBlockingProvider) callCount() int {
 	return p.calls
 }
 
-func (p *cliResumeSmokeBlockingProvider) Infer(ctx context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *cliResumeSmokeBlockingProvider) Infer(ctx context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
@@ -713,9 +713,9 @@ func (p *cliResumeSmokeBlockingProvider) Infer(ctx context.Context, _ interfaces
 	p.mu.Unlock()
 
 	if call == 1 {
-		return interfaces.InferenceResponse{
+		return workerexecution.InferenceResponse{
 			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
-			ProviderSession: &interfaces.ProviderSessionMetadata{
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
 				Provider: "mock",
 				Kind:     "session_id",
 				ID:       "live-provider-session-1",
@@ -732,12 +732,12 @@ func (p *cliResumeSmokeBlockingProvider) Infer(ctx context.Context, _ interfaces
 		p.mu.Lock()
 		p.contextCanceled++
 		p.mu.Unlock()
-		return interfaces.InferenceResponse{}, ctx.Err()
+		return workerexecution.InferenceResponse{}, ctx.Err()
 	}
 
-	return interfaces.InferenceResponse{
+	return workerexecution.InferenceResponse{
 		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "mock",
 			Kind:     "session_id",
 			ID:       "live-provider-session-2",

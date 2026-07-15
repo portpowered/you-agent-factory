@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
 
@@ -19,7 +18,7 @@ func TestLoadFromFile(t *testing.T) {
 	req := work.WorkRequest{
 		RequestID: "request-1",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Works: []work.Work{{
 			Name:       "source-file",
 			WorkTypeID: "task",
 			TraceID:    "trace-1",

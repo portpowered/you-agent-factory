@@ -16,11 +16,13 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // TestAdHocPrepare runs the prepare command directly for ad hoc testing.
@@ -82,8 +84,8 @@ func TestAdHocRecordReplaySmoke(t *testing.T) {
 	})
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Processed by adhoc record smoke. <COMPLETE>"},
-		interfaces.InferenceResponse{Content: "Reviewed by adhoc record smoke. <COMPLETE>"},
+		workerexecution.InferenceResponse{Content: "Processed by adhoc record smoke. <COMPLETE>"},
+		workerexecution.InferenceResponse{Content: "Reviewed by adhoc record smoke. <COMPLETE>"},
 	)
 	recordHarness := testutil.NewServiceTestHarness(t, runDir,
 		testutil.WithProvider(provider),
@@ -206,7 +208,7 @@ func nonTerminalWorkItems(snapshot *interfaces.EngineStateSnapshot[petri.Marking
 
 	var items []string
 	for _, token := range snapshot.Marking.Tokens {
-		if token == nil || token.Color.DataType != interfaces.DataTypeWork || token.Color.WorkID == "" {
+		if token == nil || token.Color.DataType != factorytoken.DataTypeWork || token.Color.WorkID == "" {
 			continue
 		}
 		category := snapshot.Topology.StateCategoryForPlace(token.PlaceID)
@@ -220,7 +222,7 @@ func nonTerminalWorkItems(snapshot *interfaces.EngineStateSnapshot[petri.Marking
 			continue
 		}
 		for _, token := range dispatch.ConsumedTokens {
-			if token.Color.DataType != interfaces.DataTypeWork || token.Color.WorkID == "" {
+			if token.Color.DataType != factorytoken.DataTypeWork || token.Color.WorkID == "" {
 				continue
 			}
 			items = append(items, fmt.Sprintf("%s@active-dispatch:%s", token.Color.WorkID, dispatchID))

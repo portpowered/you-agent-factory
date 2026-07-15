@@ -15,10 +15,10 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -312,10 +312,10 @@ type apiLifecycleFailingChildProvider struct{}
 
 func (apiLifecycleFailingChildProvider) Infer(
 	_ context.Context,
-	_ interfaces.ProviderInferenceRequest,
-) (interfaces.InferenceResponse, error) {
-	return interfaces.InferenceResponse{}, workerprovider.NewProviderError(
-		interfaces.WorkFailureTypePermanentBadRequest,
+	_ workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, error) {
+	return workerexecution.InferenceResponse{}, workerprovider.NewProviderError(
+		workerexecution.WorkFailureTypePermanentBadRequest,
 		"simulated live child error",
 		nil,
 	)

@@ -15,6 +15,7 @@ import (
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupportedBoundaries(t *testing.T) {
@@ -86,10 +87,10 @@ func assertSelectedTickCanonicalState(t *testing.T, worldState interfaces.Factor
 	if len(failedAttempts) != 1 {
 		t.Fatalf("failed inference attempts = %#v, want one attempt", failedAttempts)
 	}
-	if detail := failedAttempts["dispatch-runtime-failed/inference-request/1"].FailureDetail; detail == nil || detail.Reason != interfaces.WorkFailureTypeThrottled {
+	if detail := failedAttempts["dispatch-runtime-failed/inference-request/1"].FailureDetail; detail == nil || detail.Reason != workerexecution.WorkFailureTypeThrottled {
 		t.Fatalf("failed inference failureDetail = %#v, want throttled", detail)
 	}
-	if detail := worldState.FailureDetailsByWorkID["work-runtime-failed"].FailureDetail; detail == nil || detail.Reason != interfaces.WorkFailureTypeThrottled {
+	if detail := worldState.FailureDetailsByWorkID["work-runtime-failed"].FailureDetail; detail == nil || detail.Reason != workerexecution.WorkFailureTypeThrottled {
 		t.Fatalf("failed work failureDetail = %#v, want throttled", detail)
 	}
 }

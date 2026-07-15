@@ -8,6 +8,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestFactoryEventHistory_RecordDispatchLifecycle_EmitsReconstructableQueueInterruptReconcileAndArtifactSequence(t *testing.T) {
@@ -157,10 +158,10 @@ func assertDispatchLifecycleEventType(
 }
 
 func TestFailureDetailsForResult_NonFailedResultsOmitFailureDetails(t *testing.T) {
-	reason, message := failureDetailsForResult(interfaces.WorkResult{
+	reason, message := failureDetailsForResult(workerexecution.WorkResult{
 		DispatchID:   "dispatch-rejected",
 		TransitionID: "build",
-		Outcome:      interfaces.OutcomeRejected,
+		Outcome:      workerexecution.OutcomeRejected,
 		Feedback:     "needs revision",
 	})
 
@@ -170,10 +171,10 @@ func TestFailureDetailsForResult_NonFailedResultsOmitFailureDetails(t *testing.T
 }
 
 func TestFailureDetailsForResult_FailedWorkerErrorUsesStableFailureDetails(t *testing.T) {
-	reason, message := failureDetailsForResult(interfaces.WorkResult{
+	reason, message := failureDetailsForResult(workerexecution.WorkResult{
 		DispatchID:   "dispatch-worker-error",
 		TransitionID: "build",
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        "script exited with code 1",
 	})
 
@@ -186,16 +187,16 @@ func TestFailureDetailsForResult_FailedWorkerErrorUsesStableFailureDetails(t *te
 }
 
 func TestFailureDetailsForResult_FailureMetadataOverridesWorkerErrorReason(t *testing.T) {
-	reason, message := failureDetailsForResult(interfaces.WorkResult{
+	reason, message := failureDetailsForResult(workerexecution.WorkResult{
 		DispatchID:      "dispatch-timeout",
 		TransitionID:    "build",
-		Outcome:         interfaces.OutcomeFailed,
+		Outcome:         workerexecution.OutcomeFailed,
 		Error:           "provider error: timeout: context deadline exceeded",
-		FailureMetadata: &interfaces.WorkFailureMetadata{Type: interfaces.WorkFailureTypeTimeout},
+		FailureMetadata: &workerexecution.WorkFailureMetadata{Type: workerexecution.WorkFailureTypeTimeout},
 	})
 
-	if reason != string(interfaces.WorkFailureTypeTimeout) {
-		t.Fatalf("failure reason = %q, want %q", reason, interfaces.WorkFailureTypeTimeout)
+	if reason != string(workerexecution.WorkFailureTypeTimeout) {
+		t.Fatalf("failure reason = %q, want %q", reason, workerexecution.WorkFailureTypeTimeout)
 	}
 	if message != "provider error: timeout: context deadline exceeded" {
 		t.Fatalf("failure message = %q, want preserved rendered timeout text", message)
@@ -203,10 +204,10 @@ func TestFailureDetailsForResult_FailureMetadataOverridesWorkerErrorReason(t *te
 }
 
 func TestFailureDetailsForResult_ClassifierInvalidOutputPreservesRawOutputEvidence(t *testing.T) {
-	reason, message := failureDetailsForResult(interfaces.WorkResult{
+	reason, message := failureDetailsForResult(workerexecution.WorkResult{
 		DispatchID:   "dispatch-classifier-invalid",
 		TransitionID: "classify",
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        `classifier output invalid: expected plain string label (raw output: "{\"label\":\"approved\"}")`,
 	})
 
@@ -219,10 +220,10 @@ func TestFailureDetailsForResult_ClassifierInvalidOutputPreservesRawOutputEviden
 }
 
 func TestFailureDetailsForResult_FailedWithoutDetailsUsesUnavailableMessage(t *testing.T) {
-	reason, message := failureDetailsForResult(interfaces.WorkResult{
+	reason, message := failureDetailsForResult(workerexecution.WorkResult{
 		DispatchID:   "dispatch-unknown",
 		TransitionID: "build",
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 	})
 
 	if reason != failureReasonUnknown {

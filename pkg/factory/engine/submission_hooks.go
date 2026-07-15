@@ -9,6 +9,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	workdomain "github.com/portpowered/infinite-you/pkg/work"
 )
@@ -85,7 +86,7 @@ func completionRecordID(tick int, dispatchID string, index int) string {
 	return fmt.Sprintf("tick-%d:%s:%d", tick, dispatchID, index)
 }
 
-func consumedTokenIDs(tokens []interfaces.Token) []string {
+func consumedTokenIDs(tokens []factorytoken.Token) []string {
 	if len(tokens) == 0 {
 		return nil
 	}

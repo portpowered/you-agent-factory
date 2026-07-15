@@ -9,6 +9,7 @@ import (
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestBuildFactoryWorldView_ProjectsFromReconstructedWorldState(t *testing.T) {
@@ -475,7 +476,7 @@ func TestBuildFactoryWorldView_ProjectsSelectedTickTerminalAndFailedPlaceOccupan
 			DispatchID:     "dispatch-failed",
 			TransitionID:   "t-review",
 			Workstation:    interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
-			Result:         interfaces.WorkstationResult{Outcome: "FAILED", FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeThrottled, Message: "Provider rate limit exceeded."}},
+			Result:         interfaces.WorkstationResult{Outcome: "FAILED", FailureDetail: &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeThrottled, Message: "Provider rate limit exceeded."}},
 			DurationMillis: 500,
 			Outputs: []interfaces.WorkstationOutput{{
 				Type:     string(interfaces.MutationMove),
@@ -532,7 +533,7 @@ func TestBuildFactoryWorldView_ProjectsCompletedFailedTerminalAndProviderSession
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeSucceeded,
 			DurationMillis:     2500,
-			ProviderSession:    generatedProviderSessionForProjectionTest(&interfaces.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"}),
+			ProviderSession:    generatedProviderSessionForProjectionTest(&workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"}),
 		}),
 		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
 			DispatchID:     "dispatch-1",
@@ -547,7 +548,7 @@ func TestBuildFactoryWorldView_ProjectsCompletedFailedTerminalAndProviderSession
 				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
 			}},
 			TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-			ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
+			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
 			TerminalWork: &interfaces.FactoryTerminalWork{
 				WorkItem: work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
 				Status:   "TERMINAL",
@@ -645,7 +646,7 @@ func TestBuildFactoryWorldView_CountsMultiTokenProviderDispatchOnce(t *testing.T
 				DispatchID:     "dispatch-1",
 				TransitionID:   "t-review",
 				Workstation:    interfaces.FactoryWorkstationRef{Name: "Review"},
-				Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+				Result:         interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
 				WorkItemIDs:    []string{"work-1", "work-1"},
 				DurationMillis: 1000,
 			},
@@ -655,16 +656,16 @@ func TestBuildFactoryWorldView_CountsMultiTokenProviderDispatchOnce(t *testing.T
 				DispatchID:      "dispatch-1",
 				TransitionID:    "t-review",
 				WorkstationName: "Review",
-				Outcome:         string(interfaces.OutcomeAccepted),
-				ProviderSession: interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"},
+				Outcome:         string(workerexecution.OutcomeAccepted),
+				ProviderSession: workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"},
 				WorkItemIDs:     []string{"work-1", "work-1"},
 			},
 			{
 				DispatchID:      "dispatch-1",
 				TransitionID:    "t-review",
 				WorkstationName: "Review",
-				Outcome:         string(interfaces.OutcomeAccepted),
-				ProviderSession: interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-retry"},
+				Outcome:         string(workerexecution.OutcomeAccepted),
+				ProviderSession: workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-retry"},
 				WorkItemIDs:     []string{"work-1", "work-1"},
 			},
 		},
@@ -689,7 +690,7 @@ func TestBuildFactoryWorldView_CountsFailedWorkItemsForCustomerSummary(t *testin
 		TransitionID: "review",
 		WorkItemIDs:  []string{"work-1", "work-2", "work-3"},
 		Workstation:  interfaces.FactoryWorkstationRef{Name: "Review"},
-		Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed)},
+		Result:       interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeFailed)},
 	}
 	state := interfaces.FactoryWorldState{
 		WorkItemsByID: map[string]work.FactoryWorkItem{
@@ -742,7 +743,7 @@ func TestBuildFactoryWorldView_SelectedTickProjectionComesFromEventHistory(t *te
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeSucceeded,
 			DurationMillis:     2500,
-			ProviderSession:    generatedProviderSessionForProjectionTest(&interfaces.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"}),
+			ProviderSession:    generatedProviderSessionForProjectionTest(&workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"}),
 		}),
 		workstationResponseEvent(3, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
 			DispatchID:     "dispatch-1",
@@ -757,7 +758,7 @@ func TestBuildFactoryWorldView_SelectedTickProjectionComesFromEventHistory(t *te
 				WorkItem: &work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
 			}},
 			TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-			ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
+			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "openai", Kind: "responses", ID: "sess-1"},
 			TerminalWork: &interfaces.FactoryTerminalWork{
 				WorkItem: work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "Write docs", TraceID: "trace-1", PlaceID: "task:complete"},
 				Status:   "TERMINAL",
@@ -892,7 +893,7 @@ func TestBuildFactoryWorldView_ProjectsInferenceAttemptsForDashboard(t *testing.
 		completedAttempt.DurationMillis != 875 ||
 		completedAttempt.ExitCode == nil ||
 		*completedAttempt.ExitCode != 1 ||
-		completedAttempt.FailureDetail == nil || completedAttempt.FailureDetail.Reason != interfaces.WorkFailureTypeThrottled ||
+		completedAttempt.FailureDetail == nil || completedAttempt.FailureDetail.Reason != workerexecution.WorkFailureTypeThrottled ||
 		completedAttempt.ResponseTime.IsZero() {
 		t.Fatalf("completed inference attempt view = %#v, want failed response details", completedAttempt)
 	}

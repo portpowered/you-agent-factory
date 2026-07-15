@@ -46,6 +46,7 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
@@ -545,7 +546,7 @@ type sessionCapturingCommandRunner struct {
 
 func (r *sessionCapturingCommandRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
 	r.mu.Lock()
-	r.requests = append(r.requests, workers.CommandRequest(interfaces.CloneSubprocessExecutionRequest(req)))
+	r.requests = append(r.requests, workers.CommandRequest(workerexecution.CloneSubprocessExecutionRequest(req)))
 	r.mu.Unlock()
 	return workers.CommandResult{Stdout: []byte("ok")}, nil
 }
@@ -573,24 +574,24 @@ func (r *sessionCapturingCommandRunner) waitForRequests(t *testing.T, want int, 
 
 type sessionCapturingProvider struct {
 	mu       sync.Mutex
-	requests []interfaces.ProviderInferenceRequest
+	requests []workerexecution.ProviderInferenceRequest
 }
 
-func (p *sessionCapturingProvider) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *sessionCapturingProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
-	p.requests = append(p.requests, interfaces.CloneProviderInferenceRequest(req))
+	p.requests = append(p.requests, workerexecution.CloneProviderInferenceRequest(req))
 	p.mu.Unlock()
-	return interfaces.InferenceResponse{Content: "ok"}, nil
+	return workerexecution.InferenceResponse{Content: "ok"}, nil
 }
 
-func (p *sessionCapturingProvider) waitForRequests(t *testing.T, want int, wait time.Duration) []interfaces.ProviderInferenceRequest {
+func (p *sessionCapturingProvider) waitForRequests(t *testing.T, want int, wait time.Duration) []workerexecution.ProviderInferenceRequest {
 	t.Helper()
 
 	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
 		p.mu.Lock()
 		if len(p.requests) >= want {
-			requests := append([]interfaces.ProviderInferenceRequest(nil), p.requests...)
+			requests := append([]workerexecution.ProviderInferenceRequest(nil), p.requests...)
 			p.mu.Unlock()
 			return requests
 		}
@@ -2171,9 +2172,9 @@ func assertPortableLifecycleReplayInspection(t *testing.T, svc *FactoryService, 
 
 type countingReplayProvider struct{ calls atomic.Int32 }
 
-func (p *countingReplayProvider) Infer(context.Context, interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *countingReplayProvider) Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.calls.Add(1)
-	return interfaces.InferenceResponse{}, errors.New("live provider must not be used during recording replay")
+	return workerexecution.InferenceResponse{}, errors.New("live provider must not be used during recording replay")
 }
 
 func TestFactoryService_GetFactorySession_JavaScriptStreamIdentityMatchesEventHandshakeSnapshotToken(t *testing.T) {
@@ -2635,10 +2636,10 @@ type durableRetryDispatchFailingChildProvider struct{}
 
 func (durableRetryDispatchFailingChildProvider) Infer(
 	_ context.Context,
-	_ interfaces.ProviderInferenceRequest,
-) (interfaces.InferenceResponse, error) {
-	return interfaces.InferenceResponse{}, workerprovider.NewProviderError(
-		interfaces.WorkFailureTypePermanentBadRequest,
+	_ workerexecution.ProviderInferenceRequest,
+) (workerexecution.InferenceResponse, error) {
+	return workerexecution.InferenceResponse{}, workerprovider.NewProviderError(
+		workerexecution.WorkFailureTypePermanentBadRequest,
 		"simulated live child error",
 		nil,
 	)
@@ -4114,7 +4115,7 @@ func TestFactoryService_InferenceProgressPublisherPublishesOrderedInternalEvents
 
 	publisher(workerprovider.ProgressFragment("dispatch-1", nil, "phase=planning"))
 	publisher(workerprovider.ResponseFragment("dispatch-1", nil, "partial-response"))
-	publisher(workerprovider.CompletedFragment("dispatch-1", &interfaces.ProviderSessionMetadata{
+	publisher(workerprovider.CompletedFragment("dispatch-1", &workerexecution.ProviderSessionMetadata{
 		Provider: "cursor",
 		Kind:     "session_id",
 		ID:       "cursor-session-1",
@@ -4870,7 +4871,7 @@ func TestFactoryService_InferenceProgressPublisherPreservesNormalizedCodexMetada
 		Type:              workerprovider.NormalizedEventTypeFinalText,
 		Payload:           "final response",
 		ExternalEventType: "response.completed",
-		ProviderSessionRef: &interfaces.ProviderSessionMetadata{
+		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-codex-1",

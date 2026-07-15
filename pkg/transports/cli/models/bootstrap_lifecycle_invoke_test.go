@@ -9,11 +9,11 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	"go.uber.org/zap"
 )
 
@@ -25,11 +25,11 @@ func (p offlineNonReadyAssetPuller) PullModel(_ context.Context, _ *factoryconfi
 	return apisurface.ModelPullResult{}, nil
 }
 
-func (p offlineNonReadyAssetPuller) EnsureModelAvailable(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *interfaces.WorkerConfig) error {
+func (p offlineNonReadyAssetPuller) EnsureModelAvailable(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *workerconfig.Config) error {
 	return nil
 }
 
-func (p offlineNonReadyAssetPuller) ResolveModelCache(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
+func (p offlineNonReadyAssetPuller) ResolveModelCache(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *workerconfig.Config) (localmodels.CacheLayout, error) {
 	return localmodels.CacheLayout{}, nil
 }
 

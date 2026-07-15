@@ -12,9 +12,9 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 )
 
 func TestRun_DocumentedSimpleFinalWorkflow(t *testing.T) {

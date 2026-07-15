@@ -9,6 +9,7 @@ import (
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 // LocalModelDomain wires local-model runtime dependencies constructed at host
@@ -75,7 +76,7 @@ func WrapLocalModelRunner(
 	inner workers.Runner,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	modelDomain LocalModelDomain,
 ) workers.Runner {
 	if modelDomain.LeaseExecution != nil {

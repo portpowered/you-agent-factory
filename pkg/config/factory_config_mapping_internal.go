@@ -8,8 +8,10 @@ import (
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func factoryInternalFromAPI(apiCfg factoryapi.Factory) (interfaces.FactoryConfig, error) {
@@ -210,10 +212,10 @@ func workTypesInternalFromAPI(workTypes []factoryapi.WorkType) []interfaces.Work
 	return values
 }
 
-func resourcesInternalFromAPI(resources []factoryapi.Resource) []interfaces.ResourceConfig {
-	values := make([]interfaces.ResourceConfig, len(resources))
+func resourcesInternalFromAPI(resources []factoryapi.Resource) []factoryresource.Config {
+	values := make([]factoryresource.Config, len(resources))
 	for i, resource := range resources {
-		values[i] = interfaces.ResourceConfig{
+		values[i] = factoryresource.Config{
 			ID:         stringValue(resource.Id),
 			Name:       resource.Name,
 			Type:       internalFactoryResourceTypeFromPublic(enumStringValue(resource.Type)),
@@ -406,8 +408,8 @@ func bundledFilesInternalFromAPI(bundledFiles *[]factoryapi.BundledFile) []inter
 	return values
 }
 
-func workersInternalFromAPI(workers []factoryapi.Worker) ([]interfaces.WorkerConfig, error) {
-	values := make([]interfaces.WorkerConfig, len(workers))
+func workersInternalFromAPI(workers []factoryapi.Worker) ([]workerconfig.Config, error) {
+	values := make([]workerconfig.Config, len(workers))
 	for i, worker := range workers {
 		converted, err := WorkerConfigFromOpenAPI(worker)
 		if err != nil {
@@ -418,8 +420,8 @@ func workersInternalFromAPI(workers []factoryapi.Worker) ([]interfaces.WorkerCon
 	return values, nil
 }
 
-func workerInternalFromAPI(worker factoryapi.Worker) interfaces.WorkerConfig {
-	return interfaces.WorkerConfig{
+func workerInternalFromAPI(worker factoryapi.Worker) workerconfig.Config {
+	return workerconfig.Config{
 		ID:               stringValue(worker.Id),
 		Name:             worker.Name,
 		Type:             internalFactoryWorkerTypeFromPublic(valueOrEmpty(worker.Type)),
@@ -442,13 +444,13 @@ func workerInternalFromAPI(worker factoryapi.Worker) interfaces.WorkerConfig {
 	}
 }
 
-func modelOperationsInternalFromAPI(operations *[]factoryapi.ModelOperation) []interfaces.ModelOperation {
+func modelOperationsInternalFromAPI(operations *[]factoryapi.ModelOperation) []workerconfig.ModelOperation {
 	if operations == nil {
 		return nil
 	}
-	values := make([]interfaces.ModelOperation, len(*operations))
+	values := make([]workerconfig.ModelOperation, len(*operations))
 	for i, operation := range *operations {
-		values[i] = interfaces.ModelOperation{
+		values[i] = workerconfig.ModelOperation{
 			Name:    operation.Name,
 			Inputs:  modelOperationSlotsInternalFromAPI(operation.Inputs),
 			Outputs: modelOperationSlotsInternalFromAPI(operation.Outputs),
@@ -457,13 +459,13 @@ func modelOperationsInternalFromAPI(operations *[]factoryapi.ModelOperation) []i
 	return values
 }
 
-func modelOperationSlotsInternalFromAPI(slots *[]factoryapi.ModelOperationSlot) []interfaces.ModelOperationSlot {
+func modelOperationSlotsInternalFromAPI(slots *[]factoryapi.ModelOperationSlot) []workerconfig.ModelOperationSlot {
 	if slots == nil {
 		return nil
 	}
-	values := make([]interfaces.ModelOperationSlot, len(*slots))
+	values := make([]workerconfig.ModelOperationSlot, len(*slots))
 	for i, slot := range *slots {
-		values[i] = interfaces.ModelOperationSlot{
+		values[i] = workerconfig.ModelOperationSlot{
 			Name:         slot.Name,
 			ContentTypes: modelOperationContentTypesInternalFromAPI(slot.ContentTypes),
 			Required:     boolValue(slot.Required),
@@ -485,11 +487,11 @@ func modelOperationContentTypesInternalFromAPI(contentTypes []factoryapi.ModelOp
 
 // WorkerConfigFromOpenAPI converts a generated OpenAPI worker model into the
 // internal runtime config representation.
-func WorkerConfigFromOpenAPI(worker factoryapi.Worker) (interfaces.WorkerConfig, error) {
+func WorkerConfigFromOpenAPI(worker factoryapi.Worker) (workerconfig.Config, error) {
 	cfg := workerInternalFromAPI(worker)
 	openCodeAgent, err := openCodeAgentInternalFromAPI(worker.OpenCodeAgent, fmt.Sprintf("factory.workers[%q]", worker.Name))
 	if err != nil {
-		return interfaces.WorkerConfig{}, err
+		return workerconfig.Config{}, err
 	}
 	cfg.OpenCodeAgent = openCodeAgent
 	return cfg, nil
@@ -505,20 +507,20 @@ func openCodeAgentInternalFromAPI(agent *string, fieldPath string) (string, erro
 	return *agent, nil
 }
 
-func hostedWorkerAuthInternalFromAPI(auth *factoryapi.HostedWorkerAuth) *interfaces.HostedWorkerAuthConfig {
+func hostedWorkerAuthInternalFromAPI(auth *factoryapi.HostedWorkerAuth) *workerconfig.HostedWorkerAuthConfig {
 	if auth == nil {
 		return nil
 	}
-	return &interfaces.HostedWorkerAuthConfig{
+	return &workerconfig.HostedWorkerAuthConfig{
 		SecretRef: stringValue(auth.SecretRef),
 	}
 }
 
-func hostedLinearWorkerInternalFromAPI(cfg *factoryapi.HostedLinearWorkerConfig) *interfaces.HostedLinearWorkerConfig {
+func hostedLinearWorkerInternalFromAPI(cfg *factoryapi.HostedLinearWorkerConfig) *workerconfig.HostedLinearWorkerConfig {
 	if cfg == nil {
 		return nil
 	}
-	return &interfaces.HostedLinearWorkerConfig{
+	return &workerconfig.HostedLinearWorkerConfig{
 		PollInterval: stringValue(cfg.PollInterval),
 		TeamIDs:      stringSliceValue(cfg.TeamIds),
 		StateIDs:     stringSliceValue(cfg.StateIds),
@@ -527,30 +529,30 @@ func hostedLinearWorkerInternalFromAPI(cfg *factoryapi.HostedLinearWorkerConfig)
 	}
 }
 
-func hostedLinearWorkerMappingInternalFromAPI(mapping *factoryapi.HostedLinearWorkerMapping) interfaces.HostedLinearWorkerMappingConfig {
+func hostedLinearWorkerMappingInternalFromAPI(mapping *factoryapi.HostedLinearWorkerMapping) workerconfig.HostedLinearWorkerMappingConfig {
 	if mapping == nil {
-		return interfaces.HostedLinearWorkerMappingConfig{}
+		return workerconfig.HostedLinearWorkerMappingConfig{}
 	}
-	return interfaces.HostedLinearWorkerMappingConfig{
+	return workerconfig.HostedLinearWorkerMappingConfig{
 		WorkType: stringValue(mapping.WorkType),
 		State:    stringValue(mapping.State),
 	}
 }
 
-func hostedLinearWorkerClaimInternalFromAPI(claim *factoryapi.HostedLinearWorkerClaim) *interfaces.HostedLinearWorkerClaimConfig {
+func hostedLinearWorkerClaimInternalFromAPI(claim *factoryapi.HostedLinearWorkerClaim) *workerconfig.HostedLinearWorkerClaimConfig {
 	if claim == nil {
 		return nil
 	}
-	return &interfaces.HostedLinearWorkerClaimConfig{
+	return &workerconfig.HostedLinearWorkerClaimConfig{
 		AssigneeField: stringValue(claim.AssigneeField),
 	}
 }
 
-func agentWorkerToolsInternalFromAPI(cfg *factoryapi.AgentWorkerToolsConfig) *interfaces.AgentWorkerToolsConfig {
+func agentWorkerToolsInternalFromAPI(cfg *factoryapi.AgentWorkerToolsConfig) *workerconfig.AgentToolsConfig {
 	if cfg == nil {
 		return nil
 	}
-	return &interfaces.AgentWorkerToolsConfig{
+	return &workerconfig.AgentToolsConfig{
 		Policy: string(cfg.Policy),
 	}
 }
@@ -784,13 +786,13 @@ func inputGuardInternalFromAPI(guards *[]factoryapi.InputGuard, fieldPath string
 	}, nil
 }
 
-func resourceRequirementsInternalFromAPI(resources *[]factoryapi.ResourceRequirement) []interfaces.ResourceConfig {
+func resourceRequirementsInternalFromAPI(resources *[]factoryapi.ResourceRequirement) []factoryresource.Config {
 	if resources == nil {
 		return nil
 	}
-	values := make([]interfaces.ResourceConfig, len(*resources))
+	values := make([]factoryresource.Config, len(*resources))
 	for i, resource := range *resources {
-		values[i] = interfaces.ResourceConfig{
+		values[i] = factoryresource.Config{
 			Name:     resource.Name,
 			Capacity: resource.Capacity,
 		}

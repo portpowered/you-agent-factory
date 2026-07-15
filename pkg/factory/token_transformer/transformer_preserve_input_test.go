@@ -8,8 +8,10 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestOutputToken_PreserveInput_SameType_KeepsConsumedPayload(t *testing.T) {
@@ -27,7 +29,7 @@ func TestOutputToken_PreserveInput_SameType_KeepsConsumedPayload(t *testing.T) {
 		Arcs: []petri.Arc{
 			{PlaceID: "task:done", Direction: petri.ArcOutput},
 		},
-		InputColors: []interfaces.TokenColor{{
+		InputColors: []factorytoken.Color{{
 			WorkTypeID: "task",
 			WorkID:     "work-1",
 			Payload:    []byte("input-payload"),
@@ -38,9 +40,9 @@ func TestOutputToken_PreserveInput_SameType_KeepsConsumedPayload(t *testing.T) {
 		}},
 		Output:              "worker-output",
 		WorkPropagationMode: interfaces.WorkPropagationModePreserveInput,
-		Outcome:             interfaces.OutcomeAccepted,
+		Outcome:             workerexecution.OutcomeAccepted,
 		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -74,16 +76,16 @@ func TestOutputToken_PreserveInput_CrossType_CopiesConsumedPayload(t *testing.T)
 		Arcs: []petri.Arc{
 			{PlaceID: "review:init", Direction: petri.ArcOutput},
 		},
-		InputColors: []interfaces.TokenColor{{
+		InputColors: []factorytoken.Color{{
 			WorkTypeID: "task",
 			WorkID:     "work-task-1",
 			Payload:    []byte("input-payload"),
 		}},
 		Output:              "worker-output",
 		WorkPropagationMode: interfaces.WorkPropagationModePreserveInput,
-		Outcome:             interfaces.OutcomeAccepted,
+		Outcome:             workerexecution.OutcomeAccepted,
 		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -112,7 +114,7 @@ func TestOutputToken_OutputAsPayload_UsesWorkerOutput(t *testing.T) {
 		Arcs: []petri.Arc{
 			{PlaceID: "task:done", Direction: petri.ArcOutput},
 		},
-		InputColors: []interfaces.TokenColor{{
+		InputColors: []factorytoken.Color{{
 			WorkTypeID: "task",
 			WorkID:     "work-1",
 			Payload:    []byte("input-payload"),
@@ -123,9 +125,9 @@ func TestOutputToken_OutputAsPayload_UsesWorkerOutput(t *testing.T) {
 		}},
 		Output:              "worker-output",
 		WorkPropagationMode: interfaces.WorkPropagationModeOutputAsPayload,
-		Outcome:             interfaces.OutcomeAccepted,
+		Outcome:             workerexecution.OutcomeAccepted,
 		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -157,7 +159,7 @@ func TestOutputToken_OutputAsPayload_Continue_UsesNextTurnContent(t *testing.T) 
 		Arcs: []petri.Arc{
 			{PlaceID: "task:init", Direction: petri.ArcOutput},
 		},
-		InputColors: []interfaces.TokenColor{{
+		InputColors: []factorytoken.Color{{
 			WorkTypeID: "task",
 			WorkID:     "work-1",
 			Payload:    []byte("input-payload"),
@@ -168,10 +170,10 @@ func TestOutputToken_OutputAsPayload_Continue_UsesNextTurnContent(t *testing.T) 
 		}},
 		Output:              "next-turn-output",
 		WorkPropagationMode: interfaces.WorkPropagationModeOutputAsPayload,
-		Outcome:             interfaces.OutcomeContinue,
+		Outcome:             workerexecution.OutcomeContinue,
 		Feedback:            "needs revision",
 		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -211,7 +213,7 @@ func TestOutputToken_OutputAsPayload_RejectedLoopback_UsesNextTurnContent(t *tes
 		Arcs: []petri.Arc{
 			{PlaceID: "task:init", Direction: petri.ArcOutput},
 		},
-		InputColors: []interfaces.TokenColor{{
+		InputColors: []factorytoken.Color{{
 			WorkTypeID: "task",
 			WorkID:     "work-1",
 			Payload:    []byte("input-payload"),
@@ -222,10 +224,10 @@ func TestOutputToken_OutputAsPayload_RejectedLoopback_UsesNextTurnContent(t *tes
 		}},
 		Output:              "next-turn-output",
 		WorkPropagationMode: interfaces.WorkPropagationModeOutputAsPayload,
-		Outcome:             interfaces.OutcomeRejected,
+		Outcome:             workerexecution.OutcomeRejected,
 		Feedback:            "try again",
 		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -259,7 +261,7 @@ func TestOutputToken_OutputAsPayload_RejectedFailurePlace_KeepsRequestContent(t 
 		Arcs: []petri.Arc{
 			{PlaceID: "task:failed", Direction: petri.ArcOutput},
 		},
-		InputColors: []interfaces.TokenColor{{
+		InputColors: []factorytoken.Color{{
 			WorkTypeID: "task",
 			WorkID:     "work-1",
 			Payload:    []byte("input-payload"),
@@ -270,11 +272,11 @@ func TestOutputToken_OutputAsPayload_RejectedFailurePlace_KeepsRequestContent(t 
 		}},
 		Output:              "worker-output",
 		WorkPropagationMode: interfaces.WorkPropagationModeOutputAsPayload,
-		Outcome:             interfaces.OutcomeRejected,
+		Outcome:             workerexecution.OutcomeRejected,
 		Feedback:            "rejected",
 		TransitionID:        "t1",
 		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -311,7 +313,7 @@ func TestOutputToken_OutputAsPayload_Failed_KeepsRequestContentAndDiagnostics(t 
 		Arcs: []petri.Arc{
 			{PlaceID: "task:failed", Direction: petri.ArcOutput},
 		},
-		InputColors: []interfaces.TokenColor{{
+		InputColors: []factorytoken.Color{{
 			WorkTypeID: "task",
 			WorkID:     "work-1",
 			Payload:    []byte("input-payload"),
@@ -322,11 +324,11 @@ func TestOutputToken_OutputAsPayload_Failed_KeepsRequestContentAndDiagnostics(t 
 		}},
 		Output:              "worker-output",
 		WorkPropagationMode: interfaces.WorkPropagationModeOutputAsPayload,
-		Outcome:             interfaces.OutcomeFailed,
+		Outcome:             workerexecution.OutcomeFailed,
 		Error:               "agent crashed",
 		TransitionID:        "t1",
 		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -366,7 +368,7 @@ func TestOutputToken_PreserveInput_KeepsConsumedTags(t *testing.T) {
 		Arcs: []petri.Arc{
 			{PlaceID: "review:init", Direction: petri.ArcOutput},
 		},
-		InputColors: []interfaces.TokenColor{{
+		InputColors: []factorytoken.Color{{
 			WorkTypeID: "task",
 			WorkID:     "work-task-1",
 			Payload:    []byte("input-payload"),
@@ -374,9 +376,9 @@ func TestOutputToken_PreserveInput_KeepsConsumedTags(t *testing.T) {
 		}},
 		Output:              "worker-output",
 		WorkPropagationMode: interfaces.WorkPropagationModePreserveInput,
-		Outcome:             interfaces.OutcomeAccepted,
+		Outcome:             workerexecution.OutcomeAccepted,
 		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -410,13 +412,13 @@ func TestOutputToken_PreserveInput_OutcomeLanes_KeepConsumedPayload(t *testing.T
 	tests := []struct {
 		name     string
 		placeID  string
-		outcome  interfaces.WorkOutcome
+		outcome  workerexecution.WorkOutcome
 		feedback string
 		errText  string
 	}{
-		{name: "Continue", placeID: "task:init", outcome: interfaces.OutcomeContinue, feedback: "needs revision"},
-		{name: "Rejected", placeID: "task:init", outcome: interfaces.OutcomeRejected, feedback: "rejected"},
-		{name: "Failed", placeID: "task:failed", outcome: interfaces.OutcomeFailed, errText: "agent crashed"},
+		{name: "Continue", placeID: "task:init", outcome: workerexecution.OutcomeContinue, feedback: "needs revision"},
+		{name: "Rejected", placeID: "task:init", outcome: workerexecution.OutcomeRejected, feedback: "rejected"},
+		{name: "Failed", placeID: "task:failed", outcome: workerexecution.OutcomeFailed, errText: "agent crashed"},
 	}
 
 	for _, tt := range tests {
@@ -426,7 +428,7 @@ func TestOutputToken_PreserveInput_OutcomeLanes_KeepConsumedPayload(t *testing.T
 				Arcs: []petri.Arc{
 					{PlaceID: tt.placeID, Direction: petri.ArcOutput},
 				},
-				InputColors: []interfaces.TokenColor{{
+				InputColors: []factorytoken.Color{{
 					WorkTypeID: "task",
 					WorkID:     "work-1",
 					Payload:    []byte("input-payload"),
@@ -438,7 +440,7 @@ func TestOutputToken_PreserveInput_OutcomeLanes_KeepConsumedPayload(t *testing.T
 				Error:               tt.errText,
 				TransitionID:        "t1",
 				Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
-				History: interfaces.TokenHistory{
+				History: factorytoken.History{
 					TotalVisits:         map[string]int{},
 					ConsecutiveFailures: map[string]int{},
 					PlaceVisits:         map[string]int{},
@@ -472,7 +474,7 @@ func TestOutputToken_PreserveInput_MultiInput_UsesPrimaryNonResourceInput(t *tes
 		Arcs: []petri.Arc{
 			{PlaceID: "review:init", Direction: petri.ArcOutput},
 		},
-		InputColors: []interfaces.TokenColor{
+		InputColors: []factorytoken.Color{
 			{
 				WorkTypeID: "objective",
 				WorkID:     "work-objective",
@@ -488,9 +490,9 @@ func TestOutputToken_PreserveInput_MultiInput_UsesPrimaryNonResourceInput(t *tes
 		},
 		Output:              "worker-output",
 		WorkPropagationMode: interfaces.WorkPropagationModePreserveInput,
-		Outcome:             interfaces.OutcomeAccepted,
+		Outcome:             workerexecution.OutcomeAccepted,
 		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -521,7 +523,7 @@ func TestOutputToken_PreserveInput_MultiOutput_EachLaneKeepsConsumedWorkData(t *
 		"review-c": {ID: "review-c"},
 	}
 	transformer := New(places, workTypes, WithWorkIDGenerator(petri.NewWorkIDGenerator()))
-	inputColors := []interfaces.TokenColor{{
+	inputColors := []factorytoken.Color{{
 		WorkTypeID: "task",
 		WorkID:     "work-task-1",
 		Payload:    []byte("input-payload"),
@@ -544,9 +546,9 @@ func TestOutputToken_PreserveInput_MultiOutput_EachLaneKeepsConsumedWorkData(t *
 			InputColors:         inputColors,
 			Output:              "worker-output",
 			WorkPropagationMode: interfaces.WorkPropagationModePreserveInput,
-			Outcome:             interfaces.OutcomeAccepted,
+			Outcome:             workerexecution.OutcomeAccepted,
 			Now:                 now,
-			History: interfaces.TokenHistory{
+			History: factorytoken.History{
 				TotalVisits:         map[string]int{},
 				ConsecutiveFailures: map[string]int{},
 				PlaceVisits:         map[string]int{},
@@ -586,9 +588,9 @@ func TestOutputToken_PreserveInput_WithoutConsumedWorkInput_ReturnsDiagnostic(t 
 		Output:              "worker-output",
 		WorkPropagationMode: interfaces.WorkPropagationModePreserveInput,
 		WorkstationName:     "review-story",
-		Outcome:             interfaces.OutcomeAccepted,
+		Outcome:             workerexecution.OutcomeAccepted,
 		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -625,17 +627,17 @@ func TestOutputToken_PreserveInput_OnlyResourceInputs_ReturnsDiagnostic(t *testi
 		Arcs: []petri.Arc{
 			{PlaceID: "task:done", Direction: petri.ArcOutput},
 		},
-		InputColors: []interfaces.TokenColor{{
+		InputColors: []factorytoken.Color{{
 			WorkTypeID: "resource",
 			WorkID:     "resource-1",
-			DataType:   interfaces.DataTypeResource,
+			DataType:   factorytoken.DataTypeResource,
 		}},
 		Output:              "worker-output",
 		WorkPropagationMode: interfaces.WorkPropagationModePreserveInput,
 		WorkstationName:     "review-story",
-		Outcome:             interfaces.OutcomeAccepted,
+		Outcome:             workerexecution.OutcomeAccepted,
 		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},
@@ -664,16 +666,16 @@ func TestOutputToken_OutputAsPayloadExplicit_UsesWorkerOutput(t *testing.T) {
 		Arcs: []petri.Arc{
 			{PlaceID: "task:done", Direction: petri.ArcOutput},
 		},
-		InputColors: []interfaces.TokenColor{{
+		InputColors: []factorytoken.Color{{
 			WorkTypeID: "task",
 			WorkID:     "work-1",
 			Payload:    []byte("input-payload"),
 		}},
 		Output:              "worker-output",
 		WorkPropagationMode: interfaces.WorkPropagationModeOutputAsPayload,
-		Outcome:             interfaces.OutcomeAccepted,
+		Outcome:             workerexecution.OutcomeAccepted,
 		Now:                 time.Date(2026, time.June, 20, 10, 0, 0, 0, time.UTC),
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{},
 			ConsecutiveFailures: map[string]int{},
 			PlaceVisits:         map[string]int{},

@@ -9,8 +9,10 @@ import (
 	"sync"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -22,7 +24,7 @@ type fanoutParserExecutor struct {
 	childCount int
 }
 
-func (e *fanoutParserExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *fanoutParserExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.mu.Lock()
 	e.calls++
 	e.mu.Unlock()
@@ -30,7 +32,7 @@ func (e *fanoutParserExecutor) Execute(_ context.Context, dispatch work.WorkDisp
 	parentWorkID := ""
 	parentTags := map[string]string{}
 	for _, token := range workers.WorkDispatchInputTokens(dispatch) {
-		if token.Color.DataType != interfaces.DataTypeWork {
+		if token.Color.DataType != factorytoken.DataTypeWork {
 			continue
 		}
 		parentWorkID = token.Color.WorkID
@@ -40,9 +42,9 @@ func (e *fanoutParserExecutor) Execute(_ context.Context, dispatch work.WorkDisp
 		break
 	}
 
-	spawned := make([]interfaces.TokenColor, e.childCount)
+	spawned := make([]factorytoken.Color, e.childCount)
 	for i := range spawned {
-		spawned[i] = interfaces.TokenColor{
+		spawned[i] = factorytoken.Color{
 			WorkTypeID: "page",
 			WorkID:     fmt.Sprintf("page-%d", i+1),
 			ParentID:   parentWorkID,
@@ -50,10 +52,10 @@ func (e *fanoutParserExecutor) Execute(_ context.Context, dispatch work.WorkDisp
 		}
 	}
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		SpawnedWork:  spawned,
 	}, nil
 }
@@ -82,7 +84,7 @@ type execDirObservingProcessor struct {
 	sawExecutionChannel bool
 }
 
-func (p *execDirObservingProcessor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (p *execDirObservingProcessor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	p.mu.Lock()
 	p.dispatchCount++
 	p.mu.Unlock()
@@ -94,13 +96,13 @@ func (p *execDirObservingProcessor) Execute(_ context.Context, dispatch work.Wor
 		p.mu.Unlock()
 	}
 	if got := executionIDFromDispatch(dispatch); got != p.wantExecutionID {
-		return interfaces.WorkResult{}, fmt.Errorf("page dispatch execution ID = %q, want %q", got, p.wantExecutionID)
+		return workerexecution.WorkResult{}, fmt.Errorf("page dispatch execution ID = %q, want %q", got, p.wantExecutionID)
 	}
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}, nil
 }
 
@@ -123,21 +125,21 @@ type gatedProcessor struct {
 	dispatchCount int
 }
 
-func (p *gatedProcessor) Execute(ctx context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (p *gatedProcessor) Execute(ctx context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	select {
 	case <-p.release:
 	case <-ctx.Done():
-		return interfaces.WorkResult{}, ctx.Err()
+		return workerexecution.WorkResult{}, ctx.Err()
 	}
 
 	p.mu.Lock()
 	p.dispatchCount++
 	p.mu.Unlock()
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}, nil
 }
 
@@ -147,7 +149,7 @@ type multiChapterParserExecutor struct {
 	childCounts []int
 }
 
-func (e *multiChapterParserExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *multiChapterParserExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.mu.Lock()
 	call := e.calls
 	e.calls++
@@ -163,19 +165,19 @@ func (e *multiChapterParserExecutor) Execute(_ context.Context, dispatch work.Wo
 		childCount = e.childCounts[call]
 	}
 
-	spawned := make([]interfaces.TokenColor, childCount)
+	spawned := make([]factorytoken.Color, childCount)
 	for i := range spawned {
-		spawned[i] = interfaces.TokenColor{
+		spawned[i] = factorytoken.Color{
 			WorkTypeID: "page",
 			WorkID:     fmt.Sprintf("%s-page-%d", parentWorkID, i+1),
 			ParentID:   parentWorkID,
 		}
 	}
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		SpawnedWork:  spawned,
 	}, nil
 }

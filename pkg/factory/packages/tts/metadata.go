@@ -8,6 +8,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	builtintts "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/tts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
 )
 
@@ -53,7 +54,7 @@ func ShouldFormatInvocationMetadata(workstation *interfaces.FactoryWorkstationCo
 // BackendLabelFromWorker derives the packaged TTS backend identifier from the
 // loaded on-disk worker configuration. An empty or nil worker falls back to the
 // packaged factory defaults.
-func BackendLabelFromWorker(worker *interfaces.WorkerConfig) string {
+func BackendLabelFromWorker(worker *workerconfig.Config) string {
 	model := DefaultModelName
 	backend := DefaultBackendName
 	if worker != nil {
@@ -116,11 +117,11 @@ func MetadataContentFromWorkerOutput(output, traceID, sessionID, backendLabel st
 }
 
 func audioPartsFromInferenceOutput(output string) ([]work.WorkContentPart, error) {
-	parts, err := workerinference.WorkContentFromInferenceOutput(output, interfaces.ModelOperation{
+	parts, err := workerinference.WorkContentFromInferenceOutput(output, workerconfig.ModelOperation{
 		Name: "TTS",
-		Outputs: []interfaces.ModelOperationSlot{{
+		Outputs: []workerconfig.ModelOperationSlot{{
 			Name:         "audio",
-			ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+			ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 		}},
 	})
 	if err != nil {

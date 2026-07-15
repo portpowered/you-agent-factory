@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -132,11 +132,11 @@ type channelExecutor struct {
 	releaseCh <-chan struct{}
 }
 
-func (e *channelExecutor) Execute(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *channelExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 	<-e.releaseCh
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   d.DispatchID,
 		TransitionID: d.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}, nil
 }

@@ -4,7 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 )
 
 func TestValidateOpenCodeAgentForRunnerSelection(t *testing.T) {
@@ -14,33 +15,33 @@ func TestValidateOpenCodeAgentForRunnerSelection(t *testing.T) {
 		name              string
 		workstationAgent  string
 		workerAgent       string
-		selection         interfaces.ResolvedRunnerSelection
+		selection         workerexecution.ResolvedRunnerSelection
 		wantErrSubstrings []string
 	}{
 		{
 			name:        "AllowsOpenCodeRunner",
 			workerAgent: "reviewer",
-			selection: interfaces.ResolvedRunnerSelection{
-				RunnerID: interfaces.RunnerIDOpenCode,
-				Source:   interfaces.RunnerSelectionSourceFactory,
+			selection: workerexecution.ResolvedRunnerSelection{
+				RunnerID: workerexecution.RunnerIDOpenCode,
+				Source:   workerexecution.RunnerSelectionSourceFactory,
 			},
 		},
 		{
 			name:      "AllowsUnsetAgent",
-			selection: interfaces.ResolvedRunnerSelection{RunnerID: interfaces.RunnerIDCodex, Source: interfaces.RunnerSelectionSourceDefault},
+			selection: workerexecution.ResolvedRunnerSelection{RunnerID: workerexecution.RunnerIDCodex, Source: workerexecution.RunnerSelectionSourceDefault},
 		},
 		{
 			name:              "RejectsWorkerAgentOnCodexRunner",
 			workerAgent:       "reviewer",
-			selection:         interfaces.ResolvedRunnerSelection{RunnerID: interfaces.RunnerIDCodex, Source: interfaces.RunnerSelectionSourceDefault},
-			wantErrSubstrings: []string{"openCodeAgent", "reviewer", interfaces.RunnerIDOpenCode, interfaces.RunnerIDCodex},
+			selection:         workerexecution.ResolvedRunnerSelection{RunnerID: workerexecution.RunnerIDCodex, Source: workerexecution.RunnerSelectionSourceDefault},
+			wantErrSubstrings: []string{"openCodeAgent", "reviewer", workerexecution.RunnerIDOpenCode, workerexecution.RunnerIDCodex},
 		},
 		{
 			name:              "RejectsWorkstationAgentOverrideOnNonOpenCodeRunner",
 			workstationAgent:  "implementer",
 			workerAgent:       "reviewer",
-			selection:         interfaces.ResolvedRunnerSelection{RunnerID: interfaces.RunnerIDGemini, Source: interfaces.RunnerSelectionSourceWorkstation},
-			wantErrSubstrings: []string{"openCodeAgent", "implementer", interfaces.RunnerIDOpenCode, interfaces.RunnerIDGemini},
+			selection:         workerexecution.ResolvedRunnerSelection{RunnerID: workerexecution.RunnerIDGemini, Source: workerexecution.RunnerSelectionSourceWorkstation},
+			wantErrSubstrings: []string{"openCodeAgent", "implementer", workerexecution.RunnerIDOpenCode, workerexecution.RunnerIDGemini},
 		},
 	}
 
@@ -49,7 +50,7 @@ func TestValidateOpenCodeAgentForRunnerSelection(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := interfaces.ValidateOpenCodeAgentForRunnerSelection(tt.workstationAgent, tt.workerAgent, tt.selection)
+			err := workerrunner.ValidateOpenCodeAgentForRunnerSelection(tt.workstationAgent, tt.workerAgent, tt.selection)
 			if len(tt.wantErrSubstrings) == 0 {
 				if err != nil {
 					t.Fatalf("ValidateOpenCodeAgentForRunnerSelection(...) = %v, want nil", err)
@@ -98,7 +99,7 @@ func TestResolveOpenCodeAgent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := interfaces.ResolveOpenCodeAgent(tt.workstationAgent, tt.workerAgent)
+			got := workerrunner.ResolveOpenCodeAgent(tt.workstationAgent, tt.workerAgent)
 			if got != tt.wantOpenCodeAgent {
 				t.Fatalf("ResolveOpenCodeAgent(...) = %q, want %q", got, tt.wantOpenCodeAgent)
 			}

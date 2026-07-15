@@ -16,6 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -38,8 +39,8 @@ func TestReplayRuntimeConfigSmoke_CanonicalWorkstationsDriveDispatchAndReplay(t 
 	assertCanonicalSmokeWorkstation(t, loaded.Workstation, "step-one", "worker-a")
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Step one done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Step two done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),

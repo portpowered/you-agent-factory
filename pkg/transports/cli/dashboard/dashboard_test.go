@@ -7,9 +7,11 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // buildTestTopology creates a minimal topology with one work type for testing.
@@ -76,16 +78,16 @@ func TestFormatSimpleDashboardWithRenderData_RendersSessionMetricsAndActiveRows(
 
 func activeRawEngineSnapshotForDashboardTest(now time.Time, topology *state.Net) interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net] {
 	return interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
+		Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{}},
 		Dispatches: map[string]*interfaces.DispatchEntry{
 			"raw-dispatch": {
 				TransitionID:    "raw-transition",
 				WorkstationName: "raw-workstation",
 				StartTime:       now.Add(-5 * time.Second),
-				ConsumedTokens: []interfaces.Token{{
+				ConsumedTokens: []factorytoken.Token{{
 					ID:      "raw-token",
 					PlaceID: "task:processing",
-					Color:   interfaces.TokenColor{Name: "raw-should-not-render", WorkID: "raw-work", WorkTypeID: "task"},
+					Color:   factorytoken.Color{Name: "raw-should-not-render", WorkID: "raw-work", WorkTypeID: "task"},
 				}},
 			},
 		},
@@ -151,7 +153,7 @@ func TestFormatSimpleDashboardWithRenderData_MapsSystemTimeCompatibilityAtCliBou
 
 	output := FormatSimpleDashboardWithRenderData(
 		interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			Marking:         petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
+			Marking:         petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{}},
 			FactoryState:    "RUNNING",
 			RuntimeStatus:   interfaces.RuntimeStatusIdle,
 			Uptime:          2 * time.Minute,
@@ -170,7 +172,7 @@ func TestFormatSimpleDashboardWithRenderData_MapsSystemTimeCompatibilityAtCliBou
 						DispatchID:     "dispatch-expire",
 						TransitionID:   interfaces.SystemTimeExpiryTransitionID,
 						Workstation:    interfaces.FactoryWorkstationRef{Name: interfaces.SystemTimeExpiryTransitionID},
-						Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureDetail: &interfaces.FailureDetail{Reason: "expired", Message: "expired"}},
+						Result:         interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeFailed), FailureDetail: &workerexecution.FailureDetail{Reason: "expired", Message: "expired"}},
 						StartedAt:      now.Add(-15 * time.Second),
 						CompletedAt:    now.Add(-10 * time.Second),
 						DurationMillis: 5000,
@@ -180,9 +182,9 @@ func TestFormatSimpleDashboardWithRenderData_MapsSystemTimeCompatibilityAtCliBou
 					DispatchID:      "dispatch-expire",
 					TransitionID:    interfaces.SystemTimeExpiryTransitionID,
 					WorkstationName: interfaces.SystemTimeExpiryTransitionID,
-					Outcome:         string(interfaces.OutcomeFailed),
-					FailureDetail:   &interfaces.FailureDetail{Reason: "expired", Message: "expired"},
-					ProviderSession: interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-expire"},
+					Outcome:         string(workerexecution.OutcomeFailed),
+					FailureDetail:   &workerexecution.FailureDetail{Reason: "expired", Message: "expired"},
+					ProviderSession: workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-expire"},
 				}},
 			},
 		},
@@ -207,7 +209,7 @@ func TestFormatSimpleDashboardWithRenderData_RendersUnavailableTimes(t *testing.
 
 	output := FormatSimpleDashboardWithRenderData(
 		interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			Marking:       petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
+			Marking:       petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{}},
 			FactoryState:  "RUNNING",
 			RuntimeStatus: interfaces.RuntimeStatusActive,
 			Topology:      buildTestTopology(),
@@ -232,7 +234,7 @@ func TestFormatSimpleDashboardWithRenderData_RendersUnavailableTimes(t *testing.
 					TransitionID:    "write",
 					Workstation:     interfaces.FactoryWorkstationRef{Name: "Writer"},
 					OutputWorkItems: []work.FactoryWorkItem{{ID: "work-complete", WorkTypeID: "story", DisplayName: "Complete story"}},
-					Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+					Result:          interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
 				}},
 			},
 		},
@@ -259,7 +261,7 @@ func TestDashboardSessionViewFromRenderData_FallsBackToDispatchHistoryWorkItems(
 
 	output := FormatSimpleDashboardWithRenderData(
 		interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			Marking:       petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
+			Marking:       petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{}},
 			FactoryState:  "RUNNING",
 			RuntimeStatus: interfaces.RuntimeStatusIdle,
 			Topology:      buildTestTopology(),
@@ -277,13 +279,13 @@ func buildTerminalProviderRenderFixture(now time.Time) (
 	dashboardrender.SimpleDashboardRenderData,
 ) {
 	return interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
+			Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{}},
 			DispatchHistory: []interfaces.CompletedDispatch{{
 				DispatchID:      "raw-dispatch",
 				TransitionID:    "raw-transition",
 				WorkstationName: "raw-workstation",
-				Outcome:         interfaces.OutcomeAccepted,
-				ConsumedTokens:  []interfaces.Token{{ID: "raw-token", Color: interfaces.TokenColor{Name: "raw-input", WorkID: "raw-work", WorkTypeID: "task"}}},
+				Outcome:         workerexecution.OutcomeAccepted,
+				ConsumedTokens:  []factorytoken.Token{{ID: "raw-token", Color: factorytoken.Color{Name: "raw-input", WorkID: "raw-work", WorkTypeID: "task"}}},
 			}},
 			FactoryState:  "RUNNING",
 			RuntimeStatus: interfaces.RuntimeStatusIdle,
@@ -321,7 +323,7 @@ func buildTerminalProviderRenderFixture(now time.Time) (
 						Workstation:     interfaces.FactoryWorkstationRef{Name: "Writer"},
 						InputWorkItems:  []work.FactoryWorkItem{{ID: "work-complete", WorkTypeID: "story", DisplayName: "Draft docs"}},
 						OutputWorkItems: []work.FactoryWorkItem{{ID: "work-complete", WorkTypeID: "story", DisplayName: "Docs complete"}},
-						Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+						Result:          interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
 						StartedAt:       now.Add(-70 * time.Second),
 						CompletedAt:     now.Add(-65 * time.Second),
 						DurationMillis:  5000,
@@ -332,7 +334,7 @@ func buildTerminalProviderRenderFixture(now time.Time) (
 						Workstation:     interfaces.FactoryWorkstationRef{Name: "Reviewer"},
 						InputWorkItems:  []work.FactoryWorkItem{{ID: "work-rejected", WorkTypeID: "story", DisplayName: "Review draft"}},
 						OutputWorkItems: []work.FactoryWorkItem{{ID: "work-rejected", WorkTypeID: "story", DisplayName: "Needs rewrite"}},
-						Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeRejected), Feedback: "missing acceptance tests"},
+						Result:          interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeRejected), Feedback: "missing acceptance tests"},
 						StartedAt:       now.Add(-60 * time.Second),
 						CompletedAt:     now.Add(-45 * time.Second),
 						DurationMillis:  15000,
@@ -343,7 +345,7 @@ func buildTerminalProviderRenderFixture(now time.Time) (
 						Workstation:     interfaces.FactoryWorkstationRef{Name: "Publisher"},
 						InputWorkItems:  []work.FactoryWorkItem{{ID: "work-failed", WorkTypeID: "story", DisplayName: "Ship change"}},
 						OutputWorkItems: []work.FactoryWorkItem{{ID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"}},
-						Result:          interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeThrottled, Message: "provider unavailable"}},
+						Result:          interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeFailed), FailureDetail: &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeThrottled, Message: "provider unavailable"}},
 						StartedAt:       now.Add(-40 * time.Second),
 						CompletedAt:     now.Add(-20 * time.Second),
 						DurationMillis:  20000,
@@ -354,9 +356,9 @@ func buildTerminalProviderRenderFixture(now time.Time) (
 					TransitionID:    "ship",
 					WorkstationName: "Publisher",
 					ConsumedInputs:  []interfaces.WorkstationInput{{WorkItem: &work.FactoryWorkItem{ID: "work-failed", WorkTypeID: "story", DisplayName: "Blocked change"}}},
-					Outcome:         string(interfaces.OutcomeFailed),
-					FailureDetail:   &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeThrottled, Message: "provider unavailable"},
-					ProviderSession: interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"},
+					Outcome:         string(workerexecution.OutcomeFailed),
+					FailureDetail:   &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeThrottled, Message: "provider unavailable"},
+					ProviderSession: workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"},
 				}},
 			},
 		}
@@ -418,7 +420,7 @@ func buildDispatchHistoryFallbackFixture(now time.Time) dashboardrender.SimpleDa
 					OutputWorkItems: []work.FactoryWorkItem{
 						{ID: "completed-terminal", WorkTypeID: "story", DisplayName: "should not replace terminal"},
 					},
-					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+					Result:         interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
 					StartedAt:      now.Add(-50 * time.Second),
 					CompletedAt:    now.Add(-40 * time.Second),
 					DurationMillis: 10000,
@@ -431,7 +433,7 @@ func buildDispatchHistoryFallbackFixture(now time.Time) dashboardrender.SimpleDa
 					OutputWorkItems: []work.FactoryWorkItem{
 						{ID: "completed-output", WorkTypeID: "story", DisplayName: "Review ready"},
 					},
-					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+					Result:         interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
 					StartedAt:      now.Add(-39 * time.Second),
 					CompletedAt:    now.Add(-30 * time.Second),
 					DurationMillis: 9000,
@@ -441,7 +443,7 @@ func buildDispatchHistoryFallbackFixture(now time.Time) dashboardrender.SimpleDa
 					TransitionID:   "draft",
 					Workstation:    interfaces.FactoryWorkstationRef{Name: "Drafter"},
 					InputWorkItems: []work.FactoryWorkItem{{ID: "completed-input-only", WorkTypeID: "story", DisplayName: "should stay hidden"}},
-					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeAccepted)},
+					Result:         interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeAccepted)},
 					StartedAt:      now.Add(-35 * time.Second),
 					CompletedAt:    now.Add(-31 * time.Second),
 					DurationMillis: 4000,
@@ -454,7 +456,7 @@ func buildDispatchHistoryFallbackFixture(now time.Time) dashboardrender.SimpleDa
 					OutputWorkItems: []work.FactoryWorkItem{
 						{ID: "failed-terminal", WorkTypeID: "story", DisplayName: "should not replace failed terminal"},
 					},
-					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeThrottled, Message: "provider unavailable"}},
+					Result:         interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeFailed), FailureDetail: &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeThrottled, Message: "provider unavailable"}},
 					StartedAt:      now.Add(-29 * time.Second),
 					CompletedAt:    now.Add(-20 * time.Second),
 					DurationMillis: 9000,
@@ -470,7 +472,7 @@ func buildDispatchHistoryFallbackFixture(now time.Time) dashboardrender.SimpleDa
 					OutputWorkItems: []work.FactoryWorkItem{
 						{ID: "failed-output", WorkTypeID: "story", DisplayName: "Expired artifact"},
 					},
-					Result:         interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeFailed), FailureDetail: &interfaces.FailureDetail{Reason: "expired", Message: "expired"}},
+					Result:         interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeFailed), FailureDetail: &workerexecution.FailureDetail{Reason: "expired", Message: "expired"}},
 					StartedAt:      now.Add(-19 * time.Second),
 					CompletedAt:    now.Add(-10 * time.Second),
 					DurationMillis: 9000,
@@ -536,14 +538,14 @@ func TestFormatSimpleDashboard_SnapshotOnlyDoesNotRenderSessionRows(t *testing.T
 	topology := buildTestTopology()
 
 	es := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{}},
+		Marking: petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{}},
 		DispatchHistory: []interfaces.CompletedDispatch{{
 			DispatchID:      "raw-dispatch",
 			TransitionID:    "raw-transition",
 			WorkstationName: "raw-workstation",
-			Outcome:         interfaces.OutcomeAccepted,
-			ConsumedTokens: []interfaces.Token{
-				{ID: "raw-token", PlaceID: "task:processing", Color: interfaces.TokenColor{Name: "raw-input", WorkID: "raw-work", WorkTypeID: "task"}},
+			Outcome:         workerexecution.OutcomeAccepted,
+			ConsumedTokens: []factorytoken.Token{
+				{ID: "raw-token", PlaceID: "task:processing", Color: factorytoken.Color{Name: "raw-input", WorkID: "raw-work", WorkTypeID: "task"}},
 			},
 		}},
 		FactoryState: "RUNNING",
@@ -566,8 +568,8 @@ func TestFormatSimpleDashboard_NoRemovedSections(t *testing.T) {
 		TickCount:     1,
 		RuntimeStatus: interfaces.RuntimeStatusFinished,
 		Marking: petri.MarkingSnapshot{
-			Tokens: map[string]*interfaces.Token{
-				"tok-1": {ID: "tok-1", PlaceID: "task:failed", Color: interfaces.TokenColor{WorkTypeID: "task"}},
+			Tokens: map[string]*factorytoken.Token{
+				"tok-1": {ID: "tok-1", PlaceID: "task:failed", Color: factorytoken.Color{WorkTypeID: "task"}},
 			},
 		},
 		FactoryState: "RUNNING",

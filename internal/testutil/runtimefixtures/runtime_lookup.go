@@ -1,9 +1,12 @@
 package runtimefixtures
 
-import interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+import (
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	// RuntimeWorkstationLookupFixture provides a narrow map-backed
+	// RuntimeWorkstationLookup for tests.
+)
 
-// RuntimeWorkstationLookupFixture provides a narrow map-backed
-// RuntimeWorkstationLookup for tests.
 type RuntimeWorkstationLookupFixture struct {
 	Workstations map[string]*interfaces.FactoryWorkstationConfig
 }
@@ -19,14 +22,14 @@ func (f RuntimeWorkstationLookupFixture) Workstation(name string) (*interfaces.F
 // RuntimeDefinitionLookup for tests.
 type RuntimeDefinitionLookupFixture struct {
 	Workstations map[string]*interfaces.FactoryWorkstationConfig
-	Workers      map[string]*interfaces.WorkerConfig
+	Workers      map[string]*workerconfig.Config
 	Factory      *interfaces.FactoryConfig
 }
 
 var _ interfaces.RuntimeDefinitionLookup = RuntimeDefinitionLookupFixture{}
 var _ interfaces.RuntimeFactoryConfigLookup = RuntimeDefinitionLookupFixture{}
 
-func (f RuntimeDefinitionLookupFixture) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (f RuntimeDefinitionLookupFixture) Worker(name string) (*workerconfig.Config, bool) {
 	worker, ok := f.Workers[name]
 	return worker, ok
 }
@@ -44,7 +47,7 @@ func (f RuntimeDefinitionLookupFixture) FactoryConfig() *interfaces.FactoryConfi
 // for tests, with RuntimeBaseDir defaulting to FactoryDir when unset.
 type RuntimeConfigLookupFixture struct {
 	Workstations    map[string]*interfaces.FactoryWorkstationConfig
-	Workers         map[string]*interfaces.WorkerConfig
+	Workers         map[string]*workerconfig.Config
 	Factory         *interfaces.FactoryConfig
 	FactoryPath     string
 	RuntimeBasePath string
@@ -57,7 +60,7 @@ func (f RuntimeConfigLookupFixture) FactoryDir() string {
 	return f.FactoryPath
 }
 
-func (f RuntimeConfigLookupFixture) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (f RuntimeConfigLookupFixture) Worker(name string) (*workerconfig.Config, bool) {
 	worker, ok := f.Workers[name]
 	return worker, ok
 }

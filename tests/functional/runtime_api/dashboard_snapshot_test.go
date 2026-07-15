@@ -12,6 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -22,7 +24,7 @@ func singleStagePipelineConfig() *interfaces.FactoryConfig {
 			{Name: "complete", Type: interfaces.StateTypeTerminal},
 			{Name: "failed", Type: interfaces.StateTypeFailed},
 		}}},
-		Workers: []interfaces.WorkerConfig{{Name: "step-worker"}},
+		Workers: []workerconfig.Config{{Name: "step-worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name: "process", WorkerTypeName: "step-worker",
 			Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
@@ -125,7 +127,7 @@ type snapshotCapturingExecutor struct {
 	captured atomic.Bool
 }
 
-func (e *snapshotCapturingExecutor) Execute(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *snapshotCapturingExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 	if !e.captured.Load() {
 		if rt, err := e.harness.GetEngineStateSnapshot(); err == nil {
 			e.mu.Lock()
@@ -134,7 +136,7 @@ func (e *snapshotCapturingExecutor) Execute(_ context.Context, d work.WorkDispat
 			e.captured.Store(true)
 		}
 	}
-	return interfaces.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: interfaces.OutcomeAccepted}, nil
+	return workerexecution.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: workerexecution.OutcomeAccepted}, nil
 }
 
 // portos:func-length-exception owner=agent-factory reason=dashboard-parallel-snapshot-smoke review=2026-07-22 removal=split-parallel-submission-occupancy-and-dashboard-assertions-before-next-dashboard-snapshot-change
@@ -236,7 +238,7 @@ type barrierSnapshotExecutor struct {
 	initOnce sync.Once
 }
 
-func (e *barrierSnapshotExecutor) Execute(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *barrierSnapshotExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.initOnce.Do(func() { e.release = make(chan struct{}) })
 
 	count := int(e.arrived.Add(1))
@@ -251,5 +253,5 @@ func (e *barrierSnapshotExecutor) Execute(_ context.Context, d work.WorkDispatch
 		<-e.release
 	}
 
-	return interfaces.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: interfaces.OutcomeAccepted}, nil
+	return workerexecution.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: workerexecution.OutcomeAccepted}, nil
 }

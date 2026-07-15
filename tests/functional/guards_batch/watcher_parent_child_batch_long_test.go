@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -40,7 +39,7 @@ func seedSubmittedParentChildBatch(t *testing.T) string {
 	testutil.WriteSeedBatchFile(t, dir, work.WorkRequest{
 		RequestID: "release-story-set",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{
 				Name:       "story-set",
 				WorkTypeID: "story-set",

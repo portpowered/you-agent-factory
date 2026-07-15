@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -71,7 +71,7 @@ func TestCascadingFailure_DirectChild(t *testing.T) {
 	}
 }
 
-func tokenDependsOn(tok *interfaces.Token, workID string) bool {
+func tokenDependsOn(tok *factorytoken.Token, workID string) bool {
 	for _, rel := range tok.Color.Relations {
 		if rel.Type == work.RelationDependsOn && rel.TargetWorkID == workID {
 			return true

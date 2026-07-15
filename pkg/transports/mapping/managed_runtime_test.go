@@ -3,15 +3,15 @@ package apisurface
 import (
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestManagedRuntimePullResultFromService_MapsLegacyOutcomes(t *testing.T) {
 	t.Run("pulled", func(t *testing.T) {
 		result := ManagedRuntimePullResultFromService(ModelPullResult{
 			ModelName:        "OMNIVOICE_Q4_K_M",
-			ProviderLocality: interfaces.ModelLocalityLocal,
+			ProviderLocality: workerconfig.ModelLocalityLocal,
 			Outcome:          "PULLED",
 			CachePath:        "/tmp/cache",
 			Revision:         "rev1",
@@ -28,7 +28,7 @@ func TestManagedRuntimePullResultFromService_MapsLegacyOutcomes(t *testing.T) {
 	t.Run("already present", func(t *testing.T) {
 		result := ManagedRuntimePullResultFromService(ModelPullResult{
 			ModelName:        "OMNIVOICE_Q4_K_M",
-			ProviderLocality: interfaces.ModelLocalityLocal,
+			ProviderLocality: workerconfig.ModelLocalityLocal,
 			Outcome:          "ALREADY_PRESENT",
 		}, nil)
 
@@ -43,7 +43,7 @@ func TestManagedRuntimePullResultFromService_MapsLegacyOutcomes(t *testing.T) {
 		notes := "assets resolve through configured managed mirror source"
 		result := ManagedRuntimePullResultFromService(ModelPullResult{
 			ModelName:          "OMNIVOICE_Q4_K_M",
-			ProviderLocality:   interfaces.ModelLocalityLocal,
+			ProviderLocality:   workerconfig.ModelLocalityLocal,
 			Outcome:            "ALREADY_PRESENT",
 			ManagedPullOutcome: "ALREADY_READY",
 			ReadinessState:     "READY",

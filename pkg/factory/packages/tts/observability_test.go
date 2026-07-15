@@ -6,6 +6,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestClassifyInvocationWait_LoadingWhenActiveWorkRemains(t *testing.T) {
@@ -94,7 +95,7 @@ func packagedTTSFailureWorldState(requestID, workID, failureMessage string) inte
 	state.FailureDetailsByWorkID[workID] = interfaces.FactoryWorldFailureDetail{
 		WorkstationName: PackagedInvokeWorkstationName,
 		WorkItem:        failed,
-		FailureDetail:   &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeUnknown, Message: failureMessage},
+		FailureDetail:   &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeUnknown, Message: failureMessage},
 	}
 	return state
 }

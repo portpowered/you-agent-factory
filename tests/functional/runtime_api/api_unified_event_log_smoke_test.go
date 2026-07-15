@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
@@ -52,17 +53,17 @@ func newUnifiedEventLogSmokeFixture(t *testing.T) unifiedEventLogSmokeFixture {
 
 	dir := testutil.CopyFixtureDir(t, testutil.MustRepoPath(t, "tests/functional_test/testdata/service_simple"))
 	artifactPath := filepath.Join(t.TempDir(), "unified-event-log.replay.json")
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"worker-a": {{
 			Content: "draft stage one complete. COMPLETE",
-			ProviderSession: &interfaces.ProviderSessionMetadata{
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-unified-event-log-draft-step-one",
 			},
 		}, {
 			Content: "review stage one complete. COMPLETE",
-			ProviderSession: &interfaces.ProviderSessionMetadata{
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-unified-event-log-review-step-one",
@@ -70,14 +71,14 @@ func newUnifiedEventLogSmokeFixture(t *testing.T) unifiedEventLogSmokeFixture {
 		}},
 		"worker-b": {{
 			Content: "draft stage two complete. COMPLETE",
-			ProviderSession: &interfaces.ProviderSessionMetadata{
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-unified-event-log-draft-step-two",
 			},
 		}, {
 			Content: "review stage two complete. COMPLETE",
-			ProviderSession: &interfaces.ProviderSessionMetadata{
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-unified-event-log-review-step-two",

@@ -13,6 +13,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // TestCrossWorkflowPipeline verifies that two workflows can cooperate:
@@ -95,7 +97,7 @@ func TestCrossWorkflowPipelineNoDeadlock(t *testing.T) {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "submitter"}},
+		Workers: []workerconfig.Config{{Name: "submitter"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name: "submit-work", WorkerTypeName: "submitter",
 			Inputs:    []interfaces.IOConfig{{WorkTypeName: "analysis", StateName: "init"}},
@@ -104,7 +106,7 @@ func TestCrossWorkflowPipelineNoDeadlock(t *testing.T) {
 		}},
 	})
 	hB := testutil.NewServiceTestHarness(t, dirB)
-	hB.SetCustomExecutor("submitter", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+	hB.SetCustomExecutor("submitter", &funcExecutor{fn: func(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 		for i := range 3 {
 			hA.SubmitFull(context.Background(), []work.SubmitRequest{{
 				WorkTypeID: "code-change",
@@ -112,10 +114,10 @@ func TestCrossWorkflowPipelineNoDeadlock(t *testing.T) {
 				Payload:    fmt.Appendf(nil, `{"item": %d}`, i),
 			}})
 		}
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 		}, nil
 	}})
 
@@ -300,7 +302,7 @@ func codePipelineCfg() *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "coder"}, {Name: "review-submitter"}, {Name: "reviewer"}},
+		Workers: []workerconfig.Config{{Name: "coder"}, {Name: "review-submitter"}, {Name: "reviewer"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "do-coding", WorkerTypeName: "coder",
 				Inputs:    []interfaces.IOConfig{{WorkTypeName: "code-change", StateName: "init"}},
@@ -330,7 +332,7 @@ func simpleCodePipelineCfg(workerName string) *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: workerName}},
+		Workers: []workerconfig.Config{{Name: workerName}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "process", WorkerTypeName: workerName,
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "code-change", StateName: "init"}},
@@ -353,7 +355,7 @@ func oneStageCodePipelineCfg(workerName string) *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: workerName}},
+		Workers: []workerconfig.Config{{Name: workerName}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "process", WorkerTypeName: workerName,
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "code-change", StateName: "init"}},
@@ -375,7 +377,7 @@ func metaPipelineCfg() *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "scanner"}, {Name: "work-generator"}, {Name: "cross-submitter"}},
+		Workers: []workerconfig.Config{{Name: "scanner"}, {Name: "work-generator"}, {Name: "cross-submitter"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "scan-codebase", WorkerTypeName: "scanner",
 				Inputs:    []interfaces.IOConfig{{WorkTypeName: "analysis", StateName: "init"}},
@@ -397,16 +399,16 @@ func metaPipelineCfg() *interfaces.FactoryConfig {
 
 // staticExecutor returns a fixed outcome with optional tags.
 type staticExecutor struct {
-	outcome interfaces.WorkOutcome
+	outcome workerexecution.WorkOutcome
 	tags    map[string]string
 }
 
-func (e *staticExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *staticExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	output := ""
 	if e.tags != nil {
 		output = e.tags["findings"]
 	}
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
 		Outcome:      e.outcome,
@@ -416,9 +418,9 @@ func (e *staticExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) 
 
 // funcExecutor wraps a function as a WorkerExecutor.
 type funcExecutor struct {
-	fn func(context.Context, work.WorkDispatch) (interfaces.WorkResult, error)
+	fn func(context.Context, work.WorkDispatch) (workerexecution.WorkResult, error)
 }
 
-func (e *funcExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *funcExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	return e.fn(ctx, dispatch)
 }

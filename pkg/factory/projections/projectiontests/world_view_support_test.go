@@ -11,6 +11,8 @@ import (
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestBuildFactoryWorldView_ProjectsFailedTerminalWorkFailureDetails(t *testing.T) {
@@ -395,9 +397,9 @@ func failedTerminalWorkProjectionEvents(t0 time.Time) []factoryapi.FactoryEvent 
 			Outcome:            factoryapi.InferenceOutcomeFailed,
 			DurationMillis:     500,
 			FailureDetail:      &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureTypeThrottled, Message: "Provider rate limit exceeded."},
-			ProviderSession:    generatedProviderSessionForProjectionTest(&interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"}),
-			Diagnostics: generatedWorkDiagnosticsForProjectionTest(&interfaces.SafeWorkDiagnostics{
-				Provider: &interfaces.SafeProviderDiagnostic{
+			ProviderSession:    generatedProviderSessionForProjectionTest(&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"}),
+			Diagnostics: generatedWorkDiagnosticsForProjectionTest(&workerdiagnostics.SafeWorkDiagnostics{
+				Provider: &workerdiagnostics.SafeProviderDiagnostic{
 					Provider: "codex",
 					Model:    "gpt-5.4",
 					ResponseMetadata: map[string]string{
@@ -410,9 +412,9 @@ func failedTerminalWorkProjectionEvents(t0 time.Time) []factoryapi.FactoryEvent 
 			DispatchID:      "dispatch-failed",
 			TransitionID:    "t-review",
 			Workstation:     interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
-			Result:          interfaces.WorkstationResult{Outcome: "FAILED", Error: "provider throttled", FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeThrottled, Message: "Provider rate limit exceeded."}},
+			Result:          interfaces.WorkstationResult{Outcome: "FAILED", Error: "provider throttled", FailureDetail: &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeThrottled, Message: "Provider rate limit exceeded."}},
 			DurationMillis:  500,
-			ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"},
+			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-failed"},
 			Outputs: []interfaces.WorkstationOutput{{
 				Type:     string(interfaces.MutationMove),
 				TokenID:  "work-failed-terminal",
@@ -439,7 +441,7 @@ func assertFailedTerminalWorkProjection(t *testing.T, failedView interfaces.Fact
 		t.Fatalf("failed occupancy = %#v, want Blocked story in task:failed", failedItems)
 	}
 	if len(failedView.Runtime.Session.DispatchHistory) != 1 ||
-		failedView.Runtime.Session.DispatchHistory[0].Result.FailureDetail == nil || failedView.Runtime.Session.DispatchHistory[0].Result.FailureDetail.Reason != interfaces.WorkFailureTypeThrottled {
+		failedView.Runtime.Session.DispatchHistory[0].Result.FailureDetail == nil || failedView.Runtime.Session.DispatchHistory[0].Result.FailureDetail.Reason != workerexecution.WorkFailureTypeThrottled {
 		t.Fatalf("dispatch history = %#v, want retained failure reason", failedView.Runtime.Session.DispatchHistory)
 	}
 	if len(failedView.Runtime.Session.ProviderSessions) != 1 ||
@@ -483,9 +485,9 @@ func canonicalDispatchProviderSessionProjectionEvents(t0 time.Time) []factoryapi
 			Attempt:            1,
 			Outcome:            factoryapi.InferenceOutcomeSucceeded,
 			DurationMillis:     1200,
-			ProviderSession:    generatedProviderSessionForProjectionTest(&interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"}),
-			Diagnostics: generatedWorkDiagnosticsForProjectionTest(&interfaces.SafeWorkDiagnostics{
-				Provider: &interfaces.SafeProviderDiagnostic{
+			ProviderSession:    generatedProviderSessionForProjectionTest(&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"}),
+			Diagnostics: generatedWorkDiagnosticsForProjectionTest(&workerdiagnostics.SafeWorkDiagnostics{
+				Provider: &workerdiagnostics.SafeProviderDiagnostic{
 					Provider: "codex",
 					Model:    "gpt-5.4",
 				},
@@ -499,7 +501,7 @@ func canonicalDispatchProviderSessionProjectionEvents(t0 time.Time) []factoryapi
 			DurationMillis:  1200,
 			OutputWork:      []work.FactoryWorkItem{output},
 			TraceData:       &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-			ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"},
+			ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-1"},
 			TerminalWork:    &interfaces.FactoryTerminalWork{WorkItem: output, Status: "TERMINAL"},
 		}),
 	}

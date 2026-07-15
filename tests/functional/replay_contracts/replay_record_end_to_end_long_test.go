@@ -22,6 +22,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
@@ -203,7 +204,7 @@ Finish the input task.
 `)
 
 	generatedBatchOutput := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"generated-alpha","workId":"work-generated-alpha","workTypeName":"task","payload":"generated alpha"},{"name":"generated-beta","workId":"work-generated-beta","workTypeName":"task","payload":"generated beta"}],"relations":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha","requiredState":"complete"}]},"metadata":{"parentLineage":["request-replay-external-batch","work-external-fanout"],"relationContext":[{"type":"DEPENDS_ON","sourceWorkName":"generated-beta","targetWorkName":"generated-alpha","requiredState":"complete"}]}}`
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {
 			{Content: "record external first"},
 			{Content: generatedBatchOutput},
@@ -225,7 +226,7 @@ Finish the input task.
 	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-replay-external-batch",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{Name: "external-first", WorkID: "work-external-first", WorkTypeID: "task", TraceID: "trace-replay-batch", Payload: "external first"},
 			{Name: "external-fanout", WorkID: "work-external-fanout", WorkTypeID: "task", TraceID: "trace-replay-batch", Payload: "external fanout"},
 		},

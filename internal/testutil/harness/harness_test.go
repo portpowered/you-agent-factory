@@ -11,6 +11,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestMarkingAssert_PlaceTokenCount(t *testing.T) {
@@ -24,7 +26,7 @@ func TestMarkingAssert_PlaceTokenCount(t *testing.T) {
 				{Name: "error", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "w"}},
+		Workers: []workerconfig.Config{{Name: "w"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "work",
 			WorkerTypeName: "w",
@@ -35,7 +37,7 @@ func TestMarkingAssert_PlaceTokenCount(t *testing.T) {
 	dir := testutil.ScaffoldFactoryDir(t, cfg)
 
 	h := testutil.NewServiceTestHarness(t, dir)
-	h.MockWorker("w", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("w", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	// Submit queues the token; RunUntilComplete processes it via the engine.
 	if err := h.SubmitWork("item", []byte("test")); err != nil {
@@ -64,8 +66,8 @@ func TestMockWorker_AsyncDispatch(t *testing.T) {
 
 	// Register mock AFTER construction — delegating executor picks it up at runtime.
 	mock := h.MockWorker("processor",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	if err := h.SubmitWork("task", []byte(`{"title":"async mock test"}`)); err != nil {
@@ -94,7 +96,7 @@ func TestMockWorker_AllowsBuiltInRunnerConfigWithoutLocalBinary(t *testing.T) {
 				{Name: "done", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "worker"}},
+		Workers: []workerconfig.Config{{Name: "worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "process",
 			WorkerTypeName: "worker",
@@ -119,7 +121,7 @@ Process the task.
 	}
 
 	h := testutil.NewServiceTestHarness(t, dir)
-	mock := h.MockWorker("worker", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	mock := h.MockWorker("worker", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	if err := h.SubmitWork("task", []byte(`{"title":"uses mocked runner"}`)); err != nil {
 		t.Fatalf("submit work: %v", err)
@@ -167,19 +169,19 @@ type callTracker struct {
 	count int
 }
 
-func (c *callTracker) Execute(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
+func (c *callTracker) Execute(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 	c.count++
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   d.DispatchID,
 		TransitionID: d.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}, nil
 }
 
 func TestMockExecutor_CallTracking(t *testing.T) {
 	mock := testutil.NewMockExecutor(
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
 	)
 
 	if mock.CallCount() != 0 {
@@ -191,7 +193,7 @@ func TestMockExecutor_CallTracking(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
+	if result.Outcome != workerexecution.OutcomeAccepted {
 		t.Errorf("expected ACCEPTED, got %s", result.Outcome)
 	}
 	if mock.CallCount() != 1 {
@@ -202,7 +204,7 @@ func TestMockExecutor_CallTracking(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeRejected {
+	if result.Outcome != workerexecution.OutcomeRejected {
 		t.Errorf("expected REJECTED, got %s", result.Outcome)
 	}
 
@@ -211,7 +213,7 @@ func TestMockExecutor_CallTracking(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
+	if result.Outcome != workerexecution.OutcomeAccepted {
 		t.Errorf("expected default ACCEPTED, got %s", result.Outcome)
 	}
 

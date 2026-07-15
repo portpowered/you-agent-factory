@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -27,7 +27,7 @@ func TestDispatcherLifecycle_IdeaToArchive(t *testing.T) {
 		TraceID:    originTraceID,
 	})
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"planner":  {{Content: "success<COMPLETE>"}},
 		"executor": {{Content: "success<COMPLETE>"}},
 		"reviewer": {{Content: "success<COMPLETE>"}},
@@ -66,7 +66,7 @@ func TestDispatcherLifecycle_PlannerFailure(t *testing.T) {
 
 	testutil.WriteSeedFile(t, dir, "idea", []byte(`{"title": "broken idea"}`))
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"planner": {{Content: "failed"}},
 	})
 

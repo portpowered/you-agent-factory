@@ -12,9 +12,13 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 )
 
 // TODO: we should move these constants to the interfaces package, actually we should move the events generally to the openapi.yaml to allow generation of the various types of events payloads.
@@ -101,7 +105,7 @@ func (h *FactoryEventHistory) SetFactoryRunnerOverride(runnerID string) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.factoryRunner = interfaces.NormalizeRunnerID(runnerID)
+	h.factoryRunner = workerrunner.NormalizeRunnerID(runnerID)
 }
 
 // SetInitialStructureFactory overrides the public factory snapshot emitted by
@@ -277,7 +281,7 @@ func (h *FactoryEventHistory) RecordRunRequest() {
 
 // RecordWorkInput records a submitted work token after submit-time identity
 // generation has completed.
-func (h *FactoryEventHistory) RecordWorkInput(tick int, req work.SubmitRequest, token interfaces.Token, eventTime time.Time) {
+func (h *FactoryEventHistory) RecordWorkInput(tick int, req work.SubmitRequest, token factorytoken.Token, eventTime time.Time) {
 	if h == nil || token.ID == "" {
 		return
 	}
@@ -375,7 +379,7 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 }
 
 // RecordWorkstationResponse records a completed dispatch and its outputs.
-func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result interfaces.WorkResult, completed interfaces.CompletedDispatch) {
+func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workerexecution.WorkResult, completed interfaces.CompletedDispatch) {
 	if h == nil || result.DispatchID == "" {
 		return
 	}
@@ -410,7 +414,7 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result interfa
 			DurationMillis:              int64Ptr(completed.Duration.Milliseconds()),
 			OutputWork:                  generatedWorksPtr(outputWorkItems(completed.OutputMutations, completed.ConsumedTokens)),
 			OutputResources:             h.generatedOutputResourcesPtr(completed.OutputMutations),
-			ProviderFailure:             interfaces.GeneratedWorkFailureMetadata(result.FailureMetadata),
+			ProviderFailure:             workerdiagnostics.GeneratedWorkFailureMetadata(result.FailureMetadata),
 		},
 	))
 }
@@ -642,13 +646,13 @@ func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 	return out
 }
 
-func (h *FactoryEventHistory) resolvedRunnerSelectionForDispatch(dispatch work.WorkDispatch) interfaces.ResolvedRunnerSelection {
+func (h *FactoryEventHistory) resolvedRunnerSelectionForDispatch(dispatch work.WorkDispatch) workerexecution.ResolvedRunnerSelection {
 	if h == nil {
-		return interfaces.ResolvedRunnerSelection{}
+		return workerexecution.ResolvedRunnerSelection{}
 	}
 	workstationRunner, workerModelProvider := h.runnerSelectionInputsForDispatch(dispatch)
 	factoryRunner := h.factoryRunnerID()
-	return interfaces.ResolveRunnerSelection(workstationRunner, factoryRunner, workerModelProvider)
+	return workerrunner.ResolveRunnerSelection(workstationRunner, factoryRunner, workerModelProvider)
 }
 
 func (h *FactoryEventHistory) runnerSelectionInputsForDispatch(dispatch work.WorkDispatch) (string, string) {
@@ -700,14 +704,14 @@ func (h *FactoryEventHistory) factoryRunnerID() string {
 	return cfg.Runner
 }
 
-func traceIDsFromTokens(tokens []interfaces.Token) []string {
+func traceIDsFromTokens(tokens []factorytoken.Token) []string {
 	return interfaces.PreviousChainingTraceIDsFromTokens(tokens)
 }
 
-func workIDsFromTokens(tokens []interfaces.Token) []string {
+func workIDsFromTokens(tokens []factorytoken.Token) []string {
 	values := make([]string, 0, len(tokens))
 	for _, token := range tokens {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		values = append(values, token.Color.WorkID)
@@ -805,7 +809,7 @@ func isAgentRunEventType(eventType factoryapi.FactoryEventType) bool {
 	return eventType == factoryapi.FactoryEventTypeAgentRunResponse
 }
 
-func workItemFromToken(token interfaces.Token) work.FactoryWorkItem {
+func workItemFromToken(token factorytoken.Token) work.FactoryWorkItem {
 	currentChainingTraceID := token.Color.CurrentChainingTraceID
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = token.Color.TraceID
@@ -827,8 +831,8 @@ func workItemFromToken(token interfaces.Token) work.FactoryWorkItem {
 	}
 }
 
-func failureDetailsForResult(result interfaces.WorkResult) (string, string) {
-	if result.Outcome != interfaces.OutcomeFailed {
+func failureDetailsForResult(result workerexecution.WorkResult) (string, string) {
+	if result.Outcome != workerexecution.OutcomeFailed {
 		return "", ""
 	}
 
@@ -840,7 +844,7 @@ func failureDetailsForResult(result interfaces.WorkResult) (string, string) {
 	return reason, message
 }
 
-func failureReasonForResult(result interfaces.WorkResult) string {
+func failureReasonForResult(result workerexecution.WorkResult) string {
 	failureMetadata := result.FailureMetadata
 	if failureMetadata != nil {
 		if failureMetadata.Type != "" {
@@ -856,11 +860,11 @@ func failureReasonForResult(result interfaces.WorkResult) string {
 	return failureReasonUnknown
 }
 
-func outputWorkItems(mutations []interfaces.TokenMutationRecord, consumedTokens []interfaces.Token) []work.FactoryWorkItem {
+func outputWorkItems(mutations []interfaces.TokenMutationRecord, consumedTokens []factorytoken.Token) []work.FactoryWorkItem {
 	items := make([]work.FactoryWorkItem, 0, len(mutations))
 	previousChainingTraceIDs := interfaces.PreviousChainingTraceIDsFromTokens(consumedTokens)
 	for _, mutation := range mutations {
-		if mutation.Token == nil || mutation.Token.Color.DataType == interfaces.DataTypeResource {
+		if mutation.Token == nil || mutation.Token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		item := workItemFromToken(*mutation.Token)

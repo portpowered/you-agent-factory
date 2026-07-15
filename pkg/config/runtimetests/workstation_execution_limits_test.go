@@ -1,9 +1,10 @@
 package runtimetests
 
 import (
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"testing"
 	"time"
+
+	. "github.com/portpowered/infinite-you/pkg/config"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )

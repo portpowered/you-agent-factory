@@ -40,6 +40,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factory/sessions/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	sessioncursor "github.com/portpowered/infinite-you/pkg/platform/cursors/session"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -2288,7 +2289,7 @@ func classifyInvocationMissingPrimaryResultFromSnapshot(
 	if snapshot == nil || strings.TrimSpace(input.RequestID) == "" {
 		return nil
 	}
-	tokens := make([]*interfaces.Token, 0, len(snapshot.Marking.Tokens))
+	tokens := make([]*factorytoken.Token, 0, len(snapshot.Marking.Tokens))
 	for _, token := range snapshot.Marking.Tokens {
 		tokens = append(tokens, token)
 	}
@@ -2307,7 +2308,7 @@ func classifyInvocationMissingPrimaryResultFromSnapshot(
 	})
 	for _, wantState := range []string{"blocked", "needs-human"} {
 		for _, token := range tokens {
-			if token == nil || token.Color.DataType == interfaces.DataTypeResource {
+			if token == nil || token.Color.DataType == factorytoken.DataTypeResource {
 				continue
 			}
 			if strings.TrimSpace(token.Color.RequestID) != strings.TrimSpace(input.RequestID) || tokenStateName(token.PlaceID) != wantState {
@@ -2330,7 +2331,7 @@ func tokenStateName(placeID string) string {
 	return trimmed
 }
 
-func tokenPlaceID(token *interfaces.Token) string {
+func tokenPlaceID(token *factorytoken.Token) string {
 	if token == nil {
 		return ""
 	}

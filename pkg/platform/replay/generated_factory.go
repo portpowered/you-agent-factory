@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 // GeneratedFactoryOption customizes the generated Factory payload captured for
@@ -45,9 +46,9 @@ type MetadataMismatchWarning struct {
 type EmbeddedRuntimeConfig struct {
 	Factory          *interfaces.FactoryConfig
 	FactoryDirPath   string
-	WorkerConfigs    map[string]*interfaces.WorkerConfig
+	WorkerConfigs    map[string]*workerconfig.Config
 	Workstations     map[string]*interfaces.FactoryWorkstationConfig
-	WorkersByID      map[string]*interfaces.WorkerConfig
+	WorkersByID      map[string]*workerconfig.Config
 	WorkstationsByID map[string]*interfaces.FactoryWorkstationConfig
 }
 
@@ -79,7 +80,7 @@ func (c *EmbeddedRuntimeConfig) RuntimeBaseDir() string {
 }
 
 // Worker returns the embedded worker definition for the configured worker name.
-func (c *EmbeddedRuntimeConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (c *EmbeddedRuntimeConfig) Worker(name string) (*workerconfig.Config, bool) {
 	if c == nil {
 		return nil, false
 	}
@@ -195,9 +196,9 @@ func RuntimeConfigFromGeneratedFactory(generated factoryapi.Factory) (*EmbeddedR
 	runtimeCfg := &EmbeddedRuntimeConfig{
 		Factory:          factoryCopy,
 		FactoryDirPath:   stringValue(generated.FactoryDirectory),
-		WorkerConfigs:    make(map[string]*interfaces.WorkerConfig),
+		WorkerConfigs:    make(map[string]*workerconfig.Config),
 		Workstations:     make(map[string]*interfaces.FactoryWorkstationConfig),
-		WorkersByID:      make(map[string]*interfaces.WorkerConfig),
+		WorkersByID:      make(map[string]*workerconfig.Config),
 		WorkstationsByID: make(map[string]*interfaces.FactoryWorkstationConfig),
 	}
 
@@ -279,7 +280,7 @@ func generatedWorkstationAPIFromConfig(name string, cfg interfaces.FactoryWorkst
 	return workstation
 }
 
-func generatedWorkerAPIFromConfig(name string, cfg interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) factoryapi.Worker {
+func generatedWorkerAPIFromConfig(name string, cfg workerconfig.Config, workstations []interfaces.FactoryWorkstationConfig) factoryapi.Worker {
 	worker := config.WorkerConfigToOpenAPIWithFactoryUsage(cfg, workstations)
 	if worker.Name == "" {
 		worker.Name = name
@@ -315,8 +316,8 @@ func workstationConfigFromGeneratedAPI(workstation factoryapi.Workstation) (inte
 	return config.WorkstationConfigFromOpenAPI(workstation)
 }
 
-func runtimeWorkersByName(factoryCfg *interfaces.FactoryConfig, runtimeCfg interfaces.RuntimeDefinitionLookup) map[string]interfaces.WorkerConfig {
-	workers := make(map[string]interfaces.WorkerConfig)
+func runtimeWorkersByName(factoryCfg *interfaces.FactoryConfig, runtimeCfg interfaces.RuntimeDefinitionLookup) map[string]workerconfig.Config {
+	workers := make(map[string]workerconfig.Config)
 	for _, workerCfg := range factoryCfg.Workers {
 		def, ok := runtimeCfg.Worker(workerCfg.Name)
 		if !ok || def == nil {
@@ -433,7 +434,7 @@ func mergeRuntimeWorkstationForGeneratedFactory(base, runtime interfaces.Factory
 
 func generatedFactoryMetadata(
 	factoryWithRuntime *interfaces.FactoryConfig,
-	workers map[string]interfaces.WorkerConfig,
+	workers map[string]workerconfig.Config,
 	workstations map[string]interfaces.FactoryWorkstationConfig,
 	metadata map[string]string,
 ) map[string]string {
@@ -447,7 +448,7 @@ func generatedFactoryMetadata(
 	out[metadataWorkstationsHash] = sha256JSON(workstations)
 	out[metadataRuntimeConfigHash] = sha256JSON(struct {
 		Factory      *interfaces.FactoryConfig                      `json:"factory"`
-		Workers      map[string]interfaces.WorkerConfig             `json:"workers,omitempty"`
+		Workers      map[string]workerconfig.Config                 `json:"workers,omitempty"`
 		Workstations map[string]interfaces.FactoryWorkstationConfig `json:"workstations,omitempty"`
 	}{
 		Factory:      factoryWithRuntime,

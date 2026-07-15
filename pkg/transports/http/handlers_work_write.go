@@ -533,15 +533,15 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (workdomain.WorkRe
 	workRequest := workdomain.WorkRequest{
 		RequestID:              req.RequestId,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
-		Type:                   work.WorkRequestType(req.Type),
+		Type:                   workdomain.WorkRequestType(req.Type),
 	}
 	if req.Works != nil {
-		workRequest.Works = make([]interfaces.Work, 0, len(*req.Works))
+		workRequest.Works = make([]workdomain.Work, 0, len(*req.Works))
 		for i, work := range *req.Works {
 			if err := validateGeneratedWorkContentAtPath(work.Content, fmt.Sprintf("works[%d].content", i)); err != nil {
 				return workdomain.WorkRequest{}, err
 			}
-			workRequest.Works = append(workRequest.Works, interfaces.Work{
+			workRequest.Works = append(workRequest.Works, workdomain.Work{
 				Name:                     work.Name,
 				WorkID:                   stringValue(work.WorkId),
 				RequestID:                stringValue(work.RequestId),

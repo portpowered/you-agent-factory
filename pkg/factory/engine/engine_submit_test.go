@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
@@ -32,8 +32,8 @@ func TestInjectTokensCreatesTokenInInitialPlace(t *testing.T) {
 	if tokens[0].Color.Tags["key"] != "val" {
 		t.Error("expected tag 'key'='val'")
 	}
-	if tokens[0].Color.DataType != interfaces.DataTypeWork {
-		t.Errorf("expected DataType %q, got %q", interfaces.DataTypeWork, tokens[0].Color.DataType)
+	if tokens[0].Color.DataType != factorytoken.DataTypeWork {
+		t.Errorf("expected DataType %q, got %q", factorytoken.DataTypeWork, tokens[0].Color.DataType)
 	}
 }
 
@@ -79,7 +79,7 @@ func batchSubmitTestRequest() work.WorkRequest {
 	return work.WorkRequest{
 		RequestID: "request-batch-1",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{Name: "plan", WorkID: "work-plan", WorkTypeID: "task", TraceID: "trace-batch"},
 			{Name: "test", WorkID: "work-test", WorkTypeID: "task"},
 		},
@@ -123,7 +123,7 @@ func TestSubmitWorkRequest_InjectsBatchAtomicallyAndIgnoresDuplicateRequestID(t 
 	marking := petri.NewMarking("test-wf")
 	var workInputs []work.SubmitRequest
 
-	eng := NewFactoryEngine(n, marking, nil, WithWorkInputRecorder(func(_ int, req work.SubmitRequest, _ interfaces.Token) {
+	eng := NewFactoryEngine(n, marking, nil, WithWorkInputRecorder(func(_ int, req work.SubmitRequest, _ factorytoken.Token) {
 		workInputs = append(workInputs, req)
 	}))
 	request := batchSubmitTestRequest()
@@ -160,7 +160,7 @@ func TestSubmitWorkRequest_ValidationFailureQueuesNoPartialWork(t *testing.T) {
 	_, err := eng.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-invalid",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{Name: "valid", WorkTypeID: "task"},
 			{Name: "invalid", WorkTypeID: "missing-type"},
 		},
@@ -237,7 +237,7 @@ func TestSubmitWorkRequest_RejectsUnknownExplicitStateBeforeEnqueue(t *testing.T
 	_, err := eng.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-invalid-state",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Works: []work.Work{{
 			Name:       "draft",
 			WorkTypeID: "task",
 			State:      "queued",
@@ -268,7 +268,7 @@ func TestSubmitWorkRequest_RejectsInvalidParentChildBatchBeforeEnqueue(t *testin
 	_, err := eng.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-invalid-parent-child",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{Name: "parent", WorkTypeID: "task"},
 			{Name: "child", WorkTypeID: "task"},
 		},
@@ -317,7 +317,7 @@ func TestSubmitWhileAutomaticTicksPaused_AcceptsAndBuffersUntilResume(t *testing
 	request := work.WorkRequest{
 		RequestID: "request-paused-submit-001",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Works: []work.Work{{
 			Name:       "paused-submit",
 			WorkTypeID: "task",
 			TraceID:    "trace-paused-submit",

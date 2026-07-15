@@ -11,6 +11,8 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 var invocationInterpolationPattern = regexp.MustCompile(`\$\{([A-Za-z0-9_.-]+)\}`)
@@ -91,39 +93,39 @@ func ValidateInvocationInterpolation(cfg *interfaces.FactoryConfig, args *work.I
 
 // InterpolateWorkerConfig resolves supported `${parameter}` placeholders on one
 // effective worker definition using runtime invocation arguments.
-func InterpolateWorkerConfig(worker interfaces.WorkerConfig, args *work.InvocationArguments, readFile FileReader) (interfaces.WorkerConfig, error) {
+func InterpolateWorkerConfig(worker workerconfig.Config, args *work.InvocationArguments, readFile FileReader) (workerconfig.Config, error) {
 	next := cloneWorkerForInterpolation(worker)
 	var err error
 	if next.Provider, err = interpolateInvocationField(next.Provider, args, "worker.provider", false, readFile); err != nil {
-		return interfaces.WorkerConfig{}, err
+		return workerconfig.Config{}, err
 	}
 	if next.Model, err = interpolateInvocationField(next.Model, args, "worker.model", false, readFile); err != nil {
-		return interfaces.WorkerConfig{}, err
+		return workerconfig.Config{}, err
 	}
 	if next.ModelProvider, err = interpolateInvocationField(next.ModelProvider, args, "worker.modelProvider", false, readFile); err != nil {
-		return interfaces.WorkerConfig{}, err
+		return workerconfig.Config{}, err
 	}
 	if next.ExecutorProvider, err = interpolateInvocationField(next.ExecutorProvider, args, "worker.executorProvider", false, readFile); err != nil {
-		return interfaces.WorkerConfig{}, err
+		return workerconfig.Config{}, err
 	}
 	if next.Command, err = interpolateInvocationField(next.Command, args, "worker.command", false, readFile); err != nil {
-		return interfaces.WorkerConfig{}, err
+		return workerconfig.Config{}, err
 	}
 	if next.Timeout, err = interpolateInvocationField(next.Timeout, args, "worker.timeout", false, readFile); err != nil {
-		return interfaces.WorkerConfig{}, err
+		return workerconfig.Config{}, err
 	}
 	if next.StopToken, err = interpolateInvocationField(next.StopToken, args, "worker.stopToken", false, readFile); err != nil {
-		return interfaces.WorkerConfig{}, err
+		return workerconfig.Config{}, err
 	}
 	if next.OpenCodeAgent, err = interpolateInvocationField(next.OpenCodeAgent, args, "worker.openCodeAgent", false, readFile); err != nil {
-		return interfaces.WorkerConfig{}, err
+		return workerconfig.Config{}, err
 	}
 	if next.Body, err = interpolateInvocationField(next.Body, args, "worker body", false, readFile); err != nil {
-		return interfaces.WorkerConfig{}, err
+		return workerconfig.Config{}, err
 	}
 	for i := range next.Args {
 		if next.Args[i], err = interpolateInvocationField(next.Args[i], args, "worker.args entry", false, readFile); err != nil {
-			return interfaces.WorkerConfig{}, err
+			return workerconfig.Config{}, err
 		}
 	}
 	return next, nil
@@ -286,7 +288,7 @@ func invocationArgumentScalar(argument work.InvocationArgument, parameterName, f
 	return string(data), nil
 }
 
-func cloneWorkerForInterpolation(worker interfaces.WorkerConfig) interfaces.WorkerConfig {
+func cloneWorkerForInterpolation(worker workerconfig.Config) workerconfig.Config {
 	worker.Args = append([]string(nil), worker.Args...)
 	return worker
 }
@@ -308,11 +310,11 @@ func cloneWorkstationForInterpolation(workstation interfaces.FactoryWorkstationC
 func InvocationDiagnostic(
 	signature *interfaces.InvocationSignatureConfig,
 	args *work.InvocationArguments,
-) *interfaces.InvocationDiagnostic {
+) *workerexecution.InvocationDiagnostic {
 	if signature == nil && (args == nil || len(args.Arguments) == 0) {
 		return nil
 	}
-	diagnostic := &interfaces.InvocationDiagnostic{
+	diagnostic := &workerexecution.InvocationDiagnostic{
 		SignatureHash: InvocationSignatureHash(signature),
 	}
 	if args == nil || len(args.Arguments) == 0 {
@@ -326,10 +328,10 @@ func InvocationDiagnostic(
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	diagnostic.Parameters = make([]interfaces.InvocationParameterDiagnostic, 0, len(names))
+	diagnostic.Parameters = make([]workerexecution.InvocationParameterDiagnostic, 0, len(names))
 	for _, name := range names {
 		argument := args.Arguments[name]
-		entry := interfaces.InvocationParameterDiagnostic{
+		entry := workerexecution.InvocationParameterDiagnostic{
 			Name:       name,
 			ValueCount: len(argument.Values),
 			Redacted:   argument.Sensitive,

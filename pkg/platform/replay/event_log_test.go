@@ -10,9 +10,12 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func testReplayArtifact(t *testing.T, events ...factoryapi.FactoryEvent) *interfaces.ReplayArtifact {
@@ -119,7 +122,7 @@ func replayDispatchCreatedEvent(t *testing.T, dispatch work.WorkDispatch, tick i
 	}
 }
 
-func replayDispatchCompletedEvent(t *testing.T, completionID string, result interfaces.WorkResult, tick int) factoryapi.FactoryEvent {
+func replayDispatchCompletedEvent(t *testing.T, completionID string, result workerexecution.WorkResult, tick int) factoryapi.FactoryEvent {
 	t.Helper()
 
 	payload := factoryapi.DispatchResponseEventPayload{
@@ -130,7 +133,7 @@ func replayDispatchCompletedEvent(t *testing.T, completionID string, result inte
 		OutputWork:      generatedReplayOutputWorkPtr(result.RecordedOutputWork),
 		Error:           stringPtrIfNotEmpty(result.Error),
 		Feedback:        stringPtrIfNotEmpty(result.Feedback),
-		ProviderFailure: interfaces.GeneratedWorkFailureMetadata(result.FailureMetadata),
+		ProviderFailure: workerdiagnostics.GeneratedWorkFailureMetadata(result.FailureMetadata),
 		Metrics:         generatedWorkMetrics(result.Metrics),
 	}
 	var union factoryapi.FactoryEvent_Payload
@@ -195,10 +198,10 @@ func TestReduceReplayEvents_ThinDispatchRequestUsesContextIdentityAndFactoryTopo
 func TestReduceReplayEvents_CompletionsPreserveRecordedOutputWork(t *testing.T) {
 	artifact := testReplayArtifact(
 		t,
-		replayDispatchCompletedEvent(t, "completion-1", interfaces.WorkResult{
+		replayDispatchCompletedEvent(t, "completion-1", workerexecution.WorkResult{
 			DispatchID:   "dispatch-1",
 			TransitionID: "setup-workspace",
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 			RecordedOutputWork: []work.FactoryWorkItem{
 				{
 					ID:                     "work-plan-38",
@@ -253,8 +256,8 @@ func TestReduceReplayEvents_CompletionsRehydrateSafeDiagnosticsThroughInterfaces
 }
 
 func TestReduceReplayEvents_MapsLegacyProviderFailureOnlyWireToFailureMetadata(t *testing.T) {
-	family := factoryapi.WorkFailureFamily(interfaces.WorkFailureFamilyRetryable)
-	failureType := factoryapi.WorkFailureType(interfaces.WorkFailureTypeTimeout)
+	family := factoryapi.WorkFailureFamily(workerexecution.WorkFailureFamilyRetryable)
+	failureType := factoryapi.WorkFailureType(workerexecution.WorkFailureTypeTimeout)
 	payload := factoryapi.DispatchResponseEventPayload{
 		CompletionId: stringPtrIfNotEmpty("completion-legacy"),
 		TransitionId: "process",
@@ -293,10 +296,10 @@ func TestReduceReplayEvents_MapsLegacyProviderFailureOnlyWireToFailureMetadata(t
 	if completion.FailureMetadata == nil {
 		t.Fatal("failure metadata = nil, want retryable/timeout from wire provider_failure")
 	}
-	if completion.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
+	if completion.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable {
 		t.Fatalf("failure family = %q, want retryable", completion.FailureMetadata.Family)
 	}
-	if completion.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+	if completion.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("failure type = %q, want timeout", completion.FailureMetadata.Type)
 	}
 }
@@ -318,7 +321,7 @@ func TestReduceReplayEvents_CompletionsOmitDiagnosticsWhenReplayArtifactOmitsThe
 			1,
 			3,
 			"recorded provider output",
-			&interfaces.ProviderSessionMetadata{
+			&workerexecution.ProviderSessionMetadata{
 				Provider: "codex",
 				Kind:     "response_id",
 				ID:       "resp-no-diagnostics",
@@ -326,10 +329,10 @@ func TestReduceReplayEvents_CompletionsOmitDiagnosticsWhenReplayArtifactOmitsThe
 			nil,
 			"",
 		),
-		replayDispatchCompletedEvent(t, "completion-no-diagnostics", interfaces.WorkResult{
+		replayDispatchCompletedEvent(t, "completion-no-diagnostics", workerexecution.WorkResult{
 			DispatchID:   "dispatch-no-diagnostics",
 			TransitionID: "transition-no-diagnostics",
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 			Output:       "recorded provider output",
 		}, 4),
 	)
@@ -358,22 +361,22 @@ func thinDispatchReplayArtifact(t *testing.T) (*interfaces.ReplayArtifact, facto
 		DispatchID:   "dispatch-1",
 		TransitionID: "process",
 		InputTokens: workers.InputTokens(
-			interfaces.Token{
+			factorytoken.Token{
 				ID: "token-work-1",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkID:     "work-1",
 					WorkTypeID: "task",
-					DataType:   interfaces.DataTypeWork,
+					DataType:   factorytoken.DataTypeWork,
 					TraceID:    "trace-1",
 					Name:       "story-1",
 				},
 			},
-			interfaces.Token{
+			factorytoken.Token{
 				ID:      "resource/executor-slot",
 				PlaceID: "executor-slot:available",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkTypeID: "executor-slot",
-					DataType:   interfaces.DataTypeResource,
+					DataType:   factorytoken.DataTypeResource,
 					Name:       "executor-slot",
 				},
 			},
@@ -415,33 +418,33 @@ func safeDiagnosticReductionArtifact(t *testing.T) *interfaces.ReplayArtifact {
 			1,
 			3,
 			"recorded provider output",
-			&interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
+			&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
 			safeDiagnosticReductionFixture(),
 			"",
 		),
-		replayDispatchCompletedEvent(t, "completion-safe", interfaces.WorkResult{
+		replayDispatchCompletedEvent(t, "completion-safe", workerexecution.WorkResult{
 			DispatchID:   "dispatch-safe",
 			TransitionID: "transition-safe",
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 			Output:       "recorded provider output",
-			FailureMetadata: &interfaces.WorkFailureMetadata{
-				Family: interfaces.WorkFailureFamilyRetryable,
-				Type:   interfaces.WorkFailureTypeThrottled,
+			FailureMetadata: &workerexecution.WorkFailureMetadata{
+				Family: workerexecution.WorkFailureFamilyRetryable,
+				Type:   workerexecution.WorkFailureTypeThrottled,
 			},
 		}, 4),
 	)
 }
 
-func safeDiagnosticReductionFixture() *interfaces.WorkDiagnostics {
-	return &interfaces.WorkDiagnostics{
-		RenderedPrompt: &interfaces.RenderedPromptDiagnostic{
+func safeDiagnosticReductionFixture() *workerexecution.WorkDiagnostics {
+	return &workerexecution.WorkDiagnostics{
+		RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{
 			SystemPromptHash: "system-hash-123",
 			UserMessageHash:  "user-hash-456",
 			Variables: map[string]string{
 				"prompt_source": "factory-renderer", "work_type_name": "story", "system_prompt": "unsafe raw prompt",
 			},
 		},
-		Provider: &interfaces.ProviderDiagnostic{
+		Provider: &workerexecution.ProviderDiagnostic{
 			Provider: "codex",
 			Model:    "gpt-5.4",
 			RequestMetadata: map[string]string{
@@ -451,8 +454,8 @@ func safeDiagnosticReductionFixture() *interfaces.WorkDiagnostics {
 				"provider_session_id": "resp-safe-123", "retry_count": "1", "env_secret": "unsafe response secret",
 			},
 		},
-		Command: &interfaces.CommandDiagnostic{Command: "echo", Stdin: "unsafe stdin"},
-		Panic:   &interfaces.PanicDiagnostic{Message: "unsafe panic", Stack: "unsafe stack"},
+		Command: &workerexecution.CommandDiagnostic{Command: "echo", Stdin: "unsafe stdin"},
+		Panic:   &workerexecution.PanicDiagnostic{Message: "unsafe panic", Stack: "unsafe stack"},
 		Metadata: map[string]string{
 			"debug": "unsafe metadata",
 		},
@@ -469,7 +472,7 @@ func assertReducedCompletionSafeDiagnostics(t *testing.T, completion replayCompl
 	if completion.result.ProviderSession == nil || completion.result.ProviderSession.ID != "resp-safe-123" {
 		t.Fatalf("provider session = %#v, want resp-safe-123", completion.result.ProviderSession)
 	}
-	if completion.result.FailureMetadata == nil || completion.result.FailureMetadata.Type != interfaces.WorkFailureTypeThrottled {
+	if completion.result.FailureMetadata == nil || completion.result.FailureMetadata.Type != workerexecution.WorkFailureTypeThrottled {
 		t.Fatalf("failure metadata = %#v, want throttled", completion.result.FailureMetadata)
 	}
 	if completion.result.Diagnostics == nil || completion.result.Diagnostics.Provider == nil || completion.result.Diagnostics.RenderedPrompt == nil {
@@ -592,12 +595,12 @@ func assertThinReplayDispatchTokens(t *testing.T, recorded work.WorkDispatch) {
 	var sawResource bool
 	for _, token := range inputTokens {
 		switch token.Color.DataType {
-		case interfaces.DataTypeWork:
+		case factorytoken.DataTypeWork:
 			if token.Color.WorkID != "work-1" || token.Color.TraceID != "trace-1" {
 				t.Fatalf("work token = %#v, want canonical work identity", token)
 			}
 			sawWork = true
-		case interfaces.DataTypeResource:
+		case factorytoken.DataTypeResource:
 			if token.Color.Name != "executor-slot" || token.PlaceID != "executor-slot:available" {
 				t.Fatalf("resource token = %#v, want executor-slot usage", token)
 			}
@@ -652,7 +655,7 @@ func assertReplayDispatchOwnedContract(t *testing.T, recorded work.WorkDispatch)
 	}
 }
 
-func replayInferenceRequestEvent(t *testing.T, request interfaces.ProviderInferenceRequest, inferenceRequestID string, attempt int, tick int) factoryapi.FactoryEvent {
+func replayInferenceRequestEvent(t *testing.T, request workerexecution.ProviderInferenceRequest, inferenceRequestID string, attempt int, tick int) factoryapi.FactoryEvent {
 	t.Helper()
 
 	payload := factoryapi.InferenceRequestEventPayload{
@@ -689,8 +692,8 @@ func replayInferenceResponseEvent(
 	attempt int,
 	tick int,
 	response string,
-	providerSession *interfaces.ProviderSessionMetadata,
-	diagnostics *interfaces.WorkDiagnostics,
+	providerSession *workerexecution.ProviderSessionMetadata,
+	diagnostics *workerexecution.WorkDiagnostics,
 	errorClass string,
 ) factoryapi.FactoryEvent {
 	t.Helper()
@@ -699,8 +702,8 @@ func replayInferenceResponseEvent(
 		InferenceRequestId: inferenceRequestID,
 		Attempt:            attempt,
 		DurationMillis:     125,
-		ProviderSession:    interfaces.GeneratedProviderSessionMetadata(providerSession),
-		Diagnostics:        interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(diagnostics),
+		ProviderSession:    workerdiagnostics.GeneratedProviderSessionMetadata(providerSession),
+		Diagnostics:        workerdiagnostics.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(diagnostics),
 	}
 	if errorClass != "" {
 		payload.Outcome = factoryapi.InferenceOutcomeFailed

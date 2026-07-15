@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // FormatSimpleDashboard renders the snapshot-only dashboard shell. Session
@@ -271,7 +272,7 @@ type dashboardFailedWorkDetail struct {
 	DispatchID      string
 	TransitionID    string
 	WorkstationName string
-	FailureDetail   *interfaces.FailureDetail
+	FailureDetail   *workerexecution.FailureDetail
 }
 
 type dashboardProviderSessionView struct {
@@ -279,5 +280,5 @@ type dashboardProviderSessionView struct {
 	TransitionID    string
 	WorkstationName string
 	WorkItems       []interfaces.FactoryWorldWorkItemRef
-	ProviderSession *interfaces.ProviderSessionMetadata
+	ProviderSession *workerexecution.ProviderSessionMetadata
 }

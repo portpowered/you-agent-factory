@@ -209,18 +209,6 @@ func BuiltInRunnerMetadata(id string) (RunnerMetadata, bool) {
 	return workerrunner.BuiltInRunnerMetadata(id)
 }
 
-func IsBuiltInRunnerID(id string) bool {
-	return workerrunner.IsBuiltInRunnerID(id)
-}
-
-func ResolveOpenCodeAgent(workstationAgent, workerAgent string) string {
-	return workerrunner.ResolveOpenCodeAgent(workstationAgent, workerAgent)
-}
-
-func ValidateOpenCodeAgentForRunnerSelection(workstationAgent, workerAgent string, selection ResolvedRunnerSelection) error {
-	return workerrunner.ValidateOpenCodeAgentForRunnerSelection(workstationAgent, workerAgent, selection)
-}
-
 func ResolveRunnerSelection(workstationRunner, factoryRunner, workerModelProvider string) ResolvedRunnerSelection {
 	return workerrunner.ResolveRunnerSelection(workstationRunner, factoryRunner, workerModelProvider)
 }

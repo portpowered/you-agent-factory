@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
@@ -106,7 +105,7 @@ func TestFactoryRequestBatch_BatchSubmissionAtomic(t *testing.T) {
 	invalidInput := work.WorkRequest{
 		RequestID: "request-atomic-invalid",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{WorkTypeID: "task", Name: "valid-item"},
 			{WorkTypeID: "task", Name: ""},
 		},
@@ -131,7 +130,7 @@ func TestFactoryRequestBatch_BatchSubmissionAtomic(t *testing.T) {
 	validInput := work.WorkRequest{
 		RequestID: "request-atomic-1",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{WorkTypeID: "task", Name: "item-1"},
 			{WorkTypeID: "task", Name: "item-2"},
 			{WorkTypeID: "task", Name: "item-3"},

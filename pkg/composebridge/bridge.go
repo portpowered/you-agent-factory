@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
@@ -127,6 +128,6 @@ func NewFactoryDefinitionServiceFromCore(core *runtimehost.Core) FactoryDefiniti
 }
 
 // StartupWorkerConfigFromCore returns the named worker from the composed startup runtime.
-func StartupWorkerConfigFromCore(core *runtimehost.Core, name string) (*interfaces.WorkerConfig, bool) {
+func StartupWorkerConfigFromCore(core *runtimehost.Core, name string) (*workerconfig.Config, bool) {
 	return service.StartupWorkerConfigFromCore(core, name)
 }

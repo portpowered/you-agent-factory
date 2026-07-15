@@ -6,7 +6,8 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestDefaultEffectivePolicy_MatchesReadOnlyMVPDefaults(t *testing.T) {
@@ -172,7 +173,7 @@ func TestBuildPreview_IncludesEffectivePolicyHashBudgetsAndDeniedCapabilities(t 
 		Request: workflowpolicy.Request{
 			Requested: map[string]any{"maxAgents": 8},
 		},
-		RequestedRunner:  interfaces.RunnerIDCodex,
+		RequestedRunner:  workerexecution.RunnerIDCodex,
 		RequestedModel:   "gpt-5-codex",
 		RequestedProfile: "reviewer",
 	})

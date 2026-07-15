@@ -6,7 +6,9 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const providerErrorSmokePollInterval = 50 * time.Millisecond
@@ -16,7 +18,7 @@ const providerErrorSmokePollInterval = 50 * time.Millisecond
 type ProviderErrorSmokeOutcome struct {
 	Work         ProviderErrorSmokeWork
 	FinalPlaceID string
-	Token        interfaces.Token
+	Token        factorytoken.Token
 	Dispatches   []interfaces.CompletedDispatch
 	EngineState  *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]
 }
@@ -153,7 +155,7 @@ func WaitForProviderErrorFailedAfterBoundedRetries(
 		work,
 		work.WorkTypeID+":failed",
 		timeout,
-		func(token interfaces.Token, dispatches []interfaces.CompletedDispatch) bool {
+		func(token factorytoken.Token, dispatches []interfaces.CompletedDispatch) bool {
 			if len(dispatches) == 0 {
 				return false
 			}
@@ -251,7 +253,7 @@ func waitForProviderErrorOutcome(
 	work ProviderErrorSmokeWork,
 	finalPlaceID string,
 	timeout time.Duration,
-	matches func(token interfaces.Token, dispatches []interfaces.CompletedDispatch) bool,
+	matches func(token factorytoken.Token, dispatches []interfaces.CompletedDispatch) bool,
 ) ProviderErrorSmokeOutcome {
 	t.Helper()
 
@@ -299,22 +301,22 @@ func waitForProviderErrorOutcome(
 }
 
 func providerErrorThrottleRequeueMatches(
-	token interfaces.Token,
+	token factorytoken.Token,
 	dispatches []interfaces.CompletedDispatch,
 ) bool {
 	if len(token.History.FailureLog) != 1 {
 		return false
 	}
-	return len(dispatches) == 1 && dispatches[0].Outcome == interfaces.OutcomeFailed
+	return len(dispatches) == 1 && dispatches[0].Outcome == workerexecution.OutcomeFailed
 }
 
 func providerErrorRequeueDispatch(
 	dispatches []interfaces.CompletedDispatch,
 	placeID string,
 	workID string,
-) (interfaces.CompletedDispatch, interfaces.Token, bool) {
+) (interfaces.CompletedDispatch, factorytoken.Token, bool) {
 	for _, dispatch := range dispatches {
-		if dispatch.Outcome != interfaces.OutcomeFailed {
+		if dispatch.Outcome != workerexecution.OutcomeFailed {
 			continue
 		}
 		for _, mutation := range dispatch.OutputMutations {
@@ -327,23 +329,23 @@ func providerErrorRequeueDispatch(
 			return dispatch, *mutation.Token, true
 		}
 	}
-	return interfaces.CompletedDispatch{}, interfaces.Token{}, false
+	return interfaces.CompletedDispatch{}, factorytoken.Token{}, false
 }
 
 func providerErrorCompletedMatches(dispatches []interfaces.CompletedDispatch) bool {
 	if len(dispatches) == 0 {
 		return false
 	}
-	return dispatches[len(dispatches)-1].Outcome == interfaces.OutcomeAccepted
+	return dispatches[len(dispatches)-1].Outcome == workerexecution.OutcomeAccepted
 }
 
-func findProviderErrorToken(marking *petri.MarkingSnapshot, placeID, workID string) (interfaces.Token, bool) {
+func findProviderErrorToken(marking *petri.MarkingSnapshot, placeID, workID string) (factorytoken.Token, bool) {
 	for _, token := range marking.Tokens {
 		if token.PlaceID == placeID && token.Color.WorkID == workID {
 			return *token, true
 		}
 	}
-	return interfaces.Token{}, false
+	return factorytoken.Token{}, false
 }
 
 func providerErrorDispatchesForWork(history []interfaces.CompletedDispatch, workID string) []interfaces.CompletedDispatch {

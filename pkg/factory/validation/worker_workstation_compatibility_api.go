@@ -6,6 +6,8 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workercompatibility "github.com/portpowered/infinite-you/pkg/workers/compatibility"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 // WorkerWorkstationCompatibilityTargetsFromAPI validates worker/workstation behavior
@@ -88,7 +90,7 @@ func displayWorkstationTypeFromAPI(workstation factoryapi.Workstation) string {
 	return interfaces.WorkstationTypeModel
 }
 
-func expectedWorkerBehaviorClassFromAPI(workstation factoryapi.Workstation, workerType string) (interfaces.WorkerWorkstationBehaviorClass, bool) {
+func expectedWorkerBehaviorClassFromAPI(workstation factoryapi.Workstation, workerType string) (workercompatibility.WorkerWorkstationBehaviorClass, bool) {
 	return interfaces.ExpectedWorkerBehaviorClassForWorkstation(workstationConfigFromAPI(workstation), workerType)
 }
 
@@ -136,7 +138,7 @@ func WorkerWorkstationBehaviorCompatibilityTargets(cfg *interfaces.FactoryConfig
 		return nil
 	}
 
-	workersByName := make(map[string]interfaces.WorkerConfig, len(cfg.Workers))
+	workersByName := make(map[string]workerconfig.Config, len(cfg.Workers))
 	for _, worker := range cfg.Workers {
 		workersByName[worker.Name] = worker
 	}

@@ -9,6 +9,7 @@ import (
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestReconstructFactoryWorldState_AppliesCanonicalEventsByTick(t *testing.T) {
@@ -18,6 +19,14 @@ func TestReconstructFactoryWorldState_AppliesCanonicalEventsByTick(t *testing.T)
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
 	assertCanonicalCompletedDispatchState(t, state)
+}
+
+func int64PtrForProjectionTest(value int64) *int64 {
+	return &value
+}
+
+func intPtrForProjectionTest(value int) *int {
+	return &value
 }
 
 func TestReconstructFactoryWorldState_SeedsTopologyFromRunRequestBeforeInitialStructure(t *testing.T) {
@@ -374,7 +383,7 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 			Outcome:            factoryapi.InferenceOutcomeFailed,
 			DurationMillis:     900,
 			FailureDetail:      &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureTypeTimeout, Message: "provider timed out"},
-			ProviderSession: generatedProviderSessionForProjectionTest(&interfaces.ProviderSessionMetadata{
+			ProviderSession: generatedProviderSessionForProjectionTest(&workerexecution.ProviderSessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-1",
@@ -384,10 +393,10 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 			DispatchID:     "dispatch-1",
 			TransitionID:   "t-review",
 			Workstation:    interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
-			Result:         interfaces.WorkstationResult{Outcome: "FAILED", FailureMetadata: &interfaces.WorkFailureMetadata{Family: interfaces.WorkFailureFamilyRetryable, Type: interfaces.WorkFailureTypeTimeout}},
+			Result:         interfaces.WorkstationResult{Outcome: "FAILED", FailureMetadata: &workerexecution.WorkFailureMetadata{Family: workerexecution.WorkFailureFamilyRetryable, Type: workerexecution.WorkFailureTypeTimeout}},
 			DurationMillis: 900,
 			TraceData:      &interfaces.FactoryTraceData{TraceID: "trace-1", WorkIDs: []string{"work-1"}},
-			ProviderSession: &interfaces.ProviderSessionMetadata{
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
 				Provider: "codex",
 				Kind:     "session_id",
 				ID:       "sess-1",
@@ -410,8 +419,8 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 	if completion.Result.FailureMetadata == nil {
 		t.Fatal("completion failure metadata is nil, want canonical metadata")
 	}
-	if completion.Result.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable ||
-		completion.Result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+	if completion.Result.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable ||
+		completion.Result.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("completion failure metadata = %#v, want retryable/timeout", completion.Result.FailureMetadata)
 	}
 	if len(state.ProviderSessions) != 1 || state.ProviderSessions[0].ProviderSession.ID != "sess-1" {
@@ -421,8 +430,8 @@ func TestReconstructFactoryWorldState_PreservesCanonicalProviderMetadata(t *test
 
 func TestReconstructFactoryWorldState_MapsLegacyProviderFailureOnlyWireToFailureMetadata(t *testing.T) {
 	t0 := time.Date(2026, 4, 19, 11, 0, 0, 0, time.UTC)
-	family := factoryapi.WorkFailureFamily(interfaces.WorkFailureFamilyRetryable)
-	failureType := factoryapi.WorkFailureType(interfaces.WorkFailureTypeInternalServerError)
+	family := factoryapi.WorkFailureFamily(workerexecution.WorkFailureFamilyRetryable)
+	failureType := factoryapi.WorkFailureType(workerexecution.WorkFailureTypeInternalServerError)
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
 		workInputEventWithToken(1, t0.Add(time.Second), "tok-task-1", work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", TraceID: "trace-1", PlaceID: "task:init"}),
@@ -470,8 +479,8 @@ func TestReconstructFactoryWorldState_MapsLegacyProviderFailureOnlyWireToFailure
 	if completion.Result.FailureMetadata == nil {
 		t.Fatal("completion failure metadata is nil, want ingress from wire provider_failure")
 	}
-	if completion.Result.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable ||
-		completion.Result.FailureMetadata.Type != interfaces.WorkFailureTypeInternalServerError {
+	if completion.Result.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable ||
+		completion.Result.FailureMetadata.Type != workerexecution.WorkFailureTypeInternalServerError {
 		t.Fatalf("completion failure metadata = %#v, want retryable/internal_server_error", completion.Result.FailureMetadata)
 	}
 }
@@ -675,7 +684,7 @@ func TestReconstructFactoryWorldState_FailedTerminalWorkRetainsFailureDetails(t 
 			DispatchID:     "dispatch-failed",
 			TransitionID:   "t-review",
 			Workstation:    interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
-			Result:         interfaces.WorkstationResult{Outcome: "FAILED", Error: "provider throttled", FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeThrottled, Message: "Provider rate limit exceeded."}},
+			Result:         interfaces.WorkstationResult{Outcome: "FAILED", Error: "provider throttled", FailureDetail: &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeThrottled, Message: "Provider rate limit exceeded."}},
 			DurationMillis: 500,
 			Outputs: []interfaces.WorkstationOutput{{
 				Type:     string(interfaces.MutationMove),
@@ -708,13 +717,13 @@ func TestReconstructFactoryWorldState_FailedTerminalWorkRetainsFailureDetails(t 
 	if detail.DispatchID != "dispatch-failed" || detail.WorkstationName != "Review" {
 		t.Fatalf("failure detail dispatch = %#v, want dispatch-failed from Review", detail)
 	}
-	if detail.FailureDetail == nil || detail.FailureDetail.Reason != interfaces.WorkFailureTypeThrottled || detail.FailureDetail.Message != "Provider rate limit exceeded." {
+	if detail.FailureDetail == nil || detail.FailureDetail.Reason != workerexecution.WorkFailureTypeThrottled || detail.FailureDetail.Message != "Provider rate limit exceeded." {
 		t.Fatalf("failure detail = %#v, want throttled reason and provider message", detail)
 	}
 	if _, ok := failedState.FailedWorkItemsByID["work-failed"]; !ok {
 		t.Fatalf("failed terminal work should be indexed as failed work")
 	}
-	if failedState.CompletedDispatches[0].Result.FailureDetail == nil || failedState.CompletedDispatches[0].Result.FailureDetail.Reason != interfaces.WorkFailureTypeThrottled {
+	if failedState.CompletedDispatches[0].Result.FailureDetail == nil || failedState.CompletedDispatches[0].Result.FailureDetail.Reason != workerexecution.WorkFailureTypeThrottled {
 		t.Fatalf("completion result = %#v, want failure reason retained", failedState.CompletedDispatches[0].Result)
 	}
 }
@@ -798,7 +807,7 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromFailedToInProgress
 			DispatchID:   "dispatch-failed",
 			TransitionID: "t-review",
 			Workstation:  interfaces.FactoryWorkstationRef{ID: "t-review", Name: "Review"},
-			Result:       interfaces.WorkstationResult{Outcome: "FAILED", Error: "boom", FailureDetail: &interfaces.FailureDetail{Reason: interfaces.WorkFailureTypeUnknown, Message: "boom"}},
+			Result:       interfaces.WorkstationResult{Outcome: "FAILED", Error: "boom", FailureDetail: &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeUnknown, Message: "boom"}},
 			Outputs: []interfaces.WorkstationOutput{{
 				Type:     string(interfaces.MutationMove),
 				TokenID:  "work-recover",
@@ -837,7 +846,7 @@ func TestReconstructFactoryWorldState_WorkStateChangeMovesFromFailedToInProgress
 	if got := recoveredState.PlaceOccupancyByID["task:failed"].WorkItemIDs; len(got) != 0 {
 		t.Fatalf("task:failed occupancy = %#v, want empty after move", got)
 	}
-	if detail, ok := recoveredState.FailureDetailsByWorkID["work-recover"]; !ok || !worldFailureDetailHasReason(detail, interfaces.WorkFailureTypeUnknown) {
+	if detail, ok := recoveredState.FailureDetailsByWorkID["work-recover"]; !ok || !worldFailureDetailHasReason(detail, workerexecution.WorkFailureTypeUnknown) {
 		t.Fatalf("failure details = %#v, want retained history after leaving FAILED", recoveredState.FailureDetailsByWorkID["work-recover"])
 	}
 	item := recoveredState.WorkItemsByID["work-recover"]

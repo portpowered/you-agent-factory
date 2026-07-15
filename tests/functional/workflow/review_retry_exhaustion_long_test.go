@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -59,15 +59,15 @@ func TestReviewRetryLoopBreaker_FeedbackPropagated(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	sweMock := h.MockWorker("swe",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	h.MockWorker("reviewer",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected, Feedback: "add unit tests"},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected, Feedback: "tests incomplete"},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected, Feedback: "coverage too low"},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: "add unit tests"},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: "tests incomplete"},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Feedback: "coverage too low"},
 	)
 
 	h.RunUntilComplete(t, 10*time.Second)

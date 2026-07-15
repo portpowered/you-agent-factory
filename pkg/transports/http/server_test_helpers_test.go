@@ -19,14 +19,15 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	cursorstorage "github.com/portpowered/infinite-you/pkg/platform/cursors"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 	_ "modernc.org/sqlite"
 )
@@ -62,7 +63,7 @@ func newTestServerWithCodexRoot(root string) *Server {
 	logger, _ := zap.NewDevelopment()
 	return NewServerWithOptions(&testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
-			Tokens: make(map[string]*interfaces.Token),
+			Tokens: make(map[string]*factorytoken.Token),
 		},
 	}, 8080, logger, ServerOptions{CodexSessionsRoot: root})
 }
@@ -77,7 +78,7 @@ func newTestServerWithCursorRoot(root string) *Server {
 	logger, _ := zap.NewDevelopment()
 	return NewServerWithOptions(&testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
-			Tokens: make(map[string]*interfaces.Token),
+			Tokens: make(map[string]*factorytoken.Token),
 		},
 	}, 8080, logger, ServerOptions{CursorSessionsRoot: root})
 }
@@ -86,7 +87,7 @@ func newTestServerWithProviderSessionRoots(codexRoot, cursorRoot string) *Server
 	logger, _ := zap.NewDevelopment()
 	return NewServerWithOptions(&testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
-			Tokens: make(map[string]*interfaces.Token),
+			Tokens: make(map[string]*factorytoken.Token),
 		},
 	}, 8080, logger, ServerOptions{
 		CodexSessionsRoot:  codexRoot,
@@ -209,9 +210,9 @@ func providerSessionDetailURLFromEventRef(ref factoryapi.LoadableProviderSession
 
 // loadableProviderSessionRefFromEventMetadata mirrors dispatch/event projection of
 // canonical provider-session metadata onto the loadable detail contract.
-func loadableProviderSessionRefFromEventMetadata(session interfaces.ProviderSessionMetadata) factoryapi.LoadableProviderSessionRef {
+func loadableProviderSessionRefFromEventMetadata(session workerexecution.ProviderSessionMetadata) factoryapi.LoadableProviderSessionRef {
 	return factoryapi.LoadableProviderSessionRef{
-		Provider: factoryapi.LoadableProviderSessionProvider(interfaces.CanonicalProviderSessionProvider(session.Provider)),
+		Provider: factoryapi.LoadableProviderSessionProvider(workerexecution.CanonicalProviderSessionProvider(session.Provider)),
 		Kind:     factoryapi.LoadableProviderSessionKind(session.Kind),
 		Id:       session.ID,
 	}
@@ -299,8 +300,8 @@ func assertJSONError(t *testing.T, rec *httptest.ResponseRecorder, wantStatus in
 	}
 }
 
-func makeListWorkTokens(prefix string, count int, now time.Time) map[string]*interfaces.Token {
-	tokens := make(map[string]*interfaces.Token, count)
+func makeListWorkTokens(prefix string, count int, now time.Time) map[string]*factorytoken.Token {
+	tokens := make(map[string]*factorytoken.Token, count)
 	for i := 1; i <= count; i++ {
 		suffix := string(rune('0' + i))
 		id := "tok-" + prefix + "-" + suffix
@@ -309,12 +310,12 @@ func makeListWorkTokens(prefix string, count int, now time.Time) map[string]*int
 	return tokens
 }
 
-func listWorkToken(id, workID, placeID, workTypeID string, now time.Time) *interfaces.Token {
+func listWorkToken(id, workID, placeID, workTypeID string, now time.Time) *factorytoken.Token {
 	return listWorkTokenWithTraces(id, workID, "", placeID, workTypeID, "", "", now)
 }
 
-func listWorkTokenWithTraces(id, workID, name, placeID, workTypeID, traceID, currentChainingTraceID string, now time.Time) *interfaces.Token {
-	color := interfaces.TokenColor{
+func listWorkTokenWithTraces(id, workID, name, placeID, workTypeID, traceID, currentChainingTraceID string, now time.Time) *factorytoken.Token {
+	color := factorytoken.Color{
 		WorkID:                 workID,
 		WorkTypeID:             workTypeID,
 		TraceID:                traceID,
@@ -326,20 +327,20 @@ func listWorkTokenWithTraces(id, workID, name, placeID, workTypeID, traceID, cur
 	return listWorkTokenWithColor(id, workID, placeID, workTypeID, now, color)
 }
 
-func listWorkTokenWithColor(id, workID, placeID, workTypeID string, now time.Time, color interfaces.TokenColor) *interfaces.Token {
+func listWorkTokenWithColor(id, workID, placeID, workTypeID string, now time.Time, color factorytoken.Color) *factorytoken.Token {
 	if color.WorkID == "" {
 		color.WorkID = workID
 	}
 	if color.WorkTypeID == "" {
 		color.WorkTypeID = workTypeID
 	}
-	return &interfaces.Token{
+	return &factorytoken.Token{
 		ID:        id,
 		PlaceID:   placeID,
 		Color:     color,
 		CreatedAt: now,
 		EnteredAt: now,
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         make(map[string]int),
 			ConsecutiveFailures: make(map[string]int),
 			PlaceVisits:         make(map[string]int),
@@ -761,7 +762,7 @@ func runUpsertValidationFailureCases(t *testing.T, cases []upsertValidationFailu
 			if mf == nil {
 				mf = &testutil.MockFactory{}
 			}
-			mf.Marking = &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}
+			mf.Marking = &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}
 			srv := newTestServer(mf)
 
 			rec := upsertWorkRequest(t, srv, tc.path, tc.body)

@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestResultResponseToAPI_MapsProjectionFixtures(t *testing.T) {
@@ -384,7 +384,7 @@ func TestProjectionResponses_TrimAndOmitOptionalFields(t *testing.T) {
 			Label:                 " summarize ",
 			Attempt:               2,
 			Retryable:             &retryable,
-			FailureClassification: string(interfaces.WorkFailureTypeTimeout),
+			FailureClassification: string(workerexecution.WorkFailureTypeTimeout),
 			RunnerID:              "runner-1",
 			Model:                 "gpt",
 			Provider:              "openai",

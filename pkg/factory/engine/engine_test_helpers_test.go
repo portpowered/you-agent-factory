@@ -9,6 +9,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // mockSubsystem records calls and returns configured results.
@@ -58,9 +59,9 @@ func (h *testSubmissionHook) OnTick(ctx context.Context, input interfaces.Submis
 type testDispatchResultHook struct {
 	waitCh   chan struct{}
 	submit   func(context.Context, work.WorkDispatch) error
-	onTick   func(context.Context, interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]interfaces.WorkResult, error)
+	onTick   func(context.Context, interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]workerexecution.WorkResult, error)
 	submits  []work.WorkDispatch
-	results  []interfaces.WorkResult
+	results  []workerexecution.WorkResult
 	waitOnce bool
 }
 
@@ -76,14 +77,14 @@ func (h *testDispatchResultHook) SubmitDispatch(ctx context.Context, dispatch wo
 	return nil
 }
 
-func (h *testDispatchResultHook) OnTick(ctx context.Context, input interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]interfaces.WorkResult, error) {
+func (h *testDispatchResultHook) OnTick(ctx context.Context, input interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]workerexecution.WorkResult, error) {
 	if h.onTick != nil {
 		return h.onTick(ctx, input)
 	}
 	if len(h.results) == 0 {
 		return nil, nil
 	}
-	results := make([]interfaces.WorkResult, len(h.results))
+	results := make([]workerexecution.WorkResult, len(h.results))
 	copy(results, h.results)
 	h.results = nil
 	return results, nil

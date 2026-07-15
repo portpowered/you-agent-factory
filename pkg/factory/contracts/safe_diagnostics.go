@@ -34,24 +34,8 @@ func GeneratedSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *factoryapi.
 	return workerdiagnostics.GeneratedSafeWorkDiagnostics(diagnostics)
 }
 
-func GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(diagnostics *WorkDiagnostics) *factoryapi.SafeWorkDiagnostics {
-	return workerdiagnostics.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
-}
-
 func WorkDiagnosticsFromSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *WorkDiagnostics {
 	return workerdiagnostics.WorkDiagnosticsFromSafeWorkDiagnostics(diagnostics)
-}
-
-func GeneratedWorkFailureMetadata(failure *WorkFailureMetadata) *factoryapi.ProviderFailureMetadata {
-	return workerdiagnostics.GeneratedWorkFailureMetadata(failure)
-}
-
-func WorkFailureMetadataFromGenerated(failure *factoryapi.ProviderFailureMetadata) *WorkFailureMetadata {
-	return workerdiagnostics.WorkFailureMetadataFromGenerated(failure)
-}
-
-func GeneratedProviderSessionMetadata(session *ProviderSessionMetadata) *factoryapi.ProviderSessionMetadata {
-	return workerdiagnostics.GeneratedProviderSessionMetadata(session)
 }
 
 func ProviderSessionMetadataFromGenerated(session *factoryapi.ProviderSessionMetadata) *ProviderSessionMetadata {
@@ -60,8 +44,4 @@ func ProviderSessionMetadataFromGenerated(session *factoryapi.ProviderSessionMet
 
 func SafeAgentRunDiagnosticFromWorkDiagnostics(diagnostics *WorkDiagnostics) *SafeAgentRunDiagnostic {
 	return workerdiagnostics.SafeAgentRunDiagnosticFromWorkDiagnostics(diagnostics)
-}
-
-func GeneratedFactoryWorldAgentRunInspectionView(diagnostic *SafeAgentRunDiagnostic) *factoryapi.FactoryWorldAgentRunInspectionView {
-	return workerdiagnostics.GeneratedFactoryWorldAgentRunInspectionView(diagnostic)
 }

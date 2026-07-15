@@ -6,7 +6,9 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 // ProviderErrorSmokeLane declares one provider/model lane in a generated
@@ -15,7 +17,7 @@ type ProviderErrorSmokeLane struct {
 	WorkTypeID      string
 	WorkerName      string
 	WorkstationName string
-	Provider        interfaces.ModelProvider
+	Provider        modelprovider.ID
 	Model           string
 	PromptBody      string
 }
@@ -73,7 +75,7 @@ func NewProviderErrorSmokePauseIsolationHarness(
 			providerErrorSmokeLaneWorkType(throttledLane),
 			providerErrorSmokeLaneWorkType(unaffectedLane),
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: throttledLane.WorkerName},
 			{Name: unaffectedLane.WorkerName},
 		},

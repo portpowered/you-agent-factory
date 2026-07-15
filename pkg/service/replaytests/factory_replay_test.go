@@ -16,11 +16,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/platform/replay"
 	service "github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -108,13 +111,13 @@ func TestBuildFactoryService_ReplayModeUsesRecordedProviderSideEffects(t *testin
 			TraceID:   "trace-replay-provider",
 			WorkIDs:   []string{"work-replay-provider"},
 		},
-	}, interfaces.WorkResult{
+	}, workerexecution.WorkResult{
 		DispatchID:   "recorded-dispatch-provider",
 		TransitionID: "process",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "replayed provider output",
-		Diagnostics: &interfaces.WorkDiagnostics{
-			Provider: &interfaces.ProviderDiagnostic{
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Provider: &workerexecution.ProviderDiagnostic{
 				ResponseMetadata: map[string]string{"request_id": "replay-provider-1"},
 			},
 		},
@@ -158,14 +161,14 @@ func TestBuildFactoryService_ReplayModeDeliversRecordedCompletionAtLogicalTick(t
 			WorkIDs:   []string{"work-logical-tick"},
 		},
 	}
-	recordedResult := interfaces.WorkResult{
+	recordedResult := workerexecution.WorkResult{
 		DispatchID:                  recordedDispatch.DispatchID,
 		TransitionID:                recordedDispatch.TransitionID,
-		Outcome:                     interfaces.OutcomeAccepted,
+		Outcome:                     workerexecution.OutcomeAccepted,
 		Output:                      "replayed provider output",
 		SelectedClassificationLabel: "approved",
-		Diagnostics: &interfaces.WorkDiagnostics{
-			Provider: &interfaces.ProviderDiagnostic{
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Provider: &workerexecution.ProviderDiagnostic{
 				ResponseMetadata: map[string]string{"request_id": "logical-tick-provider-1"},
 			},
 		},
@@ -300,13 +303,13 @@ func TestBuildFactoryService_ReplayModeUsesRecordedCommandRunnerSideEffects(t *t
 			TraceID:   "trace-replay-command",
 			WorkIDs:   []string{"work-replay-command"},
 		},
-	}, interfaces.WorkResult{
+	}, workerexecution.WorkResult{
 		DispatchID:   "recorded-dispatch-command",
 		TransitionID: "process",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "replayed command output",
-		Diagnostics: &interfaces.WorkDiagnostics{
-			Command: &interfaces.CommandDiagnostic{
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Command: &workerexecution.CommandDiagnostic{
 				Command:  "replay-live-command-should-not-run",
 				Args:     []string{"ok"},
 				Stdout:   "replayed command output\n",
@@ -348,13 +351,13 @@ func TestBuildFactoryService_ReplayModeStopsOnDispatchDivergence(t *testing.T) {
 			TraceID:   "trace-divergence",
 			WorkIDs:   []string{"work-divergence"},
 		},
-	}, interfaces.WorkResult{
+	}, workerexecution.WorkResult{
 		DispatchID:   "recorded-dispatch-mismatch",
 		TransitionID: "review",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "recorded output",
-		Diagnostics: &interfaces.WorkDiagnostics{
-			Command: &interfaces.CommandDiagnostic{
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Command: &workerexecution.CommandDiagnostic{
 				Command:  "echo",
 				Args:     []string{"ok"},
 				Stdout:   "recorded output\n",
@@ -406,13 +409,13 @@ func TestBuildFactoryService_ReplayModeWarnsOnCurrentConfigHashMismatch(t *testi
 			TraceID:   "trace-warning",
 			WorkIDs:   []string{"work-warning"},
 		},
-	}, interfaces.WorkResult{
+	}, workerexecution.WorkResult{
 		DispatchID:   "recorded-dispatch-warning",
 		TransitionID: "process",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "recorded output",
-		Diagnostics: &interfaces.WorkDiagnostics{
-			Command: &interfaces.CommandDiagnostic{
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Command: &workerexecution.CommandDiagnostic{
 				Command:  "echo",
 				Args:     []string{"ok"},
 				Stdout:   "recorded output\n",
@@ -441,7 +444,7 @@ func TestBuildFactoryService_ReplayModeWarnsOnCurrentConfigHashMismatch(t *testi
 	}
 }
 
-func saveReplayBehaviorArtifact(t *testing.T, sourceDir, artifactPath string, dispatch work.WorkDispatch, result interfaces.WorkResult) {
+func saveReplayBehaviorArtifact(t *testing.T, sourceDir, artifactPath string, dispatch work.WorkDispatch, result workerexecution.WorkResult) {
 	t.Helper()
 
 	createdTick := dispatch.Execution.DispatchCreatedTick
@@ -586,7 +589,7 @@ func serviceReplayWorkRequestEvent(t *testing.T, requestID string, tick int, sou
 	}
 }
 
-func serviceReplayDispatchCompletedEvent(t *testing.T, completionID string, result interfaces.WorkResult, tick int) factoryapi.FactoryEvent {
+func serviceReplayDispatchCompletedEvent(t *testing.T, completionID string, result workerexecution.WorkResult, tick int) factoryapi.FactoryEvent {
 	t.Helper()
 	payload := factoryapi.DispatchResponseEventPayload{
 		CompletionId:                serviceStringPtr(completionID),
@@ -596,7 +599,7 @@ func serviceReplayDispatchCompletedEvent(t *testing.T, completionID string, resu
 		Error:                       serviceStringPtr(result.Error),
 		Feedback:                    serviceStringPtr(result.Feedback),
 		SelectedClassificationLabel: serviceStringPtr(result.SelectedClassificationLabel),
-		ProviderFailure:             interfaces.GeneratedWorkFailureMetadata(result.FailureMetadata),
+		ProviderFailure:             workerdiagnostics.GeneratedWorkFailureMetadata(result.FailureMetadata),
 		Metrics:                     serviceWorkMetricsPtr(result.Metrics),
 	}
 	var union factoryapi.FactoryEvent_Payload
@@ -620,7 +623,7 @@ func serviceReplayWorksFromDispatch(dispatch work.WorkDispatch) []factoryapi.Wor
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	works := make([]factoryapi.Work, 0, len(tokens))
 	for _, token := range tokens {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		workID := firstNonEmpty(token.Color.WorkID, token.ID)
@@ -649,7 +652,7 @@ func serviceReplayDispatchInputRefsFromDispatch(dispatch work.WorkDispatch) []fa
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	refs := make([]factoryapi.DispatchConsumedWorkRef, 0, len(tokens))
 	for _, token := range tokens {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		workID := firstNonEmpty(token.Color.WorkID, token.ID)
@@ -673,7 +676,7 @@ func serviceReplayResourcesFromDispatch(dispatch work.WorkDispatch) *[]factoryap
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	resources := make([]factoryapi.Resource, 0, len(tokens))
 	for _, token := range tokens {
-		if token.Color.DataType != interfaces.DataTypeResource {
+		if token.Color.DataType != factorytoken.DataTypeResource {
 			continue
 		}
 		resources = append(resources, factoryapi.Resource{Name: firstNonEmpty(token.Color.WorkTypeID, token.Color.Name)})
@@ -690,7 +693,7 @@ func serviceDispatchRequestMetadata(values map[string]string) *factoryapi.Dispat
 	}
 }
 
-func serviceWorkMetricsPtr(metrics interfaces.WorkMetrics) *factoryapi.WorkMetrics {
+func serviceWorkMetricsPtr(metrics workerexecution.WorkMetrics) *factoryapi.WorkMetrics {
 	if metrics.Duration == 0 && metrics.Cost == 0 && metrics.RetryCount == 0 {
 		return nil
 	}

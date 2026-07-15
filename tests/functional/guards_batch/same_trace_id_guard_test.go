@@ -13,6 +13,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -82,7 +83,7 @@ func TestSameTraceIDGuard_FixtureBoundaryMapsToRuntimeConfig(t *testing.T) {
 
 func TestSameTraceIDGuard_MatchingCurrentChainingTraceCompletesJoin(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_trace_id_guard_dir"))
-	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "joined COMPLETE"})
 
 	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -126,7 +127,7 @@ func TestSameTraceIDGuard_MatchingCurrentChainingTraceCompletesJoin(t *testing.T
 
 func TestSameTraceIDGuard_FallsBackToLegacyTraceIDWhenCurrentChainingTraceIsMissing(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_trace_id_guard_dir"))
-	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "joined COMPLETE"})
 
 	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -161,7 +162,7 @@ func TestSameTraceIDGuard_FallsBackToLegacyTraceIDWhenCurrentChainingTraceIsMiss
 
 func TestSameTraceIDGuard_DifferentTraceIdentityStaysBlocked(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_trace_id_guard_dir"))
-	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "joined COMPLETE"})
 
 	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -210,7 +211,7 @@ func TestSameTraceIDGuard_DifferentTraceIdentityStaysBlocked(t *testing.T) {
 
 func TestSameTraceIDGuard_MissingTraceIdentityFailsClosed(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "same_trace_id_guard_dir"))
-	provider := testutil.NewMockProvider(interfaces.InferenceResponse{Content: "joined COMPLETE"})
+	provider := testutil.NewMockProvider(workerexecution.InferenceResponse{Content: "joined COMPLETE"})
 
 	h := support.NewGuardsBatchHarness(t, dir,
 		testutil.WithProvider(provider),

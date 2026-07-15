@@ -16,6 +16,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -72,7 +74,7 @@ func generatedSchemaRuntimeSummaryFromLoadedConfig(t *testing.T, loaded *config.
 
 func generatedSchemaTransportSummaryFromRuntimeConfig(
 	t *testing.T,
-	workerLookup func(string) (*interfaces.WorkerConfig, bool),
+	workerLookup func(string) (*workerconfig.Config, bool),
 	workstationLookup func(string) (*interfaces.FactoryWorkstationConfig, bool),
 ) generatedSchemaTransportSummary {
 	t.Helper()
@@ -91,7 +93,7 @@ func generatedSchemaTransportSummaryFromRuntimeConfig(
 
 func generatedSchemaRuntimeSummaryFromRuntimeConfig(
 	t *testing.T,
-	workerLookup func(string) (*interfaces.WorkerConfig, bool),
+	workerLookup func(string) (*workerconfig.Config, bool),
 	workstationLookup func(string) (*interfaces.FactoryWorkstationConfig, bool),
 ) generatedSchemaRuntimeSummary {
 	t.Helper()
@@ -141,8 +143,8 @@ func generatedSchemaTransportAndRuntimeSummaryFromRecordedReplay(
 		Payload:    []byte(`{"title":"generated schema deserialization smoke"}`),
 	})
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Step one done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Step two done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
 	harness := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -318,7 +320,7 @@ func assertGeneratedSmokeSerializedWorkstationBoundary(t *testing.T, generated f
 
 func requireGeneratedSchemaWorkerSummary(
 	t *testing.T,
-	workerLookup func(string) (*interfaces.WorkerConfig, bool),
+	workerLookup func(string) (*workerconfig.Config, bool),
 	name string,
 ) generatedSchemaWorkerSummary {
 	t.Helper()

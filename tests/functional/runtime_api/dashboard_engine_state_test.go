@@ -14,6 +14,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -34,9 +36,9 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 	submitDashboardWorldViewFunctionalWork(t, h, "world-view-success", "trace-world-view-success")
 	provider.nextDispatch(t)
 	assertFunctionalWorldViewActive(t, buildFunctionalWorldView(t, h), "world-view-success")
-	provider.respond(interfaces.InferenceResponse{
+	provider.respond(workerexecution.InferenceResponse{
 		Content: "COMPLETE",
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-world-view-success",
@@ -46,11 +48,11 @@ func TestDashboard_EngineStateSnapshot_EndToEnd(t *testing.T) {
 
 	submitDashboardWorldViewFunctionalWork(t, h, "world-view-failed", "trace-world-view-failed")
 	provider.nextDispatch(t)
-	provider.respond(interfaces.InferenceResponse{}, workers.NewProviderErrorWithSession(
-		interfaces.WorkFailureTypePermanentBadRequest,
+	provider.respond(workerexecution.InferenceResponse{}, workers.NewProviderErrorWithSession(
+		workerexecution.WorkFailureTypePermanentBadRequest,
 		"provider rejected dashboard world-view work",
 		errors.New("provider rejected"),
-		&interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-world-view-failed"},
+		&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "session_id", ID: "sess-world-view-failed"},
 	))
 	waitForHarnessWorkInPlace(t, h, "task:failed", "world-view-failed", time.Second)
 
@@ -70,7 +72,7 @@ func scaffoldDashboardWorldViewFunctionalDir(t *testing.T) string {
 			{Name: "complete", Type: interfaces.StateTypeTerminal},
 			{Name: "failed", Type: interfaces.StateTypeFailed},
 		}}},
-		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers: []workerconfig.Config{{Name: "worker-a"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name: "process", WorkerTypeName: "worker-a",
 			Inputs:    []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
@@ -198,48 +200,48 @@ func waitForHarnessWorkInPlace(t *testing.T, h *testutil.ServiceTestHarness, pla
 }
 
 type functionalWorldViewProvider struct {
-	requests  chan interfaces.ProviderInferenceRequest
+	requests  chan workerexecution.ProviderInferenceRequest
 	responses chan functionalWorldViewProviderResponse
 }
 
 type functionalWorldViewProviderResponse struct {
-	response interfaces.InferenceResponse
+	response workerexecution.InferenceResponse
 	err      error
 }
 
 func newFunctionalWorldViewProvider() *functionalWorldViewProvider {
 	return &functionalWorldViewProvider{
-		requests:  make(chan interfaces.ProviderInferenceRequest, 2),
+		requests:  make(chan workerexecution.ProviderInferenceRequest, 2),
 		responses: make(chan functionalWorldViewProviderResponse, 2),
 	}
 }
 
-func (p *functionalWorldViewProvider) Infer(ctx context.Context, request interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *functionalWorldViewProvider) Infer(ctx context.Context, request workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	select {
 	case p.requests <- request:
 	case <-ctx.Done():
-		return interfaces.InferenceResponse{}, ctx.Err()
+		return workerexecution.InferenceResponse{}, ctx.Err()
 	}
 	select {
 	case response := <-p.responses:
 		return response.response, response.err
 	case <-ctx.Done():
-		return interfaces.InferenceResponse{}, ctx.Err()
+		return workerexecution.InferenceResponse{}, ctx.Err()
 	}
 }
 
-func (p *functionalWorldViewProvider) nextDispatch(t *testing.T) interfaces.ProviderInferenceRequest {
+func (p *functionalWorldViewProvider) nextDispatch(t *testing.T) workerexecution.ProviderInferenceRequest {
 	t.Helper()
 	select {
 	case request := <-p.requests:
 		return request
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for provider dispatch")
-		return interfaces.ProviderInferenceRequest{}
+		return workerexecution.ProviderInferenceRequest{}
 	}
 }
 
-func (p *functionalWorldViewProvider) respond(response interfaces.InferenceResponse, err error) {
+func (p *functionalWorldViewProvider) respond(response workerexecution.InferenceResponse, err error) {
 	p.responses <- functionalWorldViewProviderResponse{response: response, err: err}
 }
 

@@ -2,7 +2,7 @@ package initializer
 
 import (
 	"github.com/portpowered/infinite-you/pkg/composebridge"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 // NewModelServiceFromCore constructs a ModelService from a composed Core without
@@ -18,6 +18,6 @@ func NewFactoryDefinitionServiceFromCore(core *Core) FactoryDefinitionService {
 }
 
 // StartupWorkerConfigFromCore returns the named worker from the composed startup runtime.
-func StartupWorkerConfigFromCore(core *Core, name string) (*interfaces.WorkerConfig, bool) {
+func StartupWorkerConfigFromCore(core *Core, name string) (*workerconfig.Config, bool) {
 	return composebridge.StartupWorkerConfigFromCore(core, name)
 }

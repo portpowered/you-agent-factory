@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -396,7 +397,7 @@ func assertCronSubmissionRecord(t *testing.T, record work.FactorySubmissionRecor
 	}
 }
 
-func waitForCronToken(t *testing.T, fs *functionalAPIServer, workstation string, workID string, timeout time.Duration) interfaces.Token {
+func waitForCronToken(t *testing.T, fs *functionalAPIServer, workstation string, workID string, timeout time.Duration) factorytoken.Token {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -411,7 +412,7 @@ func waitForCronToken(t *testing.T, fs *functionalAPIServer, workstation string,
 	}
 
 	t.Fatalf("timed out waiting for cron token from %q", workstation)
-	return interfaces.Token{}
+	return factorytoken.Token{}
 }
 
 func waitForCronTimeWorkGone(t *testing.T, fs *functionalAPIServer, workID string, timeout time.Duration) {
@@ -485,7 +486,7 @@ func waitForRequiredInputCronDispatch(t *testing.T, fs *functionalAPIServer, wor
 	return interfaces.CompletedDispatch{}
 }
 
-func consumedCronTimeToken(t *testing.T, dispatch interfaces.CompletedDispatch, workID string) interfaces.Token {
+func consumedCronTimeToken(t *testing.T, dispatch interfaces.CompletedDispatch, workID string) factorytoken.Token {
 	t.Helper()
 	for _, token := range dispatch.ConsumedTokens {
 		if token.Color.WorkID == workID && token.Color.WorkTypeID == interfaces.SystemTimeWorkTypeID {
@@ -493,10 +494,10 @@ func consumedCronTimeToken(t *testing.T, dispatch interfaces.CompletedDispatch, 
 		}
 	}
 	t.Fatalf("dispatch %q did not consume cron time token %q: %#v", dispatch.DispatchID, workID, dispatch.ConsumedTokens)
-	return interfaces.Token{}
+	return factorytoken.Token{}
 }
 
-func waitForTokenInPlaceByParent(t *testing.T, fs *functionalAPIServer, placeID string, parentID string, timeout time.Duration) interfaces.Token {
+func waitForTokenInPlaceByParent(t *testing.T, fs *functionalAPIServer, placeID string, parentID string, timeout time.Duration) factorytoken.Token {
 	t.Helper()
 
 	deadline := time.Now().Add(timeout)
@@ -511,10 +512,10 @@ func waitForTokenInPlaceByParent(t *testing.T, fs *functionalAPIServer, placeID 
 	}
 
 	t.Fatalf("timed out waiting for token in %s with parent %q", placeID, parentID)
-	return interfaces.Token{}
+	return factorytoken.Token{}
 }
 
-func assertCronDefaultExpiryWindow(t *testing.T, token interfaces.Token, expected time.Duration) {
+func assertCronDefaultExpiryWindow(t *testing.T, token factorytoken.Token, expected time.Duration) {
 	t.Helper()
 
 	dueAt := parseCronTimeTag(t, token, interfaces.TimeWorkTagKeyDueAt)
@@ -524,7 +525,7 @@ func assertCronDefaultExpiryWindow(t *testing.T, token interfaces.Token, expecte
 	}
 }
 
-func parseCronTimeTag(t *testing.T, token interfaces.Token, key string) time.Time {
+func parseCronTimeTag(t *testing.T, token factorytoken.Token, key string) time.Time {
 	t.Helper()
 
 	value := token.Color.Tags[key]
@@ -566,7 +567,7 @@ func assertNoCronDispatchForWorkstation(t *testing.T, snap *interfaces.EngineSta
 	}
 }
 
-func assertCronPayload(t *testing.T, token interfaces.Token, workstation string) {
+func assertCronPayload(t *testing.T, token factorytoken.Token, workstation string) {
 	t.Helper()
 
 	if token.Color.WorkTypeID != interfaces.SystemTimeWorkTypeID {

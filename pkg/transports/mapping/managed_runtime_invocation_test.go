@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -125,7 +125,7 @@ func TestClassifyInferenceFailure_UnsupportedOperationIdentifiesTarget(t *testin
 func TestClassifyInferenceFailure_TimeoutUsesActionableMessage(t *testing.T) {
 	ctx := InferenceFailureContext{ModelName: "OMNIVOICE_Q4_K_M", Operation: "TTS"}
 	failure, ok := ClassifyInferenceFailure(
-		workerprovider.NewProviderError(interfaces.WorkFailureTypeTimeout, "execution timeout", context.DeadlineExceeded),
+		workerprovider.NewProviderError(workerexecution.WorkFailureTypeTimeout, "execution timeout", context.DeadlineExceeded),
 		ctx,
 	)
 	if !ok || failure.Class != InferenceFailureClassTimeout {
@@ -154,11 +154,11 @@ func TestClassifyInferenceFailure_RuntimeFailureSuppressesRawSubprocessLogs(t *t
 
 func TestClassifyInferenceWorkResultFailure_UsesFailureMetadata(t *testing.T) {
 	ctx := InferenceFailureContext{ModelName: "OMNIVOICE_Q4_K_M", Operation: "TTS"}
-	failure, ok := ClassifyInferenceWorkResultFailure(interfaces.WorkResult{
-		Outcome: interfaces.OutcomeFailed,
+	failure, ok := ClassifyInferenceWorkResultFailure(workerexecution.WorkResult{
+		Outcome: workerexecution.OutcomeFailed,
 		Error:   "execution timeout",
-		FailureMetadata: &interfaces.WorkFailureMetadata{
-			Type: interfaces.WorkFailureTypeTimeout,
+		FailureMetadata: &workerexecution.WorkFailureMetadata{
+			Type: workerexecution.WorkFailureTypeTimeout,
 		},
 	}, ctx)
 	if !ok || failure.Class != InferenceFailureClassTimeout {

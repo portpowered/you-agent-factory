@@ -15,6 +15,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -289,8 +290,8 @@ func assertThinEventSmokeFinalViews(
 }
 
 type blockingFunctionalInferenceProvider struct {
-	responses        []interfaces.InferenceResponse
-	firstCallStarted chan interfaces.ProviderInferenceRequest
+	responses        []workerexecution.InferenceResponse
+	firstCallStarted chan workerexecution.ProviderInferenceRequest
 	releaseFirst     chan struct{}
 	releaseOnce      sync.Once
 	mu               sync.Mutex
@@ -300,16 +301,16 @@ type blockingFunctionalInferenceProvider struct {
 var _ workers.Provider = (*blockingFunctionalInferenceProvider)(nil)
 
 func newBlockingFunctionalInferenceProvider(
-	responses ...interfaces.InferenceResponse,
+	responses ...workerexecution.InferenceResponse,
 ) *blockingFunctionalInferenceProvider {
 	return &blockingFunctionalInferenceProvider{
 		responses:        responses,
-		firstCallStarted: make(chan interfaces.ProviderInferenceRequest, 1),
+		firstCallStarted: make(chan workerexecution.ProviderInferenceRequest, 1),
 		releaseFirst:     make(chan struct{}),
 	}
 }
 
-func (p *blockingFunctionalInferenceProvider) Infer(ctx context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *blockingFunctionalInferenceProvider) Infer(ctx context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	index := p.index
 	p.index++
@@ -323,17 +324,17 @@ func (p *blockingFunctionalInferenceProvider) Infer(ctx context.Context, req int
 		select {
 		case <-p.releaseFirst:
 		case <-ctx.Done():
-			return interfaces.InferenceResponse{}, ctx.Err()
+			return workerexecution.InferenceResponse{}, ctx.Err()
 		}
 	}
 
 	if index < len(p.responses) {
 		return p.responses[index], nil
 	}
-	return interfaces.InferenceResponse{Content: "default mock response"}, nil
+	return workerexecution.InferenceResponse{Content: "default mock response"}, nil
 }
 
-func (p *blockingFunctionalInferenceProvider) WaitForFirstCall(t *testing.T, timeout time.Duration) interfaces.ProviderInferenceRequest {
+func (p *blockingFunctionalInferenceProvider) WaitForFirstCall(t *testing.T, timeout time.Duration) workerexecution.ProviderInferenceRequest {
 	t.Helper()
 
 	select {
@@ -342,7 +343,7 @@ func (p *blockingFunctionalInferenceProvider) WaitForFirstCall(t *testing.T, tim
 	case <-time.After(timeout):
 		t.Fatalf("timed out waiting %s for first provider call", timeout)
 	}
-	return interfaces.ProviderInferenceRequest{}
+	return workerexecution.ProviderInferenceRequest{}
 }
 
 func (p *blockingFunctionalInferenceProvider) ReleaseFirst() {
@@ -351,16 +352,16 @@ func (p *blockingFunctionalInferenceProvider) ReleaseFirst() {
 	})
 }
 
-func thinReducerInferenceResponse(sessionID string, content string) interfaces.InferenceResponse {
-	return interfaces.InferenceResponse{
+func thinReducerInferenceResponse(sessionID string, content string) workerexecution.InferenceResponse {
+	return workerexecution.InferenceResponse{
 		Content: content,
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       sessionID,
 		},
-		Diagnostics: &interfaces.WorkDiagnostics{
-			Provider: &interfaces.ProviderDiagnostic{
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Provider: &workerexecution.ProviderDiagnostic{
 				Provider: "codex",
 				Model:    "gpt-5.4",
 				RequestMetadata: map[string]string{

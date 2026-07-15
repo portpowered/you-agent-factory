@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // SessionResponseStream keeps ordered internal provider progress for one live
@@ -307,7 +307,7 @@ func canCoalesceEvents(left, right Event) bool {
 	return providerSessionRefEqual(left.ProviderSessionRef, right.ProviderSessionRef)
 }
 
-func providerSessionRefEqual(left, right *interfaces.ProviderSessionMetadata) bool {
+func providerSessionRefEqual(left, right *workerexecution.ProviderSessionMetadata) bool {
 	if left == nil && right == nil {
 		return true
 	}

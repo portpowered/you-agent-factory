@@ -8,6 +8,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestEditedMaterializedPackagedSubagentFactoryChangesNextLoad(t *testing.T) {
@@ -76,7 +77,7 @@ func loadPackagedSubagentRuntimeConfig(t *testing.T, factoryDir string) *factory
 	return loaded
 }
 
-func loadPackagedSubagentWorker(t *testing.T, factoryDir string) *interfaces.WorkerConfig {
+func loadPackagedSubagentWorker(t *testing.T, factoryDir string) *workerconfig.Config {
 	t.Helper()
 	loaded := loadPackagedSubagentRuntimeConfig(t, factoryDir)
 	worker, ok := loaded.Worker(PackagedWorkerName)

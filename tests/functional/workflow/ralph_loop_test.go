@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -14,7 +14,7 @@ func TestRalphLoop_ConvergesOnReviewerAccept(t *testing.T) {
 
 	testutil.WriteSeedFile(t, dir, "story", []byte(`{"title": "implement feature"}`))
 
-	work := map[string][]interfaces.InferenceResponse{
+	work := map[string][]workerexecution.InferenceResponse{
 		"executor-worker": {
 			{Content: "code with missing error handling <COMPLETE>"},
 		},

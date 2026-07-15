@@ -12,8 +12,10 @@ import (
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/work"
 
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestProjectInitialStructure_NilNet_ReturnsEmptyPayload(t *testing.T) {
@@ -129,7 +131,7 @@ func TestProjectInitialStructure_ConfigMappedCronImplicitFailureRoutesAppearInTo
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "cron-worker"}},
+		Workers: []workerconfig.Config{{Name: "cron-worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "poll-for-work",
 			Kind:           interfaces.WorkstationKindCron,
@@ -173,7 +175,7 @@ func TestProjectInitialStructure_NetOnlyTopology_OrdersMapDerivedOutputDetermini
 func TestProjectInitialStructure_RuntimeConfig_ProjectsLoadedWorkerMetadata(t *testing.T) {
 	net := representativeProjectionNet()
 	runtimeConfig := projectionRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"builder": {
 				Type:             interfaces.WorkerTypeModel,
 				ExecutorProvider: "codex-cli",
@@ -259,7 +261,7 @@ func TestProjectInitialStructure_RuntimeConfig_NilFactoryConfigLeavesNameEmpty(t
 func TestProjectInitialStructure_RuntimeConfig_MissingWorkerKeepsWorkstationTopology(t *testing.T) {
 	net := representativeProjectionNet()
 	runtimeConfig := projectionRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"reviewer": {
 				Type:             interfaces.WorkerTypeModel,
 				ExecutorProvider: "claude-cli",
@@ -310,7 +312,7 @@ func projectionNetAndRuntimeConfigWithConstraints() (*state.Net, projectionRunti
 		MaxVisits:    3,
 	}
 	return net, projectionRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"builder": {
 				Type:        interfaces.WorkerTypeModel,
 				Concurrency: 2,
@@ -329,7 +331,7 @@ func projectionNetAndRuntimeConfigWithConstraints() (*state.Net, projectionRunti
 					Jitter:         "30s",
 					ExpiryWindow:   "2m",
 				},
-				Resources: []interfaces.ResourceConfig{{Name: "cpu", Capacity: 1}},
+				Resources: []factoryresource.Config{{Name: "cpu", Capacity: 1}},
 				Guards: []interfaces.GuardConfig{
 					{Type: interfaces.GuardTypeVisitCount, Workstation: "Build", MaxVisits: 3},
 				},
@@ -606,13 +608,13 @@ func assertSingleConstraint(t *testing.T, constraints []interfaces.FactoryConstr
 type projectionRuntimeConfig = runtimefixtures.RuntimeDefinitionLookupFixture
 
 type runtimeDefinitionOnlyFixture struct {
-	Workers      map[string]*interfaces.WorkerConfig
+	Workers      map[string]*workerconfig.Config
 	Workstations map[string]*interfaces.FactoryWorkstationConfig
 }
 
 var _ interfaces.RuntimeDefinitionLookup = runtimeDefinitionOnlyFixture{}
 
-func (f runtimeDefinitionOnlyFixture) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (f runtimeDefinitionOnlyFixture) Worker(name string) (*workerconfig.Config, bool) {
 	worker, ok := f.Workers[name]
 	return worker, ok
 }

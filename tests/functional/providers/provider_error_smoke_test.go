@@ -7,10 +7,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -24,7 +25,7 @@ func TestProviderErrorSmoke_ThrottlePauseOnlyBlocksTheAffectedProviderModelLane(
 			WorkTypeID:      "claude-task",
 			WorkerName:      "claude-worker",
 			WorkstationName: "process-claude",
-			Provider:        interfaces.ModelProviderClaude,
+			Provider:        modelprovider.Claude,
 			Model:           "claude-sonnet-4-5-20250514",
 			PromptBody:      "Process the Claude lane task.\n",
 		},
@@ -32,7 +33,7 @@ func TestProviderErrorSmoke_ThrottlePauseOnlyBlocksTheAffectedProviderModelLane(
 			WorkTypeID:      "codex-task",
 			WorkerName:      "codex-worker",
 			WorkstationName: "process-codex",
-			Provider:        interfaces.ModelProviderCodex,
+			Provider:        modelprovider.Codex,
 			Model:           "gpt-5-codex",
 			PromptBody:      "Process the Codex lane task.\n",
 		},
@@ -43,7 +44,7 @@ func TestProviderErrorSmoke_ThrottlePauseOnlyBlocksTheAffectedProviderModelLane(
 	testutil.AppendFactoryInferenceThrottleGuard(
 		t,
 		pauseHarness.Dir,
-		interfaces.ModelProviderClaude,
+		modelprovider.Claude,
 		"claude-sonnet-4-5-20250514",
 		3*time.Second,
 	)
@@ -77,7 +78,7 @@ func TestProviderErrorSmoke_ThrottlePauseOnlyBlocksTheAffectedProviderModelLane(
 	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-" + unaffectedWork.Name,
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Works: []work.Work{{
 			Name:       unaffectedWork.Name,
 			WorkID:     unaffectedWork.WorkID,
 			WorkTypeID: unaffectedWork.WorkTypeID,
@@ -93,12 +94,12 @@ func TestProviderErrorSmoke_ThrottlePauseOnlyBlocksTheAffectedProviderModelLane(
 		t.Fatalf("provider command count = %d, want 4", len(requests))
 	}
 	for i := 0; i < 3; i++ {
-		if requests[i].Command != string(interfaces.ModelProviderClaude) {
-			t.Fatalf("request %d command = %q, want %q", i, requests[i].Command, interfaces.ModelProviderClaude)
+		if requests[i].Command != string(modelprovider.Claude) {
+			t.Fatalf("request %d command = %q, want %q", i, requests[i].Command, modelprovider.Claude)
 		}
 	}
-	if requests[3].Command != string(interfaces.ModelProviderCodex) {
-		t.Fatalf("request 3 command = %q, want %q", requests[3].Command, interfaces.ModelProviderCodex)
+	if requests[3].Command != string(modelprovider.Codex) {
+		t.Fatalf("request 3 command = %q, want %q", requests[3].Command, modelprovider.Codex)
 	}
 	assertDispatchHistoryMatchesWork(t, outcome.ThrottledLane.Dispatches[0], throttledWork)
 	assertDispatchHistoryMatchesWork(
@@ -128,14 +129,14 @@ func assertCodexCapacityFailureNormalizesThroughWorkerPool(t *testing.T, capacit
 	smokeHarness := testutil.NewProviderErrorSmokeHarness(
 		t,
 		support.LegacyFixtureDir(t, "worktree_passthrough"),
-		interfaces.ModelProviderCodex,
+		modelprovider.Codex,
 		"gpt-5-codex",
 		testutil.WithProviderErrorSmokeServiceOptions(testutil.WithFullWorkerPoolAndScriptWrap()),
 	)
 	testutil.AppendFactoryInferenceThrottleGuard(
 		t,
 		smokeHarness.Dir,
-		interfaces.ModelProviderCodex,
+		modelprovider.Codex,
 		"gpt-5-codex",
 		3*time.Second,
 	)
@@ -173,7 +174,7 @@ func assertCodexTimeoutFailureNormalizesThroughWorkerPool(t *testing.T, timeoutE
 	smokeHarness := testutil.NewProviderErrorSmokeHarness(
 		t,
 		support.LegacyFixtureDir(t, "worktree_passthrough"),
-		interfaces.ModelProviderCodex,
+		modelprovider.Codex,
 		"gpt-5-codex",
 		testutil.WithProviderErrorSmokeServiceOptions(testutil.WithFullWorkerPoolAndScriptWrap()),
 	)
@@ -191,11 +192,11 @@ func assertCodexTimeoutFailureNormalizesThroughWorkerPool(t *testing.T, timeoutE
 	if dispatch.FailureMetadata == nil {
 		t.Fatal("FailureMetadata is nil, want timeout metadata")
 	}
-	if dispatch.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
-		t.Fatalf("failure metadata type = %s, want %s", dispatch.FailureMetadata.Type, interfaces.WorkFailureTypeTimeout)
+	if dispatch.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
+		t.Fatalf("failure metadata type = %s, want %s", dispatch.FailureMetadata.Type, workerexecution.WorkFailureTypeTimeout)
 	}
-	if dispatch.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("failure metadata family = %s, want %s", dispatch.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
+	if dispatch.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable {
+		t.Fatalf("failure metadata family = %s, want %s", dispatch.FailureMetadata.Family, workerexecution.WorkFailureFamilyRetryable)
 	}
 	assertContainsAll(t, dispatch.Reason, []string{"provider error: timeout", "Codex request timed out."})
 	for _, reject := range timeoutEntry.RejectMessageContains {
@@ -240,7 +241,7 @@ func TestProviderErrorSmoke_CodexTemporaryServerErrorsRequeueWithoutThrottlePaus
 			smokeHarness := testutil.NewProviderErrorSmokeHarness(
 				t,
 				support.LegacyFixtureDir(t, "worktree_passthrough"),
-				interfaces.ModelProviderCodex,
+				modelprovider.Codex,
 				"gpt-5-codex",
 				testutil.WithProviderErrorSmokeServiceOptions(testutil.WithFullWorkerPoolAndScriptWrap()),
 			)
@@ -272,7 +273,7 @@ func TestProviderErrorSmoke_CodexWindowsExitCode4294967295RequeuesAndSurfacesRet
 	smokeHarness := testutil.NewProviderErrorSmokeHarness(
 		t,
 		support.LegacyFixtureDir(t, "worktree_passthrough"),
-		interfaces.ModelProviderCodex,
+		modelprovider.Codex,
 		"gpt-5-codex",
 		testutil.WithProviderErrorSmokeServiceOptions(testutil.WithFullWorkerPoolAndScriptWrap()),
 	)
@@ -304,21 +305,21 @@ func TestProviderErrorSmoke_CodexWindowsExitCode4294967295RequeuesAndSurfacesRet
 	if completion.Outcome != factoryapi.WorkOutcomeFailed {
 		t.Fatalf("DISPATCH_COMPLETED outcome = %s, want %s", completion.Outcome, factoryapi.WorkOutcomeFailed)
 	}
-	if completion.FailureDetail == nil || string(completion.FailureDetail.Reason) != string(interfaces.WorkFailureTypeInternalServerError) {
+	if completion.FailureDetail == nil || string(completion.FailureDetail.Reason) != string(workerexecution.WorkFailureTypeInternalServerError) {
 		got := ""
 		if completion.FailureDetail != nil {
 			got = string(completion.FailureDetail.Reason)
 		}
-		t.Fatalf("DISPATCH_COMPLETED failureReason = %q, want %q", got, interfaces.WorkFailureTypeInternalServerError)
+		t.Fatalf("DISPATCH_COMPLETED failureReason = %q, want %q", got, workerexecution.WorkFailureTypeInternalServerError)
 	}
 	if completion.ProviderFailure == nil {
 		t.Fatal("DISPATCH_COMPLETED providerFailure is nil, want canonical metadata")
 	}
-	if got := stringPointerValue(completion.ProviderFailure.Type); got != string(interfaces.WorkFailureTypeInternalServerError) {
-		t.Fatalf("DISPATCH_COMPLETED providerFailure.type = %q, want %q", got, interfaces.WorkFailureTypeInternalServerError)
+	if got := stringPointerValue(completion.ProviderFailure.Type); got != string(workerexecution.WorkFailureTypeInternalServerError) {
+		t.Fatalf("DISPATCH_COMPLETED providerFailure.type = %q, want %q", got, workerexecution.WorkFailureTypeInternalServerError)
 	}
-	if got := stringPointerValue(completion.ProviderFailure.Family); got != string(interfaces.WorkFailureFamilyRetryable) {
-		t.Fatalf("DISPATCH_COMPLETED providerFailure.family = %q, want %q", got, interfaces.WorkFailureFamilyRetryable)
+	if got := stringPointerValue(completion.ProviderFailure.Family); got != string(workerexecution.WorkFailureFamilyRetryable) {
+		t.Fatalf("DISPATCH_COMPLETED providerFailure.family = %q, want %q", got, workerexecution.WorkFailureFamilyRetryable)
 	}
 	assertContainsAll(
 		t,
@@ -334,7 +335,7 @@ func TestProviderErrorSmoke_CodexHighDemandPersistentFailureFailsOnlyAfterGuarde
 	smokeHarness := testutil.NewProviderErrorSmokeHarness(
 		t,
 		support.LegacyFixtureDir(t, "worktree_passthrough"),
-		interfaces.ModelProviderCodex,
+		modelprovider.Codex,
 		"gpt-5-codex",
 		testutil.WithProviderErrorSmokeServiceOptions(testutil.WithFullWorkerPoolAndScriptWrap()),
 	)

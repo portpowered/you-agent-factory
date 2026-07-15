@@ -26,6 +26,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -33,6 +34,9 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 )
 
@@ -70,11 +74,11 @@ func bindServiceStartupRuntime(svc *FactoryService, bundle *factoryRuntimeBundle
 
 type recordingDiagnosticsProvider struct{}
 
-func (recordingDiagnosticsProvider) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
-	return interfaces.InferenceResponse{
+func (recordingDiagnosticsProvider) Infer(_ context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+	return workerexecution.InferenceResponse{
 		Content: "Done. COMPLETE",
-		Diagnostics: &interfaces.WorkDiagnostics{
-			Provider: &interfaces.ProviderDiagnostic{
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Provider: &workerexecution.ProviderDiagnostic{
 				ResponseMetadata: map[string]string{"request_id": "provider-request-1"},
 			},
 		},
@@ -295,7 +299,7 @@ func newLoadedFactoryConfigForServiceTest(
 	t *testing.T,
 	factoryDir string,
 	factoryCfg *interfaces.FactoryConfig,
-	workers map[string]*interfaces.WorkerConfig,
+	workers map[string]*workerconfig.Config,
 	workstations map[string]*interfaces.FactoryWorkstationConfig,
 ) *config.LoadedFactoryConfig {
 	t.Helper()
@@ -335,9 +339,9 @@ Review.
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers:      []workerconfig.Config{{Name: "worker-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -359,9 +363,9 @@ func TestLoadWorkersFromConfig_AcceptsAvailableGeminiFactoryRunner(t *testing.T)
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers:      []workerconfig.Config{{Name: "worker-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -369,7 +373,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableGeminiFactoryRunner(t *testing.T)
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDGemini, cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), workerexecution.RunnerIDGemini, cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available gemini runner", err)
 	}
 }
@@ -382,9 +386,9 @@ func TestLoadWorkersFromConfig_AcceptsAvailableKiroFactoryRunner(t *testing.T) {
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers:      []workerconfig.Config{{Name: "worker-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -392,7 +396,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableKiroFactoryRunner(t *testing.T) {
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDKiro, cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), workerexecution.RunnerIDKiro, cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available kiro runner", err)
 	}
 }
@@ -405,9 +409,9 @@ func TestLoadWorkersFromConfig_AcceptsAvailableCursorFactoryRunner(t *testing.T)
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers:      []workerconfig.Config{{Name: "worker-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -415,7 +419,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableCursorFactoryRunner(t *testing.T)
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDCursorCLI, cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), workerexecution.RunnerIDCursorCLI, cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available cursor runner", err)
 	}
 }
@@ -428,9 +432,9 @@ func TestLoadWorkersFromConfig_AcceptsAvailableOpenCodeFactoryRunner(t *testing.
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers:      []workerconfig.Config{{Name: "worker-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -438,7 +442,7 @@ func TestLoadWorkersFromConfig_AcceptsAvailableOpenCodeFactoryRunner(t *testing.
 		},
 	)
 
-	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), interfaces.RunnerIDOpenCode, cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
+	if _, err := loadWorkersFromConfig(cfg.FactoryDir(), cfg.FactoryConfig(), workerexecution.RunnerIDOpenCode, cfg, nil, logging.NoopLogger{}, false, nil, nil, nil, &workers.MockWorkerCommandRunner{}, nil, nil, nil, nil, nil, nil, localModelDomain{}); err != nil {
 		t.Fatalf("loadWorkersFromConfig error = %v, want available opencode runner", err)
 	}
 }
@@ -457,9 +461,9 @@ You are a helpful assistant.
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers:      []workerconfig.Config{{Name: "worker-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"worker-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "worker-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -480,9 +484,9 @@ func TestRunnerSelectionValidation_AcceptsLegacyBuiltInRunnerDefault(t *testing.
 			WorkerTypeName: "worker-a",
 		}},
 	}
-	runtimeCfg := configFixtureWithWorkerAndWorkstation("worker-a", "review", &interfaces.WorkerConfig{
+	runtimeCfg := configFixtureWithWorkerAndWorkstation("worker-a", "review", &workerconfig.Config{
 		Name:          "worker-a",
-		ModelProvider: interfaces.RunnerIDCodex,
+		ModelProvider: workerexecution.RunnerIDCodex,
 	})
 
 	if err := validateConfiguredWorkstationRunners(cfg, "", runtimeCfg, runnerSelectionPreflight{skipCommandAvailability: true}); err != nil {
@@ -497,7 +501,7 @@ func TestRunnerSelectionValidation_SkipsDefaultFallbackValidation(t *testing.T) 
 			WorkerTypeName: "worker-a",
 		}},
 	}
-	runtimeCfg := configFixtureWithWorkerAndWorkstation("worker-a", "review", &interfaces.WorkerConfig{
+	runtimeCfg := configFixtureWithWorkerAndWorkstation("worker-a", "review", &workerconfig.Config{
 		Name:          "worker-a",
 		ModelProvider: "claude",
 	})
@@ -515,10 +519,10 @@ func TestRunnerSelectionValidation_RejectsUnknownExplicitWorkstationRunner(t *te
 		}},
 	}
 	runtimeCfg := configRuntimeFixture{
-		workers: map[string]*interfaces.WorkerConfig{
+		workers: map[string]*workerconfig.Config{
 			"worker-a": {
 				Name:          "worker-a",
-				ModelProvider: interfaces.RunnerIDCodex,
+				ModelProvider: workerexecution.RunnerIDCodex,
 			},
 		},
 		workstations: map[string]*interfaces.FactoryWorkstationConfig{
@@ -543,7 +547,7 @@ func TestRunnerSelectionValidation_RejectsUnknownExplicitFactoryRunner(t *testin
 			WorkerTypeName: "worker-a",
 		}},
 	}
-	runtimeCfg := configFixtureWithWorkerAndWorkstation("worker-a", "review", &interfaces.WorkerConfig{
+	runtimeCfg := configFixtureWithWorkerAndWorkstation("worker-a", "review", &workerconfig.Config{
 		Name:          "worker-a",
 		ModelProvider: "claude",
 	})
@@ -555,22 +559,22 @@ func TestRunnerSelectionValidation_RejectsUnknownExplicitFactoryRunner(t *testin
 }
 
 func TestEffectiveFactoryRunnerID_PrefersExplicitOverrideThenConfig(t *testing.T) {
-	cfg := &interfaces.FactoryConfig{Runner: interfaces.RunnerIDGemini}
+	cfg := &interfaces.FactoryConfig{Runner: workerexecution.RunnerIDGemini}
 
-	if got := effectiveFactoryRunnerID("  cursor-cli  ", cfg); got != interfaces.RunnerIDCursorCLI {
-		t.Fatalf("effectiveFactoryRunnerID override = %q, want %q", got, interfaces.RunnerIDCursorCLI)
+	if got := effectiveFactoryRunnerID("  cursor-cli  ", cfg); got != workerexecution.RunnerIDCursorCLI {
+		t.Fatalf("effectiveFactoryRunnerID override = %q, want %q", got, workerexecution.RunnerIDCursorCLI)
 	}
-	if got := effectiveFactoryRunnerID("", cfg); got != interfaces.RunnerIDGemini {
-		t.Fatalf("effectiveFactoryRunnerID config = %q, want %q", got, interfaces.RunnerIDGemini)
+	if got := effectiveFactoryRunnerID("", cfg); got != workerexecution.RunnerIDGemini {
+		t.Fatalf("effectiveFactoryRunnerID config = %q, want %q", got, workerexecution.RunnerIDGemini)
 	}
 	if got := effectiveFactoryRunnerID("", nil); got != "" {
 		t.Fatalf("effectiveFactoryRunnerID nil config = %q, want empty", got)
 	}
 }
 
-func configFixtureWithWorkerAndWorkstation(workerName, workstationName string, worker *interfaces.WorkerConfig) configRuntimeFixture {
+func configFixtureWithWorkerAndWorkstation(workerName, workstationName string, worker *workerconfig.Config) configRuntimeFixture {
 	return configRuntimeFixture{
-		workers: map[string]*interfaces.WorkerConfig{
+		workers: map[string]*workerconfig.Config{
 			workerName: worker,
 		},
 		workstations: map[string]*interfaces.FactoryWorkstationConfig{
@@ -580,12 +584,12 @@ func configFixtureWithWorkerAndWorkstation(workerName, workstationName string, w
 }
 
 type configRuntimeFixture struct {
-	workers      map[string]*interfaces.WorkerConfig
+	workers      map[string]*workerconfig.Config
 	workstations map[string]*interfaces.FactoryWorkstationConfig
 	factory      *interfaces.FactoryConfig
 }
 
-func (f configRuntimeFixture) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (f configRuntimeFixture) Worker(name string) (*workerconfig.Config, bool) {
 	worker, ok := f.workers[name]
 	return worker, ok
 }
@@ -691,7 +695,7 @@ func serviceReplayWorkRequestEvent(t *testing.T, requestID string, tick int, sou
 	}
 }
 
-func serviceReplayDispatchCompletedEvent(t *testing.T, completionID string, result interfaces.WorkResult, tick int) factoryapi.FactoryEvent {
+func serviceReplayDispatchCompletedEvent(t *testing.T, completionID string, result workerexecution.WorkResult, tick int) factoryapi.FactoryEvent {
 	t.Helper()
 	payload := factoryapi.DispatchResponseEventPayload{
 		CompletionId:                serviceStringPtr(completionID),
@@ -701,7 +705,7 @@ func serviceReplayDispatchCompletedEvent(t *testing.T, completionID string, resu
 		Error:                       serviceStringPtr(result.Error),
 		Feedback:                    serviceStringPtr(result.Feedback),
 		SelectedClassificationLabel: serviceStringPtr(result.SelectedClassificationLabel),
-		ProviderFailure:             interfaces.GeneratedWorkFailureMetadata(result.FailureMetadata),
+		ProviderFailure:             workerdiagnostics.GeneratedWorkFailureMetadata(result.FailureMetadata),
 		Metrics:                     serviceWorkMetricsPtr(result.Metrics),
 	}
 	var union factoryapi.FactoryEvent_Payload
@@ -809,7 +813,7 @@ func serviceReplayWorksFromDispatch(dispatch work.WorkDispatch) []factoryapi.Wor
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	works := make([]factoryapi.Work, 0, len(tokens))
 	for _, token := range tokens {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		workID := firstNonEmpty(token.Color.WorkID, token.ID)
@@ -838,7 +842,7 @@ func serviceReplayDispatchInputRefsFromDispatch(dispatch work.WorkDispatch) []fa
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	refs := make([]factoryapi.DispatchConsumedWorkRef, 0, len(tokens))
 	for _, token := range tokens {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		workID := firstNonEmpty(token.Color.WorkID, token.ID)
@@ -862,7 +866,7 @@ func serviceReplayResourcesFromDispatch(dispatch work.WorkDispatch) *[]factoryap
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	resources := make([]factoryapi.Resource, 0, len(tokens))
 	for _, token := range tokens {
-		if token.Color.DataType != interfaces.DataTypeResource {
+		if token.Color.DataType != factorytoken.DataTypeResource {
 			continue
 		}
 		resources = append(resources, factoryapi.Resource{Name: firstNonEmpty(token.Color.WorkTypeID, token.Color.Name)})
@@ -879,7 +883,7 @@ func serviceDispatchRequestMetadata(values map[string]string) *factoryapi.Dispat
 	}
 }
 
-func serviceWorkMetricsPtr(metrics interfaces.WorkMetrics) *factoryapi.WorkMetrics {
+func serviceWorkMetricsPtr(metrics workerexecution.WorkMetrics) *factoryapi.WorkMetrics {
 	if metrics.Duration == 0 && metrics.Cost == 0 && metrics.RetryCount == 0 {
 		return nil
 	}
@@ -1160,7 +1164,7 @@ type prefixBlockingExecutor struct {
 	release     chan struct{}
 }
 
-func (e *prefixBlockingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *prefixBlockingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	workID := ""
 	if len(dispatch.Execution.WorkIDs) > 0 {
 		workID = dispatch.Execution.WorkIDs[0]
@@ -1172,10 +1176,10 @@ func (e *prefixBlockingExecutor) Execute(_ context.Context, dispatch work.WorkDi
 		}
 		<-e.release
 	}
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "done",
 	}, nil
 }
@@ -1518,9 +1522,9 @@ You are a helpful agent.
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "agent-a"}},
+		Workers:      []workerconfig.Config{{Name: "agent-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"agent-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -1576,9 +1580,9 @@ You are a helpful assistant.
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "model-a"}},
+		Workers:      []workerconfig.Config{{Name: "model-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"model-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "model-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -1634,9 +1638,9 @@ You are a helpful agent.
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "agent-a"}},
+		Workers:      []workerconfig.Config{{Name: "agent-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"agent-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -1702,9 +1706,9 @@ func executeProviderBackedWorker(
 		TransitionID:    "transition-skip-permissions",
 		WorkerType:      workerName,
 		WorkstationName: "review",
-		InputTokens: workers.InputTokens(interfaces.Token{
+		InputTokens: workers.InputTokens(factorytoken.Token{
 			ID: "token-skip-permissions",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:  "work-skip-permissions",
 				Payload: []byte("helpful input"),
 			},
@@ -1755,9 +1759,9 @@ You are a helpful agent.
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "agent-a"}},
+		Workers:      []workerconfig.Config{{Name: "agent-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"agent-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -1819,15 +1823,15 @@ You are a helpful agent.
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:          "agent-a",
-			ModelLocality: interfaces.ModelLocalityLocal,
+			ModelLocality: workerconfig.ModelLocalityLocal,
 		}},
 	},
-		map[string]*interfaces.WorkerConfig{
-			"agent-a": func() *interfaces.WorkerConfig {
+		map[string]*workerconfig.Config{
+			"agent-a": func() *workerconfig.Config {
 				worker := mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a"))
-				worker.ModelLocality = interfaces.ModelLocalityLocal
+				worker.ModelLocality = workerconfig.ModelLocalityLocal
 				return worker
 			}(),
 		},
@@ -1896,12 +1900,12 @@ You are another agent.
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "agent-supported"},
 			{Name: "agent-unsupported"},
 		},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"agent-supported":   mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-supported")),
 			"agent-unsupported": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-unsupported")),
 		},
@@ -1961,9 +1965,9 @@ You are a helpful agent.
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "agent-a"}},
+		Workers:      []workerconfig.Config{{Name: "agent-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"agent-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -2018,9 +2022,9 @@ You are a helpful agent.
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "agent-a"}},
+		Workers:      []workerconfig.Config{{Name: "agent-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"agent-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -2082,9 +2086,9 @@ You are a helpful agent.
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "agent-a"}},
+		Workers:      []workerconfig.Config{{Name: "agent-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"agent-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{
@@ -2154,9 +2158,9 @@ You are a helpful agent.
 
 	cfg := newLoadedFactoryConfigForServiceTest(t, dir, &interfaces.FactoryConfig{
 		Workstations: []interfaces.FactoryWorkstationConfig{{Name: "review"}},
-		Workers:      []interfaces.WorkerConfig{{Name: "agent-a"}},
+		Workers:      []workerconfig.Config{{Name: "agent-a"}},
 	},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"agent-a": mustLoadWorkerConfig(t, filepath.Join(dir, "workers", "agent-a")),
 		},
 		map[string]*interfaces.FactoryWorkstationConfig{

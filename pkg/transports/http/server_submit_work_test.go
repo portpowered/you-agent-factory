@@ -21,12 +21,13 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work/content"
 )
 
 func TestSubmitWork(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"name":"draft-prd","workTypeName":"prd","traceId":"test-trace-1","payload":{"title":"Draft PRD"}}`)
@@ -65,7 +66,7 @@ func TestSubmitWork(t *testing.T) {
 }
 
 func TestSubmitWork_ReturnsAcceptedWorkIdentifiers(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"name":"draft-prd","workTypeName":"prd","traceId":"test-trace-1","payload":{"title":"Draft PRD"}}`)
@@ -126,7 +127,7 @@ func assertSubmitWorkResponseIdentifiers(t *testing.T, resp factoryapi.SubmitWor
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this contract-heavy submit boundary test keeps the full canonical request and response shape in one reviewer-readable flow.
 func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"name":"ui-review","workTypeName":"prd","content":[{"type":"text","text":"Review this UI."},{"type":"image","url":"file://fixtures/ui.png"}]}`)
@@ -163,7 +164,7 @@ func TestSubmitWork_AcceptsCanonicalContent(t *testing.T) {
 }
 
 func TestSubmitWork_AcceptsStructuredItems(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	staged := stageSubmitWorkTestFile(t, srv, "image", "ui.png", "image/png", []byte("png-bytes"))
@@ -236,7 +237,7 @@ func assertStructuredSubmitWorkStagedImagePart(
 }
 
 func TestSubmitWork_AcceptsUppercaseAndExtendedCanonicalContent(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{
@@ -297,19 +298,19 @@ func assertUppercaseExtendedJSONPart(t *testing.T, part work.WorkContentPart) {
 }
 
 func TestSubmitWork_RejectsConflictingContentAndPayload(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}})
 	rec := submitWorkRequest(t, srv, `{"name":"conflicting-content","workTypeName":"prd","content":[{"type":"text","text":"canonical"}],"payload":"different"}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", `work_request: works[0] ("conflicting-content") has invalid content/payload: payload conflicts with explicit content`)
 }
 
 func TestSubmitWork_RejectsStructuredItemsCombinedWithPayload(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}})
 	rec := submitWorkRequest(t, srv, `{"name":"conflicting-items","workTypeName":"prd","items":[{"type":"text","text":"canonical"}],"payload":"different"}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items cannot be combined with payload")
 }
 
 func TestSubmitWork_RejectsStructuredItemsCombinedWithContent(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}})
 	rec := submitWorkRequest(t, srv, `{"name":"conflicting-items-content","workTypeName":"prd","items":[{"type":"text","text":"structured"}],"content":[{"type":"text","text":"canonical"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items cannot be combined with content")
 }
@@ -317,7 +318,7 @@ func TestSubmitWork_RejectsStructuredItemsCombinedWithContent(t *testing.T) {
 func TestSubmitWork_AcceptsHeaderOnlyStructuredSubmitWork(t *testing.T) {
 	// Dashboard submit-work sends name, workTypeName, and items: [] when optional text
 	// inputs are blank. Header/type-only submissions carry no structured content.
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 	rec := submitWorkRequest(t, srv, `{"name":"header-only-request","workTypeName":"prd","items":[]}`)
 	if rec.Code != http.StatusCreated {
@@ -348,19 +349,19 @@ func TestSubmitWork_AcceptsHeaderOnlyStructuredSubmitWork(t *testing.T) {
 }
 
 func TestSubmitWork_RejectsBlankOnlyStructuredItems(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}})
 	rec := submitWorkRequest(t, srv, `{"name":"blank-items","workTypeName":"prd","items":[{"type":"text","text":"   \t"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items must contain at least one non-empty item")
 }
 
 func TestSubmitWork_RejectsStructuredFileItemWithoutStagedReference(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}})
 	rec := submitWorkRequest(t, srv, `{"name":"missing-staged-ref","workTypeName":"prd","items":[{"type":"document","url":"file://staged/spec.pdf","stagedFileRef":"","fileName":"spec.pdf","mediaType":"application/pdf"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items[0].stagedFileRef must be a non-empty string")
 }
 
 func TestSubmitWork_RejectsForgedStructuredFileReference(t *testing.T) {
-	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}})
+	srv := newTestServer(&testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}})
 
 	rec := submitWorkRequest(t, srv, `{"name":"forged-staged-ref","workTypeName":"prd","items":[{"type":"image","url":"file://staged/ui.png","stagedFileRef":"staged://forged-ui.png","fileName":"ui.png","mediaType":"image/png"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "items[0]: stagedFileRef must be a backend-issued staged file reference")
@@ -446,7 +447,7 @@ func TestStageSubmitWorkFileBySessionId_NotFound(t *testing.T) {
 }
 
 func TestSubmitWork_RejectsInvalidContentPartShape(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 	rec := submitWorkRequest(t, srv, `{"workTypeName":"prd","content":[{"type":"image","text":"wrong-field"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].text is not supported")
@@ -456,7 +457,7 @@ func TestSubmitWork_RejectsInvalidContentPartShape(t *testing.T) {
 }
 
 func TestSubmitWork_RejectsInvalidExtendedContentMetadata(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 	rec := submitWorkRequest(t, srv, `{"workTypeName":"prd","content":[{"type":"AUDIO","url":"file://voice.wav","metadata":"wrong"}]}`)
 	assertJSONError(t, rec, http.StatusBadRequest, "BAD_REQUEST", "content[0].metadata must be an object")
@@ -466,7 +467,7 @@ func TestSubmitWork_RejectsInvalidExtendedContentMetadata(t *testing.T) {
 }
 
 func TestSubmitWork_CurrentChainingTraceIDPreservesRuntimeBoundary(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"name":"chain-submit","workTypeName":"prd","currentChainingTraceId":"chain-submit-1","payload":{"title":"Draft PRD"}}`)
@@ -488,7 +489,7 @@ func TestSubmitWork_CurrentChainingTraceIDPreservesRuntimeBoundary(t *testing.T)
 }
 
 func TestSubmitWork_CopiesTagMapBeforeRuntimeSubmission(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"name":"tag-copy","workTypeName":"prd","payload":{"title":"Draft PRD"},"tags":{"priority":"high","team":"api"}}`)
@@ -507,7 +508,7 @@ func TestSubmitWork_CopiesTagMapBeforeRuntimeSubmission(t *testing.T) {
 }
 
 func TestSubmitWork_MatchingTraceAliasesNormalizeAtBoundary(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"name":"chain-submit","workTypeName":"prd","currentChainingTraceId":"chain-submit-1","traceId":"chain-submit-1","payload":{"title":"Draft PRD"}}`)
@@ -523,7 +524,7 @@ func TestSubmitWork_MatchingTraceAliasesNormalizeAtBoundary(t *testing.T) {
 }
 
 func TestSubmitWork_ConflictingCurrentChainingTraceIDReturnsBadRequest(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"workTypeName":"prd","currentChainingTraceId":"chain-submit-1","traceId":"trace-submit-1","payload":{"title":"Draft PRD"}}`)
@@ -534,7 +535,7 @@ func TestSubmitWork_ConflictingCurrentChainingTraceIDReturnsBadRequest(t *testin
 }
 
 func TestSubmitWork_WorkTypeIDReturnsBadRequest(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"work_type_id":"legacy-task","traceId":"test-trace-legacy","payload":{"title":"Legacy"}}`)
@@ -545,7 +546,7 @@ func TestSubmitWork_WorkTypeIDReturnsBadRequest(t *testing.T) {
 }
 
 func TestSubmitWork_TargetStateReturnsBadRequest(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"name":"draft","workTypeName":"prd","target_state":"queued","payload":{"title":"Draft PRD"}}`)
@@ -556,7 +557,7 @@ func TestSubmitWork_TargetStateReturnsBadRequest(t *testing.T) {
 }
 
 func TestSubmitWork_PreservesRuntimeRelations(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"name":"runtime-relations","workTypeName":"prd","payload":{"title":"Draft PRD"},"relations":[{"type":"DEPENDS_ON","targetWorkId":"review-work","requiredState":"complete"}]}`)
@@ -573,7 +574,7 @@ func TestSubmitWork_PreservesRuntimeRelations(t *testing.T) {
 }
 
 func TestSubmitWork_WorkTypeNameWithWorkTypeIDReturnsBadRequest(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"workTypeName":"tasks","work_type_id":"legacy-task","payload":"fix lint"}`)
@@ -584,7 +585,7 @@ func TestSubmitWork_WorkTypeNameWithWorkTypeIDReturnsBadRequest(t *testing.T) {
 }
 
 func TestSubmitWorkMissingWorkType(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work", bytes.NewBufferString(`{"name":"missing-work-type","traceId":"test-trace-1"}`))
@@ -594,7 +595,7 @@ func TestSubmitWorkMissingWorkType(t *testing.T) {
 }
 
 func TestSubmitWorkMissingName(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work", bytes.NewBufferString(`{"workTypeName":"task","traceId":"test-trace-1","payload":{"title":"unnamed"}}`))
@@ -608,7 +609,7 @@ func TestSubmitWorkMissingName(t *testing.T) {
 }
 
 func TestSubmitWorkBlankName(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work", bytes.NewBufferString("{\"name\":\"   \\t\\n \",\"workTypeName\":\"task\",\"traceId\":\"test-trace-1\",\"payload\":{\"title\":\"blank\"}}"))
@@ -622,7 +623,7 @@ func TestSubmitWorkBlankName(t *testing.T) {
 }
 
 func TestSubmitWorkMarkdownPayload(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"name":"markdown-fix","workTypeName":"tasks","traceId":"trace-markdown","payload":"# Fix lint\n\nRun gofmt."}`)
@@ -641,7 +642,7 @@ func TestSubmitWorkMarkdownPayload(t *testing.T) {
 }
 
 func TestSubmitWorkInvalidPayload_ReturnsDocumentedBadRequest(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work", bytes.NewBufferString(`{"workTypeName":`))
@@ -652,7 +653,7 @@ func TestSubmitWorkInvalidPayload_ReturnsDocumentedBadRequest(t *testing.T) {
 
 func TestSubmitWorkUnknownWorkTypeReturnsBadRequest(t *testing.T) {
 	mf := &testutil.MockFactory{
-		Marking:   &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+		Marking:   &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
 		SubmitErr: errors.New(`work_request: works[0] ("unknown-work") references unknown work type "unknown"`),
 	}
 	srv := newTestServer(mf)
@@ -662,7 +663,7 @@ func TestSubmitWorkUnknownWorkTypeReturnsBadRequest(t *testing.T) {
 }
 
 func TestSubmitWorkBySessionId_ReturnsWorkIdentityFields(t *testing.T) {
-	sessionFactory := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}, Net: sessionScopedStateNet()}
+	sessionFactory := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}, Net: sessionScopedStateNet()}
 	srv := newTestServer(&testutil.MockFactory{
 		SessionFactories: map[string]*testutil.MockFactory{
 			"session-alpha": sessionFactory,
@@ -724,7 +725,7 @@ func assertSubmitWorkIdentityResponse(t *testing.T, resp factoryapi.SubmitWorkRe
 }
 
 func TestSubmitWorkAutoTraceID(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	req := httptest.NewRequest(http.MethodPost, "/factory-sessions/~default/work", bytes.NewBufferString(`{"name":"auto-trace","workTypeName":"prd"}`))
@@ -763,14 +764,14 @@ func newSubmitSurfaceSmokeFactory(t *testing.T, eventTime time.Time, liveEvents 
 	currentFactoryID := "beta"
 	return &testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
-			Tokens: map[string]*interfaces.Token{
+			Tokens: map[string]*factorytoken.Token{
 				"tok-api-surface-1": {
 					ID:        "tok-api-surface-1",
 					PlaceID:   "task:init",
-					Color:     interfaces.TokenColor{WorkID: "work-api-surface-1", WorkTypeID: "task"},
+					Color:     factorytoken.Color{WorkID: "work-api-surface-1", WorkTypeID: "task"},
 					CreatedAt: eventTime,
 					EnteredAt: eventTime,
-					History: interfaces.TokenHistory{
+					History: factorytoken.History{
 						TotalVisits:         make(map[string]int),
 						ConsecutiveFailures: make(map[string]int),
 						PlaceVisits:         make(map[string]int),
@@ -886,11 +887,11 @@ func assertSubmitSurfaceSmokeEvents(t *testing.T, serverURL string) {
 }
 
 func TestSubmitWorkResponseFromResult_IdempotentReplayPreservesWorkIdentity(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	request := work.WorkRequest{
 		RequestID: "request-idem-1",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Works: []work.Work{{
 			Name:       "draft-prd",
 			WorkTypeID: "prd",
 			TraceID:    "trace-idem-1",
@@ -928,7 +929,7 @@ func TestSubmitWorkResponseFromResult_IdempotentReplayPreservesWorkIdentity(t *t
 	}
 }
 func TestSubmitWork_RejectsUnsupportedContentURLScheme(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"name":"bad-url","workTypeName":"prd","content":[{"type":"image","url":"ftp://example.com/ui.png"}]}`)
@@ -936,7 +937,7 @@ func TestSubmitWork_RejectsUnsupportedContentURLScheme(t *testing.T) {
 }
 
 func TestSubmitWork_RejectsURLAndFileConflict(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"name":"conflict","workTypeName":"prd","content":[{"type":"image","url":"file://fixtures/ui.png","file":"fixtures/ui.png"}]}`)
@@ -944,7 +945,7 @@ func TestSubmitWork_RejectsURLAndFileConflict(t *testing.T) {
 }
 
 func TestSubmitWork_AcceptsLegacyFileOnlyContent(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	rec := submitWorkRequest(t, srv, `{"name":"legacy-file","workTypeName":"prd","content":[{"type":"image","file":"fixtures/ui.png"}]}`)

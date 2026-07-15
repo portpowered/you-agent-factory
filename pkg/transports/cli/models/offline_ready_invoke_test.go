@@ -14,11 +14,14 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 )
 
@@ -33,11 +36,11 @@ func (p readyLocalModelAssetPuller) PullModel(context.Context, *factoryconfig.Lo
 	}, nil
 }
 
-func (p readyLocalModelAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+func (p readyLocalModelAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) error {
 	return nil
 }
 
-func (p readyLocalModelAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
+func (p readyLocalModelAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) (localmodels.CacheLayout, error) {
 	return p.cache, nil
 }
 
@@ -55,7 +58,7 @@ type readyLocalModelRuntime struct {
 	audioPath string
 }
 
-func (r *readyLocalModelRuntime) Supports(resource interfaces.ResourceConfig, worker *interfaces.WorkerConfig) bool {
+func (r *readyLocalModelRuntime) Supports(resource factoryresource.Config, worker *workerconfig.Config) bool {
 	return localmodels.CanonicalBackendName(resource.Backend) == "LLAMACPP" &&
 		localmodels.CanonicalModelName(worker.Model) == localmodels.CanonicalModelName("OMNIVOICE_Q4_K_M")
 }
@@ -68,8 +71,8 @@ type readyLocalModelHandle struct {
 	audioPath string
 }
 
-func (h readyLocalModelHandle) Invoke(context.Context, localmodels.InvocationRequest) (interfaces.InferenceResponse, error) {
-	return interfaces.InferenceResponse{
+func (h readyLocalModelHandle) Invoke(context.Context, localmodels.InvocationRequest) (workerexecution.InferenceResponse, error) {
+	return workerexecution.InferenceResponse{
 		Content: mustOfflineReadyAudioContentResponse(h.audioPath),
 	}, nil
 }
@@ -139,18 +142,18 @@ func offlineReadyLocalModelFactoryConfig(healthEndpoint string) map[string]any {
 		"type":          interfaces.WorkerTypeModel,
 		"modelProvider": "CODEX",
 		"model":         "OMNIVOICE_Q4_K_M",
-		"modelLocality": interfaces.ModelLocalityLocal,
+		"modelLocality": workerconfig.ModelLocalityLocal,
 		"resources":     []map[string]any{{"name": "omnivoice-cache", "capacity": 1}},
 		"operations": []map[string]any{{
 			"name": "TTS",
 			"inputs": []map[string]any{{
 				"name":         "text",
-				"contentTypes": []string{interfaces.ModelOperationContentTypeText},
+				"contentTypes": []string{workerconfig.ModelOperationContentTypeText},
 				"required":     true,
 			}},
 			"outputs": []map[string]any{{
 				"name":         "audio",
-				"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
+				"contentTypes": []string{workerconfig.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}
@@ -162,7 +165,7 @@ func offlineReadyLocalModelFactoryConfig(healthEndpoint string) map[string]any {
 		"name": "factory",
 		"resources": []map[string]any{{
 			"name":       "omnivoice-cache",
-			"type":       interfaces.ResourceTypeModel,
+			"type":       factoryresource.TypeModel,
 			"capacity":   1,
 			"model":      "OMNIVOICE_Q4_K_M",
 			"backend":    "LLAMACPP",

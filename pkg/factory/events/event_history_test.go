@@ -14,12 +14,15 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(t *testing.T) {
 	runtimeConfig := eventHistoryRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"builder": {
 				Type:             interfaces.WorkerTypeModel,
 				ExecutorProvider: "codex-cli",
@@ -265,7 +268,7 @@ func TestFactoryEventHistory_RecordInitialStructure_ProjectsImplicitCronFailureR
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "cron-worker"}},
+		Workers: []workerconfig.Config{{Name: "cron-worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "poll-for-work",
 			Kind:           interfaces.WorkstationKindCron,
@@ -310,7 +313,7 @@ func TestFactoryEventHistory_RecordInitialStructure_ProjectsImplicitCronFailureR
 
 func TestFactoryEventHistory_RecordInitialStructure_PreservesGeneratedPublicEnumPointerValues(t *testing.T) {
 	runtimeConfig := eventHistoryRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"builder": {
 				Type:             "  MODEL_WORKER  ",
 				ExecutorProvider: "  local-claude  ",
@@ -376,17 +379,17 @@ func TestFactoryEventHistory_RecordDispatchCompletion_PreservesSelectedClassific
 		func() time.Time { return time.Unix(0, 0).UTC() },
 	)
 
-	result := interfaces.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:                  "dispatch-1",
 		TransitionID:                "t-review",
-		Outcome:                     interfaces.OutcomeAccepted,
+		Outcome:                     workerexecution.OutcomeAccepted,
 		SelectedClassificationLabel: "approved",
 	}
 	completed := interfaces.CompletedDispatch{
 		DispatchID:      "dispatch-1",
 		TransitionID:    "t-review",
-		Outcome:         interfaces.OutcomeAccepted,
-		ConsumedTokens:  []interfaces.Token{{ID: "token-1", Color: interfaces.TokenColor{WorkID: "work-1", TraceID: "trace-1"}}},
+		Outcome:         workerexecution.OutcomeAccepted,
+		ConsumedTokens:  []factorytoken.Token{{ID: "token-1", Color: factorytoken.Color{WorkID: "work-1", TraceID: "trace-1"}}},
 		OutputMutations: nil,
 	}
 
@@ -411,25 +414,25 @@ func TestFactoryEventHistory_RecordDispatchCompletion_PreservesOutputWorkStateFr
 		func() time.Time { return time.Unix(0, 0).UTC() },
 	)
 
-	result := interfaces.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:   "dispatch-1",
 		TransitionID: "t-review",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}
 	completed := interfaces.CompletedDispatch{
 		DispatchID:   "dispatch-1",
 		TransitionID: "t-review",
-		Outcome:      interfaces.OutcomeAccepted,
-		ConsumedTokens: []interfaces.Token{{
+		Outcome:      workerexecution.OutcomeAccepted,
+		ConsumedTokens: []factorytoken.Token{{
 			ID:    "token-1",
-			Color: interfaces.TokenColor{WorkID: "work-1", WorkTypeID: "task", TraceID: "trace-1"},
+			Color: factorytoken.Color{WorkID: "work-1", WorkTypeID: "task", TraceID: "trace-1"},
 		}},
 		OutputMutations: []interfaces.TokenMutationRecord{{
 			Type: interfaces.MutationMove,
-			Token: &interfaces.Token{
+			Token: &factorytoken.Token{
 				ID:      "token-terminal",
 				PlaceID: "task:complete",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkID:     "work-1",
 					WorkTypeID: "task",
 					Name:       "Write docs",
@@ -461,11 +464,11 @@ func TestFactoryEventHistory_RecordDispatchCompletion_PreservesOutputWorkStateFr
 type eventHistoryRuntimeConfig = runtimefixtures.RuntimeDefinitionLookupFixture
 
 type eventHistoryDefinitionOnlyRuntimeConfig struct {
-	Workers      map[string]*interfaces.WorkerConfig
+	Workers      map[string]*workerconfig.Config
 	Workstations map[string]*interfaces.FactoryWorkstationConfig
 }
 
-func (c eventHistoryDefinitionOnlyRuntimeConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (c eventHistoryDefinitionOnlyRuntimeConfig) Worker(name string) (*workerconfig.Config, bool) {
 	worker, ok := c.Workers[name]
 	return worker, ok
 }

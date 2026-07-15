@@ -161,7 +161,7 @@ func (fw *FileWatcher) PreseedInputs(ctx context.Context) error {
 
 func (fw *FileWatcher) collectPreseedRequests() ([]work.WorkRequest, error) {
 	var batchRequests []work.WorkRequest
-	var fileWorks []interfaces.Work
+	var fileWorks []work.Work
 	usedFileWorkNames := map[string]int{}
 
 	err := filepath.WalkDir(fw.dir, func(path string, d fs.DirEntry, walkErr error) error {
@@ -464,7 +464,7 @@ func applyInternalBatchWorkFields(request *work.WorkRequest, content []byte) err
 func singleFileWorkRequest(filename string, workType string, executionID string, content []byte) work.WorkRequest {
 	return work.WorkRequest{
 		Type: work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Works: []work.Work{{
 			Name:        strings.TrimSuffix(filename, filepath.Ext(filename)),
 			WorkTypeID:  workType,
 			Payload:     append([]byte(nil), content...),

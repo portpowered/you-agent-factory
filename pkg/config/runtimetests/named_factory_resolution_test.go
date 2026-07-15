@@ -2,11 +2,12 @@ package runtimetests
 
 import (
 	"errors"
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	. "github.com/portpowered/infinite-you/pkg/config"
 
 	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"

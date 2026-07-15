@@ -13,6 +13,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // FactoryOption configures a factoryImpl via the functional options pattern.
@@ -82,7 +83,7 @@ type SubmissionHook interface {
 // execution and tick-owned result delivery.
 type DispatchResultHook interface {
 	SubmitDispatch(ctx context.Context, dispatch work.WorkDispatch) error
-	OnTick(ctx context.Context, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]interfaces.WorkResult, error)
+	OnTick(ctx context.Context, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]workerexecution.WorkResult, error)
 	WaitCh() <-chan struct{}
 	HasPendingResults() bool
 }

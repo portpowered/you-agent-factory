@@ -8,6 +8,7 @@ import (
 	. "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestFactoryConfigMapper_ExpandRejectsRetiredCronIntervalField(t *testing.T) {
@@ -302,7 +303,7 @@ func TestFactoryConfigMapper_FlattenOmitsUnsetWorkerTypeFields(t *testing.T) {
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workers: []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "process-task",
 			WorkerTypeName: "executor",
@@ -541,7 +542,7 @@ func TestWorkstationConfigToOpenAPI_UsesBodyAsCanonicalExportPromptField(t *test
 			Slot: "text",
 			Selector: &interfaces.ModelOperationBindingSelector{
 				Label: "utterance",
-				Type:  interfaces.ModelOperationContentTypeText,
+				Type:  workerconfig.ModelOperationContentTypeText,
 			},
 			Config: []work.WorkContentPart{{
 				Type: work.WorkContentPartTypeText,
@@ -737,7 +738,7 @@ func portableResourceManifestMapperFixture() *interfaces.FactoryConfig {
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workers: []workerconfig.Config{{Name: "executor"}},
 		ResourceManifest: &interfaces.PortableResourceManifestConfig{
 			RequiredTools: []interfaces.RequiredToolConfig{{
 				Name:        "python",
@@ -928,7 +929,7 @@ func TestFactoryConfigMapper_FlattenRoundTripsInvocationReturn(t *testing.T) {
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workers: []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "execute-story",
 			WorkerTypeName: "executor",

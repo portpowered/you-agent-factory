@@ -4,9 +4,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // Option configures a FactoryEngine.
@@ -55,7 +57,7 @@ func WithTokenTransformer(transformer *token_transformer.Transformer) Option {
 
 // WithResultBuffer sets the runtime-owned work result buffer used to collect
 // worker completions before transition processing.
-func WithResultBuffer(buffer *buffers.TypedBuffer[interfaces.WorkResult]) Option {
+func WithResultBuffer(buffer *buffers.TypedBuffer[workerexecution.WorkResult]) Option {
 	return func(e *FactoryEngine) {
 		if buffer != nil {
 			e.runtimeState.ResultBuffer = buffer
@@ -91,7 +93,7 @@ func WithWorkRequestRecorder(fn func(int, work.WorkRequestRecord)) Option {
 
 // WithWorkInputRecorder registers a callback invoked after a submit request is
 // converted to a runtime token and injected into the marking.
-func WithWorkInputRecorder(fn func(int, work.SubmitRequest, interfaces.Token)) Option {
+func WithWorkInputRecorder(fn func(int, work.SubmitRequest, factorytoken.Token)) Option {
 	return func(e *FactoryEngine) {
 		e.recordWorkInput = fn
 	}
@@ -115,7 +117,7 @@ func WithCompletionRecorder(fn func(interfaces.FactoryCompletionRecord)) Option 
 
 // WithWorkstationResponseRecorder registers a callback invoked after a worker
 // result has been routed and a completed dispatch summary is available.
-func WithWorkstationResponseRecorder(fn func(int, interfaces.WorkResult, interfaces.CompletedDispatch)) Option {
+func WithWorkstationResponseRecorder(fn func(int, workerexecution.WorkResult, interfaces.CompletedDispatch)) Option {
 	return func(e *FactoryEngine) {
 		e.recordResponse = fn
 	}

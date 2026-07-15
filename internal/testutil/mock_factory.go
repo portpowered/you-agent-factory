@@ -20,6 +20,7 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
@@ -524,12 +525,12 @@ func (m *MockFactory) applyMockOperatorMove(workID, stateName, requestID string)
 	return result, nil
 }
 
-func findMockWorkToken(tokens map[string]*interfaces.Token, workID string) (*interfaces.Token, bool) {
+func findMockWorkToken(tokens map[string]*factorytoken.Token, workID string) (*factorytoken.Token, bool) {
 	for _, token := range tokens {
 		if token == nil || token.Color.WorkID != workID {
 			continue
 		}
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		return token, true

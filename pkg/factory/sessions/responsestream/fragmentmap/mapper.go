@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"strings"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // ErrUnsupportedFragmentKind indicates the mapper does not handle the supplied
@@ -357,7 +357,7 @@ func fragmentPayloadTruncated(metadata map[string]string) bool {
 
 func fragmentProvider(fragment responsestream.Event) string {
 	if fragment.ProviderSessionRef != nil {
-		if provider := interfaces.CanonicalProviderSessionProvider(fragment.ProviderSessionRef.Provider); provider != "" {
+		if provider := workerexecution.CanonicalProviderSessionProvider(fragment.ProviderSessionRef.Provider); provider != "" {
 			return provider
 		}
 	}
@@ -379,7 +379,7 @@ func fragmentNativeEventType(fragment responsestream.Event) string {
 	return string(fragment.Kind)
 }
 
-func providerSessionRefString(session *interfaces.ProviderSessionMetadata) string {
+func providerSessionRefString(session *workerexecution.ProviderSessionMetadata) string {
 	if session == nil {
 		return ""
 	}

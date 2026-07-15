@@ -7,9 +7,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -21,8 +23,8 @@ func TestPartialBatch_SomeTokensFail(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "token-b"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Task done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Task incomplete, no stop token"},
+		workerexecution.InferenceResponse{Content: "Task done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Task incomplete, no stop token"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -47,8 +49,8 @@ func TestPartialBatch_SomeTokensRejected_RoutedViaRejectionArcs(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "token-rejected"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Work accepted. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Work needs review, no stop token"},
+		workerexecution.InferenceResponse{Content: "Work accepted. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Work needs review, no stop token"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -104,8 +106,8 @@ Process the task input.
 		t.Fatalf("expected provider runner called 1 time, got %d", runner.CallCount())
 	}
 	call := runner.LastRequest()
-	if call.Command != string(interfaces.ModelProviderCodex) {
-		t.Fatalf("expected command %q, got %q", interfaces.ModelProviderCodex, call.Command)
+	if call.Command != string(modelprovider.Codex) {
+		t.Fatalf("expected command %q, got %q", modelprovider.Codex, call.Command)
 	}
 	support.AssertArgsContainSequence(t, call.Args, []string{"--model", "gpt-5-codex"})
 	if got := call.Args[len(call.Args)-1]; got != "-" {
@@ -160,8 +162,8 @@ Process the input task.
 		t.Fatalf("expected provider runner called 1 time, got %d", runner.CallCount())
 	}
 	call := runner.LastRequest()
-	if call.Command != string(interfaces.ModelProviderClaude) {
-		t.Fatalf("expected command %q, got %q", interfaces.ModelProviderClaude, call.Command)
+	if call.Command != string(modelprovider.Claude) {
+		t.Fatalf("expected command %q, got %q", modelprovider.Claude, call.Command)
 	}
 	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "provider-exit-failure"})
 
@@ -217,8 +219,8 @@ Process the input task.
 		t.Fatalf("expected provider runner called 3 times, got %d", runner.CallCount())
 	}
 	call := runner.LastRequest()
-	if call.Command != string(interfaces.ModelProviderClaude) {
-		t.Fatalf("expected command %q, got %q", interfaces.ModelProviderClaude, call.Command)
+	if call.Command != string(modelprovider.Claude) {
+		t.Fatalf("expected command %q, got %q", modelprovider.Claude, call.Command)
 	}
 	support.AssertArgsContainSequence(t, call.Args, []string{"--worktree", "provider-retry-success"})
 }
@@ -277,7 +279,7 @@ func assertThrottledWorkFailedAfterRetries(t *testing.T, h *testutil.ServiceTest
 	t.Helper()
 
 	snap := h.Marking()
-	var failed *interfaces.Token
+	var failed *factorytoken.Token
 	for _, tok := range snap.Tokens {
 		if tok.PlaceID == "task:failed" && tok.Color.WorkID == "work-provider-throttle-requeue" {
 			failed = tok

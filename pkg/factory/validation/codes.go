@@ -8,6 +8,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 const (
@@ -645,7 +646,7 @@ func invocationInterpolationFieldTargets(cfg *interfaces.FactoryConfig) []interp
 	return append(fields, invocationWorkstationInterpolationFieldTargets(cfg.Workstations)...)
 }
 
-func invocationWorkerInterpolationFieldTargets(workers []interfaces.WorkerConfig) []interpolationFieldTarget {
+func invocationWorkerInterpolationFieldTargets(workers []workerconfig.Config) []interpolationFieldTarget {
 	var fields []interpolationFieldTarget
 	for workerIndex, worker := range workers {
 		subjectID := worker.Name

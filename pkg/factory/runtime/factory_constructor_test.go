@@ -16,6 +16,8 @@ import (
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestNew_RequiresNet(t *testing.T) {
@@ -122,8 +124,8 @@ func TestNew_InlineDispatchExecutorPanicRoutesFailedWork(t *testing.T) {
 		t.Fatalf("dispatch history count = %d, want 1", len(snapshot.DispatchHistory))
 	}
 	completed := snapshot.DispatchHistory[0]
-	if completed.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("dispatch outcome = %q, want %q", completed.Outcome, interfaces.OutcomeFailed)
+	if completed.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("dispatch outcome = %q, want %q", completed.Outcome, workerexecution.OutcomeFailed)
 	}
 	if !strings.Contains(completed.Reason, "executor panic:") || !strings.Contains(completed.Reason, "simulated catastrophic panic") {
 		t.Fatalf("dispatch reason = %q, want panic-derived failure message", completed.Reason)
@@ -160,8 +162,8 @@ func TestNew_InlineDispatchWithoutRegisteredExecutorRecordsMissingExecutorFailur
 		t.Fatalf("dispatch history count = %d, want 1", len(snap.DispatchHistory))
 	}
 	completed := snap.DispatchHistory[0]
-	if completed.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("dispatch outcome = %q, want %q", completed.Outcome, interfaces.OutcomeFailed)
+	if completed.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("dispatch outcome = %q, want %q", completed.Outcome, workerexecution.OutcomeFailed)
 	}
 	if !strings.Contains(completed.Reason, `no executor registered for worker type "mock"`) {
 		t.Fatalf("dispatch reason = %q, want missing executor error", completed.Reason)
@@ -211,7 +213,7 @@ func TestNew_InitialStructureIncludesRuntimeConfigWorkerMetadata(t *testing.T) {
 		factory.WithInlineDispatch(),
 		factory.WithWorkerExecutor("mock", &passExecutor{}),
 		factory.WithRuntimeConfig(runtimeProjectionConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"mock": {
 					Type:             interfaces.WorkerTypeModel,
 					ExecutorProvider: "codex-cli",

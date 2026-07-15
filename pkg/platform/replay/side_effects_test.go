@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestSideEffects_InferReturnsRecordedProviderResponse(t *testing.T) {
@@ -19,7 +20,7 @@ func TestSideEffects_InferReturnsRecordedProviderResponse(t *testing.T) {
 		t.Fatalf("NewSideEffects: %v", err)
 	}
 
-	resp, err := sideEffects.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+	resp, err := sideEffects.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
 			Execution: work.ExecutionMetadata{
@@ -92,7 +93,7 @@ func TestSideEffects_InferDiagnosticsStayDetachedFromRecordedMutation(t *testing
 	providerDiagnostics.Metadata["phase"] = "mutated"
 	providerDiagnostics.Panic.Message = "mutated panic"
 
-	resp, err := sideEffects.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+	resp, err := sideEffects.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
 			Execution: work.ExecutionMetadata{
@@ -160,7 +161,7 @@ func TestSideEffects_UnmatchedRequestFailsClearly(t *testing.T) {
 		t.Fatalf("NewSideEffects: %v", err)
 	}
 
-	_, err = sideEffects.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+	_, err = sideEffects.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
 			Execution: work.ExecutionMetadata{
@@ -207,7 +208,7 @@ func TestSideEffects_InferPreservesNilDiagnosticsWhenReplayArtifactOmitsThem(t *
 			1,
 			3,
 			"recorded provider output",
-			&interfaces.ProviderSessionMetadata{
+			&workerexecution.ProviderSessionMetadata{
 				Provider: "claude",
 				Kind:     "response_id",
 				ID:       "resp-no-diagnostics",
@@ -215,10 +216,10 @@ func TestSideEffects_InferPreservesNilDiagnosticsWhenReplayArtifactOmitsThem(t *
 			nil,
 			"",
 		),
-		replayDispatchCompletedEvent(t, "completion-no-diagnostics", interfaces.WorkResult{
+		replayDispatchCompletedEvent(t, "completion-no-diagnostics", workerexecution.WorkResult{
 			DispatchID:   "dispatch-no-diagnostics",
 			TransitionID: "process",
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 			Output:       "recorded provider output",
 		}, 4),
 	)
@@ -227,7 +228,7 @@ func TestSideEffects_InferPreservesNilDiagnosticsWhenReplayArtifactOmitsThem(t *
 		t.Fatalf("NewSideEffects: %v", err)
 	}
 
-	resp, err := sideEffects.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+	resp, err := sideEffects.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
 			Execution: work.ExecutionMetadata{
@@ -265,14 +266,14 @@ func TestSideEffects_InferResolvesFailureMetadataOnlyRecordedFailure(t *testing.
 				WorkIDs:   []string{"work-failure"},
 			},
 		}, 2),
-		replayDispatchCompletedEvent(t, "completion-failure-metadata", interfaces.WorkResult{
+		replayDispatchCompletedEvent(t, "completion-failure-metadata", workerexecution.WorkResult{
 			DispatchID:   "dispatch-failure-metadata",
 			TransitionID: "process",
-			Outcome:      interfaces.OutcomeFailed,
+			Outcome:      workerexecution.OutcomeFailed,
 			Error:        "provider throttled",
-			FailureMetadata: &interfaces.WorkFailureMetadata{
-				Family: interfaces.WorkFailureFamilyThrottle,
-				Type:   interfaces.WorkFailureTypeThrottled,
+			FailureMetadata: &workerexecution.WorkFailureMetadata{
+				Family: workerexecution.WorkFailureFamilyThrottle,
+				Type:   workerexecution.WorkFailureTypeThrottled,
 			},
 		}, 3),
 	)
@@ -282,7 +283,7 @@ func TestSideEffects_InferResolvesFailureMetadataOnlyRecordedFailure(t *testing.
 		t.Fatalf("NewSideEffects: %v", err)
 	}
 
-	_, err = sideEffects.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+	_, err = sideEffects.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
 			Execution: work.ExecutionMetadata{
@@ -322,7 +323,7 @@ func TestSideEffects_DispatchWithoutCompletionFailsExplicitly(t *testing.T) {
 		t.Fatalf("NewSideEffects: %v", err)
 	}
 
-	_, err = sideEffects.Infer(context.Background(), interfaces.ProviderInferenceRequest{
+	_, err = sideEffects.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
 		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
 			Execution: work.ExecutionMetadata{
@@ -348,7 +349,7 @@ func replaySideEffectArtifact(t *testing.T) *interfaces.ReplayArtifact {
 	return artifact
 }
 
-func replaySideEffectArtifactWithDiagnostics(t *testing.T) (*interfaces.ReplayArtifact, *interfaces.WorkDiagnostics, *interfaces.WorkDiagnostics) {
+func replaySideEffectArtifactWithDiagnostics(t *testing.T) (*interfaces.ReplayArtifact, *workerexecution.WorkDiagnostics, *workerexecution.WorkDiagnostics) {
 	t.Helper()
 	dispatchProvider := work.WorkDispatch{
 		DispatchID:      "dispatch-provider",
@@ -372,23 +373,23 @@ func replaySideEffectArtifactWithDiagnostics(t *testing.T) (*interfaces.ReplayAr
 			WorkIDs:   []string{"work-2"},
 		},
 	}
-	providerDiagnostics := &interfaces.WorkDiagnostics{
-		RenderedPrompt: &interfaces.RenderedPromptDiagnostic{
+	providerDiagnostics := &workerexecution.WorkDiagnostics{
+		RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{
 			SystemPromptHash: "system-hash",
 			UserMessageHash:  "user-hash",
 		},
-		Provider: &interfaces.ProviderDiagnostic{
+		Provider: &workerexecution.ProviderDiagnostic{
 			Provider: "claude",
 			Model:    "claude-3-5-haiku-20241022",
 			ResponseMetadata: map[string]string{
 				"request_id": "req-1",
 			},
 		},
-		Panic:    &interfaces.PanicDiagnostic{Message: "unsafe panic", Stack: "unsafe stack"},
+		Panic:    &workerexecution.PanicDiagnostic{Message: "unsafe panic", Stack: "unsafe stack"},
 		Metadata: map[string]string{"phase": "unsafe"},
 	}
-	commandDiagnostics := &interfaces.WorkDiagnostics{
-		Command: &interfaces.CommandDiagnostic{
+	commandDiagnostics := &workerexecution.WorkDiagnostics{
+		Command: &workerexecution.CommandDiagnostic{
 			Command:  "echo",
 			Args:     []string{"ok"},
 			Stdout:   "recorded script output\n",
@@ -411,17 +412,17 @@ func replaySideEffectArtifactWithDiagnostics(t *testing.T) (*interfaces.ReplayAr
 			providerDiagnostics,
 			"",
 		),
-		replayDispatchCompletedEvent(t, "completion-provider", interfaces.WorkResult{
+		replayDispatchCompletedEvent(t, "completion-provider", workerexecution.WorkResult{
 			DispatchID:   "dispatch-provider",
 			TransitionID: "process",
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 			Output:       "recorded provider output",
 			Diagnostics:  providerDiagnostics,
 		}, 4),
-		replayDispatchCompletedEvent(t, "completion-command", interfaces.WorkResult{
+		replayDispatchCompletedEvent(t, "completion-command", workerexecution.WorkResult{
 			DispatchID:   "dispatch-command",
 			TransitionID: "process",
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 			Output:       "recorded script output\n",
 			Error:        "recorded script details\n",
 			Diagnostics:  commandDiagnostics,
@@ -434,7 +435,7 @@ func TestSideEffects_CancellationDoesNotConsumeRecordedProviderResponse(t *testi
 	if err != nil {
 		t.Fatalf("NewSideEffects: %v", err)
 	}
-	request := interfaces.ProviderInferenceRequest{
+	request := workerexecution.ProviderInferenceRequest{
 		Dispatch: work.WorkDispatch{
 			WorkerType: "worker-a",
 			Execution: work.ExecutionMetadata{

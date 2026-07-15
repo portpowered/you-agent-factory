@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -36,7 +35,7 @@ Process the input task.
 	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-codex-images",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Works: []work.Work{{
 			Name:       "mixed-image-work",
 			WorkTypeID: "task",
 			TraceID:    "trace-codex-images",
@@ -87,7 +86,7 @@ Process the input task.
 	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-codex-text",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Works: []work.Work{{
 			Name:       "text-only-work",
 			WorkTypeID: "task",
 			TraceID:    "trace-codex-text",

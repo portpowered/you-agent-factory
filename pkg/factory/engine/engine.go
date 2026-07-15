@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
@@ -19,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // FactoryEngine is the signal-driven graph (colored petri net) executor. It blocks on a select over
@@ -38,10 +40,10 @@ type FactoryEngine struct {
 	workRequests          map[string]workdomain.WorkRequestSubmitResult
 	recordSubmission      func(work.FactorySubmissionRecord)
 	recordWorkRequest     func(int, work.WorkRequestRecord)
-	recordWorkInput       func(int, workdomain.SubmitRequest, interfaces.Token)
+	recordWorkInput       func(int, workdomain.SubmitRequest, factorytoken.Token)
 	recordDispatch        func(interfaces.FactoryDispatchRecord)
 	recordCompletion      func(interfaces.FactoryCompletionRecord)
-	recordResponse        func(int, interfaces.WorkResult, interfaces.CompletedDispatch)
+	recordResponse        func(int, workerexecution.WorkResult, interfaces.CompletedDispatch)
 	recordPetriMutations  func([]interfaces.TokenMutationRecord) error
 	dispatchHandler       func(work.WorkDispatch)
 	dispatchHook          factory.DispatchResultHook
@@ -73,7 +75,7 @@ func NewFactoryEngine(
 		runtimeState: &RuntimeState{
 			Marking:      marking,
 			Dispatches:   make(map[string]*interfaces.DispatchEntry),
-			ResultBuffer: buffers.NewTypedBuffer[interfaces.WorkResult](64),
+			ResultBuffer: buffers.NewTypedBuffer[workerexecution.WorkResult](64),
 		},
 		subsystems:       sorted,
 		logger:           logging.NoopLogger{},
@@ -122,7 +124,7 @@ func (e *FactoryEngine) drainPendingResults() {
 	}
 }
 
-func (e *FactoryEngine) appendObservedResult(result interfaces.WorkResult) {
+func (e *FactoryEngine) appendObservedResult(result workerexecution.WorkResult) {
 	index := len(e.runtimeState.Results)
 	e.runtimeState.Results = append(e.runtimeState.Results, result)
 	if e.recordCompletion != nil {
@@ -139,7 +141,7 @@ func (e *FactoryEngine) appendObservedResult(result interfaces.WorkResult) {
 // processed during this tick and records them in DispatchHistory. Transitioner-
 // supplied completion records take precedence; missing records fall back to a
 // minimal timing summary so dispatch bookkeeping still completes.
-func (e *FactoryEngine) retireCompletedDispatches(results []interfaces.WorkResult, completed map[string]interfaces.CompletedDispatch) {
+func (e *FactoryEngine) retireCompletedDispatches(results []workerexecution.WorkResult, completed map[string]interfaces.CompletedDispatch) {
 	for _, r := range results {
 		if entry, ok := e.runtimeState.Dispatches[r.DispatchID]; ok {
 			completedDispatch, hasCompletedRecord := completed[r.DispatchID]
@@ -170,27 +172,27 @@ func (e *FactoryEngine) retireCompletedDispatches(results []interfaces.WorkResul
 	}
 }
 
-func completedDispatchReasonFromResult(result interfaces.WorkResult) string {
+func completedDispatchReasonFromResult(result workerexecution.WorkResult) string {
 	switch result.Outcome {
-	case interfaces.OutcomeFailed:
+	case workerexecution.OutcomeFailed:
 		return result.Error
-	case interfaces.OutcomeContinue:
+	case workerexecution.OutcomeContinue:
 		return result.Feedback
-	case interfaces.OutcomeRejected:
+	case workerexecution.OutcomeRejected:
 		return result.Feedback
 	default:
 		return ""
 	}
 }
 
-func workResultForCompletedDispatch(result interfaces.WorkResult, completed interfaces.CompletedDispatch) interfaces.WorkResult {
+func workResultForCompletedDispatch(result workerexecution.WorkResult, completed interfaces.CompletedDispatch) workerexecution.WorkResult {
 	result.Outcome = completed.Outcome
 	switch completed.Outcome {
-	case interfaces.OutcomeFailed:
+	case workerexecution.OutcomeFailed:
 		result.Error = completed.Reason
-	case interfaces.OutcomeContinue:
+	case workerexecution.OutcomeContinue:
 		result.Feedback = completed.Reason
-	case interfaces.OutcomeRejected:
+	case workerexecution.OutcomeRejected:
 		result.Feedback = completed.Reason
 	}
 	return result
@@ -468,7 +470,7 @@ func (e *FactoryEngine) GetRuntimeStateSnapshot() interfaces.EngineStateSnapshot
 
 // GetResultBuffer returns the runtime-owned work result buffer used to hand
 // completed worker results back to the engine.
-func (e *FactoryEngine) GetResultBuffer() *buffers.TypedBuffer[interfaces.WorkResult] {
+func (e *FactoryEngine) GetResultBuffer() *buffers.TypedBuffer[workerexecution.WorkResult] {
 	return e.runtimeState.ResultBuffer
 }
 
@@ -797,7 +799,7 @@ func (e *FactoryEngine) applyHookMarkingMutations(mutations []interfaces.Marking
 		}
 		fromState := stateValueForPlace(e.state, mutation.FromPlace)
 		if leavingFailedPlace(e.state, token.Color.WorkTypeID, fromState) {
-			interfaces.ClearGuardBlockingFields(&token.History)
+			factorytoken.ClearGuardBlockingFields(&token.History)
 		}
 	}
 	return applyMutations(e.runtimeState.Marking, e.state.Places, mutations)
@@ -859,9 +861,9 @@ func (e *FactoryEngine) skipGeneratedSubmissionRequest(requestID string, source 
 	return exists
 }
 
-func (e *FactoryEngine) tokensFromGeneratedSubmissions(normalized []workdomain.SubmitRequest) ([]*interfaces.Token, error) {
+func (e *FactoryEngine) tokensFromGeneratedSubmissions(normalized []workdomain.SubmitRequest) ([]*factorytoken.Token, error) {
 	now := e.clock.Now()
-	tokens := make([]*interfaces.Token, 0, len(normalized))
+	tokens := make([]*factorytoken.Token, 0, len(normalized))
 	for _, req := range normalized {
 		token, err := e.transformer.InitialTokenFromSubmit(req, now)
 		if err != nil {
@@ -890,7 +892,7 @@ func (e *FactoryEngine) recordGeneratedSubmissionRequest(
 func (e *FactoryEngine) recordGeneratedSubmissionTokens(
 	source string,
 	normalized []workdomain.SubmitRequest,
-	tokens []*interfaces.Token,
+	tokens []*factorytoken.Token,
 ) {
 	for index, token := range tokens {
 		if e.recordSubmission != nil {

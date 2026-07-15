@@ -10,7 +10,9 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func generatedFactory(payload interfaces.InitialStructurePayload) factoryapi.Factory {
@@ -406,10 +408,10 @@ func generatedWork(item work.FactoryWorkItem) factoryapi.Work {
 	}
 }
 
-func generatedDispatchConsumedWorkRefsFromTokens(tokens []interfaces.Token) []factoryapi.DispatchConsumedWorkRef {
+func generatedDispatchConsumedWorkRefsFromTokens(tokens []factorytoken.Token) []factoryapi.DispatchConsumedWorkRef {
 	out := make([]factoryapi.DispatchConsumedWorkRef, 0, len(tokens))
 	for _, token := range tokens {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		workID := token.Color.WorkID
@@ -424,7 +426,7 @@ func generatedDispatchConsumedWorkRefsFromTokens(tokens []interfaces.Token) []fa
 	return out
 }
 
-func generatedDispatchRequestEventMetadataPtr(replayKey string, selection interfaces.ResolvedRunnerSelection) *factoryapi.DispatchRequestEventMetadata {
+func generatedDispatchRequestEventMetadataPtr(replayKey string, selection workerexecution.ResolvedRunnerSelection) *factoryapi.DispatchRequestEventMetadata {
 	if replayKey == "" && selection.RunnerID == "" && selection.Source == "" {
 		return nil
 	}
@@ -457,10 +459,10 @@ func generatedFactoryRelation(relation work.FactoryRelation) factoryapi.Relation
 	}
 }
 
-func (h *FactoryEventHistory) generatedResourcesPtr(tokens []interfaces.Token) *[]factoryapi.Resource {
+func (h *FactoryEventHistory) generatedResourcesPtr(tokens []factorytoken.Token) *[]factoryapi.Resource {
 	resources := make([]factoryapi.Resource, 0, len(tokens))
 	for _, token := range tokens {
-		if token.Color.DataType != interfaces.DataTypeResource {
+		if token.Color.DataType != factorytoken.DataTypeResource {
 			continue
 		}
 		resources = append(resources, h.generatedResource(token.Color.WorkTypeID))
@@ -471,7 +473,7 @@ func (h *FactoryEventHistory) generatedResourcesPtr(tokens []interfaces.Token) *
 func (h *FactoryEventHistory) generatedOutputResourcesPtr(mutations []interfaces.TokenMutationRecord) *[]factoryapi.Resource {
 	resources := make([]factoryapi.Resource, 0, len(mutations))
 	for _, mutation := range mutations {
-		if mutation.Token == nil || mutation.Token.Color.DataType != interfaces.DataTypeResource {
+		if mutation.Token == nil || mutation.Token.Color.DataType != factorytoken.DataTypeResource {
 			continue
 		}
 		resources = append(resources, h.generatedResource(mutation.Token.Color.WorkTypeID))

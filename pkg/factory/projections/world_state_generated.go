@@ -5,6 +5,8 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func resourceUnitsFromGenerated(resources *[]factoryapi.Resource) []interfaces.FactoryResourceUnit {
@@ -22,11 +24,11 @@ func resourceUnitsFromGenerated(resources *[]factoryapi.Resource) []interfaces.F
 }
 
 func workstationResultFromGenerated(payload factoryapi.DispatchResponseEventPayload) interfaces.WorkstationResult {
-	failureMetadata := interfaces.WorkFailureMetadataFromGenerated(payload.ProviderFailure)
-	var failureDetail *interfaces.FailureDetail
+	failureMetadata := workerdiagnostics.WorkFailureMetadataFromGenerated(payload.ProviderFailure)
+	var failureDetail *workerexecution.FailureDetail
 	if payload.FailureDetail != nil {
-		failureDetail = &interfaces.FailureDetail{
-			Reason:  interfaces.WorkFailureType(payload.FailureDetail.Reason),
+		failureDetail = &workerexecution.FailureDetail{
+			Reason:  workerexecution.WorkFailureType(payload.FailureDetail.Reason),
 			Message: payload.FailureDetail.Message,
 		}
 	}

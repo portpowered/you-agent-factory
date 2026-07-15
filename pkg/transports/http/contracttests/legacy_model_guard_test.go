@@ -12,6 +12,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/contractguard"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -115,8 +116,8 @@ func TestOpenAPIContract_WorkerModelProviderEnumMatchesSupportedBackendProviders
 	schemas := componentSchemas(t, doc)
 	schema := schemaObject(t, schemas, "WorkerModelProvider")
 
-	wantPublic := make([]string, 0, len(interfaces.SupportedModelProviders()))
-	for _, internal := range interfaces.SupportedModelProviders() {
+	wantPublic := make([]string, 0, len(modelprovider.Supported()))
+	for _, internal := range modelprovider.Supported() {
 		public, ok := interfaces.PublicWorkerModelProviderFromInternal(internal)
 		if !ok {
 			t.Fatalf("PublicWorkerModelProviderFromInternal(%q) = false", internal)
@@ -126,7 +127,7 @@ func TestOpenAPIContract_WorkerModelProviderEnumMatchesSupportedBackendProviders
 	sort.Strings(wantPublic)
 	assertEnumValues(t, schema, "WorkerModelProvider", wantPublic)
 
-	for _, internal := range interfaces.SupportedModelProviders() {
+	for _, internal := range modelprovider.Supported() {
 		public, ok := interfaces.PublicWorkerModelProviderFromInternal(internal)
 		if !ok {
 			t.Fatalf("PublicWorkerModelProviderFromInternal(%q) = false", internal)
@@ -149,8 +150,8 @@ func TestOpenAPIContract_GeneratedWorkerModelProviderConstantsMatchOpenAPIEnum(t
 		factoryapi.WorkerModelProviderPi,
 		factoryapi.WorkerModelProviderAgy,
 	}
-	if len(want) != len(interfaces.SupportedModelProviders()) {
-		t.Fatalf("generated WorkerModelProvider constants = %d, supported internal providers = %d", len(want), len(interfaces.SupportedModelProviders()))
+	if len(want) != len(modelprovider.Supported()) {
+		t.Fatalf("generated WorkerModelProvider constants = %d, supported internal providers = %d", len(want), len(modelprovider.Supported()))
 	}
 	for _, public := range want {
 		if _, ok := interfaces.InternalModelProviderFromPublicWorkerModelProvider(public); !ok {

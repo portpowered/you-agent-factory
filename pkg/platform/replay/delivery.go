@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -128,8 +129,8 @@ func buildReplayDispatchDefaultsIndex(dispatches []replayDispatch) (
 	return byWorkID, byNameAndTrace, byTrace
 }
 
-func replayDispatchDefaultsFromToken(token interfaces.Token, fallbackTraceID string) (dispatchWorkDefaults, bool) {
-	if token.Color.DataType == interfaces.DataTypeResource || token.Color.WorkID == "" {
+func replayDispatchDefaultsFromToken(token factorytoken.Token, fallbackTraceID string) (dispatchWorkDefaults, bool) {
+	if token.Color.DataType == factorytoken.DataTypeResource || token.Color.WorkID == "" {
 		return dispatchWorkDefaults{}, false
 	}
 	traceID := token.Color.TraceID
@@ -144,7 +145,7 @@ func replayDispatchDefaultsFromToken(token interfaces.Token, fallbackTraceID str
 }
 
 func applyReplaySubmissionDefaultsForRequest(
-	works []interfaces.Work,
+	works []work.Work,
 	byWorkID map[string]dispatchWorkDefaults,
 	byNameAndTrace map[namedTraceKey]dispatchWorkDefaults,
 	byTrace map[string][]dispatchWorkDefaults,
@@ -165,7 +166,7 @@ func applyReplaySubmissionDefaultsForRequest(
 }
 
 func replayDispatchDefaultsForWork(
-	work interfaces.Work,
+	work work.Work,
 	byWorkID map[string]dispatchWorkDefaults,
 	byNameAndTrace map[namedTraceKey]dispatchWorkDefaults,
 	byTrace map[string][]dispatchWorkDefaults,
@@ -366,12 +367,12 @@ func replayWorkStateChangeMutation(
 	}, true
 }
 
-func replayWorkTokenID(tokens map[string]*interfaces.Token, workID string) string {
+func replayWorkTokenID(tokens map[string]*factorytoken.Token, workID string) string {
 	for id, token := range tokens {
 		if token == nil || token.Color.WorkID != workID {
 			continue
 		}
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		return id
@@ -384,7 +385,7 @@ func replayWorkTokenID(tokens map[string]*interfaces.Token, workID string) strin
 type CompletionDeliveryPlan struct {
 	mu             sync.Mutex
 	records        []completionDeliveryRecord
-	plannedResults map[string]interfaces.WorkResult
+	plannedResults map[string]workerexecution.WorkResult
 }
 
 type completionDeliveryRecord struct {
@@ -446,7 +447,7 @@ func NewCompletionDeliveryPlan(artifact *interfaces.ReplayArtifact) (*Completion
 	}
 	return &CompletionDeliveryPlan{
 		records:        records,
-		plannedResults: make(map[string]interfaces.WorkResult),
+		plannedResults: make(map[string]workerexecution.WorkResult),
 	}, nil
 }
 
@@ -514,9 +515,9 @@ func (p *CompletionDeliveryPlan) ValidateReplayTick(currentTick int) error {
 	return nil
 }
 
-func (p *CompletionDeliveryPlan) PlannedResultForDispatch(dispatch work.WorkDispatch) (interfaces.WorkResult, bool, error) {
+func (p *CompletionDeliveryPlan) PlannedResultForDispatch(dispatch work.WorkDispatch) (workerexecution.WorkResult, bool, error) {
 	if p == nil {
-		return interfaces.WorkResult{}, false, nil
+		return workerexecution.WorkResult{}, false, nil
 	}
 
 	p.mu.Lock()
@@ -524,16 +525,16 @@ func (p *CompletionDeliveryPlan) PlannedResultForDispatch(dispatch work.WorkDisp
 
 	result, ok := p.plannedResults[dispatch.DispatchID]
 	if !ok {
-		return interfaces.WorkResult{}, false, nil
+		return workerexecution.WorkResult{}, false, nil
 	}
 	delete(p.plannedResults, dispatch.DispatchID)
 	return cloneReplayPlannedResult(result), true, nil
 }
 
-func cloneReplayPlannedResult(result interfaces.WorkResult) interfaces.WorkResult {
+func cloneReplayPlannedResult(result workerexecution.WorkResult) workerexecution.WorkResult {
 	clone := result
 	if result.SpawnedWork != nil {
-		clone.SpawnedWork = append([]interfaces.TokenColor(nil), result.SpawnedWork...)
+		clone.SpawnedWork = append([]factorytoken.Color(nil), result.SpawnedWork...)
 	}
 	if result.RecordedOutputWork != nil {
 		clone.RecordedOutputWork = cloneReplayFactoryWorkItems(result.RecordedOutputWork)
@@ -604,7 +605,7 @@ func dispatchMatches(recorded, observed work.WorkDispatch) bool {
 	return executionMetadataMatches(recorded.Execution, observed.Execution)
 }
 
-func tokenIDsMatch(recorded, observed []interfaces.Token) bool {
+func tokenIDsMatch(recorded, observed []factorytoken.Token) bool {
 	if !hasResourceToken(recorded) {
 		observed = nonResourceTokens(observed)
 	}
@@ -621,19 +622,19 @@ func tokenIDsMatch(recorded, observed []interfaces.Token) bool {
 	return reflect.DeepEqual(recordedIDs, observedIDs)
 }
 
-func hasResourceToken(tokens []interfaces.Token) bool {
+func hasResourceToken(tokens []factorytoken.Token) bool {
 	for _, token := range tokens {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			return true
 		}
 	}
 	return false
 }
 
-func nonResourceTokens(tokens []interfaces.Token) []interfaces.Token {
-	out := make([]interfaces.Token, 0, len(tokens))
+func nonResourceTokens(tokens []factorytoken.Token) []factorytoken.Token {
+	out := make([]factorytoken.Token, 0, len(tokens))
 	for _, token := range tokens {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		out = append(out, token)
@@ -641,8 +642,8 @@ func nonResourceTokens(tokens []interfaces.Token) []interfaces.Token {
 	return out
 }
 
-func replayTokenIdentity(token interfaces.Token) string {
-	if token.Color.DataType == interfaces.DataTypeResource {
+func replayTokenIdentity(token factorytoken.Token) string {
+	if token.Color.DataType == factorytoken.DataTypeResource {
 		resourceID := resourceTokenName(token)
 		return strings.Join([]string{"resource", resourceID}, "/")
 	}
@@ -652,7 +653,7 @@ func replayTokenIdentity(token interfaces.Token) string {
 	return token.ID
 }
 
-func resourceTokenName(token interfaces.Token) string {
+func resourceTokenName(token factorytoken.Token) string {
 	if token.Color.WorkTypeID != "" {
 		return token.Color.WorkTypeID
 	}
@@ -681,7 +682,7 @@ func dispatchSummary(dispatch work.WorkDispatch) string {
 	)
 }
 
-func workTokenIDs(tokens []interfaces.Token) []string {
+func workTokenIDs(tokens []factorytoken.Token) []string {
 	ids := make([]string, 0, len(tokens))
 	for _, token := range tokens {
 		ids = append(ids, token.ID)

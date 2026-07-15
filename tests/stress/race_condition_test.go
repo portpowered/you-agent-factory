@@ -11,9 +11,9 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // TestRaceConditionConcurrentMutation verifies the engine has no race conditions
@@ -355,7 +355,7 @@ type delayExecutor struct {
 	maxDelay time.Duration
 }
 
-func (e *delayExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *delayExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	if e.maxDelay > 0 {
 		time.Sleep(time.Duration(rand.Int63n(int64(e.maxDelay))))
 	}
@@ -363,10 +363,10 @@ func (e *delayExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (
 	e.calls++
 	e.mu.Unlock()
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}, nil
 }
 

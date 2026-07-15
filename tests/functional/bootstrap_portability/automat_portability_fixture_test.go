@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -702,7 +703,7 @@ type automatDispatchReadyRunner struct {
 
 func (r *automatDispatchReadyRunner) Run(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
 	r.mu.Lock()
-	r.requests = append(r.requests, workers.CommandRequest(interfaces.CloneSubprocessExecutionRequest(req)))
+	r.requests = append(r.requests, workers.CommandRequest(workerexecution.CloneSubprocessExecutionRequest(req)))
 	r.mu.Unlock()
 
 	scriptPath, issues := automatScriptPathAndIssues(req.Args)
@@ -740,7 +741,7 @@ func (r *automatDispatchReadyRunner) Requests() []workers.CommandRequest {
 
 	out := make([]workers.CommandRequest, len(r.requests))
 	for i := range r.requests {
-		out[i] = workers.CommandRequest(interfaces.CloneSubprocessExecutionRequest(r.requests[i]))
+		out[i] = workers.CommandRequest(workerexecution.CloneSubprocessExecutionRequest(r.requests[i]))
 	}
 	return out
 }

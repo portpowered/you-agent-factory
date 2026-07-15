@@ -13,9 +13,9 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
@@ -198,8 +198,8 @@ func TestInitialize_MatchesBuildFactoryServiceOperatorDefaults(t *testing.T) {
 	if !ok || worker == nil {
 		t.Fatal("expected executor worker from initializer startup runtime")
 	}
-	if worker.ModelProvider != string(interfaces.ModelProviderCodex) {
-		t.Fatalf("initializer modelProvider = %q, want %q", worker.ModelProvider, interfaces.ModelProviderCodex)
+	if worker.ModelProvider != string(modelprovider.Codex) {
+		t.Fatalf("initializer modelProvider = %q, want %q", worker.ModelProvider, modelprovider.Codex)
 	}
 
 	serviceWorker, ok := svc.StartupWorkerConfig("executor")

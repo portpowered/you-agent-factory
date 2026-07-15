@@ -15,12 +15,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
@@ -135,7 +138,7 @@ Work from {{ .Context.WorkDir }}
 	}
 
 	executor := &captureReplayWorkstationExecutor{
-		result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"},
+		result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"},
 	}
 	we := &workerexecutor.WorkstationExecutor{
 		RuntimeConfig: runtimeCfg,
@@ -149,16 +152,16 @@ Work from {{ .Context.WorkDir }}
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
 		ProjectID:       "agent-factory",
-		InputTokens: workers.InputTokens(interfaces.Token{
+		InputTokens: workers.InputTokens(factorytoken.Token{
 			ID:    "tok-1",
-			Color: interfaces.TokenColor{WorkID: "work-1"},
+			Color: factorytoken.Color{WorkID: "work-1"},
 		}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if executor.request.WorkingDirectory != filepath.Join(factoryDir, "workspace") {
 		t.Fatalf("working directory = %q, want %q", executor.request.WorkingDirectory, filepath.Join(factoryDir, "workspace"))
@@ -665,11 +668,11 @@ func assertDynamicFanInGuard(t *testing.T, transition *petri.Transition, childPl
 }
 
 type captureReplayWorkstationExecutor struct {
-	request interfaces.WorkstationExecutionRequest
-	result  interfaces.WorkResult
+	request workerexecution.WorkstationExecutionRequest
+	result  workerexecution.WorkResult
 }
 
-func (e *captureReplayWorkstationExecutor) Execute(_ context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (e *captureReplayWorkstationExecutor) Execute(_ context.Context, request workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	e.request = request
 	return e.result, nil
 }
@@ -741,7 +744,7 @@ func assertCanonicalRuntimeDefinitionLookupByName(
 	lookup interfaces.RuntimeDefinitionLookup,
 	workerName string,
 	workstationName string,
-) (*interfaces.WorkerConfig, *interfaces.FactoryWorkstationConfig) {
+) (*workerconfig.Config, *interfaces.FactoryWorkstationConfig) {
 	t.Helper()
 	worker, ok := lookup.Worker(workerName)
 	if !ok || worker == nil {

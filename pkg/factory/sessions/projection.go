@@ -15,6 +15,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
@@ -421,7 +422,7 @@ func projectedEnabledTransitions(
 	return projected
 }
 
-func projectedTokenResponse(token *interfaces.Token) factoryapi.TokenResponse {
+func projectedTokenResponse(token *factorytoken.Token) factoryapi.TokenResponse {
 	resp := factoryapi.TokenResponse{
 		Id:        token.ID,
 		PlaceId:   token.PlaceID,
@@ -466,7 +467,7 @@ func categorizeProjectionTokens(
 		if token == nil || interfaces.IsSystemTimeToken(token) {
 			continue
 		}
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			resourceID, resourceState := state.SplitPlaceID(token.PlaceID)
 			if _, ok := resourceTotals[resourceID]; !ok {
 				resourceTotals[resourceID]++

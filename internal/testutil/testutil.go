@@ -16,7 +16,9 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 // seedFileCounter provides unique filenames across concurrent test invocations.
@@ -384,7 +386,7 @@ func UpdateFactoryJSON(t *testing.T, dir string, mutate func(map[string]any)) {
 func AppendFactoryInferenceThrottleGuard(
 	t *testing.T,
 	dir string,
-	provider interfaces.ModelProvider,
+	provider modelprovider.ID,
 	model string,
 	refreshWindow time.Duration,
 ) {
@@ -443,7 +445,7 @@ func PipelineConfig(stages int, workerName string) *interfaces.FactoryConfig {
 
 	return &interfaces.FactoryConfig{
 		WorkTypes:    []interfaces.WorkTypeConfig{{Name: "task", States: states}},
-		Workers:      []interfaces.WorkerConfig{{Name: workerName}},
+		Workers:      []workerconfig.Config{{Name: workerName}},
 		Workstations: workstations,
 	}
 }

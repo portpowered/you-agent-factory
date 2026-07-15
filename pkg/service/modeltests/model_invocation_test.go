@@ -16,35 +16,37 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 )
 
 type providerCallRecorder struct {
 	mu        sync.Mutex
-	calls     []interfaces.ProviderInferenceRequest
-	responses []interfaces.InferenceResponse
+	calls     []workerexecution.ProviderInferenceRequest
+	responses []workerexecution.InferenceResponse
 }
 
-func (p *providerCallRecorder) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *providerCallRecorder) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.calls = append(p.calls, interfaces.CloneProviderInferenceRequest(req))
+	p.calls = append(p.calls, workerexecution.CloneProviderInferenceRequest(req))
 	if len(p.responses) == 0 {
-		return interfaces.InferenceResponse{Content: "ok"}, nil
+		return workerexecution.InferenceResponse{Content: "ok"}, nil
 	}
 	response := p.responses[0]
 	p.responses = p.responses[1:]
 	return response, nil
 }
 
-func (p *providerCallRecorder) Calls() []interfaces.ProviderInferenceRequest {
+func (p *providerCallRecorder) Calls() []workerexecution.ProviderInferenceRequest {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	calls := make([]interfaces.ProviderInferenceRequest, len(p.calls))
+	calls := make([]workerexecution.ProviderInferenceRequest, len(p.calls))
 	for i, call := range p.calls {
-		calls[i] = interfaces.CloneProviderInferenceRequest(call)
+		calls[i] = workerexecution.CloneProviderInferenceRequest(call)
 	}
 	return calls
 }
@@ -81,7 +83,7 @@ func TestInvokeModel_ReturnsModelNotAvailableWhenManagedCacheIsMissing(t *testin
 func TestInvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
 	provider := &providerCallRecorder{
-		responses: []interfaces.InferenceResponse{{
+		responses: []workerexecution.InferenceResponse{{
 			Content: mustMarshalAudioContentResponse(t, audioPath),
 		}},
 	}
@@ -103,7 +105,7 @@ func TestInvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
 	if result.ModelName != "OMNIVOICE_Q4_K_M" || result.Worker != "tts-worker" {
 		t.Fatalf("result identity = %#v, want OMNIVOICE tts-worker", result)
 	}
-	if len(result.Bindings) != 1 || result.Bindings[0].Slot != "text" || result.Bindings[0].Source != interfaces.ModelOperationBindingSourceInput {
+	if len(result.Bindings) != 1 || result.Bindings[0].Slot != "text" || result.Bindings[0].Source != workerexecution.ModelOperationBindingSourceInput {
 		t.Fatalf("bindings = %#v, want one input binding", result.Bindings)
 	}
 	if len(result.Content) != 1 || result.Content[0].Type != work.WorkContentPartTypeAudio || result.StreamFile != audioPath || result.StreamContentType != "audio/wav" {
@@ -146,17 +148,17 @@ func cloudModelInvocationConfig() map[string]any {
 		"type":          interfaces.WorkerTypeModel,
 		"model":         "OMNIVOICE_Q4_K_M",
 		"modelProvider": "CODEX",
-		"modelLocality": interfaces.ModelLocalityCloud,
+		"modelLocality": workerconfig.ModelLocalityCloud,
 		"operations": []map[string]any{{
 			"name": "TTS",
 			"inputs": []map[string]any{{
 				"name":         "text",
-				"contentTypes": []string{interfaces.ModelOperationContentTypeText},
+				"contentTypes": []string{workerconfig.ModelOperationContentTypeText},
 				"required":     true,
 			}},
 			"outputs": []map[string]any{{
 				"name":         "audio",
-				"contentTypes": []string{interfaces.ModelOperationContentTypeAudio},
+				"contentTypes": []string{workerconfig.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}}

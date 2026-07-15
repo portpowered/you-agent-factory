@@ -150,28 +150,28 @@ func NewSideEffects(artifact *interfaces.ReplayArtifact) (*SideEffects, error) {
 
 // Infer implements workers.Provider by returning the recorded provider response
 // for the matching dispatch.
-func (s *SideEffects) Infer(ctx context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (s *SideEffects) Infer(ctx context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	record, err := s.claim(ctx, "provider", func(candidate sideEffectRecord) bool {
 		return providerRequestMatches(candidate, req)
 	})
 	if err != nil {
-		return interfaces.InferenceResponse{}, err
+		return workerexecution.InferenceResponse{}, err
 	}
 	if !record.hasCompletion {
-		return interfaces.InferenceResponse{}, missingCompletionError(record.dispatch)
+		return workerexecution.InferenceResponse{}, missingCompletionError(record.dispatch)
 	}
 
 	result := record.completion.result
 	failureMetadata := result.FailureMetadata
-	if result.Outcome == interfaces.OutcomeFailed && failureMetadata != nil {
-		return interfaces.InferenceResponse{}, workerprovider.NewProviderError(
+	if result.Outcome == workerexecution.OutcomeFailed && failureMetadata != nil {
+		return workerexecution.InferenceResponse{}, workerprovider.NewProviderError(
 			failureMetadata.Type,
 			result.Error,
 			errors.New(result.Error),
 		)
 	}
 
-	return interfaces.InferenceResponse{
+	return workerexecution.InferenceResponse{
 		Content:         result.Output,
 		ProviderSession: interfaces.CloneProviderSessionMetadata(result.ProviderSession),
 		Diagnostics:     workerexecution.CloneWorkDiagnostics(record.completion.diagnostics),
@@ -195,7 +195,7 @@ func (s *SideEffects) Run(ctx context.Context, req workers.CommandRequest) (work
 			Stdout: []byte(record.completion.result.Output),
 			Stderr: []byte(record.completion.result.Error),
 		}
-		if record.completion.result.Outcome == interfaces.OutcomeFailed {
+		if record.completion.result.Outcome == workerexecution.OutcomeFailed {
 			result.ExitCode = 1
 		}
 		return result, nil
@@ -250,7 +250,7 @@ func (s *SideEffects) claim(ctx context.Context, kind string, matches func(sideE
 	)
 }
 
-func providerRequestMatches(record sideEffectRecord, req interfaces.ProviderInferenceRequest) bool {
+func providerRequestMatches(record sideEffectRecord, req workerexecution.ProviderInferenceRequest) bool {
 	dispatch := record.dispatch.dispatch
 	if !executionMetadataMatches(dispatch.Execution, req.Dispatch.Execution) {
 		return false

@@ -8,6 +8,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/work"
@@ -268,7 +269,7 @@ type runtimeConfigAlignmentSummary struct {
 
 type runtimeConfigAlignmentWorkerSummary struct {
 	Type      string
-	Resources []interfaces.ResourceConfig
+	Resources []factoryresource.Config
 	StopToken string
 }
 
@@ -278,7 +279,7 @@ type runtimeConfigAlignmentWorkstationSummary struct {
 	Type           string
 	Cron           *runtimeConfigAlignmentCronSummary
 	Limits         interfaces.WorkstationLimits
-	Resources      []interfaces.ResourceConfig
+	Resources      []factoryresource.Config
 	StopWords      []string
 }
 

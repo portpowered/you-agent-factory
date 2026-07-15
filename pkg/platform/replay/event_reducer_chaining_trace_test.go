@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -31,7 +32,7 @@ func TestReplayDispatchFromEvent_PreservesConsumedInputChainingLineage(t *testin
 			WorkIds:    slicePtr([]string{"work-generated"}),
 		},
 		Payload: union,
-	}, map[string]interfaces.Work{
+	}, map[string]work.Work{
 		"work-generated": {
 			WorkID:                   "work-generated",
 			Name:                     "generated-merge-input",
@@ -86,7 +87,7 @@ func TestReplayDispatchFromEvent_PrefersContextChainingLineageOverPayloadCompati
 			WorkIds:                  slicePtr([]string{"work-generated"}),
 		},
 		Payload: union,
-	}, map[string]interfaces.Work{
+	}, map[string]work.Work{
 		"work-generated": {
 			WorkID:                   "work-generated",
 			Name:                     "generated-merge-input",
@@ -130,7 +131,7 @@ func TestReplayDispatchFromEvent_FallsBackToContextWorkIDsWhenConsumedRefsOmitWo
 			WorkIds:    slicePtr([]string{"work-task-1"}),
 		},
 		Payload: union,
-	}, map[string]interfaces.Work{
+	}, map[string]work.Work{
 		"work-task-1": {
 			WorkID:                 "work-task-1",
 			Name:                   "task-1",
@@ -220,7 +221,7 @@ func TestReplayDispatchFromEvent_DerivesCanonicalPreviousLineageFromMixedInputs(
 			WorkIds:    slicePtr([]string{"work-z", "work-a", "work-z-duplicate"}),
 		},
 		Payload: union,
-	}, map[string]interfaces.Work{
+	}, map[string]work.Work{
 		"work-z": {
 			WorkID:                   "work-z",
 			Name:                     "work-z",
@@ -257,7 +258,7 @@ func TestReplayDispatchFromEvent_DerivesCanonicalPreviousLineageFromMixedInputs(
 	if len(tokens) != 4 {
 		t.Fatalf("replayed input tokens = %#v, want three work tokens plus one resource token", tokens)
 	}
-	if tokens[3].Color.DataType != interfaces.DataTypeResource {
+	if tokens[3].Color.DataType != factorytoken.DataTypeResource {
 		t.Fatalf("replayed resource token data type = %q, want resource", tokens[3].Color.DataType)
 	}
 }

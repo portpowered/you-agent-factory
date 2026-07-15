@@ -15,6 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/initializer"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
@@ -358,8 +359,8 @@ func assertComposeOperatorDefaultedExecutorWorker(t *testing.T, svc *service.Fac
 	if !ok || worker == nil {
 		t.Fatal("expected executor worker")
 	}
-	if worker.ModelProvider != string(interfaces.ModelProviderCodex) {
-		t.Fatalf("modelProvider = %q, want %q", worker.ModelProvider, interfaces.ModelProviderCodex)
+	if worker.ModelProvider != string(modelprovider.Codex) {
+		t.Fatalf("modelProvider = %q, want %q", worker.ModelProvider, modelprovider.Codex)
 	}
 	if worker.Model != "gpt-5-codex" {
 		t.Fatalf("model = %q, want gpt-5-codex", worker.Model)

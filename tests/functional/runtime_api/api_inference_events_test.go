@@ -15,6 +15,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -30,8 +31,8 @@ func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifac
 	})
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Step one done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Step two done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -84,15 +85,15 @@ func TestInferenceEvents_HTTPStreamAndDashboardProjectionCorrelateRetryAttempts(
 	support.SkipLongFunctional(t, "slow inference-event stream-projection sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	provider := testutil.NewMockProviderWithErrors(
-		[]interfaces.InferenceResponse{
+		[]workerexecution.InferenceResponse{
 			{},
 			{},
 			{Content: "Step one recovered. COMPLETE"},
 			{Content: "Step two done. COMPLETE"},
 		},
 		[]error{
-			workers.NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timeout", nil),
-			workers.NewProviderError(interfaces.WorkFailureTypeInternalServerError, "provider 500", nil),
+			workers.NewProviderError(workerexecution.WorkFailureTypeTimeout, "provider timeout", nil),
+			workers.NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "provider 500", nil),
 			nil,
 			nil,
 		},
@@ -548,20 +549,20 @@ type DashboardThrottlePause struct {
 }
 
 type InferenceAttempt struct {
-	Attempt            int                       `json:"attempt"`
-	DispatchId         string                    `json:"dispatch_id"`
-	DurationMillis     int64                     `json:"duration_millis,omitempty"`
-	FailureDetail      *interfaces.FailureDetail `json:"failureDetail,omitempty"`
-	ExitCode           *int                      `json:"exit_code,omitempty"`
-	InferenceRequestId string                    `json:"inference_request_id"`
-	Outcome            string                    `json:"outcome,omitempty"`
-	Prompt             string                    `json:"prompt"`
-	RequestTime        string                    `json:"request_time"`
-	Response           string                    `json:"response,omitempty"`
-	ResponseTime       string                    `json:"response_time,omitempty"`
-	TransitionId       string                    `json:"transition_id"`
-	WorkingDirectory   string                    `json:"working_directory,omitempty"`
-	Worktree           string                    `json:"worktree,omitempty"`
+	Attempt            int                            `json:"attempt"`
+	DispatchId         string                         `json:"dispatch_id"`
+	DurationMillis     int64                          `json:"duration_millis,omitempty"`
+	FailureDetail      *workerexecution.FailureDetail `json:"failureDetail,omitempty"`
+	ExitCode           *int                           `json:"exit_code,omitempty"`
+	InferenceRequestId string                         `json:"inference_request_id"`
+	Outcome            string                         `json:"outcome,omitempty"`
+	Prompt             string                         `json:"prompt"`
+	RequestTime        string                         `json:"request_time"`
+	Response           string                         `json:"response,omitempty"`
+	ResponseTime       string                         `json:"response_time,omitempty"`
+	TransitionId       string                         `json:"transition_id"`
+	WorkingDirectory   string                         `json:"working_directory,omitempty"`
+	Worktree           string                         `json:"worktree,omitempty"`
 }
 
 type DashboardSessionRuntime struct {

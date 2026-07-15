@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type fixedClock struct {
@@ -43,7 +43,7 @@ func TestSessionResponseStream_AppendAssignsMonotonicSequenceAndRetentionMetadat
 		Kind:       responsestream.EventKindResponseFragment,
 		DispatchID: "dispatch-1",
 		Payload:    "partial response",
-		ProviderSessionRef: &interfaces.ProviderSessionMetadata{
+		ProviderSessionRef: &workerexecution.ProviderSessionMetadata{
 			Provider: "cursor",
 			Kind:     "session_id",
 			ID:       "sess-1",

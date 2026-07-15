@@ -15,6 +15,7 @@ import (
 	factoryruntime "github.com/portpowered/infinite-you/pkg/factory/runtime"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
@@ -53,7 +54,7 @@ func TestMoveWork_AcceptsWhileFactoryPaused(t *testing.T) {
 
 func TestMoveWork_Returns404ForMissingWork(t *testing.T) {
 	mf := &testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
 		Net:     moveWorkTestNet(),
 	}
 	srv := newAPITestServer(mf)
@@ -97,11 +98,11 @@ func TestMoveWork_Returns409ForDuplicateRequestId(t *testing.T) {
 
 func TestMoveWorkBySessionId_Returns404ForMissingSession(t *testing.T) {
 	mf := &testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
 		Net:     moveWorkTestNet(),
 		SessionFactories: map[string]*testutil.MockFactory{
 			"~default": {
-				Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+				Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
 				Net:     moveWorkTestNet(),
 			},
 		},
@@ -121,11 +122,11 @@ func TestMoveWorkBySessionId_SucceedsForScopedSession(t *testing.T) {
 	now := time.Now().UTC()
 	beta := moveWorkMockFactory(now, "work-beta-move", "task", "init")
 	mf := &testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
 		Net:     moveWorkTestNet(),
 		SessionFactories: map[string]*testutil.MockFactory{
 			"~default": {
-				Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+				Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
 				Net:     moveWorkTestNet(),
 			},
 			"beta": beta,
@@ -237,11 +238,11 @@ func moveWorkMockFactory(now time.Time, workID, workTypeID, stateName string) *t
 	placeID := state.PlaceID(workTypeID, stateName)
 	return &testutil.MockFactory{
 		Marking: &petri.MarkingSnapshot{
-			Tokens: map[string]*interfaces.Token{
+			Tokens: map[string]*factorytoken.Token{
 				"tok-1": {
 					ID:      "tok-1",
 					PlaceID: placeID,
-					Color: interfaces.TokenColor{
+					Color: factorytoken.Color{
 						WorkID:     workID,
 						WorkTypeID: workTypeID,
 					},

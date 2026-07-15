@@ -9,8 +9,8 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func normalizeSubmitRequestsForFunctionalTest(requests []work.SubmitRequest) []work.SubmitRequest {
@@ -43,12 +43,12 @@ type blockingExecutor struct {
 	calls     *int
 }
 
-func (e *blockingExecutor) Execute(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *blockingExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.mu.Lock()
 	*e.calls++
 	e.mu.Unlock()
 	<-e.releaseCh
-	return interfaces.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: interfaces.OutcomeAccepted}, nil
+	return workerexecution.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: workerexecution.OutcomeAccepted}, nil
 }
 
 func tokenPlaces(snap petri.MarkingSnapshot) map[string]int {

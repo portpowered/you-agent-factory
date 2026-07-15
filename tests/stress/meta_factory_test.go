@@ -15,6 +15,9 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	agentstate "github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/state/validation"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // TestMetaFactoryWorkflow proves the meta-factory pattern: a workflow that
@@ -42,7 +45,7 @@ func TestMetaFactoryWorkflow(t *testing.T) {
 	h.SetCustomExecutor("validator-worker", &validatorExecutor{tracker: tracker})
 	h.SetCustomExecutor("apply-emitter", &applyEmitterExecutor{tracker: tracker})
 	h.SetCustomExecutor("applier", &applierExecutor{tracker: tracker})
-	h.MockWorker("finalizer", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("finalizer", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	// Submit an analysis request.
 	h.SubmitWork("analyze-stats", []byte(`{"factory_id": "code-factory", "metric": "transition_latency"}`))
@@ -112,7 +115,7 @@ func TestMetaFactoryWithRejectionLoop(t *testing.T) {
 	})
 	h.SetCustomExecutor("apply-emitter", &applyEmitterExecutor{tracker: tracker})
 	h.SetCustomExecutor("applier", &applierExecutor{tracker: tracker})
-	h.MockWorker("finalizer", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("finalizer", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	h.SubmitWork("analyze-stats", []byte(`{"factory_id": "code-factory", "metric": "error_rate"}`))
 
@@ -148,7 +151,7 @@ func TestMetaFactoryGuardedLoopBreakerTerminatesRejectedValidationLoop(t *testin
 	h.SetCustomExecutor("validator-worker", &alwaysRejectingValidatorExecutor{tracker: tracker})
 	h.SetCustomExecutor("apply-emitter", &applyEmitterExecutor{tracker: tracker})
 	h.SetCustomExecutor("applier", &applierExecutor{tracker: tracker})
-	h.MockWorker("finalizer", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("finalizer", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	h.SubmitWork("analyze-stats", []byte(`{"factory_id": "code-factory"}`))
 
@@ -195,7 +198,7 @@ func TestMetaFactoryTimeout(t *testing.T) {
 		h.SetCustomExecutor("validator-worker", &validatorExecutor{tracker: tracker})
 		h.SetCustomExecutor("apply-emitter", &applyEmitterExecutor{tracker: tracker})
 		h.SetCustomExecutor("applier", &applierExecutor{tracker: tracker})
-		h.MockWorker("finalizer", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+		h.MockWorker("finalizer", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 		h.SubmitWork("analyze-stats", []byte(`{"factory_id": "test"}`))
 
@@ -236,7 +239,7 @@ func buildMetaFactoryCfg(maxVisits int) *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			}},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "analyzer"}, {Name: "proposal-emitter"}, {Name: "validator-worker"},
 			{Name: "apply-emitter"}, {Name: "applier"}, {Name: "finalizer"},
 		},
@@ -335,7 +338,7 @@ type analyzerExecutor struct {
 	tracker *metaFactoryTracker
 }
 
-func (e *analyzerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *analyzerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.tracker.recordAnalyzer()
 
 	// Simulate: analyzed stats, found that transition X has high retry rate.
@@ -348,10 +351,10 @@ func (e *analyzerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch
 	}
 	proposalJSON, _ := json.Marshal(proposal)
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       string(proposalJSON),
 	}, nil
 }
@@ -361,7 +364,7 @@ type proposalEmitterExecutor struct {
 	tracker *metaFactoryTracker
 }
 
-func (e *proposalEmitterExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *proposalEmitterExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	proposalJSON := ""
 	traceID := ""
 	if len(dispatch.InputTokens) > 0 {
@@ -369,11 +372,11 @@ func (e *proposalEmitterExecutor) Execute(_ context.Context, dispatch work.WorkD
 		traceID = firstInputToken(dispatch.InputTokens).Color.TraceID
 	}
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
-		SpawnedWork: []interfaces.TokenColor{{
+		Outcome:      workerexecution.OutcomeAccepted,
+		SpawnedWork: []factorytoken.Color{{
 			WorkTypeID: "optimization-proposal",
 			WorkID:     fmt.Sprintf("proposal-%s", traceID),
 			Tags: map[string]string{
@@ -389,7 +392,7 @@ type validatorExecutor struct {
 	tracker *metaFactoryTracker
 }
 
-func (e *validatorExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *validatorExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.tracker.recordValidator()
 
 	proposalJSON := ""
@@ -401,27 +404,27 @@ func (e *validatorExecutor) Execute(_ context.Context, dispatch work.WorkDispatc
 
 	var proposal workflowModification
 	if err := json.Unmarshal([]byte(proposalJSON), &proposal); err != nil {
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeRejected,
+			Outcome:      workerexecution.OutcomeRejected,
 			Feedback:     fmt.Sprintf("invalid proposal JSON: %v", err),
 		}, nil
 	}
 
 	if proposal.TransitionID == "" || proposal.Field == "" {
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeRejected,
+			Outcome:      workerexecution.OutcomeRejected,
 			Feedback:     "proposal missing required fields: transition_id and field",
 		}, nil
 	}
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}, nil
 }
 
@@ -431,7 +434,7 @@ type rejectingValidatorExecutor struct {
 	rejectUntilN int
 }
 
-func (e *rejectingValidatorExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *rejectingValidatorExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.tracker.recordValidator()
 
 	callNum := e.tracker.validatorCalls()
@@ -442,19 +445,19 @@ func (e *rejectingValidatorExecutor) Execute(_ context.Context, dispatch work.Wo
 			iteration = strconv.Itoa(n + 1)
 		}
 
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeRejected,
+			Outcome:      workerexecution.OutcomeRejected,
 			Feedback:     fmt.Sprintf("proposal needs refinement (attempt %d/%d)", callNum, e.rejectUntilN),
 			Output:       iteration,
 		}, nil
 	}
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}, nil
 }
 
@@ -463,13 +466,13 @@ type alwaysRejectingValidatorExecutor struct {
 	tracker *metaFactoryTracker
 }
 
-func (e *alwaysRejectingValidatorExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *alwaysRejectingValidatorExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.tracker.recordValidator()
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeRejected,
+		Outcome:      workerexecution.OutcomeRejected,
 		Feedback:     "proposal is structurally invalid — always rejected for testing",
 	}, nil
 }
@@ -479,7 +482,7 @@ type applyEmitterExecutor struct {
 	tracker *metaFactoryTracker
 }
 
-func (e *applyEmitterExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *applyEmitterExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	proposalJSON := ""
 	traceID := ""
 	if len(dispatch.InputTokens) > 0 {
@@ -489,11 +492,11 @@ func (e *applyEmitterExecutor) Execute(_ context.Context, dispatch work.WorkDisp
 		traceID = firstInputToken(dispatch.InputTokens).Color.TraceID
 	}
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
-		SpawnedWork: []interfaces.TokenColor{{
+		Outcome:      workerexecution.OutcomeAccepted,
+		SpawnedWork: []factorytoken.Color{{
 			WorkTypeID: "apply-changes",
 			WorkID:     fmt.Sprintf("apply-%s", traceID),
 			Tags: map[string]string{
@@ -509,7 +512,7 @@ type applierExecutor struct {
 	tracker *metaFactoryTracker
 }
 
-func (e *applierExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *applierExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.tracker.recordApplier()
 
 	proposalJSON := ""
@@ -528,10 +531,10 @@ func (e *applierExecutor) Execute(_ context.Context, dispatch work.WorkDispatch)
 	// Simulates loading code-factory workflow and modifying max_retries.
 	modifiedNet, err := buildTargetWorkflowNet(proposal.NewValue)
 	if err != nil {
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeFailed,
+			Outcome:      workerexecution.OutcomeFailed,
 			Error:        fmt.Sprintf("failed to build modified workflow: %v", err),
 		}, nil
 	}
@@ -539,10 +542,10 @@ func (e *applierExecutor) Execute(_ context.Context, dispatch work.WorkDispatch)
 	// Store the modified net for post-hoc validation in the test.
 	e.tracker.storeModifiedNet(modifiedNet)
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       fmt.Sprintf("set %s.%s = %d (was %d)", proposal.TransitionID, proposal.Field, proposal.NewValue, proposal.OldValue),
 	}, nil
 }

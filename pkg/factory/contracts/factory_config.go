@@ -694,11 +694,3 @@ const (
 )
 
 type AgentWorkerToolsConfig = workerconfig.AgentToolsConfig
-
-func NormalizeAgentWorkerToolPolicy(policy string) string {
-	return workerconfig.NormalizeAgentToolPolicy(policy)
-}
-
-func IsKnownAgentWorkerToolPolicy(policy string) bool {
-	return workerconfig.IsKnownAgentToolPolicy(policy)
-}

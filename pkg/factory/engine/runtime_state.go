@@ -5,19 +5,20 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // RuntimeState is the unified mutable state container for the engine loop.
 // All per-tick state lives here so it can be snapshotted atomically.
 type RuntimeState struct {
-	Marking              *petri.Marking                              `json:"marking"`
-	Dispatches           map[string]*interfaces.DispatchEntry        `json:"dispatches"`
-	InFlightCount        int                                         `json:"in_flight_count"` // accurate count even when Dispatches map has key collisions
-	Results              []interfaces.WorkResult                     `json:"results"`
-	ResultBuffer         *buffers.TypedBuffer[interfaces.WorkResult] `json:"-"`
-	DispatchHistory      []interfaces.CompletedDispatch              `json:"dispatch_history"`
-	ActiveThrottlePauses []interfaces.ActiveThrottlePause            `json:"active_throttle_pauses,omitempty"`
-	TickCount            int                                         `json:"tick_count"`
+	Marking              *petri.Marking                                   `json:"marking"`
+	Dispatches           map[string]*interfaces.DispatchEntry             `json:"dispatches"`
+	InFlightCount        int                                              `json:"in_flight_count"` // accurate count even when Dispatches map has key collisions
+	Results              []workerexecution.WorkResult                     `json:"results"`
+	ResultBuffer         *buffers.TypedBuffer[workerexecution.WorkResult] `json:"-"`
+	DispatchHistory      []interfaces.CompletedDispatch                   `json:"dispatch_history"`
+	ActiveThrottlePauses []interfaces.ActiveThrottlePause                 `json:"active_throttle_pauses,omitempty"`
+	TickCount            int                                              `json:"tick_count"`
 }
 
 // Snapshot produces an immutable deep copy of the RuntimeState.
@@ -48,7 +49,7 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 
 	// Deep copy results.
 	if rs.Results != nil {
-		snap.Results = make([]interfaces.WorkResult, len(rs.Results))
+		snap.Results = make([]workerexecution.WorkResult, len(rs.Results))
 		for i := range rs.Results {
 			snap.Results[i] = deepCopyWorkResult(rs.Results[i])
 		}
@@ -83,7 +84,7 @@ func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.Comple
 	return cp
 }
 
-func deepCopyWorkResult(result interfaces.WorkResult) interfaces.WorkResult {
+func deepCopyWorkResult(result workerexecution.WorkResult) workerexecution.WorkResult {
 	cp := result
 	cp.ProviderSession = interfaces.CloneProviderSessionMetadata(result.ProviderSession)
 	return cp

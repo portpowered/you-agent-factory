@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -26,7 +26,7 @@ func TestIdeaToPRD_CrossWorkTypeOutput(t *testing.T) {
 		TraceID:    originTraceID,
 	})
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"planner":       {{Content: "Done. COMPLETE"}},
 		"prd-processor": {{Content: "Done. COMPLETE"}},
 	})
@@ -90,7 +90,7 @@ func TestIdeaToPRD_MultipleIdeas(t *testing.T) {
 		TraceID:    trace2,
 	})
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"planner":       {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 		"prd-processor": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})

@@ -84,7 +84,7 @@ func (m *mockFactory) getWorkRequests() []work.WorkRequest {
 
 func cloneWorkRequest(request work.WorkRequest) work.WorkRequest {
 	out := request
-	out.Works = make([]interfaces.Work, len(request.Works))
+	out.Works = make([]work.Work, len(request.Works))
 	for i := range request.Works {
 		out.Works[i] = request.Works[i]
 		if payload, ok := request.Works[i].Payload.([]byte); ok {
@@ -279,7 +279,7 @@ func TestFileWatcher_JSONFactoryRequestBatch(t *testing.T) {
 	batch := work.WorkRequest{
 		RequestID: "request-batch-1",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{
 				Name:    "first",
 				TraceID: "trace-batch",
@@ -616,7 +616,7 @@ func TestFileWatcher_JSONFactoryRequestBatchRejectsConflictingWorkType(t *testin
 	batch := work.WorkRequest{
 		RequestID: "request-batch-conflict",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Works: []work.Work{
 			{
 				Name:       "wrong-folder",
 				WorkTypeID: "chapter",
@@ -650,7 +650,7 @@ func TestFileWatcher_PreseedValidatesAllFilesBeforeSubmitting(t *testing.T) {
 	batch := work.WorkRequest{
 		RequestID: "request-empty-batch",
 		Type:      work.WorkRequestTypeFactoryRequestBatch,
-		Works:     []interfaces.Work{},
+		Works:     []work.Work{},
 	}
 	data, err := json.Marshal(batch)
 	if err != nil {

@@ -11,6 +11,9 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 )
 
 // BuildFactoryWorldWorkstationRequestProjectionSlice keeps the additive
@@ -187,7 +190,7 @@ func workstationFailureDetail(reason, message string) *factoryapi.FailureDetail 
 	return &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureType(reason), Message: message}
 }
 
-func workstationFailureDetailFromCanonical(detail *interfaces.FailureDetail) *factoryapi.FailureDetail {
+func workstationFailureDetailFromCanonical(detail *workerexecution.FailureDetail) *factoryapi.FailureDetail {
 	if detail == nil {
 		return nil
 	}
@@ -196,7 +199,7 @@ func workstationFailureDetailFromCanonical(detail *interfaces.FailureDetail) *fa
 
 func workstationDispatchRequestView(
 	runnerID string,
-	runnerSource interfaces.RunnerSelectionSource,
+	runnerSource workerexecution.RunnerSelectionSource,
 	startedAt time.Time,
 	inputWorkItems []factoryapi.FactoryWorldWorkItemRef,
 	currentChainingTraceID string,
@@ -218,8 +221,8 @@ func workstationDispatchRequestView(
 	}
 }
 
-func generatedFactoryWorldSelectedRunnerView(runnerID string, runnerSource interfaces.RunnerSelectionSource) *factoryapi.FactoryWorldSelectedRunnerView {
-	runnerID = interfaces.NormalizeRunnerID(runnerID)
+func generatedFactoryWorldSelectedRunnerView(runnerID string, runnerSource workerexecution.RunnerSelectionSource) *factoryapi.FactoryWorldSelectedRunnerView {
+	runnerID = workerrunner.NormalizeRunnerID(runnerID)
 	if runnerID == "" && runnerSource == "" {
 		return nil
 	}
@@ -227,7 +230,7 @@ func generatedFactoryWorldSelectedRunnerView(runnerID string, runnerSource inter
 		RunnerId:        interfaces.GeneratedPublicFactoryRunnerIDPtr(runnerID),
 		SelectionSource: interfaces.GeneratedPublicFactoryRunnerSelectionSourcePtr(string(runnerSource)),
 	}
-	if metadata, ok := interfaces.BuiltInRunnerMetadata(runnerID); ok {
+	if metadata, ok := workerrunner.BuiltInRunnerMetadata(runnerID); ok {
 		view.DisplayName = workstationRequestStringPtr(metadata.DisplayName)
 		view.Capabilities = generatedFactoryWorldRunnerCapabilitiesView(metadata.Capabilities)
 	}
@@ -235,7 +238,7 @@ func generatedFactoryWorldSelectedRunnerView(runnerID string, runnerSource inter
 }
 
 func generatedFactoryWorldRunnerCapabilitiesView(
-	capabilities interfaces.RunnerCapabilities,
+	capabilities workerexecution.RunnerCapabilities,
 ) *factoryapi.FactoryWorldRunnerCapabilitiesView {
 	baseline := make([]factoryapi.FactoryWorldRunnerBaselineCapability, 0, len(capabilities.Baseline))
 	for _, capability := range capabilities.Baseline {
@@ -776,12 +779,12 @@ func generatedFactoryWorldScriptResponse(
 }
 
 func generatedFactoryWorldAgentRunInspection(
-	diagnostics *interfaces.SafeWorkDiagnostics,
+	diagnostics *workerdiagnostics.SafeWorkDiagnostics,
 ) *factoryapi.FactoryWorldAgentRunInspectionView {
 	if diagnostics == nil || diagnostics.AgentRun == nil {
 		return nil
 	}
-	return interfaces.GeneratedFactoryWorldAgentRunInspectionView(diagnostics.AgentRun)
+	return workerdiagnostics.GeneratedFactoryWorldAgentRunInspectionView(diagnostics.AgentRun)
 }
 
 func stringSlicePtr(values []string) *[]string {

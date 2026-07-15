@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -27,7 +27,7 @@ func TestDependencyTerminal_BlockedUntilArchived(t *testing.T) {
 		},
 	})
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"executor": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 		"reviewer": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})
@@ -65,7 +65,7 @@ func TestDependencyTerminal_BlockedDuringProcessing(t *testing.T) {
 		},
 	})
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"executor": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 		"reviewer": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})
@@ -100,7 +100,7 @@ func TestDependencyTerminal_BothComplete(t *testing.T) {
 		},
 	})
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"executor": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 		"reviewer": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})

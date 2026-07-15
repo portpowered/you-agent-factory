@@ -17,6 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -32,7 +33,7 @@ func TestReplayFactoryOnlySerializationSmoke_RecordReplayUsesRunStartedFactoryPa
 		TraceID:    "trace-factory-only-serialization-smoke",
 		Payload:    []byte(`{"title":"factory-only serialization smoke"}`),
 	})
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"exec-worker": {
 			{Content: "first pass needs another iteration"},
 			{Content: "second pass needs another iteration"},

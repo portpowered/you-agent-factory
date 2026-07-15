@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -16,7 +16,7 @@ func TestExecutorFailure_NoFailureArcs(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte("work payload"))
 
 	provider := testutil.NewMockProviderWithErrors(
-		[]interfaces.InferenceResponse{{}},
+		[]workerexecution.InferenceResponse{{}},
 		[]error{errors.New("executor crashed")},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,

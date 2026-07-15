@@ -12,8 +12,13 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const (
@@ -311,7 +316,7 @@ func workRelationsFromGenerated(works []factoryapi.Work, relations *[]factoryapi
 	return out
 }
 
-func mergeGeneratedWorkers(factory *factoryapi.Factory, runtimeWorkers map[string]interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) error {
+func mergeGeneratedWorkers(factory *factoryapi.Factory, runtimeWorkers map[string]workerconfig.Config, workstations []interfaces.FactoryWorkstationConfig) error {
 	if len(runtimeWorkers) == 0 {
 		return nil
 	}
@@ -333,7 +338,7 @@ func mergeGeneratedWorkers(factory *factoryapi.Factory, runtimeWorkers map[strin
 	return nil
 }
 
-func generatedWorkerFromReplayConfig(name string, worker interfaces.WorkerConfig, workstations []interfaces.FactoryWorkstationConfig) (factoryapi.Worker, error) {
+func generatedWorkerFromReplayConfig(name string, worker workerconfig.Config, workstations []interfaces.FactoryWorkstationConfig) (factoryapi.Worker, error) {
 	generated := generatedWorkerAPIFromConfig(name, worker, workstations)
 	if generated.Name == "" {
 		generated.Name = name
@@ -341,7 +346,7 @@ func generatedWorkerFromReplayConfig(name string, worker interfaces.WorkerConfig
 	return generated, nil
 }
 
-func mergeGeneratedWorkstations(factory *factoryapi.Factory, workstationsByName map[string]interfaces.FactoryWorkstationConfig, runtimeWorkers map[string]interfaces.WorkerConfig) error {
+func mergeGeneratedWorkstations(factory *factoryapi.Factory, workstationsByName map[string]interfaces.FactoryWorkstationConfig, runtimeWorkers map[string]workerconfig.Config) error {
 	if len(workstationsByName) == 0 {
 		return nil
 	}
@@ -380,7 +385,7 @@ func mergeGeneratedEntries[T any](generated []T, indexes func([]T) map[string]in
 	return generated, nil
 }
 
-func generatedWorkstationFromReplayConfig(name string, cfg interfaces.FactoryWorkstationConfig, runtimeWorkers map[string]interfaces.WorkerConfig) (factoryapi.Workstation, error) {
+func generatedWorkstationFromReplayConfig(name string, cfg interfaces.FactoryWorkstationConfig, runtimeWorkers map[string]workerconfig.Config) (factoryapi.Workstation, error) {
 	workerType := ""
 	if worker, ok := runtimeWorkers[cfg.WorkerTypeName]; ok {
 		workerType = worker.Type
@@ -399,7 +404,7 @@ func generatedWorkstationFromReplayConfig(name string, cfg interfaces.FactoryWor
 	return generated, nil
 }
 
-func preserveGeneratedWorkstationResources(resources []interfaces.ResourceConfig, target *factoryapi.Workstation) {
+func preserveGeneratedWorkstationResources(resources []factoryresource.Config, target *factoryapi.Workstation) {
 	if len(resources) == 0 || target == nil {
 		return
 	}
@@ -428,7 +433,7 @@ func generatedWorkerIndexes(workers []factoryapi.Worker) map[string]int {
 	return indexes
 }
 
-func sortedWorkerNames(workers map[string]interfaces.WorkerConfig) []string {
+func sortedWorkerNames(workers map[string]workerconfig.Config) []string {
 	names := make([]string, 0, len(workers))
 	for name := range workers {
 		names = append(names, name)
@@ -475,7 +480,7 @@ func generatedDispatchConsumedWorkRefsFromReplayDispatch(dispatch work.WorkDispa
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	out := make([]factoryapi.DispatchConsumedWorkRef, 0, len(tokens))
 	for _, token := range tokens {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		workID := token.Color.WorkID
@@ -502,7 +507,7 @@ func generatedResourcesFromReplayDispatch(dispatch work.WorkDispatch) *[]factory
 	tokens := workers.WorkDispatchInputTokens(dispatch)
 	resources := make([]factoryapi.Resource, 0, len(tokens))
 	for _, token := range tokens {
-		if token.Color.DataType != interfaces.DataTypeResource {
+		if token.Color.DataType != factorytoken.DataTypeResource {
 			continue
 		}
 		name := token.Color.WorkTypeID
@@ -518,7 +523,7 @@ func preserveGeneratedResourceUsage(source *interfaces.FactoryConfig, target *fa
 	if source == nil || target == nil || target.Workstations == nil {
 		return
 	}
-	byName := make(map[string][]interfaces.ResourceConfig, len(source.Workstations))
+	byName := make(map[string][]factoryresource.Config, len(source.Workstations))
 	for _, workstation := range source.Workstations {
 		byName[workstation.Name] = workstation.Resources
 	}
@@ -542,14 +547,14 @@ func restoreReplayResourceUsage(source factoryapi.Factory, target *interfaces.Fa
 	if target == nil || source.Workstations == nil {
 		return
 	}
-	byName := make(map[string][]interfaces.ResourceConfig, len(*source.Workstations))
+	byName := make(map[string][]factoryresource.Config, len(*source.Workstations))
 	for _, workstation := range *source.Workstations {
 		if workstation.Resources == nil {
 			continue
 		}
-		resources := make([]interfaces.ResourceConfig, 0, len(*workstation.Resources))
+		resources := make([]factoryresource.Config, 0, len(*workstation.Resources))
 		for _, usage := range *workstation.Resources {
-			resources = append(resources, interfaces.ResourceConfig{
+			resources = append(resources, factoryresource.Config{
 				Name:     usage.Name,
 				Capacity: usage.Capacity,
 			})
@@ -563,7 +568,7 @@ func restoreReplayResourceUsage(source factoryapi.Factory, target *interfaces.Fa
 	}
 }
 
-func workFromGeneratedWork(work factoryapi.Work, requestID string) interfaces.Work {
+func workFromGeneratedWork(work factoryapi.Work, requestID string) workdomain.Work {
 	workTypeID := stringValue(work.WorkTypeName)
 	workState := generatedWorkStateName(work.State)
 	currentChainingTraceID := stringValue(work.CurrentChainingTraceId)
@@ -574,7 +579,7 @@ func workFromGeneratedWork(work factoryapi.Work, requestID string) interfaces.Wo
 	if workState == "" && workTypeID == interfaces.SystemTimeWorkTypeID {
 		workState = interfaces.SystemTimePendingState
 	}
-	return interfaces.Work{
+	return workdomain.Work{
 		RequestID:                requestID,
 		WorkID:                   stringValue(work.WorkId),
 		Name:                     work.Name,
@@ -640,10 +645,10 @@ func replayDiagnosticsFromGenerated(diagnostics *factoryapi.Diagnostics) interfa
 	if diagnostics == nil {
 		return interfaces.ReplayDiagnostics{}
 	}
-	workers := make(map[string]interfaces.SafeWorkDiagnostics)
+	workers := make(map[string]workerdiagnostics.SafeWorkDiagnostics)
 	if diagnostics.Workers != nil {
 		for key, value := range *diagnostics.Workers {
-			if converted := interfaces.SafeWorkDiagnosticsFromGenerated(&value); converted != nil {
+			if converted := workerdiagnostics.SafeWorkDiagnosticsFromGenerated(&value); converted != nil {
 				workers[key] = *converted
 			}
 		}
@@ -654,13 +659,13 @@ func replayDiagnosticsFromGenerated(diagnostics *factoryapi.Diagnostics) interfa
 	}
 }
 
-func generatedWorkDiagnosticsMapPtr(in map[string]interfaces.SafeWorkDiagnostics) *map[string]factoryapi.SafeWorkDiagnostics {
+func generatedWorkDiagnosticsMapPtr(in map[string]workerdiagnostics.SafeWorkDiagnostics) *map[string]factoryapi.SafeWorkDiagnostics {
 	if len(in) == 0 {
 		return nil
 	}
 	out := make(map[string]factoryapi.SafeWorkDiagnostics, len(in))
 	for key, value := range in {
-		if converted := interfaces.GeneratedSafeWorkDiagnostics(&value); converted != nil {
+		if converted := workerdiagnostics.GeneratedSafeWorkDiagnostics(&value); converted != nil {
 			out[key] = *converted
 		}
 	}
@@ -687,7 +692,7 @@ func replayWallClockFromGenerated(wallClock *factoryapi.WallClock) *interfaces.R
 	}
 }
 
-func generatedWorkMetrics(metrics interfaces.WorkMetrics) *factoryapi.WorkMetrics {
+func generatedWorkMetrics(metrics workerexecution.WorkMetrics) *factoryapi.WorkMetrics {
 	if metrics.Duration == 0 && metrics.Cost == 0 && metrics.RetryCount == 0 {
 		return nil
 	}
@@ -698,11 +703,11 @@ func generatedWorkMetrics(metrics interfaces.WorkMetrics) *factoryapi.WorkMetric
 	}
 }
 
-func replayWorkMetricsFromGenerated(metrics *factoryapi.WorkMetrics) interfaces.WorkMetrics {
+func replayWorkMetricsFromGenerated(metrics *factoryapi.WorkMetrics) workerexecution.WorkMetrics {
 	if metrics == nil {
-		return interfaces.WorkMetrics{}
+		return workerexecution.WorkMetrics{}
 	}
-	return interfaces.WorkMetrics{
+	return workerexecution.WorkMetrics{
 		Duration:   time.Duration(int64Value(metrics.DurationMillis)) * time.Millisecond,
 		Cost:       float64Value(metrics.Cost),
 		RetryCount: intValue(metrics.RetryCount),

@@ -4,6 +4,9 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type publicFactoryEnumNormalizerCase struct {
@@ -82,7 +85,7 @@ func publicFactoryEnumNormalizerProviderCases() []publicFactoryEnumNormalizerCas
 			name:       "worker model locality",
 			alias:      "LOCAL",
 			unknown:    "edge",
-			want:       interfaces.ModelLocalityLocal,
+			want:       workerconfig.ModelLocalityLocal,
 			permissive: interfaces.PermissivePublicFactoryWorkerModelLocality,
 			strict:     interfaces.StrictPublicFactoryWorkerModelLocality,
 		},
@@ -90,7 +93,7 @@ func publicFactoryEnumNormalizerProviderCases() []publicFactoryEnumNormalizerCas
 			name:       "worker operation content type",
 			alias:      "AUDIO",
 			unknown:    "sound",
-			want:       interfaces.ModelOperationContentTypeAudio,
+			want:       workerconfig.ModelOperationContentTypeAudio,
 			permissive: interfaces.PermissivePublicFactoryWorkerModelOperationContentType,
 			strict:     interfaces.StrictPublicFactoryWorkerModelOperationContentType,
 		},
@@ -98,7 +101,7 @@ func publicFactoryEnumNormalizerProviderCases() []publicFactoryEnumNormalizerCas
 			name:       "resource type",
 			alias:      "MODEL",
 			unknown:    "custom-resource",
-			want:       interfaces.ResourceTypeModel,
+			want:       factoryresource.TypeModel,
 			permissive: interfaces.PermissivePublicFactoryResourceType,
 			strict:     interfaces.StrictPublicFactoryResourceType,
 		},
@@ -140,7 +143,7 @@ func publicFactoryEnumNormalizerMiscCases() []publicFactoryEnumNormalizerCase {
 			name:       "runner id",
 			alias:      "cursor-cli",
 			unknown:    "custom-runner",
-			want:       interfaces.RunnerIDCursorCLI,
+			want:       workerexecution.RunnerIDCursorCLI,
 			permissive: interfaces.PermissivePublicFactoryRunnerID,
 			strict:     interfaces.StrictPublicFactoryRunnerID,
 		},
@@ -148,7 +151,7 @@ func publicFactoryEnumNormalizerMiscCases() []publicFactoryEnumNormalizerCase {
 			name:       "runner selection source",
 			alias:      "factory",
 			unknown:    "custom-source",
-			want:       string(interfaces.RunnerSelectionSourceFactory),
+			want:       string(workerexecution.RunnerSelectionSourceFactory),
 			permissive: interfaces.PermissivePublicFactoryRunnerSelectionSource,
 			strict:     interfaces.StrictPublicFactoryRunnerSelectionSource,
 		},

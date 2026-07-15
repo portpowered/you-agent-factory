@@ -8,6 +8,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 )
 
@@ -99,10 +100,10 @@ type sidecarRuntimeConfig struct {
 	factoryCfg *interfaces.FactoryConfig
 }
 
-func (c *sidecarRuntimeConfig) FactoryConfig() *interfaces.FactoryConfig     { return c.factoryCfg }
-func (*sidecarRuntimeConfig) FactoryDir() string                             { return "/factory" }
-func (*sidecarRuntimeConfig) RuntimeBaseDir() string                         { return "/factory" }
-func (*sidecarRuntimeConfig) Worker(string) (*interfaces.WorkerConfig, bool) { return nil, false }
+func (c *sidecarRuntimeConfig) FactoryConfig() *interfaces.FactoryConfig { return c.factoryCfg }
+func (*sidecarRuntimeConfig) FactoryDir() string                         { return "/factory" }
+func (*sidecarRuntimeConfig) RuntimeBaseDir() string                     { return "/factory" }
+func (*sidecarRuntimeConfig) Worker(string) (*workerconfig.Config, bool) { return nil, false }
 func (*sidecarRuntimeConfig) Workstation(string) (*interfaces.FactoryWorkstationConfig, bool) {
 	return nil, false
 }

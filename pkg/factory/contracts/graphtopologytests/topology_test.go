@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestBuildPendingFactoryGraphTopology_UsesCanonicalNodeAndEdgeIDs(t *testing.T) {
@@ -16,7 +18,7 @@ func TestBuildPendingFactoryGraphTopology_UsesCanonicalNodeAndEdgeIDs(t *testing
 				{Type: interfaces.BundledFileTypeScript, TargetPath: "factory/scripts/setup.py"},
 			},
 		},
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			ID:   "resource-slot",
 			Name: "executor-slot",
 		}},
@@ -28,10 +30,10 @@ func TestBuildPendingFactoryGraphTopology_UsesCanonicalNodeAndEdgeIDs(t *testing
 				{ID: "state-done", Name: "done", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			ID:   "worker-executor",
 			Name: "executor",
-			Resources: []interfaces.ResourceConfig{{
+			Resources: []factoryresource.Config{{
 				Name: "executor-slot",
 			}},
 		}},
@@ -39,7 +41,7 @@ func TestBuildPendingFactoryGraphTopology_UsesCanonicalNodeAndEdgeIDs(t *testing
 			ID:             "workstation-plan",
 			Name:           "plan",
 			WorkerTypeName: "executor",
-			Resources: []interfaces.ResourceConfig{{
+			Resources: []factoryresource.Config{{
 				ID:   "resource-slot",
 				Name: "executor-slot",
 			}},

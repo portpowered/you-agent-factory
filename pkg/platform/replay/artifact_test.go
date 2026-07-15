@@ -14,7 +14,9 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestSaveLoad_PreservesReplayArtifactFields(t *testing.T) {
@@ -144,8 +146,8 @@ func replayArtifactFieldEvents(t *testing.T, recordedAt time.Time, generatedFact
 		}}, nil),
 		replayDispatchCreatedEvent(t, replayArtifactFieldDispatch(), 3),
 		replayInferenceResponseEvent(t, replayArtifactFieldInferenceDispatch(), "dispatch-1/inference-request/1", 1, 4, "done", nil, replayArtifactFieldDiagnostics(), ""),
-		replayDispatchCompletedEvent(t, "completion-1", interfaces.WorkResult{
-			DispatchID: "dispatch-1", TransitionID: "transition-1", Outcome: interfaces.OutcomeAccepted, Output: "done",
+		replayDispatchCompletedEvent(t, "completion-1", workerexecution.WorkResult{
+			DispatchID: "dispatch-1", TransitionID: "transition-1", Outcome: workerexecution.OutcomeAccepted, Output: "done",
 		}, 5),
 		runFinishedEvent(recordedAt.Add(time.Second), replayWallClockMetadata(recordedAt), interfaces.ReplayDiagnostics{}),
 	}
@@ -158,10 +160,10 @@ func replayArtifactFieldDispatch() work.WorkDispatch {
 		DispatchID:   "dispatch-1",
 		TransitionID: "transition-1",
 		WorkerType:   "executor",
-		InputTokens: workers.InputTokens(interfaces.Token{
+		InputTokens: workers.InputTokens(factorytoken.Token{
 			ID: "token-1",
-			Color: interfaces.TokenColor{
-				WorkID: "work-1", WorkTypeID: "story", DataType: interfaces.DataTypeWork, TraceID: "trace-1",
+			Color: factorytoken.Color{
+				WorkID: "work-1", WorkTypeID: "story", DataType: factorytoken.DataTypeWork, TraceID: "trace-1",
 			},
 		}),
 		Execution: work.ExecutionMetadata{
@@ -183,9 +185,9 @@ func replayArtifactFieldInferenceDispatch() work.WorkDispatch {
 	}
 }
 
-func replayArtifactFieldDiagnostics() *interfaces.WorkDiagnostics {
-	return &interfaces.WorkDiagnostics{
-		Provider: &interfaces.ProviderDiagnostic{
+func replayArtifactFieldDiagnostics() *workerexecution.WorkDiagnostics {
+	return &workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
 			Provider: "mock",
 			Model:    "mock-model",
 			ResponseMetadata: map[string]string{
@@ -238,26 +240,26 @@ func safeDiagnosticsReplayArtifact(t *testing.T) *interfaces.ReplayArtifact {
 			1,
 			2,
 			"completed",
-			&interfaces.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
+			&workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: "response_id", ID: "resp-safe-123"},
 			unsafeReplayDiagnosticsFixture(),
 			"",
 		),
-		replayDispatchCompletedEvent(t, "completion-safe", interfaces.WorkResult{
+		replayDispatchCompletedEvent(t, "completion-safe", workerexecution.WorkResult{
 			DispatchID:   "dispatch-safe",
 			TransitionID: "transition-safe",
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 			Output:       "completed",
-			FailureMetadata: &interfaces.WorkFailureMetadata{
-				Family: interfaces.WorkFailureFamilyRetryable,
-				Type:   interfaces.WorkFailureTypeThrottled,
+			FailureMetadata: &workerexecution.WorkFailureMetadata{
+				Family: workerexecution.WorkFailureFamilyRetryable,
+				Type:   workerexecution.WorkFailureTypeThrottled,
 			},
 		}, 3),
 	)
 }
 
-func unsafeReplayDiagnosticsFixture() *interfaces.WorkDiagnostics {
-	return &interfaces.WorkDiagnostics{
-		RenderedPrompt: &interfaces.RenderedPromptDiagnostic{
+func unsafeReplayDiagnosticsFixture() *workerexecution.WorkDiagnostics {
+	return &workerexecution.WorkDiagnostics{
+		RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{
 			SystemPromptHash: "system-hash-123",
 			UserMessageHash:  "user-hash-456",
 			Variables: map[string]string{
@@ -265,7 +267,7 @@ func unsafeReplayDiagnosticsFixture() *interfaces.WorkDiagnostics {
 				"user_message": "raw rendered user message must stay private", "stdin": "raw rendered stdin must stay private", "env": "raw rendered environment must stay private",
 			},
 		},
-		Provider: &interfaces.ProviderDiagnostic{
+		Provider: &workerexecution.ProviderDiagnostic{
 			Provider: "codex",
 			Model:    "gpt-5.4",
 			RequestMetadata: map[string]string{
@@ -277,12 +279,12 @@ func unsafeReplayDiagnosticsFixture() *interfaces.WorkDiagnostics {
 				"stdin_payload": "raw response stdin payload must stay private", "env_secret": "raw response env secret must stay private",
 			},
 		},
-		Command: &interfaces.CommandDiagnostic{
+		Command: &workerexecution.CommandDiagnostic{
 			Command: "echo",
 			Stdin:   "raw command stdin must stay private",
 			Env:     map[string]string{"AGENT_FACTORY_AUTH_TOKEN": "raw environment value must stay private"},
 		},
-		Panic: &interfaces.PanicDiagnostic{Stack: "panic stack should not be stored"},
+		Panic: &workerexecution.PanicDiagnostic{Stack: "panic stack should not be stored"},
 	}
 }
 
@@ -306,7 +308,7 @@ func assertStoredReplayDiagnosticsAreSafe(t *testing.T, loaded *interfaces.Repla
 		t.Fatalf("provider session id = %q, want resp-safe-123", got)
 	}
 	completionPayload := requireReplayDispatchCompleted(t, loaded.Events, "dispatch-safe")
-	if got := stringValue(completionPayload.ProviderFailure.Type); got != string(interfaces.WorkFailureTypeThrottled) {
+	if got := stringValue(completionPayload.ProviderFailure.Type); got != string(workerexecution.WorkFailureTypeThrottled) {
 		t.Fatalf("provider failure type = %q, want throttled", got)
 	}
 }
@@ -367,10 +369,10 @@ func TestLoad_AcceptsInferenceEventsInCanonicalEventsArray(t *testing.T) {
 		replayDispatchCreatedEvent(t, request.Dispatch, 2),
 		replayInferenceRequestEvent(t, request, inferenceRequestID, 1, 2),
 		replayInferenceResponseEvent(t, request.Dispatch, inferenceRequestID, 1, 2, "provider completed", nil, nil, ""),
-		replayDispatchCompletedEvent(t, "completion-1", interfaces.WorkResult{
+		replayDispatchCompletedEvent(t, "completion-1", workerexecution.WorkResult{
 			DispatchID:   request.Dispatch.DispatchID,
 			TransitionID: request.Dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 			Output:       "provider completed",
 		}, 3),
 	)
@@ -651,17 +653,17 @@ func artifactTestFactory() factoryapi.Factory {
 	}
 }
 
-func replayInferenceDispatch() interfaces.ProviderInferenceRequest {
+func replayInferenceDispatch() workerexecution.ProviderInferenceRequest {
 	dispatch := work.WorkDispatch{
 		DispatchID:   "dispatch-1",
 		TransitionID: "process",
 		WorkerType:   "worker-a",
-		InputTokens: workers.InputTokens(interfaces.Token{
+		InputTokens: workers.InputTokens(factorytoken.Token{
 			ID: "token-1",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-1",
 				WorkTypeID: "task",
-				DataType:   interfaces.DataTypeWork,
+				DataType:   factorytoken.DataTypeWork,
 				TraceID:    "trace-1",
 			},
 		}),
@@ -672,7 +674,7 @@ func replayInferenceDispatch() interfaces.ProviderInferenceRequest {
 			WorkIDs:   []string{"work-1"},
 		},
 	}
-	return interfaces.ProviderInferenceRequest{
+	return workerexecution.ProviderInferenceRequest{
 		Dispatch:         dispatch,
 		WorkerType:       dispatch.WorkerType,
 		WorkingDirectory: "/workspace/project",

@@ -12,13 +12,15 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestCreateFactoryRoute_RemovedFromRouter(t *testing.T) {
@@ -177,15 +179,15 @@ func TestInvokeModel_ReturnsInvocationMetadata(t *testing.T) {
 			ModelName:        "OMNIVOICE_Q4_K_M",
 			Worker:           "tts-worker",
 			Operation:        "TTS",
-			ProviderLocality: interfaces.ModelLocalityLocal,
+			ProviderLocality: workerconfig.ModelLocalityLocal,
 			Content: []work.WorkContentPart{{
 				Type:        work.WorkContentPartTypeAudio,
 				File:        "artifacts/output.wav",
 				ContentType: "audio/wav",
 			}},
-			Bindings: []interfaces.ResolvedModelOperationBinding{{
+			Bindings: []workerexecution.ResolvedModelOperationBinding{{
 				Slot:   "text",
-				Source: interfaces.ModelOperationBindingSourceInput,
+				Source: workerexecution.ModelOperationBindingSourceInput,
 				Content: []work.WorkContentPart{{
 					Type: work.WorkContentPartTypeText,
 					Text: "hello world",
@@ -223,7 +225,7 @@ func TestInvokeModel_StreamsAudioOutput(t *testing.T) {
 			ModelName:         "OMNIVOICE_Q4_K_M",
 			Worker:            "tts-worker",
 			Operation:         "TTS",
-			ProviderLocality:  interfaces.ModelLocalityLocal,
+			ProviderLocality:  workerconfig.ModelLocalityLocal,
 			StreamFile:        audioPath,
 			StreamContentType: "audio/wav",
 		},
@@ -262,7 +264,7 @@ func TestPullModel_ReturnsManagedCachePullMetadata(t *testing.T) {
 	mf := &testutil.MockFactory{
 		PullModelResult: apisurface.ModelPullResult{
 			ModelName:        "OMNIVOICE_Q4_K_M",
-			ProviderLocality: interfaces.ModelLocalityLocal,
+			ProviderLocality: workerconfig.ModelLocalityLocal,
 			Outcome:          "PULLED",
 			CachePath:        "/tmp/models/OMNIVOICE_Q4_K_M/rev1",
 			Revision:         "rev1",
@@ -724,10 +726,10 @@ func assertHasValidationTargetCode(t *testing.T, targets []factoryapi.FactoryVal
 }
 
 func TestUpsertWorkRequestBySessionId_Returns201AndSubmitsToSessionFactory(t *testing.T) {
-	defaultFactory := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
-	sessionFactory := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}, Net: sessionScopedStateNet()}
+	defaultFactory := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
+	sessionFactory := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}, Net: sessionScopedStateNet()}
 	srv := newTestServer(&testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
 		SessionFactories: map[string]*testutil.MockFactory{
 			"~default":      defaultFactory,
 			"session-alpha": sessionFactory,
@@ -764,7 +766,7 @@ func TestUpsertWorkRequestBySessionId_Returns201AndSubmitsToSessionFactory(t *te
 func TestUpsertWorkRequestBySessionId_UnknownSessionReturnsNotFound(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
 		SessionFactories: map[string]*testutil.MockFactory{
-			"~default": {Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}},
+			"~default": {Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}},
 		},
 	})
 
@@ -778,7 +780,7 @@ func TestUpsertWorkRequestBySessionId_UnknownSessionReturnsNotFound(t *testing.T
 
 func TestUnscopedWorkRoutes_RemovedFromRouter(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
-		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)},
+		Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)},
 	})
 
 	cases := []struct {
@@ -815,7 +817,7 @@ func TestUnscopedWorkRoutes_RemovedFromRouter(t *testing.T) {
 }
 
 func TestSessionScopedWorkRoutes_AcceptValidRequests(t *testing.T) {
-	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}}
+	mf := &testutil.MockFactory{Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}}
 	srv := newTestServer(mf)
 
 	submitRec := submitWorkRequest(t, srv, `{"name":"scoped-submit","workTypeName":"task","traceId":"trace-scoped","payload":{"title":"scoped"}}`)
@@ -839,7 +841,7 @@ func TestSessionScopedWorkRoutes_AcceptValidRequests(t *testing.T) {
 func TestSessionScopedWorkRoutes_UnknownSessionReturnsNotFound(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{
 		SessionFactories: map[string]*testutil.MockFactory{
-			factorysessions.DefaultSessionID: {Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*interfaces.Token)}},
+			factorysessions.DefaultSessionID: {Marking: &petri.MarkingSnapshot{Tokens: make(map[string]*factorytoken.Token)}},
 		},
 	})
 

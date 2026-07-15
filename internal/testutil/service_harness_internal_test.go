@@ -16,14 +16,15 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap/zapcore"
 )
 
 type waitUntilCancelExecutor struct{}
 
-func (waitUntilCancelExecutor) Execute(ctx context.Context, _ work.WorkDispatch) (interfaces.WorkResult, error) {
+func (waitUntilCancelExecutor) Execute(ctx context.Context, _ work.WorkDispatch) (workerexecution.WorkResult, error) {
 	<-ctx.Done()
-	return interfaces.WorkResult{Outcome: interfaces.OutcomeFailed}, ctx.Err()
+	return workerexecution.WorkResult{Outcome: workerexecution.OutcomeFailed}, ctx.Err()
 }
 
 func TestServiceTestHarnessMarkingFallsBackToCachedSnapshot(t *testing.T) {
@@ -32,8 +33,8 @@ func TestServiceTestHarnessMarkingFallsBackToCachedSnapshot(t *testing.T) {
 
 	h := NewServiceTestHarness(t, dir)
 	h.MockWorker("processor",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	if err := h.SubmitWork("task", []byte(`{"title":"cache final marking"}`)); err != nil {
@@ -62,7 +63,7 @@ func TestServiceTestHarnessRunUntilCompleteAcceptsRunThatFinishesBeforeAvailabil
 	dir := ScaffoldFactoryDir(t, cfg)
 
 	h := NewServiceTestHarness(t, dir)
-	h.MockWorker("processor", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("processor", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 	if err := h.SubmitWork("task", []byte(`{"title":"finish immediately"}`)); err != nil {
 		t.Fatalf("submit work: %v", err)
 	}
@@ -98,7 +99,7 @@ func TestNewServiceTestHarness_WithZapLogger_PreservesCapturingLoggerThroughRun(
 		WithRuntimeLogDir(logDir),
 		WithRuntimeInstanceID("harness-capture"),
 	)
-	h.MockWorker("processor", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("processor", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	if err := h.SubmitWork("task", []byte(`{"title":"capture harness logger"}`)); err != nil {
 		t.Fatalf("submit work: %v", err)
@@ -149,7 +150,7 @@ func TestNewServiceTestHarness_DisablesRuntimeFileLoggingByDefault(t *testing.T)
 	logDir := t.TempDir()
 
 	h := NewServiceTestHarness(t, dir, WithRuntimeLogDir(logDir))
-	h.MockWorker("processor", interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted})
+	h.MockWorker("processor", workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted})
 
 	if err := h.SubmitWork("task", []byte(`{"title":"no incidental runtime log file"}`)); err != nil {
 		t.Fatalf("submit work: %v", err)

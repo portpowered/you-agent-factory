@@ -10,12 +10,13 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestExecutorReviewStateLifecycle_ProcessCompletionLeavesSingleReviewInit(t *testing.T) {
 	dir := scaffoldExecutorReviewProcessOnlyFactory(t)
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "<COMPLETE>\n"}},
 	})
 	h := support.NewGuardsBatchHarness(t, dir,
@@ -58,7 +59,7 @@ func TestExecutorReviewStateLifecycle_ProcessCompletionLeavesSingleReviewInit(t 
 
 func TestExecutorReviewStateLifecycle_CompletedReviewClearsResidueAndReplayMatches(t *testing.T) {
 	dir := scaffoldExecutorReviewReconcileFactory(t)
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "<COMPLETE>\n"}},
 	})
 	h := support.NewGuardsBatchHarness(t, dir,
@@ -95,7 +96,7 @@ func TestExecutorReviewStateLifecycle_CompletedReviewClearsResidueAndReplayMatch
 
 func TestExecutorReviewStateLifecycle_CompletedExecutorAndReviewConvergeToTerminalOutcome(t *testing.T) {
 	dir := scaffoldExecutorReviewLifecycleFactory(t)
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {
 			{Content: "<COMPLETE>\n"},
 			{Content: "<COMPLETE>\n"},
@@ -159,7 +160,7 @@ func TestExecutorReviewStateLifecycle_DuplicateReviewRegressionMatchesLaneThreeS
 	}
 
 	dir := scaffoldExecutorReviewReconcileFactory(t)
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "<COMPLETE>\n"}},
 	})
 	h := support.NewGuardsBatchHarness(t, dir,

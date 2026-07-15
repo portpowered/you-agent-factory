@@ -5,10 +5,12 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestFactoryEventHistory_RecordWorkRequest_PreservesGeneratedWorkChainingTraceLineage(t *testing.T) {
@@ -171,14 +173,14 @@ func fanInLineageFixture(eventTime time.Time) (interfaces.FactoryDispatchRecord,
 	return record, fanInLineageCompletion(eventTime, consumed)
 }
 
-func fanInLineageConsumedTokens() []interfaces.Token {
-	return []interfaces.Token{
+func fanInLineageConsumedTokens() []factorytoken.Token {
+	return []factorytoken.Token{
 		newFanInWorkToken("tok-z", "work-z", "source-z", "request-z", "trace-z", []string{"trace-root-z"}),
 		{
 			ID:      "tok-resource",
 			PlaceID: "resource:available",
-			Color: interfaces.TokenColor{
-				DataType:                 interfaces.DataTypeResource,
+			Color: factorytoken.Color{
+				DataType:                 factorytoken.DataTypeResource,
 				WorkTypeID:               "gpu",
 				Name:                     "gpu",
 				CurrentChainingTraceID:   "trace-resource-ignored",
@@ -191,12 +193,12 @@ func fanInLineageConsumedTokens() []interfaces.Token {
 	}
 }
 
-func newFanInWorkToken(id, workID, name, requestID, traceID string, previous []string) interfaces.Token {
-	return interfaces.Token{
+func newFanInWorkToken(id, workID, name, requestID, traceID string, previous []string) factorytoken.Token {
+	return factorytoken.Token{
 		ID:      id,
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
-			DataType:                 interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:                 factorytoken.DataTypeWork,
 			WorkID:                   workID,
 			WorkTypeID:               "task",
 			Name:                     name,
@@ -208,12 +210,12 @@ func newFanInWorkToken(id, workID, name, requestID, traceID string, previous []s
 	}
 }
 
-func fanInLineageCompletion(eventTime time.Time, consumed []interfaces.Token) interfaces.CompletedDispatch {
+func fanInLineageCompletion(eventTime time.Time, consumed []factorytoken.Token) interfaces.CompletedDispatch {
 	return interfaces.CompletedDispatch{
 		DispatchID:      "dispatch-lineage",
 		TransitionID:    "build",
 		WorkstationName: "Build",
-		Outcome:         interfaces.OutcomeAccepted,
+		Outcome:         workerexecution.OutcomeAccepted,
 		EndTime:         eventTime,
 		Duration:        2 * time.Second,
 		ConsumedTokens:  consumed,
@@ -222,11 +224,11 @@ func fanInLineageCompletion(eventTime time.Time, consumed []interfaces.Token) in
 			newFanOutWorkMutation("tok-output-b", "task:done", "work-output-b", "fan-out-b", "trace-output-b", nil),
 			{
 				Type: interfaces.MutationCreate,
-				Token: &interfaces.Token{
+				Token: &factorytoken.Token{
 					ID:      "tok-resource-out",
 					PlaceID: "gpu:available",
-					Color: interfaces.TokenColor{
-						DataType:   interfaces.DataTypeResource,
+					Color: factorytoken.Color{
+						DataType:   factorytoken.DataTypeResource,
 						WorkTypeID: "gpu",
 						Name:       "gpu",
 					},
@@ -239,11 +241,11 @@ func fanInLineageCompletion(eventTime time.Time, consumed []interfaces.Token) in
 func newFanOutWorkMutation(id, placeID, workID, name, traceID string, previous []string) interfaces.TokenMutationRecord {
 	return interfaces.TokenMutationRecord{
 		Type: interfaces.MutationCreate,
-		Token: &interfaces.Token{
+		Token: &factorytoken.Token{
 			ID:      id,
 			PlaceID: placeID,
-			Color: interfaces.TokenColor{
-				DataType:                 interfaces.DataTypeWork,
+			Color: factorytoken.Color{
+				DataType:                 factorytoken.DataTypeWork,
 				WorkID:                   workID,
 				WorkTypeID:               "task",
 				Name:                     name,
@@ -255,14 +257,14 @@ func newFanOutWorkMutation(id, placeID, workID, name, traceID string, previous [
 	}
 }
 
-func chainingTraceLineageConsumedTokens() []interfaces.Token {
-	return []interfaces.Token{
+func chainingTraceLineageConsumedTokens() []factorytoken.Token {
+	return []factorytoken.Token{
 		newFanInWorkToken("tok-z", "work-z", "source-z", "request-z", "trace-z", []string{"trace-origin-z"}),
 		newFanInWorkToken("tok-a", "work-a", "source-a", "request-a", "trace-a", []string{"trace-origin-a-1", "trace-origin-a-2"}),
 	}
 }
 
-func chainingTraceLineageDispatchRecord(consumed []interfaces.Token) interfaces.FactoryDispatchRecord {
+func chainingTraceLineageDispatchRecord(consumed []factorytoken.Token) interfaces.FactoryDispatchRecord {
 	return interfaces.FactoryDispatchRecord{
 		DispatchID:  "dispatch-lineage",
 		CreatedTick: 8,
@@ -282,31 +284,31 @@ func chainingTraceLineageDispatchRecord(consumed []interfaces.Token) interfaces.
 	}
 }
 
-func chainingTraceLineageResult() interfaces.WorkResult {
-	return interfaces.WorkResult{
+func chainingTraceLineageResult() workerexecution.WorkResult {
+	return workerexecution.WorkResult{
 		DispatchID:   "dispatch-lineage",
 		TransitionID: "build",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "merged output",
 	}
 }
 
-func chainingTraceLineageCompletion(eventTime time.Time, consumed []interfaces.Token) interfaces.CompletedDispatch {
+func chainingTraceLineageCompletion(eventTime time.Time, consumed []factorytoken.Token) interfaces.CompletedDispatch {
 	return interfaces.CompletedDispatch{
 		DispatchID:      "dispatch-lineage",
 		TransitionID:    "build",
 		WorkstationName: "Build",
-		Outcome:         interfaces.OutcomeAccepted,
+		Outcome:         workerexecution.OutcomeAccepted,
 		EndTime:         eventTime,
 		Duration:        1500 * time.Millisecond,
 		ConsumedTokens:  consumed,
 		OutputMutations: []interfaces.TokenMutationRecord{{
 			Type: interfaces.MutationCreate,
-			Token: &interfaces.Token{
+			Token: &factorytoken.Token{
 				ID:      "tok-output",
 				PlaceID: "task:done",
-				Color: interfaces.TokenColor{
-					DataType:   interfaces.DataTypeWork,
+				Color: factorytoken.Color{
+					DataType:   factorytoken.DataTypeWork,
 					WorkID:     "work-output",
 					WorkTypeID: "task",
 					Name:       "merged-output",
@@ -423,11 +425,11 @@ func TestFactoryEventHistory_RecordWorkstationResponse_PreserveInputExposesConsu
 	eventTime := time.Date(2026, time.June, 20, 12, 0, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
-	consumed := []interfaces.Token{{
+	consumed := []factorytoken.Token{{
 		ID:      "tok-input",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
@@ -439,11 +441,11 @@ func TestFactoryEventHistory_RecordWorkstationResponse_PreserveInputExposesConsu
 			}},
 		},
 	}}
-	outputToken := interfaces.Token{
+	outputToken := factorytoken.Token{
 		ID:      "work-input",
 		PlaceID: "task:done",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
@@ -468,15 +470,15 @@ func TestFactoryEventHistory_RecordWorkstationResponse_PreserveInputExposesConsu
 			},
 		},
 	}, eventTime)
-	history.RecordWorkstationResponse(2, interfaces.WorkResult{
+	history.RecordWorkstationResponse(2, workerexecution.WorkResult{
 		DispatchID:   "dispatch-preserve",
 		TransitionID: "execute",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "worker-output",
 	}, interfaces.CompletedDispatch{
 		DispatchID:     "dispatch-preserve",
 		TransitionID:   "execute",
-		Outcome:        interfaces.OutcomeAccepted,
+		Outcome:        workerexecution.OutcomeAccepted,
 		EndTime:        eventTime,
 		Duration:       time.Second,
 		ConsumedTokens: consumed,
@@ -517,11 +519,11 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesRes
 	eventTime := time.Date(2026, time.July, 12, 18, 0, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
-	consumed := []interfaces.Token{{
+	consumed := []factorytoken.Token{{
 		ID:      "tok-input",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
@@ -533,11 +535,11 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesRes
 			}},
 		},
 	}}
-	outputToken := interfaces.Token{
+	outputToken := factorytoken.Token{
 		ID:      "work-input",
 		PlaceID: "task:done",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
@@ -562,15 +564,15 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesRes
 			},
 		},
 	}, eventTime)
-	history.RecordWorkstationResponse(2, interfaces.WorkResult{
+	history.RecordWorkstationResponse(2, workerexecution.WorkResult{
 		DispatchID:   "dispatch-response",
 		TransitionID: "execute",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "worker-response",
 	}, interfaces.CompletedDispatch{
 		DispatchID:     "dispatch-response",
 		TransitionID:   "execute",
-		Outcome:        interfaces.OutcomeAccepted,
+		Outcome:        workerexecution.OutcomeAccepted,
 		EndTime:        eventTime,
 		Duration:       time.Second,
 		ConsumedTokens: consumed,
@@ -611,11 +613,11 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesNex
 	eventTime := time.Date(2026, time.July, 12, 19, 0, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
-	consumed := []interfaces.Token{{
+	consumed := []factorytoken.Token{{
 		ID:      "tok-input",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
@@ -627,11 +629,11 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesNex
 			}},
 		},
 	}}
-	outputToken := interfaces.Token{
+	outputToken := factorytoken.Token{
 		ID:      "work-input",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
@@ -657,16 +659,16 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesNex
 			},
 		},
 	}, eventTime)
-	history.RecordWorkstationResponse(2, interfaces.WorkResult{
+	history.RecordWorkstationResponse(2, workerexecution.WorkResult{
 		DispatchID:   "dispatch-continue",
 		TransitionID: "review",
-		Outcome:      interfaces.OutcomeContinue,
+		Outcome:      workerexecution.OutcomeContinue,
 		Output:       "next-turn-output",
 		Feedback:     "needs revision",
 	}, interfaces.CompletedDispatch{
 		DispatchID:     "dispatch-continue",
 		TransitionID:   "review",
-		Outcome:        interfaces.OutcomeContinue,
+		Outcome:        workerexecution.OutcomeContinue,
 		EndTime:        eventTime,
 		Duration:       time.Second,
 		ConsumedTokens: consumed,
@@ -703,12 +705,12 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesNex
 	}
 }
 
-func failedPreservesRequestContentFixture(eventTime time.Time) (consumed []interfaces.Token, outputToken interfaces.Token) {
-	consumed = []interfaces.Token{{
+func failedPreservesRequestContentFixture(eventTime time.Time) (consumed []factorytoken.Token, outputToken factorytoken.Token) {
+	consumed = []factorytoken.Token{{
 		ID:      "tok-input",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
@@ -720,11 +722,11 @@ func failedPreservesRequestContentFixture(eventTime time.Time) (consumed []inter
 			}},
 		},
 	}}
-	outputToken = interfaces.Token{
+	outputToken = factorytoken.Token{
 		ID:      "work-input",
 		PlaceID: "task:failed",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
@@ -735,9 +737,9 @@ func failedPreservesRequestContentFixture(eventTime time.Time) (consumed []inter
 				Text: "input-content",
 			}},
 		},
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			LastError: "agent crashed",
-			FailureLog: []interfaces.FailureRecord{{
+			FailureLog: []factorytoken.Failure{{
 				TransitionID: "execute",
 				Error:        "agent crashed",
 				Timestamp:    eventTime,
@@ -798,16 +800,16 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedPreservesRequestCon
 			},
 		},
 	}, eventTime)
-	history.RecordWorkstationResponse(2, interfaces.WorkResult{
+	history.RecordWorkstationResponse(2, workerexecution.WorkResult{
 		DispatchID:   "dispatch-failed",
 		TransitionID: "execute",
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Output:       "worker-output",
 		Error:        "agent crashed",
 	}, interfaces.CompletedDispatch{
 		DispatchID:     "dispatch-failed",
 		TransitionID:   "execute",
-		Outcome:        interfaces.OutcomeFailed,
+		Outcome:        workerexecution.OutcomeFailed,
 		EndTime:        eventTime,
 		Duration:       time.Second,
 		ConsumedTokens: consumed,

@@ -9,7 +9,8 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestValidateFactoryAPI_ProfileTopology_CrossPathInvalidFixture(t *testing.T) {
@@ -180,7 +181,7 @@ func TestValidateFactoryAPI_ProfileTopology_RejectsInvalidInvocationSignature(t 
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:  "worker-a",
 			Type:  interfaces.WorkerTypeInference,
 			Model: "${missing}",

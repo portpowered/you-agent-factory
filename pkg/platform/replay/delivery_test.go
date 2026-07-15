@@ -11,8 +11,10 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestSubmissionHook_ReplaysWorkRequestEventsByTick(t *testing.T) {
@@ -109,7 +111,7 @@ func assertSubmissionHookReplayedGeneratedWorkCount(t *testing.T, batch work.Gen
 	}
 }
 
-func assertSubmissionHookReplayedOrderedContent(t *testing.T, work interfaces.Work, wantText, wantImageURL string) {
+func assertSubmissionHookReplayedOrderedContent(t *testing.T, work work.Work, wantText, wantImageURL string) {
 	t.Helper()
 	got := work.Content
 	if len(got) != 2 {
@@ -288,7 +290,7 @@ func TestCompletionDeliveryPlan_DispatchIdentityMismatchReportsDivergence(t *tes
 		DispatchID:      "observed-dispatch",
 		TransitionID:    "review",
 		WorkstationName: "review",
-		InputTokens:     workers.InputTokens(interfaces.Token{ID: "tok-1"}),
+		InputTokens:     workers.InputTokens(factorytoken.Token{ID: "tok-1"}),
 		Execution: work.ExecutionMetadata{
 			DispatchCreatedTick: 2,
 			ReplayKey:           "review/trace-1/work-1",
@@ -367,9 +369,9 @@ func TestCompletionDeliveryPlan_LateDispatchCreatedTickKeepsRelativeDelay(t *tes
 
 func TestCompletionDeliveryPlan_PlannedResultClonesFailureMetadataOnlyInput(t *testing.T) {
 	completion := replayTestCompletion("completion-1", "dispatch-1", "process", 3)
-	completion.FailureMetadata = &interfaces.WorkFailureMetadata{
-		Family: interfaces.WorkFailureFamilyRetryable,
-		Type:   interfaces.WorkFailureTypeInternalServerError,
+	completion.FailureMetadata = &workerexecution.WorkFailureMetadata{
+		Family: workerexecution.WorkFailureFamilyRetryable,
+		Type:   workerexecution.WorkFailureTypeInternalServerError,
 	}
 
 	plan, err := NewCompletionDeliveryPlan(deliveryArtifact(t,
@@ -389,7 +391,7 @@ func TestCompletionDeliveryPlan_PlannedResultClonesFailureMetadataOnlyInput(t *t
 		t.Fatalf("delivery match = (%t, %d), want (true, 3)", ok, deliveryTick)
 	}
 
-	completion.FailureMetadata.Type = interfaces.WorkFailureTypeAuthFailure
+	completion.FailureMetadata.Type = workerexecution.WorkFailureTypeAuthFailure
 
 	planned, ok, err := plan.PlannedResultForDispatch(observed)
 	if err != nil {
@@ -398,7 +400,7 @@ func TestCompletionDeliveryPlan_PlannedResultClonesFailureMetadataOnlyInput(t *t
 	if !ok {
 		t.Fatal("expected planned result for observed dispatch")
 	}
-	if planned.FailureMetadata == nil || planned.FailureMetadata.Type != interfaces.WorkFailureTypeInternalServerError {
+	if planned.FailureMetadata == nil || planned.FailureMetadata.Type != workerexecution.WorkFailureTypeInternalServerError {
 		t.Fatalf("planned failure metadata = %#v, want detached internal_server_error", planned.FailureMetadata)
 	}
 }
@@ -416,7 +418,7 @@ func TestCompletionDeliveryPlan_LineageMismatchReportsDivergence(t *testing.T) {
 		DispatchID:      "observed-dispatch",
 		TransitionID:    "process",
 		WorkstationName: "process",
-		InputTokens:     workers.InputTokens(interfaces.Token{ID: "tok-different"}),
+		InputTokens:     workers.InputTokens(factorytoken.Token{ID: "tok-different"}),
 		Execution: work.ExecutionMetadata{
 			DispatchCreatedTick: 2,
 			ReplayKey:           "process/trace-1/work-1",
@@ -443,7 +445,7 @@ func TestCompletionDeliveryPlan_ResourceTokenIDChangesDoNotDiverge(t *testing.T)
 	dispatch := replayTestDispatch("dispatch-1", "process", 2, "trace-1", "work-1", "tok-1")
 	dispatch.InputTokens = workers.InputTokens(
 		resourceReplayToken("executor-slot:resource:7"),
-		interfaces.Token{ID: "tok-1"},
+		factorytoken.Token{ID: "tok-1"},
 	)
 	plan, err := NewCompletionDeliveryPlan(deliveryArtifact(t,
 		dispatch,
@@ -457,7 +459,7 @@ func TestCompletionDeliveryPlan_ResourceTokenIDChangesDoNotDiverge(t *testing.T)
 	observed.DispatchID = "observed-dispatch"
 	observed.InputTokens = workers.InputTokens(
 		resourceReplayToken("executor-slot:resource:4"),
-		interfaces.Token{ID: "tok-1"},
+		factorytoken.Token{ID: "tok-1"},
 	)
 	deliveryTick, ok, err := plan.DeliveryTickForDispatch(observed)
 	if err != nil {
@@ -510,7 +512,7 @@ func requireDivergence(t *testing.T, err error) DivergenceReport {
 	return divergence.Report
 }
 
-func deliveryArtifact(t *testing.T, dispatch work.WorkDispatch, completion interfaces.WorkResult) *interfaces.ReplayArtifact {
+func deliveryArtifact(t *testing.T, dispatch work.WorkDispatch, completion workerexecution.WorkResult) *interfaces.ReplayArtifact {
 	t.Helper()
 	return testReplayArtifact(
 		t,
@@ -529,14 +531,14 @@ func replaySubmissionHookContext(tick int) interfaces.SubmissionHookContext[inte
 
 func replaySubmissionHookContextWithWorkToken(tick int, workID, tokenID, placeID string) interfaces.SubmissionHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]] {
 	ctx := replaySubmissionHookContext(tick)
-	ctx.Snapshot.Marking.Tokens = map[string]*interfaces.Token{
+	ctx.Snapshot.Marking.Tokens = map[string]*factorytoken.Token{
 		tokenID: {
 			ID:      tokenID,
 			PlaceID: placeID,
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     workID,
 				WorkTypeID: "task",
-				DataType:   interfaces.DataTypeWork,
+				DataType:   factorytoken.DataTypeWork,
 			},
 		},
 	}
@@ -584,7 +586,7 @@ func replayTestDispatch(dispatchID, transitionID string, tick int, traceID, work
 		DispatchID:      dispatchID,
 		TransitionID:    transitionID,
 		WorkstationName: transitionID,
-		InputTokens:     workers.InputTokens(interfaces.Token{ID: tokenID}),
+		InputTokens:     workers.InputTokens(factorytoken.Token{ID: tokenID}),
 		Execution: work.ExecutionMetadata{
 			DispatchCreatedTick: tick,
 			ReplayKey:           transitionID + "/" + traceID + "/" + workID,
@@ -594,11 +596,11 @@ func replayTestDispatch(dispatchID, transitionID string, tick int, traceID, work
 	}
 }
 
-func replayTestCompletion(_ string, dispatchID string, transitionID string, _ int) interfaces.WorkResult {
-	return interfaces.WorkResult{
+func replayTestCompletion(_ string, dispatchID string, transitionID string, _ int) workerexecution.WorkResult {
+	return workerexecution.WorkResult{
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}
 }
 
@@ -609,12 +611,12 @@ func contentURLForTestPath(url string, file string) string {
 	return "file://" + file
 }
 
-func resourceReplayToken(id string) interfaces.Token {
-	return interfaces.Token{
+func resourceReplayToken(id string) factorytoken.Token {
+	return factorytoken.Token{
 		ID:      id,
 		PlaceID: "executor-slot:available",
-		Color: interfaces.TokenColor{
-			DataType: interfaces.DataTypeResource,
+		Color: factorytoken.Color{
+			DataType: factorytoken.DataTypeResource,
 			Name:     "executor-slot",
 		},
 	}
