@@ -45,6 +45,25 @@ func TestModelsDocsFamilyManifestMatchesContractedIDs(t *testing.T) {
 	}
 }
 
+func TestRunSubmitFamilyManifestMatchesContractedIDs(t *testing.T) {
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		t.Fatalf("RunSubmitFamilyManifest() error = %v", err)
+	}
+	if len(manifest.Commands) != len(climanifestgen.RunSubmitFamilyCommandIDs) {
+		t.Fatalf("command count = %d, want %d", len(manifest.Commands), len(climanifestgen.RunSubmitFamilyCommandIDs))
+	}
+	for i, id := range climanifestgen.RunSubmitFamilyCommandIDs {
+		record, err := manifest.CommandByID(id)
+		if err != nil {
+			t.Fatalf("CommandByID(%q) error = %v", id, err)
+		}
+		if record.ID != id || generated.RunSubmitFamilyCommandIDs[i] != id {
+			t.Fatalf("run/submit id[%d] record=%q generated=%q want=%q", i, record.ID, generated.RunSubmitFamilyCommandIDs[i], id)
+		}
+	}
+}
+
 func TestWorkflowMCPGeneratedFamiliesStaySeparated(t *testing.T) {
 	mcp, err := generated.MCPFamilyManifest()
 	if err != nil {

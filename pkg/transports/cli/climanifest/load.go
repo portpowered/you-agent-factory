@@ -13,7 +13,14 @@ const (
 
 // LoadProduction decodes the committed production CLI command manifest.
 func LoadProduction(path string) (Manifest, error) {
-	return load(path, "production")
+	manifest, err := load(path, "production")
+	if err != nil {
+		return Manifest{}, err
+	}
+	if err := ValidateRunSubmitFamily(manifest); err != nil {
+		return Manifest{}, fmt.Errorf("validate run/submit family: %w", err)
+	}
+	return manifest, nil
 }
 
 // LoadCompatibility decodes the separately classified compatibility command manifest.

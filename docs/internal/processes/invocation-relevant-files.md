@@ -3,6 +3,54 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+## CLI run and submit command contracts
+
+- Canonical metadata for `you.run`, `you.submit`, and `you.submit.batch` lives
+  in `contracts/cli/commands.json`. Keep positional cardinality, stdin channels,
+  source precedence, conflicts, no-option defaults, output modes, effects, and
+  stable handler/OpenAPI bindings aligned with the handwritten constructors in
+  `pkg/transports/cli/root_work.go` and
+  `pkg/transports/cli/root_submit_batch.go`.
+- `pkg/transports/cli/climanifest/run_submit_validation.go` rejects incomplete
+  or contradictory family records before generation. Update its focused
+  validation cases whenever the supported family contract changes.
+- String flags may define a non-empty `noOptionDefault` when presence without a
+  value selects a stable sentinel, as `--with-mock-workers` does. Boolean
+  no-option defaults remain restricted to `true` or `false` by
+  `contracts/cli/command-manifest.schema.json`.
+- Generated run/submit metadata is embedded from
+  `pkg/transports/cli/generated/run_submit_family.json`, with stable IDs in
+  `run_submit_command_ids_gen.go`. `climanifestcobra.NewRunSubmitFamilyComponents`
+  constructs only detached `run` and `submit` roots plus the nested `submit batch`
+  leaf; `commandregistry.NewRunSubmitRegistry` attaches retained `PreRunE` and
+  `RunE` lifecycles by stable command ID. Production execution bindings are
+  assembled by `newRunSubmitHandlerRegistry` in `root_work.go`.
+  `productionRunSubmitCommands` selects the generated family by default while
+  retaining the handwritten constructors behind the localized
+  `useGeneratedRunSubmitFamily` rollback constant.
+  `NewGeneratedRunSubmitFamilyCommandForParity` exposes the isolated generated
+  tree for focused verification.
+  `NewRunSubmitFamilyParityRoots` builds independent legacy and generated roots
+  with injected `RootCommandOptions`; use it for observable parser, resolved
+  `RunConfig`, service-call, stdout/stderr, and error parity without sharing
+  mutable Cobra flag state. Inject unary submit through `RootCommandOptions.SubmitWork`
+  and call the real submit transport against an `httptest` server when parity
+  must prove request path/body, default or explicit session selection, and
+  human/JSON output. Manifest-required submit inputs remain validated by the
+  retained handwritten handler so generated construction does not preempt its
+  stable diagnostics or validation ordering. Batch positional cardinality is
+  likewise retained in `submit.resolveBatchInput`; inject the real batch
+  transport through `RootCommandOptions.SubmitBatch` so parity roots receive
+  independent Cobra stdin/stdout/stderr streams while proving `--file`,
+  positional file, inline JSON, explicit or implicit stdin, dry-run, session
+  routing, request, output, diagnostic, and failure behavior. When both parity
+  roots share a migrated execution helper, also assert fixed pre-migration
+  outcomes (including nil optional sinks and exact stdout/stderr) so changing
+  that helper cannot redefine the legacy oracle. Run-specific
+  coverage lives in `pkg/transports/cli/climanifestparity/runparity/run_parity_test.go`;
+  unary and batch submit coverage lives in the sibling `submitparity` and
+  `submitbatchparity` packages.
+
 ## CLI invocation output modes (primary-result, human response-stream, NDJSON)
 
 Use this lane when changing `you run` stdout modes, `--output response-stream`,
@@ -211,7 +259,10 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   manifest in `internal/contractvalidator.CLIRegistry`, and keep relationship
   participants on same-command flag or argument IDs so diagnostics name the exact
   record path. Compatibility records must not be copied into the primary manifest
-  merely to make generation convenient.
+  merely to make generation convenient. Apply family-completeness validators only
+  to the manifest classification that owns that family: `LoadProduction` owns
+  canonical run/submit validation, while `LoadCompatibility` must remain able to
+  decode the separately classified workflow-only manifest.
 - Classification-aware workflow/MCP generation lives in
   `pkg/transports/cli/climanifestgen`: canonical `you mcp` / `you mcp serve`
   metadata is emitted from `commands.json` into `mcp_family.json`, while approved

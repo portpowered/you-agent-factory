@@ -23,6 +23,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
@@ -46,6 +47,91 @@ func TestMain(m *testing.M) {
 	os.Setenv("HOMEPATH", string(os.PathSeparator))
 
 	os.Exit(m.Run())
+}
+
+func TestGeneratedRunSubmitFamilyForParityUsesProductionHandlerBindings(t *testing.T) {
+	root, err := NewGeneratedRunSubmitFamilyCommandForParity()
+	if err != nil {
+		t.Fatalf("NewGeneratedRunSubmitFamilyCommandForParity() error = %v", err)
+	}
+	for _, path := range []struct {
+		args []string
+		name string
+	}{
+		{args: []string{"run"}, name: "run"},
+		{args: []string{"submit"}, name: "submit"},
+		{args: []string{"submit", "batch"}, name: "batch"},
+	} {
+		cmd, _, findErr := root.Find(path.args)
+		if findErr != nil {
+			t.Fatalf("Find(%v) error = %v", path.args, findErr)
+		}
+		if cmd.Name() != path.name || cmd.PreRunE == nil || cmd.RunE == nil {
+			t.Fatalf("Find(%v) = %q lifecycle=(%t,%t)", path.args, cmd.Name(), cmd.PreRunE != nil, cmd.RunE != nil)
+		}
+	}
+}
+
+func TestProductionRunSubmitFamilyCutoverEnabled(t *testing.T) {
+	if !useGeneratedRunSubmitFamily {
+		t.Fatal("useGeneratedRunSubmitFamily = false, want production cutover enabled")
+	}
+
+	root := NewRootCommandWithOptions(RootCommandOptions{})
+	for _, path := range [][]string{{"run"}, {"submit"}, {"submit", "batch"}} {
+		cmd, remaining, err := root.Find(path)
+		if err != nil {
+			t.Fatalf("Find(%v) error = %v", path, err)
+		}
+		if len(remaining) != 0 {
+			t.Fatalf("Find(%v) remaining = %v, want none", path, remaining)
+		}
+		if cmd.PreRunE == nil || cmd.RunE == nil {
+			t.Fatalf("Find(%v) lifecycle = (%t, %t), want retained PreRunE and RunE", path, cmd.PreRunE != nil, cmd.RunE != nil)
+		}
+	}
+
+	assertDirectCommandCount(t, root, "run", 1)
+	assertDirectCommandCount(t, root, "submit", 1)
+	submitCmd, _, err := root.Find([]string{"submit"})
+	if err != nil {
+		t.Fatalf("find submit: %v", err)
+	}
+	assertDirectCommandCount(t, submitCmd, "batch", 1)
+}
+
+func TestRunSubmitFamilyRollbackBuildsRetainedCommands(t *testing.T) {
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+
+	commands, err := buildRunSubmitProductionCommands(
+		globals, diagnostics, operatorDefaults, options, false,
+	)
+	if err != nil {
+		t.Fatalf("buildRunSubmitProductionCommands(legacy) error = %v", err)
+	}
+	if commands.Run.Name() != "run" || commands.Submit.Name() != "submit" {
+		t.Fatalf("legacy commands = (%q, %q), want (run, submit)", commands.Run.Name(), commands.Submit.Name())
+	}
+	if commands.Run.PreRunE == nil || commands.Run.RunE == nil || commands.Submit.PreRunE == nil || commands.Submit.RunE == nil {
+		t.Fatal("legacy rollback commands must retain handwritten lifecycles")
+	}
+	assertDirectCommandCount(t, commands.Submit, "batch", 1)
+}
+
+func assertDirectCommandCount(t *testing.T, parent *cobra.Command, name string, want int) {
+	t.Helper()
+	count := 0
+	for _, command := range parent.Commands() {
+		if command.Name() == name {
+			count++
+		}
+	}
+	if count != want {
+		t.Fatalf("%s direct %q command count = %d, want %d", parent.CommandPath(), name, count, want)
+	}
 }
 
 func newComposedTestRootCommand(t *testing.T) *cobra.Command {

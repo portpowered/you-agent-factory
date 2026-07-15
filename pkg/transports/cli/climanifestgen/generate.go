@@ -27,6 +27,12 @@ const (
 	// WorkFamilyJSONPath is the generated work-family metadata artifact.
 	WorkFamilyJSONPath = "pkg/transports/cli/generated/work_family.json"
 
+	// RunSubmitFamilyJSONPath is the generated run/submit-family metadata artifact.
+	RunSubmitFamilyJSONPath = "pkg/transports/cli/generated/run_submit_family.json"
+
+	// RunSubmitFamilyCommandIDsPath is the generated run/submit stable command ID list.
+	RunSubmitFamilyCommandIDsPath = "pkg/transports/cli/generated/run_submit_command_ids_gen.go"
+
 	// RepresentativeFamilyCommandIDsPath is the generated stable command ID list.
 	RepresentativeFamilyCommandIDsPath = "pkg/transports/cli/generated/command_ids_gen.go"
 
@@ -83,6 +89,20 @@ func WorkArtifact(repositoryRoot string) ([]byte, error) {
 		return nil, err
 	}
 	family, err := ExtractWorkFamily(manifest)
+	if err != nil {
+		return nil, err
+	}
+	return contractjoiner.MarshalCanonicalJSON(family)
+}
+
+// RunSubmitArtifact returns deterministic generated run/submit-family metadata bytes.
+func RunSubmitArtifact(repositoryRoot string) ([]byte, error) {
+	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
+	manifest, err := climanifest.LoadProduction(manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	family, err := ExtractRunSubmitFamily(manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -195,6 +215,13 @@ func Generate(repositoryRoot string) error {
 	if err := os.WriteFile(idsTarget, representativeAndWorkCommandIDsSource(), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", RepresentativeFamilyCommandIDsPath, err)
 	}
+	if err := writeArtifact(repositoryRoot, RunSubmitFamilyJSONPath, RunSubmitArtifact); err != nil {
+		return err
+	}
+	runSubmitIDsTarget := filepath.Join(repositoryRoot, filepath.FromSlash(RunSubmitFamilyCommandIDsPath))
+	if err := os.WriteFile(runSubmitIDsTarget, runSubmitCommandIDsSource(), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", RunSubmitFamilyCommandIDsPath, err)
+	}
 
 	if err := writeArtifact(repositoryRoot, FactoryConfigInitFamilyJSONPath, FactoryConfigInitFamilyArtifact); err != nil {
 		return err
@@ -265,6 +292,14 @@ func modelsDocsCommandIDsSource() []byte {
 		"ModelsDocsFamilyCommandIDs lists the stable command IDs emitted from\n// contracts/cli/commands.json for the models/docs CLI family.",
 		"ModelsDocsFamilyCommandIDs",
 		ModelsDocsFamilyCommandIDs,
+	)
+}
+
+func runSubmitCommandIDsSource() []byte {
+	return renderCommandIDsSource(
+		"RunSubmitFamilyCommandIDs lists the stable command IDs emitted from\n// contracts/cli/commands.json for the run/submit CLI family.",
+		"RunSubmitFamilyCommandIDs",
+		RunSubmitFamilyCommandIDs,
 	)
 }
 

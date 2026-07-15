@@ -23,6 +23,9 @@ var factoryConfigInitFamilyJSON []byte
 //go:embed models_docs_family.json
 var modelsDocsFamilyJSON []byte
 
+//go:embed run_submit_family.json
+var runSubmitFamilyJSON []byte
+
 //go:embed mcp_family.json
 var mcpFamilyJSON []byte
 
@@ -57,6 +60,11 @@ func FactoryConfigInitFamilyManifest() (climanifest.Manifest, error) {
 // command family.
 func ModelsDocsFamilyManifest() (climanifest.Manifest, error) {
 	return parseFamilyManifest(modelsDocsFamilyJSON, "models/docs")
+}
+
+// RunSubmitFamilyManifest returns generated metadata for the run/submit family.
+func RunSubmitFamilyManifest() (climanifest.Manifest, error) {
+	return parseFamilyManifest(runSubmitFamilyJSON, "run/submit")
 }
 
 func MCPFamilyManifest() (climanifest.Manifest, error) {

@@ -86,6 +86,7 @@ func TestCommandManifestSchemaFlagFixtures(t *testing.T) {
 		{name: "valid persistent flag", fixture: "valid-persistent-flag.json", valid: true},
 		{name: "valid inherited flag", fixture: "valid-inherited-flag.json", valid: true},
 		{name: "valid no-option flag", fixture: "valid-no-option-flag.json", valid: true},
+		{name: "valid string no-option flag", fixture: "valid-string-no-option-flag.json", valid: true},
 		{
 			name:     "unknown flag property",
 			fixture:  "invalid-flag-unknown-property.json",
@@ -170,6 +171,7 @@ func TestCommandManifestSchemaValidFixtureMatrix(t *testing.T) {
 		{name: "persistent flag", fixture: "valid-persistent-flag.json"},
 		{name: "inherited flag", fixture: "valid-inherited-flag.json"},
 		{name: "no-option flag", fixture: "valid-no-option-flag.json"},
+		{name: "string no-option flag", fixture: "valid-string-no-option-flag.json"},
 		{name: "mutex relationship", fixture: "valid-mutex-relationship.json"},
 		{name: "required-together relationship", fixture: "valid-required-together-relationship.json"},
 		{name: "conditional relationship", fixture: "valid-conditional-relationship.json"},

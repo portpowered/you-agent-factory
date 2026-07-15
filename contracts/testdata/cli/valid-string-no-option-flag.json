@@ -2,54 +2,53 @@
   "formatVersion": "1.0.0",
   "rootPath": "example",
   "commands": {
-    "example.factory.publish": {
-      "id": "example.factory.publish",
-      "name": "publish",
-      "path": "example factory publish",
+    "example.run": {
+      "id": "example.run",
+      "name": "run",
+      "path": "example run",
       "aliases": [],
       "documentation": {
         "formatVersion": "1.0.0",
-        "itemId": "example.factory.publish",
+        "itemId": "example.run",
         "documentation": {
           "title": {
-            "id": "example.factory.publish.title",
-            "canonicalEnglish": "Publish factory artifacts"
+            "id": "example.run.title",
+            "canonicalEnglish": "Run with optional fixture configuration"
           },
           "description": {
-            "id": "example.factory.publish.description",
-            "canonicalEnglish": "Publishes factory artifacts with an invalid no-option default on an integer flag."
+            "id": "example.run.description",
+            "canonicalEnglish": "Runs with an optional string configuration path and uses a sentinel when the flag has no explicit value."
           }
         },
         "examples": [
-          "example factory publish"
+          "example run --with-fixture"
         ],
         "visibility": "public",
-        "sourceHash": "5555666677778888999900001111222233334444aaaabbbbccccddddeeeeffff"
+        "sourceHash": "7777888899990000111122223333444455556666aaaabbbbccccddddeeeeffff"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "example.factory.publish",
+        "itemId": "example.run",
         "state": "active",
         "since": "1.0.0"
       },
       "visibility": "visible",
       "runnable": true,
       "usage": {
-        "line": "publish",
-        "example": "  example factory publish"
+        "line": "run"
       },
       "flags": {
-        "example.factory.publish.flag.channel": {
-          "id": "example.factory.publish.flag.channel",
-          "long": "channel",
+        "example.run.flag.with-fixture": {
+          "id": "example.run.flag.with-fixture",
+          "long": "with-fixture",
           "shorthand": "",
           "aliases": [],
           "scope": "local",
-          "valueType": "int",
+          "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
-          "noOptionDefault": "true",
+          "noOptionDefault": "__default_fixture__",
           "repeatable": false,
           "normalization": "",
           "completion": "none",
@@ -57,7 +56,7 @@
           "visibility": "visible",
           "lifecycle": {
             "formatVersion": "1.0.0",
-            "itemId": "example.factory.publish.flag.channel",
+            "itemId": "example.run.flag.with-fixture",
             "state": "active",
             "since": "1.0.0"
           }

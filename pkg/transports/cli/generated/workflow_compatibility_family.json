@@ -146,12 +146,12 @@
           "kind": "mutually-exclusive",
           "participants": [
             {
-              "id": "you.workflow.preview.flag.value",
-              "type": "flag"
+              "type": "flag",
+              "id": "you.workflow.preview.flag.value"
             },
             {
-              "id": "you.workflow.preview.flag.inline",
-              "type": "flag"
+              "type": "flag",
+              "id": "you.workflow.preview.flag.inline"
             }
           ]
         },
@@ -160,15 +160,25 @@
           "kind": "at-least-one",
           "participants": [
             {
-              "id": "you.workflow.preview.flag.value",
-              "type": "flag"
+              "type": "flag",
+              "id": "you.workflow.preview.flag.value"
             },
             {
-              "id": "you.workflow.preview.flag.inline",
-              "type": "flag"
+              "type": "flag",
+              "id": "you.workflow.preview.flag.inline"
             }
           ]
         }
+      },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
       },
       "channels": {
         "input": [
@@ -379,12 +389,12 @@
           "kind": "mutually-exclusive",
           "participants": [
             {
-              "id": "you.workflow.validate.flag.value",
-              "type": "flag"
+              "type": "flag",
+              "id": "you.workflow.validate.flag.value"
             },
             {
-              "id": "you.workflow.validate.flag.inline",
-              "type": "flag"
+              "type": "flag",
+              "id": "you.workflow.validate.flag.inline"
             }
           ]
         },
@@ -393,15 +403,25 @@
           "kind": "at-least-one",
           "participants": [
             {
-              "id": "you.workflow.validate.flag.value",
-              "type": "flag"
+              "type": "flag",
+              "id": "you.workflow.validate.flag.value"
             },
             {
-              "id": "you.workflow.validate.flag.inline",
-              "type": "flag"
+              "type": "flag",
+              "id": "you.workflow.validate.flag.inline"
             }
           ]
         }
+      },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
       },
       "channels": {
         "input": [

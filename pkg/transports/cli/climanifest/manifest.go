@@ -21,6 +21,7 @@ type Command struct {
 	Arguments     map[string]Argument     `json:"arguments,omitempty"`
 	Flags         map[string]Flag         `json:"flags,omitempty"`
 	Relationships map[string]Relationship `json:"relationships,omitempty"`
+	Precedence    Precedence              `json:"precedence,omitempty"`
 	Channels      Channels                `json:"channels,omitempty"`
 	Outputs       map[string]Output       `json:"outputs,omitempty"`
 	Exits         map[string]Exit         `json:"exits,omitempty"`
@@ -29,17 +30,22 @@ type Command struct {
 	Handler       *Handler                `json:"handler,omitempty"`
 }
 
-// Relationship is one contracted Cobra input relationship.
+// Relationship describes a parse-time constraint between command inputs.
 type Relationship struct {
 	ID           string           `json:"id"`
 	Kind         string           `json:"kind"`
 	Participants []ParticipantRef `json:"participants"`
 }
 
-// ParticipantRef identifies one flag or argument in a relationship.
+// ParticipantRef points to one flag or positional argument in a relationship.
 type ParticipantRef struct {
-	ID   string `json:"id"`
 	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
+// Precedence records input sources from highest to lowest priority.
+type Precedence struct {
+	Order []string `json:"order"`
 }
 
 // Handler carries stable handler identity and optional OpenAPI operation binding.

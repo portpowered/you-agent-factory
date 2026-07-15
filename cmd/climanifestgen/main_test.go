@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 )
 
@@ -70,11 +71,12 @@ func TestRunCheckNamesAffectedStableCommandIDs(t *testing.T) {
 
 func writeProductionManifestFixture(t *testing.T, root string) {
 	t.Helper()
+	repositoryRoot := testutil.MustRepoPath(t, ".")
 	for _, relativePath := range []string{
 		climanifestgen.ProductionManifestPath,
 		climanifestgen.CompatibilityManifestPath,
 	} {
-		manifest, err := os.ReadFile(filepath.Join("..", "..", filepath.FromSlash(relativePath)))
+		manifest, err := os.ReadFile(filepath.Join(repositoryRoot, filepath.FromSlash(relativePath)))
 		if err != nil {
 			t.Fatalf("read %s fixture: %v", relativePath, err)
 		}

@@ -205,6 +205,42 @@ func TestExtractWorkFamilyRejectsEmptyManifest(t *testing.T) {
 	}
 }
 
+func TestExtractRunSubmitFamilyFromProductionManifest(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	manifest, err := climanifest.LoadProduction(filepath.Join(repoRoot, climanifest.ProductionManifestPath))
+	if err != nil {
+		t.Fatalf("LoadProduction() error = %v", err)
+	}
+
+	family, err := climanifestgen.ExtractRunSubmitFamily(manifest)
+	if err != nil {
+		t.Fatalf("ExtractRunSubmitFamily() error = %v", err)
+	}
+	if len(family.Commands) != len(climanifestgen.RunSubmitFamilyCommandIDs) {
+		t.Fatalf("command count = %d, want %d", len(family.Commands), len(climanifestgen.RunSubmitFamilyCommandIDs))
+	}
+	for _, id := range climanifestgen.RunSubmitFamilyCommandIDs {
+		if record, ok := family.Commands[id]; !ok || record.ID != id {
+			t.Fatalf("run/submit command %q = %#v, present = %t", id, record, ok)
+		}
+	}
+}
+
+func TestExtractRunSubmitFamilyRejectsMissingAndOutOfFamilyCommands(t *testing.T) {
+	manifest := climanifest.Manifest{
+		RootPath: "you",
+		Commands: map[string]climanifest.Command{
+			"you.run": {ID: "you.run", Path: "you run"},
+		},
+	}
+	if _, err := climanifestgen.ExtractRunSubmitFamily(manifest); err == nil {
+		t.Fatal("ExtractRunSubmitFamily() missing submit commands = nil, want error")
+	}
+	if err := climanifestgen.AssertRunSubmitFamilyCommandID("you.work.list"); err == nil {
+		t.Fatal("AssertRunSubmitFamilyCommandID() out-of-family command = nil, want error")
+	}
+}
+
 func TestProductionWorkFamilyArtifactsMatchGenerator(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	drift, err := climanifestgen.Check(repoRoot)
@@ -297,6 +333,8 @@ func TestGenerateIsDeterministic(t *testing.T) {
 		climanifestgen.FactoryConfigInitFamilyCommandIDsPath,
 		climanifestgen.ModelsDocsFamilyJSONPath,
 		climanifestgen.ModelsDocsFamilyCommandIDsPath,
+		climanifestgen.RunSubmitFamilyJSONPath,
+		climanifestgen.RunSubmitFamilyCommandIDsPath,
 		climanifestgen.MCPFamilyJSONPath,
 		climanifestgen.WorkflowCompatibilityFamilyJSONPath,
 		climanifestgen.WorkflowMCPFamilyCommandIDsPath,
@@ -312,6 +350,8 @@ func TestGenerateIsDeterministic(t *testing.T) {
 		climanifestgen.FactoryConfigInitFamilyCommandIDsPath,
 		climanifestgen.ModelsDocsFamilyJSONPath,
 		climanifestgen.ModelsDocsFamilyCommandIDsPath,
+		climanifestgen.RunSubmitFamilyJSONPath,
+		climanifestgen.RunSubmitFamilyCommandIDsPath,
 		climanifestgen.MCPFamilyJSONPath,
 		climanifestgen.WorkflowCompatibilityFamilyJSONPath,
 		climanifestgen.WorkflowMCPFamilyCommandIDsPath,
@@ -415,6 +455,7 @@ func TestProductionCLIArtifactsMatchGenerator(t *testing.T) {
 	for _, path := range []string{
 		climanifestgen.RepresentativeFamilyJSONPath,
 		climanifestgen.ModelsDocsFamilyJSONPath,
+		climanifestgen.RunSubmitFamilyJSONPath,
 	} {
 		payload, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(path)))
 		if err != nil {
@@ -423,6 +464,31 @@ func TestProductionCLIArtifactsMatchGenerator(t *testing.T) {
 		if len(bytes.TrimSpace(payload)) == 0 {
 			t.Fatalf("%s is empty", path)
 		}
+	}
+}
+
+func TestCheckDetectsStaleRunSubmitFamilyArtifact(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	root := t.TempDir()
+	if err := copyFile(
+		filepath.Join(repoRoot, climanifest.ProductionManifestPath),
+		filepath.Join(root, climanifest.ProductionManifestPath),
+	); err != nil {
+		t.Fatalf("copy production manifest: %v", err)
+	}
+	if err := climanifestgen.Generate(root); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	target := filepath.Join(root, filepath.FromSlash(climanifestgen.RunSubmitFamilyJSONPath))
+	if err := os.WriteFile(target, []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("write stale artifact: %v", err)
+	}
+	drift, err := climanifestgen.Check(root)
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if len(drift.Stale) != 1 || drift.Stale[0] != climanifestgen.RunSubmitFamilyJSONPath {
+		t.Fatalf("stale drift = %#v, want %q", drift, climanifestgen.RunSubmitFamilyJSONPath)
 	}
 }
 
