@@ -155,16 +155,18 @@ func TestSessionHandlerBindingsMapFlagsArgumentsAndDiagnostics(t *testing.T) {
 
 func TestSessionListBindingPreparesAndMapsExecutionConfig(t *testing.T) {
 	listCfg := sessioncli.ListConfig{Scope: "persisted"}
+	server := "https://factory.example.test"
 	prepared := false
 	runE := commandregistry.SessionListRunE(commandregistry.SessionListBinding{
 		Config: &listCfg,
+		Server: &server,
 		Prepare: func(_ context.Context, cfg *sessioncli.ListConfig) error {
 			prepared = true
 			cfg.Scope = "all"
 			return nil
 		},
 		ListSessions: func(cfg sessioncli.ListConfig) error {
-			if cfg.Scope != "all" || cfg.Output == nil {
+			if cfg.Scope != "all" || cfg.Server != server || cfg.Output == nil {
 				t.Fatalf("list config = %#v", cfg)
 			}
 			return nil

@@ -540,7 +540,7 @@ func newSessionHandlerRegistry(
 		}),
 		ListRunE: commandregistry.SessionListRunE(commandregistry.SessionListBinding{
 			Config: configs.List, SessionDiagnosticsBinding: diagnosticsBinding,
-			Prepare: sessionListPrepare(options), ListSessions: listSessions,
+			Server: &globals.server, Prepare: sessionListPrepare(options), ListSessions: listSessions,
 		}),
 		ShowRunE: commandregistry.SessionShowRunE(commandregistry.SessionShowBinding{
 			Server: &globals.server, JSON: &globals.json, Verbose: diagnostics.verboseEnabled,
