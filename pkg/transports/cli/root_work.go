@@ -6,10 +6,10 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
@@ -19,6 +19,11 @@ import (
 // generated representative-family constructor and the legacy handwritten path.
 // Flip this constant to false for a one-localized-change rollback.
 const useGeneratedRepresentativeFamily = true
+
+// useGeneratedSessionFamily toggles only the production session subtree between
+// the generated metadata constructor and the retained handwritten rollback path.
+// Flip this constant to false for a one-localized-change rollback.
+const useGeneratedSessionFamily = true
 
 // useGeneratedWorkFamily toggles production work wiring between the generated
 // metadata constructor and the legacy handwritten path.
@@ -34,7 +39,7 @@ func newLegacyRootCommandWithOptions(options RootCommandOptions) *cobra.Command 
 	factoryConfigInit := productionFactoryConfigInitCommands(globals, diagnostics, options)
 	docsCmd := newDocsCommand(diagnostics)
 	modelsCmd := newModelsCommand(globals, diagnostics, operatorDefaults, options)
-	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, newSessionCommand(globals, diagnostics, options), factoryConfigInit, docsCmd, modelsCmd)...)
+	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, productionSessionCommand(globals, diagnostics, options), factoryConfigInit, docsCmd, modelsCmd)...)
 	return root
 }
 
@@ -124,8 +129,7 @@ func newRootCommandWithGeneratedRepresentativeFamily(options RootCommandOptions)
 		panic(fmt.Sprintf("build representative family command: %v", err))
 	}
 
-	session := components.Session
-	session.AddCommand(handwrittenSessionSubcommands(globals, diagnostics, options, components.Show)...)
+	session := productionSessionCommand(globals, diagnostics, options)
 
 	factoryConfigInit := productionFactoryConfigInitCommands(globals, diagnostics, options)
 	docsCmd, modelsCmd, err := newProductionModelsDocsCommands(globals, diagnostics, operatorDefaults, options)
@@ -136,6 +140,25 @@ func newRootCommandWithGeneratedRepresentativeFamily(options RootCommandOptions)
 	root := components.Root
 	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, session, factoryConfigInit, docsCmd, modelsCmd)...)
 	return root
+}
+
+func productionSessionCommand(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	options RootCommandOptions,
+) *cobra.Command {
+	if !useGeneratedSessionFamily {
+		return newSessionCommand(globals, diagnostics, options)
+	}
+	registry, bindings, err := newSessionHandlerRegistry(globals, diagnostics, options)
+	if err != nil {
+		panic(fmt.Sprintf("build session handler registry: %v", err))
+	}
+	session, err := climanifestcobra.NewSessionFamilyCommand(registry, bindings)
+	if err != nil {
+		panic(fmt.Sprintf("build session family command: %v", err))
+	}
+	return session
 }
 
 func productionRootSubcommands(

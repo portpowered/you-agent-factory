@@ -33,6 +33,22 @@ func TestSessionCommand_RegistersSubcommands(t *testing.T) {
 	}
 }
 
+func TestGeneratedSessionFamilyBindsEveryCanonicalHandwrittenHandler(t *testing.T) {
+	root, err := NewGeneratedSessionFamilyCommand(RootCommandOptions{})
+	if err != nil {
+		t.Fatalf("NewGeneratedSessionFamilyCommand() error = %v", err)
+	}
+	for _, name := range []string{"create", "list", "show", "delete", "pause", "resume", "dispatches"} {
+		command, _, findErr := root.Find([]string{"session", name})
+		if findErr != nil {
+			t.Fatalf("Find(session %s) error = %v", name, findErr)
+		}
+		if command.CommandPath() != "you session "+name || command.RunE == nil {
+			t.Fatalf("session %s path=%q runnable=%t", name, command.CommandPath(), command.RunE != nil)
+		}
+	}
+}
+
 func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	var out bytes.Buffer
 	root := NewRootCommand()
@@ -902,9 +918,9 @@ func TestNewRepresentativeHandlerRegistryWiresHandwrittenSessionShow(t *testing.
 	}
 }
 
-func TestProductionRootUsesGeneratedRepresentativeFamilyCutover(t *testing.T) {
-	if !useGeneratedRepresentativeFamily {
-		t.Fatal("useGeneratedRepresentativeFamily = false, want production cutover enabled")
+func TestProductionRootUsesGeneratedSessionFamilyCutover(t *testing.T) {
+	if !useGeneratedSessionFamily {
+		t.Fatal("useGeneratedSessionFamily = false, want production cutover enabled")
 	}
 
 	root := NewRootCommand()
@@ -912,19 +928,19 @@ func TestProductionRootUsesGeneratedRepresentativeFamilyCutover(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Find(session) error = %v", err)
 	}
-	show, _, err := root.Find([]string{"session", "show"})
-	if err != nil {
-		t.Fatalf("Find(session show) error = %v", err)
+	if session.RunE != nil {
+		t.Fatal("session parent must remain non-runnable through generated cutover")
 	}
-	if show.RunE == nil {
-		t.Fatal("session show must attach handwritten RunE through generated cutover")
+	if len(session.Commands()) != 7 {
+		t.Fatalf("session child count = %d, want exactly 7 generated leaves", len(session.Commands()))
 	}
-	if len(session.Commands()) < 7 {
-		t.Fatalf("session child count = %d, want handwritten siblings plus generated show", len(session.Commands()))
-	}
-	for _, name := range []string{"list", "dispatches", "pause", "resume", "create", "delete"} {
-		if _, _, err := root.Find([]string{"session", name}); err != nil {
-			t.Fatalf("Find(session %s) error = %v, want remaining session family on handwritten constructors", name, err)
+	for _, name := range []string{"create", "list", "show", "delete", "pause", "resume", "dispatches"} {
+		command, _, findErr := root.Find([]string{"session", name})
+		if findErr != nil {
+			t.Fatalf("Find(session %s) error = %v", name, findErr)
+		}
+		if command.RunE == nil {
+			t.Fatalf("session %s must attach handwritten RunE through generated cutover", name)
 		}
 	}
 	for _, name := range []string{"run", "submit", "factory", "models", "work", "workflow"} {

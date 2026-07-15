@@ -66,6 +66,114 @@
         "operationId": "getFactorySession"
       }
     },
+    "you.session.create": {
+      "id": "you.session.create",
+      "name": "create",
+      "path": "you session create",
+      "documentation": {
+        "documentation": {
+          "title": { "canonicalEnglish": "create" },
+          "description": { "canonicalEnglish": "create" }
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": { "line": "create" },
+      "handler": {
+        "id": "you.session.create.handler",
+        "operationId": "openFactorySession"
+      }
+    },
+    "you.session.list": {
+      "id": "you.session.list",
+      "name": "list",
+      "path": "you session list",
+      "documentation": {
+        "documentation": {
+          "title": { "canonicalEnglish": "list" },
+          "description": { "canonicalEnglish": "list" }
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": { "line": "list" },
+      "handler": {
+        "id": "you.session.list.handler",
+        "operationId": "listFactorySessions"
+      }
+    },
+    "you.session.delete": {
+      "id": "you.session.delete",
+      "name": "delete",
+      "path": "you session delete",
+      "documentation": {
+        "documentation": {
+          "title": { "canonicalEnglish": "delete" },
+          "description": { "canonicalEnglish": "delete" }
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": { "line": "delete <session-id>" },
+      "handler": {
+        "id": "you.session.delete.handler",
+        "operationId": "closeFactorySession"
+      }
+    },
+    "you.session.pause": {
+      "id": "you.session.pause",
+      "name": "pause",
+      "path": "you session pause",
+      "documentation": {
+        "documentation": {
+          "title": { "canonicalEnglish": "pause" },
+          "description": { "canonicalEnglish": "pause" }
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": { "line": "pause [session-id]" },
+      "handler": {
+        "id": "you.session.pause.handler",
+        "operationId": "pauseFactorySession"
+      }
+    },
+    "you.session.resume": {
+      "id": "you.session.resume",
+      "name": "resume",
+      "path": "you session resume",
+      "documentation": {
+        "documentation": {
+          "title": { "canonicalEnglish": "resume" },
+          "description": { "canonicalEnglish": "resume" }
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": { "line": "resume [session-id]" },
+      "handler": {
+        "id": "you.session.resume.handler",
+        "operationId": "resumeFactorySession"
+      }
+    },
+    "you.session.dispatches": {
+      "id": "you.session.dispatches",
+      "name": "dispatches",
+      "path": "you session dispatches",
+      "documentation": {
+        "documentation": {
+          "title": { "canonicalEnglish": "dispatches" },
+          "description": { "canonicalEnglish": "dispatches" }
+        }
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": { "line": "dispatches [session-id]" },
+      "handler": {
+        "id": "you.session.dispatches.handler",
+        "operationId": "listFactorySessionDispatches"
+      }
+    },
     "you.work": {
       "id": "you.work",
       "name": "work",
