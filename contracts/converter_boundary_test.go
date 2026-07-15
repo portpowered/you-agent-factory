@@ -19,7 +19,7 @@ var forbiddenConverterToolingImports = []string{
 
 type runtimePackage struct {
 	ImportPath string
-	Imports    []string
+	Deps       []string
 }
 
 func TestRuntimePackagesDoNotImportConverterTooling(t *testing.T) {
@@ -49,10 +49,10 @@ func TestRuntimePackagesDoNotImportConverterTooling(t *testing.T) {
 }
 
 func rejectConverterToolingImport(pkg runtimePackage) error {
-	for _, imported := range pkg.Imports {
+	for _, dependency := range pkg.Deps {
 		for _, forbidden := range forbiddenConverterToolingImports {
-			if imported == forbidden || strings.HasPrefix(imported, forbidden+"/") {
-				return fmt.Errorf("runtime package %s imports forbidden converter tooling dependency %s", pkg.ImportPath, imported)
+			if dependency == forbidden || strings.HasPrefix(dependency, forbidden+"/") {
+				return fmt.Errorf("runtime package %s depends on forbidden converter tooling dependency %s", pkg.ImportPath, dependency)
 			}
 		}
 	}
@@ -62,10 +62,24 @@ func rejectConverterToolingImport(pkg runtimePackage) error {
 func TestRuntimePackageConverterBoundaryNamesImporterAndForbiddenDependency(t *testing.T) {
 	pkg := runtimePackage{
 		ImportPath: "github.com/portpowered/infinite-you/pkg/config/example",
-		Imports:    []string{"github.com/portpowered/infinite-you/internal/contractopenapiconverter"},
+		Deps:       []string{"github.com/portpowered/infinite-you/internal/contractopenapiconverter"},
 	}
 	err := rejectConverterToolingImport(pkg)
-	if err == nil || !strings.Contains(err.Error(), pkg.ImportPath) || !strings.Contains(err.Error(), pkg.Imports[0]) {
+	if err == nil || !strings.Contains(err.Error(), pkg.ImportPath) || !strings.Contains(err.Error(), pkg.Deps[0]) {
 		t.Fatalf("rejectConverterToolingImport() error = %v, want importing package and forbidden dependency", err)
+	}
+}
+
+func TestRuntimePackageConverterBoundaryRejectsIndirectDependency(t *testing.T) {
+	pkg := runtimePackage{
+		ImportPath: "github.com/portpowered/infinite-you/pkg/config/example",
+		Deps: []string{
+			"github.com/portpowered/infinite-you/pkg/config/intermediary",
+			"github.com/portpowered/infinite-you/internal/contractstaging",
+		},
+	}
+	err := rejectConverterToolingImport(pkg)
+	if err == nil || !strings.Contains(err.Error(), pkg.ImportPath) || !strings.Contains(err.Error(), pkg.Deps[1]) {
+		t.Fatalf("rejectConverterToolingImport() error = %v, want owning runtime package and indirect forbidden dependency", err)
 	}
 }
