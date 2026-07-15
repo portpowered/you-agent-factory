@@ -195,6 +195,8 @@ func ValidateAll(repositoryRoot string, registry Registry) []Diagnostic {
 	return diagnostics
 }
 
+const toolCatalogSchemaID = "https://schemas.portpowered.com/you/contracts/mcp/tool-catalog.schema.json"
+
 func validateEntry(repositoryRoot string, entry Entry) []Diagnostic {
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
@@ -248,6 +250,9 @@ func validateEntry(repositoryRoot string, entry Entry) []Diagnostic {
 		}
 		if document.SchemaID == runtimeManifestSchemaID {
 			diagnostics = append(diagnostics, runtimeManifestDiagnostics(document.Path, value)...)
+		}
+		if document.SchemaID == toolCatalogSchemaID {
+			diagnostics = append(diagnostics, mcpToolCatalogIdentityDiagnostics(document.Path, value)...)
 		}
 		for _, source := range sourceDocuments {
 			loadedDocuments[source.path] = source

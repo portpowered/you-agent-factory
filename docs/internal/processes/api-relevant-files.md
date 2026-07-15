@@ -133,6 +133,16 @@ Use this map when changing the public REST contract.
   wait, domain-error, transport, lifecycle, handler, and CallToolResult vocabulary.
   Tool records may reference shared schemas through in-document `$ref` pointers
   resolved by `internal/contractvalidator` before schema validation.
+- Authored catalog identity completeness is proven by
+  `pkg/transports/mcp/factorysession/catalog_identity.go`
+  (`CatalogToolIdentitiesFromCatalogDocument`, `VerifyCatalogToolIdentityCompleteness`,
+  `CatalogToolIDForName`) against `DiscoverTools()` stable ID (`mcp.tool.<name>`)
+  and public name parity; compatibility alias names are rejected. Wire the check
+  into `make contracts-validate` for `contracts/mcp/tools.json` via
+  `internal/contractvalidator/mcp_tool_catalog_identity.go`, and prove success
+  plus missing/extra/duplicate/alias failures in
+  `contracts/mcp_tool_catalog_identity_test.go` and
+  `pkg/transports/mcp/factorysession/catalog_identity_test.go`.
 - Valid MCP catalog fixtures live under `contracts/testdata/mcp/` and register
   through `internal/contractvalidator.MCPRegistry()` into
   `make contracts-validate`. The authored `contracts/mcp/tools.json` registers in
