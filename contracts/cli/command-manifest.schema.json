@@ -417,7 +417,7 @@
           "type": "boolean"
         },
         "noOptionDefault": {
-          "description": "Serialized value applied when a boolean flag is present without an explicit option value. Use an empty string when no-option defaults are unsupported.",
+          "description": "Serialized value applied when a boolean or string flag is present without an explicit option value. Use an empty string when no-option defaults are unsupported.",
           "type": "string"
         },
         "repeatable": {
@@ -472,8 +472,31 @@
           "then": {
             "properties": {
               "valueType": {
+                "enum": [
+                  "bool",
+                  "string"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "valueType": {
                 "const": "bool"
               },
+              "noOptionDefault": {
+                "minLength": 1
+              }
+            },
+            "required": [
+              "valueType",
+              "noOptionDefault"
+            ]
+          },
+          "then": {
+            "properties": {
               "noOptionDefault": {
                 "enum": [
                   "true",

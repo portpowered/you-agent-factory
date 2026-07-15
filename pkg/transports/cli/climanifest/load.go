@@ -24,6 +24,9 @@ func LoadProduction(path string) (Manifest, error) {
 	if len(manifest.Commands) == 0 {
 		return Manifest{}, fmt.Errorf("production CLI command manifest missing commands")
 	}
+	if err := ValidateRunSubmitFamily(manifest); err != nil {
+		return Manifest{}, fmt.Errorf("validate run/submit family: %w", err)
+	}
 	return manifest, nil
 }
 

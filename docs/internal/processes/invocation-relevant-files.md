@@ -3,6 +3,22 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+## CLI run and submit command contracts
+
+- Canonical metadata for `you.run`, `you.submit`, and `you.submit.batch` lives
+  in `contracts/cli/commands.json`. Keep positional cardinality, stdin channels,
+  source precedence, conflicts, no-option defaults, output modes, effects, and
+  stable handler/OpenAPI bindings aligned with the handwritten constructors in
+  `pkg/transports/cli/root_work.go` and
+  `pkg/transports/cli/root_submit_batch.go`.
+- `pkg/transports/cli/climanifest/run_submit_validation.go` rejects incomplete
+  or contradictory family records before generation. Update its focused
+  validation cases whenever the supported family contract changes.
+- String flags may define a non-empty `noOptionDefault` when presence without a
+  value selects a stable sentinel, as `--with-mock-workers` does. Boolean
+  no-option defaults remain restricted to `true` or `false` by
+  `contracts/cli/command-manifest.schema.json`.
+
 ## CLI invocation output modes (primary-result, human response-stream, NDJSON)
 
 Use this lane when changing `you run` stdout modes, `--output response-stream`,
