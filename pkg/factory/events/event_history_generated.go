@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -15,6 +16,34 @@ import (
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
+
+func (h *FactoryEventHistory) sessionLifecycleContext(
+	sessionID string,
+	orchestratorKind factoryapi.FactoryOrchestratorKind,
+	orchestratorDialect string,
+	source string,
+	tick int,
+	eventTime time.Time,
+	sessionSequence int,
+) factoryapi.FactoryEventContext {
+	context := factoryapi.FactoryEventContext{
+		Tick:            tick,
+		EventTime:       eventTime,
+		SessionId:       stringPtr(sessionID),
+		SessionSequence: &sessionSequence,
+	}
+	if orchestratorKind != "" {
+		kind := orchestratorKind
+		context.OrchestratorKind = &kind
+	}
+	if dialect := strings.TrimSpace(orchestratorDialect); dialect != "" {
+		context.OrchestratorDialect = &dialect
+	}
+	if source := strings.TrimSpace(source); source != "" {
+		context.Source = &source
+	}
+	return context
+}
 
 func domainFactoryEvents(events []factoryapi.FactoryEvent) ([]interfaces.FactoryEvent, error) {
 	converted := make([]interfaces.FactoryEvent, 0, len(events))

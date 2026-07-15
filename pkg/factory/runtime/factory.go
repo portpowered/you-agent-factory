@@ -238,7 +238,7 @@ func (f *factoryImpl) recordSessionLifecyclePause() {
 	}
 	f.eventHistory.RecordSessionPaused(factoryevents.SessionLifecycleControlInput{
 		SessionID:        sessionIDFromFactoryConfig(f.cfg),
-		OrchestratorKind: interfaces.GeneratedPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryConfigFromFactoryConfig(f.cfg))),
+		OrchestratorKind: interfaces.StrictPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryConfigFromFactoryConfig(f.cfg))),
 		Source:           "runtime",
 		Tick:             tick,
 	}, f.clock.Now())
@@ -254,7 +254,7 @@ func (f *factoryImpl) recordSessionLifecycleResume() {
 	}
 	f.eventHistory.RecordSessionResumed(factoryevents.SessionLifecycleControlInput{
 		SessionID:        sessionIDFromFactoryConfig(f.cfg),
-		OrchestratorKind: interfaces.GeneratedPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryConfigFromFactoryConfig(f.cfg))),
+		OrchestratorKind: interfaces.StrictPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryConfigFromFactoryConfig(f.cfg))),
 		Source:           "runtime",
 		Tick:             tick,
 	}, f.clock.Now())
@@ -614,7 +614,7 @@ func (f *factoryImpl) recordSessionLifecycleControl(
 		tick = f.engine.GetRuntimeStateSnapshot().TickCount
 	}
 	factoryCfg := factoryConfigFromFactoryConfig(f.cfg)
-	orchestratorKind := interfaces.GeneratedPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryCfg))
+	orchestratorKind := interfaces.StrictPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryCfg))
 	var orchestratorDialect string
 	if factoryCfg != nil && factoryCfg.Orchestrator != nil && factoryCfg.Orchestrator.JavaScript != nil {
 		orchestratorDialect = factoryCfg.Orchestrator.JavaScript.Dialect
@@ -625,8 +625,8 @@ func (f *factoryImpl) recordSessionLifecycleControl(
 		OrchestratorDialect: orchestratorDialect,
 		Source:              "runtime",
 		Tick:                tick,
-		Operation:           operation,
-		Outcome:             factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+		Operation:           interfaces.FactorySessionLifecycleControlKind(operation),
+		Outcome:             interfaces.FactorySessionLifecycleControlOutcomeAccepted,
 		PreviousStatus:      factoryevents.FactoryStateToDurableLifecycleStatus(previous),
 		NewStatus:           factoryevents.FactoryStateToDurableLifecycleStatus(next),
 		Reason:              reason,

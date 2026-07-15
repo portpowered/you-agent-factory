@@ -137,24 +137,24 @@ func TestFactoryEventHistory_RecordSessionLifecycleControl_EmitsPauseAndResume(t
 	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })
 	history.RecordSessionLifecycleControl(SessionLifecycleControlInput{
 		SessionID:        "session-live",
-		OrchestratorKind: factoryapi.JAVASCRIPT,
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
 		Source:           "runtime",
 		Tick:             3,
-		Operation:        factoryapi.FactorySessionLifecycleControlKindPause,
-		Outcome:          factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
-		PreviousStatus:   factoryapi.FactorySessionDurableLifecycleStatusRunning,
-		NewStatus:        factoryapi.FactorySessionDurableLifecycleStatusPaused,
+		Operation:        interfaces.FactorySessionLifecycleControlPause,
+		Outcome:          interfaces.FactorySessionLifecycleControlOutcomeAccepted,
+		PreviousStatus:   interfaces.FactorySessionLifecycleStatusRunning,
+		NewStatus:        interfaces.FactorySessionLifecycleStatusPaused,
 		Reason:           "pause requested",
 	}, t0)
 	history.RecordSessionLifecycleControl(SessionLifecycleControlInput{
 		SessionID:        "session-live",
-		OrchestratorKind: factoryapi.JAVASCRIPT,
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
 		Source:           "runtime",
 		Tick:             4,
-		Operation:        factoryapi.FactorySessionLifecycleControlKindResume,
-		Outcome:          factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
-		PreviousStatus:   factoryapi.FactorySessionDurableLifecycleStatusPaused,
-		NewStatus:        factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		Operation:        interfaces.FactorySessionLifecycleControlResume,
+		Outcome:          interfaces.FactorySessionLifecycleControlOutcomeAccepted,
+		PreviousStatus:   interfaces.FactorySessionLifecycleStatusPaused,
+		NewStatus:        interfaces.FactorySessionLifecycleStatusRunning,
 		Reason:           "resume requested",
 	}, t0.Add(time.Second))
 
@@ -177,10 +177,10 @@ func TestFactoryEventHistory_RecordSessionLifecycleControl_EmitsPauseAndResume(t
 }
 
 func TestFactoryStateToDurableLifecycleStatus_MapsLiveFactoryStates(t *testing.T) {
-	if got := FactoryStateToDurableLifecycleStatus(interfaces.FactoryStatePaused); got != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+	if got := FactoryStateToDurableLifecycleStatus(interfaces.FactoryStatePaused); got != interfaces.FactorySessionLifecycleStatusPaused {
 		t.Fatalf("paused = %q, want PAUSED", got)
 	}
-	if got := FactoryStateToDurableLifecycleStatus(interfaces.FactoryStateRunning); got != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+	if got := FactoryStateToDurableLifecycleStatus(interfaces.FactoryStateRunning); got != interfaces.FactorySessionLifecycleStatusRunning {
 		t.Fatalf("running = %q, want RUNNING", got)
 	}
 }
@@ -211,13 +211,13 @@ func TestFactoryEventHistory_RecordSessionPauseResume_EmitsReconstructableContro
 	}, 0, t0)
 	history.RecordSessionPaused(SessionLifecycleControlInput{
 		SessionID:        "session-live",
-		OrchestratorKind: factoryapi.PETRI,
+		OrchestratorKind: interfaces.OrchestratorKindPetri,
 		Source:           "runtime",
 		Tick:             1,
 	}, t0.Add(time.Second))
 	history.RecordSessionResumed(SessionLifecycleControlInput{
 		SessionID:        "session-live",
-		OrchestratorKind: factoryapi.PETRI,
+		OrchestratorKind: interfaces.OrchestratorKindPetri,
 		Source:           "runtime",
 		Tick:             2,
 	}, t0.Add(2*time.Second))

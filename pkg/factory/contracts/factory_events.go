@@ -187,6 +187,103 @@ type OrchestratorCheckpointWrittenEventPayload struct {
 	Warnings              []FactoryDispatchWarning     `json:"warnings,omitempty"`
 }
 
+// FactorySessionResultStatus describes customer-visible result availability
+// retained by a canonical Factory Session lifecycle event.
+type FactorySessionResultStatus string
+
+const (
+	FactorySessionResultStatusPartial           FactorySessionResultStatus = "PARTIAL"
+	FactorySessionResultStatusFinal             FactorySessionResultStatus = "FINAL"
+	FactorySessionResultStatusFailedWithPartial FactorySessionResultStatus = "FAILED_WITH_PARTIAL"
+)
+
+// FactorySessionLifecycleStatus is the durable status retained by canonical
+// Factory Session lifecycle events.
+type FactorySessionLifecycleStatus string
+
+const (
+	FactorySessionLifecycleStatusRunning   FactorySessionLifecycleStatus = "RUNNING"
+	FactorySessionLifecycleStatusPaused    FactorySessionLifecycleStatus = "PAUSED"
+	FactorySessionLifecycleStatusSucceeded FactorySessionLifecycleStatus = "SUCCEEDED"
+	FactorySessionLifecycleStatusFailed    FactorySessionLifecycleStatus = "FAILED"
+)
+
+// FactorySessionLifecycleControlKind identifies a lifecycle operation recorded
+// in canonical Factory history.
+type FactorySessionLifecycleControlKind string
+
+const (
+	FactorySessionLifecycleControlPause  FactorySessionLifecycleControlKind = "PAUSE"
+	FactorySessionLifecycleControlResume FactorySessionLifecycleControlKind = "RESUME"
+)
+
+// FactorySessionLifecycleControlOutcome describes the accepted control result
+// retained by canonical Factory history.
+type FactorySessionLifecycleControlOutcome string
+
+const FactorySessionLifecycleControlOutcomeAccepted FactorySessionLifecycleControlOutcome = "ACCEPTED"
+
+// FactorySessionChildDispatchCounts summarizes JavaScript child dispatch state.
+type FactorySessionChildDispatchCounts struct {
+	Completed int `json:"completed"`
+	Queued    int `json:"queued"`
+	Running   int `json:"running"`
+}
+
+// FactorySessionStartedEventPayload records session execution start facts.
+// Session and orchestrator identity remain authoritative in event context.
+type FactorySessionStartedEventPayload struct {
+	ArgsDigest *string   `json:"argsDigest,omitempty"`
+	FactoryID  *string   `json:"factoryId,omitempty"`
+	PolicyHash *string   `json:"policyHash,omitempty"`
+	SourceHash *string   `json:"sourceHash,omitempty"`
+	SourceRef  *string   `json:"sourceRef,omitempty"`
+	StartedAt  time.Time `json:"startedAt"`
+}
+
+// FactorySessionPausedEventPayload records a successful pause transition.
+type FactorySessionPausedEventPayload struct {
+	PausedAt time.Time                     `json:"pausedAt"`
+	Status   FactorySessionLifecycleStatus `json:"status"`
+}
+
+// FactorySessionResumedEventPayload records a successful resume transition.
+type FactorySessionResumedEventPayload struct {
+	ResumedAt time.Time                     `json:"resumedAt"`
+	Status    FactorySessionLifecycleStatus `json:"status"`
+}
+
+// FactorySessionResultUpdatedEventPayload records partial or final result
+// availability in canonical Factory history.
+type FactorySessionResultUpdatedEventPayload struct {
+	ArtifactIDs   []string                   `json:"artifactIds,omitempty"`
+	ResultStatus  FactorySessionResultStatus `json:"resultStatus"`
+	ResultSummary []work.WorkContentPart     `json:"resultSummary,omitempty"`
+}
+
+// FactorySessionCompletedEventPayload records the authoritative terminal
+// Factory Session marker.
+type FactorySessionCompletedEventPayload struct {
+	ArtifactIDs    []string                           `json:"artifactIds,omitempty"`
+	CompletedAt    time.Time                          `json:"completedAt"`
+	DispatchCounts *FactorySessionChildDispatchCounts `json:"dispatchCounts,omitempty"`
+	DurationMillis *int64                             `json:"durationMillis,omitempty"`
+	FailureDetail  *workerexecution.FailureDetail     `json:"failureDetail,omitempty"`
+	FinalStatus    FactorySessionLifecycleStatus      `json:"finalStatus"`
+	ResultStatus   *FactorySessionResultStatus        `json:"resultStatus,omitempty"`
+}
+
+// FactorySessionLifecycleControlEventPayload records replay-safe accepted
+// lifecycle control facts.
+type FactorySessionLifecycleControlEventPayload struct {
+	NewStatus      FactorySessionLifecycleStatus         `json:"newStatus"`
+	OccurredAt     time.Time                             `json:"occurredAt"`
+	Operation      FactorySessionLifecycleControlKind    `json:"operation"`
+	Outcome        FactorySessionLifecycleControlOutcome `json:"outcome"`
+	PreviousStatus FactorySessionLifecycleStatus         `json:"previousStatus"`
+	Reason         *string                               `json:"reason,omitempty"`
+}
+
 // Clone returns a detached event envelope so recorders and stream consumers
 // cannot mutate canonical history through payload or context slice aliases.
 func (e FactoryEvent) Clone() FactoryEvent {

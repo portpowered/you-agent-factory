@@ -30,6 +30,12 @@ Factory-owned payload, status, artifact-reference, warning, and context
 contracts. Generated OpenAPI decoding is a transport or compatibility-test
 concern, not part of Factory event construction.
 
+Factory Session lifecycle producers use Factory-owned canonical event payloads
+with domain status values, then append the Factory-owned envelope directly.
+Keep generated session-event unions at public mapping and compatibility-test
+boundaries; runtime lifecycle recording should pass domain orchestrator strings,
+Work content, and worker-owned failure detail.
+
 Production command runners must remain blocking without taking lifecycle ownership
 back from `pkg/initializer`. The entrypoint should construct and start the graph
 through `pkg/root`, then let the returned application wait for its selected
