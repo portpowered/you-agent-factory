@@ -725,12 +725,30 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   initialization is the only catalog-to-disk installation boundary. Named
   resolution in `pkg/config/layout.go` reads project-local then global disk
   state only; it does not install packages or expose compatibility JSON aliases.
-  `pkg/factory/packages/promptassets` owns schema-neutral packaged prompt
-  assembly: definitions declare package-relative `promptFile` paths, package
-  owners supply an explicit embedded `fs.FS`, and the assembler attaches exact
-  asset bytes without installing or persisting anything. Worker declarations
-  become canonical inline bodies, while workstation declarations retain
-  `promptFile` metadata for editable split-layout materialization.
+  `pkg/factory/packages/packageassets` is the shared, side-effect-free packaged
+  asset assembly entry point: package owners supply the authored `factory.json`
+  and an explicit embedded `fs.FS`, and definitions call this assembler before
+  their payload enters the catalog. It delegates prompt declarations to
+  `pkg/factory/packages/promptassets` and discovers regular UTF-8 `scripts/**`
+  assets as deterministic `SCRIPT` bundled files at matching
+  `factory/scripts/**` targets. Discovery rejects non-regular, unreadable, or
+  invalid UTF-8 assets, and assembly rejects unsafe or duplicate canonical
+  bundled targets before the payload can reach config initialization. The
+  assembler attaches exact asset bytes but does not install or persist anything.
+  `pkg/config/configinit` passes each missing assembled catalog payload through
+  the transactional `factoryconfig.PersistNamedFactory` boundary. That shared
+  persistence path materializes `SCRIPT` entries at mode `0755`, writes only
+  thin UTF-8 bundled-file metadata to `factory.json`, and validates the staged
+  runtime before publishing the named-factory directory. Existing valid package
+  directories are loaded read-only and skipped as a whole, so later init runs
+  do not normalize permissions or replace operator-edited scripts. At runtime,
+  `pkg/workers/executor.ScriptExecutor` resolves portable `scripts/**` commands
+  (and legacy `factory/scripts/**` references) against the active runtime
+  configuration's factory directory before using the generic subprocess path;
+  package assembly and config initialization do not own process execution.
+  Worker prompt declarations become
+  canonical inline bodies, while workstation declarations retain `promptFile`
+  metadata for editable split-layout materialization.
   Packaged `@you/goal`
   has one `execute-goal` `AGENT_RUN` workstation with `REPEATER` behavior:
   accepted completion routes to `goal:complete`, continue/reject route back to

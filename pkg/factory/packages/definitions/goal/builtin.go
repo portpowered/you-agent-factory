@@ -4,7 +4,7 @@ import (
 	"embed"
 	"fmt"
 
-	"github.com/portpowered/infinite-you/pkg/factory/packages/promptassets"
+	"github.com/portpowered/infinite-you/pkg/factory/packages/packageassets"
 )
 
 //go:embed factory.json
@@ -24,7 +24,7 @@ func FactoryJSON() []byte {
 }
 
 func mustAssembleBuiltInGoalFactoryJSON() []byte {
-	payload, err := promptassets.Assemble(promptassets.Definition{
+	payload, err := packageassets.Assemble(packageassets.Definition{
 		Package:     "@you/goal",
 		FactoryJSON: factoryJSON,
 		Assets:      promptAssets,
