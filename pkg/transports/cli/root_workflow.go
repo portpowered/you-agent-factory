@@ -3,9 +3,11 @@ package cli
 import (
 	"strings"
 
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry/workflowmcp"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
+	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	workflowcli "github.com/portpowered/infinite-you/pkg/transports/cli/workflow"
@@ -54,11 +56,7 @@ func newWorkflowValidateCommand(globals *cliGlobalOptions) *cobra.Command {
 			"  " + cliBinaryName + " workflow validate --kind WORKFLOW_NAME --value review\n\n" +
 			"  # Validate inline workflow source.\n" +
 			"  " + cliBinaryName + " workflow validate --kind INLINE_WORKFLOW --inline \"phase('setup');\"",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			return workflowcli.Validate(cfg)
-		},
+		RunE: workflowcli.ValidateRunE(&cfg, &globals.json),
 	}
 	addWorkflowSourceFlags(cmd, &cfg.SourceConfig)
 	return cmd
@@ -76,11 +74,7 @@ func newWorkflowPreviewCommand(globals *cliGlobalOptions) *cobra.Command {
 			"  " + cliBinaryName + " workflow preview --kind WORKFLOW_NAME --value review\n\n" +
 			"  # Preview inline workflow source.\n" +
 			"  " + cliBinaryName + " workflow preview --kind INLINE_WORKFLOW --inline \"phase('setup');\"",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			return workflowcli.Preview(cfg)
-		},
+		RunE: workflowcli.PreviewRunE(&cfg, &globals.json),
 	}
 	addWorkflowSourceFlags(cmd, &cfg.SourceConfig)
 	return cmd
@@ -94,6 +88,27 @@ func addWorkflowSourceFlags(command *cobra.Command, cfg *workflowcli.SourceConfi
 	command.Flags().StringVar(&cfg.ArtifactRoot, "artifact-root", "", "optional absolute artifact root")
 	command.Flags().StringVar(&cfg.ArgsSchema, "args-schema", "", "optional orchestrator.javascript argsSchema JSON")
 	command.Flags().StringVar(&cfg.RequestedPolicyJSON, "requested-policy", "", "optional requested policy override JSON")
+}
+
+func newWorkflowMCPHandlerRegistries(
+	globals *cliGlobalOptions,
+	options RootCommandOptions,
+) (workflowmcp.Registries, error) {
+	validateCfg := workflowcli.ValidateConfig{SourceConfig: workflowcli.SourceConfig{Dir: defaultcmd.FactoryDir}}
+	previewCfg := workflowcli.PreviewConfig{SourceConfig: workflowcli.SourceConfig{Dir: defaultcmd.FactoryDir}}
+	var fixtureCatalogPath string
+	var runtimeBacked bool
+	var projectRoot string
+	return workflowmcp.NewRegistries(workflowmcp.Handlers{
+		MCPServe: mcpcli.ServeRunE(mcpcli.ServeBinding{
+			FixtureCatalogPath: &fixtureCatalogPath,
+			RuntimeBacked:      &runtimeBacked,
+			ProjectRoot:        &projectRoot,
+			Startup:            options.Startup,
+		}),
+		WorkflowPreview:  workflowcli.PreviewRunE(&previewCfg, &globals.json),
+		WorkflowValidate: workflowcli.ValidateRunE(&validateCfg, &globals.json),
+	})
 }
 
 func newWorkflowRunCommand(globals *cliGlobalOptions, options RootCommandOptions) *cobra.Command {

@@ -2,10 +2,14 @@ package mcpcli
 
 import (
 	"bytes"
+	"context"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
+	"github.com/spf13/cobra"
 )
 
 func TestNewServeCommand_HelpRoutesToCanonicalMCPTopic(t *testing.T) {
@@ -61,5 +65,38 @@ func TestNewServeCommand_RejectsRuntimeAndFixtureCatalogTogether(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "cannot combine --runtime with --fixture-catalog") {
 		t.Fatalf("RunE error = %q, want combined-flag rejection", err.Error())
+	}
+}
+
+func TestServeRunEDelegatesUnchangedIntentThroughStartupBoundary(t *testing.T) {
+	fixtureCatalogPath := "fixtures.json"
+	runtimeBacked := false
+	projectRoot := "/workspace/project"
+	stdin := strings.NewReader("request\n")
+	var stdout bytes.Buffer
+	var got startupcli.Request
+	runE := ServeRunE(ServeBinding{
+		FixtureCatalogPath: &fixtureCatalogPath,
+		RuntimeBacked:      &runtimeBacked,
+		ProjectRoot:        &projectRoot,
+		Startup: func(_ context.Context, request startupcli.Request) error {
+			got = request
+			return nil
+		},
+	})
+	cmd := &cobra.Command{Use: "serve"}
+	cmd.SetIn(stdin)
+	cmd.SetOut(&stdout)
+	if err := runE(cmd, nil); err != nil {
+		t.Fatalf("ServeRunE() error = %v", err)
+	}
+	if got.Kind != startupcli.KindMCPServe {
+		t.Fatalf("startup kind = %q, want %q", got.Kind, startupcli.KindMCPServe)
+	}
+	if got.MCP.FixtureCatalogPath != fixtureCatalogPath || got.MCP.RuntimeBacked || got.MCP.ProjectRoot != projectRoot {
+		t.Fatalf("startup MCP intent = %#v, want bound fixture/runtime/project-root", got.MCP)
+	}
+	if got.MCP.Stdin != io.Reader(stdin) || got.MCP.Stdout != io.Writer(&stdout) {
+		t.Fatalf("startup stdio = (%T, %T), want original command streams", got.MCP.Stdin, got.MCP.Stdout)
 	}
 }

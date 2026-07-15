@@ -706,6 +706,21 @@ func TestWorkflowCommand_LongHelpPresentsCanonicalFactorySessionSuccessorsFirst(
 	}
 }
 
+func TestNewWorkflowMCPHandlerRegistriesWiresClassificationSpecificStableIDs(t *testing.T) {
+	registries, err := newWorkflowMCPHandlerRegistries(&cliGlobalOptions{}, RootCommandOptions{})
+	if err != nil {
+		t.Fatalf("newWorkflowMCPHandlerRegistries() error = %v", err)
+	}
+	if _, err := registries.MCP.Lookup("you.mcp.serve"); err != nil {
+		t.Fatalf("MCP.Lookup(you.mcp.serve) error = %v", err)
+	}
+	for _, commandID := range []string{"you.workflow.preview", "you.workflow.validate"} {
+		if _, err := registries.WorkflowCompatibility.Lookup(commandID); err != nil {
+			t.Fatalf("WorkflowCompatibility.Lookup(%q) error = %v", commandID, err)
+		}
+	}
+}
+
 func TestSessionListCommand_LongHelpDocumentsDurableFactorySessions(t *testing.T) {
 	root := NewRootCommand()
 	sessionCmd, _, err := root.Find([]string{"session"})

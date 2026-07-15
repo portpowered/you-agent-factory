@@ -220,6 +220,14 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   Keep their generated stable-ID lists source-labeled and disjoint; `Check` must
   report the affected stable IDs for drift, and generation must reject either
   family when its IDs appear in the wrong classification source.
+- Workflow/MCP handwritten handler binding lives in
+  `pkg/transports/cli/commandregistry/workflowmcp`. Keep canonical MCP and
+  workflow-compatibility registries separate, verify each against its own
+  generated manifest, and report missing or classification-mismatched bindings
+  by stable command ID. The execution adapters remain with their transport
+  owners (`workflow.ValidateRunE`, `workflow.PreviewRunE`, and `mcp.ServeRunE`),
+  while `newWorkflowMCPHandlerRegistries` supplies root dependencies without
+  moving workflow resolution or MCP lifecycle logic into generated artifacts.
 - Production CLI command manifest parity for the root + `session show` family lives in
   `pkg/transports/cli/climanifest` (`LoadProduction`, `ProductionManifestPath`) and
   `pkg/transports/cli/climanifestparity` (`CompareDeclaredHandler`,
