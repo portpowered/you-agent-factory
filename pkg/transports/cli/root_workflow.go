@@ -1,10 +1,14 @@
 package cli
 
 import (
+	"context"
 	"strings"
 
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
@@ -355,6 +359,133 @@ func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 	sessionCmd := legacySessionParentCommand()
 	sessionCmd.AddCommand(handwrittenSessionSubcommands(globals, diagnostics, options, newSessionShowCommand(globals, diagnostics))...)
 	return sessionCmd
+}
+
+// NewLegacySessionFamilyCommand builds the isolated handwritten session tree
+// retained as the generated-family parity and rollback reference.
+func NewLegacySessionFamilyCommand(options RootCommandOptions) *cobra.Command {
+	options = normalizeRootCommandOptions(options)
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	root.AddCommand(newSessionCommand(globals, diagnostics, options))
+	return root
+}
+
+// NewGeneratedSessionFamilyCommand builds an isolated root/session tree from
+// generated metadata with all execution paths bound to handwritten handlers.
+// Production uses the same constructor through its session-local cutover seam.
+func NewGeneratedSessionFamilyCommand(options RootCommandOptions) (*cobra.Command, error) {
+	options = normalizeRootCommandOptions(options)
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	registry, bindings, err := newSessionHandlerRegistry(globals, diagnostics, options)
+	if err != nil {
+		return nil, err
+	}
+	session, err := climanifestcobra.NewSessionFamilyCommand(registry, bindings)
+	if err != nil {
+		return nil, err
+	}
+	root.AddCommand(session)
+	return root, nil
+}
+
+func newSessionHandlerRegistry(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	options RootCommandOptions,
+) (*commandregistry.Registry, climanifestcobra.SessionFamilyBindings, error) {
+	configs := newSessionFamilyBindings()
+	diagnosticsBinding := commandregistry.SessionDiagnosticsBinding{
+		Verbose: diagnostics.verboseEnabled, Debug: &diagnostics.debug, DiagnosticsWriter: diagnostics.writer,
+	}
+	registry, err := commandregistry.NewSessionRegistry(commandregistry.SessionHandlers{
+		CreateRunE: commandregistry.SessionCreateRunE(commandregistry.SessionCreateBinding{
+			Config: configs.Create, SessionDiagnosticsBinding: diagnosticsBinding, CreateSession: createSession,
+		}),
+		ListRunE: commandregistry.SessionListRunE(commandregistry.SessionListBinding{
+			Config: configs.List, SessionDiagnosticsBinding: diagnosticsBinding,
+			Prepare: sessionListPrepare(options), ListSessions: listSessions,
+		}),
+		ShowRunE: commandregistry.SessionShowRunE(commandregistry.SessionShowBinding{
+			Server: &globals.server, JSON: &globals.json, Verbose: diagnostics.verboseEnabled,
+			Debug: &diagnostics.debug, DiagnosticsWriter: diagnostics.writer, ShowSession: showSession,
+		}),
+		DeleteRunE: commandregistry.SessionDeleteRunE(commandregistry.SessionDeleteBinding{
+			Config: configs.Delete, SessionDiagnosticsBinding: diagnosticsBinding, DeleteSession: deleteSession,
+		}),
+		DispatchesRunE: commandregistry.SessionDispatchesRunE(commandregistry.SessionDispatchesBinding{
+			Config: configs.Dispatches, Server: &globals.server, JSON: &globals.json,
+			SessionDiagnosticsBinding: diagnosticsBinding, ListDispatches: listSessionDispatches,
+		}),
+		PauseRunE:  sessionLifecycleRunE(configs.Pause, globals, diagnosticsBinding, pauseSession),
+		ResumeRunE: sessionLifecycleRunE(configs.Resume, globals, diagnosticsBinding, resumeSession),
+	})
+	return registry, configs, err
+}
+
+func sessionLifecycleRunE(
+	config *sessioncli.LifecycleControlConfig,
+	globals *cliGlobalOptions,
+	diagnostics commandregistry.SessionDiagnosticsBinding,
+	control func(sessioncli.LifecycleControlConfig) error,
+) commandregistry.RunE {
+	return commandregistry.SessionLifecycleRunE(commandregistry.SessionLifecycleBinding{
+		Config: config, Server: &globals.server, JSON: &globals.json,
+		SessionDiagnosticsBinding: diagnostics, Control: control,
+	})
+}
+
+func newSessionFamilyBindings() climanifestcobra.SessionFamilyBindings {
+	return climanifestcobra.SessionFamilyBindings{
+		Create:     &sessioncli.CreateConfig{Port: defaultcmd.FactoryPort},
+		List:       &sessioncli.ListConfig{Port: defaultcmd.FactoryPort, Scope: "live"},
+		Delete:     &sessioncli.DeleteConfig{Port: defaultcmd.FactoryPort},
+		Dispatches: &sessioncli.DispatchesConfig{},
+		Pause:      &sessioncli.LifecycleControlConfig{},
+		Resume:     &sessioncli.LifecycleControlConfig{},
+		FlagUsages: sessionFamilyFlagUsages(),
+	}
+}
+
+func sessionListPrepare(options RootCommandOptions) func(context.Context, *sessioncli.ListConfig) error {
+	return func(ctx context.Context, cfg *sessioncli.ListConfig) error {
+		scope := fse.SessionListScope(strings.TrimSpace(cfg.Scope))
+		if scope != fse.SessionListScopePersisted && scope != fse.SessionListScopeAll {
+			return nil
+		}
+		service, err := buildWorkflowExecutionService(ctx, options, sessionexecutioncli.ExecutionBackendConfig{Provider: string(fse.ExecutionProviderFake)}, "", "")
+		if err != nil {
+			return err
+		}
+		cfg.DurableLister = service.ListSessions
+		return nil
+	}
+}
+
+func sessionFamilyFlagUsages() map[string]string {
+	return map[string]string{
+		"you.session.create.dir":              "folder path to open as a live factory session",
+		"you.session.create.init-new-factory": "write the default init scaffold at --dir and open a live session",
+		"you.session.create.validate-only":    "validate the folder and optional target without creating a live session",
+		"you.session.create.target-kind":      "target kind when disambiguating runnable factories (default or named)",
+		"you.session.create.target-name":      "named target when --target-kind is named",
+		"you.session.create.json":             "emit the API open-factory-session JSON response",
+		"you.session.list.scope":              "session list scope: live, persisted, or all",
+		"you.session.list.json":               "emit the API list-factory-sessions JSON response",
+		"you.session.delete.json":             "emit a JSON confirmation after the session closes",
+		"you.session.dispatches.phase":        "filter by exact Dispatch phase",
+		"you.session.dispatches.status":       "filter by canonical Dispatch status",
+		"you.session.show.port":               "deprecated; use --server",
+		"you.session.dispatches.port":         "deprecated; use --server",
+		"you.session.pause.port":              "deprecated; use --server",
+		"you.session.resume.port":             "deprecated; use --server",
+		"port":                                "HTTP server port",
+	}
 }
 
 func legacySessionParentCommand() *cobra.Command {
