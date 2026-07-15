@@ -277,17 +277,19 @@ async function verifyJSONArtifactSemantics({ document, packageRoot, specifier })
 	}
 }
 
-function runNpmInstall(consumerDirectory, tarballPath) {
+function runNpmInstall(consumerDirectory, packageTarget, { offline = false } = {}) {
 	const arguments_ = [
 		"install",
-		"--offline",
 		"--ignore-scripts",
 		"--no-audit",
 		"--no-fund",
 		"--no-save",
 		"--package-lock=false",
-		resolve(tarballPath),
 	];
+	if (offline) {
+		arguments_.push("--offline");
+	}
+	arguments_.push(packageTarget);
 
 	return new Promise((resolvePromise, rejectPromise) => {
 		const child = spawn("npm", arguments_, {
@@ -315,12 +317,12 @@ function runNpmInstall(consumerDirectory, tarballPath) {
 	});
 }
 
-export async function installAndVerifyTarball({
+export async function verifyInstalledPackage({
 	consumerDirectory,
 	packageName,
 	packedFiles,
-	tarballPath,
 	workspaceDirectory,
+	expectedVersion,
 }) {
 	const consumerRoot = resolve(consumerDirectory);
 	const workspaceRoot = resolve(workspaceDirectory);
@@ -330,7 +332,6 @@ export async function installAndVerifyTarball({
 		);
 	}
 
-	await runNpmInstall(consumerRoot, tarballPath);
 	const packageRoot = join(
 		consumerRoot,
 		"node_modules",
@@ -346,6 +347,14 @@ export async function installAndVerifyTarball({
 	const installedManifest = JSON.parse(
 		await readFile(join(packageRoot, "package.json"), "utf8"),
 	);
+	if (
+		typeof expectedVersion === "string" &&
+		installedManifest.version !== expectedVersion
+	) {
+		throw new Error(
+			`[api-package-consumer] installed version ${installedManifest.version}, want ${expectedVersion}`,
+		);
+	}
 	const exportCases = concreteExportCases(installedManifest, packedFiles);
 	const resolveFromConsumer = createRequire(
 		join(consumerRoot, "verify.cjs"),
@@ -359,4 +368,20 @@ export async function installAndVerifyTarball({
 	}
 
 	return exportCases;
+}
+
+export async function installAndVerifyTarball(input) {
+	await runNpmInstall(input.consumerDirectory, resolve(input.tarballPath), {
+		offline: true,
+	});
+	return verifyInstalledPackage(input);
+}
+
+export async function installAndVerifyRegistryPackage(input) {
+	const packageTarget = `${input.packageName}@${input.candidateVersion}`;
+	await runNpmInstall(input.consumerDirectory, packageTarget);
+	return verifyInstalledPackage({
+		...input,
+		expectedVersion: input.candidateVersion,
+	});
 }

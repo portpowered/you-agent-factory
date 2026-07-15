@@ -171,7 +171,13 @@ Use this map when changing the public REST contract.
   pack, and isolated-consumer gates in its read-only `validate` job. The
   dependent dry-run job must pass the reviewed head SHA and one preserved
   candidate directly through `scripts/api-package-pr-dry-run.mjs`; it must not
-  receive registry mutation credentials or OIDC permission. Run `make
+  receive registry mutation credentials or OIDC permission. Protected-main
+  publication prepares and uploads its candidate in a read-only job, then the
+  separately environment-protected `id-token: write` job downloads that exact
+  artifact and calls `scripts/api-package-publish.mjs`. That boundary reconciles
+  before mutation, publishes an absent version at most once with public access,
+  provenance, and the `dev` tag, digest-verifies the registry result, and installs
+  the exact registry version in a clean external consumer. Run `make
   api-package-pack-smoke` after contract, candidate, registry, dry-run, or
   development-package workflow guard changes and in
   `verify-build-contracts`/CI.
