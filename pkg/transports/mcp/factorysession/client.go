@@ -6,6 +6,7 @@ import (
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
 
 // Client is a deterministic mock MCP client for Factory Session tool calls.
@@ -38,73 +39,132 @@ func callToolJSON[Input any, Response any](
 
 type canonicalToolHandler func(*Client, json.RawMessage) (json.RawMessage, error)
 
-var canonicalToolHandlers = map[string]canonicalToolHandler{
-	ToolListSessions: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+type canonicalToolBinding struct {
+	handlerID string
+	handler   canonicalToolHandler
+}
+
+// ToolHandlerBinding identifies the contracted tool and handwritten handler
+// selected for one canonical tool name or compatibility alias.
+type ToolHandlerBinding struct {
+	ToolID    string
+	HandlerID string
+}
+
+const (
+	stableToolIDPrefix    = "mcp.tool."
+	stableHandlerIDPrefix = "mcp.handler."
+)
+
+// Handwritten handlers stay keyed by stable catalog tool IDs. Handler IDs are
+// recorded alongside them so catalog identity never moves business logic into
+// generated discovery code.
+var canonicalToolHandlersByID = map[string]canonicalToolBinding{
+	stableToolID(ToolListSessions): handwrittenToolBinding(ToolListSessions, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode list sessions input", func(request ListSessionsInput) ToolResponse[factoryapi.ListFactorySessionsResponse] {
 			return ListSessions(c.service, request)
 		})
-	},
-	ToolValidateSource: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	}),
+	stableToolID(ToolValidateSource): handwrittenToolBinding(ToolValidateSource, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode validate source input", ValidateSource)
-	},
-	ToolStartSync: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	}),
+	stableToolID(ToolStartSync): handwrittenToolBinding(ToolStartSync, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode start sync input", func(request factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionSyncExecutionResponse] {
 			return StartSync(c.service, request)
 		})
-	},
-	ToolStartAsync: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	}),
+	stableToolID(ToolStartAsync): handwrittenToolBinding(ToolStartAsync, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode start async input", func(request factoryapi.FactorySessionExecutionRequest) ToolResponse[factoryapi.FactorySessionExecutionResponse] {
 			return StartAsync(c.service, request)
 		})
-	},
-	ToolGetSession: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	}),
+	stableToolID(ToolGetSession): handwrittenToolBinding(ToolGetSession, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode get session input", func(request GetSessionInput) ToolResponse[factoryapi.FactorySessionDurableReadModel] {
 			return GetSession(c.service, request)
 		})
-	},
-	ToolGetResult: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	}),
+	stableToolID(ToolGetResult): handwrittenToolBinding(ToolGetResult, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode get result input", func(request GetResultInput) ToolResponse[factoryapi.FactorySessionResult] {
 			return GetResult(c.service, request)
 		})
-	},
-	ToolListDispatches: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	}),
+	stableToolID(ToolListDispatches): handwrittenToolBinding(ToolListDispatches, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode list dispatches input", func(request ListDispatchesInput) ToolResponse[factoryapi.ListFactorySessionDispatchesResponse] {
 			return ListDispatches(c.service, request)
 		})
-	},
-	ToolListArtifacts: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	}),
+	stableToolID(ToolListArtifacts): handwrittenToolBinding(ToolListArtifacts, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode list artifacts input", func(request ListArtifactsInput) ToolResponse[factoryapi.ListFactorySessionArtifactsResponse] {
 			return ListArtifacts(c.service, request)
 		})
-	},
-	ToolReadEvents: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	}),
+	stableToolID(ToolReadEvents): handwrittenToolBinding(ToolReadEvents, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode read events input", func(request ReadEventsInput) ToolResponse[ReadEventsResult] {
 			return ReadEvents(c.service, request)
 		})
-	},
-	ToolControl: func(c *Client, input json.RawMessage) (json.RawMessage, error) {
+	}),
+	stableToolID(ToolControl): handwrittenToolBinding(ToolControl, func(c *Client, input json.RawMessage) (json.RawMessage, error) {
 		return callToolJSON(input, "decode control input", func(request ControlInput) ToolResponse[factoryapi.FactorySessionLifecycleControlResponse] {
 			return Control(c.service, request)
 		})
-	},
+	}),
 }
 
 // IsCanonicalToolHandlerRegistered reports whether the live CallTool path
 // registers a handler for one canonical Factory Session tool name.
 func IsCanonicalToolHandlerRegistered(name string) bool {
-	_, ok := canonicalToolHandlers[name]
+	if ResolveToolName(name) != name {
+		return false
+	}
+	_, ok := ResolveToolHandlerBinding(name)
 	return ok
+}
+
+// ResolveToolHandlerBinding resolves a canonical name or compatibility alias
+// through generated catalog identity into the handwritten stable-ID registry.
+func ResolveToolHandlerBinding(name string) (ToolHandlerBinding, bool) {
+	canonicalName := ResolveToolName(name)
+	toolID, ok := generatedToolIDByName(canonicalName)
+	if !ok {
+		return ToolHandlerBinding{}, false
+	}
+	binding, ok := canonicalToolHandlersByID[toolID]
+	if !ok {
+		return ToolHandlerBinding{}, false
+	}
+	return ToolHandlerBinding{ToolID: toolID, HandlerID: binding.handlerID}, true
 }
 
 // CallTool invokes one discovered Factory Session MCP tool by stable name.
 // Workflow-named compatibility aliases resolve to the same canonical handlers.
 func (c *Client) CallTool(name string, input json.RawMessage) (json.RawMessage, error) {
-	resolved := ResolveToolName(name)
-	handler, ok := canonicalToolHandlers[resolved]
+	bindingIdentity, ok := ResolveToolHandlerBinding(name)
 	if !ok {
 		return nil, fmt.Errorf("unsupported tool %q", name)
 	}
-	return handler(c, input)
+	binding := canonicalToolHandlersByID[bindingIdentity.ToolID]
+	return binding.handler(c, input)
+}
+
+func generatedToolIDByName(name string) (string, bool) {
+	for _, tool := range mcpgenerated.PrimaryDiscovery() {
+		if tool.Name == name {
+			return tool.ID, true
+		}
+	}
+	return "", false
+}
+
+func stableToolID(name string) string {
+	return stableToolIDPrefix + name
+}
+
+func stableHandlerID(name string) string {
+	return stableHandlerIDPrefix + name
+}
+
+func handwrittenToolBinding(name string, handler canonicalToolHandler) canonicalToolBinding {
+	return canonicalToolBinding{handlerID: stableHandlerID(name), handler: handler}
 }
 
 // ListSessions calls you.factory_session.list through the mock client.

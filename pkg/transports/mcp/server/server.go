@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
+	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
 
 const protocolVersion = "2024-11-05"
@@ -155,16 +156,24 @@ func (s *Server) handleInitialize(params json.RawMessage) (any, *jsonRPCError, e
 
 func (s *Server) handleToolsList(params json.RawMessage) (any, *jsonRPCError, error) {
 	_ = params
-	tools := make([]map[string]any, 0, len(mcpfactorysession.DiscoverTools())+len(mcpfactorysession.DiscoverCompatibilityAliases()))
-	for _, tool := range mcpfactorysession.DiscoverTools() {
-		tools = append(tools, mcpToolDescriptor(tool.Name, tool.Description, tool.InputSchema))
+	primary := mcpgenerated.PrimaryDiscovery()
+	aliases := mcpfactorysession.DiscoverCompatibilityAliases()
+	tools := make([]map[string]any, 0, len(primary)+len(aliases))
+	inputSchemas := make(map[string]map[string]any, len(primary))
+	for _, tool := range primary {
+		var inputSchema map[string]any
+		if err := json.Unmarshal(tool.InputSchema, &inputSchema); err != nil {
+			return nil, nil, fmt.Errorf("decode generated MCP discovery schema for %s: %w", tool.ID, err)
+		}
+		inputSchemas[tool.Name] = inputSchema
+		tools = append(tools, mcpToolDescriptor(tool.Name, tool.Description, inputSchema))
 	}
-	for _, alias := range mcpfactorysession.DiscoverCompatibilityAliases() {
-		canonical, ok := mcpfactorysession.ToolByName(alias.CanonicalName)
+	for _, alias := range aliases {
+		inputSchema, ok := inputSchemas[alias.CanonicalName]
 		if !ok {
 			continue
 		}
-		tools = append(tools, mcpToolDescriptor(alias.Name, alias.Description, canonical.InputSchema))
+		tools = append(tools, mcpToolDescriptor(alias.Name, alias.Description, inputSchema))
 	}
 	return map[string]any{"tools": tools}, nil, nil
 }
