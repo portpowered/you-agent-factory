@@ -3,7 +3,8 @@ additionalProperties: false
 description: Customer-facing output hint for a factory invocation signature.
 properties:
   mode:
-    $ref: './FactoryInvocationOutputContractMode.yaml'
+    allOf:
+      - $ref: './FactoryInvocationOutputContractMode.yaml'
     description: High-level output contract mode exposed to callers.
   pathParameter:
     type: string

@@ -1,15 +1,8 @@
 {
   "profile": "fail-closed",
   "status": "blocks_full_endorsement",
-  "summary": "The canonical OpenAPI Factory component graph still contains $ref/description sibling combinations that the restricted fail-closed converter profile rejects. Factory schema staging therefore records these concrete B16 gaps and continues emitting the legacy ref-materialization projection until B16 closes parity without broadening the profile.",
-  "blockingCategories": [
-    {
-      "code": "openapi.convert.unsupported_reference",
-      "pattern": "$ref with sibling keywords such as description",
-      "why": "The refs/fail-closed profile requires $ref-only schema objects for internal component references. The authored Factory graph still annotates many property refs with description siblings that the legacy staging rewrite preserved.",
-      "instanceCount": 46
-    }
-  ],
+  "summary": "The canonical OpenAPI Factory component graph no longer emits $ref/description sibling diagnostics. Factory schema staging still records the legacy nullable semantic gap until B16 closes converter-backed generation without broadening the profile.",
+  "blockingCategories": [],
   "legacyProjectionSemanticGaps": [
     {
       "keyword": "nullable",

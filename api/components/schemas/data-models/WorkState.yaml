@@ -13,5 +13,6 @@ properties:
     type: string
     description: Customer-authored state name referenced by workstation inputs and outputs.
   type:
-    $ref: './WorkStateType.yaml'
+    allOf:
+      - $ref: './WorkStateType.yaml'
     description: Lifecycle category for this state, such as initial, processing, terminal, or failed.

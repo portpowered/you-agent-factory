@@ -16,13 +16,16 @@ properties:
     type: string
     description: Customer-authored workstation name used by guards, diagnostics, and authored references.
   behavior:
-    $ref: './WorkstationKind.yaml'
+    allOf:
+      - $ref: './WorkstationKind.yaml'
     description: Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution.
   type:
-    $ref: './WorkstationType.yaml'
+    allOf:
+      - $ref: './WorkstationType.yaml'
     description: Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type.
   operation:
-    $ref: './ModelOperationName.yaml'
+    allOf:
+      - $ref: './ModelOperationName.yaml'
     description: Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`.
   operationBindings:
     type: array
@@ -33,7 +36,8 @@ properties:
     type: string
     description: Name of a worker declared in the workers list.
   runner:
-    $ref: './RunnerID.yaml'
+    allOf:
+      - $ref: './RunnerID.yaml'
     description: Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then worker modelProvider compatibility when no explicit runner is configured, then the default codex runner.
   openCodeAgent:
     type: string
@@ -48,17 +52,20 @@ properties:
     type: string
     description: JSON schema string used to validate or parse structured model output when configured.
   outcomeFormat:
-    $ref: './WorkstationOutcomeFormat.yaml'
+    allOf:
+      - $ref: './WorkstationOutcomeFormat.yaml'
     description: >-
       Optional worker-output parsing mode for model workstations. When set to
       `decision-envelope`, agent output is parsed as a reviewer/checker JSON
       envelope that maps directly onto WorkResult outcome, feedback, output, and
       optional recorded output work instead of stop-token routing.
   limits:
-    $ref: './WorkstationLimits.yaml'
+    allOf:
+      - $ref: './WorkstationLimits.yaml'
     description: Retry and execution ceilings applied to this workstation.
   workPropagation:
-    $ref: './WorkPropagation.yaml'
+    allOf:
+      - $ref: './WorkPropagation.yaml'
     description: >-
       Optional policy for whether downstream work uses the workstation output
       payload or preserves the consumed input payload.
@@ -66,7 +73,8 @@ properties:
     type: string
     description: Inline workstation instructions or script body when authored directly in factory config.
   cron:
-    $ref: './WorkstationCron.yaml'
+    allOf:
+      - $ref: './WorkstationCron.yaml'
     description: Cron trigger configuration for workstations whose behavior is CRON.
   inputs:
     type: array
@@ -123,5 +131,6 @@ properties:
     type: string
     description: Go template resolved and passed as the worktree path to CLI dispatchers.
   env:
-    $ref: '../shared/StringMap.yaml'
+    allOf:
+      - $ref: '../shared/StringMap.yaml'
     description: Environment variables added to the workstation execution context.

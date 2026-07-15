@@ -299,7 +299,7 @@ var productionBoundarySources = []struct {
 	},
 	{
 		relativePath: "api/components/schemas/data-models/Factory.yaml",
-		sha256Hex:    "7a150f3c80a75e823940cec9b7660dc48ff20046b6a0000111674e3c8f0f2767",
+		sha256Hex:    "bf3b2eb5709d1b4828bb6c0542b22ff50fb1cfc56ab24cf02ae8f546388a9304",
 	},
 	{
 		relativePath: "api/components/schemas/data-models/WorkerType.yaml",
@@ -319,11 +319,11 @@ var productionBoundarySources = []struct {
 	},
 	{
 		relativePath: "api/components/schemas/data-models/FactoryOrchestrator.yaml",
-		sha256Hex:    "46717f730e2b864a1c1979bc41ec2720b14cd7fe6cd73ad8025a18c64c8e39a6",
+		sha256Hex:    "08669ab5b1aa7af5c55185a9ec5827959dac35d51f0c0098732852a21d18d84c",
 	},
 	{
 		relativePath: "api/components/schemas/data-models/Resource.yaml",
-		sha256Hex:    "56099e658940395035851cfcce7424782ef9e42193b8eb608b93b45d5866ab28",
+		sha256Hex:    "e19cd17f7daddfcedc7c46dffb75dced03b2021f8ce33543a88f4a105df9632b",
 	},
 }
 

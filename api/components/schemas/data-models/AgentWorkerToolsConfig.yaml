@@ -7,5 +7,6 @@ required:
   - policy
 properties:
   policy:
-    $ref: './AgentWorkerToolPolicy.yaml'
+    allOf:
+      - $ref: './AgentWorkerToolPolicy.yaml'
     description: Required executor policy for agent-loop tool use on this worker.

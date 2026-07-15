@@ -11,7 +11,8 @@ properties:
         type: string
         description: Factory identifier used as the factory-level template context fallback.
     runner:
-        $ref: './RunnerID.yaml'
+        allOf:
+            - $ref: './RunnerID.yaml'
         description: Default runner selection for the factory when a workstation does not declare its own runner override.
     factoryDirectory:
         type: string
@@ -20,13 +21,16 @@ properties:
         type: string
         description: Original source directory for record/replay and drift diagnostics.
     version:
-        $ref: '../api/HybridLogicalTimestamp.yaml'
+        allOf:
+            - $ref: '../api/HybridLogicalTimestamp.yaml'
         description: Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology.
     metadata:
-        $ref: '../shared/StringMap.yaml'
+        allOf:
+            - $ref: '../shared/StringMap.yaml'
         description: Free-form factory-level metadata carried through runtime serialization and replay diagnostics.
     orchestrator:
-        $ref: './FactoryOrchestrator.yaml'
+        allOf:
+            - $ref: './FactoryOrchestrator.yaml'
         description: >-
             Authored orchestrator identity for this factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
     inputTypes:
@@ -35,11 +39,13 @@ properties:
         items:
             $ref: './InputType.yaml'
     invocationReturn:
-        $ref: './InvocationReturn.yaml'
+        allOf:
+            - $ref: './InvocationReturn.yaml'
         description: >-
             Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation.
     invocationSignature:
-        $ref: './FactoryInvocationSignature.yaml'
+        allOf:
+            - $ref: './FactoryInvocationSignature.yaml'
         description: >-
             Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior.
     guards:
@@ -58,10 +64,12 @@ properties:
         items:
             $ref: './Resource.yaml'
     supportingFiles:
-        $ref: './ResourceManifest.yaml'
+        allOf:
+            - $ref: './ResourceManifest.yaml'
         description: Optional portability manifest for validation-only external tools and portable bundled files. During v1 factory sharing, bundled INPUT files represent a share-time snapshot of the source factory's current inputs work so recipients restore detached starter-work copies that no longer sync back to the original factory. This contract is distinct from runtime-capacity resources.
     layout:
-        $ref: './FactoryLayout.yaml'
+        allOf:
+            - $ref: './FactoryLayout.yaml'
         description: Optional non-executable graph editor layout metadata keyed by canonical graph node and edge ids.
     workers:
         type: array

@@ -8,7 +8,8 @@ description: >-
   SUBMITTED_WORK_TERMINAL fallback.
 properties:
   policy:
-    $ref: './InvocationReturnPolicy.yaml'
+    allOf:
+      - $ref: './InvocationReturnPolicy.yaml'
     description: Return selection policy for this factory.
   workTypeName:
     type: string

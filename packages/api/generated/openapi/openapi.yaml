@@ -8143,7 +8143,8 @@ components:
           type: string
           description: Factory identifier used as the factory-level template context fallback.
         runner:
-          $ref: '#/components/schemas/RunnerID'
+          allOf:
+            - $ref: '#/components/schemas/RunnerID'
           description: Default runner selection for the factory when a workstation does not declare its own runner override.
         factoryDirectory:
           type: string
@@ -8152,13 +8153,16 @@ components:
           type: string
           description: Original source directory for record/replay and drift diagnostics.
         version:
-          $ref: '#/components/schemas/HybridLogicalTimestamp'
+          allOf:
+            - $ref: '#/components/schemas/HybridLogicalTimestamp'
           description: Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology.
         metadata:
-          $ref: '#/components/schemas/StringMap'
+          allOf:
+            - $ref: '#/components/schemas/StringMap'
           description: Free-form factory-level metadata carried through runtime serialization and replay diagnostics.
         orchestrator:
-          $ref: '#/components/schemas/FactoryOrchestrator'
+          allOf:
+            - $ref: '#/components/schemas/FactoryOrchestrator'
           description: Authored orchestrator identity for this factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
         inputTypes:
           type: array
@@ -8166,10 +8170,12 @@ components:
           items:
             $ref: '#/components/schemas/InputType'
         invocationReturn:
-          $ref: '#/components/schemas/InvocationReturn'
+          allOf:
+            - $ref: '#/components/schemas/InvocationReturn'
           description: Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation.
         invocationSignature:
-          $ref: '#/components/schemas/FactoryInvocationSignature'
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationSignature'
           description: Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior.
         guards:
           type: array
@@ -8187,10 +8193,12 @@ components:
           items:
             $ref: '#/components/schemas/Resource'
         supportingFiles:
-          $ref: '#/components/schemas/ResourceManifest'
+          allOf:
+            - $ref: '#/components/schemas/ResourceManifest'
           description: Optional portability manifest for validation-only external tools and portable bundled files. During v1 factory sharing, bundled INPUT files represent a share-time snapshot of the source factory's current inputs work so recipients restore detached starter-work copies that no longer sync back to the original factory. This contract is distinct from runtime-capacity resources.
         layout:
-          $ref: '#/components/schemas/FactoryLayout'
+          allOf:
+            - $ref: '#/components/schemas/FactoryLayout'
           description: Optional non-executable graph editor layout metadata keyed by canonical graph node and edge ids.
         workers:
           type: array
@@ -8212,10 +8220,12 @@ components:
         kind:
           $ref: '#/components/schemas/FactoryOrchestratorKind'
         petri:
-          $ref: '#/components/schemas/FactoryOrchestratorPetriConfig'
+          allOf:
+            - $ref: '#/components/schemas/FactoryOrchestratorPetriConfig'
           description: Petri-specific orchestrator configuration. Required only when kind = PETRI and additional Petri options are authored.
         javascript:
-          $ref: '#/components/schemas/FactoryOrchestratorJavaScriptConfig'
+          allOf:
+            - $ref: '#/components/schemas/FactoryOrchestratorJavaScriptConfig'
           description: JavaScript-specific orchestrator configuration. Required when kind = JAVASCRIPT.
     FactoryOrchestratorKind:
       type: string
@@ -8239,7 +8249,8 @@ components:
           type: string
           description: Factory-relative or authored reference to the workflow source file.
         inlineSource:
-          $ref: '#/components/schemas/FactoryOrchestratorJavaScriptInlineSource'
+          allOf:
+            - $ref: '#/components/schemas/FactoryOrchestratorJavaScriptInlineSource'
           description: Inline workflow source when the factory carries source text directly.
         sourceHash:
           type: string
@@ -8248,7 +8259,8 @@ components:
           type: string
           description: Optional exported entrypoint or phase name used to start the workflow.
         metadata:
-          $ref: '#/components/schemas/StringMap'
+          allOf:
+            - $ref: '#/components/schemas/StringMap'
           description: Free-form JavaScript orchestrator metadata for authoring and diagnostics.
         argsSchema:
           type: object
@@ -8290,10 +8302,12 @@ components:
           items:
             $ref: '#/components/schemas/FactoryInvocationParameter'
         unknownNamedArgumentPolicy:
-          $ref: '#/components/schemas/FactoryInvocationUnknownNamedArgumentPolicy'
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationUnknownNamedArgumentPolicy'
           description: Policy for named inputs that do not match any declared parameter binding.
         outputContract:
-          $ref: '#/components/schemas/FactoryInvocationOutputContract'
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationOutputContract'
           description: Optional customer-facing hint for the factory's primary output shape.
         examples:
           type: array
@@ -8322,10 +8336,12 @@ components:
           items:
             type: string
         typeHint:
-          $ref: '#/components/schemas/FactoryInvocationParameterTypeHint'
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationParameterTypeHint'
           description: String-first hint that guides parsing, docs, and dashboard form selection.
         valueMode:
-          $ref: '#/components/schemas/FactoryInvocationParameterValueMode'
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationParameterValueMode'
           description: Declares whether the parameter consumes one value, repeated values, variadic values, or file contents.
         required:
           type: boolean
@@ -8359,7 +8375,8 @@ components:
       description: One public binding that exposes a parameter to callers.
       properties:
         kind:
-          $ref: '#/components/schemas/FactoryInvocationParameterBindingKind'
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationParameterBindingKind'
           description: Binding kind used to route invocation input into the parameter.
         position:
           type: integer
@@ -8404,7 +8421,8 @@ components:
       description: Customer-facing output hint for a factory invocation signature.
       properties:
         mode:
-          $ref: '#/components/schemas/FactoryInvocationOutputContractMode'
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationOutputContractMode'
           description: High-level output contract mode exposed to callers.
         pathParameter:
           type: string
@@ -8454,7 +8472,8 @@ components:
       description: Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.
       properties:
         policy:
-          $ref: '#/components/schemas/InvocationReturnPolicy'
+          allOf:
+            - $ref: '#/components/schemas/InvocationReturnPolicy'
           description: Return selection policy for this factory.
         workTypeName:
           type: string
@@ -8629,7 +8648,8 @@ components:
           type: string
           description: Customer-authored state name referenced by workstation inputs and outputs.
         type:
-          $ref: '#/components/schemas/WorkStateType'
+          allOf:
+            - $ref: '#/components/schemas/WorkStateType'
           description: Lifecycle category for this state, such as initial, processing, terminal, or failed.
     WorkStateType:
       type: string
@@ -8654,7 +8674,8 @@ components:
           type: string
           description: Resource name referenced from worker requirements and workstation resourceUsage entries.
         type:
-          $ref: '#/components/schemas/ResourceType'
+          allOf:
+            - $ref: '#/components/schemas/ResourceType'
           description: Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`.
         capacity:
           type: integer
@@ -8693,22 +8714,27 @@ components:
           type: string
           description: Worker name referenced by Workstation.worker.
         type:
-          $ref: '#/components/schemas/WorkerType'
+          allOf:
+            - $ref: '#/components/schemas/WorkerType'
           description: Worker implementation family to instantiate for this definition.
         provider:
-          $ref: '#/components/schemas/HostedWorkerProvider'
+          allOf:
+            - $ref: '#/components/schemas/HostedWorkerProvider'
           description: Built-in hosted provider identity when this worker uses repository-owned hosted execution.
         model:
           type: string
           description: Model identifier to request from the configured model provider when this worker uses model execution.
         modelProvider:
-          $ref: '#/components/schemas/WorkerModelProvider'
+          allOf:
+            - $ref: '#/components/schemas/WorkerModelProvider'
           description: Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
         modelLocality:
-          $ref: '#/components/schemas/WorkerModelLocality'
+          allOf:
+            - $ref: '#/components/schemas/WorkerModelLocality'
           description: Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution.
         executorProvider:
-          $ref: '#/components/schemas/WorkerProvider'
+          allOf:
+            - $ref: '#/components/schemas/WorkerProvider'
           description: Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`.
         operations:
           type: array
@@ -8741,13 +8767,16 @@ components:
           type: string
           description: Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
         auth:
-          $ref: '#/components/schemas/HostedWorkerAuth'
+          allOf:
+            - $ref: '#/components/schemas/HostedWorkerAuth'
           description: Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef.
         linear:
-          $ref: '#/components/schemas/HostedLinearWorkerConfig'
+          allOf:
+            - $ref: '#/components/schemas/HostedLinearWorkerConfig'
           description: Provider-specific configuration for the built-in hosted LINEAR worker.
         agentTools:
-          $ref: '#/components/schemas/AgentWorkerToolsConfig'
+          allOf:
+            - $ref: '#/components/schemas/AgentWorkerToolsConfig'
           description: Explicit agent-loop tool policy for AGENT_WORKER definitions. Omit or set policy DISABLED to run agent loops without advertising or executing tools.
         body:
           type: string
@@ -8760,7 +8789,8 @@ components:
         - policy
       properties:
         policy:
-          $ref: '#/components/schemas/AgentWorkerToolPolicy'
+          allOf:
+            - $ref: '#/components/schemas/AgentWorkerToolPolicy'
           description: Required executor policy for agent-loop tool use on this worker.
     AgentWorkerToolPolicy:
       type: string
@@ -8889,13 +8919,16 @@ components:
           type: string
           description: Customer-authored workstation name used by guards, diagnostics, and authored references.
         behavior:
-          $ref: '#/components/schemas/WorkstationKind'
+          allOf:
+            - $ref: '#/components/schemas/WorkstationKind'
           description: Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution.
         type:
-          $ref: '#/components/schemas/WorkstationType'
+          allOf:
+            - $ref: '#/components/schemas/WorkstationType'
           description: Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type.
         operation:
-          $ref: '#/components/schemas/ModelOperationName'
+          allOf:
+            - $ref: '#/components/schemas/ModelOperationName'
           description: Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`.
         operationBindings:
           type: array
@@ -8906,7 +8939,8 @@ components:
           type: string
           description: Name of a worker declared in the workers list.
         runner:
-          $ref: '#/components/schemas/RunnerID'
+          allOf:
+            - $ref: '#/components/schemas/RunnerID'
           description: Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then worker modelProvider compatibility when no explicit runner is configured, then the default codex runner.
         openCodeAgent:
           type: string
@@ -8918,19 +8952,23 @@ components:
           type: string
           description: JSON schema string used to validate or parse structured model output when configured.
         outcomeFormat:
-          $ref: '#/components/schemas/WorkstationOutcomeFormat'
+          allOf:
+            - $ref: '#/components/schemas/WorkstationOutcomeFormat'
           description: Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
         limits:
-          $ref: '#/components/schemas/WorkstationLimits'
+          allOf:
+            - $ref: '#/components/schemas/WorkstationLimits'
           description: Retry and execution ceilings applied to this workstation.
         workPropagation:
-          $ref: '#/components/schemas/WorkPropagation'
+          allOf:
+            - $ref: '#/components/schemas/WorkPropagation'
           description: Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload.
         body:
           type: string
           description: Inline workstation instructions or script body when authored directly in factory config.
         cron:
-          $ref: '#/components/schemas/WorkstationCron'
+          allOf:
+            - $ref: '#/components/schemas/WorkstationCron'
           description: Cron trigger configuration for workstations whose behavior is CRON.
         inputs:
           type: array
@@ -8987,7 +9025,8 @@ components:
           type: string
           description: Go template resolved and passed as the worktree path to CLI dispatchers.
         env:
-          $ref: '#/components/schemas/StringMap'
+          allOf:
+            - $ref: '#/components/schemas/StringMap'
           description: Environment variables added to the workstation execution context.
     WorkstationOutcomeFormat:
       type: string
@@ -9069,7 +9108,8 @@ components:
       description: Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.
       properties:
         mode:
-          $ref: '#/components/schemas/WorkPropagationMode'
+          allOf:
+            - $ref: '#/components/schemas/WorkPropagationMode'
           description: Propagation mode for downstream work payload selection after this workstation succeeds.
     WorkPropagationMode:
       type: string
@@ -9940,7 +9980,8 @@ components:
           type: string
           description: Match a content part by its label field.
         type:
-          $ref: '#/components/schemas/ModelOperationContentType'
+          allOf:
+            - $ref: '#/components/schemas/ModelOperationContentType'
           description: Match a content part by its uppercase public type.
         role:
           type: string
@@ -9956,13 +9997,16 @@ components:
           type: string
           description: Stable input slot name declared by the worker operation.
         selector:
-          $ref: '#/components/schemas/WorkstationOperationBindingSelector'
+          allOf:
+            - $ref: '#/components/schemas/WorkstationOperationBindingSelector'
           description: Ordered runtime-input selector used before falling back to config or default content.
         config:
-          $ref: '#/components/schemas/WorkContent'
+          allOf:
+            - $ref: '#/components/schemas/WorkContent'
           description: Static authored content bound directly or used as the first fallback when runtime input does not match.
         defaultContent:
-          $ref: '#/components/schemas/WorkContent'
+          allOf:
+            - $ref: '#/components/schemas/WorkContent'
           description: Optional final fallback content when neither runtime input nor config content resolves the slot.
     FactoryOrchestratorJavaScriptAgent:
       type: object
@@ -10210,8 +10254,10 @@ components:
           items:
             type: string
         mapping:
-          $ref: '#/components/schemas/HostedLinearWorkerMapping'
+          allOf:
+            - $ref: '#/components/schemas/HostedLinearWorkerMapping'
           description: Deterministic mapping fields for canonical work submission generation.
         claim:
-          $ref: '#/components/schemas/HostedLinearWorkerClaim'
+          allOf:
+            - $ref: '#/components/schemas/HostedLinearWorkerClaim'
           description: Optional claim-related configuration that v1 hosted Linear polling allows.

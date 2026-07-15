@@ -12,24 +12,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestFactorySchemaConverterIsBlockedByDocumentedB16Gaps(t *testing.T) {
+func TestFactorySchemaConverterHasNoUnsupportedReferenceDiagnostics(t *testing.T) {
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
 	factory, components := loadFactoryGraph(t, repositoryRoot)
 
-	_, diagnostics := contractopenapiconverter.ConvertFailClosedSchema(factory, components)
-	if len(diagnostics) == 0 {
-		t.Fatal("ConvertFailClosedSchema() succeeded, want documented B16-blocking diagnostics")
-	}
-	if diagnostics[0].Code != "openapi.convert.unsupported_reference" {
-		t.Fatalf("first diagnostic = %#v, want unsupported_reference while B16 $ref siblings remain", diagnostics[0])
-	}
-
-	artifacts, err := contractstaging.Artifacts(repositoryRoot)
-	if err != nil {
-		t.Fatalf("Artifacts() error = %v", err)
-	}
-	if len(artifacts["packages/api/generated/schemas/factory.schema.json"]) == 0 {
-		t.Fatal("Artifacts() returned empty factory schema while converter is blocked")
+	collected := contractstaging.CollectFactorySchemaConverterDiagnosticsForTest(factory, components)
+	for _, diagnostic := range collected {
+		if diagnostic.Code == "openapi.convert.unsupported_reference" {
+			t.Fatalf("unsupported_reference diagnostic remains: %#v", diagnostic)
+		}
 	}
 }
 
@@ -38,9 +29,6 @@ func TestFactorySchemaB16GapRecordCoversCanonicalFactoryGraph(t *testing.T) {
 	factory, components := loadFactoryGraph(t, repositoryRoot)
 
 	collected := contractstaging.CollectFactorySchemaConverterDiagnosticsForTest(factory, components)
-	if len(collected) == 0 {
-		t.Fatal("collectFactorySchemaConverterDiagnostics() = 0, want blocking diagnostics")
-	}
 
 	recordPath := filepath.Join(repositoryRoot, "docs", "internal", "contract", "factory-schema-b16-gaps.json")
 	recordPayload, err := os.ReadFile(recordPath)
@@ -73,6 +61,9 @@ func TestFactorySchemaB16GapRecordCoversCanonicalFactoryGraph(t *testing.T) {
 		if counts[category.Code] != category.InstanceCount {
 			t.Fatalf("gap record %s instanceCount = %d, collected %d", category.Code, category.InstanceCount, counts[category.Code])
 		}
+	}
+	if len(collected) == 0 {
+		return
 	}
 
 	factoryCopy := contractstaging.DeepCopyValueForTest(factory).(map[string]any)

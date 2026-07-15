@@ -14,7 +14,11 @@
       "description": "Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy.",
       "properties": {
         "policy": {
-          "$ref": "#/$defs/AgentWorkerToolPolicy",
+          "allOf": [
+            {
+              "$ref": "#/$defs/AgentWorkerToolPolicy"
+            }
+          ],
           "description": "Required executor policy for agent-loop tool use on this worker."
         }
       },
@@ -181,7 +185,11 @@
           "type": "string"
         },
         "mode": {
-          "$ref": "#/$defs/FactoryInvocationOutputContractMode",
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryInvocationOutputContractMode"
+            }
+          ],
           "description": "High-level output contract mode exposed to callers."
         },
         "pathParameter": {
@@ -257,11 +265,19 @@
           "type": "boolean"
         },
         "typeHint": {
-          "$ref": "#/$defs/FactoryInvocationParameterTypeHint",
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryInvocationParameterTypeHint"
+            }
+          ],
           "description": "String-first hint that guides parsing, docs, and dashboard form selection."
         },
         "valueMode": {
-          "$ref": "#/$defs/FactoryInvocationParameterValueMode",
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryInvocationParameterValueMode"
+            }
+          ],
           "description": "Declares whether the parameter consumes one value, repeated values, variadic values, or file contents."
         }
       },
@@ -275,7 +291,11 @@
       "description": "One public binding that exposes a parameter to callers.",
       "properties": {
         "kind": {
-          "$ref": "#/$defs/FactoryInvocationParameterBindingKind",
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryInvocationParameterBindingKind"
+            }
+          ],
           "description": "Binding kind used to route invocation input into the parameter."
         },
         "position": {
@@ -333,7 +353,11 @@
           "type": "array"
         },
         "outputContract": {
-          "$ref": "#/$defs/FactoryInvocationOutputContract",
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryInvocationOutputContract"
+            }
+          ],
           "description": "Optional customer-facing hint for the factory's primary output shape."
         },
         "parameters": {
@@ -344,7 +368,11 @@
           "type": "array"
         },
         "unknownNamedArgumentPolicy": {
-          "$ref": "#/$defs/FactoryInvocationUnknownNamedArgumentPolicy",
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryInvocationUnknownNamedArgumentPolicy"
+            }
+          ],
           "description": "Policy for named inputs that do not match any declared parameter binding."
         }
       },
@@ -487,8 +515,10 @@
         },
         "parentGroupId": {
           "description": "Reserved for future nested groups. Omit or set null for flat groups.",
-          "nullable": true,
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [
@@ -613,14 +643,22 @@
       "description": "Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.",
       "properties": {
         "javascript": {
-          "$ref": "#/$defs/FactoryOrchestratorJavaScriptConfig",
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryOrchestratorJavaScriptConfig"
+            }
+          ],
           "description": "JavaScript-specific orchestrator configuration. Required when kind = JAVASCRIPT."
         },
         "kind": {
           "$ref": "#/$defs/FactoryOrchestratorKind"
         },
         "petri": {
-          "$ref": "#/$defs/FactoryOrchestratorPetriConfig",
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryOrchestratorPetriConfig"
+            }
+          ],
           "description": "Petri-specific orchestrator configuration. Required only when kind = PETRI and additional Petri options are authored."
         }
       },
@@ -674,11 +712,19 @@
           "type": "string"
         },
         "inlineSource": {
-          "$ref": "#/$defs/FactoryOrchestratorJavaScriptInlineSource",
+          "allOf": [
+            {
+              "$ref": "#/$defs/FactoryOrchestratorJavaScriptInlineSource"
+            }
+          ],
           "description": "Inline workflow source when the factory carries source text directly."
         },
         "metadata": {
-          "$ref": "#/$defs/StringMap",
+          "allOf": [
+            {
+              "$ref": "#/$defs/StringMap"
+            }
+          ],
           "description": "Free-form JavaScript orchestrator metadata for authoring and diagnostics."
         },
         "sourceHash": {
@@ -817,11 +863,19 @@
       "description": "Provider-specific poller configuration for the built-in hosted Linear worker.",
       "properties": {
         "claim": {
-          "$ref": "#/$defs/HostedLinearWorkerClaim",
+          "allOf": [
+            {
+              "$ref": "#/$defs/HostedLinearWorkerClaim"
+            }
+          ],
           "description": "Optional claim-related configuration that v1 hosted Linear polling allows."
         },
         "mapping": {
-          "$ref": "#/$defs/HostedLinearWorkerMapping",
+          "allOf": [
+            {
+              "$ref": "#/$defs/HostedLinearWorkerMapping"
+            }
+          ],
           "description": "Deterministic mapping fields for canonical work submission generation."
         },
         "pollInterval": {
@@ -929,7 +983,11 @@
       "description": "Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.",
       "properties": {
         "policy": {
-          "$ref": "#/$defs/InvocationReturnPolicy",
+          "allOf": [
+            {
+              "$ref": "#/$defs/InvocationReturnPolicy"
+            }
+          ],
           "description": "Return selection policy for this factory."
         },
         "terminalState": {
@@ -1092,7 +1150,11 @@
           "type": "string"
         },
         "type": {
-          "$ref": "#/$defs/ResourceType",
+          "allOf": [
+            {
+              "$ref": "#/$defs/ResourceType"
+            }
+          ],
           "description": "Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`."
         }
       },
@@ -1388,7 +1450,11 @@
       "description": "Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.",
       "properties": {
         "mode": {
-          "$ref": "#/$defs/WorkPropagationMode",
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkPropagationMode"
+            }
+          ],
           "description": "Propagation mode for downstream work payload selection after this workstation succeeds."
         }
       },
@@ -1418,7 +1484,11 @@
           "type": "string"
         },
         "type": {
-          "$ref": "#/$defs/WorkStateType",
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkStateType"
+            }
+          ],
           "description": "Lifecycle category for this state, such as initial, processing, terminal, or failed."
         }
       },
@@ -1516,7 +1586,11 @@
       "description": "A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.",
       "properties": {
         "agentTools": {
-          "$ref": "#/$defs/AgentWorkerToolsConfig",
+          "allOf": [
+            {
+              "$ref": "#/$defs/AgentWorkerToolsConfig"
+            }
+          ],
           "description": "Explicit agent-loop tool policy for AGENT_WORKER definitions. Omit or set policy DISABLED to run agent loops without advertising or executing tools."
         },
         "args": {
@@ -1527,7 +1601,11 @@
           "type": "array"
         },
         "auth": {
-          "$ref": "#/$defs/HostedWorkerAuth",
+          "allOf": [
+            {
+              "$ref": "#/$defs/HostedWorkerAuth"
+            }
+          ],
           "description": "Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef."
         },
         "body": {
@@ -1539,7 +1617,11 @@
           "type": "string"
         },
         "executorProvider": {
-          "$ref": "#/$defs/WorkerProvider",
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkerProvider"
+            }
+          ],
           "description": "Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`."
         },
         "id": {
@@ -1547,7 +1629,11 @@
           "type": "string"
         },
         "linear": {
-          "$ref": "#/$defs/HostedLinearWorkerConfig",
+          "allOf": [
+            {
+              "$ref": "#/$defs/HostedLinearWorkerConfig"
+            }
+          ],
           "description": "Provider-specific configuration for the built-in hosted LINEAR worker."
         },
         "model": {
@@ -1555,11 +1641,19 @@
           "type": "string"
         },
         "modelLocality": {
-          "$ref": "#/$defs/WorkerModelLocality",
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkerModelLocality"
+            }
+          ],
           "description": "Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution."
         },
         "modelProvider": {
-          "$ref": "#/$defs/WorkerModelProvider",
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkerModelProvider"
+            }
+          ],
           "description": "Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs."
         },
         "name": {
@@ -1578,7 +1672,11 @@
           "type": "array"
         },
         "provider": {
-          "$ref": "#/$defs/HostedWorkerProvider",
+          "allOf": [
+            {
+              "$ref": "#/$defs/HostedWorkerProvider"
+            }
+          ],
           "description": "Built-in hosted provider identity when this worker uses repository-owned hosted execution."
         },
         "resources": {
@@ -1601,7 +1699,11 @@
           "type": "string"
         },
         "type": {
-          "$ref": "#/$defs/WorkerType",
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkerType"
+            }
+          ],
           "description": "Worker implementation family to instantiate for this definition."
         }
       },
@@ -1656,7 +1758,11 @@
       "description": "A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.",
       "properties": {
         "behavior": {
-          "$ref": "#/$defs/WorkstationKind",
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkstationKind"
+            }
+          ],
           "description": "Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution."
         },
         "body": {
@@ -1675,11 +1781,19 @@
           "type": "boolean"
         },
         "cron": {
-          "$ref": "#/$defs/WorkstationCron",
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkstationCron"
+            }
+          ],
           "description": "Cron trigger configuration for workstations whose behavior is CRON."
         },
         "env": {
-          "$ref": "#/$defs/StringMap",
+          "allOf": [
+            {
+              "$ref": "#/$defs/StringMap"
+            }
+          ],
           "description": "Environment variables added to the workstation execution context."
         },
         "guards": {
@@ -1701,7 +1815,11 @@
           "type": "array"
         },
         "limits": {
-          "$ref": "#/$defs/WorkstationLimits",
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkstationLimits"
+            }
+          ],
           "description": "Retry and execution ceilings applied to this workstation."
         },
         "name": {
@@ -1734,7 +1852,11 @@
           "type": "string"
         },
         "operation": {
-          "$ref": "#/$defs/ModelOperationName",
+          "allOf": [
+            {
+              "$ref": "#/$defs/ModelOperationName"
+            }
+          ],
           "description": "Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`."
         },
         "operationBindings": {
@@ -1745,7 +1867,11 @@
           "type": "array"
         },
         "outcomeFormat": {
-          "$ref": "#/$defs/WorkstationOutcomeFormat",
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkstationOutcomeFormat"
+            }
+          ],
           "description": "Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing."
         },
         "outputSchema": {
@@ -1771,7 +1897,11 @@
           "type": "array"
         },
         "runner": {
-          "$ref": "#/$defs/RunnerID",
+          "allOf": [
+            {
+              "$ref": "#/$defs/RunnerID"
+            }
+          ],
           "description": "Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then worker modelProvider compatibility when no explicit runner is configured, then the default codex runner."
         },
         "stopWords": {
@@ -1782,11 +1912,19 @@
           "type": "array"
         },
         "type": {
-          "$ref": "#/$defs/WorkstationType",
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkstationType"
+            }
+          ],
           "description": "Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type."
         },
         "workPropagation": {
-          "$ref": "#/$defs/WorkPropagation",
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkPropagation"
+            }
+          ],
           "description": "Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload."
         },
         "worker": {
@@ -1893,15 +2031,27 @@
       "description": "One workstation-authored binding for a provider-agnostic model-operation input slot.",
       "properties": {
         "config": {
-          "$ref": "#/$defs/WorkContent",
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkContent"
+            }
+          ],
           "description": "Static authored content bound directly or used as the first fallback when runtime input does not match."
         },
         "defaultContent": {
-          "$ref": "#/$defs/WorkContent",
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkContent"
+            }
+          ],
           "description": "Optional final fallback content when neither runtime input nor config content resolves the slot."
         },
         "selector": {
-          "$ref": "#/$defs/WorkstationOperationBindingSelector",
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkstationOperationBindingSelector"
+            }
+          ],
           "description": "Ordered runtime-input selector used before falling back to config or default content."
         },
         "slot": {
@@ -1931,7 +2081,11 @@
           "type": "string"
         },
         "type": {
-          "$ref": "#/$defs/ModelOperationContentType",
+          "allOf": [
+            {
+              "$ref": "#/$defs/ModelOperationContentType"
+            }
+          ],
           "description": "Match a content part by its uppercase public type."
         }
       },
@@ -1987,26 +2141,46 @@
       "type": "array"
     },
     "invocationReturn": {
-      "$ref": "#/$defs/InvocationReturn",
+      "allOf": [
+        {
+          "$ref": "#/$defs/InvocationReturn"
+        }
+      ],
       "description": "Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation."
     },
     "invocationSignature": {
-      "$ref": "#/$defs/FactoryInvocationSignature",
+      "allOf": [
+        {
+          "$ref": "#/$defs/FactoryInvocationSignature"
+        }
+      ],
       "description": "Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior."
     },
     "layout": {
-      "$ref": "#/$defs/FactoryLayout",
+      "allOf": [
+        {
+          "$ref": "#/$defs/FactoryLayout"
+        }
+      ],
       "description": "Optional non-executable graph editor layout metadata keyed by canonical graph node and edge ids."
     },
     "metadata": {
-      "$ref": "#/$defs/StringMap",
+      "allOf": [
+        {
+          "$ref": "#/$defs/StringMap"
+        }
+      ],
       "description": "Free-form factory-level metadata carried through runtime serialization and replay diagnostics."
     },
     "name": {
       "$ref": "#/$defs/FactoryName"
     },
     "orchestrator": {
-      "$ref": "#/$defs/FactoryOrchestrator",
+      "allOf": [
+        {
+          "$ref": "#/$defs/FactoryOrchestrator"
+        }
+      ],
       "description": "Authored orchestrator identity for this factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI."
     },
     "resources": {
@@ -2017,7 +2191,11 @@
       "type": "array"
     },
     "runner": {
-      "$ref": "#/$defs/RunnerID",
+      "allOf": [
+        {
+          "$ref": "#/$defs/RunnerID"
+        }
+      ],
       "description": "Default runner selection for the factory when a workstation does not declare its own runner override."
     },
     "sourceDirectory": {
@@ -2025,11 +2203,19 @@
       "type": "string"
     },
     "supportingFiles": {
-      "$ref": "#/$defs/ResourceManifest",
+      "allOf": [
+        {
+          "$ref": "#/$defs/ResourceManifest"
+        }
+      ],
       "description": "Optional portability manifest for validation-only external tools and portable bundled files. During v1 factory sharing, bundled INPUT files represent a share-time snapshot of the source factory's current inputs work so recipients restore detached starter-work copies that no longer sync back to the original factory. This contract is distinct from runtime-capacity resources."
     },
     "version": {
-      "$ref": "#/$defs/HybridLogicalTimestamp",
+      "allOf": [
+        {
+          "$ref": "#/$defs/HybridLogicalTimestamp"
+        }
+      ],
       "description": "Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology."
     },
     "workTypes": {

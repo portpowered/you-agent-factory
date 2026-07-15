@@ -33,7 +33,10 @@ Use this map when changing the public REST contract.
   Factory fragments for converter endorsement, keep stable Go enum/type names via
   `api/codegen_config/factory-codegen-overlay.yaml` referenced from the oapi-codegen
   configs rather than leaving `x-enum-varnames` / `x-go-type` in authored schema
-  bodies. Authored configuration schemas live under
+  bodies. When a Factory property needs both an internal component `$ref` and a
+  `description`, wrap the ref in `allOf: [{ $ref: ... }]` and keep
+  `description` as a sibling of `allOf` so the refs profile sees `$ref`-only
+  objects inside the composition array. Authored configuration schemas live under
   `contracts/config/`; do not substitute topology or parity inventories for
   those schemas. `make contracts-check` reports stale, missing, and unexpected
   staged paths across the complete projection.
