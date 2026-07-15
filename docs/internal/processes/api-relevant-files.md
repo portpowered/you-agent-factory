@@ -121,7 +121,9 @@ Use this map when changing the public REST contract.
   through `internal/contractvalidator.MCPRegistry()` into
   `make contracts-validate`. Invalid fixtures are asserted in focused
   `internal/contractvalidator` tests with path-bearing diagnostics, not in the
-  default valid-only registry pass.
+  default valid-only registry pass. Consolidated fixture-matrix closure lives in
+  `contracts/mcp_tool_catalog_fixture_matrix_test.go` (valid/invalid classes,
+  directory coverage, registry alignment, and no-production-cutover boundary).
 - Tool `input` combines a closed Draft `schema` (`#/$defs/closedDraftSchema`)
   with object-keyed `arguments` using `mcp.arg.*` stable IDs; `execution.mode`
   is pinned to `tools-call` and `transports` to `stdio-json-rpc` for the
