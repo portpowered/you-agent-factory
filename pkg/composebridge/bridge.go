@@ -13,7 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
@@ -27,18 +27,18 @@ type (
 	FactoryDefinitionService = service.FactoryDefinitionService
 )
 
-// ResolveRoot absolutizes cfg.Dir, assigns cfg.Logger, and mints cfg.RuntimeInstanceID when empty.
-func ResolveRoot(cfg *runtimehost.Config) (Root, error) {
+// resolveRoot absolutizes cfg.Dir, assigns cfg.Logger, and mints cfg.RuntimeInstanceID when empty.
+func resolveRoot(cfg *runtimehost.Config) (Root, error) {
 	return service.ResolveFactoryServiceRoot(service.FactoryServiceConfigFromRuntimeHost(cfg))
 }
 
-// EnsureBackendScope resolves backend scope before core composition.
-func EnsureBackendScope(cfg *runtimehost.Config, logger *zap.Logger) error {
+// ensurebackendScope resolves backend scope before core composition.
+func ensurebackendScope(cfg *runtimehost.Config, logger *zap.Logger) error {
 	return service.EnsureBackendScopeForCompose(cfg, logger)
 }
 
-// LoadConfig loads factory.json and replay metadata for compose.
-func LoadConfig(cfg *runtimehost.Config, root Root) (ConfigLoad, error) {
+// loadConfig loads factory.json and replay metadata for compose.
+func loadConfig(cfg *runtimehost.Config, root Root) (ConfigLoad, error) {
 	return service.LoadFactoryConfigForStartup(cfg, root)
 }
 

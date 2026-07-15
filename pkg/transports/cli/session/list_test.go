@@ -49,7 +49,7 @@ func TestList_PerformsGETFactorySessions(t *testing.T) {
 
 	var out bytes.Buffer
 	err := List(ListConfig{
-		Port:   serverPort(t, srv),
+		Server: srv.URL,
 		Output: &out,
 	})
 	if err != nil {

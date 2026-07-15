@@ -6,10 +6,10 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
@@ -196,7 +196,7 @@ func handwrittenSessionSubcommands(
 	generatedShow *cobra.Command,
 ) []*cobra.Command {
 	return []*cobra.Command{
-		newSessionListCommand(diagnostics, options),
+		newSessionListCommand(globals, diagnostics, options),
 		generatedShow,
 		newSessionDispatchesCommand(globals, diagnostics),
 		newSessionPauseCommand(globals, diagnostics),

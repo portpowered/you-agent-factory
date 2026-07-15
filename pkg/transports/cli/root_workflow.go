@@ -3,8 +3,8 @@ package cli
 import (
 	"strings"
 
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
@@ -552,7 +552,7 @@ func newSessionResumeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnost
 	return cmd
 }
 
-func newSessionListCommand(diagnostics *cliDiagnosticsOptions, options RootCommandOptions) *cobra.Command {
+func newSessionListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, options RootCommandOptions) *cobra.Command {
 	cfg := sessioncli.ListConfig{Port: defaultcmd.FactoryPort, Scope: "live"}
 
 	cmd := &cobra.Command{
@@ -577,11 +577,12 @@ func newSessionListCommand(diagnostics *cliDiagnosticsOptions, options RootComma
 				}
 				cfg.DurableLister = service.ListSessions
 			}
+			cfg.Server = globals.server
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
 			cfg.Debug = diagnostics.debug
-			return listSessions(cfg)
+			return sessioncli.List(cfg)
 		},
 	}
 

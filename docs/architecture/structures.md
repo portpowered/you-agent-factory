@@ -681,3 +681,11 @@ flowchart LR
 ```
 
 
+# package structures
+
+## initialization
+
+pkg/factory
+-> pkg/root
+-> pkg/wire
+-> pkg/initializer
