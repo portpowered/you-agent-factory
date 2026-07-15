@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
@@ -22,8 +21,8 @@ func TestEditedMaterializedPackagedSubagentFactoryChangesNextLoad(t *testing.T) 
 	editMaterializedWorkerBody(t, factoryDir, PackagedWorkerName, editedBody)
 
 	editedWorker := loadPackagedSubagentWorker(t, factoryDir)
-	if editedWorker.Body != strings.TrimSpace(editedBody) {
-		t.Fatalf("edited worker body = %q, want %q", editedWorker.Body, strings.TrimSpace(editedBody))
+	if editedWorker.Body != editedBody {
+		t.Fatalf("edited worker body = %q, want exact edited content %q", editedWorker.Body, editedBody)
 	}
 	if editedWorker.Body == initialWorker.Body {
 		t.Fatalf("edited worker body = %q, want change from initial materialized content", editedWorker.Body)
@@ -41,8 +40,8 @@ func TestEditedMaterializedPackagedSubagentFactoryWorkstationChangesNextLoad(t *
 	editMaterializedWorkstationBody(t, factoryDir, PackagedRunWorkstationName, editedBody)
 
 	editedWorkstation := loadPackagedSubagentWorkstation(t, factoryDir)
-	if editedWorkstation.Body != strings.TrimSpace(editedBody) {
-		t.Fatalf("edited workstation body = %q, want %q", editedWorkstation.Body, strings.TrimSpace(editedBody))
+	if editedWorkstation.Body != editedBody {
+		t.Fatalf("edited workstation body = %q, want exact edited content %q", editedWorkstation.Body, editedBody)
 	}
 	if editedWorkstation.Body == initialWorkstation.Body {
 		t.Fatalf("edited workstation body = %q, want change from initial materialized content", editedWorkstation.Body)

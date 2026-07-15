@@ -1,26 +1,24 @@
 package builtingoal
 
 import (
+	"encoding/json"
+	"io/fs"
 	"strings"
 	"testing"
 )
 
-func TestAuthoredRolePrompt_ReturnsTrimmedPromptForKnownRoles(t *testing.T) {
-	for role, want := range AuthoredRolePrompts {
-		got, ok := AuthoredRolePrompt(role)
-		if !ok {
-			t.Fatalf("AuthoredRolePrompt(%q) ok = false, want true", role)
-		}
-		if got != strings.TrimSpace(want) {
-			t.Fatalf("AuthoredRolePrompt(%q) = %q, want %q", role, got, strings.TrimSpace(want))
-		}
+func TestBuiltInGoalFactoryJSON_AssemblesExactDeclaredPromptAsset(t *testing.T) {
+	want, err := fs.ReadFile(promptAssets, "prompts/executor.md")
+	if err != nil {
+		t.Fatalf("read embedded executor prompt: %v", err)
 	}
-}
 
-func TestAuthoredRolePrompt_RejectsUnknownRole(t *testing.T) {
-	if got, ok := AuthoredRolePrompt("unknown-role"); ok || got != "" {
-		t.Fatalf("AuthoredRolePrompt(unknown) = (%q, %v), want (\"\", false)", got, ok)
+	var assembled map[string]any
+	if err := json.Unmarshal(BuiltInGoalFactoryJSON, &assembled); err != nil {
+		t.Fatalf("unmarshal assembled goal definition: %v", err)
 	}
+	assertAssembledGoalPrompt(t, assembled, "workers", "goal-executor", string(want), false)
+	assertAssembledGoalPrompt(t, assembled, "workstations", "execute-goal", string(want), true)
 }
 
 func TestBuiltInGoalFactoryJSON_DoesNotUseLegacyTopLevelWorkIDTemplateAlias(t *testing.T) {
@@ -29,46 +27,21 @@ func TestBuiltInGoalFactoryJSON_DoesNotUseLegacyTopLevelWorkIDTemplateAlias(t *t
 	}
 }
 
-func TestAssembleBuiltInGoalFactoryJSON_RejectsMalformedWorkstations(t *testing.T) {
-	t.Run("workers not array", func(t *testing.T) {
-		root := map[string]any{
-			"workers": "not-an-array",
+func assertAssembledGoalPrompt(t *testing.T, assembled map[string]any, collection, name, want string, wantPromptFile bool) {
+	t.Helper()
+	for _, entry := range assembled[collection].([]any) {
+		subject := entry.(map[string]any)
+		if subject["name"] != name {
+			continue
 		}
-		_, err := assembleBuiltInGoalFactoryJSONFromRoot(root)
-		if err == nil || !strings.Contains(err.Error(), "workers must be an array") {
-			t.Fatalf("assemble error = %v, want workers array validation", err)
+		if got := subject["body"]; got != want {
+			t.Fatalf("assembled %s %q body = %q, want exact authored prompt %q", collection, name, got, want)
 		}
-	})
-
-	t.Run("worker entry not object", func(t *testing.T) {
-		root := map[string]any{
-			"workers": []any{"not-an-object"},
+		_, hasPromptFile := subject["promptFile"]
+		if hasPromptFile != wantPromptFile {
+			t.Fatalf("assembled %s %q promptFile presence = %v, want %v", collection, name, hasPromptFile, wantPromptFile)
 		}
-		_, err := assembleBuiltInGoalFactoryJSONFromRoot(root)
-		if err == nil || !strings.Contains(err.Error(), "worker entry must be an object") {
-			t.Fatalf("assemble error = %v, want worker object validation", err)
-		}
-	})
-
-	t.Run("workstations not array", func(t *testing.T) {
-		root := map[string]any{
-			"workers":      []any{},
-			"workstations": "not-an-array",
-		}
-		_, err := assembleBuiltInGoalFactoryJSONFromRoot(root)
-		if err == nil || !strings.Contains(err.Error(), "workstations must be an array") {
-			t.Fatalf("assemble error = %v, want workstations array validation", err)
-		}
-	})
-
-	t.Run("workstation entry not object", func(t *testing.T) {
-		root := map[string]any{
-			"workers":      []any{},
-			"workstations": []any{"not-an-object"},
-		}
-		_, err := assembleBuiltInGoalFactoryJSONFromRoot(root)
-		if err == nil || !strings.Contains(err.Error(), "workstation entry must be an object") {
-			t.Fatalf("assemble error = %v, want workstation object validation", err)
-		}
-	})
+		return
+	}
+	t.Fatalf("assembled %s missing %q", collection, name)
 }

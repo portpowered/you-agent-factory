@@ -1803,9 +1803,8 @@ func assertLoadedGoalWorkerBody(t *testing.T, factoryDir, editedBody string) {
 	if !ok {
 		t.Fatal("expected materialized goal worker")
 	}
-	wantBody := strings.TrimSpace(editedBody)
-	if worker.Body != wantBody {
-		t.Fatalf("edited goal worker body = %q, want %q", worker.Body, wantBody)
+	if worker.Body != editedBody {
+		t.Fatalf("edited goal worker body = %q, want exact edited content %q", worker.Body, editedBody)
 	}
 }
 
