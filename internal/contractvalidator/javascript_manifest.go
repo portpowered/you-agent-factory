@@ -33,6 +33,7 @@ func runtimeManifestDiagnostics(document string, value any) []Diagnostic {
 
 	index := indexRuntimeManifestSymbols(symbols)
 	var diagnostics []Diagnostic
+	diagnostics = append(diagnostics, runtimeManifestSharedSchemaDiagnostics(document, root)...)
 	diagnostics = append(diagnostics, runtimeManifestDuplicatePathDiagnostics(document, index)...)
 	for _, key := range index.keys {
 		symbol, ok := symbols[key].(map[string]any)
@@ -88,6 +89,31 @@ func indexRuntimeManifestSymbols(symbols map[string]any) runtimeManifestSymbolIn
 		}
 	}
 	return index
+}
+
+func runtimeManifestSharedSchemaDiagnostics(document string, root map[string]any) []Diagnostic {
+	sharedSchemas, ok := root["sharedSchemas"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	var diagnostics []Diagnostic
+	for _, key := range sortedStringKeys(sharedSchemas) {
+		entry, ok := sharedSchemas[key].(map[string]any)
+		if !ok {
+			continue
+		}
+		schema, ok := entry["schema"].(map[string]any)
+		if !ok {
+			continue
+		}
+		diagnostics = append(diagnostics, openSerializableValueDiagnostics(
+			document,
+			"/sharedSchemas/"+escapeJSONPointerToken(key)+"/schema",
+			schema,
+		)...)
+	}
+	return diagnostics
 }
 
 func runtimeManifestDuplicatePathDiagnostics(document string, index runtimeManifestSymbolIndex) []Diagnostic {

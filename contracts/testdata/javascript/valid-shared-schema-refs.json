@@ -1,0 +1,71 @@
+{
+  "formatVersion": "1.0.0",
+  "sharedSchemas": {
+    "javascript.schema.checkpoint_spec": {
+      "id": "javascript.schema.checkpoint_spec",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ]
+      }
+    }
+  },
+  "symbols": {
+    "example.shared-schema.checkpoint": {
+      "id": "example.shared-schema.checkpoint",
+      "name": "checkpoint",
+      "path": "workflow.checkpoint",
+      "kind": "function",
+      "async": false,
+      "parameters": [
+        {
+          "id": "example.shared-schema.checkpoint.param.spec",
+          "name": "spec",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "$ref": "#/sharedSchemas/javascript.schema.checkpoint_spec/schema"
+          }
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.shared-schema.checkpoint",
+        "documentation": {
+          "title": {
+            "id": "example.shared-schema.checkpoint.title",
+            "canonicalEnglish": "Shared schema reference"
+          },
+          "description": {
+            "id": "example.shared-schema.checkpoint.description",
+            "canonicalEnglish": "Fixture proving shared-schema references resolve and validate."
+          }
+        },
+        "examples": [
+          "workflow.checkpoint({ label: \"draft\" })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.shared-schema.checkpoint",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

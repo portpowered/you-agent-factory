@@ -1,0 +1,67 @@
+{
+  "formatVersion": "1.0.0",
+  "sharedSchemas": {
+    "javascript.schema.open_object": {
+      "id": "javascript.schema.open_object",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "symbols": {
+    "javascript.workflow.checkpoint": {
+      "id": "javascript.workflow.checkpoint",
+      "name": "checkpoint",
+      "path": "workflow.checkpoint",
+      "kind": "function",
+      "async": false,
+      "parameters": [
+        {
+          "id": "javascript.workflow.checkpoint.param.spec",
+          "name": "spec",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "$ref": "#/sharedSchemas/javascript.schema.open_object/schema"
+          }
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.checkpoint",
+        "documentation": {
+          "title": {
+            "id": "javascript.workflow.checkpoint.title",
+            "canonicalEnglish": "Open shared schema reference"
+          },
+          "description": {
+            "id": "javascript.workflow.checkpoint.description",
+            "canonicalEnglish": "Fixture proving open shared serializable-value schemas fail semantic validation."
+          }
+        },
+        "examples": [
+          "workflow.checkpoint({ label: \"draft\", extra: true })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.checkpoint",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

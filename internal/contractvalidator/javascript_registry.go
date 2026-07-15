@@ -17,6 +17,7 @@ func JavaScriptRegistry() Registry {
 			{ID: runtimeManifestSchemaID, Path: "contracts/javascript/runtime-manifest.schema.json"},
 		},
 		Documents: []Document{
+			{Path: "contracts/javascript/runtime-api.json", SchemaID: runtimeManifestSchemaID},
 			{Path: "contracts/testdata/javascript/valid-nested-namespace.json", SchemaID: runtimeManifestSchemaID},
 			{Path: "contracts/testdata/javascript/valid-value.json", SchemaID: runtimeManifestSchemaID},
 			{Path: "contracts/testdata/javascript/valid-synchronous-function.json", SchemaID: runtimeManifestSchemaID},
@@ -27,6 +28,7 @@ func JavaScriptRegistry() Registry {
 			{Path: "contracts/testdata/javascript/valid-resume.json", SchemaID: runtimeManifestSchemaID},
 			{Path: "contracts/testdata/javascript/valid-lifecycle-constraints.json", SchemaID: runtimeManifestSchemaID},
 			{Path: "contracts/testdata/javascript/valid-closed-serializable-value.json", SchemaID: runtimeManifestSchemaID},
+			{Path: "contracts/testdata/javascript/valid-shared-schema-refs.json", SchemaID: runtimeManifestSchemaID},
 		},
 	})
 }
