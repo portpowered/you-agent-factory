@@ -352,6 +352,13 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `TestProductionManifestParsingParity_WorkFamily`,
   `TestProductionManifestOutputModeParity_WorkFamily`) using the shared-root helpers
   above; `WorkFamilyBindings.FlagUsages` bridges handwritten local flag help text.
+- Whole-production CLI closure is checked by `pkg/transports/cli/clicontract`
+  and exposed through `cmd/clicontractsmoke` / `make cli-contract-smoke`.
+  Keep deliberate smoke violations snapshot-only: they must use the production
+  validator and diagnostics without executing commands, invoking services,
+  mutating Cobra state, or requiring network access. The smoke target also runs
+  every `climanifestparity` package so generated and legacy trees stay
+  independently constructible with behavior parity.
 - Models-family manifest parity for `you.models` and list/inspect/invoke/pull leaves lives in
   `pkg/transports/cli/climanifestparity` (`CompareModelsHelpIdentity`,
   `TestProductionManifestHelpIdentityParity_ModelsFamily`,
