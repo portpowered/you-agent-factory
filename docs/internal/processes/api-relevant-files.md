@@ -81,11 +81,38 @@ Use this map when changing the public REST contract.
   `internal/contractvalidator/javascript_catalog_call_behavior_parity.go`.
   Focused runtime execution parity for the same representative symbols remains
   in `pkg/orchestrators/javascript/runtime/callbehavior_inventory_test.go`.
-  Prove runtime dependency isolation and catalog boundaries in `contracts/runtime_manifest_boundary_test.go` and
+  Prove runtime manifest independence behaviorally in `contracts/runtime_manifest_boundary_test.go` by
+  executing representative invocation, emitted-record, policy-denial, and resume behavior from a
+  subprocess whose authored and staged manifests are unusable. Catalog boundaries remain in
   `contracts/javascript_runtime_api_test.go`; staged
   `packages/api/generated/javascript/runtime-api.json` is a byte-identical copy
   of the authored catalog at `contracts/javascript/runtime-api.json` through
-  `internal/contractstaging/policy.go#rawArtifacts`.
+  `internal/contractstaging/policy.go#rawArtifacts`. Maintainer-facing
+  catalog/projection/binding/behavior parity closeout lives in
+  `internal/javascriptcontractsmoke` with CLI entrypoint
+  `cmd/javascriptcontractsmoke` and `make javascript-contract-smoke`; the same
+  target runs focused installed-runtime regressions for signature, async result,
+  emitted records, policy rejection, and resume, plus the unusable-manifest behavioral
+  proof. Canonical forbidden host-global and comparison-project-helper classification
+  lives in `pkg/orchestrators/javascript/runtime/symbolidentity`; route both schema
+  validation and smoke/catalog checks through `symbolidentity.ClassifySurface` so the
+  supported-surface policy cannot drift. Reuse
+  `symbolidentity.ProjectInstalledBindings`, `callbehavior.ProjectInstalledCallBehavior`,
+  `catalog.CatalogPathCompletenessIssues`, `catalog.CatalogForbiddenSymbolIssues`, and
+  `catalog.CatalogCallBehaviorParityIssues`
+  rather than inventing a second runtime descriptor. Prove missing/extra/duplicate
+  symbol-path failures and forbidden/comparison-project helper failures with
+  temp-dir catalog copies that keep authored and staged bytes aligned in
+  `internal/javascriptcontractsmoke/check_test.go` and
+  `cmd/javascriptcontractsmoke/main_test.go`. Stale staged-projection diagnostics
+  report the generated repository-relative file path and, when valid JSON differs
+  inside symbol records, the affected public symbol paths; the check remains
+  read-only and directs maintainers to `make contracts-generate` followed by
+  `make contracts-check`. Behavior-incomplete fixtures should delete or contradict
+  call metadata in synchronized authored/staged temp catalogs, then assert the
+  public symbol path, `/symbols/<key>/<field>` location, and call-behavior baseline
+  remediation for signature, async/result, emitted-record, policy, and resume
+  fields; this proves the smoke boundary without making the catalog executable.
 - Staged OpenAPI byte policy lives in `internal/contractstaging/openapi.go`
   (`CanonicalOpenAPIPath`, `StagedOpenAPIPath`, `ReviewedOpenAPIBytePolicy`,
   `ProjectStagedOpenAPI`, `VerifyStagedOpenAPIParity`). The reviewed policy is
