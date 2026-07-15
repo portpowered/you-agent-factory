@@ -15,9 +15,9 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 

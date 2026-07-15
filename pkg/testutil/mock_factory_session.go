@@ -11,9 +11,9 @@ import (
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/work"

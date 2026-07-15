@@ -11,8 +11,8 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"

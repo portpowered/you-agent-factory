@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/controlplane"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"

@@ -8,9 +8,9 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 

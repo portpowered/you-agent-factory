@@ -8,8 +8,8 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config/blockingload"
 	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/work/timework"
 )
 

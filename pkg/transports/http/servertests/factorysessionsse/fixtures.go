@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -86,7 +86,7 @@ func (f *FactorySessionSSEFixture) LiveDispatchEvent(t *testing.T) factoryapi.Fa
 		},
 		factoryapi.DispatchRequestEventPayload{
 			TransitionId: "review",
-			Inputs:         []factoryapi.DispatchConsumedWorkRef{},
+			Inputs:       []factoryapi.DispatchConsumedWorkRef{},
 		},
 	)
 }

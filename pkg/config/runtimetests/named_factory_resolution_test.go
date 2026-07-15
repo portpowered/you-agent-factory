@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestResolveNamedFactoryAcrossRoots_ReturnsLocalFactory(t *testing.T) {

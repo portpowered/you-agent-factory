@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )

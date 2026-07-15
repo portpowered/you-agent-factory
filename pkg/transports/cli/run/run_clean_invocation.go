@@ -14,10 +14,10 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"

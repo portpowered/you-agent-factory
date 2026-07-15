@@ -6,7 +6,7 @@ import (
 
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 )
 

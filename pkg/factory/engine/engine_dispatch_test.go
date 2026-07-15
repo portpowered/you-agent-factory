@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"

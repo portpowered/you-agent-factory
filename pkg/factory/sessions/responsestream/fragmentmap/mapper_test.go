@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/fragmentmap"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestMapFragment_ProgressFragmentEmitsProgressUpdated(t *testing.T) {

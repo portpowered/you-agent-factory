@@ -10,12 +10,12 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"

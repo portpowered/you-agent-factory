@@ -4,8 +4,8 @@ import (
 	"time"
 
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"

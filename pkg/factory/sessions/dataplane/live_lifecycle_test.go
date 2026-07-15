@@ -11,10 +11,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/dataplane"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 

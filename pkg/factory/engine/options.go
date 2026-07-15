@@ -2,9 +2,9 @@ package engine
 
 import (
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/work"
 )

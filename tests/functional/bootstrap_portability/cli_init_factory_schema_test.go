@@ -9,7 +9,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 )

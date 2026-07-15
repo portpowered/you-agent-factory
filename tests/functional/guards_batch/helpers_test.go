@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"

@@ -13,9 +13,9 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/initializer"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"

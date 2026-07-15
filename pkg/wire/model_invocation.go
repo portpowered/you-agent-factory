@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service"

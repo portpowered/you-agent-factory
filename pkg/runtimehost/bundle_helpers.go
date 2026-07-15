@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"

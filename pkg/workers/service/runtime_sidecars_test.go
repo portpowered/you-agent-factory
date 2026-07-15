@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"

@@ -7,7 +7,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func assertFunctionalSplitLayoutAtRoot(t *testing.T, rootDir, project string) {

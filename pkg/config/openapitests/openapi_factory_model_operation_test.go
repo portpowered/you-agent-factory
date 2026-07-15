@@ -4,7 +4,7 @@ import (
 	. "github.com/portpowered/infinite-you/pkg/config"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestFactoryConfigFromOpenAPIJSON_MapsModelInvokeOperation(t *testing.T) {

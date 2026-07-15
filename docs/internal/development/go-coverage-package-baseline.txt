@@ -72,7 +72,7 @@ github.com/portpowered/infinite-you/pkg/factory/subsystems
 github.com/portpowered/infinite-you/pkg/factory/throttle
 github.com/portpowered/infinite-you/pkg/factory/token_transformer
 github.com/portpowered/infinite-you/pkg/factory/validation
-github.com/portpowered/infinite-you/pkg/interfaces
+github.com/portpowered/infinite-you/pkg/factory/contracts
 github.com/portpowered/infinite-you/pkg/platform/logging
 github.com/portpowered/infinite-you/pkg/platform/metrics
 github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact

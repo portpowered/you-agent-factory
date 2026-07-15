@@ -8,7 +8,7 @@ import (
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )

@@ -12,8 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

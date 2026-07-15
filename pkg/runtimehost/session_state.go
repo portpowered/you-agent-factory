@@ -8,8 +8,8 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/workers"

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"

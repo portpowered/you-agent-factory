@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"gopkg.in/yaml.v3"
 	"os"

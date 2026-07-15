@@ -3,7 +3,7 @@ package scheduler
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestFIFOScheduler_TwoTransitionsCompetingForSameToken(t *testing.T) {

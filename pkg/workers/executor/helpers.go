@@ -11,7 +11,7 @@ import (
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"

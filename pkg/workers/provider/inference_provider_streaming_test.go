@@ -20,7 +20,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"

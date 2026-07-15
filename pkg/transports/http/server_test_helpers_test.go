@@ -18,9 +18,9 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	cursorstorage "github.com/portpowered/infinite-you/pkg/platform/cursors"
 	"github.com/portpowered/infinite-you/pkg/testutil"

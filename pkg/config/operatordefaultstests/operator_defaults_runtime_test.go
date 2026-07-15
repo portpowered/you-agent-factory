@@ -10,7 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestApplyOperatorDefaultsToLoadedConfig_FillsOmittedModelWorkerFields(t *testing.T) {

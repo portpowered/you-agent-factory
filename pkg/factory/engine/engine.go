@@ -7,12 +7,12 @@ import (
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"

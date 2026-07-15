@@ -4,9 +4,9 @@ package composebridge
 
 import (
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"

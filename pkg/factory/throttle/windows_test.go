@@ -4,16 +4,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestDeriveActiveThrottlePauses_ResolvesFailureMetadataOnlyRecord(t *testing.T) {
 	now := time.Date(2026, time.May, 1, 12, 0, 0, 0, time.UTC)
 
 	pauses := DeriveActiveThrottlePauses([]FailureRecord{{
-		Provider:        "claude",
-		Model:           "claude-sonnet",
-		OccurredAt:      now.Add(-5 * time.Minute),
+		Provider:   "claude",
+		Model:      "claude-sonnet",
+		OccurredAt: now.Add(-5 * time.Minute),
 		FailureMetadata: &interfaces.WorkFailureMetadata{
 			Family: interfaces.WorkFailureFamilyThrottle,
 			Type:   interfaces.WorkFailureTypeThrottled,

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/sessionpath"

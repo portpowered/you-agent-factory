@@ -83,7 +83,7 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 | `pkg/factory/validation` | 2 | 1 | directive + coverage baseline |
 | `pkg/factory/sessions/execution` | 26 | 8 | directive only |
 | `pkg/factory/sessions/execution/fixtures` | 5 | 3 | directive only |
-| `pkg/interfaces` | 3 | 2 | directive + coverage baseline |
+| `pkg/factory/contracts` | 3 | 2 | directive + coverage baseline |
 | `pkg/platform/cursors` | 10 | 5 | directive + coverage baseline |
 | `pkg/transports/mcp/factorysession` | 9 | 4 | directive + coverage baseline |
 | `pkg/platform/replay` | 2 | 2 | directive + coverage baseline |
@@ -445,15 +445,15 @@ Owner: `pkg/factory/sessions/execution/fixtures` package maintainers. Status: **
 | `pkg/factory/sessions/execution/fixtures/runtime_restart_resume_test.go:1` | `backendsizecheck:ignore-file` | `pkg/factory/sessions/execution/fixtures/runtime_restart_resume_test.go` | T | T gate |
 | `pkg/factory/sessions/execution/fixtures/runtime_restart_resume_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/factory/sessions/execution/fixtures/runtime_restart_resume_test.go` | T | T gate |
 
-### `pkg/interfaces`
+### `pkg/factory/contracts`
 
-Owner: `pkg/interfaces` package maintainers. Status: **directive + coverage baseline**.
+Owner: `pkg/factory/contracts` package maintainers. Status: **directive + coverage baseline**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/interfaces/interfaces_contract_test.go:1` | `backendsizecheck:ignore-file` | `pkg/interfaces/interfaces_contract_test.go` | T | T gate |
-| `pkg/interfaces/interfaces_contract_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/interfaces/interfaces_contract_test.go` | T | T gate |
-| `pkg/interfaces/work_runtime_test.go:812` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestCloneToken_PreserveNilAndEmptyValues` | T | T gate |
+| `pkg/factory/contracts/interfaces_contract_test.go:1` | `backendsizecheck:ignore-file` | `pkg/factory/contracts/interfaces_contract_test.go` | T | T gate |
+| `pkg/factory/contracts/interfaces_contract_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/factory/contracts/interfaces_contract_test.go` | T | T gate |
+| `pkg/factory/contracts/work_runtime_test.go:812` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestCloneToken_PreserveNilAndEmptyValues` | T | T gate |
 
 ### `pkg/platform/cursors`
 
@@ -627,7 +627,7 @@ as follows:
 | Batch 006 — `converge-model-worker-families` | Every detailed directive file under `pkg/workers/**`; the other named source families have no directive file in this snapshot. |
 | Batch 006 — `converge-work-family` | The named source roots (`pkg/invocations`, `pkg/materialize`, `pkg/timework`, `pkg/workcontent`, `pkg/workgraph`, and `pkg/workquery`) have no directive file in this snapshot. |
 | Batch 006 — `converge-factory-orchestrator-families` | Every detailed directive file under `pkg/factory/sessions/execution/**`; the other explicitly named moved roots have no directive file in this snapshot. Core event-first `pkg/factory/**` files are not reserved by this work item. |
-| Batch 006 — `converge-platform-and-interfaces` | Every detailed directive file under `pkg/interfaces/**`, `pkg/platform/cursors/**`, and `pkg/platform/replay/**`, matching the work item's interfaces, cursor-storage, and replay-infrastructure moves. |
+| Batch 006 — `converge-platform-and-interfaces` | Every detailed directive file under `pkg/factory/contracts/**`, `pkg/platform/cursors/**`, and `pkg/platform/replay/**`, matching the work item's interfaces, cursor-storage, and replay-infrastructure moves. |
 | Batch 007 — `move-session-state-to-factorysessions`, `split-runtime-build-ownership`, and `narrow-factory-service-facade` | Every detailed directive file under `pkg/factory/sessions/execution/**` and `pkg/service/**`. |
 | Batch 008 — `retire-legacy-composition-entrypoints` and `delete-host-composition-shims` | Every detailed directive file under `pkg/runtimehost/**` and `pkg/service/**`. Other Batch 008 deletion items have no additional directive file in this snapshot. |
 
@@ -642,7 +642,7 @@ every file in the named path set; the two file exceptions add the named PR colli
 | `pkg/apisurface/**` | 6 | 8 | **Externally owned:** Batch 006 transport-family convergence |
 | `pkg/cli/**` | 12 | 18 | **Externally owned:** Batch 006 transport-family convergence; `pkg/cli/root_run_test.go` also collides with Batch 005 `create-root-process-owner` |
 | `pkg/factory/sessions/execution/**` | 11 | 31 | **Externally owned:** Batch 006 factory/orchestrator convergence and Batch 007 session/service convergence |
-| `pkg/interfaces/**` | 2 | 3 | **Externally owned:** Batch 006 platform/interfaces convergence |
+| `pkg/factory/contracts/**` | 2 | 3 | **Externally owned:** Batch 006 platform/interfaces convergence |
 | `pkg/platform/cursors/**` | 5 | 10 | **Externally owned:** Batch 006 platform/interfaces convergence |
 | `pkg/transports/mcp/**` | 4 | 9 | **Externally owned:** Batch 006 transport-family convergence |
 | `pkg/platform/replay/**` | 5 | 5 | **Externally owned:** Batch 006 platform/interfaces convergence |

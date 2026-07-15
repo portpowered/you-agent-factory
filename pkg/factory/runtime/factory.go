@@ -16,6 +16,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
@@ -24,7 +25,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"

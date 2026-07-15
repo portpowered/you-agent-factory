@@ -17,8 +17,8 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"

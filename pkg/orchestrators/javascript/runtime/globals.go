@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/dop251/goja"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 )
 

@@ -22,12 +22,12 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/configinit"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/initializer"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"

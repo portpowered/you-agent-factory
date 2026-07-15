@@ -3,7 +3,7 @@ package workstationconfig
 import (
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // WorkPropagationMode returns the authored workstation payload propagation mode.

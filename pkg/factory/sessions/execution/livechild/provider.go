@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/work"

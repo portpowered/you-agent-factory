@@ -3,7 +3,7 @@ package subagent
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestIsPackagedFactory_MatchesNameOrProject(t *testing.T) {

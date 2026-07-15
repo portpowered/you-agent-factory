@@ -10,7 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 

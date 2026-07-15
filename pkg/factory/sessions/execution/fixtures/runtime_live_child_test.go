@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/workers/provider"

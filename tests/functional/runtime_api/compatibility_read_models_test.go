@@ -3,7 +3,7 @@ package runtime_api_test
 import (
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 type DashboardResponse struct {

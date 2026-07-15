@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/service"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"

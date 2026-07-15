@@ -10,7 +10,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // NamedFactoryListEntry describes one persisted named factory under a factory root.

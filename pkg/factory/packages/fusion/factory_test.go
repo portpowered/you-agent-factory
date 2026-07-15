@@ -11,8 +11,8 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"

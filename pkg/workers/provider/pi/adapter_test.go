@@ -12,7 +12,7 @@ import (
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"

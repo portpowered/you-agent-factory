@@ -11,7 +11,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
@@ -667,4 +667,3 @@ func assertStubChildResult(t *testing.T, value any, wantLabel, wantDispatchID st
 		t.Fatalf("child output text = %#v, want %q", output["text"], wantText)
 	}
 }
-

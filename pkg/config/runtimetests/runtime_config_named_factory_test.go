@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestPersistNamedFactory_WritesCanonicalNamedLayout(t *testing.T) {
@@ -137,7 +137,6 @@ func TestMapNamedFactoryDir_HierarchicalScopedLayout(t *testing.T) {
 		t.Fatalf("round trip = %q, want @you/goal", roundTrip)
 	}
 }
-
 
 func TestDefaultNamedFactoryRoots(t *testing.T) {
 	homeDir := filepath.Join("home", "customer")

@@ -15,7 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/optional"
 
 	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 )
 

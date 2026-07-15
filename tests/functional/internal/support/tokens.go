@@ -1,6 +1,6 @@
 package support
 
-import "github.com/portpowered/infinite-you/pkg/interfaces"
+import interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 
 func FirstInputToken(rawTokens any) interfaces.Token {
 	switch tokens := rawTokens.(type) {

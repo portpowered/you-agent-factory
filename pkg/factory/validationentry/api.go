@@ -10,8 +10,8 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

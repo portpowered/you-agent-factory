@@ -8,8 +8,8 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"

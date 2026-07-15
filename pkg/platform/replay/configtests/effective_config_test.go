@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil"

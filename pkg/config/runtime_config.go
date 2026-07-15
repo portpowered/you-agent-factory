@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/config/factoryerrors"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // LoadedFactoryConfig is the effective runtime configuration assembled from

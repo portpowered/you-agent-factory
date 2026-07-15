@@ -9,7 +9,7 @@ import (
 	"time"
 
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 )

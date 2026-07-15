@@ -3,7 +3,7 @@ package workflowpolicy
 import (
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // BuildPreview projects preview/session-start policy metadata from one request.

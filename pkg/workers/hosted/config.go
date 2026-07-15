@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/workers/hosted/linear"
 	"go.uber.org/zap"

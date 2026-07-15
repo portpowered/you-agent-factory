@@ -11,8 +11,8 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"

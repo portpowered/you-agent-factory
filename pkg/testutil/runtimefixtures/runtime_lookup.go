@@ -1,6 +1,6 @@
 package runtimefixtures
 
-import "github.com/portpowered/infinite-you/pkg/interfaces"
+import interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 
 // RuntimeWorkstationLookupFixture provides a narrow map-backed
 // RuntimeWorkstationLookup for tests.

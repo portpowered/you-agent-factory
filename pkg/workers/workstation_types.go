@@ -1,7 +1,7 @@
 package workers
 
 import (
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
 )

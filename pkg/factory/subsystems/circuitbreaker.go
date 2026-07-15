@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 // CircuitBreakerSubsystem enforces system limits and evaluates exhaustion

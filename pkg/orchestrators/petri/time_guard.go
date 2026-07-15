@@ -3,7 +3,7 @@ package petri
 import (
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // CronTimeWindowGuard matches internal cron time tokens for one workstation

@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"

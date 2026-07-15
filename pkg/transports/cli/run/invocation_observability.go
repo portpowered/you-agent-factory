@@ -13,11 +13,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"

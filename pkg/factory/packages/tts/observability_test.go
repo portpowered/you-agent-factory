@@ -3,7 +3,7 @@ package tts
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 )

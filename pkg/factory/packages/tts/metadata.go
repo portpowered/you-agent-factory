@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	builtintts "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/tts"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
 )

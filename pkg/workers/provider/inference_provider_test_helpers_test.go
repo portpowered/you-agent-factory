@@ -21,7 +21,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	interfaceresponseevents "github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	interfaceresponseevents "github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/work/content"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"

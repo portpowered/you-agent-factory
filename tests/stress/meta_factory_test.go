@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	agentstate "github.com/portpowered/infinite-you/pkg/factory/state"

@@ -1,6 +1,6 @@
 package validation
 
-import "github.com/portpowered/infinite-you/pkg/interfaces"
+import interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 
 var deferredBlockingLoadOutcomeCodes = map[string]struct{}{
 	CodeWorkstationMissingFailureRoute:   {},

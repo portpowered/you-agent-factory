@@ -27,6 +27,12 @@
     },
     {
       "rule": "backendsizecheck:ignore-file",
+      "target": "pkg/factory/contracts/interfaces_contract_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated interface contract and runtime-topology tests remain together until dedicated interface test seams split."
+    },
+    {
+      "rule": "backendsizecheck:ignore-file",
       "target": "pkg/factory/projections/world_state.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: JavaScript world replay remains consolidated with world_state until dedicated projection seams split."
@@ -54,12 +60,6 @@
       "target": "pkg/factory/sessions/execution/resume.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: checkpoint resume validation, projection reconciliation, and persistence remain co-located on the runtime resume seam."
-    },
-    {
-      "rule": "backendsizecheck:ignore-file",
-      "target": "pkg/interfaces/interfaces_contract_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the backendsizecheck:ignore-file threshold. Current rationale: consolidated interface contract and runtime-topology tests remain together until dedicated interface test seams split."
     },
     {
       "rule": "backendsizecheck:ignore-file",
@@ -192,6 +192,12 @@
       "target": "pkg/config/openapitests/openapi_factory_test.go#TestFactoryConfigFromOpenAPIJSON_MapsPortableLayoutContract",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this contract test keeps internal, public, and canonical layout mapping assertions together on the same seam."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
+      "target": "pkg/factory/contracts/work_runtime_test.go#TestCloneToken_PreserveNilAndEmptyValues",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this clone contract test keeps nil, empty, and detached-copy assertions together on the public seam."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -414,12 +420,6 @@
       "target": "pkg/factory/sessions/execution/resume.go#validateDurableResumeFacts",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: each branch rejects one independently corrupted durable resume fact before provider IO."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/interfaces/work_runtime_test.go#TestCloneToken_PreserveNilAndEmptyValues",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this clone contract test keeps nil, empty, and detached-copy assertions together on the public seam."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
@@ -867,6 +867,12 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",
+      "target": "pkg/factory/contracts/interfaces_contract_test.go",
+      "owner": "backend-maintainers",
+      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated interface contract and runtime-topology tests remain together until dedicated interface test seams split."
+    },
+    {
+      "rule": "pkgmaintcheck:ignore-file-lines",
       "target": "pkg/factory/projections/world_state.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: JavaScript world replay remains consolidated with world_state until dedicated projection seams split."
@@ -894,12 +900,6 @@
       "target": "pkg/factory/sessions/execution/resume.go",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: checkpoint resume validation, projection reconciliation, and persistence remain co-located on the runtime resume seam."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-file-lines",
-      "target": "pkg/interfaces/interfaces_contract_test.go",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-file-lines threshold. Current rationale: consolidated interface contract and runtime-topology tests remain together until dedicated interface test seams split."
     },
     {
       "rule": "pkgmaintcheck:ignore-file-lines",

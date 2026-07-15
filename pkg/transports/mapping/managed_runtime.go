@@ -3,7 +3,7 @@ package apisurface
 import (
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

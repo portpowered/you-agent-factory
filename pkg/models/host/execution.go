@@ -15,7 +15,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )

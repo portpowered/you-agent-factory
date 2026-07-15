@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestDeleteNamedFactory_RemovesNamedDirectory(t *testing.T) {

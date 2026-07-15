@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 )
 
@@ -172,8 +172,8 @@ func TestBuildPreview_IncludesEffectivePolicyHashBudgetsAndDeniedCapabilities(t 
 		Request: workflowpolicy.Request{
 			Requested: map[string]any{"maxAgents": 8},
 		},
-		RequestedRunner: interfaces.RunnerIDCodex,
-		RequestedModel:  "gpt-5-codex",
+		RequestedRunner:  interfaces.RunnerIDCodex,
+		RequestedModel:   "gpt-5-codex",
 		RequestedProfile: "reviewer",
 	})
 	if preview.PolicyHash == "" {

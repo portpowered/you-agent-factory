@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/testharness"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )
 

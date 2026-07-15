@@ -11,7 +11,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 

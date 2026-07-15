@@ -11,7 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/config/factoryrun"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )

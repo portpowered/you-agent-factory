@@ -11,8 +11,8 @@ import (
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"

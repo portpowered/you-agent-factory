@@ -12,9 +12,9 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )

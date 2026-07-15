@@ -46,7 +46,7 @@ func TestRunAllowsOnlyStartupOwnersToImportApplicationGraph(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/wire/graph.go", "wire", "github.com/portpowered/infinite-you/pkg/interfaces")
+	writeGoImportFile(t, repoRoot, "pkg/wire/graph.go", "wire", "github.com/portpowered/infinite-you/pkg/factory/contracts")
 	writeGoImportFile(t, repoRoot, "pkg/root/root.go", "root", applicationGraphImportPath)
 	writeGoImportFile(t, repoRoot, "pkg/initializer/core.go", "initializer", applicationGraphImportPath)
 

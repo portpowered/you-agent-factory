@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/portpowered/infinite-you/pkg/interfaces/factoryeventkinds"
+	"github.com/portpowered/infinite-you/pkg/factory/events/kinds"
 	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

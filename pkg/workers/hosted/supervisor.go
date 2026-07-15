@@ -15,7 +15,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"go.uber.org/zap"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/workers/hosted/linear"
 )
 

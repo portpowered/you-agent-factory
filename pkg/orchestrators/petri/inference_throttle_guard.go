@@ -4,8 +4,8 @@ import (
 	"strings"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorythrottle "github.com/portpowered/infinite-you/pkg/factory/throttle"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 type RuntimeGuardContext struct {

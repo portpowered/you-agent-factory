@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/state"

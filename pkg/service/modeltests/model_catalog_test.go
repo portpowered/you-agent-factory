@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"

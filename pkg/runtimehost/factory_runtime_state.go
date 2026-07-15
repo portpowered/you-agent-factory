@@ -14,10 +14,10 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"

@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/testpath"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 )

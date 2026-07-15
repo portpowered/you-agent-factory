@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 

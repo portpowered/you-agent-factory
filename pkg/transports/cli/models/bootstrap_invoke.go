@@ -18,8 +18,8 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"go.uber.org/zap"
 )

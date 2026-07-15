@@ -3,7 +3,7 @@ package validation
 import (
 	"fmt"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // WorkTypeHandlingBehaviorOptions configures optional handling-behavior validation.

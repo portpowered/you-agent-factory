@@ -12,7 +12,7 @@ import (
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"

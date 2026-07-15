@@ -3,7 +3,7 @@ package responsestream
 import (
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // EventKind identifies internal session response-stream record semantics.

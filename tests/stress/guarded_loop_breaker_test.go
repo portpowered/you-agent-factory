@@ -3,7 +3,7 @@ package stress_test
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func guardedLoopBreakerWorkstation(name, watchedWorkstation string, maxVisits int, source, target interfaces.IOConfig) interfaces.FactoryWorkstationConfig {

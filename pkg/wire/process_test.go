@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"

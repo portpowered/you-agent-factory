@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // Severity classifies the importance of a validation finding.
@@ -111,9 +111,9 @@ type ConfigValidatorOption func(*ConfigValidator)
 
 // ConfigValidator runs all registered validation rules against a factory config.
 type ConfigValidator struct {
-	requiredToolChecker              RequiredToolChecker
-	requireDefaultHandlingWorkType   bool
-	rules                            []validationRule
+	requiredToolChecker            RequiredToolChecker
+	requireDefaultHandlingWorkType bool
+	rules                          []validationRule
 }
 
 // NewConfigValidator creates a ConfigValidator with all built-in validation rules.

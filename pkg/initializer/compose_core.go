@@ -5,7 +5,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/composebridge"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 )

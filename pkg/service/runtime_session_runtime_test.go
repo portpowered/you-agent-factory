@@ -21,6 +21,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
@@ -33,7 +34,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"

@@ -1,6 +1,6 @@
 package workflowsource
 
-import "github.com/portpowered/infinite-you/pkg/interfaces"
+import interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 
 // Request is the normalized workflow source request shared across API, CLI, MCP,
 // and website adapters.

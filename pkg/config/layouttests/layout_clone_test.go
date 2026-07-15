@@ -7,7 +7,7 @@ import (
 	. "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestFactoryConfig_SharedSurfaceRetiresExhaustionRules(t *testing.T) {

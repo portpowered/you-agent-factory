@@ -19,7 +19,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"

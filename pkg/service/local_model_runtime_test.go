@@ -13,8 +13,8 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"

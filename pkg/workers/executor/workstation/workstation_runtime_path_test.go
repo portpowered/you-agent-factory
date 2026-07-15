@@ -13,7 +13,7 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/executor"

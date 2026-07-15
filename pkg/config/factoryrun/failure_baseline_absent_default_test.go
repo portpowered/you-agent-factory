@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // Hermetic S02 failure-baseline fixtures for one-shot you run --factory prompt

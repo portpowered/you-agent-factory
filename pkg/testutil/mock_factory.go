@@ -13,13 +13,13 @@ import (
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/controlplane"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 type resultReadTestHost struct {

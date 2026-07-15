@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )

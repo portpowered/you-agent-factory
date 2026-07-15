@@ -10,7 +10,7 @@ import (
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestEffectiveSkipPermissions(t *testing.T) {

@@ -3,8 +3,8 @@ package subagent
 import (
 	"strings"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	builtinsubagent "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/subagent"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // BuiltInFactoryJSON is the canonical runnable @you/subagent definition owned

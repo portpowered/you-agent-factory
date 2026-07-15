@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/workers"

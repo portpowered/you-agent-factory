@@ -16,9 +16,9 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"go.uber.org/zap"

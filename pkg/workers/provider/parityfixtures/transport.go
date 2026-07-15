@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/ndjsoncontract"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"

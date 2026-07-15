@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/internal/retiredsurfaceguard"
+	. "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/configinit"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 var settledScopedNamedFactoryPaths = retiredsurfaceguard.SettledScopedNamedFactoryPaths()

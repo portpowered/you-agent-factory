@@ -10,8 +10,8 @@ package initializer
 import (
 	"context"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 )

@@ -7,12 +7,12 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/controlplane"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factory/sessions/service"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"go.uber.org/zap"
 )

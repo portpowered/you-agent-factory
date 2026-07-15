@@ -5,11 +5,11 @@ import (
 	"fmt"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"

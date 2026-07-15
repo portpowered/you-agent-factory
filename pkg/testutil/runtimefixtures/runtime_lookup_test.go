@@ -3,7 +3,7 @@ package runtimefixtures
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestRuntimeWorkstationLookupFixture_Workstation(t *testing.T) {

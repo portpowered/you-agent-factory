@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"strings"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // ErrUnsupportedFragmentKind indicates the mapper does not handle the supplied

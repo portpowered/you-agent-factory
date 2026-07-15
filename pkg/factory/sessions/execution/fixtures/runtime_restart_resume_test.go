@@ -15,12 +15,12 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factorycontext "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	factoryruntime "github.com/portpowered/infinite-you/pkg/factory/runtime"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"

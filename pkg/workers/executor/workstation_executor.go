@@ -21,7 +21,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/work"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"

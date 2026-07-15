@@ -11,7 +11,7 @@ import (
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // EffectiveSkipPermissions resolves the invocation-time skip-permissions policy for

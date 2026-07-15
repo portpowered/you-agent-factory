@@ -1,6 +1,6 @@
 package initcmd
 
-import "github.com/portpowered/infinite-you/pkg/interfaces"
+import interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 
 func ralphScaffoldDefinition() scaffoldDefinition {
 	return scaffoldDefinition{

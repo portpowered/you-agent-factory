@@ -3,8 +3,8 @@ package stream
 import (
 	"strings"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 

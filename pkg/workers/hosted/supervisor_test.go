@@ -22,7 +22,7 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
 

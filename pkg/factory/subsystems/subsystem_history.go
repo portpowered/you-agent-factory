@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strings"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 // HistorySubsystem reads WorkResults from the RuntimeStateSnapshot and computes

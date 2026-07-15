@@ -5,7 +5,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // CheckpointStore keeps orchestrator-owned checkpoint bundles for one JavaScript

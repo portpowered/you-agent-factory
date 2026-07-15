@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/config/inboxgitkeep"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 type splitRuntimeExpansionOptions struct {

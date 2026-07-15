@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"

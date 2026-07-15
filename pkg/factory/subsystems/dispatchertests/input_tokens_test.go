@@ -1,6 +1,6 @@
 package subsystems_test
 
-import "github.com/portpowered/infinite-you/pkg/interfaces"
+import interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 
 func firstInputToken(rawTokens []any) interfaces.Token {
 	if len(rawTokens) == 0 {
