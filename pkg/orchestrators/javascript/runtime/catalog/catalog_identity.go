@@ -85,19 +85,7 @@ func CatalogPathCompletenessIssues(
 	}
 
 	var issues []PathCompletenessIssue
-	for path, keys := range pathToKeys {
-		if len(keys) > 1 {
-			message := fmt.Sprintf("symbol path %s appears more than once", strconv.Quote(path))
-			for _, key := range keys {
-				issues = append(issues, PathCompletenessIssue{
-					Code:      "javascript.path.duplicate",
-					SymbolKey: key,
-					Path:      path,
-					Message:   message,
-				})
-			}
-		}
-	}
+	issues = append(issues, catalogDuplicatePathIssues(pathToKeys)...)
 
 	catalogPaths := make(map[string]struct{}, len(catalog))
 	for _, entry := range catalog {
@@ -118,25 +106,7 @@ func CatalogPathCompletenessIssues(
 	for _, entry := range catalog {
 		pathToKey[entry.Path] = entry.SymbolKey
 	}
-	expectedSet := make(map[string]struct{}, len(identityPaths))
-	for _, path := range identityPaths {
-		expectedSet[path] = struct{}{}
-	}
-	extraPaths := make([]string, 0)
-	for path := range catalogPaths {
-		if _, ok := expectedSet[path]; !ok {
-			extraPaths = append(extraPaths, path)
-		}
-	}
-	sort.Strings(extraPaths)
-	for _, path := range extraPaths {
-		issues = append(issues, PathCompletenessIssue{
-			Code:      "javascript.path.extra",
-			SymbolKey: pathToKey[path],
-			Path:      path,
-			Message:   fmt.Sprintf("catalog path %s is not part of the installed supported surface", strconv.Quote(path)),
-		})
-	}
+	issues = append(issues, catalogExtraPathIssues(catalogPaths, identityPaths, pathToKey)...)
 
 	sort.Slice(issues, func(i, j int) bool {
 		left, right := issues[i], issues[j]
@@ -148,6 +118,54 @@ func CatalogPathCompletenessIssues(
 		}
 		return left.SymbolKey < right.SymbolKey
 	})
+	return issues
+}
+
+func catalogDuplicatePathIssues(pathToKeys map[string][]string) []PathCompletenessIssue {
+	var issues []PathCompletenessIssue
+	for path, keys := range pathToKeys {
+		if len(keys) <= 1 {
+			continue
+		}
+		message := fmt.Sprintf("symbol path %s appears more than once", strconv.Quote(path))
+		for _, key := range keys {
+			issues = append(issues, PathCompletenessIssue{
+				Code:      "javascript.path.duplicate",
+				SymbolKey: key,
+				Path:      path,
+				Message:   message,
+			})
+		}
+	}
+	return issues
+}
+
+func catalogExtraPathIssues(
+	catalogPaths map[string]struct{},
+	identityPaths []string,
+	pathToKey map[string]string,
+) []PathCompletenessIssue {
+	expectedSet := make(map[string]struct{}, len(identityPaths))
+	for _, path := range identityPaths {
+		expectedSet[path] = struct{}{}
+	}
+	extraPaths := make([]string, 0)
+	for path := range catalogPaths {
+		if _, ok := expectedSet[path]; !ok {
+			extraPaths = append(extraPaths, path)
+		}
+	}
+	sort.Strings(extraPaths)
+
+	issues := make([]PathCompletenessIssue, 0, len(extraPaths))
+	for _, path := range extraPaths {
+		issues = append(issues, PathCompletenessIssue{
+			Code:      "javascript.path.extra",
+			SymbolKey: pathToKey[path],
+			Path:      path,
+			Message:   fmt.Sprintf("catalog path %s is not part of the installed supported surface", strconv.Quote(path)),
+		})
+	}
 	return issues
 }
 
