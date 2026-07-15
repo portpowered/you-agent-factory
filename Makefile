@@ -145,7 +145,7 @@ api-smoke:
 	$(MAKE) provider-parity-smoke
 
 api-package-pack-smoke:
-	node --test scripts/api-package-contract.test.mjs scripts/api-package-pack.test.mjs scripts/api-package-candidate.test.mjs scripts/api-package-consumer.test.mjs
+	node --test scripts/api-package-contract.test.mjs scripts/api-package-pack.test.mjs scripts/api-package-candidate.test.mjs scripts/api-package-registry.test.mjs scripts/api-package-consumer.test.mjs
 
 contracts-validate:
 	$(GO) run ./cmd/contractsvalidate -root .

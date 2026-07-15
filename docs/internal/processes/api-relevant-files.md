@@ -160,8 +160,13 @@ Use this map when changing the public REST contract.
   `scripts/api-package-candidate.mjs`: derive their version from a stable base,
   immutable run ID, and fixed 12-character commit prefix; stage the manifest
   change outside the source package; and retain exactly one reviewed tarball
-  plus digest/inventory evidence. Run `make api-package-pack-smoke` after
-  contract or candidate guard changes and in `verify-build-contracts`/CI.
+  plus digest/inventory evidence. Immutable registry reconciliation lives in
+  `scripts/api-package-registry.mjs`: verify the preserved local tarball first,
+  treat an absent exact version as a publish decision, digest-check an existing
+  registry tarball for idempotent success, and fail authentication, permission,
+  dependency, or immutable-conflict outcomes without publishing or changing a
+  dist-tag. Run `make api-package-pack-smoke` after contract, candidate, or
+  registry guard changes and in `verify-build-contracts`/CI.
 
 ## REST operation identity inventory
 
