@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/contractvalidator"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -44,6 +45,10 @@ func TestRuntimeManifestSchemaValidFixtures(t *testing.T) {
 			if err := schema.Validate(instance); err != nil {
 				t.Fatalf("validate valid fixture %s: %v", test.fixture, err)
 			}
+			diagnostics := contractvalidator.RuntimeManifestSemanticsDiagnostics(test.fixture, instance)
+			if len(diagnostics) != 0 {
+				t.Fatalf("semantic diagnostics = %#v, want none", diagnostics)
+			}
 		})
 	}
 }
@@ -79,6 +84,10 @@ func TestRuntimeManifestSchemaCallableFixtures(t *testing.T) {
 				if err != nil {
 					t.Fatalf("validate valid fixture: %v", err)
 				}
+				diagnostics := contractvalidator.RuntimeManifestSemanticsDiagnostics(test.fixture, instance)
+				if len(diagnostics) != 0 {
+					t.Fatalf("semantic diagnostics = %#v, want none", diagnostics)
+				}
 				return
 			}
 			if err == nil {
@@ -110,6 +119,54 @@ func TestRuntimeManifestSchemaCallableMetadataFixtures(t *testing.T) {
 			if err := schema.Validate(instance); err != nil {
 				t.Fatalf("validate valid fixture %s: %v", test.fixture, err)
 			}
+			diagnostics := contractvalidator.RuntimeManifestSemanticsDiagnostics(test.fixture, instance)
+			if len(diagnostics) != 0 {
+				t.Fatalf("semantic diagnostics = %#v, want none", diagnostics)
+			}
+		})
+	}
+}
+
+func TestRuntimeManifestSchemaSymbolIntegrityFixtures(t *testing.T) {
+	schema := runtimeManifestSchema(t)
+
+	tests := []struct {
+		name     string
+		fixture  string
+		wantPath string
+	}{
+		{
+			name:     "duplicate symbol paths",
+			fixture:  "invalid-duplicate-symbol-path.json",
+			wantPath: "/symbols/example.workflow/path",
+		},
+		{
+			name:     "broken parent reference",
+			fixture:  "invalid-broken-parent.json",
+			wantPath: "/symbols/example.workflow.ops/parent",
+		},
+		{
+			name:     "unresolved namespace member",
+			fixture:  "invalid-unresolved-member.json",
+			wantPath: "/symbols/example.workflow/members/2",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			fixturePath := filepath.Join("testdata", "javascript", test.fixture)
+			instance := readJSON(t, fixturePath)
+			if err := schema.Validate(instance); err != nil {
+				t.Fatalf("schema validation should pass before semantics: %v", err)
+			}
+			diagnostics := contractvalidator.RuntimeManifestSemanticsDiagnostics(test.fixture, instance)
+			if len(diagnostics) == 0 {
+				t.Fatal("expected semantic validation to fail")
+			}
+			paths := semanticDiagnosticPaths(diagnostics)
+			if !slices.Contains(paths, test.wantPath) {
+				t.Fatalf("semantic paths = %v, want %q", paths, test.wantPath)
+			}
 		})
 	}
 }
@@ -138,6 +195,10 @@ func TestRuntimeManifestSchemaObjectBindingFixtures(t *testing.T) {
 			if test.valid {
 				if err != nil {
 					t.Fatalf("validate valid fixture: %v", err)
+				}
+				diagnostics := contractvalidator.RuntimeManifestSemanticsDiagnostics(test.fixture, instance)
+				if len(diagnostics) != 0 {
+					t.Fatalf("semantic diagnostics = %#v, want none", diagnostics)
 				}
 				return
 			}

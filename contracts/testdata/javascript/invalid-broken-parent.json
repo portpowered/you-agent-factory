@@ -80,7 +80,7 @@
       "name": "ops",
       "path": "workflow.ops",
       "kind": "namespace",
-      "parent": "example.workflow",
+      "parent": "example.missing.parent",
       "members": [],
       "documentation": {
         "formatVersion": "1.0.0",
@@ -92,14 +92,14 @@
           },
           "description": {
             "id": "example.workflow.ops.description",
-            "canonicalEnglish": "Nested namespace reserved for workflow operation helpers."
+            "canonicalEnglish": "Nested namespace with a parent reference that does not resolve."
           }
         },
         "examples": [
           "workflow.ops"
         ],
         "visibility": "public",
-        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        "sourceHash": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",

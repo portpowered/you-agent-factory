@@ -8,7 +8,8 @@
       "kind": "namespace",
       "members": [
         "checkpoint",
-        "ops"
+        "ops",
+        "ghost"
       ],
       "documentation": {
         "formatVersion": "1.0.0",
@@ -20,7 +21,7 @@
           },
           "description": {
             "id": "example.workflow.description",
-            "canonicalEnglish": "Root workflow namespace grouping checkpoint and operations helpers."
+            "canonicalEnglish": "Root workflow namespace with one unresolved member declaration."
           }
         },
         "examples": [
@@ -99,7 +100,7 @@
           "workflow.ops"
         ],
         "visibility": "public",
-        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        "sourceHash": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
       },
       "lifecycle": {
         "formatVersion": "1.0.0",

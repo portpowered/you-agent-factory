@@ -203,6 +203,9 @@ func validateEntry(repositoryRoot string, entry Entry) []Diagnostic {
 		if document.SchemaID == commandManifestSchemaID {
 			diagnostics = append(diagnostics, cliManifestDiagnostics(document.Path, value)...)
 		}
+		if document.SchemaID == runtimeManifestSchemaID {
+			diagnostics = append(diagnostics, runtimeManifestDiagnostics(document.Path, value)...)
+		}
 		for _, source := range sourceDocuments {
 			loadedDocuments[source.path] = source
 		}

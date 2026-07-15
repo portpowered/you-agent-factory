@@ -23,9 +23,7 @@
       "name": "workflow",
       "path": "workflow",
       "kind": "namespace",
-      "members": [
-        "budget"
-      ],
+      "members": [],
       "documentation": {
         "formatVersion": "1.0.0",
         "itemId": "example.lifecycle-constraints.workflow",
@@ -40,7 +38,7 @@
           }
         },
         "examples": [
-          "workflow.budget"
+          "workflow"
         ],
         "visibility": "public",
         "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"

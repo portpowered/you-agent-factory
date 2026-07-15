@@ -110,6 +110,41 @@
       "mutability": "fixed-binding",
       "nullability": "non-null",
       "bindingLifecycle": "live-namespace"
+    },
+    "example.duplicate-workflow": {
+      "id": "example.duplicate-workflow",
+      "name": "workflow",
+      "path": "workflow",
+      "kind": "namespace",
+      "members": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.duplicate-workflow",
+        "documentation": {
+          "title": {
+            "id": "example.duplicate-workflow.title",
+            "canonicalEnglish": "Duplicate workflow path"
+          },
+          "description": {
+            "id": "example.duplicate-workflow.description",
+            "canonicalEnglish": "Second namespace that reuses the workflow path."
+          }
+        },
+        "examples": [
+          "workflow"
+        ],
+        "visibility": "public",
+        "sourceHash": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.duplicate-workflow",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
     }
   }
 }
