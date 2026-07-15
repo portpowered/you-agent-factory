@@ -4,11 +4,29 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/mcpcontractcheck"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/mcp/discoverygen"
 )
+
+func TestReportReturnsNonZeroForStructuralDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	diagnostic := mcpcontractcheck.Diagnostic{
+		Code: "mcp.discovery.missing", ToolID: "mcp.tool.you.factory_session.list", Surface: "discovery",
+		Message: "regenerate discovery from the authored catalog",
+	}
+	if status := report([]mcpcontractcheck.Diagnostic{diagnostic}, nil, stdout, stderr); status != 1 {
+		t.Fatalf("report() status = %d, want 1", status)
+	}
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), diagnostic.ToolID) || !strings.Contains(stderr.String(), diagnostic.Message) {
+		t.Fatalf("report() stdout = %q, stderr = %q", stdout.String(), stderr.String())
+	}
+}
 
 func TestRunCleanRepositoryIsDeterministic(t *testing.T) {
 	root := testutil.MustRepoRoot(t)

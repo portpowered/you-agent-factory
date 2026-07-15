@@ -56,13 +56,16 @@ func Validate(inputs Inputs) []Diagnostic {
 	diagnostics = append(diagnostics, discoveryDiagnostics...)
 	registry, registryDiagnostics := indexBindings(inputs.Registry)
 	diagnostics = append(diagnostics, registryDiagnostics...)
+	if len(diagnostics) != 0 {
+		return sortDiagnostics(diagnostics)
+	}
 
 	for id, expected := range catalog {
 		actual, ok := discovery[id]
 		if !ok {
 			diagnostics = append(diagnostics, Diagnostic{
 				Code: "mcp.discovery.missing", ToolID: id, Surface: "discovery",
-				Message: fmt.Sprintf("canonical tool %q is missing from generated primary discovery", id),
+				Message: fmt.Sprintf("canonical tool %q is missing from generated primary discovery; regenerate discovery from the authored catalog", id),
 			})
 		} else {
 			diagnostics = append(diagnostics, metadataDiagnostics(expected, actual)...)
@@ -72,7 +75,7 @@ func Validate(inputs Inputs) []Diagnostic {
 		if !ok {
 			diagnostics = append(diagnostics, Diagnostic{
 				Code: "mcp.registry.missing", ToolID: id, Surface: "registry",
-				Message: fmt.Sprintf("canonical tool %q is missing handler %q from the handwritten registry", id, expected.HandlerID),
+				Message: fmt.Sprintf("canonical tool %q is missing handler %q from the handwritten registry; register that handler binding", id, expected.HandlerID),
 			})
 		} else if binding.HandlerID != expected.HandlerID {
 			diagnostics = append(diagnostics, Diagnostic{
@@ -86,7 +89,7 @@ func Validate(inputs Inputs) []Diagnostic {
 		if _, ok := catalog[id]; !ok {
 			diagnostics = append(diagnostics, Diagnostic{
 				Code: "mcp.discovery.extra", ToolID: id, Surface: "discovery",
-				Message: fmt.Sprintf("generated primary discovery contains uncontracted tool %q", id),
+				Message: fmt.Sprintf("generated primary discovery contains uncontracted tool %q; regenerate discovery from the authored catalog", id),
 			})
 		}
 	}
@@ -94,12 +97,16 @@ func Validate(inputs Inputs) []Diagnostic {
 		if _, ok := catalog[id]; !ok {
 			diagnostics = append(diagnostics, Diagnostic{
 				Code: "mcp.registry.extra", ToolID: id, Surface: "registry",
-				Message: fmt.Sprintf("handwritten registry contains uncontracted tool %q", id),
+				Message: fmt.Sprintf("handwritten registry contains uncontracted tool %q; remove the binding or add the intended tool to the authored catalog", id),
 			})
 		}
 	}
 	diagnostics = append(diagnostics, aliasSeparationDiagnostics(inputs.Aliases, catalog, discovery)...)
 
+	return sortDiagnostics(diagnostics)
+}
+
+func sortDiagnostics(diagnostics []Diagnostic) []Diagnostic {
 	sort.Slice(diagnostics, func(i, j int) bool {
 		left, right := diagnostics[i], diagnostics[j]
 		if left.ToolID != right.ToolID {
@@ -117,33 +124,83 @@ func Validate(inputs Inputs) []Diagnostic {
 }
 
 func indexTools(records []ToolRecord, surface string) (map[string]ToolRecord, []Diagnostic) {
+	records = append([]ToolRecord(nil), records...)
+	sort.Slice(records, func(i, j int) bool {
+		if records[i].ID != records[j].ID {
+			return records[i].ID < records[j].ID
+		}
+		if records[i].Name != records[j].Name {
+			return records[i].Name < records[j].Name
+		}
+		return records[i].HandlerID < records[j].HandlerID
+	})
 	indexed := make(map[string]ToolRecord, len(records))
+	names := make(map[string]string, len(records))
+	handlerIDs := make(map[string]string, len(records))
 	var diagnostics []Diagnostic
 	for _, record := range records {
 		if _, exists := indexed[record.ID]; exists {
 			diagnostics = append(diagnostics, Diagnostic{
 				Code: "mcp." + surface + ".duplicate_tool_id", ToolID: record.ID, Surface: surface,
-				Message: fmt.Sprintf("stable tool ID %q appears more than once in %s", record.ID, surface),
+				Message: fmt.Sprintf("stable tool ID %q appears more than once in %s; assign one unique stable tool ID per canonical record", record.ID, surface),
 			})
+		} else {
+			indexed[record.ID] = record
+		}
+		if priorID, exists := names[record.Name]; exists {
+			diagnostics = append(diagnostics, Diagnostic{
+				Code: "mcp." + surface + ".duplicate_canonical_name", ToolID: record.ID, Surface: surface,
+				Message: fmt.Sprintf("canonical name %q is shared by stable tool IDs %q and %q in %s; assign a unique canonical name", record.Name, priorID, record.ID, surface),
+			})
+		} else {
+			names[record.Name] = record.ID
+		}
+		if record.HandlerID == "" {
 			continue
 		}
-		indexed[record.ID] = record
+		if priorID, exists := handlerIDs[record.HandlerID]; exists {
+			diagnostics = append(diagnostics, Diagnostic{
+				Code: "mcp." + surface + ".duplicate_handler_id", ToolID: record.ID, Surface: surface,
+				Message: fmt.Sprintf("stable handler ID %q is shared by stable tool IDs %q and %q in %s; assign one unique handler ID per canonical tool", record.HandlerID, priorID, record.ID, surface),
+			})
+		} else {
+			handlerIDs[record.HandlerID] = record.ID
+		}
 	}
 	return indexed, diagnostics
 }
 
 func indexBindings(bindings []HandlerBinding) (map[string]HandlerBinding, []Diagnostic) {
+	bindings = append([]HandlerBinding(nil), bindings...)
+	sort.Slice(bindings, func(i, j int) bool {
+		if bindings[i].ToolID != bindings[j].ToolID {
+			return bindings[i].ToolID < bindings[j].ToolID
+		}
+		return bindings[i].HandlerID < bindings[j].HandlerID
+	})
 	indexed := make(map[string]HandlerBinding, len(bindings))
+	handlerIDs := make(map[string]string, len(bindings))
 	var diagnostics []Diagnostic
 	for _, binding := range bindings {
 		if _, exists := indexed[binding.ToolID]; exists {
 			diagnostics = append(diagnostics, Diagnostic{
 				Code: "mcp.registry.duplicate_tool_id", ToolID: binding.ToolID, Surface: "registry",
-				Message: fmt.Sprintf("stable tool ID %q appears more than once in registry", binding.ToolID),
+				Message: fmt.Sprintf("stable tool ID %q appears more than once in registry; keep exactly one handwritten binding per canonical tool", binding.ToolID),
 			})
+		} else {
+			indexed[binding.ToolID] = binding
+		}
+		if binding.HandlerID == "" {
 			continue
 		}
-		indexed[binding.ToolID] = binding
+		if priorID, exists := handlerIDs[binding.HandlerID]; exists {
+			diagnostics = append(diagnostics, Diagnostic{
+				Code: "mcp.registry.duplicate_handler_id", ToolID: binding.ToolID, Surface: "registry",
+				Message: fmt.Sprintf("stable handler ID %q is shared by stable tool IDs %q and %q in registry; bind each canonical tool to a unique stable handler ID", binding.HandlerID, priorID, binding.ToolID),
+			})
+		} else {
+			handlerIDs[binding.HandlerID] = binding.ToolID
+		}
 	}
 	return indexed, diagnostics
 }

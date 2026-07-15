@@ -19,6 +19,10 @@ func main() {
 
 func run(root string, stdout, stderr io.Writer) int {
 	diagnostics, err := mcpcontractcheck.Check(root)
+	return report(diagnostics, err, stdout, stderr)
+}
+
+func report(diagnostics []mcpcontractcheck.Diagnostic, err error, stdout, stderr io.Writer) int {
 	if err != nil {
 		fmt.Fprintf(stderr, "[agent-factory:mcp-contract-check] check failed: %v\n", err)
 		return 1
