@@ -398,13 +398,13 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workere
 			DispatchId:               stringPtr(result.DispatchID),
 			TraceIds:                 stringSlicePtr(traceIDsFromTokens(completed.ConsumedTokens)),
 			WorkIds:                  stringSlicePtr(workIDsFromTokens(completed.ConsumedTokens)),
-			CurrentChainingTraceId:   stringPtrIfNotEmpty(interfaces.CurrentChainingTraceIDFromTokens(completed.ConsumedTokens)),
-			PreviousChainingTraceIds: stringSlicePtr(interfaces.PreviousChainingTraceIDsFromTokens(completed.ConsumedTokens)),
+			CurrentChainingTraceId:   stringPtrIfNotEmpty(factorytoken.CurrentChainingTraceID(completed.ConsumedTokens, interfaces.SystemTimeWorkTypeID)),
+			PreviousChainingTraceIds: stringSlicePtr(factorytoken.PreviousChainingTraceIDs(completed.ConsumedTokens)),
 		},
 		factoryapi.DispatchResponseEventPayload{
 			TransitionId:                result.TransitionID,
-			CurrentChainingTraceId:      stringPtrIfNotEmpty(interfaces.CurrentChainingTraceIDFromTokens(completed.ConsumedTokens)),
-			PreviousChainingTraceIds:    stringSlicePtr(interfaces.PreviousChainingTraceIDsFromTokens(completed.ConsumedTokens)),
+			CurrentChainingTraceId:      stringPtrIfNotEmpty(factorytoken.CurrentChainingTraceID(completed.ConsumedTokens, interfaces.SystemTimeWorkTypeID)),
+			PreviousChainingTraceIds:    stringSlicePtr(factorytoken.PreviousChainingTraceIDs(completed.ConsumedTokens)),
 			Outcome:                     factoryapi.WorkOutcome(result.Outcome),
 			Output:                      stringPtrIfNotEmpty(result.Output),
 			Error:                       stringPtrIfNotEmpty(result.Error),
@@ -705,7 +705,7 @@ func (h *FactoryEventHistory) factoryRunnerID() string {
 }
 
 func traceIDsFromTokens(tokens []factorytoken.Token) []string {
-	return interfaces.PreviousChainingTraceIDsFromTokens(tokens)
+	return factorytoken.PreviousChainingTraceIDs(tokens)
 }
 
 func workIDsFromTokens(tokens []factorytoken.Token) []string {
@@ -862,7 +862,7 @@ func failureReasonForResult(result workerexecution.WorkResult) string {
 
 func outputWorkItems(mutations []interfaces.TokenMutationRecord, consumedTokens []factorytoken.Token) []work.FactoryWorkItem {
 	items := make([]work.FactoryWorkItem, 0, len(mutations))
-	previousChainingTraceIDs := interfaces.PreviousChainingTraceIDsFromTokens(consumedTokens)
+	previousChainingTraceIDs := factorytoken.PreviousChainingTraceIDs(consumedTokens)
 	for _, mutation := range mutations {
 		if mutation.Token == nil || mutation.Token.Color.DataType == factorytoken.DataTypeResource {
 			continue

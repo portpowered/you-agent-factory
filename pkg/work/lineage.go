@@ -430,17 +430,6 @@ func CurrentChainingTraceIDFromWorkItems(items []FactoryWorkItem) string {
 	return ""
 }
 
-// ChainingTraceDepthForWorkItem returns the stored chain depth for one work
-// item, falling back to depth 1 when only a trace identifier is available.
-func ChainingTraceDepthForWorkItem(item FactoryWorkItem) int {
-	if item.ChainingTraceDepth > 0 {
-		return item.ChainingTraceDepth
-	}
-	if firstNonEmptyString(item.CurrentChainingTraceID, item.TraceID) != "" {
-		return 1
-	}
-	return 0
-}
 func firstNonEmptyString(values ...string) string {
 	for _, value := range values {
 		if value != "" {

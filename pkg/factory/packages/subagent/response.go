@@ -6,6 +6,8 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workercompatibility "github.com/portpowered/infinite-you/pkg/workers/compatibility"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
 )
 
 // ShouldFormatInvocationResponse reports whether workstation output should be
@@ -18,7 +20,9 @@ func ShouldFormatInvocationResponse(workstation *interfaces.FactoryWorkstationCo
 	if strings.TrimSpace(workstation.Name) != PackagedRunWorkstationName {
 		return false
 	}
-	switch interfaces.EffectiveWorkstationTypeForCompatibility(*workstation) {
+	switch workercompatibility.EffectiveWorkstationTypeForCompatibility(workercompatibility.Workstation{
+		Name: workstation.Name, Type: workstation.Type, Kind: workertaxonomy.WorkstationKind(workstation.Kind), WorkerTypeName: workstation.WorkerTypeName,
+	}) {
 	case interfaces.WorkstationTypeModel, interfaces.WorkstationTypeAgent:
 		return true
 	default:

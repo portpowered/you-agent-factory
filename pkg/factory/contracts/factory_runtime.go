@@ -3,8 +3,11 @@ package factorycontracts
 import (
 	"time"
 
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // RequestValidationError reports a stable client-side validation failure.
@@ -39,21 +42,13 @@ const (
 	RuntimeModeService RuntimeMode = "SERVICE"
 )
 
-type SubmitRequest = work.SubmitRequest
-type WorkRequestType = work.WorkRequestType
-type WorkRequest = work.WorkRequest
-type WorkRequestSubmittedWork = work.WorkRequestSubmittedWork
-type WorkRequestSubmitResult = work.WorkRequestSubmitResult
-
-const WorkRequestTypeFactoryRequestBatch = work.WorkRequestTypeFactoryRequestBatch
-
 // FactoryInvocationResult carries the transport-independent outcome of one
 // Factory Session invocation after input resolution and result selection.
 type FactoryInvocationResult struct {
 	RequestID     string
 	TraceID       string
 	Status        factoryapi.InvocationTerminalStatus
-	PrimaryResult []WorkContentPart
+	PrimaryResult []work.WorkContentPart
 	ErrorCode     string
 	Message       string
 	SessionID     string
@@ -61,22 +56,6 @@ type FactoryInvocationResult struct {
 	WorkName      string
 	WorkState     string
 }
-
-// Work is one public item inside a WorkRequest batch.
-type Work = work.Work
-type WorkContentPart = work.WorkContentPart
-type WorkContentPartType = work.WorkContentPartType
-type InvocationArguments = work.InvocationArguments
-type InvocationArgument = work.InvocationArgument
-type InvocationArgumentSource = work.InvocationArgumentSource
-
-const (
-	WorkContentPartTypeText   = work.WorkContentPartTypeText
-	WorkContentPartTypeImage  = work.WorkContentPartTypeImage
-	WorkContentPartTypeAudio  = work.WorkContentPartTypeAudio
-	WorkContentPartTypeJSON   = work.WorkContentPartTypeJSON
-	WorkContentPartTypeBinary = work.WorkContentPartTypeBinary
-)
 
 // CanonicalEventTime normalizes runtime event boundary timestamps to UTC while
 // preserving zero values so optional/fallback handling remains explicit.
@@ -95,7 +74,7 @@ type RuntimeWorkstationLookup interface {
 // RuntimeDefinitionLookup resolves runtime worker and workstation definitions by authored name.
 type RuntimeDefinitionLookup interface {
 	RuntimeWorkstationLookup
-	Worker(name string) (*WorkerConfig, bool)
+	Worker(name string) (*workerconfig.Config, bool)
 }
 
 // RuntimeFactoryConfigLookup resolves the effective runtime factory config when
@@ -153,54 +132,54 @@ const (
 
 // MarkingMutation is a declarative description of a single token movement.
 type MarkingMutation struct {
-	Type           MutationType    `json:"type"`
-	TokenID        string          `json:"token_id"`
-	FromPlace      string          `json:"from_place"`
-	ToPlace        string          `json:"to_place"`
-	Reason         string          `json:"reason"`
-	NewToken       *Token          `json:"-"`
-	FailureRecords []FailureRecord `json:"-"`
+	Type           MutationType           `json:"type"`
+	TokenID        string                 `json:"token_id"`
+	FromPlace      string                 `json:"from_place"`
+	ToPlace        string                 `json:"to_place"`
+	Reason         string                 `json:"reason"`
+	NewToken       *factorytoken.Token    `json:"-"`
+	FailureRecords []factorytoken.Failure `json:"-"`
 }
 
 // TokenMutationRecord stores the raw token mutation emitted while applying a
 // worker result.
 type TokenMutationRecord struct {
-	DispatchID   string       `json:"dispatch_id"`
-	TransitionID string       `json:"transition_id"`
-	Outcome      WorkOutcome  `json:"outcome"`
-	Type         MutationType `json:"type"`
-	TokenID      string       `json:"token_id"`
-	FromPlace    string       `json:"from_place"`
-	ToPlace      string       `json:"to_place"`
-	Reason       string       `json:"reason"`
-	Token        *Token       `json:"token,omitempty"`
+	DispatchID   string                      `json:"dispatch_id"`
+	TransitionID string                      `json:"transition_id"`
+	Outcome      workerexecution.WorkOutcome `json:"outcome"`
+	Type         MutationType                `json:"type"`
+	TokenID      string                      `json:"token_id"`
+	FromPlace    string                      `json:"from_place"`
+	ToPlace      string                      `json:"to_place"`
+	Reason       string                      `json:"reason"`
+	Token        *factorytoken.Token         `json:"token,omitempty"`
 }
 
 // DispatchEntry tracks an in-flight dispatch awaiting a worker result.
 type DispatchEntry struct {
-	DispatchID      string            `json:"dispatch_id"`
-	TransitionID    string            `json:"transition_id"`
-	WorkstationName string            `json:"workstation_name,omitempty"`
-	StartTime       time.Time         `json:"start_time"`
-	ConsumedTokens  []Token           `json:"consumed_tokens"`
-	HeldMutations   []MarkingMutation `json:"held_mutations"`
+	DispatchID      string               `json:"dispatch_id"`
+	TransitionID    string               `json:"transition_id"`
+	WorkstationName string               `json:"workstation_name,omitempty"`
+	StartTime       time.Time            `json:"start_time"`
+	ConsumedTokens  []factorytoken.Token `json:"consumed_tokens"`
+	HeldMutations   []MarkingMutation    `json:"held_mutations"`
 }
 
 // CompletedDispatch records a dispatch that has finished, with timing data.
 type CompletedDispatch struct {
-	DispatchID                  string                   `json:"dispatch_id"`
-	TransitionID                string                   `json:"transition_id"`
-	WorkstationName             string                   `json:"workstation_name,omitempty"`
-	Outcome                     WorkOutcome              `json:"outcome"`
-	SelectedClassificationLabel string                   `json:"selected_classification_label,omitempty"`
-	Reason                      string                   `json:"reason,omitempty"`
-	FailureMetadata             *WorkFailureMetadata     `json:"failure_metadata,omitempty"`
-	ProviderSession             *ProviderSessionMetadata `json:"provider_session,omitempty"`
-	StartTime                   time.Time                `json:"start_time"`
-	EndTime                     time.Time                `json:"end_time"`
-	Duration                    time.Duration            `json:"duration"`
-	ConsumedTokens              []Token                  `json:"consumed_tokens,omitempty"`
-	OutputMutations             []TokenMutationRecord    `json:"output_mutations,omitempty"`
+	DispatchID                  string                                   `json:"dispatch_id"`
+	TransitionID                string                                   `json:"transition_id"`
+	WorkstationName             string                                   `json:"workstation_name,omitempty"`
+	Outcome                     workerexecution.WorkOutcome              `json:"outcome"`
+	SelectedClassificationLabel string                                   `json:"selected_classification_label,omitempty"`
+	Reason                      string                                   `json:"reason,omitempty"`
+	FailureMetadata             *workerexecution.WorkFailureMetadata     `json:"failure_metadata,omitempty"`
+	ProviderSession             *workerexecution.ProviderSessionMetadata `json:"provider_session,omitempty"`
+	StartTime                   time.Time                                `json:"start_time"`
+	EndTime                     time.Time                                `json:"end_time"`
+	Duration                    time.Duration                            `json:"duration"`
+	ConsumedTokens              []factorytoken.Token                     `json:"consumed_tokens,omitempty"`
+	OutputMutations             []TokenMutationRecord                    `json:"output_mutations,omitempty"`
 }
 
 // ActiveThrottlePause records an active provider/model dispatch pause window.
@@ -214,10 +193,10 @@ type ActiveThrottlePause struct {
 
 // EnabledTransition represents a transition that is ready to fire.
 type EnabledTransition struct {
-	TransitionID string             `json:"transition_id"`
-	WorkerType   string             `json:"worker_type"`
-	Bindings     map[string][]Token `json:"bindings"`
-	ArcModes     map[string]ArcMode `json:"arc_modes"`
+	TransitionID string                          `json:"transition_id"`
+	WorkerType   string                          `json:"worker_type"`
+	Bindings     map[string][]factorytoken.Token `json:"bindings"`
+	ArcModes     map[string]ArcMode              `json:"arc_modes"`
 }
 
 // ArcMode describes how an enabled transition uses an input arc.
@@ -238,19 +217,19 @@ type FiringDecision struct {
 
 // TickResult is the output of a single subsystem execution.
 type TickResult struct {
-	Mutations              []MarkingMutation          `json:"mutations,omitempty"`
-	GeneratedBatches       []GeneratedSubmissionBatch `json:"generated_batches,omitempty"`
-	Dispatches             []DispatchRecord           `json:"dispatches,omitempty"`
-	Histories              []TokenHistory             `json:"histories,omitempty"`
-	CompletedDispatches    []CompletedDispatch        `json:"completed_dispatches,omitempty"`
-	ActiveThrottlePauses   []ActiveThrottlePause      `json:"active_throttle_pauses,omitempty"`
-	ThrottlePausesObserved bool                       `json:"throttle_pauses_observed,omitempty"`
-	ShouldTerminate        bool                       `json:"should_terminate,omitempty"`
+	Mutations              []MarkingMutation               `json:"mutations,omitempty"`
+	GeneratedBatches       []work.GeneratedSubmissionBatch `json:"generated_batches,omitempty"`
+	Dispatches             []DispatchRecord                `json:"dispatches,omitempty"`
+	Histories              []factorytoken.History          `json:"histories,omitempty"`
+	CompletedDispatches    []CompletedDispatch             `json:"completed_dispatches,omitempty"`
+	ActiveThrottlePauses   []ActiveThrottlePause           `json:"active_throttle_pauses,omitempty"`
+	ThrottlePausesObserved bool                            `json:"throttle_pauses_observed,omitempty"`
+	ShouldTerminate        bool                            `json:"should_terminate,omitempty"`
 }
 
 // DispatchRecord pairs a WorkDispatch with the marking mutations consumed to fire it.
 type DispatchRecord struct {
-	Dispatch  WorkDispatch      `json:"dispatch"`
+	Dispatch  work.WorkDispatch `json:"dispatch"`
 	Mutations []MarkingMutation `json:"mutations"`
 }
 
@@ -267,13 +246,13 @@ const (
 // EngineStateSnapshot is a unified point-in-time snapshot of the full engine
 // state: runtime state, factory lifecycle, session metrics, and uptime.
 type EngineStateSnapshot[TMarking any, TTopology any] struct {
-	RuntimeStatus      RuntimeStatus             `json:"runtime_status"`
-	StreamGenerationID string                    `json:"stream_generation_id,omitempty"`
-	Marking            TMarking                  `json:"marking"`
-	Dispatches         map[string]*DispatchEntry `json:"dispatches"`
-	InFlightCount      int                       `json:"in_flight_count"`
-	Results            []WorkResult              `json:"results"`
-	DispatchHistory    []CompletedDispatch       `json:"dispatch_history"`
+	RuntimeStatus      RuntimeStatus                `json:"runtime_status"`
+	StreamGenerationID string                       `json:"stream_generation_id,omitempty"`
+	Marking            TMarking                     `json:"marking"`
+	Dispatches         map[string]*DispatchEntry    `json:"dispatches"`
+	InFlightCount      int                          `json:"in_flight_count"`
+	Results            []workerexecution.WorkResult `json:"results"`
+	DispatchHistory    []CompletedDispatch          `json:"dispatch_history"`
 	// ActiveThrottlePauses exposes active provider/model pause windows owned by
 	// dispatcher policy for tests and observability reconstruction.
 	ActiveThrottlePauses []ActiveThrottlePause `json:"active_throttle_pauses,omitempty"`
@@ -310,28 +289,12 @@ func (s EngineStateSnapshot[TMarking, TTopology]) RuntimeStateSnapshot() EngineS
 	}
 }
 
-type WorkRelationType = work.WorkRelationType
-type WorkRelation = work.WorkRelation
-type WorkRequestNormalizeOptions = work.WorkRequestNormalizeOptions
-type FactoryWorkItem = work.FactoryWorkItem
-type FactoryRelation = work.FactoryRelation
-
-const (
-	WorkRelationDependsOn   = work.WorkRelationDependsOn
-	WorkRelationParentChild = work.WorkRelationParentChild
-)
-
-type WorkRequestRecord = work.WorkRequestRecord
-type GeneratedSubmissionBatchMetadata = work.GeneratedSubmissionBatchMetadata
-type GeneratedSubmissionBatch = work.GeneratedSubmissionBatch
-type FactorySubmissionRecord = work.FactorySubmissionRecord
-
 // FactoryDispatchRecord stores a raw WorkDispatch plus token mutations held
 // while the worker is in flight.
 type FactoryDispatchRecord struct {
 	DispatchID     string
 	CreatedTick    int
-	Dispatch       WorkDispatch
+	Dispatch       work.WorkDispatch
 	HeldMutations  []MarkingMutation
 	ConsumedTokens []string
 }
@@ -342,7 +305,7 @@ type FactoryCompletionRecord struct {
 	CompletionID string
 	DispatchID   string
 	ObservedTick int
-	Result       WorkResult
+	Result       workerexecution.WorkResult
 }
 
 // SubmissionHookContext is the input passed to engine-owned submission hooks
@@ -355,8 +318,8 @@ type SubmissionHookContext[TSnapshot any] struct {
 // SubmissionHookResult contains all due hook output observed by the engine at
 // one logical tick.
 type SubmissionHookResult struct {
-	GeneratedBatches  []GeneratedSubmissionBatch
-	Results           []WorkResult
+	GeneratedBatches  []work.GeneratedSubmissionBatch
+	Results           []workerexecution.WorkResult
 	MarkingMutations  []MarkingMutation
 	ContinuationState map[string]string
 	KeepAlive         bool
@@ -387,6 +350,6 @@ type FactorySessionJavaScriptRuntimeState struct {
 	CompletedDispatches int                                     `json:"completedDispatches"`
 	Dispatches          []FactorySessionDispatchState           `json:"dispatches,omitempty"`
 	Artifacts           []FactorySessionArtifactState           `json:"artifacts,omitempty"`
-	PrimaryResult       []WorkContentPart                       `json:"primaryResult,omitempty"`
+	PrimaryResult       []work.WorkContentPart                  `json:"primaryResult,omitempty"`
 	ResultStatus        string                                  `json:"resultStatus,omitempty"`
 }

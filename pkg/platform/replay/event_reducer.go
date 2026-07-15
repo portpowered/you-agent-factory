@@ -408,8 +408,8 @@ func replayCompletionFromEvent(event factoryapi.FactoryEvent, inference replayIn
 			Feedback:                    stringValue(payload.Feedback),
 			SelectedClassificationLabel: stringValue(payload.SelectedClassificationLabel),
 			RecordedOutputWork:          recordedOutputWork,
-			FailureMetadata:             interfaces.CloneWorkFailureMetadata(failureMetadata),
-			ProviderSession:             interfaces.CloneProviderSessionMetadata(inference.providerSession),
+			FailureMetadata:             workerexecution.CloneWorkFailureMetadata(failureMetadata),
+			ProviderSession:             workerexecution.CloneProviderSessionMetadata(inference.providerSession),
 			Metrics:                     replayWorkMetricsFromGenerated(payload.Metrics),
 			Diagnostics:                 diagnostics,
 		},
@@ -505,7 +505,7 @@ func replayDispatchPreviousChainingTraceIDs(
 	if previous := stringSliceValue(payloadPrevious); len(previous) > 0 {
 		return work.CanonicalChainingTraceIDs(previous)
 	}
-	return interfaces.PreviousChainingTraceIDsFromTokens(inputTokens)
+	return factorytoken.PreviousChainingTraceIDs(inputTokens)
 }
 
 func generatedReplayWorkstation(factory factoryapi.Factory, transitionID string) *factoryapi.Workstation {

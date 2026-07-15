@@ -223,7 +223,7 @@ func invocationArgumentsFromDispatch(dispatch work.WorkDispatch) *work.Invocatio
 			continue
 		}
 		if token.Color.InvocationArguments != nil {
-			return interfaces.CloneInvocationArguments(token.Color.InvocationArguments)
+			return work.CloneInvocationArguments(token.Color.InvocationArguments)
 		}
 	}
 	return nil

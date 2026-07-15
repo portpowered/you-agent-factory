@@ -98,7 +98,7 @@ func (t *Transformer) InitialTokenFromSubmit(req work.SubmitRequest, now time.Ti
 			Relations:                factorypkg.CloneRuntimeRelations(req.Relations),
 			Content:                  cloneWorkContent(req.Content),
 			Payload:                  factorypkg.CloneRuntimePayload(req.Payload),
-			InvocationArguments:      interfaces.CloneInvocationArguments(req.InvocationArguments),
+			InvocationArguments:      work.CloneInvocationArguments(req.InvocationArguments),
 		},
 		CreatedAt: now,
 		EnteredAt: now,
@@ -129,7 +129,7 @@ func (t *Transformer) InitialTokenFromColor(color factorytoken.Color, tokenID st
 	return &factorytoken.Token{
 		ID:        tokenID,
 		PlaceID:   initialPlaceID,
-		Color:     interfaces.CloneTokenColor(color),
+		Color:     factorytoken.CloneColor(color),
 		CreatedAt: now,
 		EnteredAt: now,
 		History:   newTokenHistory(),
@@ -162,7 +162,7 @@ func (t *Transformer) FanoutCountToken(countPlaceID, transitionID, parentWorkID 
 // ReleasedResourceToken recreates a consumed resource token in its release place
 // while preserving the token's identity and metadata.
 func (t *Transformer) ReleasedResourceToken(consumed factorytoken.Token, placeID string, now time.Time) *factorytoken.Token {
-	released := interfaces.CloneToken(consumed)
+	released := factorytoken.Clone(consumed)
 	released.PlaceID = placeID
 	released.EnteredAt = now
 	return &released
@@ -202,7 +202,7 @@ func (t *Transformer) OutputToken(in OutputTokenInput) (*factorytoken.Token, err
 		Color:     color,
 		CreatedAt: createdAtForOutputToken(in.ConsumedTokens, color, in.Now),
 		EnteredAt: in.Now,
-		History:   interfaces.CloneTokenHistory(in.History),
+		History:   factorytoken.CloneHistory(in.History),
 	}
 
 	applyOutputOutcome(token, in, t.places[arc.PlaceID], t.workTypes)
@@ -300,7 +300,7 @@ func applyOutputInvocationArguments(color *factorytoken.Color, inputColors []fac
 	if source == nil || source.InvocationArguments == nil {
 		return
 	}
-	color.InvocationArguments = interfaces.CloneInvocationArguments(source.InvocationArguments)
+	color.InvocationArguments = work.CloneInvocationArguments(source.InvocationArguments)
 }
 
 // PreserveInputApplicationError reports invalid PRESERVE_INPUT routing.
@@ -345,7 +345,7 @@ func ApplyPreservedInputToColor(
 		color.Tags = factorypkg.CloneRuntimeTags(source.Tags)
 	}
 	if color.InvocationArguments == nil {
-		color.InvocationArguments = interfaces.CloneInvocationArguments(source.InvocationArguments)
+		color.InvocationArguments = work.CloneInvocationArguments(source.InvocationArguments)
 	}
 	return nil
 }
@@ -366,7 +366,7 @@ func reuseConsumedResourceToken(in OutputTokenInput, arc petri.Arc, color factor
 	if consumed == nil {
 		return nil
 	}
-	token := interfaces.CloneToken(*consumed)
+	token := factorytoken.Clone(*consumed)
 	token.PlaceID = arc.PlaceID
 	token.EnteredAt = in.Now
 	return &token
@@ -468,7 +468,7 @@ func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColo
 	}
 
 	if matched := findMatchingInput(inputColors, targetTypeID); matched != nil {
-		color := interfaces.CloneTokenColor(*matched)
+		color := factorytoken.CloneColor(*matched)
 		ensureWorkOutputDataType(&color, targetTypeID, t.workTypes)
 		return color, nil
 	}
@@ -491,9 +491,9 @@ func (t *Transformer) resolveOutputColor(arcIdx int, arcs []petri.Arc, inputColo
 		WorkID:                   t.nextWorkID(targetTypeID),
 		Name:                     name,
 		RequestID:                requestID,
-		ChainingTraceDepth:       interfaces.ChainingTraceDepthFromTokenColors(inputColors),
+		ChainingTraceDepth:       factorytoken.ChainingTraceDepthFromColors(inputColors),
 		CurrentChainingTraceID:   traceID,
-		PreviousChainingTraceIDs: interfaces.PreviousChainingTraceIDsFromTokenColors(inputColors),
+		PreviousChainingTraceIDs: factorytoken.PreviousChainingTraceIDsFromColors(inputColors),
 		TraceID:                  traceID,
 		ParentID:                 parentID,
 	}

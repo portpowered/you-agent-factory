@@ -5,6 +5,9 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // FactoryWorldState is the dashboard-agnostic reconstruction of factory state
@@ -14,13 +17,13 @@ type FactoryWorldState struct {
 	EventTime                     time.Time                                          `json:"event_time,omitempty"`
 	Factory                       *factoryapi.Factory                                `json:"factory,omitempty"`
 	Topology                      InitialStructurePayload                            `json:"topology"`
-	PayloadLineage                WorkPayloadLineageProjection                       `json:"payload_lineage,omitempty"`
+	PayloadLineage                work.WorkPayloadLineageProjection                  `json:"payload_lineage,omitempty"`
 	WorkRequestsByID              map[string]WorkRequestPayload                      `json:"work_requests_by_id,omitempty"`
-	RelationsByWorkID             map[string][]FactoryRelation                       `json:"relations_by_work_id,omitempty"`
-	WorkItemsByID                 map[string]FactoryWorkItem                         `json:"work_items_by_id,omitempty"`
-	ActiveWorkItemsByID           map[string]FactoryWorkItem                         `json:"active_work_items_by_id,omitempty"`
+	RelationsByWorkID             map[string][]work.FactoryRelation                  `json:"relations_by_work_id,omitempty"`
+	WorkItemsByID                 map[string]work.FactoryWorkItem                    `json:"work_items_by_id,omitempty"`
+	ActiveWorkItemsByID           map[string]work.FactoryWorkItem                    `json:"active_work_items_by_id,omitempty"`
 	TerminalWorkByID              map[string]FactoryTerminalWork                     `json:"terminal_work_by_id,omitempty"`
-	FailedWorkItemsByID           map[string]FactoryWorkItem                         `json:"failed_work_items_by_id,omitempty"`
+	FailedWorkItemsByID           map[string]work.FactoryWorkItem                    `json:"failed_work_items_by_id,omitempty"`
 	PlaceOccupancyByID            map[string]FactoryPlaceOccupancy                   `json:"place_occupancy_by_id,omitempty"`
 	ActiveDispatches              map[string]FactoryWorldDispatch                    `json:"active_dispatches,omitempty"`
 	CompletedDispatches           []FactoryWorldDispatchCompletion                   `json:"completed_dispatches,omitempty"`
@@ -54,47 +57,47 @@ type FactoryPlaceOccupancy struct {
 // FactoryWorldDispatch describes a workstation request that has not yet
 // received its matching response at the selected tick.
 type FactoryWorldDispatch struct {
-	DispatchID               string                `json:"dispatch_id"`
-	TransitionID             string                `json:"transition_id"`
-	Workstation              FactoryWorkstationRef `json:"workstation"`
-	RunnerID                 string                `json:"runner_id,omitempty"`
-	RunnerSelectionSource    RunnerSelectionSource `json:"runner_selection_source,omitempty"`
-	Provider                 string                `json:"provider,omitempty"`
-	Model                    string                `json:"model,omitempty"`
-	StartedTick              int                   `json:"started_tick"`
-	StartedAt                time.Time             `json:"started_at,omitempty"`
-	Inputs                   []WorkstationInput    `json:"inputs,omitempty"`
-	Resources                []FactoryResourceUnit `json:"resources,omitempty"`
-	WorkItemIDs              []string              `json:"work_item_ids,omitempty"`
-	CurrentChainingTraceID   string                `json:"current_chaining_trace_id,omitempty"`
-	PreviousChainingTraceIDs []string              `json:"previous_chaining_trace_ids,omitempty"`
-	TraceIDs                 []string              `json:"trace_ids,omitempty"`
+	DispatchID               string                                `json:"dispatch_id"`
+	TransitionID             string                                `json:"transition_id"`
+	Workstation              FactoryWorkstationRef                 `json:"workstation"`
+	RunnerID                 string                                `json:"runner_id,omitempty"`
+	RunnerSelectionSource    workerexecution.RunnerSelectionSource `json:"runner_selection_source,omitempty"`
+	Provider                 string                                `json:"provider,omitempty"`
+	Model                    string                                `json:"model,omitempty"`
+	StartedTick              int                                   `json:"started_tick"`
+	StartedAt                time.Time                             `json:"started_at,omitempty"`
+	Inputs                   []WorkstationInput                    `json:"inputs,omitempty"`
+	Resources                []FactoryResourceUnit                 `json:"resources,omitempty"`
+	WorkItemIDs              []string                              `json:"work_item_ids,omitempty"`
+	CurrentChainingTraceID   string                                `json:"current_chaining_trace_id,omitempty"`
+	PreviousChainingTraceIDs []string                              `json:"previous_chaining_trace_ids,omitempty"`
+	TraceIDs                 []string                              `json:"trace_ids,omitempty"`
 }
 
 // FactoryWorldDispatchCompletion describes a finished dispatch reconstructed
 // from a workstation response event.
 type FactoryWorldDispatchCompletion struct {
-	DispatchID               string                   `json:"dispatch_id"`
-	TransitionID             string                   `json:"transition_id"`
-	Workstation              FactoryWorkstationRef    `json:"workstation"`
-	RunnerID                 string                   `json:"runner_id,omitempty"`
-	RunnerSelectionSource    RunnerSelectionSource    `json:"runner_selection_source,omitempty"`
-	StartedTick              int                      `json:"started_tick,omitempty"`
-	CompletedTick            int                      `json:"completed_tick"`
-	StartedAt                time.Time                `json:"started_at,omitempty"`
-	CompletedAt              time.Time                `json:"completed_at,omitempty"`
-	DurationMillis           int64                    `json:"duration_millis"`
-	Result                   WorkstationResult        `json:"result"`
-	WorkItemIDs              []string                 `json:"work_item_ids,omitempty"`
-	ConsumedInputs           []WorkstationInput       `json:"consumed_inputs,omitempty"`
-	InputWorkItems           []FactoryWorkItem        `json:"input_work_items,omitempty"`
-	OutputWorkItems          []FactoryWorkItem        `json:"output_work_items,omitempty"`
-	CurrentChainingTraceID   string                   `json:"current_chaining_trace_id,omitempty"`
-	PreviousChainingTraceIDs []string                 `json:"previous_chaining_trace_ids,omitempty"`
-	TraceIDs                 []string                 `json:"trace_ids,omitempty"`
-	ProviderSession          *ProviderSessionMetadata `json:"provider_session,omitempty"`
-	Diagnostics              *SafeWorkDiagnostics     `json:"diagnostics,omitempty"`
-	TerminalWork             *FactoryTerminalWork     `json:"terminal_work,omitempty"`
+	DispatchID               string                                   `json:"dispatch_id"`
+	TransitionID             string                                   `json:"transition_id"`
+	Workstation              FactoryWorkstationRef                    `json:"workstation"`
+	RunnerID                 string                                   `json:"runner_id,omitempty"`
+	RunnerSelectionSource    workerexecution.RunnerSelectionSource    `json:"runner_selection_source,omitempty"`
+	StartedTick              int                                      `json:"started_tick,omitempty"`
+	CompletedTick            int                                      `json:"completed_tick"`
+	StartedAt                time.Time                                `json:"started_at,omitempty"`
+	CompletedAt              time.Time                                `json:"completed_at,omitempty"`
+	DurationMillis           int64                                    `json:"duration_millis"`
+	Result                   WorkstationResult                        `json:"result"`
+	WorkItemIDs              []string                                 `json:"work_item_ids,omitempty"`
+	ConsumedInputs           []WorkstationInput                       `json:"consumed_inputs,omitempty"`
+	InputWorkItems           []work.FactoryWorkItem                   `json:"input_work_items,omitempty"`
+	OutputWorkItems          []work.FactoryWorkItem                   `json:"output_work_items,omitempty"`
+	CurrentChainingTraceID   string                                   `json:"current_chaining_trace_id,omitempty"`
+	PreviousChainingTraceIDs []string                                 `json:"previous_chaining_trace_ids,omitempty"`
+	TraceIDs                 []string                                 `json:"trace_ids,omitempty"`
+	ProviderSession          *workerexecution.ProviderSessionMetadata `json:"provider_session,omitempty"`
+	Diagnostics              *workerdiagnostics.SafeWorkDiagnostics   `json:"diagnostics,omitempty"`
+	TerminalWork             *FactoryTerminalWork                     `json:"terminal_work,omitempty"`
 }
 
 // FactoryWorldTrace groups work and dispatch activity by trace identifier.
@@ -109,58 +112,58 @@ type FactoryWorldTrace struct {
 // FactoryWorldWorkStateChangeRecord records one canonical WORK_STATE_CHANGE
 // affecting a work item at the selected projection tick.
 type FactoryWorldWorkStateChangeRecord struct {
-	WorkID       string                `json:"work_id"`
-	WorkTypeName string                `json:"work_type_name,omitempty"`
-	FromState    string                `json:"from_state"`
-	ToState      string                `json:"to_state"`
-	FromPlaceID  string                `json:"from_place_id"`
-	ToPlaceID    string                `json:"to_place_id"`
-	Source       WorkStateChangeSource `json:"source"`
-	RequestID    string                `json:"request_id,omitempty"`
-	Tick         int                   `json:"tick"`
-	Sequence     int                   `json:"sequence"`
-	EventTime    time.Time             `json:"event_time,omitempty"`
+	WorkID       string                     `json:"work_id"`
+	WorkTypeName string                     `json:"work_type_name,omitempty"`
+	FromState    string                     `json:"from_state"`
+	ToState      string                     `json:"to_state"`
+	FromPlaceID  string                     `json:"from_place_id"`
+	ToPlaceID    string                     `json:"to_place_id"`
+	Source       work.WorkStateChangeSource `json:"source"`
+	RequestID    string                     `json:"request_id,omitempty"`
+	Tick         int                        `json:"tick"`
+	Sequence     int                        `json:"sequence"`
+	EventTime    time.Time                  `json:"event_time,omitempty"`
 }
 
 // FactoryWorldProviderSessionRecord records one provider session attached to a
 // workstation response in the canonical event-first world state.
 type FactoryWorldProviderSessionRecord struct {
-	DispatchID               string                    `json:"dispatch_id"`
-	TransitionID             string                    `json:"transition_id"`
-	WorkstationName          string                    `json:"workstation_name,omitempty"`
-	RunnerID                 string                    `json:"runner_id,omitempty"`
-	RunnerSelectionSource    RunnerSelectionSource     `json:"runner_selection_source,omitempty"`
-	Outcome                  string                    `json:"outcome"`
-	ProviderSession          ProviderSessionMetadata   `json:"provider_session"`
-	Diagnostics              *SafeWorkDiagnostics      `json:"diagnostics,omitempty"`
-	WorkItemIDs              []string                  `json:"work_item_ids,omitempty"`
-	WorkItems                []FactoryWorldWorkItemRef `json:"work_items,omitempty"`
-	ConsumedInputs           []WorkstationInput        `json:"consumed_inputs,omitempty"`
-	CurrentChainingTraceID   string                    `json:"current_chaining_trace_id,omitempty"`
-	PreviousChainingTraceIDs []string                  `json:"previous_chaining_trace_ids,omitempty"`
-	TraceIDs                 []string                  `json:"trace_ids,omitempty"`
-	FailureDetail            *FailureDetail            `json:"failureDetail,omitempty"`
+	DispatchID               string                                  `json:"dispatch_id"`
+	TransitionID             string                                  `json:"transition_id"`
+	WorkstationName          string                                  `json:"workstation_name,omitempty"`
+	RunnerID                 string                                  `json:"runner_id,omitempty"`
+	RunnerSelectionSource    workerexecution.RunnerSelectionSource   `json:"runner_selection_source,omitempty"`
+	Outcome                  string                                  `json:"outcome"`
+	ProviderSession          workerexecution.ProviderSessionMetadata `json:"provider_session"`
+	Diagnostics              *workerdiagnostics.SafeWorkDiagnostics  `json:"diagnostics,omitempty"`
+	WorkItemIDs              []string                                `json:"work_item_ids,omitempty"`
+	WorkItems                []FactoryWorldWorkItemRef               `json:"work_items,omitempty"`
+	ConsumedInputs           []WorkstationInput                      `json:"consumed_inputs,omitempty"`
+	CurrentChainingTraceID   string                                  `json:"current_chaining_trace_id,omitempty"`
+	PreviousChainingTraceIDs []string                                `json:"previous_chaining_trace_ids,omitempty"`
+	TraceIDs                 []string                                `json:"trace_ids,omitempty"`
+	FailureDetail            *workerexecution.FailureDetail          `json:"failureDetail,omitempty"`
 }
 
 // FactoryWorldInferenceAttempt records one provider-boundary inference attempt
 // reconstructed from canonical inference request and response events.
 type FactoryWorldInferenceAttempt struct {
-	DispatchID         string                   `json:"dispatch_id"`
-	TransitionID       string                   `json:"transition_id"`
-	InferenceRequestID string                   `json:"inference_request_id"`
-	Attempt            int                      `json:"attempt"`
-	WorkingDirectory   string                   `json:"working_directory,omitempty"`
-	Worktree           string                   `json:"worktree,omitempty"`
-	Prompt             string                   `json:"prompt"`
-	RequestTime        time.Time                `json:"request_time,omitempty"`
-	Outcome            string                   `json:"outcome,omitempty"`
-	Response           string                   `json:"response,omitempty"`
-	DurationMillis     int64                    `json:"duration_millis,omitempty"`
-	ExitCode           *int                     `json:"exit_code,omitempty"`
-	FailureDetail      *FailureDetail           `json:"failureDetail,omitempty"`
-	ProviderSession    *ProviderSessionMetadata `json:"provider_session,omitempty"`
-	Diagnostics        *SafeWorkDiagnostics     `json:"diagnostics,omitempty"`
-	ResponseTime       time.Time                `json:"response_time,omitempty"`
+	DispatchID         string                                   `json:"dispatch_id"`
+	TransitionID       string                                   `json:"transition_id"`
+	InferenceRequestID string                                   `json:"inference_request_id"`
+	Attempt            int                                      `json:"attempt"`
+	WorkingDirectory   string                                   `json:"working_directory,omitempty"`
+	Worktree           string                                   `json:"worktree,omitempty"`
+	Prompt             string                                   `json:"prompt"`
+	RequestTime        time.Time                                `json:"request_time,omitempty"`
+	Outcome            string                                   `json:"outcome,omitempty"`
+	Response           string                                   `json:"response,omitempty"`
+	DurationMillis     int64                                    `json:"duration_millis,omitempty"`
+	ExitCode           *int                                     `json:"exit_code,omitempty"`
+	FailureDetail      *workerexecution.FailureDetail           `json:"failureDetail,omitempty"`
+	ProviderSession    *workerexecution.ProviderSessionMetadata `json:"provider_session,omitempty"`
+	Diagnostics        *workerdiagnostics.SafeWorkDiagnostics   `json:"diagnostics,omitempty"`
+	ResponseTime       time.Time                                `json:"response_time,omitempty"`
 }
 
 // FactoryWorldScriptRequest records one script-boundary request reconstructed
@@ -194,22 +197,22 @@ type FactoryWorldScriptResponse struct {
 // FactoryWorldAgentRunResponse records one agent-run boundary response
 // reconstructed from canonical agent-run response events.
 type FactoryWorldAgentRunResponse struct {
-	DispatchID     string               `json:"dispatch_id"`
-	AgentRunID     string               `json:"agent_run_id"`
-	Outcome        string               `json:"outcome,omitempty"`
-	DurationMillis int64                `json:"duration_millis,omitempty"`
-	Diagnostics    *SafeWorkDiagnostics `json:"diagnostics,omitempty"`
-	ResponseTime   time.Time            `json:"response_time,omitempty"`
+	DispatchID     string                                 `json:"dispatch_id"`
+	AgentRunID     string                                 `json:"agent_run_id"`
+	Outcome        string                                 `json:"outcome,omitempty"`
+	DurationMillis int64                                  `json:"duration_millis,omitempty"`
+	Diagnostics    *workerdiagnostics.SafeWorkDiagnostics `json:"diagnostics,omitempty"`
+	ResponseTime   time.Time                              `json:"response_time,omitempty"`
 }
 
 // FactoryWorldFailureDetail associates failed terminal work with the dispatch
 // completion that produced the failure.
 type FactoryWorldFailureDetail struct {
-	DispatchID      string          `json:"dispatch_id"`
-	TransitionID    string          `json:"transition_id"`
-	WorkstationName string          `json:"workstation_name,omitempty"`
-	WorkItem        FactoryWorkItem `json:"work_item"`
-	FailureDetail   *FailureDetail  `json:"failureDetail,omitempty"`
+	DispatchID      string                         `json:"dispatch_id"`
+	TransitionID    string                         `json:"transition_id"`
+	WorkstationName string                         `json:"workstation_name,omitempty"`
+	WorkItem        work.FactoryWorkItem           `json:"work_item"`
+	FailureDetail   *workerexecution.FailureDetail `json:"failureDetail,omitempty"`
 }
 
 const (
@@ -258,34 +261,34 @@ type FactoryWorldSessionBracketState struct {
 	PausedAt               time.Time                                  `json:"paused_at,omitempty"`
 	ResumedAt              time.Time                                  `json:"resumed_at,omitempty"`
 	ResultStatus           string                                     `json:"result_status,omitempty"`
-	ResultSummary          []WorkContentPart                          `json:"result_summary,omitempty"`
+	ResultSummary          []work.WorkContentPart                     `json:"result_summary,omitempty"`
 	ArtifactIDs            []string                                   `json:"artifact_ids,omitempty"`
 	Terminal               bool                                       `json:"terminal"`
 	FinalStatus            string                                     `json:"final_status,omitempty"`
 	CompletedAt            time.Time                                  `json:"completed_at,omitempty"`
 	DurationMillis         int64                                      `json:"duration_millis,omitempty"`
 	DispatchCounts         *FactoryWorldJavaScriptChildDispatchCounts `json:"dispatch_counts,omitempty"`
-	FailureDetail          *FailureDetail                             `json:"failureDetail,omitempty"`
+	FailureDetail          *workerexecution.FailureDetail             `json:"failureDetail,omitempty"`
 }
 
 // FactoryWorldSessionBracketProjection is the customer-visible session bracket
 // projection derived from reconstructed world state.
 type FactoryWorldSessionBracketProjection struct {
-	SessionID              string            `json:"session_id,omitempty"`
-	OrchestratorKind       string            `json:"orchestrator_kind,omitempty"`
-	OrchestratorDialect    string            `json:"orchestrator_dialect,omitempty"`
-	FactoryID              string            `json:"factory_id,omitempty"`
-	SourceRef              string            `json:"source_ref,omitempty"`
-	StartedAt              time.Time         `json:"started_at,omitempty"`
-	LifecycleControlStatus string            `json:"lifecycle_control_status,omitempty"`
-	PausedAt               time.Time         `json:"paused_at,omitempty"`
-	ResumedAt              time.Time         `json:"resumed_at,omitempty"`
-	ResultStatus           string            `json:"result_status,omitempty"`
-	ResultSummary          []WorkContentPart `json:"result_summary,omitempty"`
-	ArtifactIDs            []string          `json:"artifact_ids,omitempty"`
-	Terminal               bool              `json:"terminal"`
-	FinalStatus            string            `json:"final_status,omitempty"`
-	CompletedAt            time.Time         `json:"completed_at,omitempty"`
-	DurationMillis         int64             `json:"duration_millis,omitempty"`
-	FailureDetail          *FailureDetail    `json:"failureDetail,omitempty"`
+	SessionID              string                         `json:"session_id,omitempty"`
+	OrchestratorKind       string                         `json:"orchestrator_kind,omitempty"`
+	OrchestratorDialect    string                         `json:"orchestrator_dialect,omitempty"`
+	FactoryID              string                         `json:"factory_id,omitempty"`
+	SourceRef              string                         `json:"source_ref,omitempty"`
+	StartedAt              time.Time                      `json:"started_at,omitempty"`
+	LifecycleControlStatus string                         `json:"lifecycle_control_status,omitempty"`
+	PausedAt               time.Time                      `json:"paused_at,omitempty"`
+	ResumedAt              time.Time                      `json:"resumed_at,omitempty"`
+	ResultStatus           string                         `json:"result_status,omitempty"`
+	ResultSummary          []work.WorkContentPart         `json:"result_summary,omitempty"`
+	ArtifactIDs            []string                       `json:"artifact_ids,omitempty"`
+	Terminal               bool                           `json:"terminal"`
+	FinalStatus            string                         `json:"final_status,omitempty"`
+	CompletedAt            time.Time                      `json:"completed_at,omitempty"`
+	DurationMillis         int64                          `json:"duration_millis,omitempty"`
+	FailureDetail          *workerexecution.FailureDetail `json:"failureDetail,omitempty"`
 }

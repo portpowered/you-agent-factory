@@ -1,137 +1,24 @@
 package factorycontracts
 
 import (
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
-
-// CloneToken returns a detached copy of the canonical runtime token shape.
-func CloneToken(token Token) Token {
-	return Token{
-		ID:        token.ID,
-		PlaceID:   token.PlaceID,
-		Color:     CloneTokenColor(token.Color),
-		CreatedAt: token.CreatedAt,
-		EnteredAt: token.EnteredAt,
-		History:   CloneTokenHistory(token.History),
-	}
-}
-
-// CloneTokens returns detached copies of canonical runtime tokens.
-func CloneTokens(tokens []Token) []Token {
-	if tokens == nil {
-		return nil
-	}
-	clones := make([]Token, len(tokens))
-	for i := range tokens {
-		clones[i] = CloneToken(tokens[i])
-	}
-	return clones
-}
-
-// CloneTokenColor returns a detached copy of the canonical runtime token color.
-func CloneTokenColor(color TokenColor) TokenColor {
-	return TokenColor{
-		Name:                     color.Name,
-		RequestID:                color.RequestID,
-		WorkID:                   color.WorkID,
-		WorkTypeID:               color.WorkTypeID,
-		DataType:                 color.DataType,
-		ChainingTraceDepth:       color.ChainingTraceDepth,
-		CurrentChainingTraceID:   color.CurrentChainingTraceID,
-		PreviousChainingTraceIDs: cloneStringSlice(color.PreviousChainingTraceIDs),
-		TraceID:                  color.TraceID,
-		ParentID:                 color.ParentID,
-		Tags:                     cloneStringMap(color.Tags),
-		Relations:                cloneRelations(color.Relations),
-		Content:                  CloneWorkContentParts(color.Content),
-		Payload:                  cloneBytes(color.Payload),
-		InvocationArguments:      CloneInvocationArguments(color.InvocationArguments),
-	}
-}
-
-// CloneInvocationArguments returns a detached copy of runtime-only invocation
-// argument metadata.
-func CloneInvocationArguments(args *InvocationArguments) *InvocationArguments {
-	if args == nil || len(args.Arguments) == 0 {
-		return nil
-	}
-	clone := &InvocationArguments{
-		Arguments: make(map[string]InvocationArgument, len(args.Arguments)),
-	}
-	for name, argument := range args.Arguments {
-		next := InvocationArgument{
-			Values:    cloneStringSlice(argument.Values),
-			ValueMode: argument.ValueMode,
-			Sensitive: argument.Sensitive,
-		}
-		if len(argument.Sources) > 0 {
-			next.Sources = make([]InvocationArgumentSource, len(argument.Sources))
-			copy(next.Sources, argument.Sources)
-		}
-		clone.Arguments[name] = next
-	}
-	return clone
-}
-
-// CloneWorkContentParts returns a detached copy of canonical work content parts.
-func CloneWorkContentParts(parts []WorkContentPart) []WorkContentPart {
-	if len(parts) == 0 {
-		return nil
-	}
-	clone := make([]WorkContentPart, len(parts))
-	copy(clone, parts)
-	return clone
-}
-
-// CloneTokenHistory returns a detached copy of canonical runtime token history.
-func CloneTokenHistory(history TokenHistory) TokenHistory {
-	return TokenHistory{
-		TotalVisits:         cloneStringIntMap(history.TotalVisits),
-		ConsecutiveFailures: cloneStringIntMap(history.ConsecutiveFailures),
-		PlaceVisits:         cloneStringIntMap(history.PlaceVisits),
-		TotalDuration:       history.TotalDuration,
-		LastError:           history.LastError,
-		FailureLog:          cloneFailureRecords(history.FailureLog),
-	}
-}
-
-// CloneProviderSessionMetadata returns a detached copy of canonical provider
-// session metadata.
-func CloneProviderSessionMetadata(session *ProviderSessionMetadata) *ProviderSessionMetadata {
-	return workerexecution.CloneProviderSessionMetadata(session)
-}
-
-// CloneWorkFailureMetadata returns a detached copy of canonical work failure
-// metadata.
-func CloneWorkFailureMetadata(failure *WorkFailureMetadata) *WorkFailureMetadata {
-	return workerexecution.CloneWorkFailureMetadata(failure)
-}
-
-// CloneFailureDetail returns a detached copy of a canonical failure detail.
-func CloneFailureDetail(detail *FailureDetail) *FailureDetail {
-	return workerexecution.CloneFailureDetail(detail)
-}
-
-// CloneSafeWorkDiagnostics returns a detached copy of the canonical safe
-// diagnostics boundary.
-func CloneSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *SafeWorkDiagnostics {
-	return workerdiagnostics.CloneSafeWorkDiagnostics(diagnostics)
-}
 
 // CloneFactoryWorldDispatchCompletion returns a detached copy of one canonical
 // selected-tick dispatch completion record.
 func CloneFactoryWorldDispatchCompletion(completion FactoryWorldDispatchCompletion) FactoryWorldDispatchCompletion {
 	clone := completion
-	clone.Result.FailureMetadata = CloneWorkFailureMetadata(completion.Result.FailureMetadata)
+	clone.Result.FailureMetadata = workerexecution.CloneWorkFailureMetadata(completion.Result.FailureMetadata)
 	clone.WorkItemIDs = cloneStringSlice(completion.WorkItemIDs)
 	clone.ConsumedInputs = cloneWorkstationInputs(completion.ConsumedInputs)
 	clone.InputWorkItems = cloneFactoryWorkItems(completion.InputWorkItems)
 	clone.OutputWorkItems = cloneFactoryWorkItems(completion.OutputWorkItems)
 	clone.PreviousChainingTraceIDs = cloneStringSlice(completion.PreviousChainingTraceIDs)
 	clone.TraceIDs = cloneStringSlice(completion.TraceIDs)
-	clone.ProviderSession = CloneProviderSessionMetadata(completion.ProviderSession)
-	clone.Diagnostics = CloneSafeWorkDiagnostics(completion.Diagnostics)
+	clone.ProviderSession = workerexecution.CloneProviderSessionMetadata(completion.ProviderSession)
+	clone.Diagnostics = workerdiagnostics.CloneSafeWorkDiagnostics(completion.Diagnostics)
 	clone.TerminalWork = cloneFactoryTerminalWork(completion.TerminalWork)
 	return clone
 }
@@ -140,8 +27,8 @@ func CloneFactoryWorldDispatchCompletion(completion FactoryWorldDispatchCompleti
 // canonical selected-tick provider-session record.
 func CloneFactoryWorldProviderSessionRecord(record FactoryWorldProviderSessionRecord) FactoryWorldProviderSessionRecord {
 	clone := record
-	clone.ProviderSession = *CloneProviderSessionMetadata(&record.ProviderSession)
-	clone.Diagnostics = CloneSafeWorkDiagnostics(record.Diagnostics)
+	clone.ProviderSession = *workerexecution.CloneProviderSessionMetadata(&record.ProviderSession)
+	clone.Diagnostics = workerdiagnostics.CloneSafeWorkDiagnostics(record.Diagnostics)
 	clone.WorkItemIDs = cloneStringSlice(record.WorkItemIDs)
 	clone.WorkItems = cloneFactoryWorldWorkItemRefs(record.WorkItems)
 	clone.ConsumedInputs = cloneWorkstationInputs(record.ConsumedInputs)
@@ -183,8 +70,8 @@ func CloneWorkstationInputs(inputs []WorkstationInput) []WorkstationInput {
 func cloneFactoryWorldInferenceAttempt(attempt FactoryWorldInferenceAttempt) FactoryWorldInferenceAttempt {
 	clone := attempt
 	clone.ExitCode = cloneIntPtr(attempt.ExitCode)
-	clone.ProviderSession = CloneProviderSessionMetadata(attempt.ProviderSession)
-	clone.Diagnostics = CloneSafeWorkDiagnostics(attempt.Diagnostics)
+	clone.ProviderSession = workerexecution.CloneProviderSessionMetadata(attempt.ProviderSession)
+	clone.Diagnostics = workerdiagnostics.CloneSafeWorkDiagnostics(attempt.Diagnostics)
 	return clone
 }
 
@@ -198,11 +85,11 @@ func cloneFactoryTerminalWork(terminalWork *FactoryTerminalWork) *FactoryTermina
 	return &clone
 }
 
-func cloneFactoryWorkItems(items []FactoryWorkItem) []FactoryWorkItem {
+func cloneFactoryWorkItems(items []work.FactoryWorkItem) []work.FactoryWorkItem {
 	if len(items) == 0 {
 		return nil
 	}
-	clone := make([]FactoryWorkItem, len(items))
+	clone := make([]work.FactoryWorkItem, len(items))
 	for i, item := range items {
 		clone[i] = item
 		clone[i].PreviousChainingTraceIDs = cloneStringSlice(item.PreviousChainingTraceIDs)
@@ -252,44 +139,6 @@ func cloneStringSlice(values []string) []string {
 	return clone
 }
 
-func cloneRelations(relations []Relation) []Relation {
-	if relations == nil {
-		return nil
-	}
-	clone := make([]Relation, len(relations))
-	copy(clone, relations)
-	return clone
-}
-
-func cloneBytes(values []byte) []byte {
-	if values == nil {
-		return nil
-	}
-	clone := make([]byte, len(values))
-	copy(clone, values)
-	return clone
-}
-
-func cloneFailureRecords(records []FailureRecord) []FailureRecord {
-	if records == nil {
-		return nil
-	}
-	clone := make([]FailureRecord, len(records))
-	copy(clone, records)
-	return clone
-}
-
-func cloneStringIntMap(values map[string]int) map[string]int {
-	if values == nil {
-		return nil
-	}
-	clone := make(map[string]int, len(values))
-	for key, value := range values {
-		clone[key] = value
-	}
-	return clone
-}
-
 func cloneIntPtr(value *int) *int {
 	if value == nil {
 		return nil
@@ -302,7 +151,7 @@ func cloneFactoryWorldWorkItemRef(ref FactoryWorldWorkItemRef) FactoryWorldWorkI
 	clone := ref
 	clone.PreviousChainingTraceIDs = cloneStringSlice(ref.PreviousChainingTraceIDs)
 	clone.LineageParentWorkIDs = cloneStringSlice(ref.LineageParentWorkIDs)
-	clone.Content = CloneWorkContentParts(ref.Content)
+	clone.Content = work.CloneWorkContentParts(ref.Content)
 	return clone
 }
 

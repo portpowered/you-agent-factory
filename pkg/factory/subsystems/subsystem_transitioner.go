@@ -262,7 +262,7 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 	endTime time.Time,
 ) interfaces.CompletedDispatch {
 	dispatchEntry := completedDispatchEntry(snapshot, result.DispatchID)
-	failureMetadata := interfaces.CloneWorkFailureMetadata(result.FailureMetadata)
+	failureMetadata := workerexecution.CloneWorkFailureMetadata(result.FailureMetadata)
 	completed := interfaces.CompletedDispatch{
 		DispatchID:                  result.DispatchID,
 		TransitionID:                result.TransitionID,
@@ -270,9 +270,9 @@ func (t *TransitionerSubsystem) buildCompletedDispatch(
 		SelectedClassificationLabel: resolved.selectedClassificationLabel,
 		Reason:                      completedDispatchReason(resolved),
 		FailureMetadata:             failureMetadata,
-		ProviderSession:             interfaces.CloneProviderSessionMetadata(result.ProviderSession),
+		ProviderSession:             workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
 		EndTime:                     endTime,
-		ConsumedTokens:              interfaces.CloneTokens(consumedTokens),
+		ConsumedTokens:              factorytoken.CloneSlice(consumedTokens),
 		OutputMutations: mutationRecordsForDispatch(
 			result.DispatchID,
 			result.TransitionID,
@@ -379,7 +379,7 @@ func mutationRecordsForDispatch(
 			Reason:       mutation.Reason,
 		}
 		if mutation.NewToken != nil {
-			tokenCopy := interfaces.CloneToken(*mutation.NewToken)
+			tokenCopy := factorytoken.Clone(*mutation.NewToken)
 			record.Token = &tokenCopy
 			if record.TokenID == "" {
 				record.TokenID = mutation.NewToken.ID
@@ -439,7 +439,7 @@ func cloneRuntimeTokenColors(colors []factorytoken.Color) []factorytoken.Color {
 		cloned[i].Relations = factory.CloneRuntimeRelations(colors[i].Relations)
 		cloned[i].Content = work.CloneWorkContentParts(colors[i].Content)
 		cloned[i].Payload = factory.CloneRuntimePayload(colors[i].Payload)
-		cloned[i].InvocationArguments = interfaces.CloneInvocationArguments(colors[i].InvocationArguments)
+		cloned[i].InvocationArguments = work.CloneInvocationArguments(colors[i].InvocationArguments)
 	}
 	return cloned
 }
@@ -563,8 +563,8 @@ func deterministicWorkerBatchRequestID(result resolvedWorkResult, output string)
 
 func enrichWorkerEmittedBatchRequest(request *work.WorkRequest, inputColors []factorytoken.Color, result resolvedWorkResult) {
 	source := firstNonResourceInput(inputColors)
-	previousChainingTraceIDs := interfaces.PreviousChainingTraceIDsFromTokenColors(inputColors)
-	chainingTraceDepth := interfaces.ChainingTraceDepthFromTokenColors(inputColors)
+	previousChainingTraceIDs := factorytoken.PreviousChainingTraceIDsFromColors(inputColors)
+	chainingTraceDepth := factorytoken.ChainingTraceDepthFromColors(inputColors)
 	for i := range request.Works {
 		if request.Works[i].RequestID == "" {
 			request.Works[i].RequestID = request.RequestID
@@ -664,7 +664,7 @@ func (t *TransitionerSubsystem) getSpawnedWorkMutations(
 		workstationName = workstation.Name
 	}
 	for i := range result.spawnedWork {
-		spawnColor := interfaces.CloneTokenColor(result.spawnedWork[i])
+		spawnColor := factorytoken.CloneColor(result.spawnedWork[i])
 		if workPropagationMode == interfaces.WorkPropagationModePreserveInput {
 			if err := token_transformer.ApplyPreservedInputToColor(&spawnColor, inputColors, spawnColor.WorkTypeID, workstationName); err != nil {
 				return nil, err
@@ -863,7 +863,7 @@ func (t *TransitionerSubsystem) buildIntermittentFailureRequeueMutations(
 			continue
 		}
 
-		requeued := interfaces.CloneToken(consumed)
+		requeued := factorytoken.Clone(consumed)
 		requeued.PlaceID = consumed.PlaceID
 		requeued.EnteredAt = now
 		requeued.History = cloneHistoryForIntermittentFailureRequeue(history, result, now)
@@ -883,7 +883,7 @@ func cloneHistoryForIntermittentFailureRequeue(
 	result resolvedWorkResult,
 	now time.Time,
 ) factorytoken.History {
-	cloned := interfaces.CloneTokenHistory(history)
+	cloned := factorytoken.CloneHistory(history)
 	cloned.LastError = result.err
 	cloned.FailureLog = append(cloned.FailureLog, factorytoken.Failure{
 		TransitionID: result.transitionID,

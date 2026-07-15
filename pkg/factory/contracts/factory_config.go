@@ -10,9 +10,10 @@ import (
 	"time"
 
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
-	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // File directories
@@ -96,7 +97,7 @@ func IsSystemTimePlace(placeID string) bool {
 }
 
 // IsSystemTimeToken reports whether a token is an internal time-work token.
-func IsSystemTimeToken(token *Token) bool {
+func IsSystemTimeToken(token *factorytoken.Token) bool {
 	return token != nil && IsSystemTimeWorkType(token.Color.WorkTypeID)
 }
 
@@ -155,10 +156,10 @@ type FactoryConfig struct {
 	InvocationSignature *InvocationSignatureConfig      `json:"invocationSignature,omitempty"`
 	Orchestrator        *FactoryOrchestratorConfig      `json:"orchestrator,omitempty"`
 	WorkTypes           []WorkTypeConfig                `json:"work_types"`
-	Resources           []ResourceConfig                `json:"resources"`
+	Resources           []factoryresource.Config        `json:"resources"`
 	ResourceManifest    *PortableResourceManifestConfig `json:"resourceManifest,omitempty"`
 	Layout              *FactoryLayoutConfig            `json:"layout,omitempty"`
-	Workers             []WorkerConfig                  `json:"workers"`
+	Workers             []workerconfig.Config           `json:"workers"`
 	Workstations        []FactoryWorkstationConfig      `json:"workstations"`
 }
 
@@ -320,14 +321,6 @@ const (
 	StateTypeFailed     StateType = "FAILED"
 )
 
-type ResourceConfig = factoryresource.Config
-
-const (
-	ResourceTypeModel          = factoryresource.TypeModel
-	ResourceTypeProviderQuota  = factoryresource.TypeProviderQuota
-	ResourceTypeInvocationSlot = factoryresource.TypeInvocationSlot
-)
-
 // PortableResourceManifestConfig declares portability-only resources that are
 // distinct from runtime-capacity resources.
 type PortableResourceManifestConfig struct {
@@ -428,7 +421,7 @@ type FactoryWorkstationConfig struct {
 	OnContinue            []IOConfig                  `json:"on_continue,omitempty" yaml:"onContinue,omitempty"`
 	OnRejection           []IOConfig                  `json:"on_rejection,omitempty" yaml:"onRejection,omitempty"`
 	OnFailure             []IOConfig                  `json:"on_failure,omitempty" yaml:"onFailure,omitempty"`
-	Resources             []ResourceConfig            `json:"resources,omitempty" yaml:"resources,omitempty"`
+	Resources             []factoryresource.Config    `json:"resources,omitempty" yaml:"resources,omitempty"`
 	CopyReferencedScripts bool                        `json:"copy_referenced_scripts,omitempty" yaml:"-"`
 	Guards                []GuardConfig               `json:"guards,omitempty" yaml:"guards,omitempty"`
 	StopWords             []string                    `json:"stop_words,omitempty" yaml:"stopWords,omitempty"`
@@ -565,8 +558,8 @@ type TransitionConfig struct {
 type ModelOperationBinding struct {
 	Slot           string                         `json:"slot" yaml:"slot"`
 	Selector       *ModelOperationBindingSelector `json:"selector,omitempty" yaml:"selector,omitempty"`
-	Config         []WorkContentPart              `json:"config,omitempty" yaml:"config,omitempty"`
-	DefaultContent []WorkContentPart              `json:"defaultContent,omitempty" yaml:"defaultContent,omitempty"`
+	Config         []work.WorkContentPart         `json:"config,omitempty" yaml:"config,omitempty"`
+	DefaultContent []work.WorkContentPart         `json:"defaultContent,omitempty" yaml:"defaultContent,omitempty"`
 }
 
 // ModelOperationBindingSelector matches one input content part deterministically
@@ -577,37 +570,6 @@ type ModelOperationBindingSelector struct {
 	Type  string `json:"type,omitempty" yaml:"type,omitempty"`
 	Role  string `json:"role,omitempty" yaml:"role,omitempty"`
 }
-
-// ModelOperationBindingSource records where one slot binding was resolved from.
-const (
-	ModelOperationBindingSourceInput   = workerexecution.ModelOperationBindingSourceInput
-	ModelOperationBindingSourceConfig  = workerexecution.ModelOperationBindingSourceConfig
-	ModelOperationBindingSourceDefault = workerexecution.ModelOperationBindingSourceDefault
-	ModelOperationBindingSourceOmitted = workerexecution.ModelOperationBindingSourceOmitted
-)
-
-// ResolvedModelOperationBinding stores one resolved slot binding before model
-// execution begins.
-type ModelOperationBindingSource = workerexecution.ModelOperationBindingSource
-type ResolvedModelOperationBinding = workerexecution.ResolvedModelOperationBinding
-
-type WorkerConfig = workerconfig.Config
-type HostedWorkerAuthConfig = workerconfig.HostedWorkerAuthConfig
-type HostedLinearWorkerConfig = workerconfig.HostedLinearWorkerConfig
-type HostedLinearWorkerMappingConfig = workerconfig.HostedLinearWorkerMappingConfig
-type HostedLinearWorkerClaimConfig = workerconfig.HostedLinearWorkerClaimConfig
-type ModelOperation = workerconfig.ModelOperation
-type ModelOperationSlot = workerconfig.ModelOperationSlot
-
-const (
-	ModelLocalityLocal              = workerconfig.ModelLocalityLocal
-	ModelLocalityCloud              = workerconfig.ModelLocalityCloud
-	ModelOperationContentTypeText   = workerconfig.ModelOperationContentTypeText
-	ModelOperationContentTypeImage  = workerconfig.ModelOperationContentTypeImage
-	ModelOperationContentTypeAudio  = workerconfig.ModelOperationContentTypeAudio
-	ModelOperationContentTypeJSON   = workerconfig.ModelOperationContentTypeJSON
-	ModelOperationContentTypeBinary = workerconfig.ModelOperationContentTypeBinary
-)
 
 const (
 	OrchestratorKindPetri      = "PETRI"
@@ -686,11 +648,3 @@ var publicFactoryOrchestratorKindAliases = map[string]string{
 func GeneratedPublicFactoryOrchestratorKind(kind string) factoryapi.FactoryOrchestratorKind {
 	return factoryapi.FactoryOrchestratorKind(StrictPublicFactoryOrchestratorKind(kind))
 }
-
-const (
-	AgentWorkerToolPolicyDisabled = workerconfig.AgentToolPolicyDisabled
-	AgentWorkerToolPolicyReadOnly = workerconfig.AgentToolPolicyReadOnly
-	AgentWorkerToolPolicyEnabled  = workerconfig.AgentToolPolicyEnabled
-)
-
-type AgentWorkerToolsConfig = workerconfig.AgentToolsConfig

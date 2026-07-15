@@ -1,6 +1,11 @@
 package factorycontracts
 
-import "strings"
+import (
+	"strings"
+
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+)
 
 // CanonicalFactoryGraphEntityID resolves the durable public identifier used by
 // the graph contract, preferring explicit ids while preserving legacy name-keyed
@@ -13,11 +18,11 @@ func CanonicalFactoryGraphEntityID(explicitID, fallbackName string) string {
 	return fallbackName
 }
 
-func CanonicalFactoryGraphResourceID(resource ResourceConfig) string {
+func CanonicalFactoryGraphResourceID(resource factoryresource.Config) string {
 	return CanonicalFactoryGraphEntityID(resource.ID, resource.Name)
 }
 
-func CanonicalFactoryGraphWorkerID(worker WorkerConfig) string {
+func CanonicalFactoryGraphWorkerID(worker workerconfig.Config) string {
 	return CanonicalFactoryGraphEntityID(worker.ID, worker.Name)
 }
 

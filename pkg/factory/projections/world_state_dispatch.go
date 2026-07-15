@@ -385,14 +385,14 @@ func (r *factoryWorldReducer) appendProviderSessionRecord(
 		TransitionID:             payload.TransitionId,
 		WorkstationName:          dispatch.Workstation.Name,
 		Outcome:                  string(payload.Outcome),
-		ProviderSession:          *interfaces.CloneProviderSessionMetadata(completion.ProviderSession),
+		ProviderSession:          *workerexecution.CloneProviderSessionMetadata(completion.ProviderSession),
 		WorkItemIDs:              completion.WorkItemIDs,
 		ConsumedInputs:           interfaces.CloneWorkstationInputs(completion.ConsumedInputs),
 		CurrentChainingTraceID:   completion.CurrentChainingTraceID,
 		PreviousChainingTraceIDs: cloneStringSlice(completion.PreviousChainingTraceIDs),
 		TraceIDs:                 cloneStringSlice(completion.TraceIDs),
-		Diagnostics:              interfaces.CloneSafeWorkDiagnostics(completion.Diagnostics),
-		FailureDetail:            interfaces.CloneFailureDetail(completion.Result.FailureDetail),
+		Diagnostics:              workerdiagnostics.CloneSafeWorkDiagnostics(completion.Diagnostics),
+		FailureDetail:            workerexecution.CloneFailureDetail(completion.Result.FailureDetail),
 	})
 }
 
@@ -508,14 +508,14 @@ func latestInferenceProviderSession(attempt *interfaces.FactoryWorldInferenceAtt
 	if attempt == nil {
 		return nil
 	}
-	return interfaces.CloneProviderSessionMetadata(attempt.ProviderSession)
+	return workerexecution.CloneProviderSessionMetadata(attempt.ProviderSession)
 }
 
 func latestInferenceDiagnostics(attempt *interfaces.FactoryWorldInferenceAttempt) *workerdiagnostics.SafeWorkDiagnostics {
 	if attempt == nil {
 		return nil
 	}
-	return interfaces.CloneSafeWorkDiagnostics(attempt.Diagnostics)
+	return workerdiagnostics.CloneSafeWorkDiagnostics(attempt.Diagnostics)
 }
 
 func dispatchCompletionDiagnostics(
@@ -523,7 +523,7 @@ func dispatchCompletionDiagnostics(
 	attempt *interfaces.FactoryWorldInferenceAttempt,
 ) *workerdiagnostics.SafeWorkDiagnostics {
 	if agentRun != nil && agentRun.Diagnostics != nil {
-		return interfaces.CloneSafeWorkDiagnostics(agentRun.Diagnostics)
+		return workerdiagnostics.CloneSafeWorkDiagnostics(agentRun.Diagnostics)
 	}
 	return latestInferenceDiagnostics(attempt)
 }
@@ -622,7 +622,7 @@ func (r *factoryWorldReducer) recordFailedWorkDetail(completion interfaces.Facto
 		TransitionID:    completion.TransitionID,
 		WorkstationName: completion.Workstation.Name,
 		WorkItem:        item,
-		FailureDetail:   interfaces.CloneFailureDetail(completion.Result.FailureDetail),
+		FailureDetail:   workerexecution.CloneFailureDetail(completion.Result.FailureDetail),
 	}
 }
 

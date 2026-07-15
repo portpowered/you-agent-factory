@@ -173,7 +173,7 @@ func (s *SideEffects) Infer(ctx context.Context, req workerexecution.ProviderInf
 
 	return workerexecution.InferenceResponse{
 		Content:         result.Output,
-		ProviderSession: interfaces.CloneProviderSessionMetadata(result.ProviderSession),
+		ProviderSession: workerexecution.CloneProviderSessionMetadata(result.ProviderSession),
 		Diagnostics:     workerexecution.CloneWorkDiagnostics(record.completion.diagnostics),
 	}, nil
 }

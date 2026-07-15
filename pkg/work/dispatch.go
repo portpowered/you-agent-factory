@@ -71,6 +71,25 @@ func CloneWorkContentParts(parts []WorkContentPart) []WorkContentPart {
 	return cloned
 }
 
+// CloneInvocationArguments returns a detached copy of runtime-only invocation
+// argument metadata.
+func CloneInvocationArguments(args *InvocationArguments) *InvocationArguments {
+	if args == nil || len(args.Arguments) == 0 {
+		return nil
+	}
+	clone := &InvocationArguments{Arguments: make(map[string]InvocationArgument, len(args.Arguments))}
+	for name, argument := range args.Arguments {
+		next := InvocationArgument{
+			Values: cloneStringSlice(argument.Values), ValueMode: argument.ValueMode, Sensitive: argument.Sensitive,
+		}
+		if len(argument.Sources) > 0 {
+			next.Sources = append([]InvocationArgumentSource(nil), argument.Sources...)
+		}
+		clone.Arguments[name] = next
+	}
+	return clone
+}
+
 func cloneAnyMap(values map[string]any) map[string]any {
 	if values == nil {
 		return nil

@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workercompatibility "github.com/portpowered/infinite-you/pkg/workers/compatibility"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
 )
 
 func TestWorkerTaxonomyBehaviorProjection(t *testing.T) {
@@ -167,7 +169,9 @@ func TestWorkstationTaxonomyBehaviorProjection(t *testing.T) {
 func TestCompatibleWorkerWorkstationBehavior(t *testing.T) {
 	for _, tt := range compatibleWorkerWorkstationBehaviorCases() {
 		t.Run(tt.name, func(t *testing.T) {
-			got := interfaces.CompatibleWorkerWorkstationBehavior(tt.workerType, tt.workstationType, tt.kind)
+			got := workercompatibility.CompatibleWorkerWorkstationBehavior(
+				tt.workerType, tt.workstationType, workertaxonomy.WorkstationKind(tt.kind),
+			)
 			if got != tt.wantCompatible {
 				t.Fatalf("CompatibleWorkerWorkstationBehavior(%q, %q, %q) = %v, want %v",
 					tt.workerType, tt.workstationType, tt.kind, got, tt.wantCompatible)
@@ -289,10 +293,10 @@ func compatibleWorkerWorkstationBehaviorMismatchCases() []workerWorkstationBehav
 }
 
 func TestWorkerWorkstationBehaviorMismatchMessage_UsesBehaviorTerminology(t *testing.T) {
-	msg := interfaces.WorkerWorkstationBehaviorMismatchMessage(
+	msg := workercompatibility.WorkerWorkstationBehaviorMismatchMessage(
 		"plan-task",
 		interfaces.WorkstationTypeAgent,
-		interfaces.WorkstationKindStandard,
+		workertaxonomy.WorkstationKind(interfaces.WorkstationKindStandard),
 		"executor",
 		interfaces.WorkerTypeInference,
 	)

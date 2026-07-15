@@ -200,7 +200,7 @@ func buildFactoryWorldSessionBracketProjection(
 		FinalStatus:            bracket.FinalStatus,
 		CompletedAt:            bracket.CompletedAt,
 		DurationMillis:         bracket.DurationMillis,
-		FailureDetail:          interfaces.CloneFailureDetail(bracket.FailureDetail),
+		FailureDetail:          workerexecution.CloneFailureDetail(bracket.FailureDetail),
 	}
 }
 

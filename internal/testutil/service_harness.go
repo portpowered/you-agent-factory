@@ -672,7 +672,7 @@ func cloneMarkingSnapshot(snapshot *petri.MarkingSnapshot) *petri.MarkingSnapsho
 			tokens[id] = nil
 			continue
 		}
-		cloned := interfaces.CloneToken(*token)
+		cloned := factorytoken.Clone(*token)
 		tokens[id] = &cloned
 	}
 

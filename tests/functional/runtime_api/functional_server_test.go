@@ -209,7 +209,7 @@ func dashboardInferenceAttemptsByDispatchID(input map[string]map[string]interfac
 				Attempt:            attempt.Attempt,
 				DispatchId:         attempt.DispatchID,
 				DurationMillis:     attempt.DurationMillis,
-				FailureDetail:      interfaces.CloneFailureDetail(attempt.FailureDetail),
+				FailureDetail:      workerexecution.CloneFailureDetail(attempt.FailureDetail),
 				ExitCode:           copyIntPtrForFunctionalDashboard(attempt.ExitCode),
 				InferenceRequestId: attempt.InferenceRequestID,
 				Outcome:            attempt.Outcome,

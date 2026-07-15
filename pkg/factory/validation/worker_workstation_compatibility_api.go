@@ -8,6 +8,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workercompatibility "github.com/portpowered/infinite-you/pkg/workers/compatibility"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
 )
 
 // WorkerWorkstationCompatibilityTargetsFromAPI validates worker/workstation behavior
@@ -48,10 +49,10 @@ func WorkerWorkstationCompatibilityTargetsFromAPI(factory factoryapi.Factory) []
 		targets = append(targets, Target{
 			Code:     CodeWorkerWorkstationBehaviorCompatibility,
 			Severity: SeverityError,
-			Message: interfaces.WorkerWorkstationBehaviorMismatchMessage(
+			Message: workercompatibility.WorkerWorkstationBehaviorMismatchMessage(
 				workstation.Name,
 				workstationType,
-				workstationConfigFromAPI(workstation).Kind,
+				workertaxonomy.WorkstationKind(workstationConfigFromAPI(workstation).Kind),
 				worker.Name,
 				string(*worker.Type),
 			),
@@ -91,12 +92,14 @@ func displayWorkstationTypeFromAPI(workstation factoryapi.Workstation) string {
 }
 
 func expectedWorkerBehaviorClassFromAPI(workstation factoryapi.Workstation, workerType string) (workercompatibility.WorkerWorkstationBehaviorClass, bool) {
-	return interfaces.ExpectedWorkerBehaviorClassForWorkstation(workstationConfigFromAPI(workstation), workerType)
+	return workercompatibility.ExpectedWorkerBehaviorClassForWorkstation(
+		compatibilityWorkstation(workstationConfigFromAPI(workstation)), workerType,
+	)
 }
 
 func workerMatchesWorkstationPublicAPI(workerType string, workstation factoryapi.Workstation) bool {
 	cfg := workstationConfigFromAPI(workstation)
-	if interfaces.ExemptFromWorkerWorkstationCompatibility(cfg) {
+	if workercompatibility.ExemptFromWorkerWorkstationCompatibility(compatibilityWorkstation(cfg)) {
 		return true
 	}
 
@@ -124,10 +127,10 @@ func workerMatchesWorkstationPublicAPI(workerType string, workstation factoryapi
 		}
 	}
 
-	return interfaces.CompatibleWorkerWorkstationBehavior(
+	return workercompatibility.CompatibleWorkerWorkstationBehavior(
 		workerType,
 		workstationType,
-		cfg.Kind,
+		workertaxonomy.WorkstationKind(cfg.Kind),
 	)
 }
 
@@ -149,9 +152,9 @@ func WorkerWorkstationBehaviorCompatibilityTargets(cfg *interfaces.FactoryConfig
 			strings.TrimSpace(workstation.Type) == "" {
 			continue
 		}
-		if !interfaces.RequiresWorkerWorkstationBehaviorCompatibility(
+		if !workercompatibility.RequiresWorkerWorkstationBehaviorCompatibility(
 			workstation.Type,
-			workstation.Kind,
+			workertaxonomy.WorkstationKind(workstation.Kind),
 			workstation.WorkerTypeName,
 		) {
 			continue
@@ -161,7 +164,9 @@ func WorkerWorkstationBehaviorCompatibilityTargets(cfg *interfaces.FactoryConfig
 		if !ok {
 			continue
 		}
-		if interfaces.CompatibleWorkerWorkstationBehavior(worker.Type, workstation.Type, workstation.Kind) {
+		if workercompatibility.CompatibleWorkerWorkstationBehavior(
+			worker.Type, workstation.Type, workertaxonomy.WorkstationKind(workstation.Kind),
+		) {
 			continue
 		}
 
@@ -169,10 +174,10 @@ func WorkerWorkstationBehaviorCompatibilityTargets(cfg *interfaces.FactoryConfig
 		targets = append(targets, Target{
 			Code:     CodeWorkerWorkstationBehaviorCompatibility,
 			Severity: SeverityError,
-			Message: interfaces.WorkerWorkstationBehaviorMismatchMessage(
+			Message: workercompatibility.WorkerWorkstationBehaviorMismatchMessage(
 				workstation.Name,
 				workstation.Type,
-				workstation.Kind,
+				workertaxonomy.WorkstationKind(workstation.Kind),
 				worker.Name,
 				worker.Type,
 			),
@@ -186,6 +191,12 @@ func WorkerWorkstationBehaviorCompatibilityTargets(cfg *interfaces.FactoryConfig
 	}
 
 	return targets
+}
+
+func compatibilityWorkstation(value interfaces.FactoryWorkstationConfig) workercompatibility.Workstation {
+	return workercompatibility.Workstation{
+		Name: value.Name, Type: value.Type, Kind: workertaxonomy.WorkstationKind(value.Kind), WorkerTypeName: value.WorkerTypeName,
+	}
 }
 
 // PollerRunWorkstationKindTargets returns validation targets when an explicit

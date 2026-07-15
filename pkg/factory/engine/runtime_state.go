@@ -4,6 +4,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
@@ -38,7 +39,7 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 		snap.Dispatches = make(map[string]*interfaces.DispatchEntry, len(rs.Dispatches))
 		for k, v := range rs.Dispatches {
 			cp := *v
-			cp.ConsumedTokens = interfaces.CloneTokens(v.ConsumedTokens)
+			cp.ConsumedTokens = factorytoken.CloneSlice(v.ConsumedTokens)
 			if v.HeldMutations != nil {
 				cp.HeldMutations = make([]interfaces.MarkingMutation, len(v.HeldMutations))
 				copy(cp.HeldMutations, v.HeldMutations)
@@ -73,8 +74,8 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 
 func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.CompletedDispatch {
 	cp := d
-	cp.ProviderSession = interfaces.CloneProviderSessionMetadata(d.ProviderSession)
-	cp.ConsumedTokens = interfaces.CloneTokens(d.ConsumedTokens)
+	cp.ProviderSession = workerexecution.CloneProviderSessionMetadata(d.ProviderSession)
+	cp.ConsumedTokens = factorytoken.CloneSlice(d.ConsumedTokens)
 	if d.OutputMutations != nil {
 		cp.OutputMutations = make([]interfaces.TokenMutationRecord, len(d.OutputMutations))
 		for i := range d.OutputMutations {
@@ -86,14 +87,14 @@ func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.Comple
 
 func deepCopyWorkResult(result workerexecution.WorkResult) workerexecution.WorkResult {
 	cp := result
-	cp.ProviderSession = interfaces.CloneProviderSessionMetadata(result.ProviderSession)
+	cp.ProviderSession = workerexecution.CloneProviderSessionMetadata(result.ProviderSession)
 	return cp
 }
 
 func deepCopyTokenMutationRecord(m interfaces.TokenMutationRecord) interfaces.TokenMutationRecord {
 	cp := m
 	if m.Token != nil {
-		tokenCopy := interfaces.CloneToken(*m.Token)
+		tokenCopy := factorytoken.Clone(*m.Token)
 		cp.Token = &tokenCopy
 	}
 	return cp

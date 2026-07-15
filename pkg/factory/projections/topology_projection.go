@@ -12,7 +12,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workercompatibility "github.com/portpowered/infinite-you/pkg/workers/compatibility"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
 )
 
 // ProjectInitialStructure projects the static net topology into the canonical
@@ -174,7 +176,9 @@ func workerConfigWithUsage(def *workerconfig.Config, workstations []interfaces.F
 	config := make(map[string]string)
 	if def.Type != "" {
 		if len(workstations) > 0 {
-			config["type"] = interfaces.PublicWorkerTypeForFactoryUsage(*def, workstations)
+			config["type"] = workercompatibility.PublicWorkerTypeForFactoryUsage(
+				*def, compatibilityWorkstations(workstations),
+			)
 		} else {
 			config["type"] = def.Type
 		}
@@ -183,6 +187,19 @@ func workerConfigWithUsage(def *workerconfig.Config, workstations []interfaces.F
 		return nil
 	}
 	return config
+}
+
+func compatibilityWorkstations(values []interfaces.FactoryWorkstationConfig) []workercompatibility.Workstation {
+	if len(values) == 0 {
+		return nil
+	}
+	workstations := make([]workercompatibility.Workstation, len(values))
+	for i, value := range values {
+		workstations[i] = workercompatibility.Workstation{
+			Name: value.Name, Type: value.Type, Kind: workertaxonomy.WorkstationKind(value.Kind), WorkerTypeName: value.WorkerTypeName,
+		}
+	}
+	return workstations
 }
 
 func factoryWorkstations(transitions map[string]*petri.Transition, runtimeConfig interfaces.RuntimeWorkstationLookup) []interfaces.FactoryWorkstation {

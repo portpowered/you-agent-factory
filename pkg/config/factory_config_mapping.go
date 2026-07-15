@@ -18,7 +18,9 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	workercompatibility "github.com/portpowered/infinite-you/pkg/workers/compatibility"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
 )
 
 // FactoryConfigMapper maps between on-disk factory configuration payloads and
@@ -1345,9 +1347,22 @@ func workerTypePtrForFactoryUsage(def *workerconfig.Config, workstations []inter
 	if def == nil || strings.TrimSpace(def.Type) == "" {
 		return nil
 	}
-	publicType := interfaces.PublicWorkerTypeForFactoryUsage(*def, workstations)
+	publicType := workercompatibility.PublicWorkerTypeForFactoryUsage(*def, compatibilityWorkstations(workstations))
 	enumValue := factoryapi.WorkerType(publicType)
 	return &enumValue
+}
+
+func compatibilityWorkstations(values []interfaces.FactoryWorkstationConfig) []workercompatibility.Workstation {
+	if len(values) == 0 {
+		return nil
+	}
+	workstations := make([]workercompatibility.Workstation, len(values))
+	for i, value := range values {
+		workstations[i] = workercompatibility.Workstation{
+			Name: value.Name, Type: value.Type, Kind: workertaxonomy.WorkstationKind(value.Kind), WorkerTypeName: value.WorkerTypeName,
+		}
+	}
+	return workstations
 }
 
 func workerModelProviderPtrIfNotEmpty(value string) *factoryapi.WorkerModelProvider {

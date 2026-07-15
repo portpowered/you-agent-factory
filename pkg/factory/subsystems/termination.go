@@ -197,7 +197,7 @@ func executorReviewReconcileMutations(
 }
 
 func executorReviewLineageFromConsumed(consumed []factorytoken.Token) (traceID string, laneName string) {
-	traceID = interfaces.CurrentChainingTraceIDFromTokens(consumed)
+	traceID = factorytoken.CurrentChainingTraceID(consumed, interfaces.SystemTimeWorkTypeID)
 	for i := range consumed {
 		if consumed[i].Color.DataType == factorytoken.DataTypeResource {
 			continue

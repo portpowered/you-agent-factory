@@ -3,67 +3,57 @@ package factorycontracts
 import (
 	"strings"
 
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
-)
-
-// ModelProvider identifies the CLI command used for model inference dispatch.
-type ModelProvider = modelprovider.ID
-
-const (
-	ModelProviderClaude   = modelprovider.Claude
-	ModelProviderCodex    = modelprovider.Codex
-	ModelProviderGemini   = modelprovider.Gemini
-	ModelProviderKiro     = modelprovider.Kiro
-	ModelProviderCursor   = modelprovider.Cursor
-	ModelProviderOpenCode = modelprovider.OpenCode
-	ModelProviderPi       = modelprovider.Pi
-	ModelProviderAgy      = modelprovider.Agy
 )
 
 // SupportedModelProviders returns the canonical internal model provider commands
 // used for runtime dispatch and validation.
-func SupportedModelProviders() []ModelProvider {
+func SupportedModelProviders() []modelprovider.ID {
 	return modelprovider.Supported()
 }
 
-var internalModelProviderToPublicWorkerModelProvider = map[ModelProvider]factoryapi.WorkerModelProvider{
-	ModelProviderClaude:   factoryapi.WorkerModelProviderClaude,
-	ModelProviderCodex:    factoryapi.WorkerModelProviderCodex,
-	ModelProviderCursor:   factoryapi.WorkerModelProviderCursor,
-	ModelProviderGemini:   factoryapi.WorkerModelProviderGemini,
-	ModelProviderKiro:     factoryapi.WorkerModelProviderKiro,
-	ModelProviderOpenCode: factoryapi.WorkerModelProviderOpenCode,
-	ModelProviderPi:       factoryapi.WorkerModelProviderPi,
-	ModelProviderAgy:      factoryapi.WorkerModelProviderAgy,
+var internalModelProviderToPublicWorkerModelProvider = map[modelprovider.ID]factoryapi.WorkerModelProvider{
+	modelprovider.Claude:   factoryapi.WorkerModelProviderClaude,
+	modelprovider.Codex:    factoryapi.WorkerModelProviderCodex,
+	modelprovider.Cursor:   factoryapi.WorkerModelProviderCursor,
+	modelprovider.Gemini:   factoryapi.WorkerModelProviderGemini,
+	modelprovider.Kiro:     factoryapi.WorkerModelProviderKiro,
+	modelprovider.OpenCode: factoryapi.WorkerModelProviderOpenCode,
+	modelprovider.Pi:       factoryapi.WorkerModelProviderPi,
+	modelprovider.Agy:      factoryapi.WorkerModelProviderAgy,
 }
 
 // PublicWorkerModelProviderFromInternal maps a canonical internal provider command to the generated public enum.
-func PublicWorkerModelProviderFromInternal(provider ModelProvider) (factoryapi.WorkerModelProvider, bool) {
+func PublicWorkerModelProviderFromInternal(provider modelprovider.ID) (factoryapi.WorkerModelProvider, bool) {
 	public, ok := internalModelProviderToPublicWorkerModelProvider[provider]
 	return public, ok
 }
 
 // InternalModelProviderFromPublicWorkerModelProvider maps a canonical public WorkerModelProvider to the internal command.
-func InternalModelProviderFromPublicWorkerModelProvider(value factoryapi.WorkerModelProvider) (ModelProvider, bool) {
+func InternalModelProviderFromPublicWorkerModelProvider(value factoryapi.WorkerModelProvider) (modelprovider.ID, bool) {
 	switch StrictPublicFactoryWorkerModelProvider(string(value)) {
 	case publicFactoryWorkerModelProviderClaude:
-		return ModelProviderClaude, true
+		return modelprovider.Claude, true
 	case publicFactoryWorkerModelProviderCodex:
-		return ModelProviderCodex, true
+		return modelprovider.Codex, true
 	case publicFactoryWorkerModelProviderCursor:
-		return ModelProviderCursor, true
+		return modelprovider.Cursor, true
 	case publicFactoryWorkerModelProviderGemini:
-		return ModelProviderGemini, true
+		return modelprovider.Gemini, true
 	case publicFactoryWorkerModelProviderKiro:
-		return ModelProviderKiro, true
+		return modelprovider.Kiro, true
 	case publicFactoryWorkerModelProviderOpenCode:
-		return ModelProviderOpenCode, true
+		return modelprovider.OpenCode, true
 	case publicFactoryWorkerModelProviderPi:
-		return ModelProviderPi, true
+		return modelprovider.Pi, true
 	case publicFactoryWorkerModelProviderAgy:
-		return ModelProviderAgy, true
+		return modelprovider.Agy, true
 	default:
 		return "", false
 	}
@@ -102,7 +92,7 @@ func IsProviderBackedWorkerType(workerType string) bool {
 // UsesModelhostLease reports whether local model calls for this worker should
 // acquire and release modelhost inferencer leases.
 func UsesModelhostLease(workerType string, locality string) bool {
-	return IsProviderBackedWorkerType(workerType) && locality == ModelLocalityLocal
+	return IsProviderBackedWorkerType(workerType) && locality == workerconfig.ModelLocalityLocal
 }
 
 // IsScriptWorkerType reports whether workerType is an accepted script-worker taxonomy value.
@@ -158,22 +148,22 @@ var publicFactoryHostedWorkerProviderAliases = map[string]string{
 }
 
 var publicFactoryWorkerModelLocalityAliases = map[string]string{
-	ModelLocalityLocal: ModelLocalityLocal,
-	ModelLocalityCloud: ModelLocalityCloud,
+	workerconfig.ModelLocalityLocal: workerconfig.ModelLocalityLocal,
+	workerconfig.ModelLocalityCloud: workerconfig.ModelLocalityCloud,
 }
 
 var publicFactoryWorkerModelOperationContentTypeAliases = map[string]string{
-	ModelOperationContentTypeText:   ModelOperationContentTypeText,
-	ModelOperationContentTypeImage:  ModelOperationContentTypeImage,
-	ModelOperationContentTypeAudio:  ModelOperationContentTypeAudio,
-	ModelOperationContentTypeJSON:   ModelOperationContentTypeJSON,
-	ModelOperationContentTypeBinary: ModelOperationContentTypeBinary,
+	workerconfig.ModelOperationContentTypeText:   workerconfig.ModelOperationContentTypeText,
+	workerconfig.ModelOperationContentTypeImage:  workerconfig.ModelOperationContentTypeImage,
+	workerconfig.ModelOperationContentTypeAudio:  workerconfig.ModelOperationContentTypeAudio,
+	workerconfig.ModelOperationContentTypeJSON:   workerconfig.ModelOperationContentTypeJSON,
+	workerconfig.ModelOperationContentTypeBinary: workerconfig.ModelOperationContentTypeBinary,
 }
 
 var publicFactoryResourceTypeAliases = map[string]string{
-	ResourceTypeModel:          ResourceTypeModel,
-	ResourceTypeProviderQuota:  ResourceTypeProviderQuota,
-	ResourceTypeInvocationSlot: ResourceTypeInvocationSlot,
+	factoryresource.TypeModel:          factoryresource.TypeModel,
+	factoryresource.TypeProviderQuota:  factoryresource.TypeProviderQuota,
+	factoryresource.TypeInvocationSlot: factoryresource.TypeInvocationSlot,
 }
 
 var publicFactoryWorkstationTypeAliases = map[string]string{
@@ -247,12 +237,12 @@ func ProjectWorkstationBehaviorClass(workstationType string, kind WorkstationKin
 }
 
 var publicFactoryRunnerIDAliases = map[string]string{
-	RunnerIDCodex:     RunnerIDCodex,
-	RunnerIDGemini:    RunnerIDGemini,
-	RunnerIDKiro:      RunnerIDKiro,
-	RunnerIDCursorCLI: RunnerIDCursorCLI,
-	RunnerIDOpenCode:  RunnerIDOpenCode,
-	RunnerIDPi:        RunnerIDPi,
+	workerexecution.RunnerIDCodex:     workerexecution.RunnerIDCodex,
+	workerexecution.RunnerIDGemini:    workerexecution.RunnerIDGemini,
+	workerexecution.RunnerIDKiro:      workerexecution.RunnerIDKiro,
+	workerexecution.RunnerIDCursorCLI: workerexecution.RunnerIDCursorCLI,
+	workerexecution.RunnerIDOpenCode:  workerexecution.RunnerIDOpenCode,
+	workerexecution.RunnerIDPi:        workerexecution.RunnerIDPi,
 }
 
 // WorkstationOutcomeFormatDecisionEnvelope routes agent output through the
@@ -264,10 +254,10 @@ var publicFactoryWorkstationOutcomeFormatAliases = map[string]string{
 }
 
 var publicFactoryRunnerSelectionSourceAliases = map[string]string{
-	string(RunnerSelectionSourceWorkstation):    string(RunnerSelectionSourceWorkstation),
-	string(RunnerSelectionSourceFactory):        string(RunnerSelectionSourceFactory),
-	string(RunnerSelectionSourceLegacyProvider): string(RunnerSelectionSourceLegacyProvider),
-	string(RunnerSelectionSourceDefault):        string(RunnerSelectionSourceDefault),
+	string(workerexecution.RunnerSelectionSourceWorkstation):    string(workerexecution.RunnerSelectionSourceWorkstation),
+	string(workerexecution.RunnerSelectionSourceFactory):        string(workerexecution.RunnerSelectionSourceFactory),
+	string(workerexecution.RunnerSelectionSourceLegacyProvider): string(workerexecution.RunnerSelectionSourceLegacyProvider),
+	string(workerexecution.RunnerSelectionSourceDefault):        string(workerexecution.RunnerSelectionSourceDefault),
 }
 
 var publicFactoryWorkTypeHandlingBehaviorAliases = map[string]string{
@@ -674,7 +664,7 @@ func GeneratedPublicFactoryWorkstationTypePtr(value string) *factoryapi.Workstat
 
 // GeneratedPublicFactoryRunnerID returns the generated runner ID enum.
 func GeneratedPublicFactoryRunnerID(value string) factoryapi.RunnerID {
-	return factoryapi.RunnerID(PermissivePublicFactoryRunnerID(NormalizeRunnerID(value)))
+	return factoryapi.RunnerID(PermissivePublicFactoryRunnerID(workerrunner.NormalizeRunnerID(value)))
 }
 
 // GeneratedPublicFactoryRunnerIDPtr returns the generated runner ID enum when non-empty.

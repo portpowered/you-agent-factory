@@ -285,11 +285,11 @@ var productionBoundarySources = []struct {
 }{
 	{
 		relativePath: "pkg/config/openapi_factory.go",
-		sha256Hex:    "74867cd04c31c7fb5c9733478d5ab237d411ef23b79c63ebad6f458867082086",
+		sha256Hex:    "2e2709e8a15fcd509889e1b788d14b4ca7ab59904485c87069695417eaea6e8b",
 	},
 	{
 		relativePath: "pkg/config/factory_config_mapping.go",
-		sha256Hex:    "a1c1b8b4a02e3756c9a7996e7df43823ace1b2edc894044d1ca0592a3120da10",
+		sha256Hex:    "c48865d091ceb5527c0eab38ef54c96d266f6982db1b11aa49f97e5f9e704172",
 	},
 	{
 		relativePath: "pkg/config/factory_config_mapping_internal.go",
@@ -297,7 +297,7 @@ var productionBoundarySources = []struct {
 	},
 	{
 		relativePath: "pkg/factory/contracts/factory_config.go",
-		sha256Hex:    "f93f0f136453843053377d56792089186e80ee5ea2b1d31829164725bc11b009",
+		sha256Hex:    "98073a2a8be8ff4a9f9bb174b0952bbca29774b31254be247cd9c7d0f7e35b1a",
 	},
 	{
 		relativePath: "api/components/schemas/data-models/Factory.yaml",

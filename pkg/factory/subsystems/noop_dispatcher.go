@@ -97,8 +97,8 @@ func (d *NoOpDispatcherSubsystem) Execute(ctx context.Context, snapshot *interfa
 			DispatchID:               uuid.NewString(),
 			TransitionID:             decision.TransitionID,
 			WorkerType:               decision.WorkerType,
-			CurrentChainingTraceID:   interfaces.CurrentChainingTraceIDFromTokens(inputTokens),
-			PreviousChainingTraceIDs: interfaces.PreviousChainingTraceIDsFromTokens(inputTokens),
+			CurrentChainingTraceID:   factorytoken.CurrentChainingTraceID(inputTokens, interfaces.SystemTimeWorkTypeID),
+			PreviousChainingTraceIDs: factorytoken.PreviousChainingTraceIDs(inputTokens),
 			Execution:                execution,
 			InputTokens:              workers.InputTokens(inputTokens...),
 		}

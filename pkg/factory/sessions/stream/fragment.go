@@ -3,8 +3,8 @@ package stream
 import (
 	"strings"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -22,7 +22,7 @@ func mapInferenceProgressFragment(fragment workerprovider.InferenceProgressFragm
 		Kind:               kind,
 		Type:               responsestream.EventType(strings.TrimSpace(fragment.Type)),
 		DispatchID:         strings.TrimSpace(fragment.DispatchID),
-		ProviderSessionRef: interfaces.CloneProviderSessionMetadata(fragment.ProviderSessionRef),
+		ProviderSessionRef: workerexecution.CloneProviderSessionMetadata(fragment.ProviderSessionRef),
 		Payload:            fragment.Payload,
 		ExternalEventType:  strings.TrimSpace(fragment.ExternalEventType),
 		Metadata:           cloneStringMap(fragment.Metadata),

@@ -2,6 +2,9 @@ package factorycontracts
 
 import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // FactoryEventReconnectCursor identifies the last acknowledged event for stream
@@ -56,58 +59,58 @@ type InitialStructurePayload struct {
 	WorkTypes        []FactoryWorkType               `json:"work_types,omitempty"`
 	Workstations     []FactoryWorkstation            `json:"workstations,omitempty"`
 	Places           []FactoryPlace                  `json:"places,omitempty"`
-	Relations        []FactoryRelation               `json:"relations,omitempty"`
+	Relations        []work.FactoryRelation          `json:"relations,omitempty"`
 }
 
 // WorkInputPayload describes a work item submitted to the factory.
 type WorkInputPayload struct {
-	TokenID   string            `json:"token_id"`
-	WorkItem  FactoryWorkItem   `json:"work_item"`
-	Relations []FactoryRelation `json:"relations,omitempty"`
+	TokenID   string                 `json:"token_id"`
+	WorkItem  work.FactoryWorkItem   `json:"work_item"`
+	Relations []work.FactoryRelation `json:"relations,omitempty"`
 }
 
 // WorkRequestPayload describes a canonical work request batch submission.
 type WorkRequestPayload struct {
-	RequestID     string            `json:"request_id"`
-	Type          WorkRequestType   `json:"type"`
-	TraceID       string            `json:"trace_id,omitempty"`
-	Source        string            `json:"source,omitempty"`
-	ParentLineage []string          `json:"parent_lineage,omitempty"`
-	WorkItems     []FactoryWorkItem `json:"work_items,omitempty"`
+	RequestID     string                 `json:"request_id"`
+	Type          work.WorkRequestType   `json:"type"`
+	TraceID       string                 `json:"trace_id,omitempty"`
+	Source        string                 `json:"source,omitempty"`
+	ParentLineage []string               `json:"parent_lineage,omitempty"`
+	WorkItems     []work.FactoryWorkItem `json:"work_items,omitempty"`
 }
 
 // RelationshipChangePayload describes a relationship added by a request batch.
 type RelationshipChangePayload struct {
-	Relation  FactoryRelation `json:"relation"`
-	RequestID string          `json:"request_id,omitempty"`
-	TraceID   string          `json:"trace_id,omitempty"`
+	Relation  work.FactoryRelation `json:"relation"`
+	RequestID string               `json:"request_id,omitempty"`
+	TraceID   string               `json:"trace_id,omitempty"`
 }
 
 // WorkstationRequestPayload describes work and resources consumed by a dispatch.
 type WorkstationRequestPayload struct {
-	DispatchID            string                `json:"dispatch_id"`
-	TransitionID          string                `json:"transition_id"`
-	Workstation           FactoryWorkstationRef `json:"workstation"`
-	RunnerID              string                `json:"runner_id,omitempty"`
-	RunnerSelectionSource RunnerSelectionSource `json:"runner_selection_source,omitempty"`
-	Inputs                []WorkstationInput    `json:"inputs,omitempty"`
-	Resources             []FactoryResourceUnit `json:"resources,omitempty"`
+	DispatchID            string                                `json:"dispatch_id"`
+	TransitionID          string                                `json:"transition_id"`
+	Workstation           FactoryWorkstationRef                 `json:"workstation"`
+	RunnerID              string                                `json:"runner_id,omitempty"`
+	RunnerSelectionSource workerexecution.RunnerSelectionSource `json:"runner_selection_source,omitempty"`
+	Inputs                []WorkstationInput                    `json:"inputs,omitempty"`
+	Resources             []FactoryResourceUnit                 `json:"resources,omitempty"`
 }
 
 // WorkstationResponsePayload describes the result and outputs of a dispatch.
 type WorkstationResponsePayload struct {
-	DispatchID      string                   `json:"dispatch_id"`
-	TransitionID    string                   `json:"transition_id"`
-	Workstation     FactoryWorkstationRef    `json:"workstation"`
-	Result          WorkstationResult        `json:"result"`
-	DurationMillis  int64                    `json:"duration_millis"`
-	Outputs         []WorkstationOutput      `json:"outputs,omitempty"`
-	OutputWork      []FactoryWorkItem        `json:"output_work,omitempty"`
-	OutputResources []FactoryResourceUnit    `json:"output_resources,omitempty"`
-	TraceData       *FactoryTraceData        `json:"trace_data,omitempty"`
-	ProviderSession *ProviderSessionMetadata `json:"provider_session,omitempty"`
-	Diagnostics     *SafeWorkDiagnostics     `json:"diagnostics,omitempty"`
-	TerminalWork    *FactoryTerminalWork     `json:"terminal_work,omitempty"`
+	DispatchID      string                                   `json:"dispatch_id"`
+	TransitionID    string                                   `json:"transition_id"`
+	Workstation     FactoryWorkstationRef                    `json:"workstation"`
+	Result          WorkstationResult                        `json:"result"`
+	DurationMillis  int64                                    `json:"duration_millis"`
+	Outputs         []WorkstationOutput                      `json:"outputs,omitempty"`
+	OutputWork      []work.FactoryWorkItem                   `json:"output_work,omitempty"`
+	OutputResources []FactoryResourceUnit                    `json:"output_resources,omitempty"`
+	TraceData       *FactoryTraceData                        `json:"trace_data,omitempty"`
+	ProviderSession *workerexecution.ProviderSessionMetadata `json:"provider_session,omitempty"`
+	Diagnostics     *workerdiagnostics.SafeWorkDiagnostics   `json:"diagnostics,omitempty"`
+	TerminalWork    *FactoryTerminalWork                     `json:"terminal_work,omitempty"`
 }
 
 // FactoryStateChangePayload describes a lifecycle state change.
@@ -192,31 +195,31 @@ type FactoryPlace struct {
 
 // WorkstationInput describes an input token consumed by a dispatch.
 type WorkstationInput struct {
-	TokenID  string               `json:"token_id"`
-	PlaceID  string               `json:"place_id"`
-	WorkItem *FactoryWorkItem     `json:"work_item,omitempty"`
-	Resource *FactoryResourceUnit `json:"resource,omitempty"`
+	TokenID  string                `json:"token_id"`
+	PlaceID  string                `json:"place_id"`
+	WorkItem *work.FactoryWorkItem `json:"work_item,omitempty"`
+	Resource *FactoryResourceUnit  `json:"resource,omitempty"`
 }
 
 // WorkstationOutput describes a token produced or moved by a dispatch.
 type WorkstationOutput struct {
-	Type      string               `json:"type"`
-	TokenID   string               `json:"token_id"`
-	FromPlace string               `json:"from_place,omitempty"`
-	ToPlace   string               `json:"to_place,omitempty"`
-	WorkItem  *FactoryWorkItem     `json:"work_item,omitempty"`
-	Resource  *FactoryResourceUnit `json:"resource,omitempty"`
+	Type      string                `json:"type"`
+	TokenID   string                `json:"token_id"`
+	FromPlace string                `json:"from_place,omitempty"`
+	ToPlace   string                `json:"to_place,omitempty"`
+	WorkItem  *work.FactoryWorkItem `json:"work_item,omitempty"`
+	Resource  *FactoryResourceUnit  `json:"resource,omitempty"`
 }
 
 // WorkstationResult describes the business result of a workstation execution.
 type WorkstationResult struct {
-	Outcome                     string               `json:"outcome"`
-	Output                      string               `json:"output,omitempty"`
-	Error                       string               `json:"error,omitempty"`
-	Feedback                    string               `json:"feedback,omitempty"`
-	SelectedClassificationLabel string               `json:"selected_classification_label,omitempty"`
-	FailureDetail               *FailureDetail       `json:"failureDetail,omitempty"`
-	FailureMetadata             *WorkFailureMetadata `json:"failure_metadata,omitempty"`
+	Outcome                     string                               `json:"outcome"`
+	Output                      string                               `json:"output,omitempty"`
+	Error                       string                               `json:"error,omitempty"`
+	Feedback                    string                               `json:"feedback,omitempty"`
+	SelectedClassificationLabel string                               `json:"selected_classification_label,omitempty"`
+	FailureDetail               *workerexecution.FailureDetail       `json:"failureDetail,omitempty"`
+	FailureMetadata             *workerexecution.WorkFailureMetadata `json:"failure_metadata,omitempty"`
 }
 
 // FactoryTraceData carries trace identifiers attached to a runtime event.
@@ -227,6 +230,6 @@ type FactoryTraceData struct {
 
 // FactoryTerminalWork describes work that reached a terminal outcome.
 type FactoryTerminalWork struct {
-	WorkItem FactoryWorkItem `json:"work_item"`
-	Status   string          `json:"status"`
+	WorkItem work.FactoryWorkItem `json:"work_item"`
+	Status   string               `json:"status"`
 }
