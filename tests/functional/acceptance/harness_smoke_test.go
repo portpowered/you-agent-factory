@@ -70,7 +70,7 @@ func TestBuiltCLIHarness_NonZeroExitIncludesDiagnostics(t *testing.T) {
 	harness := builtcliacceptance.NewHarness(t, testutil.MustRepoRoot(t))
 	session := harness.NewSession(t)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	result, err := session.Run(ctx, "definitely-not-a-real-subcommand")

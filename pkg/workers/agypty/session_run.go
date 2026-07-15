@@ -205,6 +205,9 @@ func startPTYCapture(
 				mu.Unlock()
 			}
 			if err != nil {
+				if os.IsTimeout(err) {
+					continue
+				}
 				return
 			}
 		}

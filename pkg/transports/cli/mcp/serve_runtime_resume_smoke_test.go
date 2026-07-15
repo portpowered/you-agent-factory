@@ -15,7 +15,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/testharness"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
-	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -410,11 +409,7 @@ func startRunServeWithRuntimeService(
 
 	serveErr := make(chan error, 1)
 	go func() {
-		serveErr <- mcpcli.RunServe(ctx, mcpcli.ServeConfig{
-			Service: service,
-			Stdin:   stdinRead,
-			Stdout:  stdoutWrite,
-		})
+		serveErr <- executeGeneratedMCPServe(ctx, service, stdinRead, stdoutWrite, true, "")
 	}()
 
 	var shutdownOnce sync.Once

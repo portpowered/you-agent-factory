@@ -239,14 +239,31 @@ Dashboard tabs and other long-lived clients can persist logical session intent
 preflight resolves logical identity to the replacement live session before SSE
 reconnect or timeline checkpoint restore.
 
+The backend's ordered Factory Event stream remains authoritative for Factory
+Session replay and history. Browser reconnect cursors, timeline entries,
+materialized Work outcomes, and IndexedDB checkpoints are bounded derived
+caches. Each such cache belongs to one exact identity made from normalized
+`backendScopeID`, a concrete resolved `factorySessionID` UUID,
+`logicalSessionKeyID`, and `streamGenerationID`; selector aliases are resolved
+at the API boundary and are never durable cache identity.
+
+The dashboard runs sync preflight before checkpoint hydration. It replaces a
+checkpoint only with a strictly newer, transaction-complete write, preserves
+the last committed checkpoint when replacement fails, and performs best-effort
+flush and handoff on session changes and page lifecycle signals. Persistence
+diagnostics retain only a bounded, redaction-safe outcome record. Detailed
+Dispatch inspection remains a lazy dedicated read and does not expand ordinary
+Factory Session identity, timeline, or checkpoint state with raw dispatch
+collections.
+
 `logicalSessionKeyID` is derived deterministically from normalized factory
 session targets (default, folder-scoped, named, and provider-backed forms). The
 backend does not allocate or persist a separate logical-session table for this
 identity.
 
-See `docs/architecture/logical-session-identity.md` for target normalization
-rules, remap outcomes, preserved vs dropped client state, and verification
-surfaces.
+See `docs/architecture/logical-session-identity.md` for target normalization,
+the complete browser-cache ownership and durability contract, remap outcomes,
+preserved vs dropped client state, and verification surfaces.
 
 ## Event Stream
 

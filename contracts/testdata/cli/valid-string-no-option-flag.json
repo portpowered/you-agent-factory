@@ -1,0 +1,67 @@
+{
+  "formatVersion": "1.0.0",
+  "rootPath": "example",
+  "commands": {
+    "example.run": {
+      "id": "example.run",
+      "name": "run",
+      "path": "example run",
+      "aliases": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.run",
+        "documentation": {
+          "title": {
+            "id": "example.run.title",
+            "canonicalEnglish": "Run with optional fixture configuration"
+          },
+          "description": {
+            "id": "example.run.description",
+            "canonicalEnglish": "Runs with an optional string configuration path and uses a sentinel when the flag has no explicit value."
+          }
+        },
+        "examples": [
+          "example run --with-fixture"
+        ],
+        "visibility": "public",
+        "sourceHash": "7777888899990000111122223333444455556666aaaabbbbccccddddeeeeffff"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.run",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "visibility": "visible",
+      "runnable": true,
+      "usage": {
+        "line": "run"
+      },
+      "flags": {
+        "example.run.flag.with-fixture": {
+          "id": "example.run.flag.with-fixture",
+          "long": "with-fixture",
+          "shorthand": "",
+          "aliases": [],
+          "scope": "local",
+          "valueType": "string",
+          "required": false,
+          "default": "",
+          "changedDefault": false,
+          "noOptionDefault": "__default_fixture__",
+          "repeatable": false,
+          "normalization": "",
+          "completion": "none",
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "example.run.flag.with-fixture",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        }
+      }
+    }
+  }
+}

@@ -138,7 +138,6 @@ func TestMapNamedFactoryDir_HierarchicalScopedLayout(t *testing.T) {
 	}
 }
 
-
 func TestDefaultNamedFactoryRoots(t *testing.T) {
 	homeDir := filepath.Join("home", "customer")
 	wantRoot := defaultpaths.NamedFactoriesRoot(homeDir)
@@ -644,14 +643,14 @@ func assertPersistedNamedFactoryAgents(t *testing.T, factoryDir string) {
 	if err != nil {
 		t.Fatalf("ReadFile(worker AGENTS.md): %v", err)
 	}
-	if got := string(workerAgents); got != "You are the executor.\n" {
+	if got := string(workerAgents); got != "You are the executor." {
 		t.Fatalf("persisted worker AGENTS.md = %q, want body-only worker content", got)
 	}
 	workstationAgents, err := os.ReadFile(filepath.Join(factoryDir, interfaces.WorkstationsDir, "execute-alpha", interfaces.FactoryAgentsFileName))
 	if err != nil {
 		t.Fatalf("ReadFile(workstation AGENTS.md): %v", err)
 	}
-	if got := string(workstationAgents); got != "Implement {{ .WorkID }}.\n" {
+	if got := string(workstationAgents); got != "Implement {{ .WorkID }}." {
 		t.Fatalf("persisted workstation AGENTS.md = %q, want body-only workstation content", got)
 	}
 }

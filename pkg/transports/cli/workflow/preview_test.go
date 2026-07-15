@@ -13,6 +13,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/workflow"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/spf13/cobra"
 )
 
 const validWorkflowSource = `
@@ -111,6 +112,42 @@ func TestPreview_InvalidWorkflowReportsDiagnostics(t *testing.T) {
 	wantPath := workflowsource.ProjectClaudeWorkflowsDir + "/broken.js"
 	if !strings.Contains(output.String(), wantPath+":") {
 		t.Fatalf("output = %q, want path-aware diagnostic prefix %q", output.String(), wantPath)
+	}
+}
+
+func TestGeneratedMetadataRunEAdaptersUseCommandOutputAndGlobalJSON(t *testing.T) {
+	projectRoot := t.TempDir()
+	writeWorkflow(t, projectRoot, "review.js", validWorkflowSource)
+	jsonOutput := true
+
+	for _, tc := range []struct {
+		name string
+		run  func(*cobra.Command, []string) error
+	}{
+		{
+			name: "preview",
+			run: workflow.PreviewRunE(&workflow.PreviewConfig{SourceConfig: workflow.SourceConfig{
+				Dir: projectRoot, SourceKind: string(workflowsource.KindWorkflowName), SourceValue: "review",
+			}}, &jsonOutput),
+		},
+		{
+			name: "validate",
+			run: workflow.ValidateRunE(&workflow.ValidateConfig{SourceConfig: workflow.SourceConfig{
+				Dir: projectRoot, SourceKind: string(workflowsource.KindWorkflowName), SourceValue: "review",
+			}}, &jsonOutput),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			cmd := &cobra.Command{}
+			cmd.SetOut(&output)
+			if err := tc.run(cmd, nil); err != nil {
+				t.Fatalf("RunE: %v", err)
+			}
+			if !json.Valid(output.Bytes()) {
+				t.Fatalf("RunE output = %q, want global-JSON document", output.String())
+			}
+		})
 	}
 }
 

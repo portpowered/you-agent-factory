@@ -30,6 +30,7 @@ func TestIsBackendCoveragePackage(t *testing.T) {
 		{name: "backend package", importPath: modulePath + "/pkg/config", want: true},
 		{name: "generated api package", importPath: modulePath + "/pkg/transports/http/generated", want: false},
 		{name: "generated client package", importPath: modulePath + "/pkg/transports/http/client", want: false},
+		{name: "generated mcp package", importPath: modulePath + "/pkg/transports/mcp/generated", want: false},
 		{name: "test helper package", importPath: modulePath + "/pkg/testutil/runtimefixtures", want: false},
 		{name: "functional test package", importPath: modulePath + "/tests/functional/runtime_api", want: false},
 		{name: "ui package", importPath: modulePath + "/ui", want: false},

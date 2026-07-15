@@ -19,6 +19,7 @@ func TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
 		"typecheck":             "@printf '%s\\n' 'stub:typecheck'\n",
+		"mcp-contract-check":    "@printf '%s\\n' 'stub:mcp-contract-check'\n",
 		"ui-test":               "@printf '%s\\n' 'stub:ui-test'\n",
 		"test":                  "@printf '%s\\n' 'stub:test'\n",
 		"ui-install-playwright": "@printf '%s\\n' 'unexpected:ui-install-playwright'\n\t@exit 99\n",
@@ -33,9 +34,11 @@ func TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites(t *testing.T) {
 	}
 
 	assertOutputOrder(t, output,
-		"Running fast verification tier: typecheck + short UI/unit suite + short Go suite",
+		"Running fast verification tier: typecheck + MCP contract boundary + short UI/unit suite + short Go suite",
 		"==> dashboard typecheck [make typecheck]",
 		"stub:typecheck",
+		"==> MCP contract boundary [make mcp-contract-check]",
+		"stub:mcp-contract-check",
 		"==> short UI/unit suite [make ui-test]",
 		"stub:ui-test",
 		"==> short Go suite [make test]",
@@ -57,9 +60,10 @@ func TestVerifyFastCommandSmoke_UsesOnlyShortOwnedSuites(t *testing.T) {
 func TestVerifyFastCommandSmoke_FailureReportsOwnedSuiteAndRerunCommand(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"typecheck": "@printf '%s\\n' 'stub:typecheck'\n",
-		"ui-test":   "@printf '%s\\n' 'stub:ui-test'\n\t@exit 17\n",
-		"test":      "@printf '%s\\n' 'stub:test'\n",
+		"typecheck":          "@printf '%s\\n' 'stub:typecheck'\n",
+		"mcp-contract-check": "@printf '%s\\n' 'stub:mcp-contract-check'\n",
+		"ui-test":            "@printf '%s\\n' 'stub:ui-test'\n\t@exit 17\n",
+		"test":               "@printf '%s\\n' 'stub:test'\n",
 	})
 
 	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-fast")
@@ -71,6 +75,29 @@ func TestVerifyFastCommandSmoke_FailureReportsOwnedSuiteAndRerunCommand(t *testi
 	}
 	if strings.Contains(output, "stub:test") {
 		t.Fatalf("verify-fast continued after the failing owned suite:\n%s", output)
+	}
+}
+
+func TestVerifyFastCommandSmoke_ContractFailureStopsLaterSuites(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
+		"typecheck":          "@printf '%s\\n' 'stub:typecheck'\n",
+		"mcp-contract-check": "@printf '%s\\n' 'stub:mcp-contract-check'\n\t@exit 23\n",
+		"ui-test":            "@printf '%s\\n' 'stub:ui-test'\n",
+		"test":               "@printf '%s\\n' 'stub:test'\n",
+	})
+
+	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-fast")
+	if err == nil {
+		t.Fatalf("verify-fast unexpectedly succeeded:\n%s", output)
+	}
+	if !strings.Contains(output, "FAIL: MCP contract boundary [make mcp-contract-check] failed. Rerun with: make mcp-contract-check") {
+		t.Fatalf("verify-fast failure output missing MCP rerun hint:\n%s", output)
+	}
+	for _, laterSuite := range []string{"stub:ui-test", "stub:test"} {
+		if strings.Contains(output, laterSuite) {
+			t.Fatalf("verify-fast continued to %q after the failing MCP contract check:\n%s", laterSuite, output)
+		}
 	}
 }
 

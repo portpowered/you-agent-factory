@@ -92,6 +92,8 @@ type RootCommandOptions struct {
 	LookupEnv             func(string) (string, bool)
 	Startup               startupcli.Handler
 	RunFactory            func(context.Context, runcli.RunConfig) error
+	SubmitWork            func(submitcli.SubmitConfig) error
+	SubmitBatch           func(submitcli.BatchConfig) error
 	BuildSessionExecution sessionexecutioncli.ServiceBuilder
 	BuildModelInvocation  modelscli.InvocationBuilder
 }
@@ -120,6 +122,12 @@ func normalizeRootCommandOptions(options RootCommandOptions) RootCommandOptions 
 		options.RunFactory = func(ctx context.Context, cfg runcli.RunConfig) error {
 			return runCLI(ctx, cfg)
 		}
+	}
+	if options.SubmitWork == nil {
+		options.SubmitWork = submitWork
+	}
+	if options.SubmitBatch == nil {
+		options.SubmitBatch = submitBatch
 	}
 	return options
 }

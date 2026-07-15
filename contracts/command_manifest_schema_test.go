@@ -86,6 +86,7 @@ func TestCommandManifestSchemaFlagFixtures(t *testing.T) {
 		{name: "valid persistent flag", fixture: "valid-persistent-flag.json", valid: true},
 		{name: "valid inherited flag", fixture: "valid-inherited-flag.json", valid: true},
 		{name: "valid no-option flag", fixture: "valid-no-option-flag.json", valid: true},
+		{name: "valid string no-option flag", fixture: "valid-string-no-option-flag.json", valid: true},
 		{
 			name:     "unknown flag property",
 			fixture:  "invalid-flag-unknown-property.json",
@@ -170,6 +171,7 @@ func TestCommandManifestSchemaValidFixtureMatrix(t *testing.T) {
 		{name: "persistent flag", fixture: "valid-persistent-flag.json"},
 		{name: "inherited flag", fixture: "valid-inherited-flag.json"},
 		{name: "no-option flag", fixture: "valid-no-option-flag.json"},
+		{name: "string no-option flag", fixture: "valid-string-no-option-flag.json"},
 		{name: "mutex relationship", fixture: "valid-mutex-relationship.json"},
 		{name: "required-together relationship", fixture: "valid-required-together-relationship.json"},
 		{name: "conditional relationship", fixture: "valid-conditional-relationship.json"},
@@ -577,5 +579,22 @@ func TestCommandManifestSchemaExecutionMetadataFixtures(t *testing.T) {
 				t.Fatalf("validation paths = %v, want %q", paths, test.wantPath)
 			}
 		})
+	}
+}
+
+func TestCommandManifestSchemaRejectsIncompleteAuthoritativeRecord(t *testing.T) {
+	schema := commandManifestSchema(t)
+	instance := readJSON(t, filepath.Join("testdata", "cli", "valid-handler-binding.json"))
+	commands := instance.(map[string]any)["commands"].(map[string]any)
+	command := commands["example.factory.invoke"].(map[string]any)
+	command["completeness"] = "authoritative"
+
+	err := schema.Validate(instance)
+	if err == nil {
+		t.Fatal("expected incomplete authoritative command to fail validation")
+	}
+	wantPath := "/commands/example.factory.invoke"
+	if paths := validationPaths(t, err); !slices.Contains(paths, wantPath) {
+		t.Fatalf("validation paths = %v, want %q", paths, wantPath)
 	}
 }

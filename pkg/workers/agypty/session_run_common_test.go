@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,6 +17,20 @@ import (
 type closeOnlyPTY struct{}
 
 func (closeOnlyPTY) Close() error { return nil }
+
+type timeoutThenDataReader struct {
+	readCount int
+}
+
+func (r *timeoutThenDataReader) Read(destination []byte) (int, error) {
+	r.readCount++
+	if r.readCount == 1 {
+		return 0, os.ErrDeadlineExceeded
+	}
+	return copy(destination, "delayed-output"), io.EOF
+}
+
+func (*timeoutThenDataReader) Close() error { return nil }
 
 func TestAllocator_RejectsInvalidLaunch(t *testing.T) {
 	t.Parallel()
@@ -438,4 +453,26 @@ func TestClosePTYReader_AllowsNil(t *testing.T) {
 	t.Parallel()
 
 	closePTYReader(nil)
+}
+
+func TestStartPTYCapture_ContinuesAfterReadDeadline(t *testing.T) {
+	t.Parallel()
+
+	var (
+		mu          sync.Mutex
+		captured    []byte
+		capacityHit bool
+		lastByteAt  = time.Now()
+	)
+	reader := &timeoutThenDataReader{}
+
+	readDone := startPTYCapture(reader, SessionConfig{MaxCaptureBytes: 1024}, &mu, &captured, &capacityHit, &lastByteAt)
+	<-readDone
+
+	if got := string(captured); got != "delayed-output" {
+		t.Fatalf("captured output = %q, want delayed-output", got)
+	}
+	if capacityHit {
+		t.Fatal("capacityHit = true, want false")
+	}
 }

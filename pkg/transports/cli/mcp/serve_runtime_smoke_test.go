@@ -8,7 +8,6 @@ import (
 	"time"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
-	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
@@ -84,11 +83,7 @@ func startRunServeRuntimeSmokeServer(
 
 	serveErr := make(chan error, 1)
 	go func() {
-		serveErr <- mcpcli.RunServe(ctx, mcpcli.ServeConfig{
-			Service: service,
-			Stdin:   stdinRead,
-			Stdout:  stdoutWrite,
-		})
+		serveErr <- executeGeneratedMCPServe(ctx, service, stdinRead, stdoutWrite, true, projectRoot)
 	}()
 
 	var shutdownOnce sync.Once

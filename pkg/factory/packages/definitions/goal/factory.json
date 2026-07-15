@@ -22,7 +22,8 @@
     {
       "name": "goal-executor",
       "type": "AGENT_WORKER",
-      "stopToken": "<COMPLETE>"
+      "stopToken": "<COMPLETE>",
+      "promptFile": "prompts/executor.md"
     }
   ],
   "workstations": [

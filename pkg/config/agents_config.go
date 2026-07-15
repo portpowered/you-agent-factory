@@ -321,7 +321,7 @@ func loadAgentsBody(path string) (string, error) {
 		return body, nil
 	}
 
-	return strings.TrimSpace(content), nil
+	return content, nil
 }
 
 func normalizeWorkstationPublicEnums(cfg *interfaces.FactoryWorkstationConfig) {
@@ -780,11 +780,7 @@ func renderAgentsMarkdown(frontmatter any, body string) ([]byte, error) {
 }
 
 func renderAgentsBody(body string) []byte {
-	trimmed := strings.TrimSpace(body)
-	if trimmed == "" {
-		return []byte{}
-	}
-	return []byte(trimmed + "\n")
+	return []byte(body)
 }
 
 func loadWorkerBody(dir string) (string, bool, error) {
@@ -814,7 +810,7 @@ func loadWorkstationBody(dir string) (string, bool, error) {
 		return "", false, nil
 	}
 
-	return strings.TrimSpace(content), true, nil
+	return content, true, nil
 }
 
 func writeAgentsFile(dir string, content []byte) error {
