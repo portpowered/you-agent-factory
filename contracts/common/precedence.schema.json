@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/common/precedence.schema.json",
+  "title": "You contract precedence metadata",
+  "description": "Family-neutral file, environment, and flag precedence metadata for one contract setting. Precedence metadata documents override layers; it does not model env or flag values as JSON document properties.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "itemId",
+    "layers"
+  ],
+  "properties": {
+    "formatVersion": {
+      "description": "The explicitly supported version of this precedence metadata format.",
+      "const": "1.0.0"
+    },
+    "itemId": {
+      "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+    },
+    "layers": {
+      "description": "Ordered override layers from lowest to highest precedence for this setting.",
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/layer"
+      }
+    },
+    "environmentVariable": {
+      "description": "Environment variable name for the env layer when present.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Z][A-Z0-9_]*$"
+    },
+    "flagName": {
+      "description": "CLI flag name for the flag layer when present.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^--[a-z0-9-]+$"
+    },
+    "notes": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "layer": {
+      "description": "One precedence layer in ascending override order.",
+      "enum": [
+        "file",
+        "env",
+        "flag"
+      ]
+    }
+  }
+}

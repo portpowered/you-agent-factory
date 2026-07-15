@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/common/sensitivity.schema.json",
+  "title": "You contract sensitivity metadata",
+  "description": "Family-neutral sensitivity classification for one contract setting. Classification metadata documents secret-handling expectations; it does not invent new secret surfaces.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "itemId",
+    "classification"
+  ],
+  "properties": {
+    "formatVersion": {
+      "description": "The explicitly supported version of this sensitivity metadata format.",
+      "const": "1.0.0"
+    },
+    "itemId": {
+      "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+    },
+    "classification": {
+      "description": "How the setting value should be handled in logs, diagnostics, and packaging.",
+      "$ref": "#/$defs/classification"
+    },
+    "notes": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "$defs": {
+    "classification": {
+      "description": "Sensitivity classification for one inventoried setting.",
+      "enum": [
+        "public",
+        "sensitive",
+        "secret"
+      ]
+    }
+  }
+}
