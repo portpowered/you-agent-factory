@@ -27,6 +27,11 @@ primary-result behavior.
   assembled by `newRunSubmitHandlerRegistry` in `root_work.go`, and
   `NewGeneratedRunSubmitFamilyCommandForParity` exposes the isolated generated
   tree without changing production root registration before the cutover lane.
+  `NewRunSubmitFamilyParityRoots` builds independent legacy and generated roots
+  with injected `RootCommandOptions`; use it for observable parser, resolved
+  `RunConfig`, service-call, stdout/stderr, and error parity without sharing
+  mutable Cobra flag state. Run-specific coverage lives in
+  `pkg/transports/cli/climanifestparity/runparity/run_parity_test.go`.
 
 ## CLI invocation output modes (primary-result, human response-stream, NDJSON)
 

@@ -394,10 +394,37 @@ func runCommandExamples() string {
 // generated run/submit metadata and the retained production handler paths.
 // Production registration remains on the legacy constructors until cutover.
 func NewGeneratedRunSubmitFamilyCommandForParity() (*cobra.Command, error) {
-	options := normalizeRootCommandOptions(RootCommandOptions{})
+	return newRunSubmitFamilyRootForParity(RootCommandOptions{}, true)
+}
+
+// NewRunSubmitFamilyParityRoots builds independent handwritten and generated
+// run/submit roots with the same process-owned dependencies. Keeping the roots
+// independent prevents Cobra flag state from leaking between parity executions.
+func NewRunSubmitFamilyParityRoots(options RootCommandOptions) (legacyRoot, generatedRoot *cobra.Command, err error) {
+	legacyRoot, err = newRunSubmitFamilyRootForParity(options, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	generatedRoot, err = newRunSubmitFamilyRootForParity(options, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	return legacyRoot, generatedRoot, nil
+}
+
+func newRunSubmitFamilyRootForParity(options RootCommandOptions, generatedFamily bool) (*cobra.Command, error) {
+	options = normalizeRootCommandOptions(options)
 	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
 	diagnostics := &cliDiagnosticsOptions{}
 	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	if !generatedFamily {
+		root.AddCommand(
+			newRunCommand(globals, diagnostics, operatorDefaults, options),
+			newSubmitCommand(globals, diagnostics),
+		)
+		return root, nil
+	}
 	registry, bindings, err := newRunSubmitHandlerRegistry(
 		globals,
 		diagnostics,
@@ -411,7 +438,6 @@ func NewGeneratedRunSubmitFamilyCommandForParity() (*cobra.Command, error) {
 	if err != nil {
 		return nil, err
 	}
-	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
 	root.AddCommand(components.Run, components.Submit)
 	return root, nil
 }
