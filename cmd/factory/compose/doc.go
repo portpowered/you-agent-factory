@@ -1,3 +1,0 @@
-// Package compose is the cmd-owned wire composition root for FactoryService.
-// Regenerate wire_gen.go with: go generate ./cmd/factory/compose/...
-package compose

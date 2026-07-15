@@ -1,6 +1,6 @@
 //go:build wireinject
 
-package compose
+package wire
 
 import (
 	"context"

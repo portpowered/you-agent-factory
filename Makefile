@@ -115,7 +115,7 @@ generate-ui-api:
 	cd ui && node ./scripts/generate-openapi-types.mjs ../api/openapi.yaml src/api/generated/openapi.ts
 
 generate-wire:
-	$(GO) generate ./cmd/factory/compose/...
+	$(GO) generate ./pkg/...
 
 wire-smoke:
 	$(MAKE) generate-wire
