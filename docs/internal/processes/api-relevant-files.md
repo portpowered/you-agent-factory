@@ -248,6 +248,14 @@ Use this map when changing the public REST contract.
   `pkg/transports/mcp/factorysession/catalog/catalog_publication_test.go`. Staged MCP
   tools remain projected only from `contracts/testdata/baseline/mcp-tools.json`
   through `internal/contractstaging/policy.go`, not from the authored catalog.
+- MCP boundary closeout comparison lives in `internal/mcpcontractcheck`, with
+  the read-only `cmd/mcpcontractcheck` entrypoint. Keep the pure `Validate`
+  function explicit over authored catalog, generated primary discovery,
+  handwritten stable-ID registry, and compatibility-alias inputs. Repository
+  loading may project handler identities through
+  `factorysession.ProjectCanonicalToolHandlerBindings`, which intentionally
+  omits executable functions and returns stable tool/handler IDs in sorted
+  order; do not move handler behavior into catalog or generated code.
 - Valid MCP catalog fixtures live under `contracts/testdata/mcp/` and register
   through `internal/contractvalidator.MCPRegistry()` into
   `make contracts-validate`. The authored `contracts/mcp/tools.json` registers in

@@ -1,0 +1,76 @@
+package mcpcontractcheck
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/portpowered/infinite-you/pkg/transports/mcp/discoverygen"
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
+	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
+)
+
+// Check loads the repository-owned boundary projections and runs the pure
+// structural comparison. It is read-only.
+func Check(repositoryRoot string) ([]Diagnostic, error) {
+	inputs, err := LoadInputs(repositoryRoot)
+	if err != nil {
+		return nil, err
+	}
+	return Validate(inputs), nil
+}
+
+// LoadInputs projects authored, generated, registry, and alias values into
+// explicit checker inputs without making contract data executable.
+func LoadInputs(repositoryRoot string) (Inputs, error) {
+	resolved, err := discoverygen.LoadResolvedCatalog(repositoryRoot)
+	if err != nil {
+		return Inputs{}, err
+	}
+	projected, err := discoverygen.ProjectDiscoveryFromCatalogDocument(resolved)
+	if err != nil {
+		return Inputs{}, fmt.Errorf("project authored MCP catalog: %w", err)
+	}
+
+	root, ok := resolved.(map[string]any)
+	if !ok {
+		return Inputs{}, fmt.Errorf("resolved MCP catalog is not an object")
+	}
+	authoredTools, ok := root["tools"].(map[string]any)
+	if !ok {
+		return Inputs{}, fmt.Errorf("resolved MCP catalog tools is not an object")
+	}
+
+	inputs := Inputs{Catalog: make([]ToolRecord, 0, len(projected.Tools))}
+	for id, record := range projected.Tools {
+		raw, ok := authoredTools[id].(map[string]any)
+		if !ok {
+			return Inputs{}, fmt.Errorf("authored MCP tool %q is not an object", id)
+		}
+		handler, ok := raw["handler"].(map[string]any)
+		if !ok {
+			return Inputs{}, fmt.Errorf("authored MCP tool %q handler is not an object", id)
+		}
+		handlerID, _ := handler["id"].(string)
+		inputs.Catalog = append(inputs.Catalog, ToolRecord{
+			ID: id, Name: record.Name, Description: record.Description,
+			InputSchema: record.InputSchema, HandlerID: handlerID,
+		})
+	}
+
+	for _, record := range mcpgenerated.PrimaryDiscovery() {
+		var inputSchema any
+		if err := json.Unmarshal(record.InputSchema, &inputSchema); err != nil {
+			return Inputs{}, fmt.Errorf("decode generated discovery input schema for %q: %w", record.ID, err)
+		}
+		inputs.Discovery = append(inputs.Discovery, ToolRecord{
+			ID: record.ID, Name: record.Name, Description: record.Description, InputSchema: inputSchema,
+		})
+	}
+	for _, binding := range mcpfactorysession.ProjectCanonicalToolHandlerBindings() {
+		inputs.Registry = append(inputs.Registry, HandlerBinding(binding))
+	}
+	for _, alias := range mcpfactorysession.DiscoverCompatibilityAliases() {
+		inputs.Aliases = append(inputs.Aliases, AliasBinding{Name: alias.Name, CanonicalName: alias.CanonicalName})
+	}
+	return inputs, nil
+}
