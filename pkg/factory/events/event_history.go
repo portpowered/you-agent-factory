@@ -44,7 +44,7 @@ const (
 
 type eventHistorySubscription struct {
 	events chan interfaces.FactoryEvent
-	inbox  chan factoryapi.FactoryEvent
+	inbox  chan interfaces.FactoryEvent
 	done   <-chan struct{}
 }
 
@@ -58,8 +58,8 @@ type FactoryEventHistory struct {
 	initialFactory      *factoryapi.Factory
 	now                 func() time.Time
 	streamGenerationID  string
-	events              []factoryapi.FactoryEvent
-	recorders           []func(factoryapi.FactoryEvent)
+	events              []interfaces.FactoryEvent
+	recorders           []func(interfaces.FactoryEvent)
 	eventTypeRecorders  []func(interfaces.FactoryEventType)
 	nextID              int
 	streams             map[int]*eventHistorySubscription
@@ -129,9 +129,7 @@ func (h *FactoryEventHistory) Events() []factoryapi.FactoryEvent {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	events := make([]factoryapi.FactoryEvent, len(h.events))
-	copy(events, h.events)
-	return events
+	return generatedFactoryEvents(h.events)
 }
 
 // Subscribe returns a replay snapshot followed by live canonical events.
@@ -147,27 +145,21 @@ func (h *FactoryEventHistory) Subscribe(
 	}
 
 	h.mu.Lock()
-	events := make([]factoryapi.FactoryEvent, len(h.events))
-	copy(events, h.events)
+	events := cloneFactoryEvents(h.events)
 	streamGenerationID := h.streamGenerationID
 	if reconnect != nil {
-		replayed, err := BuildReconnectReplay(events, *reconnect, scope)
+		replayed, err := buildDomainReconnectReplay(events, *reconnect, scope)
 		if err != nil {
 			h.mu.Unlock()
 			return interfaces.FactoryEventStream{}, err
 		}
 		events = replayed
 	}
-	domainEvents, err := domainFactoryEvents(events)
-	if err != nil {
-		h.mu.Unlock()
-		return interfaces.FactoryEventStream{}, err
-	}
 	id := h.nextID
 	h.nextID++
 	subscription := &eventHistorySubscription{
 		events: make(chan interfaces.FactoryEvent, eventHistoryStreamBufferSize),
-		inbox:  make(chan factoryapi.FactoryEvent, eventHistoryStreamBufferSize),
+		inbox:  make(chan interfaces.FactoryEvent, eventHistoryStreamBufferSize),
 		done:   ctx.Done(),
 	}
 	h.streams[id] = subscription
@@ -183,20 +175,13 @@ func (h *FactoryEventHistory) Subscribe(
 				h.mu.Unlock()
 				return
 			case event := <-subscription.inbox:
-				domainEvent, err := interfaces.NewFactoryEvent(event)
-				if err != nil {
-					h.mu.Lock()
-					delete(h.streams, id)
-					h.mu.Unlock()
-					return
-				}
 				select {
 				case <-subscription.done:
 					h.mu.Lock()
 					delete(h.streams, id)
 					h.mu.Unlock()
 					return
-				case subscription.events <- domainEvent:
+				case subscription.events <- event.Clone():
 				}
 			}
 		}
@@ -204,34 +189,21 @@ func (h *FactoryEventHistory) Subscribe(
 
 	return interfaces.FactoryEventStream{
 		StreamGenerationID: streamGenerationID,
-		History:            domainEvents,
+		History:            events,
 		Events:             subscription.events,
 	}, nil
 }
 
-func domainFactoryEvents(events []factoryapi.FactoryEvent) ([]interfaces.FactoryEvent, error) {
-	converted := make([]interfaces.FactoryEvent, 0, len(events))
-	for _, event := range events {
-		domainEvent, err := interfaces.NewFactoryEvent(event)
-		if err != nil {
-			return nil, fmt.Errorf("convert factory event %q to domain envelope: %w", event.Id, err)
-		}
-		converted = append(converted, domainEvent)
-	}
-	return converted, nil
-}
-
-// AddGeneratedRecorder registers a callback invoked for every future generated
-// FactoryEvent append. Existing events are replayed to the callback first so
+// AddEventRecorder registers a callback invoked for every future canonical
+// Factory event append. Existing events are replayed to the callback first so
 // late recorder setup still sees a complete current-process history.
-func (h *FactoryEventHistory) AddGeneratedRecorder(recorder func(factoryapi.FactoryEvent)) {
+func (h *FactoryEventHistory) AddEventRecorder(recorder func(interfaces.FactoryEvent)) {
 	if h == nil || recorder == nil {
 		return
 	}
 
 	h.mu.Lock()
-	events := make([]factoryapi.FactoryEvent, len(h.events))
-	copy(events, h.events)
+	events := cloneFactoryEvents(h.events)
 	h.recorders = append(h.recorders, recorder)
 	h.mu.Unlock()
 
@@ -251,7 +223,7 @@ func (h *FactoryEventHistory) AddEventTypeRecorder(recorder func(interfaces.Fact
 	h.mu.Lock()
 	eventTypes := make([]interfaces.FactoryEventType, len(h.events))
 	for index, event := range h.events {
-		eventTypes[index] = interfaces.FactoryEventType(event.Type)
+		eventTypes[index] = event.Type
 	}
 	h.eventTypeRecorders = append(h.eventTypeRecorders, recorder)
 	h.mu.Unlock()
@@ -605,23 +577,31 @@ func (h *FactoryEventHistory) RecordFactoryStateChange(tick int, previous interf
 }
 
 func (h *FactoryEventHistory) appendGenerated(event factoryapi.FactoryEvent) {
+	domainEvent, err := interfaces.NewFactoryEvent(event)
+	if err != nil {
+		panic(fmt.Sprintf("convert generated factory event %q to canonical envelope: %v", event.Id, err))
+	}
+	h.appendEvent(domainEvent)
+}
+
+func (h *FactoryEventHistory) appendEvent(event interfaces.FactoryEvent) {
 	h.mu.Lock()
-	event.SchemaVersion = factoryapi.AgentFactoryEventV1
+	event.SchemaVersion = interfaces.FactoryEventSchemaVersionV1
 	event.Context.Sequence = len(h.events)
 	h.events = append(h.events, event)
 	streams := make([]*eventHistorySubscription, 0, len(h.streams))
 	for _, stream := range h.streams {
 		streams = append(streams, stream)
 	}
-	recorders := append([]func(factoryapi.FactoryEvent){}, h.recorders...)
+	recorders := append([]func(interfaces.FactoryEvent){}, h.recorders...)
 	eventTypeRecorders := append([]func(interfaces.FactoryEventType){}, h.eventTypeRecorders...)
 	h.mu.Unlock()
 
 	for _, recorder := range recorders {
-		recorder(event)
+		recorder(event.Clone())
 	}
 	for _, recorder := range eventTypeRecorders {
-		recorder(interfaces.FactoryEventType(event.Type))
+		recorder(event.Type)
 	}
 	for _, stream := range streams {
 		select {
@@ -630,7 +610,7 @@ func (h *FactoryEventHistory) appendGenerated(event factoryapi.FactoryEvent) {
 		default:
 		}
 		select {
-		case stream.inbox <- event:
+		case stream.inbox <- event.Clone():
 		default:
 		}
 	}
@@ -642,6 +622,19 @@ func factoryEvent(eventType factoryapi.FactoryEventType, id string, context fact
 		Id:      id,
 		Context: context,
 		Payload: factoryEventPayload(payload),
+	}
+}
+
+func domainFactoryEvent(eventType interfaces.FactoryEventType, id string, context interfaces.FactoryEventContext, payload any) interfaces.FactoryEvent {
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		panic(fmt.Sprintf("encode factory event payload %T: %v", payload, err))
+	}
+	return interfaces.FactoryEvent{
+		Type:    eventType,
+		Id:      id,
+		Context: context,
+		Payload: encoded,
 	}
 }
 

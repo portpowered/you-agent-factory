@@ -1,6 +1,7 @@
 package events
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -14,6 +15,36 @@ import (
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
+
+func domainFactoryEvents(events []factoryapi.FactoryEvent) ([]interfaces.FactoryEvent, error) {
+	converted := make([]interfaces.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		domainEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return nil, fmt.Errorf("convert factory event %q to domain envelope: %w", event.Id, err)
+		}
+		converted = append(converted, domainEvent)
+	}
+	return converted, nil
+}
+
+func generatedFactoryEvents(events []interfaces.FactoryEvent) []factoryapi.FactoryEvent {
+	converted := make([]factoryapi.FactoryEvent, len(events))
+	for index, event := range events {
+		if err := event.Decode(&converted[index]); err != nil {
+			panic(fmt.Sprintf("decode canonical factory event %q for generated boundary: %v", event.Id, err))
+		}
+	}
+	return converted
+}
+
+func cloneFactoryEvents(events []interfaces.FactoryEvent) []interfaces.FactoryEvent {
+	clones := make([]interfaces.FactoryEvent, len(events))
+	for index, event := range events {
+		clones[index] = event.Clone()
+	}
+	return clones
+}
 
 func generatedFactory(payload interfaces.InitialStructurePayload) factoryapi.Factory {
 	resources := generatedResources(payload.Resources)

@@ -20,6 +20,30 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
+func TestFactoryEventHistory_EventRecorderCannotMutateCanonicalHistory(t *testing.T) {
+	history := NewFactoryEventHistory(
+		eventHistoryProjectionNet(),
+		func() time.Time { return time.Unix(0, 0).UTC() },
+	)
+	history.AddEventRecorder(func(event interfaces.FactoryEvent) {
+		event.Payload[0] = 'X'
+		event.Context.EventTime = time.Unix(10, 0).UTC()
+	})
+
+	history.RecordInitialStructure()
+
+	events := history.Events()
+	if len(events) != 1 {
+		t.Fatalf("event count = %d, want 1", len(events))
+	}
+	if events[0].Context.EventTime != time.Unix(0, 0).UTC() {
+		t.Fatalf("canonical event time mutated through recorder: %s", events[0].Context.EventTime)
+	}
+	if _, err := events[0].Payload.AsInitialStructureRequestEventPayload(); err != nil {
+		t.Fatalf("canonical payload mutated through recorder: %v", err)
+	}
+}
+
 func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(t *testing.T) {
 	runtimeConfig := eventHistoryRuntimeConfig{
 		Workers: map[string]*workerconfig.Config{

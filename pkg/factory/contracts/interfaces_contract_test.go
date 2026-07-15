@@ -10,6 +10,33 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
+func TestFactoryEventClone_DetachesPayloadAndContextSlices(t *testing.T) {
+	sessionID := "session-1"
+	workIDs := []string{"work-1"}
+	event := FactoryEvent{
+		Payload: json.RawMessage(`{"status":"RUNNING"}`),
+		Context: FactoryEventContext{
+			SessionID: &sessionID,
+			WorkIDs:   &workIDs,
+		},
+	}
+
+	clone := event.Clone()
+	clone.Payload[2] = 'X'
+	*clone.Context.SessionID = "changed"
+	(*clone.Context.WorkIDs)[0] = "changed"
+
+	if string(event.Payload) != `{"status":"RUNNING"}` {
+		t.Fatalf("payload mutated through clone: %s", event.Payload)
+	}
+	if *event.Context.SessionID != "session-1" {
+		t.Fatalf("session ID mutated through clone: %q", *event.Context.SessionID)
+	}
+	if (*event.Context.WorkIDs)[0] != "work-1" {
+		t.Fatalf("work IDs mutated through clone: %v", *event.Context.WorkIDs)
+	}
+}
+
 func TestFactoryWorkstationConfigUnmarshalJSON_DecodesCanonicalRuntimeAndCronFields(t *testing.T) {
 	var workstation FactoryWorkstationConfig
 	if err := json.Unmarshal([]byte(`{

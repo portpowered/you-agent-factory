@@ -217,16 +217,11 @@ func assembleRuntimeBundle(
 		factory.WithCompletionRecorder(bundle.recordCompletionMetrics),
 	}
 	if input.RecordPath != "" {
-		opts = append(opts, factory.WithFactoryEventRecorder(func(event factoryapi.FactoryEvent) {
+		opts = append(opts, factory.WithFactoryEventRecorder(func(event interfaces.FactoryEvent) {
 			if recording == nil {
 				return
 			}
-			domainEvent, err := interfaces.NewFactoryEvent(event)
-			if err != nil {
-				recording.RecordError(fmt.Errorf("convert replay event %q: %w", event.Id, err))
-				return
-			}
-			recording.RecordEvent(domainEvent)
+			recording.RecordEvent(event)
 		}))
 	}
 	opts = append(opts, input.AdditionalFactoryOpts...)

@@ -170,7 +170,7 @@ func ensureEventHistory(cfg *factory.FactoryConfig) *factoryevents.FactoryEventH
 		eventHistory = factoryevents.NewFactoryEventHistory(cfg.GetNet(), cfg.Clock.Now, cfg.RuntimeConfig)
 	}
 	eventHistory.RecordRunRequest()
-	eventHistory.AddGeneratedRecorder(cfg.FactoryEventRecorder)
+	eventHistory.AddEventRecorder(cfg.FactoryEventRecorder)
 	eventHistory.RecordInitialStructure()
 	recordSessionStartedFromFactoryConfig(cfg, eventHistory)
 	return eventHistory

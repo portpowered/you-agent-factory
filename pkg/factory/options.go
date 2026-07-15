@@ -10,7 +10,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
@@ -67,9 +66,9 @@ type CompletionRecorder func(interfaces.FactoryCompletionRecord)
 // canonical Factory Session persistence owner after transition routing.
 type PetriMutationRecorder func(sessionID string, mutations []interfaces.TokenMutationRecord) error
 
-// FactoryEventRecorder receives canonical generated FactoryEvent messages in
+// FactoryEventRecorder receives canonical Factory-owned event messages in
 // append order as runtime history records them.
-type FactoryEventRecorder func(factoryapi.FactoryEvent)
+type FactoryEventRecorder func(interfaces.FactoryEvent)
 
 // SubmissionHook provides generated work batches, results, and events that
 // become visible to the engine at deterministic tick boundaries.
@@ -204,7 +203,7 @@ func WithSubmissionRecorder(recorder SubmissionRecorder) FactoryOption {
 	}
 }
 
-// WithFactoryEventRecorder records canonical generated events as they are
+// WithFactoryEventRecorder records canonical Factory events as they are
 // appended to the runtime event history.
 func WithFactoryEventRecorder(recorder FactoryEventRecorder) FactoryOption {
 	return func(c *FactoryConfig) {

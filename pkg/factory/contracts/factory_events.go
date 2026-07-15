@@ -127,6 +127,52 @@ type FactoryEventContext struct {
 	WorkIDs                  *[]string `json:"workIds,omitempty"`
 }
 
+// Clone returns a detached event envelope so recorders and stream consumers
+// cannot mutate canonical history through payload or context slice aliases.
+func (e FactoryEvent) Clone() FactoryEvent {
+	clone := e
+	clone.Payload = append(json.RawMessage(nil), e.Payload...)
+	clone.Context.CheckpointID = cloneStringPointer(e.Context.CheckpointID)
+	clone.Context.CurrentChainingTraceID = cloneStringPointer(e.Context.CurrentChainingTraceID)
+	clone.Context.DispatchID = cloneStringPointer(e.Context.DispatchID)
+	clone.Context.OrchestratorDialect = cloneStringPointer(e.Context.OrchestratorDialect)
+	clone.Context.OrchestratorKind = cloneStringPointer(e.Context.OrchestratorKind)
+	clone.Context.PhaseID = cloneStringPointer(e.Context.PhaseID)
+	clone.Context.PhaseName = cloneStringPointer(e.Context.PhaseName)
+	clone.Context.PreviousChainingTraceIDs = cloneStringSlicePointer(e.Context.PreviousChainingTraceIDs)
+	clone.Context.RequestID = cloneStringPointer(e.Context.RequestID)
+	clone.Context.SessionID = cloneStringPointer(e.Context.SessionID)
+	clone.Context.SessionSequence = cloneIntPointer(e.Context.SessionSequence)
+	clone.Context.Source = cloneStringPointer(e.Context.Source)
+	clone.Context.TraceIDs = cloneStringSlicePointer(e.Context.TraceIDs)
+	clone.Context.WorkIDs = cloneStringSlicePointer(e.Context.WorkIDs)
+	return clone
+}
+
+func cloneStringPointer(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func cloneIntPointer(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	clone := *value
+	return &clone
+}
+
+func cloneStringSlicePointer(value *[]string) *[]string {
+	if value == nil {
+		return nil
+	}
+	clone := append([]string(nil), (*value)...)
+	return &clone
+}
+
 // NewFactoryEvent converts an event-compatible value into the detached domain
 // envelope. It is intended for temporary producer and transport adapters while
 // event payload contracts migrate to their domain owners.

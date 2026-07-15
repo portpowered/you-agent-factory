@@ -12,7 +12,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -126,7 +125,7 @@ func TestFactoryOptions_PreserveSupportedHookAndRecorderSurface(t *testing.T) {
 		WithCompletionRecorder(func(interfaces.FactoryCompletionRecord) {
 			completionRecorderCalled = true
 		}),
-		WithFactoryEventRecorder(func(factoryapi.FactoryEvent) {
+		WithFactoryEventRecorder(func(interfaces.FactoryEvent) {
 			factoryEventRecorderCalled = true
 		}),
 	}
@@ -141,7 +140,7 @@ func TestFactoryOptions_PreserveSupportedHookAndRecorderSurface(t *testing.T) {
 	cfg.SubmissionRecorder(work.FactorySubmissionRecord{})
 	cfg.DispatchRecorder(interfaces.FactoryDispatchRecord{})
 	cfg.CompletionRecorder(interfaces.FactoryCompletionRecord{})
-	cfg.FactoryEventRecorder(factoryapi.FactoryEvent{})
+	cfg.FactoryEventRecorder(interfaces.FactoryEvent{})
 
 	if !submissionRecorderCalled || !dispatchRecorderCalled || !completionRecorderCalled || !factoryEventRecorderCalled {
 		t.Fatal("expected supported recorder options to preserve callbacks")
