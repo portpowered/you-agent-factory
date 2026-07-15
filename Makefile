@@ -28,6 +28,7 @@ CURRENT_FACTORY_WATCHER_SWITCH_SMOKE_TIMEOUT ?= 120s
 CROSS_PROVIDER_PARITY_SMOKE_TEST := TestCrossProviderParity
 CROSS_PROVIDER_PARITY_SMOKE_TIMEOUT ?= 120s
 JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT ?= 120s
+JAVASCRIPT_RUNTIME_REGRESSION_TESTS ?= ^(TestCallBehavior_WorkflowFinalInventoryMatchesExecution|TestCallBehavior_AgentRunInventoryMatchesExecution|TestRun_ProgressPrimitives_EmitsOrderedRuntimeRecords|TestRun_PolicyDeniedChildOperations_ReturnStableDiagnostics|TestCallBehavior_WorkflowResumeStateInventoryMatchesExecution)$$
 RESPONSE_STREAM_STRESS_SMOKE_TEST := TestSessionResponseEventStore_Backpressure
 RESPONSE_STREAM_STRESS_SMOKE_TIMEOUT ?= 120s
 BUILT_CLI_ACCEPTANCE_PACKAGES := ./tests/functional/acceptance
@@ -268,6 +269,7 @@ javascript-contract-smoke:
 	$(GO) run ./cmd/javascriptcontractsmoke -root .
 	$(GO) test ./internal/javascriptcontractsmoke ./cmd/javascriptcontractsmoke -count=1 -timeout $(JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT)
 	$(GO) test ./contracts -run '^TestJavaScriptRuntimePackagesDoNot(ImportContractTooling|LoadContractManifests)$$' -count=1 -timeout $(JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT)
+	$(GO) test ./pkg/orchestrators/javascript/runtime -run '$(JAVASCRIPT_RUNTIME_REGRESSION_TESTS)' -count=1 -timeout $(JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT)
 
 response-stream-stress-smoke:
 	$(GO) test ./pkg/factory/sessions/responseeventstore -run $(RESPONSE_STREAM_STRESS_SMOKE_TEST) -count=1 -timeout $(RESPONSE_STREAM_STRESS_SMOKE_TIMEOUT)

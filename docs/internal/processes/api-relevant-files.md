@@ -67,7 +67,8 @@ Use this map when changing the public REST contract.
   catalog/projection/binding/behavior parity closeout lives in
   `internal/javascriptcontractsmoke` with CLI entrypoint
   `cmd/javascriptcontractsmoke` and `make javascript-contract-smoke`; the same
-  target runs the production-package guards in
+  target runs focused installed-runtime regressions for signature, async result,
+  emitted records, policy rejection, and resume, plus the production-package guards in
   `contracts/runtime_manifest_boundary_test.go`, which discover every
   `pkg/orchestrators/javascript/...` package and reject transitive contract-tooling
   imports or production source literals that name the authored/staged runtime
