@@ -157,9 +157,13 @@ func applyReplayRunRequest(reduced *replayEventLog, event interfaces.FactoryEven
 	if err != nil {
 		return err
 	}
-	reduced.Factory = payload.Factory
-	reduced.WallClock = replayWallClockFromGenerated(payload.WallClock)
-	reduced.Diagnostics = replayDiagnosticsFromGenerated(payload.Diagnostics)
+	generatedFactory, err := generatedFactoryFromSnapshot(payload.Factory)
+	if err != nil {
+		return fmt.Errorf("decode run started event %q factory: %w", event.Id, err)
+	}
+	reduced.Factory = generatedFactory
+	reduced.WallClock = replayWallClockFromRunEvent(payload.WallClock)
+	reduced.Diagnostics = replayDiagnosticsFromRunEvent(payload.Diagnostics)
 	return nil
 }
 

@@ -168,9 +168,13 @@ func normalizeEventStreamRunRequestFactories(events []interfaces.FactoryEvent) e
 		if err != nil {
 			return err
 		}
-		if payload.Factory.Workstations != nil {
-			for workstationIndex := range *payload.Factory.Workstations {
-				workstation := &(*payload.Factory.Workstations)[workstationIndex]
+		generatedPayload, err := generatedRunRequestPayload(payload)
+		if err != nil {
+			return fmt.Errorf("decode run started event %q factory: %w", event.Id, err)
+		}
+		if generatedPayload.Factory.Workstations != nil {
+			for workstationIndex := range *generatedPayload.Factory.Workstations {
+				workstation := &(*generatedPayload.Factory.Workstations)[workstationIndex]
 				if workstation.Behavior != nil &&
 					*workstation.Behavior == factoryapi.WorkstationKindCron &&
 					workstation.Cron == nil {
@@ -186,7 +190,7 @@ func normalizeEventStreamRunRequestFactories(events []interfaces.FactoryEvent) e
 			return err
 		}
 		var union factoryapi.FactoryEvent_Payload
-		if err := union.FromRunRequestEventPayload(payload); err != nil {
+		if err := union.FromRunRequestEventPayload(generatedPayload); err != nil {
 			return fmt.Errorf("normalize run started event payload: %w", err)
 		}
 		generatedEvent.Payload = union

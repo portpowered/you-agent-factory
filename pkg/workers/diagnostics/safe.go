@@ -85,6 +85,16 @@ func SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics *workerexecution.WorkDia
 // WorkDiagnosticsFromSafeEventPayload decodes the public camel-case event shape
 // into canonical worker diagnostics without involving generated transport types.
 func WorkDiagnosticsFromSafeEventPayload(payload json.RawMessage) (*workerexecution.WorkDiagnostics, error) {
+	safe, err := SafeWorkDiagnosticsFromEventPayload(payload)
+	if err != nil {
+		return nil, err
+	}
+	return WorkDiagnosticsFromSafeWorkDiagnostics(safe), nil
+}
+
+// SafeWorkDiagnosticsFromEventPayload decodes the public camel-case event
+// shape into the worker-owned safe diagnostics contract.
+func SafeWorkDiagnosticsFromEventPayload(payload json.RawMessage) (*SafeWorkDiagnostics, error) {
 	if len(payload) == 0 || string(payload) == "null" {
 		return nil, nil
 	}
@@ -101,7 +111,7 @@ func WorkDiagnosticsFromSafeEventPayload(payload json.RawMessage) (*workerexecut
 	if err := json.Unmarshal(normalized, &safe); err != nil {
 		return nil, fmt.Errorf("decode normalized safe inference diagnostics: %w", err)
 	}
-	return WorkDiagnosticsFromSafeWorkDiagnostics(&safe), nil
+	return &safe, nil
 }
 
 func normalizeSafeEventFieldNames(value any) {

@@ -152,14 +152,66 @@ func TestRunStartedPayloadFromEvent_AllowsLegacyOnFailureObjectWhileNormalizingF
 	if !payload.RecordedAt.Equal(recordedAt) {
 		t.Fatalf("RecordedAt = %s, want %s", payload.RecordedAt, recordedAt)
 	}
-	if payload.Factory.Name != "legacy-onfailure-shape" {
-		t.Fatalf("factory name = %q, want legacy-onfailure-shape", payload.Factory.Name)
+	generatedFactory, err := generatedFactoryFromSnapshot(payload.Factory)
+	if err != nil {
+		t.Fatalf("decode run request Factory snapshot: %v", err)
 	}
-	if payload.Factory.Workstations == nil || len(*payload.Factory.Workstations) != 1 {
-		t.Fatalf("factory workstations = %#v, want normalized workstation", payload.Factory.Workstations)
+	if generatedFactory.Name != "legacy-onfailure-shape" {
+		t.Fatalf("factory name = %q, want legacy-onfailure-shape", generatedFactory.Name)
 	}
-	if got := (*payload.Factory.Workstations)[0].OnFailure; got == nil || !reflect.DeepEqual(*got, []factoryapi.WorkstationIO{{WorkType: "story", State: "failed"}}) {
+	if generatedFactory.Workstations == nil || len(*generatedFactory.Workstations) != 1 {
+		t.Fatalf("factory workstations = %#v, want normalized workstation", generatedFactory.Workstations)
+	}
+	if got := (*generatedFactory.Workstations)[0].OnFailure; got == nil || !reflect.DeepEqual(*got, []factoryapi.WorkstationIO{{WorkType: "story", State: "failed"}}) {
 		t.Fatalf("normalized onFailure = %#v, want [{WorkType:story State:failed}]", got)
+	}
+}
+
+func TestApplyReplayRunRequest_DecodesFactoryOwnedPayloadAndSafeDiagnostics(t *testing.T) {
+	recordedAt := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
+	payload, err := json.Marshal(map[string]any{
+		"recordedAt": recordedAt,
+		"factory":    testGeneratedFactory(),
+		"wallClock":  map[string]any{"startedAt": recordedAt},
+		"diagnostics": map[string]any{
+			"notes": []string{"domain-owned"},
+			"workers": map[string]any{
+				"executor": map[string]any{
+					"renderedPrompt": map[string]any{"systemPromptHash": "sha256:prompt"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal run request payload: %v", err)
+	}
+	event := interfaces.FactoryEvent{
+		Id:      "factory-event/run-started",
+		Type:    interfaces.FactoryEventTypeRunRequest,
+		Payload: payload,
+	}
+
+	reduced := &replayEventLog{}
+	if err := applyReplayRunRequest(reduced, event); err != nil {
+		t.Fatalf("applyReplayRunRequest: %v", err)
+	}
+	if reduced.Factory.Name != testGeneratedFactory().Name {
+		t.Fatalf("factory name = %q, want %q", reduced.Factory.Name, testGeneratedFactory().Name)
+	}
+	if reduced.WallClock == nil || !reduced.WallClock.StartedAt.Equal(recordedAt) {
+		t.Fatalf("wall clock = %#v, want startedAt %s", reduced.WallClock, recordedAt)
+	}
+	if !reflect.DeepEqual(reduced.Diagnostics.Notes, []string{"domain-owned"}) {
+		t.Fatalf("diagnostic notes = %#v, want domain-owned", reduced.Diagnostics.Notes)
+	}
+	worker := reduced.Diagnostics.Workers["executor"]
+	if worker.RenderedPrompt == nil || worker.RenderedPrompt.SystemPromptHash != "sha256:prompt" {
+		t.Fatalf("worker diagnostics = %#v, want camel-case rendered prompt", worker)
+	}
+
+	event.Payload = json.RawMessage(`{"factory":`)
+	if err := applyReplayRunRequest(reduced, event); err == nil || !strings.Contains(err.Error(), "decode run started event") {
+		t.Fatalf("malformed payload error = %v, want run-started decode context", err)
 	}
 }
 

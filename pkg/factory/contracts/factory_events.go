@@ -276,6 +276,15 @@ type WorkStateChangeEventPayload struct {
 	WorkTypeName  string                     `json:"workTypeName"`
 }
 
+// RunRequestEventPayload describes the Factory snapshot and optional replay
+// metadata captured when a Factory run starts.
+type RunRequestEventPayload struct {
+	Diagnostics *ReplayDiagnostics `json:"diagnostics,omitempty"`
+	Factory     *FactorySnapshot   `json:"factory"`
+	RecordedAt  time.Time          `json:"recordedAt"`
+	WallClock   *RunEventWallClock `json:"wallClock,omitempty"`
+}
+
 // RunResponseEventPayload describes the terminal state and optional replay
 // metadata emitted when a Factory run finishes.
 type RunResponseEventPayload struct {
