@@ -232,4 +232,8 @@ diagnostic identity (`code`, `path`, `message`, `document`) rather than
 third-party prose snapshots.
 
 Story `interfaces-b15-factory-converter-005` wires this profile into Factory
-schema staging through the existing contract-staging generation boundary.
+schema staging through the existing contract-staging generation boundary. When
+the canonical Factory graph is not yet fully endorsable, the checked-in
+`docs/internal/contract/factory-schema-b16-gaps.json` record documents the
+concrete blocking cases and staging continues emitting the legacy projection
+until B16 closes parity without broadening conversion.

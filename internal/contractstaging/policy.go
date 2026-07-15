@@ -68,7 +68,9 @@ func SourceIdentityPaths() []string {
 		paths = append(paths, artifact.Source)
 	}
 	paths = append(paths,
+		"docs/internal/contract/factory-schema-b16-gaps.json",
 		"internal/contractstaging/factory_schema.go",
+		"internal/contractstaging/factory_schema_b16_gaps.go",
 		"internal/contractstaging/manifest.go",
 		"internal/contractstaging/openapi.go",
 		"internal/contractstaging/policy.go",
