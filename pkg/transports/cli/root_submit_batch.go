@@ -63,10 +63,6 @@ func executeSubmitCommand(
 	return submitHandler(*cfg)
 }
 
-func newSubmitBatchCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	return newSubmitBatchCommandWithHandler(globals, diagnostics, submitBatch)
-}
-
 func newSubmitBatchCommandWithHandler(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
