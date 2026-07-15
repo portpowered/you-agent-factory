@@ -113,20 +113,25 @@ func (r *Recorder) Stop() {
 	}
 }
 
-// RecordEvent appends a canonical generated event and marks the artifact for
-// streaming.
+// RecordEvent converts a temporary generated producer value into the canonical
+// Factory-owned envelope, appends it, and marks the artifact for streaming.
 func (r *Recorder) RecordEvent(event factoryapi.FactoryEvent) {
 	if r == nil {
 		return
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if replayEventIndexByID(r.artifact.Events, event.Id) >= 0 {
+	domainEvent, err := interfaces.NewFactoryEvent(event)
+	if err != nil {
+		r.recordFlushError(fmt.Errorf("convert replay event %q: %w", event.Id, err))
 		return
 	}
-	event.SchemaVersion = factoryapi.AgentFactoryEventV1
-	event.Context.Sequence = len(r.artifact.Events)
-	r.artifact.Events = append(r.artifact.Events, event)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if replayEventIndexByID(r.artifact.Events, domainEvent.Id) >= 0 {
+		return
+	}
+	domainEvent.SchemaVersion = interfaces.FactoryEventSchemaVersionV1
+	domainEvent.Context.Sequence = len(r.artifact.Events)
+	r.artifact.Events = append(r.artifact.Events, domainEvent)
 	r.version++
 }
 
@@ -151,7 +156,7 @@ func (r *Recorder) Finish(finishedAt time.Time) {
 	r.version++
 }
 
-func replayEventIndexByID(events []factoryapi.FactoryEvent, id string) int {
+func replayEventIndexByID(events []interfaces.FactoryEvent, id string) int {
 	for i := range events {
 		if events[i].Id == id {
 			return i
@@ -243,7 +248,7 @@ func (r *Recorder) recordFlushError(err error) {
 	}
 }
 
-func lastEventTick(events []factoryapi.FactoryEvent) int {
+func lastEventTick(events []interfaces.FactoryEvent) int {
 	for i := len(events) - 1; i >= 0; i-- {
 		if events[i].Context.Tick != 0 {
 			return events[i].Context.Tick

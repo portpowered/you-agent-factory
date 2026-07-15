@@ -165,7 +165,8 @@ func assertUnifiedEventLogRecording(t *testing.T, liveEvents []factoryapi.Factor
 
 	assertUnifiedSmokeCanonicalEventCoverage(t, liveEvents, fixture.traceID, fixture.requestID)
 	artifact := testutil.LoadReplayArtifact(t, fixture.artifactPath)
-	assertUnifiedSmokeCanonicalEventCoverage(t, artifact.Events, fixture.traceID, fixture.requestID)
+	generatedEvents := testutil.GeneratedFactoryEvents(t, artifact.Events)
+	assertUnifiedSmokeCanonicalEventCoverage(t, generatedEvents, fixture.traceID, fixture.requestID)
 	assertUnifiedSmokeArtifactHasEventTypes(t, artifact, []factoryapi.FactoryEventType{
 		factoryapi.FactoryEventTypeRunRequest,
 		factoryapi.FactoryEventTypeInitialStructureRequest,
@@ -184,12 +185,13 @@ func assertUnifiedEventLogRecording(t *testing.T, liveEvents []factoryapi.Factor
 
 func assertUnifiedEventLogReconstruction(t *testing.T, artifact *interfaces.ReplayArtifact, fixture unifiedEventLogSmokeFixture) {
 	t.Helper()
+	generatedEvents := testutil.GeneratedFactoryEvents(t, artifact.Events)
 
-	dispatchCreated := requireUnifiedSmokeEvent(t, artifact.Events, factoryapi.FactoryEventTypeDispatchRequest)
+	dispatchCreated := requireUnifiedSmokeEvent(t, generatedEvents, factoryapi.FactoryEventTypeDispatchRequest)
 	if _, err := dispatchCreated.Payload.AsDispatchRequestEventPayload(); err != nil {
 		t.Fatalf("decode recorded dispatch event %q: %v", dispatchCreated.Id, err)
 	}
-	activeState, err := projections.ReconstructFactoryWorldState(artifact.Events, dispatchCreated.Context.Tick)
+	activeState, err := projections.ReconstructFactoryWorldState(generatedEvents, dispatchCreated.Context.Tick)
 	if err != nil {
 		t.Fatalf("reconstruct selected tick %d: %v", dispatchCreated.Context.Tick, err)
 	}
@@ -202,8 +204,8 @@ func assertUnifiedEventLogReconstruction(t *testing.T, artifact *interfaces.Repl
 		t.Fatalf("selected tick %d active dispatches = %#v, want %s from event %s", dispatchCreated.Context.Tick, activeState.ActiveDispatches, dispatchID, dispatchCreated.Id)
 	}
 
-	finalTick := maxUnifiedSmokeTick(artifact.Events)
-	finalState, err := projections.ReconstructFactoryWorldState(artifact.Events, finalTick)
+	finalTick := maxUnifiedSmokeTick(generatedEvents)
+	finalState, err := projections.ReconstructFactoryWorldState(generatedEvents, finalTick)
 	if err != nil {
 		t.Fatalf("reconstruct final tick %d: %v", finalTick, err)
 	}
@@ -276,12 +278,12 @@ func assertUnifiedSmokeArtifactHasEventTypes(t *testing.T, artifact *interfaces.
 
 	next := 0
 	for _, event := range artifact.Events {
-		if next < len(wantSubsequence) && event.Type == wantSubsequence[next] {
+		if next < len(wantSubsequence) && string(event.Type) == string(wantSubsequence[next]) {
 			next++
 		}
 	}
 	if next != len(wantSubsequence) {
-		t.Fatalf("recorded event sequence = %#v, want subsequence %#v", unifiedSmokeEventSummaries(artifact.Events), wantSubsequence)
+		t.Fatalf("recorded event sequence = %#v, want subsequence %#v", unifiedSmokeEventSummaries(testutil.GeneratedFactoryEvents(t, artifact.Events)), wantSubsequence)
 	}
 }
 
@@ -462,13 +464,13 @@ func assertLiveEventsMatchRecordedArtifact(t *testing.T, liveEvents []factoryapi
 	t.Helper()
 
 	recordedByID := make(map[string]factoryapi.FactoryEvent, len(artifact.Events))
-	for _, event := range artifact.Events {
+	for _, event := range testutil.GeneratedFactoryEvents(t, artifact.Events) {
 		recordedByID[event.Id] = event
 	}
 	for _, live := range liveEvents {
 		recorded, ok := recordedByID[live.Id]
 		if !ok {
-			t.Fatalf("live event %s (%s) missing from recorded artifact events: %#v", live.Id, live.Type, unifiedSmokeEventSummaries(artifact.Events))
+			t.Fatalf("live event %s (%s) missing from recorded artifact events: %#v", live.Id, live.Type, unifiedSmokeEventSummaries(testutil.GeneratedFactoryEvents(t, artifact.Events)))
 		}
 		if recorded.Type != live.Type || recorded.Context.Tick != live.Context.Tick {
 			t.Fatalf("recorded event %s = type %s tick %d, live type %s tick %d", live.Id, recorded.Type, recorded.Context.Tick, live.Type, live.Context.Tick)

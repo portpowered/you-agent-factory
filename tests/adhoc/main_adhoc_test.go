@@ -15,10 +15,10 @@ import (
 	"github.com/portpowered/infinite-you/internal/testpath"
 	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
@@ -173,7 +173,7 @@ func TestAdHocApril11ReplayDrainsNonTerminalWork(t *testing.T) {
 func replayEventCount(artifact *interfaces.ReplayArtifact, eventType factoryapi.FactoryEventType) int {
 	count := 0
 	for _, event := range artifact.Events {
-		if event.Type == eventType {
+		if string(event.Type) == string(eventType) {
 			count++
 		}
 	}

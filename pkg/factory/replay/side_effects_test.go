@@ -306,7 +306,7 @@ func TestSideEffects_InferResolvesFailureMetadataOnlyRecordedFailure(t *testing.
 
 func TestSideEffects_DispatchWithoutCompletionFailsExplicitly(t *testing.T) {
 	artifact := replaySideEffectArtifact(t)
-	artifact.Events = append(artifact.Events, replayDispatchCreatedEvent(t, work.WorkDispatch{
+	dispatchEvent, err := interfaces.NewFactoryEvent(replayDispatchCreatedEvent(t, work.WorkDispatch{
 		DispatchID:      "dispatch-no-completion",
 		TransitionID:    "process",
 		WorkerType:      "worker-a",
@@ -317,6 +317,10 @@ func TestSideEffects_DispatchWithoutCompletionFailsExplicitly(t *testing.T) {
 			WorkIDs:   []string{"work-3"},
 		},
 	}, 6))
+	if err != nil {
+		t.Fatalf("convert dispatch event: %v", err)
+	}
+	artifact.Events = append(artifact.Events, dispatchEvent)
 	assignEventSequences(artifact.Events)
 	sideEffects, err := NewSideEffects(artifact)
 	if err != nil {

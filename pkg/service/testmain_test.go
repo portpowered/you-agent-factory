@@ -892,7 +892,7 @@ func assertReplayArtifactStoresCanonicalEvents(t *testing.T, path string, artifa
 	}
 	types := make([]factoryapi.FactoryEventType, 0, len(artifact.Events))
 	for _, event := range artifact.Events {
-		types = append(types, event.Type)
+		types = append(types, factoryapi.FactoryEventType(event.Type))
 	}
 	next := 0
 	for _, eventType := range types {

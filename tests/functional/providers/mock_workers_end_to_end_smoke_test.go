@@ -199,7 +199,7 @@ func assertMockWorkersSmokeRecordedOutcomes(t *testing.T, artifact *interfaces.R
 	t.Helper()
 
 	dispatchCount := 0
-	for _, event := range artifact.Events {
+	for _, event := range testutil.GeneratedFactoryEvents(t, artifact.Events) {
 		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
 			continue
 		}

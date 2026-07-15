@@ -48,7 +48,7 @@ func TestInferenceEvents_ModelProviderAttemptsRecordInCanonicalHistoryAndArtifac
 	}
 	assertFirstInferenceAttemptOrder(t, events)
 	artifact := testutil.LoadReplayArtifact(t, recordPath)
-	assertInferenceEventsRecordedInArtifact(t, events, artifact.Events)
+	assertInferenceEventsRecordedInArtifact(t, events, testutil.GeneratedFactoryEvents(t, artifact.Events))
 }
 
 func TestInferenceEvents_ScriptWorkersDoNotEmitInferenceEvents(t *testing.T) {

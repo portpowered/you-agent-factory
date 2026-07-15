@@ -168,7 +168,8 @@ func loadThinEventSmokeFinalSnapshot(
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}
 	artifact := testutil.LoadReplayArtifact(t, smoke.recordPath)
-	assertInferenceEventsRecordedInArtifact(t, liveEvents, artifact.Events)
+	generatedArtifactEvents := testutil.GeneratedFactoryEvents(t, artifact.Events)
+	assertInferenceEventsRecordedInArtifact(t, liveEvents, generatedArtifactEvents)
 	responseEventIdx := indexOfFunctionalInferenceResponseForRequest(liveEvents, active.dispatchID, active.requestPayload.InferenceRequestId)
 	if responseEventIdx < 0 {
 		t.Fatalf("live events = %v, want inference response for dispatch %s request %s", functionalEventTypes(liveEvents), active.dispatchID, active.requestPayload.InferenceRequestId)
@@ -177,7 +178,7 @@ func loadThinEventSmokeFinalSnapshot(
 	if err != nil {
 		t.Fatalf("decode final inference response payload: %v", err)
 	}
-	finalState, err := projections.ReconstructFactoryWorldState(artifact.Events, support.LastFactoryEventTick(artifact.Events))
+	finalState, err := projections.ReconstructFactoryWorldState(generatedArtifactEvents, support.LastFactoryEventTick(generatedArtifactEvents))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState final tick: %v", err)
 	}

@@ -78,25 +78,29 @@ func reduceReplayEvents(artifact *interfaces.ReplayArtifact) (*replayEventLog, e
 
 func reduceReplayEvent(
 	reduced *replayEventLog,
-	event factoryapi.FactoryEvent,
+	event interfaces.FactoryEvent,
 	workByID map[string]work.Work,
 	inferenceAttemptsByDispatchID map[string]replayInferenceAttempt,
 ) error {
+	generatedEvent, err := generatedEventFromDomain(event)
+	if err != nil {
+		return err
+	}
 	switch event.Type {
-	case factoryapi.FactoryEventTypeRunRequest:
+	case interfaces.FactoryEventTypeRunRequest:
 		return applyReplayRunRequest(reduced, event)
-	case factoryapi.FactoryEventTypeWorkRequest:
-		return applyReplayWorkRequest(reduced, event, workByID)
-	case factoryapi.FactoryEventTypeDispatchRequest:
-		return applyReplayDispatchRequest(reduced, event, workByID)
-	case factoryapi.FactoryEventTypeInferenceResponse:
-		return applyReplayInferenceResponse(event, inferenceAttemptsByDispatchID)
-	case factoryapi.FactoryEventTypeDispatchResponse:
-		return applyReplayDispatchResponse(reduced, event, inferenceAttemptsByDispatchID)
-	case factoryapi.FactoryEventTypeRunResponse:
-		return applyReplayRunResponse(reduced, event)
-	case factoryapi.FactoryEventTypeWorkStateChange:
-		return applyReplayWorkStateChange(reduced, event)
+	case interfaces.FactoryEventTypeWorkRequest:
+		return applyReplayWorkRequest(reduced, generatedEvent, workByID)
+	case interfaces.FactoryEventTypeDispatchRequest:
+		return applyReplayDispatchRequest(reduced, generatedEvent, workByID)
+	case interfaces.FactoryEventTypeInferenceResponse:
+		return applyReplayInferenceResponse(generatedEvent, inferenceAttemptsByDispatchID)
+	case interfaces.FactoryEventTypeDispatchResponse:
+		return applyReplayDispatchResponse(reduced, generatedEvent, inferenceAttemptsByDispatchID)
+	case interfaces.FactoryEventTypeRunResponse:
+		return applyReplayRunResponse(reduced, generatedEvent)
+	case interfaces.FactoryEventTypeWorkStateChange:
+		return applyReplayWorkStateChange(reduced, generatedEvent)
 	default:
 		return nil
 	}
@@ -148,7 +152,7 @@ func replayWorkStateChangeFromEvent(event factoryapi.FactoryEvent) (*replayWorkS
 	}, nil
 }
 
-func applyReplayRunRequest(reduced *replayEventLog, event factoryapi.FactoryEvent) error {
+func applyReplayRunRequest(reduced *replayEventLog, event interfaces.FactoryEvent) error {
 	payload, err := runStartedPayloadFromEvent(event)
 	if err != nil {
 		return err
@@ -237,8 +241,8 @@ func validateReplayEventEnvelope(artifact *interfaces.ReplayArtifact) error {
 		return fmt.Errorf("replay artifact events is required")
 	}
 	for i, event := range artifact.Events {
-		if event.SchemaVersion != factoryapi.AgentFactoryEventV1 {
-			return fmt.Errorf("replay artifact events[%d].schemaVersion = %q, want %q", i, event.SchemaVersion, factoryapi.AgentFactoryEventV1)
+		if event.SchemaVersion != interfaces.FactoryEventSchemaVersionV1 {
+			return fmt.Errorf("replay artifact events[%d].schemaVersion = %q, want %q", i, event.SchemaVersion, interfaces.FactoryEventSchemaVersionV1)
 		}
 		if event.Context.Sequence != i {
 			return fmt.Errorf("replay artifact events[%d].context.sequence = %d, want %d", i, event.Context.Sequence, i)

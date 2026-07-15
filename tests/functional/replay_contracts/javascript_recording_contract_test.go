@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/replay"
@@ -56,7 +57,7 @@ func TestJavaScriptRecordingContract_RoundTripsCompletedAndFailedSessionFacts(t 
 			if err != nil {
 				t.Fatalf("NewEventLogArtifactFromFactory: %v", err)
 			}
-			artifact.Events = append(artifact.Events, history.Events()...)
+			artifact.Events = append(artifact.Events, testutil.FactoryEvents(t, history.Events())...)
 			path := filepath.Join(t.TempDir(), testCase.name+".replay.json")
 			if err := replay.Save(path, artifact); err != nil {
 				t.Fatalf("Save: %v", err)
@@ -66,7 +67,7 @@ func TestJavaScriptRecordingContract_RoundTripsCompletedAndFailedSessionFacts(t 
 				t.Fatalf("Load: %v", err)
 			}
 
-			assertRecordedJavaScriptLifecycle(t, loaded.Events, testCase.wantStatus, testCase.failure)
+			assertRecordedJavaScriptLifecycle(t, testutil.GeneratedFactoryEvents(t, loaded.Events), testCase.wantStatus, testCase.failure)
 			assertRecordingOmitsRawJavaScriptInternals(t, loaded)
 			publicFactory, err := factorysnapshot.ToAPI(loaded.Factory)
 			if err != nil {

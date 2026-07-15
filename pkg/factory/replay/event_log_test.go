@@ -28,7 +28,14 @@ func testReplayArtifact(t *testing.T, events ...factoryapi.FactoryEvent) *interf
 		t.Fatalf("build run started event: %v", err)
 	}
 
-	allEvents := append([]factoryapi.FactoryEvent{runStarted}, events...)
+	allEvents := []interfaces.FactoryEvent{runStarted}
+	for _, event := range events {
+		converted, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			t.Fatalf("convert replay event %q: %v", event.Id, err)
+		}
+		allEvents = append(allEvents, converted)
+	}
 	assignEventSequences(allEvents)
 	return &interfaces.ReplayArtifact{
 		SchemaVersion: CurrentSchemaVersion,
@@ -833,7 +840,8 @@ func TestRecorder_PersistsWorkStateChangeEvents(t *testing.T) {
 		t.Fatalf("WORK_STATE_CHANGE events = %d, want 1", replayEventCount(loaded, factoryapi.FactoryEventTypeWorkStateChange))
 	}
 	event := loaded.Events[len(loaded.Events)-1]
-	payload, err := event.Payload.AsWorkStateChangeEventPayload()
+	generated := mustGeneratedReplayEvent(t, event)
+	payload, err := generated.Payload.AsWorkStateChangeEventPayload()
 	if err != nil {
 		t.Fatalf("decode payload: %v", err)
 	}
@@ -898,7 +906,7 @@ func loadReplayArtifactForTest(t *testing.T, path string) *interfaces.ReplayArti
 func replayEventCount(artifact *interfaces.ReplayArtifact, eventType factoryapi.FactoryEventType) int {
 	count := 0
 	for _, event := range artifact.Events {
-		if event.Type == eventType {
+		if string(event.Type) == string(eventType) {
 			count++
 		}
 	}

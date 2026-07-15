@@ -82,7 +82,7 @@ func TestReplayScriptBoundaryEvents_CanonicalHistoryAndArtifactIncludeScriptResp
 	})
 
 	artifact := testutil.LoadReplayArtifact(t, recordPath)
-	assertScriptEventsRecordedInArtifact(t, events, artifact.Events)
+	assertScriptEventsRecordedInArtifact(t, events, testutil.GeneratedFactoryEvents(t, artifact.Events))
 	assertReplayArtifactDoesNotContainRawValue(t, recordPath, scriptEventsSecretValue)
 }
 
@@ -118,7 +118,7 @@ func TestReplayScriptBoundaryEvents_ProcessFailureBoundaryPersistsInCanonicalHis
 	})
 
 	artifact := testutil.LoadReplayArtifact(t, recordPath)
-	assertScriptEventsRecordedInArtifact(t, events, artifact.Events)
+	assertScriptEventsRecordedInArtifact(t, events, testutil.GeneratedFactoryEvents(t, artifact.Events))
 	assertReplayArtifactDoesNotContainRawValue(t, recordPath, scriptEventsSecretValue)
 }
 

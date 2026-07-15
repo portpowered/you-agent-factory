@@ -9,10 +9,10 @@ import (
 
 func TestReplayEventCountCountsMatchingEventTypes(t *testing.T) {
 	artifact := &interfaces.ReplayArtifact{
-		Events: []factoryapi.FactoryEvent{
-			{Type: factoryapi.FactoryEventTypeDispatchRequest},
-			{Type: factoryapi.FactoryEventTypeDispatchResponse},
-			{Type: factoryapi.FactoryEventTypeDispatchRequest},
+		Events: []interfaces.FactoryEvent{
+			{Type: interfaces.FactoryEventTypeDispatchRequest},
+			{Type: interfaces.FactoryEventTypeDispatchResponse},
+			{Type: interfaces.FactoryEventTypeDispatchRequest},
 		},
 	}
 

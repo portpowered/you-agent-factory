@@ -677,7 +677,7 @@ func replayVisitCountSiblingIsolationScenario(t *testing.T, maxReviews int, even
 	artifact := &interfaces.ReplayArtifact{
 		SchemaVersion: replay.CurrentSchemaVersion,
 		RecordedAt:    time.Date(2026, time.July, 13, 0, 0, 0, 0, time.UTC),
-		Events:        append([]factoryapi.FactoryEvent(nil), events...),
+		Events:        runtimeDomainReplayEvents(t, events),
 	}
 	submissions, err := replay.NewSubmissionHook(artifact)
 	if err != nil {

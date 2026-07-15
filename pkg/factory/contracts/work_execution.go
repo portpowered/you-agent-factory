@@ -3,7 +3,6 @@ package factorycontracts
 import (
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 )
 
@@ -11,12 +10,12 @@ import (
 // Serialized events remain the compatibility source of the embedded Factory;
 // Factory is hydrated as a detached snapshot for runtime consumers.
 type ReplayArtifact struct {
-	SchemaVersion string                    `json:"schemaVersion"`
-	RecordedAt    time.Time                 `json:"recordedAt"`
-	Events        []factoryapi.FactoryEvent `json:"events"`
-	Factory       *FactorySnapshot          `json:"-"`
-	Diagnostics   ReplayDiagnostics         `json:"-"`
-	WallClock     *ReplayWallClockMetadata  `json:"-"`
+	SchemaVersion string                   `json:"schemaVersion"`
+	RecordedAt    time.Time                `json:"recordedAt"`
+	Events        []FactoryEvent           `json:"events"`
+	Factory       *FactorySnapshot         `json:"-"`
+	Diagnostics   ReplayDiagnostics        `json:"-"`
+	WallClock     *ReplayWallClockMetadata `json:"-"`
 }
 
 type ReplayDiagnostics struct {

@@ -154,7 +154,7 @@ func generatedSchemaTransportAndRuntimeSummaryFromRecordedReplay(
 	harness.RunUntilComplete(t, 10*time.Second)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
-	runStarted := requireGeneratedSchemaRunStartedPayload(t, artifact.Events)
+	runStarted := requireGeneratedSchemaRunStartedPayload(t, testutil.GeneratedFactoryEvents(t, artifact.Events))
 	assertGeneratedSmokeTransportBoundary(t, runStarted.Factory)
 	assertGeneratedSmokeRuntimeDefinitions(t, runStarted.Factory)
 	replayRuntime, err := replay.RuntimeConfigFromGeneratedFactory(runStarted.Factory)

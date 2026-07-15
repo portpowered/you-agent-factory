@@ -728,7 +728,8 @@ func serviceReplayDispatchCompletedEvent(t *testing.T, completionID string, resu
 func serviceReplayWorkRequestEvents(t *testing.T, artifact *interfaces.ReplayArtifact) []serviceReplayWorkRequestRecord {
 	t.Helper()
 	var out []serviceReplayWorkRequestRecord
-	for _, event := range artifact.Events {
+	for _, domainEvent := range artifact.Events {
+		event := serviceGeneratedReplayEvent(t, domainEvent)
 		if event.Type != factoryapi.FactoryEventTypeWorkRequest {
 			continue
 		}
@@ -749,7 +750,8 @@ type serviceReplayWorkRequestRecord struct {
 func serviceReplayDispatchCreatedEvents(t *testing.T, artifact *interfaces.ReplayArtifact) []serviceReplayDispatchCreatedRecord {
 	t.Helper()
 	var out []serviceReplayDispatchCreatedRecord
-	for _, event := range artifact.Events {
+	for _, domainEvent := range artifact.Events {
+		event := serviceGeneratedReplayEvent(t, domainEvent)
 		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
 			continue
 		}
@@ -770,7 +772,8 @@ type serviceReplayDispatchCreatedRecord struct {
 func serviceReplayDispatchCompletedEvents(t *testing.T, artifact *interfaces.ReplayArtifact) []serviceReplayDispatchCompletedRecord {
 	t.Helper()
 	var out []serviceReplayDispatchCompletedRecord
-	for _, event := range artifact.Events {
+	for _, domainEvent := range artifact.Events {
+		event := serviceGeneratedReplayEvent(t, domainEvent)
 		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 			continue
 		}
@@ -791,7 +794,8 @@ type serviceReplayDispatchCompletedRecord struct {
 func serviceReplayInferenceResponseEvents(t *testing.T, artifact *interfaces.ReplayArtifact) []serviceReplayInferenceResponseRecord {
 	t.Helper()
 	var out []serviceReplayInferenceResponseRecord
-	for _, event := range artifact.Events {
+	for _, domainEvent := range artifact.Events {
+		event := serviceGeneratedReplayEvent(t, domainEvent)
 		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
 			continue
 		}
@@ -807,6 +811,15 @@ func serviceReplayInferenceResponseEvents(t *testing.T, artifact *interfaces.Rep
 type serviceReplayInferenceResponseRecord struct {
 	Event   factoryapi.FactoryEvent
 	Payload factoryapi.InferenceResponseEventPayload
+}
+
+func serviceGeneratedReplayEvent(t *testing.T, event interfaces.FactoryEvent) factoryapi.FactoryEvent {
+	t.Helper()
+	var generated factoryapi.FactoryEvent
+	if err := event.Decode(&generated); err != nil {
+		t.Fatalf("decode canonical replay event %q: %v", event.Id, err)
+	}
+	return generated
 }
 
 func serviceReplayWorksFromDispatch(dispatch work.WorkDispatch) []factoryapi.Work {

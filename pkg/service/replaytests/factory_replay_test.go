@@ -11,13 +11,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/internal/testutil/testdeps"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/factory/replay"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	service "github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
@@ -175,7 +176,7 @@ func TestBuildFactoryService_ReplayModeDeliversRecordedCompletionAtLogicalTick(t
 	}
 	recordedAt := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
 	artifact := newReplayArtifactFromLoadedFactory(t, recordedAt, loaded)
-	artifact.Events = append(artifact.Events,
+	artifact.Events = append(artifact.Events, testutil.FactoryEvents(t, []factoryapi.FactoryEvent{
 		serviceReplayWorkRequestEvent(t, "recorded-submission-logical-tick", 1, "recorded-artifact", []factoryapi.Work{{
 			Name:         "work-logical-tick",
 			WorkId:       serviceStringPtr("work-logical-tick"),
@@ -185,7 +186,7 @@ func TestBuildFactoryService_ReplayModeDeliversRecordedCompletionAtLogicalTick(t
 		}}, nil),
 		serviceReplayDispatchCreatedEvent(t, recordedDispatch, 1),
 		serviceReplayDispatchCompletedEvent(t, "recorded-completion-logical-tick", recordedResult, 4),
-	)
+	})...)
 	if err := replay.Save(artifactPath, artifact); err != nil {
 		t.Fatalf("Save replay artifact: %v", err)
 	}
@@ -246,7 +247,7 @@ func TestBuildFactoryService_ReplayModeReplaysOperatorWorkStateChange(t *testing
 	artifactPath := filepath.Join(t.TempDir(), "operator-move-recording.json")
 	recordedAt := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
 	artifact := newReplayArtifactFromLoadedFactory(t, recordedAt, loaded)
-	artifact.Events = append(artifact.Events,
+	artifact.Events = append(artifact.Events, testutil.FactoryEvents(t, []factoryapi.FactoryEvent{
 		serviceReplayWorkRequestEvent(t, "recorded-submission-move", 1, "recorded-artifact", []factoryapi.Work{{
 			Name:         "move-me",
 			WorkId:       serviceStringPtr(workID),
@@ -254,7 +255,7 @@ func TestBuildFactoryService_ReplayModeReplaysOperatorWorkStateChange(t *testing
 			TraceId:      serviceStringPtr(traceID),
 		}}, nil),
 		serviceReplayWorkStateChangeEvent(t, workID, "init", "failed", "task:init", "task:failed", factoryapi.WorkStateChangeSourceCLI, 1),
-	)
+	})...)
 	if err := replay.Save(artifactPath, artifact); err != nil {
 		t.Fatalf("Save replay artifact: %v", err)
 	}
@@ -459,11 +460,11 @@ func saveReplayBehaviorArtifact(t *testing.T, sourceDir, artifactPath string, di
 	}
 	recordedAt := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
 	artifact := newReplayArtifactFromLoadedFactory(t, recordedAt, loaded)
-	artifact.Events = append(artifact.Events,
+	artifact.Events = append(artifact.Events, testutil.FactoryEvents(t, []factoryapi.FactoryEvent{
 		serviceReplayWorkRequestEvent(t, "recorded-submission", 1, "recorded-artifact", serviceReplayWorksFromDispatch(dispatch), nil),
 		serviceReplayDispatchCreatedEvent(t, dispatch, createdTick),
 		serviceReplayDispatchCompletedEvent(t, "recorded-completion", result, 3),
-	)
+	})...)
 	if err := replay.Save(artifactPath, artifact); err != nil {
 		t.Fatalf("Save replay artifact: %v", err)
 	}

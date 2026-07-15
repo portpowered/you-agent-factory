@@ -73,8 +73,12 @@ func TestRunStartedPayloadFromEvent_RejectsRetiredFactoryAliases(t *testing.T) {
 	if err := json.Unmarshal(data, &event); err != nil {
 		t.Fatalf("unmarshal factory event: %v", err)
 	}
+	domainEvent, err := interfaces.NewFactoryEvent(event)
+	if err != nil {
+		t.Fatalf("convert factory event: %v", err)
+	}
 
-	_, err = runStartedPayloadFromEvent(event)
+	_, err = runStartedPayloadFromEvent(domainEvent)
 	if err == nil {
 		t.Fatal("expected retired factory aliases to be rejected")
 	}
@@ -136,8 +140,12 @@ func TestRunStartedPayloadFromEvent_AllowsLegacyOnFailureObjectWhileNormalizingF
 	if err := json.Unmarshal(data, &event); err != nil {
 		t.Fatalf("unmarshal factory event: %v", err)
 	}
+	domainEvent, err := interfaces.NewFactoryEvent(event)
+	if err != nil {
+		t.Fatalf("convert factory event: %v", err)
+	}
 
-	payload, err := runStartedPayloadFromEvent(event)
+	payload, err := runStartedPayloadFromEvent(domainEvent)
 	if err != nil {
 		t.Fatalf("runStartedPayloadFromEvent() error = %v", err)
 	}

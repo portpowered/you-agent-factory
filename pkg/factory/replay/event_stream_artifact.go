@@ -27,7 +27,7 @@ type EventStreamArtifactResult struct {
 type eventStreamArtifactBuilder struct {
 	blockIndex            int
 	dataLines             []string
-	events                []factoryapi.FactoryEvent
+	events                []interfaces.FactoryEvent
 	skippedTrailingBlocks int
 }
 
@@ -67,7 +67,7 @@ func ArtifactFromEventStream(r io.Reader) (*EventStreamArtifactResult, error) {
 
 	artifact := &interfaces.ReplayArtifact{
 		SchemaVersion: CurrentSchemaVersion,
-		Events:        append([]factoryapi.FactoryEvent(nil), builder.events...),
+		Events:        append([]interfaces.FactoryEvent(nil), builder.events...),
 	}
 	if err := hydrateArtifactFromEvents(artifact); err != nil {
 		return nil, err
@@ -103,7 +103,7 @@ func (b *eventStreamArtifactBuilder) flushBlock(atEOF bool) error {
 	if err != nil {
 		return b.decodeBlockError(atEOF, err)
 	}
-	var event factoryapi.FactoryEvent
+	var event interfaces.FactoryEvent
 	if err := json.Unmarshal(normalized, &event); err != nil {
 		return b.decodeBlockError(atEOF, err)
 	}
@@ -111,7 +111,7 @@ func (b *eventStreamArtifactBuilder) flushBlock(atEOF bool) error {
 		return b.decodeBlockError(atEOF, fmt.Errorf("required replay event fields missing"))
 	}
 	if event.SchemaVersion == "" {
-		event.SchemaVersion = factoryapi.AgentFactoryEventV1
+		event.SchemaVersion = interfaces.FactoryEventSchemaVersionV1
 	}
 	b.events = append(b.events, event)
 	return nil
@@ -157,10 +157,10 @@ func SaveArtifactFromEventStreamFile(eventStreamPath string, artifactPath string
 	return result, nil
 }
 
-func normalizeEventStreamRunRequestFactories(events []factoryapi.FactoryEvent) error {
+func normalizeEventStreamRunRequestFactories(events []interfaces.FactoryEvent) error {
 	for index := range events {
 		event := &events[index]
-		if event.Type != factoryapi.FactoryEventTypeRunRequest {
+		if event.Type != interfaces.FactoryEventTypeRunRequest {
 			continue
 		}
 
@@ -181,11 +181,20 @@ func normalizeEventStreamRunRequestFactories(events []factoryapi.FactoryEvent) e
 			}
 		}
 
+		generatedEvent, err := generatedEventFromDomain(*event)
+		if err != nil {
+			return err
+		}
 		var union factoryapi.FactoryEvent_Payload
 		if err := union.FromRunRequestEventPayload(payload); err != nil {
 			return fmt.Errorf("normalize run started event payload: %w", err)
 		}
-		event.Payload = union
+		generatedEvent.Payload = union
+		converted, err := interfaces.NewFactoryEvent(generatedEvent)
+		if err != nil {
+			return err
+		}
+		*event = converted
 	}
 	return nil
 }
@@ -427,8 +436,12 @@ func rewriteArtifactFactoryEvents(artifact *interfaces.ReplayArtifact, generated
 	for i := range artifact.Events {
 		event := &artifact.Events[i]
 		switch event.Type {
-		case factoryapi.FactoryEventTypeRunRequest:
-			payload, err := event.Payload.AsRunRequestEventPayload()
+		case interfaces.FactoryEventTypeRunRequest:
+			generatedEvent, err := generatedEventFromDomain(*event)
+			if err != nil {
+				return err
+			}
+			payload, err := generatedEvent.Payload.AsRunRequestEventPayload()
 			if err != nil {
 				return fmt.Errorf("decode run request event %q: %w", event.Id, err)
 			}
@@ -437,9 +450,18 @@ func rewriteArtifactFactoryEvents(artifact *interfaces.ReplayArtifact, generated
 			if err := union.FromRunRequestEventPayload(payload); err != nil {
 				return fmt.Errorf("rewrite run request factory payload: %w", err)
 			}
-			event.Payload = union
-		case factoryapi.FactoryEventTypeInitialStructureRequest:
-			payload, err := event.Payload.AsInitialStructureRequestEventPayload()
+			generatedEvent.Payload = union
+			converted, err := interfaces.NewFactoryEvent(generatedEvent)
+			if err != nil {
+				return err
+			}
+			*event = converted
+		case interfaces.FactoryEventTypeInitialStructureRequest:
+			generatedEvent, err := generatedEventFromDomain(*event)
+			if err != nil {
+				return err
+			}
+			payload, err := generatedEvent.Payload.AsInitialStructureRequestEventPayload()
 			if err != nil {
 				return fmt.Errorf("decode initial structure event %q: %w", event.Id, err)
 			}
@@ -448,7 +470,12 @@ func rewriteArtifactFactoryEvents(artifact *interfaces.ReplayArtifact, generated
 			if err := union.FromInitialStructureRequestEventPayload(payload); err != nil {
 				return fmt.Errorf("rewrite initial structure factory payload: %w", err)
 			}
-			event.Payload = union
+			generatedEvent.Payload = union
+			converted, err := interfaces.NewFactoryEvent(generatedEvent)
+			if err != nil {
+				return err
+			}
+			*event = converted
 		}
 	}
 	return nil

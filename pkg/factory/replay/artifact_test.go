@@ -127,15 +127,15 @@ func replayArtifactFieldsFixture(t *testing.T, recordedAt time.Time) *interfaces
 	}
 }
 
-func replayArtifactFieldEvents(t *testing.T, recordedAt time.Time, generatedFactory factoryapi.Factory) []factoryapi.FactoryEvent {
+func replayArtifactFieldEvents(t *testing.T, recordedAt time.Time, generatedFactory factoryapi.Factory) []interfaces.FactoryEvent {
 	t.Helper()
 
 	runStarted, err := runStartedEventFromFactory(recordedAt, generatedFactory, replayWallClockMetadata(recordedAt), interfaces.ReplayDiagnostics{})
 	if err != nil {
 		t.Fatalf("runStartedEvent: %v", err)
 	}
-	events := []factoryapi.FactoryEvent{
-		runStarted,
+	events := []interfaces.FactoryEvent{runStarted}
+	for _, event := range []factoryapi.FactoryEvent{
 		replayWorkRequestEvent(t, "request-1", 2, "api", []factoryapi.Work{{
 			Name:         "story-1",
 			WorkId:       stringPtrIfNotEmpty("work-1"),
@@ -149,8 +149,14 @@ func replayArtifactFieldEvents(t *testing.T, recordedAt time.Time, generatedFact
 		replayDispatchCompletedEvent(t, "completion-1", workerexecution.WorkResult{
 			DispatchID: "dispatch-1", TransitionID: "transition-1", Outcome: workerexecution.OutcomeAccepted, Output: "done",
 		}, 5),
-		runFinishedEvent(recordedAt.Add(time.Second), replayWallClockMetadata(recordedAt), interfaces.ReplayDiagnostics{}),
+	} {
+		converted, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			t.Fatalf("convert replay field event %q: %v", event.Id, err)
+		}
+		events = append(events, converted)
 	}
+	events = append(events, runFinishedEvent(recordedAt.Add(time.Second), replayWallClockMetadata(recordedAt), interfaces.ReplayDiagnostics{}))
 	assignEventSequences(events)
 	return events
 }
@@ -584,11 +590,15 @@ func TestSave_ReplacesArtifactThroughRecoverableTempFile(t *testing.T) {
 		t.Fatalf("initial Save() error = %v", err)
 	}
 
-	artifact.Events = append(artifact.Events, replayWorkRequestEvent(t, "submission-1", 1, "api", []factoryapi.Work{{
+	requestEvent, err := interfaces.NewFactoryEvent(replayWorkRequestEvent(t, "submission-1", 1, "api", []factoryapi.Work{{
 		Name:         "story",
 		WorkTypeName: stringPtrIfNotEmpty("story"),
 		TraceId:      stringPtrIfNotEmpty("trace-1"),
 	}}, nil))
+	if err != nil {
+		t.Fatalf("convert work request event: %v", err)
+	}
+	artifact.Events = append(artifact.Events, requestEvent)
 	assignEventSequences(artifact.Events)
 	if err := Save(path, artifact); err != nil {
 		t.Fatalf("replacement Save() error = %v", err)
@@ -690,9 +700,10 @@ func assertReplayInferencePair(t *testing.T, artifact *interfaces.ReplayArtifact
 	var request *factoryapi.InferenceRequestEventPayload
 	var response *factoryapi.InferenceResponseEventPayload
 	for _, event := range artifact.Events {
-		switch event.Type {
+		generated := mustGeneratedReplayEvent(t, event)
+		switch generated.Type {
 		case factoryapi.FactoryEventTypeInferenceRequest:
-			payload, err := event.Payload.AsInferenceRequestEventPayload()
+			payload, err := generated.Payload.AsInferenceRequestEventPayload()
 			if err != nil {
 				t.Fatalf("decode inference request event %q: %v", event.Id, err)
 			}
@@ -700,7 +711,7 @@ func assertReplayInferencePair(t *testing.T, artifact *interfaces.ReplayArtifact
 				request = &payload
 			}
 		case factoryapi.FactoryEventTypeInferenceResponse:
-			payload, err := event.Payload.AsInferenceResponseEventPayload()
+			payload, err := generated.Payload.AsInferenceResponseEventPayload()
 			if err != nil {
 				t.Fatalf("decode inference response event %q: %v", event.Id, err)
 			}
@@ -720,23 +731,24 @@ func assertReplayInferencePair(t *testing.T, artifact *interfaces.ReplayArtifact
 	}
 }
 
-func countReplayEvents(events []factoryapi.FactoryEvent, eventType factoryapi.FactoryEventType) int {
+func countReplayEvents(events []interfaces.FactoryEvent, eventType factoryapi.FactoryEventType) int {
 	count := 0
 	for _, event := range events {
-		if event.Type == eventType {
+		if string(event.Type) == string(eventType) {
 			count++
 		}
 	}
 	return count
 }
 
-func requireReplayDispatchCreated(t *testing.T, events []factoryapi.FactoryEvent, dispatchID string) factoryapi.DispatchRequestEventPayload {
+func requireReplayDispatchCreated(t *testing.T, events []interfaces.FactoryEvent, dispatchID string) factoryapi.DispatchRequestEventPayload {
 	t.Helper()
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeDispatchRequest || stringValue(event.Context.DispatchId) != dispatchID {
+		generated := mustGeneratedReplayEvent(t, event)
+		if generated.Type != factoryapi.FactoryEventTypeDispatchRequest || stringValue(generated.Context.DispatchId) != dispatchID {
 			continue
 		}
-		payload, err := event.Payload.AsDispatchRequestEventPayload()
+		payload, err := generated.Payload.AsDispatchRequestEventPayload()
 		if err != nil {
 			t.Fatalf("decode dispatch created event: %v", err)
 		}
@@ -746,13 +758,14 @@ func requireReplayDispatchCreated(t *testing.T, events []factoryapi.FactoryEvent
 	return factoryapi.DispatchRequestEventPayload{}
 }
 
-func requireReplayDispatchCompleted(t *testing.T, events []factoryapi.FactoryEvent, dispatchID string) factoryapi.DispatchResponseEventPayload {
+func requireReplayDispatchCompleted(t *testing.T, events []interfaces.FactoryEvent, dispatchID string) factoryapi.DispatchResponseEventPayload {
 	t.Helper()
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeDispatchResponse || stringValue(event.Context.DispatchId) != dispatchID {
+		generated := mustGeneratedReplayEvent(t, event)
+		if generated.Type != factoryapi.FactoryEventTypeDispatchResponse || stringValue(generated.Context.DispatchId) != dispatchID {
 			continue
 		}
-		payload, err := event.Payload.AsDispatchResponseEventPayload()
+		payload, err := generated.Payload.AsDispatchResponseEventPayload()
 		if err != nil {
 			t.Fatalf("decode dispatch completed event: %v", err)
 		}
@@ -762,13 +775,14 @@ func requireReplayDispatchCompleted(t *testing.T, events []factoryapi.FactoryEve
 	return factoryapi.DispatchResponseEventPayload{}
 }
 
-func requireReplayInferenceResponse(t *testing.T, events []factoryapi.FactoryEvent, inferenceRequestID string) factoryapi.InferenceResponseEventPayload {
+func requireReplayInferenceResponse(t *testing.T, events []interfaces.FactoryEvent, inferenceRequestID string) factoryapi.InferenceResponseEventPayload {
 	t.Helper()
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
+		generated := mustGeneratedReplayEvent(t, event)
+		if generated.Type != factoryapi.FactoryEventTypeInferenceResponse {
 			continue
 		}
-		payload, err := event.Payload.AsInferenceResponseEventPayload()
+		payload, err := generated.Payload.AsInferenceResponseEventPayload()
 		if err != nil {
 			t.Fatalf("decode inference response event: %v", err)
 		}
@@ -778,6 +792,15 @@ func requireReplayInferenceResponse(t *testing.T, events []factoryapi.FactoryEve
 	}
 	t.Fatalf("missing INFERENCE_RESPONSE for %s", inferenceRequestID)
 	return factoryapi.InferenceResponseEventPayload{}
+}
+
+func mustGeneratedReplayEvent(t *testing.T, event interfaces.FactoryEvent) factoryapi.FactoryEvent {
+	t.Helper()
+	generated, err := generatedEventFromDomain(event)
+	if err != nil {
+		t.Fatalf("decode replay event %q: %v", event.Id, err)
+	}
+	return generated
 }
 
 func writeReplayArtifactWithFactoryJSON(t *testing.T, path string, recordedAt time.Time, factoryJSON []byte) {

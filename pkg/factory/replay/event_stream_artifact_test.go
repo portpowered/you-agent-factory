@@ -93,7 +93,8 @@ func TestArtifactFromEventStream_NormalizesLegacyCronPayloads(t *testing.T) {
 	if workstation.Cron == nil || workstation.Cron.Schedule != legacyEventStreamCronPlaceholderSchedule {
 		t.Fatalf("normalized cron = %#v, want placeholder schedule %q", workstation.Cron, legacyEventStreamCronPlaceholderSchedule)
 	}
-	runStartedPayload, err := result.Artifact.Events[0].Payload.AsRunRequestEventPayload()
+	generatedRunStarted := mustGeneratedReplayEvent(t, result.Artifact.Events[0])
+	runStartedPayload, err := generatedRunStarted.Payload.AsRunRequestEventPayload()
 	if err != nil {
 		t.Fatalf("AsRunRequestEventPayload: %v", err)
 	}
@@ -126,13 +127,15 @@ func TestSaveArtifactFromEventStreamFile_HydratesAdjacentFactoryAndRewritesEmbed
 	}
 	assertReplayHydratedFactoryRuntime(t, decodeReplayFactorySnapshot(t, loaded.Factory))
 
-	runStartedPayload, err := loaded.Events[0].Payload.AsRunRequestEventPayload()
+	generatedRunStarted := mustGeneratedReplayEvent(t, loaded.Events[0])
+	runStartedPayload, err := generatedRunStarted.Payload.AsRunRequestEventPayload()
 	if err != nil {
 		t.Fatalf("AsRunRequestEventPayload: %v", err)
 	}
 	assertReplayHydratedFactoryRuntime(t, runStartedPayload.Factory)
 
-	initialPayload, err := loaded.Events[1].Payload.AsInitialStructureRequestEventPayload()
+	generatedInitial := mustGeneratedReplayEvent(t, loaded.Events[1])
+	initialPayload, err := generatedInitial.Payload.AsInitialStructureRequestEventPayload()
 	if err != nil {
 		t.Fatalf("AsInitialStructureRequestEventPayload: %v", err)
 	}
@@ -192,7 +195,11 @@ func writeReplayEventStreamFixture(t *testing.T, factoryDir string, recordedAt t
 	if err != nil {
 		t.Fatalf("runStartedEventFromFactory: %v", err)
 	}
-	events := []factoryapi.FactoryEvent{runStarted, replayInitialStructureEvent(t, recordedFactory, recordedAt)}
+	initial, err := interfaces.NewFactoryEvent(replayInitialStructureEvent(t, recordedFactory, recordedAt))
+	if err != nil {
+		t.Fatalf("convert initial structure event: %v", err)
+	}
+	events := []interfaces.FactoryEvent{runStarted, initial}
 	assignEventSequences(events)
 
 	eventStreamPath := filepath.Join(factoryDir, "runs", "runtime.events")
@@ -256,7 +263,7 @@ func replayInitialStructureEvent(t *testing.T, factory factoryapi.Factory, recor
 	}
 }
 
-func marshalReplayEventStream(t *testing.T, events ...factoryapi.FactoryEvent) string {
+func marshalReplayEventStream[T any](t *testing.T, events ...T) string {
 	t.Helper()
 
 	var builder strings.Builder

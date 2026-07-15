@@ -217,7 +217,7 @@ func replayDispatchCompletedEvents(t *testing.T, artifact *interfaces.ReplayArti
 	t.Helper()
 
 	events := make([]factoryapi.DispatchResponseEventPayload, 0)
-	for _, event := range artifact.Events {
+	for _, event := range testutil.GeneratedFactoryEvents(t, artifact.Events) {
 		if event.Type != factoryapi.FactoryEventTypeDispatchResponse {
 			continue
 		}

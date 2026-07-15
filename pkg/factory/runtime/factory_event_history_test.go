@@ -17,8 +17,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/factory/replay"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
@@ -52,7 +52,7 @@ func TestNew_ProviderBoundPetriDispatchPreservesPublicContractOnReplay(t *testin
 	liveEvents := runtimeGeneratedEvents(t, f)
 	live := publicPetriProviderContract(t, liveEvents)
 	loaded := roundTripSafeBoundaryArtifact(t, liveEvents)
-	replayed := publicPetriProviderContract(t, loaded.Events)
+	replayed := publicPetriProviderContract(t, runtimeGeneratedReplayEvents(t, loaded.Events))
 	if !reflect.DeepEqual(replayed, live) {
 		t.Fatalf("replayed public Petri provider contract = %#v, want live %#v", replayed, live)
 	}
@@ -170,10 +170,11 @@ func TestNew_SafeDiagnosticsBoundarySurvivesReplayAndSelectedTickProjection(t *t
 	assertDispatchResponseCount(t, events, 3)
 
 	loaded := roundTripSafeBoundaryArtifact(t, events)
-	assertDispatchResponseCount(t, loaded.Events, 3)
-	assertThinDispatchResponsesOmitRetiredProviderAttemptFields(t, loaded.Events)
+	generatedReplayEvents := runtimeGeneratedReplayEvents(t, loaded.Events)
+	assertDispatchResponseCount(t, generatedReplayEvents, 3)
+	assertThinDispatchResponsesOmitRetiredProviderAttemptFields(t, generatedReplayEvents)
 
-	worldState := reconstructWorldStateAtFinalTick(t, loaded.Events)
+	worldState := reconstructWorldStateAtFinalTick(t, generatedReplayEvents)
 	assertExecutedPetriDispatchContractSurvivesReplay(t, liveSnapshot.DispatchHistory, worldState)
 	assertSafeBoundaryWorldState(t, worldState)
 	assertSafeBoundaryRequestViews(t, worldState)
@@ -371,7 +372,7 @@ func roundTripSafeBoundaryArtifact(t *testing.T, events []factoryapi.FactoryEven
 	if err != nil {
 		t.Fatalf("NewEventLogArtifactFromFactory: %v", err)
 	}
-	artifact.Events = append(artifact.Events, events...)
+	artifact.Events = append(artifact.Events, runtimeDomainReplayEvents(t, events)...)
 
 	artifactPath := filepath.Join(t.TempDir(), "safe-boundary.replay.json")
 	if err := replay.Save(artifactPath, artifact); err != nil {
@@ -389,6 +390,32 @@ func roundTripSafeBoundaryArtifact(t *testing.T, events []factoryapi.FactoryEven
 		t.Fatalf("Load replay artifact: %v", err)
 	}
 	return loaded
+}
+
+func runtimeDomainReplayEvents(t *testing.T, events []factoryapi.FactoryEvent) []interfaces.FactoryEvent {
+	t.Helper()
+	converted := make([]interfaces.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		domainEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			t.Fatalf("convert runtime replay event %q: %v", event.Id, err)
+		}
+		converted = append(converted, domainEvent)
+	}
+	return converted
+}
+
+func runtimeGeneratedReplayEvents(t *testing.T, events []interfaces.FactoryEvent) []factoryapi.FactoryEvent {
+	t.Helper()
+	converted := make([]factoryapi.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		var generated factoryapi.FactoryEvent
+		if err := event.Decode(&generated); err != nil {
+			t.Fatalf("decode runtime replay event %q: %v", event.Id, err)
+		}
+		converted = append(converted, generated)
+	}
+	return converted
 }
 
 func reconstructWorldStateAtFinalTick(t *testing.T, events []factoryapi.FactoryEvent) interfaces.FactoryWorldState {

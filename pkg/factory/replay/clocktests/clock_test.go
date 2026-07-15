@@ -6,7 +6,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/replay"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestNewArtifactClock_UsesRecordedTickEventTimes(t *testing.T) {
@@ -15,21 +14,21 @@ func TestNewArtifactClock_UsesRecordedTickEventTimes(t *testing.T) {
 	tickEight := tickFour.Add(40 * time.Second)
 	clock := replay.NewArtifactClock(&interfaces.ReplayArtifact{
 		RecordedAt: base,
-		Events: []factoryapi.FactoryEvent{
+		Events: []interfaces.FactoryEvent{
 			{
-				Context: factoryapi.FactoryEventContext{
+				Context: interfaces.FactoryEventContext{
 					Tick:      0,
 					EventTime: base,
 				},
 			},
 			{
-				Context: factoryapi.FactoryEventContext{
+				Context: interfaces.FactoryEventContext{
 					Tick:      4,
 					EventTime: tickFour,
 				},
 			},
 			{
-				Context: factoryapi.FactoryEventContext{
+				Context: interfaces.FactoryEventContext{
 					Tick:      8,
 					EventTime: tickEight,
 				},
