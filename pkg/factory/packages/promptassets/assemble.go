@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"path"
+	"strings"
 )
 
 const (
@@ -32,8 +33,8 @@ func Assemble(definition Definition) ([]byte, error) {
 	}
 
 	for _, collection := range []subjectCollection{
-		{key: workerCollection, preservePromptFile: false},
-		{key: workstationCollection, preservePromptFile: true},
+		{key: workerCollection, subjectKind: "worker", preservePromptFile: false},
+		{key: workstationCollection, subjectKind: "workstation", preservePromptFile: true},
 	} {
 		if err := assembleCollection(definition, root, collection); err != nil {
 			return nil, err
@@ -49,6 +50,7 @@ func Assemble(definition Definition) ([]byte, error) {
 
 type subjectCollection struct {
 	key                string
+	subjectKind        string
 	preservePromptFile bool
 }
 
@@ -62,10 +64,10 @@ func assembleCollection(definition Definition, root map[string]any, collection s
 		return fmt.Errorf("assemble package %q: %s must be an array", definition.Package, collection.key)
 	}
 
-	for _, entry := range subjects {
+	for index, entry := range subjects {
 		subject, ok := entry.(map[string]any)
 		if !ok {
-			return fmt.Errorf("assemble package %q: %s entry must be an object", definition.Package, collection.key)
+			return fmt.Errorf("assemble package %q: %s at index %d must be an object", definition.Package, collection.subjectKind, index)
 		}
 		if err := assembleSubject(definition, subject, collection); err != nil {
 			return err
@@ -75,15 +77,46 @@ func assembleCollection(definition Definition, root map[string]any, collection s
 }
 
 func assembleSubject(definition Definition, subject map[string]any, collection subjectCollection) error {
-	promptFile, _ := subject["promptFile"].(string)
-	if promptFile == "" {
+	name, nameValid := subject["name"].(string)
+	nameValid = nameValid && strings.TrimSpace(name) != ""
+	promptValue, hasPromptFile := subject["promptFile"]
+	promptFile, promptFileValid := promptValue.(string)
+	if hasPromptFile && !promptFileValid {
+		return promptReferenceError(definition, collection, name, "<non-string>", "declared prompt path must be a string")
+	}
+	if !nameValid {
+		if hasPromptFile {
+			return promptReferenceError(definition, collection, name, promptFile, "subject name must be a non-empty string")
+		}
+		return fmt.Errorf("assemble package %q: %s name must be a non-empty string", definition.Package, collection.subjectKind)
+	}
+	if !hasPromptFile {
 		return nil
+	}
+	if promptFile == "" {
+		return promptReferenceError(definition, collection, name, promptFile, "declared prompt path must be non-empty")
+	}
+	if inlineValue, hasInlineBody := subject["body"]; hasInlineBody {
+		inlineBody, ok := inlineValue.(string)
+		if !ok {
+			return promptReferenceError(definition, collection, name, promptFile, "inline body must be a string")
+		}
+		if inlineBody != "" {
+			return promptReferenceError(definition, collection, name, promptFile, "declares both promptFile and non-empty inline body")
+		}
+	}
+	if err := validatePromptPath(promptFile); err != nil {
+		return promptReferenceError(definition, collection, name, promptFile, err.Error())
 	}
 
 	assetPath := path.Join(definition.AssetRoot, promptFile)
 	content, err := fs.ReadFile(definition.Assets, assetPath)
 	if err != nil {
-		return fmt.Errorf("assemble package %q %s %q prompt %q: %w", definition.Package, collection.key, subject["name"], promptFile, err)
+		return fmt.Errorf(
+			"%s: read asset: %w",
+			promptReferenceContext(definition, collection, name, promptFile),
+			err,
+		)
 	}
 
 	subject["body"] = string(content)
@@ -91,4 +124,43 @@ func assembleSubject(definition Definition, subject map[string]any, collection s
 		delete(subject, "promptFile")
 	}
 	return nil
+}
+
+func validatePromptPath(promptFile string) error {
+	if path.IsAbs(promptFile) {
+		return fmt.Errorf("declared prompt path must be package-relative")
+	}
+	cleaned := path.Clean(promptFile)
+	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return fmt.Errorf("declared prompt path escapes the package asset root")
+	}
+	return nil
+}
+
+func promptReferenceError(
+	definition Definition,
+	collection subjectCollection,
+	name string,
+	promptFile string,
+	detail string,
+) error {
+	return fmt.Errorf("%s: %s", promptReferenceContext(definition, collection, name, promptFile), detail)
+}
+
+func promptReferenceContext(
+	definition Definition,
+	collection subjectCollection,
+	name string,
+	promptFile string,
+) string {
+	if name == "" {
+		name = "<unnamed>"
+	}
+	return fmt.Sprintf(
+		"assemble package %q %s %q prompt %q",
+		definition.Package,
+		collection.subjectKind,
+		name,
+		promptFile,
+	)
 }
