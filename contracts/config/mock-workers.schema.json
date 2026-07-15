@@ -1,86 +1,1103 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "fieldContract": {
+      "additionalProperties": false,
+      "properties": {
+        "defaultEmptyBehavior": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "documentation": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+        },
+        "inventoryId": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "jsonPath": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "validationOwner": {
+          "enum": [
+            "decode",
+            "validate"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "inventoryId",
+        "jsonPath",
+        "documentation",
+        "lifecycle",
+        "defaultEmptyBehavior",
+        "validationOwner"
+      ],
+      "type": "object"
+    },
+    "mockWorker": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "runType": {
+                "const": "script"
+              }
+            },
+            "required": [
+              "runType"
+            ]
+          },
+          "then": {
+            "required": [
+              "scriptConfig"
+            ]
+          }
+        }
+      ],
+      "description": "Selects a worker dispatch and declares the deterministic behavior to apply at the execution boundary.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "rejectConfig": {
+          "$ref": "#/$defs/rejectConfig"
+        },
+        "runType": {
+          "description": "Required run-type union selecting accept, script, or reject behavior.",
+          "enum": [
+            "accept",
+            "script",
+            "reject"
+          ],
+          "examples": [
+            "accept",
+            "script",
+            "reject"
+          ]
+        },
+        "scriptConfig": {
+          "$ref": "#/$defs/scriptConfig"
+        },
+        "workInputs": {
+          "items": {
+            "$ref": "#/$defs/workInput"
+          },
+          "type": "array"
+        },
+        "workerName": {
+          "type": "string"
+        },
+        "workstationName": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "runType"
+      ],
+      "type": "object"
+    },
+    "rejectConfig": {
+      "additionalProperties": false,
+      "description": "Optional observable output for a rejected mock result when runType is reject.",
+      "properties": {
+        "exitCode": {
+          "description": "Optional rejected exit code between 1 and 255.",
+          "examples": [
+            42
+          ],
+          "maximum": 255,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "stderr": {
+          "type": "string"
+        },
+        "stdout": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "scriptConfig": {
+      "additionalProperties": false,
+      "description": "Declares the local script a script mock executes through the shared command-runner boundary.",
+      "properties": {
+        "args": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "command": {
+          "description": "Required non-empty command when runType is script.",
+          "examples": [
+            "printf",
+            "echo"
+          ],
+          "minLength": 1,
+          "type": "string"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "stdin": {
+          "type": "string"
+        },
+        "timeout": {
+          "description": "Optional local script execution time bound (for example 30s). Not a dispatch delay or timing field.",
+          "examples": [
+            "30s"
+          ],
+          "type": "string"
+        },
+        "workingDirectory": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "workInput": {
+      "additionalProperties": false,
+      "description": "Narrows a mock-worker match by consumed work input. Omitted selector fields do not constrain that dimension.",
+      "properties": {
+        "channel": {
+          "type": "string"
+        },
+        "inputName": {
+          "type": "string"
+        },
+        "payloadHash": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "traceId": {
+          "type": "string"
+        },
+        "workId": {
+          "type": "string"
+        },
+        "workType": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
   "$id": "https://schemas.portpowered.com/you/config/mock-workers.schema.json",
-  "title": "You mock-worker configuration",
-  "description": "The strict mock-worker dispatch configuration accepted by ParseMockWorkersConfig.",
-  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "required": [
-    "mockWorkers"
+  "contract": {
+    "entrySelectionPolicy": "first matching mockWorkers[] entry wins; there is no response-sequence or multi-hit authoring surface beyond that first-match selection",
+    "examples": [
+      "docs/examples/mock-workers.json",
+      "docs/examples/mock-workers-script.json",
+      "docs/examples/mock-workers-mixed.json"
+    ],
+    "fields": {
+      "mockWorkers": {
+        "defaultEmptyBehavior": "missing mockWorkers decodes as an empty slice; nil after decode is normalized to []",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Ordered mock-worker entries matched in array order; the first matching entry wins.",
+              "id": "config.mock-workers.description"
+            },
+            "title": {
+              "canonicalEnglish": "Mock worker entries",
+              "id": "config.mock-workers.title"
+            }
+          },
+          "examples": [
+            [
+              {
+                "id": "reviewer-rejects-first-pass",
+                "rejectConfig": {
+                  "exitCode": 42,
+                  "stderr": "missing acceptance criteria",
+                  "stdout": "needs changes"
+                },
+                "runType": "reject",
+                "workerName": "reviewer",
+                "workstationName": "review-story"
+              }
+            ]
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers",
+          "sourceHash": "20a15c8827a59af765d5d2da1393bf60a95da459da629eaab47b4522aebb4281",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers",
+        "jsonPath": "mockWorkers",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "notes": "LoadMockWorkersConfig with an empty path returns NewEmptyMockWorkersConfig without reading a file",
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].id": {
+        "defaultEmptyBehavior": "omitted id is allowed and leaves diagnostics matching unconstrained",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional entry identifier used for diagnostics and stable matching references.",
+              "id": "config.mock-workers.id.description"
+            },
+            "title": {
+              "canonicalEnglish": "Mock worker entry identifier",
+              "id": "config.mock-workers.id.title"
+            }
+          },
+          "examples": [
+            "reviewer-rejects-first-pass",
+            "executor-script-side-effect"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.id",
+          "sourceHash": "cbad2754c252ae9ea5fa7477fe2537e8029f77884b960e2735609b450de19783",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].id",
+        "jsonPath": "mockWorkers[].id",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.id",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].rejectConfig": {
+        "defaultEmptyBehavior": "omitted rejectConfig is allowed when runType is reject",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional observable output for a rejected mock result when runType is reject.",
+              "id": "config.mock-workers.reject-config.description"
+            },
+            "title": {
+              "canonicalEnglish": "Reject configuration",
+              "id": "config.mock-workers.reject-config.title"
+            }
+          },
+          "examples": [
+            {
+              "exitCode": 42,
+              "stderr": "missing acceptance criteria",
+              "stdout": "needs changes"
+            }
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.reject-config",
+          "sourceHash": "72144b1cff9bc02e13bdf6ecc93c9eebfdd616b6c05083c7bf8dd502ceaa5a53",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].rejectConfig",
+        "jsonPath": "mockWorkers[].rejectConfig",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.reject-config",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "validate"
+      },
+      "mockWorkers[].rejectConfig.exitCode": {
+        "defaultEmptyBehavior": "omitted exitCode leaves rejected exit code unset; when set must be between 1 and 255",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional rejected exit code between 1 and 255.",
+              "id": "config.mock-workers.reject-config.exit-code.description"
+            },
+            "title": {
+              "canonicalEnglish": "Rejected exit code",
+              "id": "config.mock-workers.reject-config.exit-code.title"
+            }
+          },
+          "examples": [
+            42
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.reject-config.exit-code",
+          "sourceHash": "7834aa46d2ff5696c28b65501736e5063dc47a904b7da20a282f92bfad92835b",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].rejectConfig.exitCode",
+        "jsonPath": "mockWorkers[].rejectConfig.exitCode",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.reject-config.exit-code",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "validate"
+      },
+      "mockWorkers[].rejectConfig.stderr": {
+        "defaultEmptyBehavior": "omitted stderr leaves rejected command stderr empty",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional stderr content for a rejected mock result.",
+              "id": "config.mock-workers.reject-config.stderr.description"
+            },
+            "title": {
+              "canonicalEnglish": "Rejected stderr",
+              "id": "config.mock-workers.reject-config.stderr.title"
+            }
+          },
+          "examples": [
+            "missing acceptance criteria"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.reject-config.stderr",
+          "sourceHash": "066a7241bf5d816b40f7a73d58b67f9feae166d834887df229292efcf4a40e29",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].rejectConfig.stderr",
+        "jsonPath": "mockWorkers[].rejectConfig.stderr",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.reject-config.stderr",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].rejectConfig.stdout": {
+        "defaultEmptyBehavior": "omitted stdout leaves rejected command stdout empty",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional stdout content for a rejected mock result.",
+              "id": "config.mock-workers.reject-config.stdout.description"
+            },
+            "title": {
+              "canonicalEnglish": "Rejected stdout",
+              "id": "config.mock-workers.reject-config.stdout.title"
+            }
+          },
+          "examples": [
+            "needs changes"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.reject-config.stdout",
+          "sourceHash": "a9c5507d3a61f2e8635cff00efc4983d6d91afd49f22d449096069511035d598",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].rejectConfig.stdout",
+        "jsonPath": "mockWorkers[].rejectConfig.stdout",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.reject-config.stdout",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].runType": {
+        "defaultEmptyBehavior": "missing runType fails Validate with actionable runType union message",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Required run-type union selecting accept, script, or reject behavior.",
+              "id": "config.mock-workers.run-type.description"
+            },
+            "title": {
+              "canonicalEnglish": "Mock worker run type",
+              "id": "config.mock-workers.run-type.title"
+            }
+          },
+          "examples": [
+            "accept",
+            "script",
+            "reject"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.run-type",
+          "sourceHash": "81d181ab4417b37e7094c3b1759324fa10787f0d11dbefc21dee563a51fb3fe8",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].runType",
+        "jsonPath": "mockWorkers[].runType",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.run-type",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "notes": "accepted values are \"accept\", \"script\", and \"reject\"",
+        "validationOwner": "validate"
+      },
+      "mockWorkers[].scriptConfig": {
+        "defaultEmptyBehavior": "omitted scriptConfig is rejected when runType is script",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Required when runType is script. Declares the local script executed through the shared command-runner boundary.",
+              "id": "config.mock-workers.script-config.description"
+            },
+            "title": {
+              "canonicalEnglish": "Script configuration",
+              "id": "config.mock-workers.script-config.title"
+            }
+          },
+          "examples": [
+            {
+              "args": [
+                "mock script stdout\n"
+              ],
+              "command": "printf",
+              "timeout": "30s"
+            }
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.script-config",
+          "sourceHash": "3be00712371d2c1a368df199070a01b9df23683a8b2b1eaf3e9a73f7bbef98c8",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].scriptConfig",
+        "jsonPath": "mockWorkers[].scriptConfig",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.script-config",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "validate"
+      },
+      "mockWorkers[].scriptConfig.args": {
+        "defaultEmptyBehavior": "omitted args leaves command argument list empty",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional command arguments passed to the script command.",
+              "id": "config.mock-workers.script-config.args.description"
+            },
+            "title": {
+              "canonicalEnglish": "Script arguments",
+              "id": "config.mock-workers.script-config.args.title"
+            }
+          },
+          "examples": [
+            [
+              "mock script stdout\n"
+            ]
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.script-config.args",
+          "sourceHash": "2a80e43b96e8ac04d0692a6eeacab7fca030ad4cb97df0f49369a6c519f779f8",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].scriptConfig.args",
+        "jsonPath": "mockWorkers[].scriptConfig.args",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.script-config.args",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].scriptConfig.command": {
+        "defaultEmptyBehavior": "missing or empty command fails Validate when runType is script",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Required non-empty command when runType is script.",
+              "id": "config.mock-workers.script-config.command.description"
+            },
+            "title": {
+              "canonicalEnglish": "Script command",
+              "id": "config.mock-workers.script-config.command.title"
+            }
+          },
+          "examples": [
+            "printf",
+            "echo"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.script-config.command",
+          "sourceHash": "80c9368e3e29a8ce3bcb4f87b1d541aedc148c209c2da30ed2a5620d1b22a9fd",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].scriptConfig.command",
+        "jsonPath": "mockWorkers[].scriptConfig.command",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.script-config.command",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "validate"
+      },
+      "mockWorkers[].scriptConfig.env": {
+        "defaultEmptyBehavior": "omitted env leaves script environment unchanged aside from runner defaults",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional environment variables for local script execution.",
+              "id": "config.mock-workers.script-config.env.description"
+            },
+            "title": {
+              "canonicalEnglish": "Script environment",
+              "id": "config.mock-workers.script-config.env.title"
+            }
+          },
+          "examples": [
+            {
+              "MOCK_WORKER": "1"
+            }
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.script-config.env",
+          "sourceHash": "6576cfcff1b858fa4f5789db513a1c01d7fb92e4cbbffa0ac37c926d8f12c570",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].scriptConfig.env",
+        "jsonPath": "mockWorkers[].scriptConfig.env",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.script-config.env",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].scriptConfig.stdin": {
+        "defaultEmptyBehavior": "omitted stdin leaves script stdin empty",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional stdin payload for local script execution.",
+              "id": "config.mock-workers.script-config.stdin.description"
+            },
+            "title": {
+              "canonicalEnglish": "Script stdin",
+              "id": "config.mock-workers.script-config.stdin.title"
+            }
+          },
+          "examples": [
+            "optional script stdin payload"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.script-config.stdin",
+          "sourceHash": "8a8ad7bd1ee52043edf98e42d140f88bff32af959998f3c42a1b05d4c676b79f",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].scriptConfig.stdin",
+        "jsonPath": "mockWorkers[].scriptConfig.stdin",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.script-config.stdin",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].scriptConfig.timeout": {
+        "defaultEmptyBehavior": "omitted timeout uses runner default script timeout; duration strings such as 30s are accepted when set",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional local script execution time bound. Not a dispatch delay or timing field.",
+              "id": "config.mock-workers.script-config.timeout.description"
+            },
+            "title": {
+              "canonicalEnglish": "Script execution timeout",
+              "id": "config.mock-workers.script-config.timeout.title"
+            }
+          },
+          "examples": [
+            "30s"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.script-config.timeout",
+          "sourceHash": "51ff6d2d445a4b8702ff2979701d37967e2137a54a848d5c24c85928b08b00c9",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].scriptConfig.timeout",
+        "jsonPath": "mockWorkers[].scriptConfig.timeout",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.script-config.timeout",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "notes": "bounds local script execution only; not a dispatch-delay authoring field",
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].scriptConfig.workingDirectory": {
+        "defaultEmptyBehavior": "omitted workingDirectory uses runner default working directory",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional working directory for local script execution.",
+              "id": "config.mock-workers.script-config.working-directory.description"
+            },
+            "title": {
+              "canonicalEnglish": "Script working directory",
+              "id": "config.mock-workers.script-config.working-directory.title"
+            }
+          },
+          "examples": [
+            "."
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.script-config.working-directory",
+          "sourceHash": "5810806fc94d7683c8940f5af9ac88cd595cf0269d98eebf278a89960e0f103e",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].scriptConfig.workingDirectory",
+        "jsonPath": "mockWorkers[].scriptConfig.workingDirectory",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.script-config.working-directory",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].workInputs": {
+        "defaultEmptyBehavior": "omitted workInputs does not constrain consumed work-input selectors",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional consumed work-input selectors. All specified selector fields on an entry must match.",
+              "id": "config.mock-workers.work-inputs.description"
+            },
+            "title": {
+              "canonicalEnglish": "Work input selectors",
+              "id": "config.mock-workers.work-inputs.title"
+            }
+          },
+          "examples": [
+            [
+              {
+                "inputName": "work",
+                "state": "in-review",
+                "workType": "story"
+              }
+            ]
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs",
+          "sourceHash": "577b81329b93ae10ee790dc6a5fbbe8fa204373cb451e7dc3f91d8fd1883ec04",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].workInputs",
+        "jsonPath": "mockWorkers[].workInputs",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].workInputs[].channel": {
+        "defaultEmptyBehavior": "omitted selector field does not constrain that dimension; all specified selector fields on an entry must match",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional channel selector. Omitted selector fields do not constrain that dimension.",
+              "id": "config.mock-workers.work-inputs.channel.description"
+            },
+            "title": {
+              "canonicalEnglish": "Channel selector",
+              "id": "config.mock-workers.work-inputs.channel.title"
+            }
+          },
+          "examples": [
+            "default"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs.channel",
+          "sourceHash": "1e606b0e4b8af3a42e6bc91b54a3e216cdc059ce1d1c76a8b399fa68f702d8de",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].workInputs[].channel",
+        "jsonPath": "mockWorkers[].workInputs[].channel",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs.channel",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].workInputs[].inputName": {
+        "defaultEmptyBehavior": "omitted selector field does not constrain that dimension; all specified selector fields on an entry must match",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional consumed input name selector. Omitted selector fields do not constrain that dimension.",
+              "id": "config.mock-workers.work-inputs.input-name.description"
+            },
+            "title": {
+              "canonicalEnglish": "Input name selector",
+              "id": "config.mock-workers.work-inputs.input-name.title"
+            }
+          },
+          "examples": [
+            "work"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs.input-name",
+          "sourceHash": "eefca843569b9c33bae941e5a443adb09a0abad60b8c3d591ce2587e0dd3dbab",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].workInputs[].inputName",
+        "jsonPath": "mockWorkers[].workInputs[].inputName",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs.input-name",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].workInputs[].payloadHash": {
+        "defaultEmptyBehavior": "omitted selector field does not constrain that dimension; all specified selector fields on an entry must match",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional payload hash selector. Omitted selector fields do not constrain that dimension.",
+              "id": "config.mock-workers.work-inputs.payload-hash.description"
+            },
+            "title": {
+              "canonicalEnglish": "Payload hash selector",
+              "id": "config.mock-workers.work-inputs.payload-hash.title"
+            }
+          },
+          "examples": [
+            "sha256:deadbeef"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs.payload-hash",
+          "sourceHash": "24e5749f56bb140ab3c5da0cd89243e3e680816ab55ec45bf18cfbda27a04065",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].workInputs[].payloadHash",
+        "jsonPath": "mockWorkers[].workInputs[].payloadHash",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs.payload-hash",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].workInputs[].state": {
+        "defaultEmptyBehavior": "omitted selector field does not constrain that dimension; all specified selector fields on an entry must match",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional work state selector. Omitted selector fields do not constrain that dimension.",
+              "id": "config.mock-workers.work-inputs.state.description"
+            },
+            "title": {
+              "canonicalEnglish": "Work state selector",
+              "id": "config.mock-workers.work-inputs.state.title"
+            }
+          },
+          "examples": [
+            "in-review",
+            "init"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs.state",
+          "sourceHash": "9602307ff756dfeb9f852aba26f2a9504d205496d2255fcae5f1779d5b41ce69",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].workInputs[].state",
+        "jsonPath": "mockWorkers[].workInputs[].state",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs.state",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].workInputs[].traceId": {
+        "defaultEmptyBehavior": "omitted selector field does not constrain that dimension; all specified selector fields on an entry must match",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional trace identifier selector. Omitted selector fields do not constrain that dimension.",
+              "id": "config.mock-workers.work-inputs.trace-id.description"
+            },
+            "title": {
+              "canonicalEnglish": "Trace identifier selector",
+              "id": "config.mock-workers.work-inputs.trace-id.title"
+            }
+          },
+          "examples": [
+            "trace-abc"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs.trace-id",
+          "sourceHash": "89cc684872f241243b8780614b6a193406120b1c3d73a072992ed206b90d26e4",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].workInputs[].traceId",
+        "jsonPath": "mockWorkers[].workInputs[].traceId",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs.trace-id",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].workInputs[].workId": {
+        "defaultEmptyBehavior": "omitted selector field does not constrain that dimension; all specified selector fields on an entry must match",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional work identifier selector. Omitted selector fields do not constrain that dimension.",
+              "id": "config.mock-workers.work-inputs.work-id.description"
+            },
+            "title": {
+              "canonicalEnglish": "Work identifier selector",
+              "id": "config.mock-workers.work-inputs.work-id.title"
+            }
+          },
+          "examples": [
+            "work-123"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs.work-id",
+          "sourceHash": "ea575a14fdfd0fd2f4343e7990d931ae56ac079679171e9b109ac32c39f2e6ba",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].workInputs[].workId",
+        "jsonPath": "mockWorkers[].workInputs[].workId",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs.work-id",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].workInputs[].workType": {
+        "defaultEmptyBehavior": "omitted selector field does not constrain that dimension; all specified selector fields on an entry must match",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional work type selector. Omitted selector fields do not constrain that dimension.",
+              "id": "config.mock-workers.work-inputs.work-type.description"
+            },
+            "title": {
+              "canonicalEnglish": "Work type selector",
+              "id": "config.mock-workers.work-inputs.work-type.title"
+            }
+          },
+          "examples": [
+            "story"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs.work-type",
+          "sourceHash": "46f08014e3e2f6c462891f1ff78e2e450f6cd5ac89b761da18294e5742a02f37",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].workInputs[].workType",
+        "jsonPath": "mockWorkers[].workInputs[].workType",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.work-inputs.work-type",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].workerName": {
+        "defaultEmptyBehavior": "omitted workerName does not constrain worker-name matching",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional worker-name selector. Omitted values do not constrain worker-name matching.",
+              "id": "config.mock-workers.worker-name.description"
+            },
+            "title": {
+              "canonicalEnglish": "Worker name selector",
+              "id": "config.mock-workers.worker-name.title"
+            }
+          },
+          "examples": [
+            "reviewer",
+            "executor"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.worker-name",
+          "sourceHash": "19922fade4dd58c0743058f4667f7492f0a97a9b63a553179b035d2e0a5059b4",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].workerName",
+        "jsonPath": "mockWorkers[].workerName",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.worker-name",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "mockWorkers[].workstationName": {
+        "defaultEmptyBehavior": "omitted workstationName does not constrain workstation matching",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Optional workstation-name selector. Omitted values do not constrain workstation matching.",
+              "id": "config.mock-workers.workstation-name.description"
+            },
+            "title": {
+              "canonicalEnglish": "Workstation name selector",
+              "id": "config.mock-workers.workstation-name.title"
+            }
+          },
+          "examples": [
+            "review-story",
+            "execute-story"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.workstation-name",
+          "sourceHash": "a544d558acc8370b54a79a4845ccc38a8a6baa3b4e7744c263a008160ab632da",
+          "visibility": "public"
+        },
+        "inventoryId": "mockWorkers[].workstationName",
+        "jsonPath": "mockWorkers[].workstationName",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.workstation-name",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "validationOwner": "decode"
+      },
+      "unmatchedDispatchPolicy": {
+        "defaultEmptyBehavior": "omitted or empty string behaves as accept for unmatched dispatches",
+        "documentation": {
+          "documentation": {
+            "description": {
+              "canonicalEnglish": "Controls dispatches that do not match any mockWorkers[] entry. Omitted values behave as accept.",
+              "id": "config.mock-workers.unmatched-dispatch-policy.description"
+            },
+            "title": {
+              "canonicalEnglish": "Unmatched dispatch policy",
+              "id": "config.mock-workers.unmatched-dispatch-policy.title"
+            }
+          },
+          "examples": [
+            "accept",
+            "passthrough"
+          ],
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.unmatched-dispatch-policy",
+          "sourceHash": "04f7010ac7ea70a326bfec79da3a67f22c7601c3a604affc20b5f1b8498e15f9",
+          "visibility": "public"
+        },
+        "inventoryId": "unmatchedDispatchPolicy",
+        "jsonPath": "unmatchedDispatchPolicy",
+        "lifecycle": {
+          "formatVersion": "1.0.0",
+          "itemId": "config.mock-workers.unmatched-dispatch-policy",
+          "since": "0.0.0",
+          "state": "active"
+        },
+        "notes": "accepted values are \"accept\" and \"passthrough\"",
+        "validationOwner": "validate"
+      }
+    },
+    "formatVersion": "1.0.0",
+    "notAcceptedCapabilities": [
+      {
+        "category": "media",
+        "reason": "no media payload or media-response authoring fields are accepted by ParseMockWorkersConfig"
+      },
+      {
+        "category": "dispatch delay or timing fields",
+        "reason": "no per-entry delay, sleep, or dispatch-timing fields are accepted; scriptConfig.timeout only bounds local script execution"
+      },
+      {
+        "category": "artifact payloads",
+        "reason": "no artifact upload/download or artifact payload fields are accepted on mockWorkers entries"
+      },
+      {
+        "category": "response sequences",
+        "reason": "no multi-step response sequence authoring exists beyond first-match mockWorkers[] entry selection"
+      }
+    ],
+    "runTypeUnionSummary": "runType is required on every mockWorkers[] entry and selects which nested config shape Validate enforces",
+    "unknownFieldPolicy": "ParseMockWorkersConfig uses json.Decoder.DisallowUnknownFields and rejects unknown top-level keys, unknown nested keys, and trailing JSON values"
+  },
+  "description": "The strict mock-worker dispatch configuration accepted by ParseMockWorkersConfig. mockWorkers[] entries are matched in array order and the first matching entry wins. Unmatched dispatches follow unmatchedDispatchPolicy.",
+  "examples": [
+    {
+      "mockWorkers": []
+    }
   ],
   "properties": {
     "mockWorkers": {
-      "type": "array",
+      "description": "Ordered mock-worker entries. First-match selection applies; there is no multi-step response-sequence authoring surface.",
+      "examples": [
+        [
+          {
+            "id": "reviewer-rejects-first-pass",
+            "rejectConfig": {
+              "exitCode": 42,
+              "stderr": "missing acceptance criteria",
+              "stdout": "needs changes"
+            },
+            "runType": "reject",
+            "workerName": "reviewer",
+            "workstationName": "review-story"
+          }
+        ]
+      ],
       "items": {
         "$ref": "#/$defs/mockWorker"
-      }
+      },
+      "type": "array"
     },
     "unmatchedDispatchPolicy": {
+      "default": "accept",
+      "description": "Controls dispatches that do not match any mockWorkers[] entry. Omitted values behave as accept.",
       "enum": [
+        "accept",
+        "passthrough"
+      ],
+      "examples": [
         "accept",
         "passthrough"
       ]
     }
   },
-  "$defs": {
-    "workInput": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "workId": { "type": "string" },
-        "workType": { "type": "string" },
-        "state": { "type": "string" },
-        "inputName": { "type": "string" },
-        "traceId": { "type": "string" },
-        "channel": { "type": "string" },
-        "payloadHash": { "type": "string" }
-      }
-    },
-    "scriptConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "command"
-      ],
-      "properties": {
-        "command": { "type": "string", "minLength": 1 },
-        "args": { "type": "array", "items": { "type": "string" } },
-        "env": { "type": "object", "additionalProperties": { "type": "string" } },
-        "workingDirectory": { "type": "string" },
-        "stdin": { "type": "string" },
-        "timeout": { "type": "string" }
-      }
-    },
-    "rejectConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "stdout": { "type": "string" },
-        "stderr": { "type": "string" },
-        "exitCode": { "type": "integer", "minimum": 1, "maximum": 255 }
-      }
-    },
-    "mockWorker": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "runType"
-      ],
-      "properties": {
-        "id": { "type": "string" },
-        "workerName": { "type": "string" },
-        "workstationName": { "type": "string" },
-        "workInputs": { "type": "array", "items": { "$ref": "#/$defs/workInput" } },
-        "runType": { "enum": ["accept", "script", "reject"] },
-        "scriptConfig": { "$ref": "#/$defs/scriptConfig" },
-        "rejectConfig": { "$ref": "#/$defs/rejectConfig" }
-      },
-      "allOf": [
-        {
-          "if": { "properties": { "runType": { "const": "script" } }, "required": ["runType"] },
-          "then": { "required": ["scriptConfig"] }
-        }
-      ]
-    }
-  }
+  "required": [
+    "mockWorkers"
+  ],
+  "title": "You mock-worker configuration",
+  "type": "object"
 }
