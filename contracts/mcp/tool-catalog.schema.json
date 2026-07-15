@@ -29,6 +29,10 @@
       "additionalProperties": {
         "$ref": "#/$defs/tool"
       }
+    },
+    "protocolFailures": {
+      "description": "JSON-RPC protocol failure documentation distinct from tool domain failures.",
+      "$ref": "#/$defs/protocolFailureDocumentation"
     }
   },
   "$defs": {
@@ -51,6 +55,17 @@
         },
         {
           "pattern": "^mcp[.]arg[.].+"
+        }
+      ]
+    },
+    "failureId": {
+      "description": "Stable MCP domain failure identity with the mcp.failure prefix.",
+      "allOf": [
+        {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        {
+          "pattern": "^mcp[.]failure[.].+"
         }
       ]
     },
@@ -367,6 +382,93 @@
         }
       }
     },
+    "domainSuccessDocumentation": {
+      "description": "Typed domain success payload documentation serialized into CallToolResult text content.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "examples"
+      ],
+      "properties": {
+        "schema": {
+          "$ref": "#/$defs/closedDraftSchema"
+        },
+        "examples": {
+          "description": "Representative domain success payloads distinct from the CallToolResult transport envelope.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/mcp/protocol/domain-tool-response.schema.json#/$defs/domainSuccessPayload"
+          }
+        }
+      }
+    },
+    "domainFailureDocumentation": {
+      "description": "One typed tool/domain failure record distinct from transport isError and JSON-RPC protocol errors.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "schema",
+        "examples"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/failureId"
+        },
+        "schema": {
+          "$ref": "#/$defs/closedDraftSchema"
+        },
+        "examples": {
+          "description": "Representative domain/tool failure payloads distinct from CallToolResult and JSON-RPC protocol errors.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/mcp/protocol/domain-tool-response.schema.json#/$defs/domainFailurePayload"
+          }
+        }
+      }
+    },
+    "toolResultDomain": {
+      "description": "Domain output and failure documentation distinct from the CallToolResult transport envelope.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "success": {
+          "$ref": "#/$defs/domainSuccessDocumentation"
+        },
+        "failures": {
+          "description": "Typed domain failure records keyed by stable failure identifiers.",
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/failureId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/domainFailureDocumentation"
+          }
+        }
+      }
+    },
+    "protocolFailureDocumentation": {
+      "description": "Catalog-level JSON-RPC protocol failure examples distinct from tool domain failures.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "examples"
+      ],
+      "properties": {
+        "examples": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/mcp/protocol/json-rpc-error.schema.json#/$defs/protocolFailureExample"
+          }
+        }
+      }
+    },
     "toolResultTransport": {
       "description": "Pinned tools/call transport policy for one tool under MCP 2024-11-05.",
       "type": "object",
@@ -404,7 +506,7 @@
       }
     },
     "toolResult": {
-      "description": "Authored tools/call result transport policy and representative CallToolResult examples.",
+      "description": "Authored tools/call result transport policy, domain documentation, and representative CallToolResult examples.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -414,6 +516,9 @@
       "properties": {
         "transport": {
           "$ref": "#/$defs/toolResultTransport"
+        },
+        "domain": {
+          "$ref": "#/$defs/toolResultDomain"
         },
         "examples": {
           "description": "Representative pinned text-only CallToolResult envelopes for this tool.",

@@ -47,6 +47,37 @@
           "allowsStructuredContent": false,
           "allowsOutputSchema": false
         },
+        "domain": {
+          "success": {
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sessionId",
+                "status"
+              ],
+              "properties": {
+                "sessionId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "status": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "examples": [
+              {
+                "result": {
+                  "sessionId": "dur-sess-001",
+                  "status": "SUCCEEDED"
+                }
+              }
+            ]
+          }
+        },
         "examples": [
           {
             "content": [

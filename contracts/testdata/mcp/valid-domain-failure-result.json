@@ -1,0 +1,108 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2024-11-05",
+  "tools": {
+    "mcp.tool.you.factory_session.start_sync": {
+      "id": "mcp.tool.you.factory_session.start_sync",
+      "name": "you.factory_session.start_sync",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.start_sync",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.start_sync.title",
+            "canonicalEnglish": "Start Factory Session Sync"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.start_sync.description",
+            "canonicalEnglish": "Starts one durable Factory Session synchronously."
+          }
+        },
+        "examples": [
+          {
+            "sessionId": "dur-sess-pending-001"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.start_sync",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "transports": [
+        "stdio-json-rpc"
+      ],
+      "execution": {
+        "mode": "tools-call"
+      },
+      "result": {
+        "transport": {
+          "contentTypes": [
+            "text"
+          ],
+          "textEncoding": "serialized-json",
+          "allowsStructuredContent": false,
+          "allowsOutputSchema": false
+        },
+        "domain": {
+          "failures": {
+            "mcp.failure.you.factory_session.start_sync.validation_failed": {
+              "id": "mcp.failure.you.factory_session.start_sync.validation_failed",
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "code",
+                  "message",
+                  "retryable"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  },
+                  "sessionId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.start.validation_failed",
+                    "message": "factory session source validation failed",
+                    "retryable": false,
+                    "sessionId": "dur-sess-pending-001"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "examples": [
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"error\":{\"code\":\"factory_session.start.validation_failed\",\"message\":\"factory session source validation failed\",\"retryable\":false,\"sessionId\":\"dur-sess-pending-001\"}}"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      }
+    }
+  }
+}

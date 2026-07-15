@@ -1,0 +1,76 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2024-11-05",
+  "protocolFailures": {
+    "examples": [
+      {
+        "name": "tools_call_missing_tool_name",
+        "description": "Representative invalid-params JSON-RPC error for tools/call with a missing tool name.",
+        "request": {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "method": "tools/call",
+          "params": {}
+        },
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "error": {
+            "code": -32602,
+            "message": "tool name is required"
+          }
+        }
+      },
+      {
+        "name": "unknown_method",
+        "description": "Representative unknown-method JSON-RPC error for an unsupported MCP method.",
+        "request": {
+          "jsonrpc": "2.0",
+          "id": 3,
+          "method": "nope"
+        },
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 3,
+          "error": {
+            "code": -32601,
+            "message": "method not found: nope"
+          }
+        }
+      }
+    ]
+  },
+  "tools": {
+    "mcp.tool.you.factory_session.validate_source": {
+      "id": "mcp.tool.you.factory_session.validate_source",
+      "name": "you.factory_session.validate_source",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.validate_source",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.validate_source.title",
+            "canonicalEnglish": "Validate Factory Session Source"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.validate_source.description",
+            "canonicalEnglish": "Validates one Factory Session source before execution."
+          }
+        },
+        "examples": [
+          {
+            "sourcePath": "factory/session.json"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.validate_source",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

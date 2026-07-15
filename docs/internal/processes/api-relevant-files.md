@@ -128,9 +128,12 @@ Use this map when changing the public REST contract.
   supported protocol surface.
 - Reusable MCP protocol components live under `contracts/mcp/protocol/`
   (`content.schema.json` documents broader MCP content kinds; `call-tool-result.schema.json`
-  defines the `pinnedTextCallToolResult` envelope used by tool `result.examples`).
-  Tool `result.transport` pins text-only content types and rejects
-  `structuredContent` / `outputSchema` advertising.
+  defines the `pinnedTextCallToolResult` envelope used by tool `result.examples`;
+  `domain-tool-response.schema.json` documents typed domain success/failure payloads
+  serialized into text; `json-rpc-error.schema.json` documents protocol failures
+  distinct from domain errors). Tool `result.domain` groups domain success/failure
+  documentation separately from `result.transport` and `result.examples`; catalog-level
+  `protocolFailures` documents JSON-RPC invalid-params/unknown-method failures.
 - Compatibility aliases remain only in `contracts/mcp/deprecated.json`; the
   tool-catalog schema is build-time contract validation only and does not cut
   over `packages/api/generated/mcp/tools.json` or runtime discovery.
