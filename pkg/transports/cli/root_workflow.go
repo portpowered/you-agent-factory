@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"fmt"
 	"strings"
 
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry/workflowmcp"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
@@ -15,6 +17,20 @@ import (
 )
 
 func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions, options RootCommandOptions) *cobra.Command {
+	return newWorkflowCommandWithValidationPreview(
+		globals,
+		options,
+		newWorkflowValidateCommand(globals),
+		newWorkflowPreviewCommand(globals),
+	)
+}
+
+func newWorkflowCommandWithValidationPreview(
+	globals *cliGlobalOptions,
+	options RootCommandOptions,
+	validate *cobra.Command,
+	preview *cobra.Command,
+) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "workflow",
 		Short: "Compatibility commands for Factory Preview and Factory Session behavior",
@@ -33,8 +49,8 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions, opt
 			"  events     compatibility event read; successor: the Factory Session events API",
 	}
 	cmd.AddCommand(
-		newWorkflowValidateCommand(globals),
-		newWorkflowPreviewCommand(globals),
+		validate,
+		preview,
 		newWorkflowRunCommand(globals, options),
 		newWorkflowStartCommand(globals, options),
 		newWorkflowStatusCommand(globals, options),
@@ -44,6 +60,70 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions, opt
 		newWorkflowEventsCommand(globals, options),
 	)
 	return cmd
+}
+
+const useGeneratedWorkflowMCPFamily = true
+
+type workflowMCPBindingState struct {
+	mcpFixtureCatalogPath string
+	mcpRuntimeBacked      bool
+	mcpProjectRoot        string
+	preview               workflowcli.PreviewConfig
+	validate              workflowcli.ValidateConfig
+}
+
+func newWorkflowMCPBindingState() *workflowMCPBindingState {
+	return &workflowMCPBindingState{
+		preview:  workflowcli.PreviewConfig{SourceConfig: workflowcli.SourceConfig{Dir: defaultcmd.FactoryDir}},
+		validate: workflowcli.ValidateConfig{SourceConfig: workflowcli.SourceConfig{Dir: defaultcmd.FactoryDir}},
+	}
+}
+
+func newProductionWorkflowMCPCommands(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	options RootCommandOptions,
+) (*cobra.Command, *cobra.Command) {
+	if !useGeneratedWorkflowMCPFamily {
+		return newMCPCommand(options), newWorkflowCommand(globals, diagnostics, options)
+	}
+	state := newWorkflowMCPBindingState()
+	registries, err := workflowMCPHandlerRegistries(globals, options, state)
+	if err != nil {
+		panic(fmt.Sprintf("build workflow/MCP handler registries: %v", err))
+	}
+	components, err := climanifestcobra.NewWorkflowMCPFamilyComponents(registries, workflowMCPFlagBindings(state))
+	if err != nil {
+		panic(fmt.Sprintf("build workflow/MCP family commands: %v", err))
+	}
+	workflow := newWorkflowCommandWithValidationPreview(globals, options, components.WorkflowValidate, components.WorkflowPreview)
+	return components.MCP, workflow
+}
+
+// NewWorkflowMCPFamilyParityRoots builds detached handwritten and generated
+// roots for observable constructor parity checks.
+func NewWorkflowMCPFamilyParityRoots() (legacyRoot, generatedRoot *cobra.Command, err error) {
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+	legacyGlobals := &cliGlobalOptions{server: "http://localhost:7437"}
+	legacyDiagnostics := &cliDiagnosticsOptions{}
+	legacyRoot = newLegacyRootCommandShell(legacyGlobals, legacyDiagnostics, &cliOperatorDefaultsOptions{}, options)
+	legacyRoot.AddCommand(newMCPCommand(options), newWorkflowCommand(legacyGlobals, legacyDiagnostics, options))
+
+	generatedGlobals := &cliGlobalOptions{server: "http://localhost:7437"}
+	generatedDiagnostics := &cliDiagnosticsOptions{}
+	generatedRoot = newLegacyRootCommandShell(generatedGlobals, generatedDiagnostics, &cliOperatorDefaultsOptions{}, options)
+	state := newWorkflowMCPBindingState()
+	registries, err := workflowMCPHandlerRegistries(generatedGlobals, options, state)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build workflow/MCP parity registries: %w", err)
+	}
+	components, err := climanifestcobra.NewWorkflowMCPFamilyComponents(registries, workflowMCPFlagBindings(state))
+	if err != nil {
+		return nil, nil, fmt.Errorf("build workflow/MCP parity commands: %w", err)
+	}
+	workflow := newWorkflowCommandWithValidationPreview(generatedGlobals, options, components.WorkflowValidate, components.WorkflowPreview)
+	generatedRoot.AddCommand(components.MCP, workflow)
+	return legacyRoot, generatedRoot, nil
 }
 
 func newWorkflowValidateCommand(globals *cliGlobalOptions) *cobra.Command {
@@ -94,21 +174,58 @@ func newWorkflowMCPHandlerRegistries(
 	globals *cliGlobalOptions,
 	options RootCommandOptions,
 ) (workflowmcp.Registries, error) {
-	validateCfg := workflowcli.ValidateConfig{SourceConfig: workflowcli.SourceConfig{Dir: defaultcmd.FactoryDir}}
-	previewCfg := workflowcli.PreviewConfig{SourceConfig: workflowcli.SourceConfig{Dir: defaultcmd.FactoryDir}}
-	var fixtureCatalogPath string
-	var runtimeBacked bool
-	var projectRoot string
+	return workflowMCPHandlerRegistries(globals, options, newWorkflowMCPBindingState())
+}
+
+func workflowMCPHandlerRegistries(
+	globals *cliGlobalOptions,
+	options RootCommandOptions,
+	state *workflowMCPBindingState,
+) (workflowmcp.Registries, error) {
 	return workflowmcp.NewRegistries(workflowmcp.Handlers{
 		MCPServe: mcpcli.ServeRunE(mcpcli.ServeBinding{
-			FixtureCatalogPath: &fixtureCatalogPath,
-			RuntimeBacked:      &runtimeBacked,
-			ProjectRoot:        &projectRoot,
+			FixtureCatalogPath: &state.mcpFixtureCatalogPath,
+			RuntimeBacked:      &state.mcpRuntimeBacked,
+			ProjectRoot:        &state.mcpProjectRoot,
 			Startup:            options.Startup,
 		}),
-		WorkflowPreview:  workflowcli.PreviewRunE(&previewCfg, &globals.json),
-		WorkflowValidate: workflowcli.ValidateRunE(&validateCfg, &globals.json),
+		WorkflowPreview:  workflowcli.PreviewRunE(&state.preview, &globals.json),
+		WorkflowValidate: workflowcli.ValidateRunE(&state.validate, &globals.json),
 	})
+}
+
+func workflowMCPFlagBindings(state *workflowMCPBindingState) climanifestcobra.WorkflowMCPFlagBindings {
+	workflowUsages := map[string]string{
+		"dir":              "project root used for ordered workflow source lookup",
+		"kind":             "workflow source kind",
+		"value":            "workflow name, file ref, or factory id",
+		"inline":           "inline workflow source text",
+		"artifact-root":    "optional absolute artifact root",
+		"args-schema":      "optional orchestrator.javascript argsSchema JSON",
+		"requested-policy": "optional requested policy override JSON",
+	}
+	sourceBindings := func(cfg *workflowcli.SourceConfig) climanifestcobra.WorkflowSourceFlagBindings {
+		return climanifestcobra.WorkflowSourceFlagBindings{
+			Dir: &cfg.Dir, SourceKind: &cfg.SourceKind, SourceValue: &cfg.SourceValue,
+			InlineSource: &cfg.InlineSource, ArtifactRoot: &cfg.ArtifactRoot,
+			ArgsSchema: &cfg.ArgsSchema, RequestedPolicyJSON: &cfg.RequestedPolicyJSON,
+			FlagUsages: workflowUsages,
+		}
+	}
+	return climanifestcobra.WorkflowMCPFlagBindings{
+		MCPServe: climanifestcobra.MCPServeFlagBindings{
+			FixtureCatalogPath: &state.mcpFixtureCatalogPath,
+			RuntimeBacked:      &state.mcpRuntimeBacked,
+			ProjectRoot:        &state.mcpProjectRoot,
+			FlagUsages: map[string]string{
+				"fixture-catalog": "optional path to durable-session contract fixtures; defaults to the catalog discovered from the current working directory",
+				"runtime":         "select the shared durable JavaScript runtime execution service instead of the fixture catalog",
+				"project-root":    "project root for workflow source resolution in --runtime mode; defaults to the current working directory",
+			},
+		},
+		WorkflowPreview:  sourceBindings(&state.preview.SourceConfig),
+		WorkflowValidate: sourceBindings(&state.validate.SourceConfig),
+	}
 }
 
 func newWorkflowRunCommand(globals *cliGlobalOptions, options RootCommandOptions) *cobra.Command {

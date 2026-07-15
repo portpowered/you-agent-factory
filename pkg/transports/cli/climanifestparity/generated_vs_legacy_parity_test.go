@@ -1,17 +1,18 @@
 package climanifestparity_test
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
 	"testing"
 
-	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	"github.com/spf13/cobra"
@@ -108,6 +109,157 @@ func TestGeneratedVsLegacyParityMatrix_RepresentativeFamily(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestGeneratedVsLegacyParityMatrix_WorkflowMCPFamily(t *testing.T) {
+	cases := []struct {
+		commandID string
+		path      string
+	}{
+		{commandID: "you.mcp", path: "you mcp"},
+		{commandID: "you.mcp.serve", path: "you mcp serve"},
+		{commandID: "you.workflow.preview", path: "you workflow preview"},
+		{commandID: "you.workflow.validate", path: "you workflow validate"},
+	}
+
+	for _, comparison := range []struct {
+		name string
+		run  func(*testing.T, string, string, *cobra.Command, *cobra.Command)
+	}{
+		{name: "identity", run: func(t *testing.T, commandID, path string, legacy, generated *cobra.Command) {
+			legacyCmd, err := climanifestparity.FindCommandByPath(legacy, path)
+			if err != nil {
+				t.Fatalf("legacy FindCommandByPath(%q) error = %v", path, err)
+			}
+			generatedCmd, err := climanifestparity.FindCommandByPath(generated, path)
+			if err != nil {
+				t.Fatalf("generated FindCommandByPath(%q) error = %v", path, err)
+			}
+			assertNoConstructorMismatches(t, climanifestparity.CompareConstructorIdentityParity(commandID, legacyCmd, generatedCmd))
+		}},
+		{name: "help", run: func(t *testing.T, commandID, path string, legacy, generated *cobra.Command) {
+			mismatches, err := climanifestparity.CompareConstructorHelpParity(commandID, legacy, generated, path)
+			if err != nil {
+				t.Fatalf("CompareConstructorHelpParity(%q) error = %v", path, err)
+			}
+			assertNoConstructorMismatches(t, mismatches)
+		}},
+		{name: "completion", run: func(t *testing.T, commandID, path string, legacy, generated *cobra.Command) {
+			mismatches, err := climanifestparity.CompareConstructorCompletionInventoryParity(commandID, path, legacy, generated)
+			if err != nil {
+				t.Fatalf("CompareConstructorCompletionInventoryParity(%q) error = %v", path, err)
+			}
+			assertNoConstructorMismatches(t, mismatches)
+		}},
+	} {
+		t.Run(comparison.name, func(t *testing.T) {
+			for _, tc := range cases {
+				t.Run(tc.commandID, func(t *testing.T) {
+					legacy, generated := mustWorkflowMCPConstructorRoots(t)
+					comparison.run(t, tc.commandID, tc.path, legacy, generated)
+				})
+			}
+		})
+	}
+
+	parsingCases := []struct {
+		name        string
+		commandID   string
+		argv        []string
+		flagChecks  []string
+		wantErr     bool
+		errContains string
+	}{
+		{name: "mcp defaults", commandID: "you.mcp.serve", argv: []string{"mcp", "serve"}, flagChecks: []string{"runtime", "fixture-catalog", "project-root"}},
+		{name: "mcp explicit runtime", commandID: "you.mcp.serve", argv: []string{"mcp", "serve", "--runtime", "--project-root", "project"}, flagChecks: []string{"runtime", "project-root"}},
+		{name: "workflow validate source", commandID: "you.workflow.validate", argv: []string{"workflow", "validate", "--kind", "WORKFLOW_NAME", "--value", "review"}, flagChecks: []string{"kind", "value", "dir"}},
+		{name: "workflow preview inline", commandID: "you.workflow.preview", argv: []string{"--json", "workflow", "preview", "--kind", "INLINE_WORKFLOW", "--inline", "phase('setup');"}, flagChecks: []string{"json", "kind", "inline"}},
+		{name: "unknown workflow flag", commandID: "you.workflow.validate", argv: []string{"workflow", "validate", "--unknown"}, wantErr: true, errContains: "unknown flag"},
+	}
+	for _, tc := range parsingCases {
+		t.Run("parsing/"+tc.name, func(t *testing.T) {
+			legacy, generated := mustWorkflowMCPConstructorRoots(t)
+			assertNoConstructorMismatches(t, climanifestparity.CompareConstructorParseParity(tc.commandID, legacy, generated, tc.argv, tc.wantErr, tc.errContains))
+			if tc.wantErr {
+				return
+			}
+			legacyLeaf, _, _ := climanifestparity.ParseArgvOnRoot(legacy, tc.argv)
+			generatedLeaf, _, _ := climanifestparity.ParseArgvOnRoot(generated, tc.argv)
+			for _, flag := range tc.flagChecks {
+				assertNoConstructorMismatches(t, climanifestparity.CompareConstructorFlagParity(tc.commandID, flag, legacyLeaf, generatedLeaf))
+			}
+		})
+	}
+}
+
+func mustWorkflowMCPConstructorRoots(t *testing.T) (*cobra.Command, *cobra.Command) {
+	t.Helper()
+	legacy, generated, err := cli.NewWorkflowMCPFamilyParityRoots()
+	if err != nil {
+		t.Fatalf("NewWorkflowMCPFamilyParityRoots() error = %v", err)
+	}
+	return legacy, generated
+}
+
+func TestGeneratedVsLegacyParityMatrix_WorkflowMCPExecution(t *testing.T) {
+	cases := []struct {
+		name    string
+		argv    []string
+		wantErr bool
+	}{
+		{
+			name: "workflow validate human success",
+			argv: []string{"workflow", "validate", "--kind", "INLINE_WORKFLOW", "--inline", `meta({ name: "review", version: 1 }); phase("setup");`},
+		},
+		{
+			name: "workflow preview JSON success",
+			argv: []string{"--json", "workflow", "preview", "--kind", "INLINE_WORKFLOW", "--inline", `meta({ name: "review", version: 1 }); phase("setup");`},
+		},
+		{
+			name:    "workflow malformed source failure",
+			argv:    []string{"workflow", "validate", "--kind", "INLINE_WORKFLOW", "--inline", "phase("},
+			wantErr: true,
+		},
+		{
+			name:    "workflow conflicting source failure",
+			argv:    []string{"workflow", "preview", "--value", "review", "--inline", `phase("setup");`},
+			wantErr: true,
+		},
+		{
+			name:    "MCP mutually exclusive source failure",
+			argv:    []string{"mcp", "serve", "--runtime", "--fixture-catalog", "fixtures.json"},
+			wantErr: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			legacyRoot, generatedRoot := mustWorkflowMCPConstructorRoots(t)
+			legacyOut, legacyErrOut, legacyErr := executeConstructorRoot(legacyRoot, tc.argv)
+			generatedOut, generatedErrOut, generatedErr := executeConstructorRoot(generatedRoot, tc.argv)
+			if (legacyErr != nil) != tc.wantErr || (generatedErr != nil) != tc.wantErr {
+				t.Fatalf("execution errors: legacy=%v generated=%v wantErr=%t", legacyErr, generatedErr, tc.wantErr)
+			}
+			if fmt.Sprint(legacyErr) != fmt.Sprint(generatedErr) {
+				t.Fatalf("exit/error drift: legacy=%v generated=%v", legacyErr, generatedErr)
+			}
+			if legacyOut != generatedOut {
+				t.Fatalf("stdout drift:\nlegacy:\n%s\ngenerated:\n%s", legacyOut, generatedOut)
+			}
+			if legacyErrOut != generatedErrOut {
+				t.Fatalf("stderr drift:\nlegacy:\n%s\ngenerated:\n%s", legacyErrOut, generatedErrOut)
+			}
+		})
+	}
+}
+
+func executeConstructorRoot(root *cobra.Command, argv []string) (stdout, stderr string, err error) {
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&errOut)
+	root.SetArgs(argv)
+	err = root.Execute()
+	return out.String(), errOut.String(), err
 }
 
 func TestGeneratedVsLegacyParityMatrix_ModelsFamily(t *testing.T) {

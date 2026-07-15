@@ -228,6 +228,17 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   owners (`workflow.ValidateRunE`, `workflow.PreviewRunE`, and `mcp.ServeRunE`),
   while `newWorkflowMCPHandlerRegistries` supplies root dependencies without
   moving workflow resolution or MCP lifecycle logic into generated artifacts.
+- Workflow/MCP production construction lives in
+  `pkg/transports/cli/climanifestcobra/workflow_mcp_constructor.go` and
+  `pkg/transports/cli/root_workflow.go`. Build canonical MCP metadata and the
+  two approved workflow compatibility leaves from their separate generated
+  manifests, bind both metadata and handlers to the same local flag state, then
+  attach only the generated validate/preview leaves to the existing handwritten
+  workflow parent. Keep workflow run/start/status/result/dispatch/artifact/event
+  construction outside this family slice. Constructor parity in
+  `pkg/transports/cli/climanifestparity` must compare help, parsing, completion,
+  handler outcomes, stdout/stderr, and success/failure behavior before this
+  production cutover is changed.
 - Production CLI command manifest parity for the root + `session show` family lives in
   `pkg/transports/cli/climanifest` (`LoadProduction`, `ProductionManifestPath`) and
   `pkg/transports/cli/climanifestparity` (`CompareDeclaredHandler`,
