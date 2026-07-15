@@ -370,7 +370,7 @@ Execute {{ .WorkID }}.
 	if workerDef.StopToken != "COMPLETE" || workerDef.Timeout != "20m" || !workerDef.SkipPermissions {
 		t.Fatalf("worker runtime fields = %#v", workerDef)
 	}
-	if workerDef.Body != "You are the body-only worker." {
+	if workerDef.Body != "You are the body-only worker.\n" {
 		t.Fatalf("worker body = %q", workerDef.Body)
 	}
 }

@@ -1,38 +1,22 @@
 package builtingoal
 
 import (
-	_ "embed"
-	"encoding/json"
+	"embed"
 	"fmt"
-	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/factory/packages/promptassets"
 )
 
 //go:embed factory.json
 var factoryJSON []byte
 
-//go:embed prompts/executor.md
-var executorPrompt string
-
-var workstationPromptBodies = map[string]string{
-	"execute-goal": executorPrompt,
-}
-
-// AuthoredRolePrompts maps each goal role to its authored prompt source file content.
-var AuthoredRolePrompts = map[string]string{
-	"executor": executorPrompt,
-}
+//go:embed prompts/*.md
+var promptAssets embed.FS
 
 // BuiltInGoalFactoryJSON is the canonical runnable @you/goal packaged factory payload
-// assembled deterministically from embedded factory.json topology and authored prompt
-// files under prompts/. factory.json must not inline prompt bodies; assembly injects
-// role prompts from the embedded authored assets only.
+// assembled deterministically from the declarative promptFile references in
+// factory.json and the embedded package-owned assets under prompts/.
 var BuiltInGoalFactoryJSON = mustAssembleBuiltInGoalFactoryJSON()
-
-// AuthoredRolePrompt returns the authored prompt content for a goal role.
-func AuthoredRolePrompt(role string) (string, bool) {
-	prompt, ok := AuthoredRolePrompts[role]
-	return strings.TrimSpace(prompt), ok
-}
 
 // FactoryJSON returns the authored factory scaffold without assembled prompt bodies.
 func FactoryJSON() []byte {
@@ -40,57 +24,13 @@ func FactoryJSON() []byte {
 }
 
 func mustAssembleBuiltInGoalFactoryJSON() []byte {
-	payload, err := assembleBuiltInGoalFactoryJSON()
+	payload, err := promptassets.Assemble(promptassets.Definition{
+		Package:     "@you/goal",
+		FactoryJSON: factoryJSON,
+		Assets:      promptAssets,
+	})
 	if err != nil {
 		panic(fmt.Sprintf("assemble built-in @you/goal factory json: %v", err))
 	}
 	return payload
-}
-
-func assembleBuiltInGoalFactoryJSON() ([]byte, error) {
-	var root map[string]any
-	if err := json.Unmarshal(factoryJSON, &root); err != nil {
-		return nil, fmt.Errorf("unmarshal factory.json: %w", err)
-	}
-	return assembleBuiltInGoalFactoryJSONFromRoot(root)
-}
-
-func assembleBuiltInGoalFactoryJSONFromRoot(root map[string]any) ([]byte, error) {
-	workers, ok := root["workers"].([]any)
-	if !ok {
-		return nil, fmt.Errorf("factory.json workers must be an array")
-	}
-	for _, entry := range workers {
-		worker, ok := entry.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("factory.json worker entry must be an object")
-		}
-		name, _ := worker["name"].(string)
-		if name == "goal-executor" {
-			worker["body"] = strings.TrimSpace(executorPrompt)
-		}
-	}
-
-	workstations, ok := root["workstations"].([]any)
-	if !ok {
-		return nil, fmt.Errorf("factory.json workstations must be an array")
-	}
-	for _, entry := range workstations {
-		workstation, ok := entry.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("factory.json workstation entry must be an object")
-		}
-		name, _ := workstation["name"].(string)
-		promptBody, ok := workstationPromptBodies[name]
-		if !ok {
-			continue
-		}
-		workstation["body"] = strings.TrimSpace(promptBody)
-	}
-
-	payload, err := json.Marshal(root)
-	if err != nil {
-		return nil, fmt.Errorf("marshal assembled factory json: %w", err)
-	}
-	return payload, nil
 }

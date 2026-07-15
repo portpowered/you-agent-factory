@@ -725,13 +725,20 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   initialization is the only catalog-to-disk installation boundary. Named
   resolution in `pkg/config/layout.go` reads project-local then global disk
   state only; it does not install packages or expose compatibility JSON aliases.
+  `pkg/factory/packages/promptassets` owns schema-neutral packaged prompt
+  assembly: definitions declare package-relative `promptFile` paths, package
+  owners supply an explicit embedded `fs.FS`, and the assembler attaches exact
+  asset bytes without installing or persisting anything. Worker declarations
+  become canonical inline bodies, while workstation declarations retain
+  `promptFile` metadata for editable split-layout materialization.
   Packaged `@you/goal`
   has one `execute-goal` `AGENT_RUN` workstation with `REPEATER` behavior:
   accepted completion routes to `goal:complete`, continue/reject route back to
   `goal:init`, and worker or workstation failure routes to `goal:failed`.
   `pkg/factory/packages/definitions/goal/` owns the authored factory and concise
-  executor prompt; assembly and materialization require only `goal-executor` and
-  `execute-goal`.
+  executor prompt. Both `goal-executor` and `execute-goal` declare that shared
+  package-relative asset and use the package-neutral prompt assembler; goal does
+  not own a JSON walker or name-to-prompt map.
   Packaged workstation `body` templates must use canonical `PromptData` roots
   such as `(index .Inputs 0).Payload`; legacy top-level aliases like
   `{{ .WorkID }}` fail prompt rendering before mock-worker dispatch. Resolution
