@@ -2,15 +2,26 @@ package script_test
 
 import (
 	"context"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
+
+type capturingCommandRunner struct {
+	request executor.CommandRequest
+}
+
+func (r *capturingCommandRunner) Run(_ context.Context, request executor.CommandRequest) (executor.CommandResult, error) {
+	r.request = request
+	return executor.CommandResult{Stdout: []byte("ok")}, nil
+}
 
 func testScriptRequest(dispatch work.WorkDispatch, opts ...func(*workerexecution.WorkstationExecutionRequest)) workerexecution.WorkstationExecutionRequest {
 	req := workerexecution.WorkstationExecutionRequest{
@@ -70,5 +81,36 @@ func TestScriptExecutor_FailingCommand_ReturnsFailedResult(t *testing.T) {
 	}
 	if !strings.Contains(result.Error, "something went wrong") {
 		t.Fatalf("Error = %q", result.Error)
+	}
+}
+
+func TestScriptExecutor_ResolvesInstalledScriptCommandAgainstFactoryDirectory(t *testing.T) {
+	factoryDir := t.TempDir()
+	runner := &capturingCommandRunner{}
+	scriptExecutor := executor.NewScriptExecutorWithRunner(
+		&workerconfig.Config{
+			Command: "scripts/setup-workspace.py",
+			Args:    []string{"factory/scripts/nested/helper.sh"},
+		},
+		runner,
+		nil,
+		executor.WithScriptFactoryDir(factoryDir),
+	)
+
+	result, err := scriptExecutor.Execute(context.Background(), testScriptRequest(work.WorkDispatch{
+		DispatchID:   "dispatch-installed-script",
+		TransitionID: "transition-installed-script",
+	}))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
+	}
+	if want := filepath.Join(factoryDir, "scripts", "setup-workspace.py"); runner.request.Command != want {
+		t.Fatalf("command = %q, want %q", runner.request.Command, want)
+	}
+	if want := filepath.Join(factoryDir, "scripts", "nested", "helper.sh"); len(runner.request.Args) != 1 || runner.request.Args[0] != want {
+		t.Fatalf("args = %#v, want [%q]", runner.request.Args, want)
 	}
 }

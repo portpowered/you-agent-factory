@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -15,9 +16,63 @@ import (
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
+
+func TestNewWorkflowMCPHandlerRegistriesWiresClassificationSpecificStableIDs(t *testing.T) {
+	registries, err := newWorkflowMCPHandlerRegistries(&cliGlobalOptions{}, RootCommandOptions{})
+	if err != nil {
+		t.Fatalf("newWorkflowMCPHandlerRegistries() error = %v", err)
+	}
+	if _, err := registries.MCP.Lookup("you.mcp.serve"); err != nil {
+		t.Fatalf("MCP.Lookup(you.mcp.serve) error = %v", err)
+	}
+	for _, commandID := range []string{"you.workflow.preview", "you.workflow.validate"} {
+		if _, err := registries.WorkflowCompatibility.Lookup(commandID); err != nil {
+			t.Fatalf("WorkflowCompatibility.Lookup(%q) error = %v", commandID, err)
+		}
+	}
+}
+
+func TestProductionMCPServeGeneratedMetadataDelegatesExistingStartupBoundary(t *testing.T) {
+	var got startupcli.Request
+	startup := func(_ context.Context, request startupcli.Request) error {
+		got = request
+		return nil
+	}
+	stdin := strings.NewReader("protocol input")
+	var stdout bytes.Buffer
+	root := NewRootCommandWithOptions(RootCommandOptions{Startup: startup})
+	root.SetIn(stdin)
+	root.SetOut(&stdout)
+	root.SetErr(io.Discard)
+	root.SetArgs([]string{"mcp", "serve", "--runtime", "--project-root", "project"})
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("execute generated mcp serve: %v", err)
+	}
+	if got.Kind != startupcli.KindMCPServe {
+		t.Fatalf("startup kind = %q, want %q", got.Kind, startupcli.KindMCPServe)
+	}
+	if !got.MCP.RuntimeBacked || got.MCP.ProjectRoot != "project" {
+		t.Fatalf("startup MCP intent = %#v, want generated flag values", got.MCP)
+	}
+	if got.MCP.Stdin != stdin || got.MCP.Stdout != &stdout {
+		t.Fatalf("startup stdio = (%T, %T), want command streams", got.MCP.Stdin, got.MCP.Stdout)
+	}
+
+	workflow, _, err := root.Find([]string{"workflow"})
+	if err != nil {
+		t.Fatalf("find workflow: %v", err)
+	}
+	for _, name := range []string{"run", "start", "status", "result", "dispatches", "artifacts", "events"} {
+		if child, _, findErr := workflow.Find([]string{name}); findErr != nil || child.Name() != name {
+			t.Fatalf("out-of-scope workflow compatibility command %q missing after cutover: child=%v err=%v", name, child, findErr)
+		}
+	}
+}
 
 var removedFactoryConfigCommandPaths = []string{
 	"you config flatten",

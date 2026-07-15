@@ -230,11 +230,11 @@ func assertDeterministicExpandedRuntimeConfig(t *testing.T, dir string) {
 	t.Helper()
 
 	workerAgents := readCLITestFile(t, filepath.Join(dir, "workers", "executor", "AGENTS.md"))
-	if got := string(workerAgents); got != "You are the expanded executor.\n" {
+	if got := string(workerAgents); got != "You are the expanded executor." {
 		t.Fatalf("expanded worker AGENTS.md = %q, want body-only worker content", got)
 	}
 	workstationAgents := readCLITestFile(t, filepath.Join(dir, "workstations", "execute-story", "AGENTS.md"))
-	if got := string(workstationAgents); got != "Complete {{ .WorkID }} deterministically.\n" {
+	if got := string(workstationAgents); got != "Complete {{ .WorkID }} deterministically." {
 		t.Fatalf("expanded workstation AGENTS.md = %q, want body-only workstation content", got)
 	}
 	promptContent := readCLITestFile(t, filepath.Join(dir, "workstations", "execute-story", "prompt.md"))
@@ -874,11 +874,11 @@ func assertExistingSplitDefinitionsPreserved(t *testing.T, dir, inputPath, worke
 	}
 
 	workerAgents := string(readCLITestFile(t, workerAgentsPath))
-	if workerAgents != "Existing worker body.\n" {
+	if workerAgents != "Existing worker body." {
 		t.Fatalf("expected expanded worker AGENTS.md body to be preserved, got %q", workerAgents)
 	}
 	workstationAgents := string(readCLITestFile(t, workstationAgentsPath))
-	if workstationAgents != "Existing workstation body.\n" {
+	if workstationAgents != "Existing workstation body." {
 		t.Fatalf("expected expanded workstation AGENTS.md body to be preserved, got %q", workstationAgents)
 	}
 	if got := string(readCLITestFile(t, promptPath)); got != "Preserve {{ .WorkID }}.\n" {

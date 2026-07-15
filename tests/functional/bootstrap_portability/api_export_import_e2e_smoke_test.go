@@ -265,8 +265,8 @@ func assertImportedWorkerBodiesPersistOnlyInAgentsFiles(t *testing.T, factoryDir
 			t.Fatalf("ReadFile(%s): %v", agentsPath, err)
 		}
 		got := string(contents)
-		if got != *worker.Body+"\n" {
-			t.Fatalf("imported worker AGENTS.md for %q = %q, want body-only %q", worker.Name, got, *worker.Body+"\n")
+		if got != *worker.Body {
+			t.Fatalf("imported worker AGENTS.md for %q = %q, want exact body-only content %q", worker.Name, got, *worker.Body)
 		}
 		if strings.HasPrefix(got, "---") {
 			t.Fatalf("imported worker AGENTS.md for %q should be body-only, got frontmatter:\n%s", worker.Name, got)
@@ -287,8 +287,8 @@ func assertImportedWorkstationBodiesPersistOnlyInAgentsFiles(t *testing.T, facto
 			t.Fatalf("ReadFile(%s): %v", agentsPath, err)
 		}
 		got := string(contents)
-		if got != *workstation.Body+"\n" {
-			t.Fatalf("imported workstation AGENTS.md for %q = %q, want body-only %q", workstation.Name, got, *workstation.Body+"\n")
+		if got != *workstation.Body {
+			t.Fatalf("imported workstation AGENTS.md for %q = %q, want exact body-only content %q", workstation.Name, got, *workstation.Body)
 		}
 		if strings.HasPrefix(got, "---") {
 			t.Fatalf("imported workstation AGENTS.md for %q should be body-only, got frontmatter:\n%s", workstation.Name, got)

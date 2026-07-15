@@ -3,6 +3,54 @@
 Use this map when changing factory invocation input, return-policy, or
 primary-result behavior.
 
+## CLI run and submit command contracts
+
+- Canonical metadata for `you.run`, `you.submit`, and `you.submit.batch` lives
+  in `contracts/cli/commands.json`. Keep positional cardinality, stdin channels,
+  source precedence, conflicts, no-option defaults, output modes, effects, and
+  stable handler/OpenAPI bindings aligned with the handwritten constructors in
+  `pkg/transports/cli/root_work.go` and
+  `pkg/transports/cli/root_submit_batch.go`.
+- `pkg/transports/cli/climanifest/run_submit_validation.go` rejects incomplete
+  or contradictory family records before generation. Update its focused
+  validation cases whenever the supported family contract changes.
+- String flags may define a non-empty `noOptionDefault` when presence without a
+  value selects a stable sentinel, as `--with-mock-workers` does. Boolean
+  no-option defaults remain restricted to `true` or `false` by
+  `contracts/cli/command-manifest.schema.json`.
+- Generated run/submit metadata is embedded from
+  `pkg/transports/cli/generated/run_submit_family.json`, with stable IDs in
+  `run_submit_command_ids_gen.go`. `climanifestcobra.NewRunSubmitFamilyComponents`
+  constructs only detached `run` and `submit` roots plus the nested `submit batch`
+  leaf; `commandregistry.NewRunSubmitRegistry` attaches retained `PreRunE` and
+  `RunE` lifecycles by stable command ID. Production execution bindings are
+  assembled by `newRunSubmitHandlerRegistry` in `root_work.go`.
+  `productionRunSubmitCommands` selects the generated family by default while
+  retaining the handwritten constructors behind the localized
+  `useGeneratedRunSubmitFamily` rollback constant.
+  `NewGeneratedRunSubmitFamilyCommandForParity` exposes the isolated generated
+  tree for focused verification.
+  `NewRunSubmitFamilyParityRoots` builds independent legacy and generated roots
+  with injected `RootCommandOptions`; use it for observable parser, resolved
+  `RunConfig`, service-call, stdout/stderr, and error parity without sharing
+  mutable Cobra flag state. Inject unary submit through `RootCommandOptions.SubmitWork`
+  and call the real submit transport against an `httptest` server when parity
+  must prove request path/body, default or explicit session selection, and
+  human/JSON output. Manifest-required submit inputs remain validated by the
+  retained handwritten handler so generated construction does not preempt its
+  stable diagnostics or validation ordering. Batch positional cardinality is
+  likewise retained in `submit.resolveBatchInput`; inject the real batch
+  transport through `RootCommandOptions.SubmitBatch` so parity roots receive
+  independent Cobra stdin/stdout/stderr streams while proving `--file`,
+  positional file, inline JSON, explicit or implicit stdin, dry-run, session
+  routing, request, output, diagnostic, and failure behavior. When both parity
+  roots share a migrated execution helper, also assert fixed pre-migration
+  outcomes (including nil optional sinks and exact stdout/stderr) so changing
+  that helper cannot redefine the legacy oracle. Run-specific
+  coverage lives in `pkg/transports/cli/climanifestparity/runparity/run_parity_test.go`;
+  unary and batch submit coverage lives in the sibling `submitparity` and
+  `submitbatchparity` packages.
+
 ## CLI invocation output modes (primary-result, human response-stream, NDJSON)
 
 Use this lane when changing `you run` stdout modes, `--output response-stream`,
@@ -202,6 +250,54 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `config init` subcommand; installer smoke coverage lives in
   `tests/release/install_script_test.go` and `scripts/release/smoke-install.sh`
   / `scripts/release/smoke-install.ps1`.
+- Canonical CLI metadata belongs in `contracts/cli/commands.json`. Separately
+  approved compatibility-only command metadata belongs in
+  `contracts/cli/deprecated-commands.json`, while its classification, successor,
+  approval, evidence, and removal gates remain in `contracts/cli/deprecated.json`.
+  Mark generation-ready records with `completeness: authoritative`; the CLI schema
+  then requires complete channels, outputs, exits, effects, runtime constraints,
+  and stable handler metadata for runnable records. Register every authored command
+  manifest in `internal/contractvalidator.CLIRegistry`, and keep relationship
+  participants on same-command flag or argument IDs so diagnostics name the exact
+  record path. Compatibility records must not be copied into the primary manifest
+  merely to make generation convenient. Apply family-completeness validators only
+  to the manifest classification that owns that family: `LoadProduction` owns
+  canonical run/submit validation, while `LoadCompatibility` must remain able to
+  decode the separately classified workflow-only manifest.
+- Classification-aware workflow/MCP generation lives in
+  `pkg/transports/cli/climanifestgen`: canonical `you mcp` / `you mcp serve`
+  metadata is emitted from `commands.json` into `mcp_family.json`, while approved
+  `you workflow validate` / `you workflow preview` metadata is emitted separately
+  from `deprecated-commands.json` into `workflow_compatibility_family.json`.
+  Keep their generated stable-ID lists source-labeled and disjoint; `Check` must
+  report the affected stable IDs for drift, and generation must reject either
+  family when its IDs appear in the wrong classification source.
+- Workflow/MCP handwritten handler binding lives in
+  `pkg/transports/cli/commandregistry/workflowmcp`. Keep canonical MCP and
+  workflow-compatibility registries separate, verify each against its own
+  generated manifest, and report missing or classification-mismatched bindings
+  by stable command ID. The execution adapters remain with their transport
+  owners (`workflow.ValidateRunE`, `workflow.PreviewRunE`, and `mcp.ServeRunE`),
+  while `newWorkflowMCPHandlerRegistries` supplies root dependencies without
+  moving workflow resolution or MCP lifecycle logic into generated artifacts.
+- Workflow/MCP production construction lives in
+  `pkg/transports/cli/climanifestcobra/workflow_mcp_constructor.go` and
+  `pkg/transports/cli/root_workflow.go`. Build canonical MCP metadata and the
+  two approved workflow compatibility leaves from their separate generated
+  manifests, bind both metadata and handlers to the same local flag state, then
+  attach only the generated validate/preview leaves to the existing handwritten
+  workflow parent. Keep workflow run/start/status/result/dispatch/artifact/event
+  construction outside this family slice. Constructor parity in
+  `pkg/transports/cli/climanifestparity` must compare help, parsing, completion,
+  handler outcomes, stdout/stderr, and success/failure behavior before this
+  production cutover is changed.
+- MCP protocol and resume smokes in `pkg/transports/cli/mcp/serve_*_test.go`
+  should enter through `cli.NewRootCommandWithOptions` and the injected startup
+  boundary, then delegate to the existing `mcp.RunServe` implementation with the
+  exact parsed stdio streams. This keeps fixture/runtime selection, JSON-RPC,
+  EOF/cancellation, and durable resume assertions attached to the generated
+  production `you mcp serve` construction instead of proving only its detached
+  handwritten execution adapter.
 - Production CLI command manifest parity for the root + `session show` family lives in
   `pkg/transports/cli/climanifest` (`LoadProduction`, `ProductionManifestPath`) and
   `pkg/transports/cli/climanifestparity` (`CompareDeclaredHandler`,
@@ -630,13 +726,38 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   initialization is the only catalog-to-disk installation boundary. Named
   resolution in `pkg/config/layout.go` reads project-local then global disk
   state only; it does not install packages or expose compatibility JSON aliases.
+  `pkg/factory/packages/packageassets` is the shared, side-effect-free packaged
+  asset assembly entry point: package owners supply the authored `factory.json`
+  and an explicit embedded `fs.FS`, and definitions call this assembler before
+  their payload enters the catalog. It delegates prompt declarations to
+  `pkg/factory/packages/promptassets` and discovers regular UTF-8 `scripts/**`
+  assets as deterministic `SCRIPT` bundled files at matching
+  `factory/scripts/**` targets. Discovery rejects non-regular, unreadable, or
+  invalid UTF-8 assets, and assembly rejects unsafe or duplicate canonical
+  bundled targets before the payload can reach config initialization. The
+  assembler attaches exact asset bytes but does not install or persist anything.
+  `pkg/config/configinit` passes each missing assembled catalog payload through
+  the transactional `factoryconfig.PersistNamedFactory` boundary. That shared
+  persistence path materializes `SCRIPT` entries at mode `0755`, writes only
+  thin UTF-8 bundled-file metadata to `factory.json`, and validates the staged
+  runtime before publishing the named-factory directory. Existing valid package
+  directories are loaded read-only and skipped as a whole, so later init runs
+  do not normalize permissions or replace operator-edited scripts. At runtime,
+  `pkg/workers/executor.ScriptExecutor` resolves portable `scripts/**` commands
+  (and legacy `factory/scripts/**` references) against the active runtime
+  configuration's factory directory before using the generic subprocess path;
+  package assembly and config initialization do not own process execution.
+  Worker prompt declarations become
+  canonical inline bodies, while workstation declarations retain `promptFile`
+  metadata for editable split-layout materialization.
   Packaged `@you/goal`
   has one `execute-goal` `AGENT_RUN` workstation with `REPEATER` behavior:
   accepted completion routes to `goal:complete`, continue/reject route back to
   `goal:init`, and worker or workstation failure routes to `goal:failed`.
   `pkg/factory/packages/definitions/goal/` owns the authored factory and concise
-  executor prompt; assembly and materialization require only `goal-executor` and
-  `execute-goal`.
+  executor prompt. Both `goal-executor` and `execute-goal` declare that shared
+  package-relative asset and use the package-neutral prompt assembler; goal does
+  not own a JSON walker or name-to-prompt map.
   Packaged workstation `body` templates must use canonical `PromptData` roots
   such as `(index .Inputs 0).Payload`; legacy top-level aliases like
   `{{ .WorkID }}` fail prompt rendering before mock-worker dispatch. Resolution

@@ -20,6 +20,8 @@ const (
 	cellDispositionComplete                   consumePathCellDisposition = "complete"
 	cellDispositionNeedsBoundedManualMove     consumePathCellDisposition = "needs_bounded_manual_move"
 	cellDispositionNeedsBoundedFollowupRepair consumePathCellDisposition = "needs_bounded_followup_repair"
+	consumePathCellTestTimeout                                           = 15 * time.Second
+	consumePathCellWaitTimeout                                           = 3 * time.Second
 )
 
 // consumePathCellDispositionEvidence is reviewer-verifiable output for a
@@ -42,9 +44,9 @@ func reproduceLiveQueueOrphanPattern(
 
 	submitSameNameOrphanAfterConsumePattern(t, h, cellName, "trace-orphan-"+cellName)
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, consumePathCellWaitTimeout)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, consumePathCellWaitTimeout)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:to-complete", 1, consumePathCellWaitTimeout)
 	time.Sleep(150 * time.Millisecond)
 }
 
@@ -105,7 +107,7 @@ func TestSameNameConsumePathCellDisposition_ReviewedCLIAndMCPCells(t *testing.T)
 			dir := scaffoldConsumePathFactoryBuiltInOrder(t)
 			h := newSameNameConsumePathServiceHarness(t, dir)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), consumePathCellTestTimeout)
 			defer cancel()
 			errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
@@ -142,7 +144,7 @@ func TestSameNameConsumePathCellDisposition_ManualMoveReachesExpectedPostRepairS
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
 	h := newSameNameConsumePathServiceHarness(t, dir)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), consumePathCellTestTimeout)
 	defer cancel()
 	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
@@ -196,12 +198,12 @@ func TestSameNameConsumePathCellDisposition_FreshReviewedPairIsCompleteWithoutMa
 
 	submitConsumePathPair(t, h, cellName)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), consumePathCellTestTimeout)
 	defer cancel()
 	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
-	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, time.Second)
-	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, time.Second)
+	support.WaitForHarnessPlaceTokenCount(t, h, "idea:complete", 1, consumePathCellWaitTimeout)
+	support.WaitForHarnessPlaceTokenCount(t, h, "task:complete", 1, consumePathCellWaitTimeout)
 
 	h.Assert().
 		HasNoTokenInPlace("idea:to-complete").

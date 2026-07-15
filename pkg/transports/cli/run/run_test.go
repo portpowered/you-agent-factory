@@ -26,7 +26,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
-	"go.uber.org/zap"
 )
 
 type stubFactoryService struct {
@@ -548,29 +547,41 @@ func TestRun_WithBootstrapCallsBootstrapFactory(t *testing.T) {
 }
 
 func TestRun_StartupOutputReportsDashboardAndOpensBrowser(t *testing.T) {
-	preserveRunGlobals(t)
-
-	bootstrapFactory = func(string) error {
-		return nil
-	}
-	useAPIServerBackedServiceBuilder()
-
 	var openedURL string
 	opened := make(chan struct{})
-	installReadyDashboardOpenAssertions(t, &openedURL, opened)
-
 	var out bytes.Buffer
-	err := Run(context.Background(), RunConfig{
+	cfg := RunConfig{
 		Dir:           "factory",
 		Port:          7437,
 		Bootstrap:     true,
 		Continuously:  true,
 		OpenDashboard: true,
 		StartupOutput: &out,
-	})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
 	}
+	if !emitStartupMessages(cfg, service.RuntimeLogDiagnostics{}, func(io.Writer) bool { return true }) {
+		t.Fatal("startup messages did not request dashboard open")
+	}
+	dashboardReady := make(chan struct{})
+	wait := openDashboardWhenServerReady(
+		context.Background(), cfg, dashboardReady,
+		func(_ context.Context, url string) error {
+			openedURL = url
+			close(opened)
+			return nil
+		},
+	)
+	select {
+	case <-opened:
+		t.Fatal("dashboard opener ran before API server readiness")
+	default:
+	}
+	close(dashboardReady)
+	select {
+	case <-opened:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for dashboard opener")
+	}
+	wait()
 
 	wantURL := "http://localhost:7437/dashboard/ui"
 	if openedURL != wantURL {
@@ -587,49 +598,6 @@ func TestRun_StartupOutputReportsDashboardAndOpensBrowser(t *testing.T) {
 		if !strings.Contains(output, want) {
 			t.Fatalf("startup output = %q, want %q", output, want)
 		}
-	}
-}
-
-func useAPIServerBackedServiceBuilder() {
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
-		return stubFactoryService{
-			run: func(ctx context.Context) error {
-				return cfg.APIServerStarter(ctx, nil, cfg.Port, zap.NewNop())
-			},
-		}, nil
-	}
-}
-
-func installReadyDashboardOpenAssertions(t *testing.T, openedURL *string, opened chan struct{}) {
-	t.Helper()
-
-	dashboardOpener = func(_ context.Context, url string) error {
-		*openedURL = url
-		close(opened)
-		return nil
-	}
-	interactiveOutput = func(io.Writer) bool {
-		return true
-	}
-	startAPIServer = func(
-		ctx context.Context,
-		_ apisurface.APISurface,
-		_ int,
-		_ *zap.Logger,
-		markReady func(),
-	) error {
-		if *openedURL != "" {
-			t.Fatalf("dashboard opener ran before API server readiness: %q", *openedURL)
-		}
-		markReady()
-		select {
-		case <-opened:
-		case <-ctx.Done():
-			t.Fatal("context canceled before dashboard opened")
-		case <-time.After(time.Second):
-			t.Fatal("timed out waiting for dashboard opener")
-		}
-		return nil
 	}
 }
 

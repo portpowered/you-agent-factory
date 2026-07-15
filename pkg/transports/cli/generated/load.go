@@ -11,6 +11,9 @@ import (
 //go:embed representative_family.json
 var representativeFamilyJSON []byte
 
+//go:embed session_family.json
+var sessionFamilyJSON []byte
+
 //go:embed work_family.json
 var workFamilyJSON []byte
 
@@ -20,10 +23,25 @@ var factoryConfigInitFamilyJSON []byte
 //go:embed models_docs_family.json
 var modelsDocsFamilyJSON []byte
 
+//go:embed run_submit_family.json
+var runSubmitFamilyJSON []byte
+
+//go:embed mcp_family.json
+var mcpFamilyJSON []byte
+
+//go:embed workflow_compatibility_family.json
+var workflowCompatibilityFamilyJSON []byte
+
 // RepresentativeFamilyManifest returns generated §4.3 metadata for the
 // representative root/session-show command family.
 func RepresentativeFamilyManifest() (climanifest.Manifest, error) {
 	return parseFamilyManifest(representativeFamilyJSON, "representative")
+}
+
+// SessionFamilyManifest returns generated metadata for the complete canonical
+// Factory Session command family.
+func SessionFamilyManifest() (climanifest.Manifest, error) {
+	return parseFamilyManifest(sessionFamilyJSON, "session")
 }
 
 // WorkFamilyManifest returns generated §4.3 metadata for the work
@@ -42,6 +60,19 @@ func FactoryConfigInitFamilyManifest() (climanifest.Manifest, error) {
 // command family.
 func ModelsDocsFamilyManifest() (climanifest.Manifest, error) {
 	return parseFamilyManifest(modelsDocsFamilyJSON, "models/docs")
+}
+
+// RunSubmitFamilyManifest returns generated metadata for the run/submit family.
+func RunSubmitFamilyManifest() (climanifest.Manifest, error) {
+	return parseFamilyManifest(runSubmitFamilyJSON, "run/submit")
+}
+
+func MCPFamilyManifest() (climanifest.Manifest, error) {
+	return parseFamilyManifest(mcpFamilyJSON, "canonical MCP")
+}
+
+func WorkflowCompatibilityFamilyManifest() (climanifest.Manifest, error) {
+	return parseFamilyManifest(workflowCompatibilityFamilyJSON, "workflow compatibility")
 }
 
 func parseFamilyManifest(payload []byte, familyLabel string) (climanifest.Manifest, error) {

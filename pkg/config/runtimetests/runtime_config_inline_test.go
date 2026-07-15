@@ -626,7 +626,7 @@ func TestLoadRuntimeConfig_DerivesCanonicalWorkstationTypeFromWorkerAcrossInline
 	splitConfig["workstations"].([]any)[0].(map[string]any)["limits"] = map[string]any{"maxExecutionTime": "15m"}
 	splitConfig["workstations"].([]any)[0].(map[string]any)["env"] = map[string]string{"SHARED": "inline"}
 	writeRuntimeFactoryJSON(t, splitDir, splitConfig)
-	writeRuntimeWorkstationAgentsMD(t, splitDir, "execute-story", "Inline fallback prompt.\n")
+	writeRuntimeWorkstationAgentsMD(t, splitDir, "execute-story", "Inline fallback prompt.")
 
 	inlineLoaded, err := LoadRuntimeConfig(inlineDir, nil)
 	if err != nil {
@@ -664,7 +664,7 @@ func TestLoadRuntimeConfig_InlineAndSplitWorkstationsNormalizeToEquivalentCanoni
 
 	splitConfig := configureSplitCanonicalWorkstation(t, topology)
 	writeRuntimeFactoryJSON(t, splitDir, splitConfig)
-	writeRuntimeWorkstationAgentsMD(t, splitDir, "execute-story", "Implement {{ .WorkID }}.\n")
+	writeRuntimeWorkstationAgentsMD(t, splitDir, "execute-story", "Implement {{ .WorkID }}.")
 	if err := os.WriteFile(filepath.Join(splitDir, "workstations", "execute-story", "prompt.md"), []byte("Implement {{ .WorkID }}."), 0o644); err != nil {
 		t.Fatalf("write split prompt file: %v", err)
 	}

@@ -1,0 +1,379 @@
+{
+  "formatVersion": "1.0.0",
+  "tools": {
+    "mcp.tool.you.factory_session.control": {
+      "id": "mcp.tool.you.factory_session.control",
+      "name": "you.factory_session.control",
+      "description": "Apply one durable Factory Session lifecycle control such as approve, pause, resume, cancel, terminate, or retry-dispatch. Maps to POST /factory-sessions/{session_id}/{control}.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "approvalPreviewId": {
+            "type": "string"
+          },
+          "approvedPolicy": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "dispatchId": {
+            "type": "string"
+          },
+          "operation": {
+            "enum": [
+              "APPROVE",
+              "PAUSE",
+              "RESUME",
+              "CANCEL",
+              "TERMINATE",
+              "RETRY_DISPATCH"
+            ],
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId",
+          "operation"
+        ],
+        "type": "object"
+      }
+    },
+    "mcp.tool.you.factory_session.get": {
+      "id": "mcp.tool.you.factory_session.get",
+      "name": "you.factory_session.get",
+      "description": "Get one durable Factory Session inspection read model with lifecycle status, source identity, phase, progress, and result summary. Maps to GET /factory-sessions/{session_id}.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "type": "object"
+      }
+    },
+    "mcp.tool.you.factory_session.get_result": {
+      "id": "mcp.tool.you.factory_session.get_result",
+      "name": "you.factory_session.get_result",
+      "description": "Retrieve one durable Factory Session result in final or partial mode with optional artifact metadata. Maps to GET /factory-sessions/{session_id}/results.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "includeArtifacts": {
+            "type": "boolean"
+          },
+          "mode": {
+            "enum": [
+              "final",
+              "partial"
+            ],
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "type": "object"
+      }
+    },
+    "mcp.tool.you.factory_session.list": {
+      "id": "mcp.tool.you.factory_session.list",
+      "name": "you.factory_session.list",
+      "description": "List Factory Sessions for one scope (live workspace, persisted durable execution, or all). Uses GET /factory-sessions durable listing vocabulary.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "scope": {
+            "enum": [
+              "live",
+              "persisted",
+              "all"
+            ],
+            "type": "string"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "mcp.tool.you.factory_session.list_artifacts": {
+      "id": "mcp.tool.you.factory_session.list_artifacts",
+      "name": "you.factory_session.list_artifacts",
+      "description": "List FactoryArtifact summaries for one Factory Session, including artifact id, kind, visibility, size or hash metadata, and dispatch linkage when available. Maps to GET /factory-sessions/{session_id}/artifacts.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "type": "object"
+      }
+    },
+    "mcp.tool.you.factory_session.list_dispatches": {
+      "id": "mcp.tool.you.factory_session.list_dispatches",
+      "name": "you.factory_session.list_dispatches",
+      "description": "List dispatch summaries for one Factory Session, including dispatch id, status, kind, phase, and provider-session correlation metadata when available. Maps to GET /factory-sessions/{session_id}/dispatches.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "phase": {
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "type": "object"
+      }
+    },
+    "mcp.tool.you.factory_session.read_events": {
+      "id": "mcp.tool.you.factory_session.read_events",
+      "name": "you.factory_session.read_events",
+      "description": "Read ordered Factory Session event facts for reconnect and inspection without exposing internal Petri-net terminology as the primary public vocabulary. Maps to GET /factory-sessions/{session_id}/events.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "afterEventId": {
+            "type": "string"
+          },
+          "afterSequence": {
+            "type": "integer"
+          },
+          "sessionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sessionId"
+        ],
+        "type": "object"
+      }
+    },
+    "mcp.tool.you.factory_session.start_async": {
+      "id": "mcp.tool.you.factory_session.start_async",
+      "name": "you.factory_session.start_async",
+      "description": "Start one async Factory Session and return an accepted or running summary for polling. Maps to POST /factory-sessions/async.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "orchestrator": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "requestedPolicy": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "source": {
+            "additionalProperties": false,
+            "properties": {
+              "factoryId": {
+                "type": "string"
+              },
+              "inlineWorkflow": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "kind": {
+                "enum": [
+                  "FACTORY_ID",
+                  "FACTORY_INLINE",
+                  "WORKFLOW_FILE",
+                  "WORKFLOW_NAME",
+                  "INLINE_WORKFLOW"
+                ],
+                "type": "string"
+              },
+              "workflowFile": {
+                "type": "string"
+              },
+              "workflowName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "wait": {
+            "additionalProperties": false,
+            "properties": {
+              "cancelOnTimeout": {
+                "type": "boolean"
+              },
+              "timeoutMillis": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "requestId",
+          "source"
+        ],
+        "type": "object"
+      }
+    },
+    "mcp.tool.you.factory_session.start_sync": {
+      "id": "mcp.tool.you.factory_session.start_sync",
+      "name": "you.factory_session.start_sync",
+      "description": "Start one sync Factory Session and wait for terminal completion or timeout. Maps to POST /factory-sessions/sync.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "orchestrator": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "requestedPolicy": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "source": {
+            "additionalProperties": false,
+            "properties": {
+              "factoryId": {
+                "type": "string"
+              },
+              "inlineWorkflow": {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              "kind": {
+                "enum": [
+                  "FACTORY_ID",
+                  "FACTORY_INLINE",
+                  "WORKFLOW_FILE",
+                  "WORKFLOW_NAME",
+                  "INLINE_WORKFLOW"
+                ],
+                "type": "string"
+              },
+              "workflowFile": {
+                "type": "string"
+              },
+              "workflowName": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          "wait": {
+            "additionalProperties": false,
+            "properties": {
+              "cancelOnTimeout": {
+                "type": "boolean"
+              },
+              "timeoutMillis": {
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "requestId",
+          "source"
+        ],
+        "type": "object"
+      }
+    },
+    "mcp.tool.you.factory_session.validate_source": {
+      "id": "mcp.tool.you.factory_session.validate_source",
+      "name": "you.factory_session.validate_source",
+      "description": "Validate JavaScript orchestrator factory source through the canonical Factory preview contract (POST /factories/preview) before starting a Factory Session.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "allowFactoryLookup": {
+            "type": "boolean"
+          },
+          "argsSchema": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "artifactRoot": {
+            "type": "string"
+          },
+          "defaultPolicy": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "inlineSource": {
+            "type": "string"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "projectRoot": {
+            "type": "string"
+          },
+          "requestedPolicy": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "sourceKind": {
+            "enum": [
+              "FACTORY_ID",
+              "FACTORY_INLINE",
+              "WORKFLOW_FILE",
+              "WORKFLOW_NAME",
+              "INLINE_WORKFLOW"
+            ],
+            "type": "string"
+          },
+          "sourceValue": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourceKind"
+        ],
+        "type": "object"
+      }
+    }
+  }
+}

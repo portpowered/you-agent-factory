@@ -11,6 +11,15 @@ import (
 )
 
 func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	return newSubmitCommandWithHandlers(globals, diagnostics, submitWork, submitBatch)
+}
+
+func newSubmitCommandWithHandlers(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	submitHandler func(submitcli.SubmitConfig) error,
+	batchHandler func(submitcli.BatchConfig) error,
+) *cobra.Command {
 	cfg := submitcli.SubmitConfig{Server: globals.server}
 
 	cmd := &cobra.Command{
@@ -25,13 +34,7 @@ func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpti
 			"Use --session to submit to one specific live factory session instead.",
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Server = globals.server
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return submitWork(cfg)
+			return executeSubmitCommand(cmd, &cfg, globals, diagnostics, submitHandler)
 		},
 	}
 
@@ -40,11 +43,31 @@ func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpti
 	cmd.Flags().StringVar(&cfg.WorkTypeName, "work-type-name", "", "work type name to submit to (required)")
 	cmd.Flags().StringVar(&cfg.Payload, "payload", "", "path to payload file (.json or .md) (required)")
 	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
-	cmd.AddCommand(newSubmitBatchCommand(globals, diagnostics))
+	cmd.AddCommand(newSubmitBatchCommandWithHandler(globals, diagnostics, batchHandler))
 	return cmd
 }
 
-func newSubmitBatchCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+func executeSubmitCommand(
+	cmd *cobra.Command,
+	cfg *submitcli.SubmitConfig,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	submitHandler func(submitcli.SubmitConfig) error,
+) error {
+	cfg.Server = globals.server
+	cfg.JSON = globals.json
+	cfg.Output = cmd.OutOrStdout()
+	cfg.Diagnostics = diagnostics.writer(cmd)
+	cfg.Verbose = diagnostics.verboseEnabled()
+	cfg.Debug = diagnostics.debug
+	return submitHandler(*cfg)
+}
+
+func newSubmitBatchCommandWithHandler(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	batchHandler func(submitcli.BatchConfig) error,
+) *cobra.Command {
 	cfg := submitcli.BatchConfig{Server: globals.server}
 
 	cmd := &cobra.Command{
@@ -83,12 +106,7 @@ func newSubmitBatchCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 			"  " + cliBinaryName + " --server http://localhost:9090 --json submit batch --session session-beta ./batch.json",
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Server = globals.server
-			cfg.JSON = globals.json
-			cfg.Args = args
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return submitBatch(cfg)
+			return executeSubmitBatchCommand(cmd, args, &cfg, globals, diagnostics, batchHandler)
 		},
 	}
 
@@ -97,6 +115,24 @@ func newSubmitBatchCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 	cmd.Flags().BoolVar(&cfg.DryRun, "dry-run", false, "validate input and print a summary without sending HTTP")
 	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
 	return cmd
+}
+
+func executeSubmitBatchCommand(
+	cmd *cobra.Command,
+	args []string,
+	cfg *submitcli.BatchConfig,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	batchHandler func(submitcli.BatchConfig) error,
+) error {
+	cfg.Server = globals.server
+	cfg.JSON = globals.json
+	cfg.Args = args
+	cfg.Stdin = cmd.InOrStdin()
+	cfg.Output = cmd.OutOrStdout()
+	cfg.Verbose = diagnostics.verboseEnabled()
+	cfg.Debug = diagnostics.debug
+	return batchHandler(*cfg)
 }
 
 func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {

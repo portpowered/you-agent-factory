@@ -168,10 +168,12 @@ func writeCheckFixture(t *testing.T, root, path, contents string) {
 	}
 }
 
+const checkFixtureDefaultBranch = "main"
+
 func initCheckGitRepo(t *testing.T, root string) {
 	t.Helper()
 	commands := [][]string{
-		{"git", "-C", root, "init"},
+		{"git", "-C", root, "init", "--initial-branch", checkFixtureDefaultBranch},
 		{"git", "-C", root, "config", "user.email", "contractstaging-check@test"},
 		{"git", "-C", root, "config", "user.name", "contractstaging-check"},
 		{"git", "-C", root, "add", "-A"},

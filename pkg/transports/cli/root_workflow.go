@@ -1,11 +1,18 @@
 package cli
 
 import (
+	"context"
+	"fmt"
 	"strings"
 
-	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry/workflowmcp"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
+	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	workflowcli "github.com/portpowered/infinite-you/pkg/transports/cli/workflow"
@@ -13,6 +20,20 @@ import (
 )
 
 func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions, options RootCommandOptions) *cobra.Command {
+	return newWorkflowCommandWithValidationPreview(
+		globals,
+		options,
+		newWorkflowValidateCommand(globals),
+		newWorkflowPreviewCommand(globals),
+	)
+}
+
+func newWorkflowCommandWithValidationPreview(
+	globals *cliGlobalOptions,
+	options RootCommandOptions,
+	validate *cobra.Command,
+	preview *cobra.Command,
+) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "workflow",
 		Short: "Compatibility commands for Factory Preview and Factory Session behavior",
@@ -31,8 +52,8 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions, opt
 			"  events     compatibility event read; successor: the Factory Session events API",
 	}
 	cmd.AddCommand(
-		newWorkflowValidateCommand(globals),
-		newWorkflowPreviewCommand(globals),
+		validate,
+		preview,
 		newWorkflowRunCommand(globals, options),
 		newWorkflowStartCommand(globals, options),
 		newWorkflowStatusCommand(globals, options),
@@ -42,6 +63,70 @@ func newWorkflowCommand(globals *cliGlobalOptions, _ *cliDiagnosticsOptions, opt
 		newWorkflowEventsCommand(globals, options),
 	)
 	return cmd
+}
+
+const useGeneratedWorkflowMCPFamily = true
+
+type workflowMCPBindingState struct {
+	mcpFixtureCatalogPath string
+	mcpRuntimeBacked      bool
+	mcpProjectRoot        string
+	preview               workflowcli.PreviewConfig
+	validate              workflowcli.ValidateConfig
+}
+
+func newWorkflowMCPBindingState() *workflowMCPBindingState {
+	return &workflowMCPBindingState{
+		preview:  workflowcli.PreviewConfig{SourceConfig: workflowcli.SourceConfig{Dir: defaultcmd.FactoryDir}},
+		validate: workflowcli.ValidateConfig{SourceConfig: workflowcli.SourceConfig{Dir: defaultcmd.FactoryDir}},
+	}
+}
+
+func newProductionWorkflowMCPCommands(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	options RootCommandOptions,
+) (*cobra.Command, *cobra.Command) {
+	if !useGeneratedWorkflowMCPFamily {
+		return newMCPCommand(options), newWorkflowCommand(globals, diagnostics, options)
+	}
+	state := newWorkflowMCPBindingState()
+	registries, err := workflowMCPHandlerRegistries(globals, options, state)
+	if err != nil {
+		panic(fmt.Sprintf("build workflow/MCP handler registries: %v", err))
+	}
+	components, err := climanifestcobra.NewWorkflowMCPFamilyComponents(registries, workflowMCPFlagBindings(state))
+	if err != nil {
+		panic(fmt.Sprintf("build workflow/MCP family commands: %v", err))
+	}
+	workflow := newWorkflowCommandWithValidationPreview(globals, options, components.WorkflowValidate, components.WorkflowPreview)
+	return components.MCP, workflow
+}
+
+// NewWorkflowMCPFamilyParityRoots builds detached handwritten and generated
+// roots for observable constructor parity checks.
+func NewWorkflowMCPFamilyParityRoots() (legacyRoot, generatedRoot *cobra.Command, err error) {
+	options := normalizeRootCommandOptions(RootCommandOptions{})
+	legacyGlobals := &cliGlobalOptions{server: "http://localhost:7437"}
+	legacyDiagnostics := &cliDiagnosticsOptions{}
+	legacyRoot = newLegacyRootCommandShell(legacyGlobals, legacyDiagnostics, &cliOperatorDefaultsOptions{}, options)
+	legacyRoot.AddCommand(newMCPCommand(options), newWorkflowCommand(legacyGlobals, legacyDiagnostics, options))
+
+	generatedGlobals := &cliGlobalOptions{server: "http://localhost:7437"}
+	generatedDiagnostics := &cliDiagnosticsOptions{}
+	generatedRoot = newLegacyRootCommandShell(generatedGlobals, generatedDiagnostics, &cliOperatorDefaultsOptions{}, options)
+	state := newWorkflowMCPBindingState()
+	registries, err := workflowMCPHandlerRegistries(generatedGlobals, options, state)
+	if err != nil {
+		return nil, nil, fmt.Errorf("build workflow/MCP parity registries: %w", err)
+	}
+	components, err := climanifestcobra.NewWorkflowMCPFamilyComponents(registries, workflowMCPFlagBindings(state))
+	if err != nil {
+		return nil, nil, fmt.Errorf("build workflow/MCP parity commands: %w", err)
+	}
+	workflow := newWorkflowCommandWithValidationPreview(generatedGlobals, options, components.WorkflowValidate, components.WorkflowPreview)
+	generatedRoot.AddCommand(components.MCP, workflow)
+	return legacyRoot, generatedRoot, nil
 }
 
 func newWorkflowValidateCommand(globals *cliGlobalOptions) *cobra.Command {
@@ -54,11 +139,7 @@ func newWorkflowValidateCommand(globals *cliGlobalOptions) *cobra.Command {
 			"  " + cliBinaryName + " workflow validate --kind WORKFLOW_NAME --value review\n\n" +
 			"  # Validate inline workflow source.\n" +
 			"  " + cliBinaryName + " workflow validate --kind INLINE_WORKFLOW --inline \"phase('setup');\"",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			return workflowcli.Validate(cfg)
-		},
+		RunE: workflowcli.ValidateRunE(&cfg, &globals.json),
 	}
 	addWorkflowSourceFlags(cmd, &cfg.SourceConfig)
 	return cmd
@@ -76,11 +157,7 @@ func newWorkflowPreviewCommand(globals *cliGlobalOptions) *cobra.Command {
 			"  " + cliBinaryName + " workflow preview --kind WORKFLOW_NAME --value review\n\n" +
 			"  # Preview inline workflow source.\n" +
 			"  " + cliBinaryName + " workflow preview --kind INLINE_WORKFLOW --inline \"phase('setup');\"",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			return workflowcli.Preview(cfg)
-		},
+		RunE: workflowcli.PreviewRunE(&cfg, &globals.json),
 	}
 	addWorkflowSourceFlags(cmd, &cfg.SourceConfig)
 	return cmd
@@ -94,6 +171,64 @@ func addWorkflowSourceFlags(command *cobra.Command, cfg *workflowcli.SourceConfi
 	command.Flags().StringVar(&cfg.ArtifactRoot, "artifact-root", "", "optional absolute artifact root")
 	command.Flags().StringVar(&cfg.ArgsSchema, "args-schema", "", "optional orchestrator.javascript argsSchema JSON")
 	command.Flags().StringVar(&cfg.RequestedPolicyJSON, "requested-policy", "", "optional requested policy override JSON")
+}
+
+func newWorkflowMCPHandlerRegistries(
+	globals *cliGlobalOptions,
+	options RootCommandOptions,
+) (workflowmcp.Registries, error) {
+	return workflowMCPHandlerRegistries(globals, options, newWorkflowMCPBindingState())
+}
+
+func workflowMCPHandlerRegistries(
+	globals *cliGlobalOptions,
+	options RootCommandOptions,
+	state *workflowMCPBindingState,
+) (workflowmcp.Registries, error) {
+	return workflowmcp.NewRegistries(workflowmcp.Handlers{
+		MCPServe: mcpcli.ServeRunE(mcpcli.ServeBinding{
+			FixtureCatalogPath: &state.mcpFixtureCatalogPath,
+			RuntimeBacked:      &state.mcpRuntimeBacked,
+			ProjectRoot:        &state.mcpProjectRoot,
+			Startup:            options.Startup,
+		}),
+		WorkflowPreview:  workflowcli.PreviewRunE(&state.preview, &globals.json),
+		WorkflowValidate: workflowcli.ValidateRunE(&state.validate, &globals.json),
+	})
+}
+
+func workflowMCPFlagBindings(state *workflowMCPBindingState) climanifestcobra.WorkflowMCPFlagBindings {
+	workflowUsages := map[string]string{
+		"dir":              "project root used for ordered workflow source lookup",
+		"kind":             "workflow source kind",
+		"value":            "workflow name, file ref, or factory id",
+		"inline":           "inline workflow source text",
+		"artifact-root":    "optional absolute artifact root",
+		"args-schema":      "optional orchestrator.javascript argsSchema JSON",
+		"requested-policy": "optional requested policy override JSON",
+	}
+	sourceBindings := func(cfg *workflowcli.SourceConfig) climanifestcobra.WorkflowSourceFlagBindings {
+		return climanifestcobra.WorkflowSourceFlagBindings{
+			Dir: &cfg.Dir, SourceKind: &cfg.SourceKind, SourceValue: &cfg.SourceValue,
+			InlineSource: &cfg.InlineSource, ArtifactRoot: &cfg.ArtifactRoot,
+			ArgsSchema: &cfg.ArgsSchema, RequestedPolicyJSON: &cfg.RequestedPolicyJSON,
+			FlagUsages: workflowUsages,
+		}
+	}
+	return climanifestcobra.WorkflowMCPFlagBindings{
+		MCPServe: climanifestcobra.MCPServeFlagBindings{
+			FixtureCatalogPath: &state.mcpFixtureCatalogPath,
+			RuntimeBacked:      &state.mcpRuntimeBacked,
+			ProjectRoot:        &state.mcpProjectRoot,
+			FlagUsages: map[string]string{
+				"fixture-catalog": "optional path to durable-session contract fixtures; defaults to the catalog discovered from the current working directory",
+				"runtime":         "select the shared durable JavaScript runtime execution service instead of the fixture catalog",
+				"project-root":    "project root for workflow source resolution in --runtime mode; defaults to the current working directory",
+			},
+		},
+		WorkflowPreview:  sourceBindings(&state.preview.SourceConfig),
+		WorkflowValidate: sourceBindings(&state.validate.SourceConfig),
+	}
 }
 
 func newWorkflowRunCommand(globals *cliGlobalOptions, options RootCommandOptions) *cobra.Command {
@@ -355,6 +490,133 @@ func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 	sessionCmd := legacySessionParentCommand()
 	sessionCmd.AddCommand(handwrittenSessionSubcommands(globals, diagnostics, options, newSessionShowCommand(globals, diagnostics))...)
 	return sessionCmd
+}
+
+// NewLegacySessionFamilyCommand builds the isolated handwritten session tree
+// retained as the generated-family parity and rollback reference.
+func NewLegacySessionFamilyCommand(options RootCommandOptions) *cobra.Command {
+	options = normalizeRootCommandOptions(options)
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	root.AddCommand(newSessionCommand(globals, diagnostics, options))
+	return root
+}
+
+// NewGeneratedSessionFamilyCommand builds an isolated root/session tree from
+// generated metadata with all execution paths bound to handwritten handlers.
+// Production uses the same constructor through its session-local cutover seam.
+func NewGeneratedSessionFamilyCommand(options RootCommandOptions) (*cobra.Command, error) {
+	options = normalizeRootCommandOptions(options)
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	registry, bindings, err := newSessionHandlerRegistry(globals, diagnostics, options)
+	if err != nil {
+		return nil, err
+	}
+	session, err := climanifestcobra.NewSessionFamilyCommand(registry, bindings)
+	if err != nil {
+		return nil, err
+	}
+	root.AddCommand(session)
+	return root, nil
+}
+
+func newSessionHandlerRegistry(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	options RootCommandOptions,
+) (*commandregistry.Registry, climanifestcobra.SessionFamilyBindings, error) {
+	configs := newSessionFamilyBindings()
+	diagnosticsBinding := commandregistry.SessionDiagnosticsBinding{
+		Verbose: diagnostics.verboseEnabled, Debug: &diagnostics.debug, DiagnosticsWriter: diagnostics.writer,
+	}
+	registry, err := commandregistry.NewSessionRegistry(commandregistry.SessionHandlers{
+		CreateRunE: commandregistry.SessionCreateRunE(commandregistry.SessionCreateBinding{
+			Config: configs.Create, SessionDiagnosticsBinding: diagnosticsBinding, CreateSession: createSession,
+		}),
+		ListRunE: commandregistry.SessionListRunE(commandregistry.SessionListBinding{
+			Config: configs.List, SessionDiagnosticsBinding: diagnosticsBinding,
+			Prepare: sessionListPrepare(options), ListSessions: listSessions,
+		}),
+		ShowRunE: commandregistry.SessionShowRunE(commandregistry.SessionShowBinding{
+			Server: &globals.server, JSON: &globals.json, Verbose: diagnostics.verboseEnabled,
+			Debug: &diagnostics.debug, DiagnosticsWriter: diagnostics.writer, ShowSession: showSession,
+		}),
+		DeleteRunE: commandregistry.SessionDeleteRunE(commandregistry.SessionDeleteBinding{
+			Config: configs.Delete, SessionDiagnosticsBinding: diagnosticsBinding, DeleteSession: deleteSession,
+		}),
+		DispatchesRunE: commandregistry.SessionDispatchesRunE(commandregistry.SessionDispatchesBinding{
+			Config: configs.Dispatches, Server: &globals.server, JSON: &globals.json,
+			SessionDiagnosticsBinding: diagnosticsBinding, ListDispatches: listSessionDispatches,
+		}),
+		PauseRunE:  sessionLifecycleRunE(configs.Pause, globals, diagnosticsBinding, pauseSession),
+		ResumeRunE: sessionLifecycleRunE(configs.Resume, globals, diagnosticsBinding, resumeSession),
+	})
+	return registry, configs, err
+}
+
+func sessionLifecycleRunE(
+	config *sessioncli.LifecycleControlConfig,
+	globals *cliGlobalOptions,
+	diagnostics commandregistry.SessionDiagnosticsBinding,
+	control func(sessioncli.LifecycleControlConfig) error,
+) commandregistry.RunE {
+	return commandregistry.SessionLifecycleRunE(commandregistry.SessionLifecycleBinding{
+		Config: config, Server: &globals.server, JSON: &globals.json,
+		SessionDiagnosticsBinding: diagnostics, Control: control,
+	})
+}
+
+func newSessionFamilyBindings() climanifestcobra.SessionFamilyBindings {
+	return climanifestcobra.SessionFamilyBindings{
+		Create:     &sessioncli.CreateConfig{Port: defaultcmd.FactoryPort},
+		List:       &sessioncli.ListConfig{Port: defaultcmd.FactoryPort, Scope: "live"},
+		Delete:     &sessioncli.DeleteConfig{Port: defaultcmd.FactoryPort},
+		Dispatches: &sessioncli.DispatchesConfig{},
+		Pause:      &sessioncli.LifecycleControlConfig{},
+		Resume:     &sessioncli.LifecycleControlConfig{},
+		FlagUsages: sessionFamilyFlagUsages(),
+	}
+}
+
+func sessionListPrepare(options RootCommandOptions) func(context.Context, *sessioncli.ListConfig) error {
+	return func(ctx context.Context, cfg *sessioncli.ListConfig) error {
+		scope := fse.SessionListScope(strings.TrimSpace(cfg.Scope))
+		if scope != fse.SessionListScopePersisted && scope != fse.SessionListScopeAll {
+			return nil
+		}
+		service, err := buildWorkflowExecutionService(ctx, options, sessionexecutioncli.ExecutionBackendConfig{Provider: string(fse.ExecutionProviderFake)}, "", "")
+		if err != nil {
+			return err
+		}
+		cfg.DurableLister = service.ListSessions
+		return nil
+	}
+}
+
+func sessionFamilyFlagUsages() map[string]string {
+	return map[string]string{
+		"you.session.create.dir":              "folder path to open as a live factory session",
+		"you.session.create.init-new-factory": "write the default init scaffold at --dir and open a live session",
+		"you.session.create.validate-only":    "validate the folder and optional target without creating a live session",
+		"you.session.create.target-kind":      "target kind when disambiguating runnable factories (default or named)",
+		"you.session.create.target-name":      "named target when --target-kind is named",
+		"you.session.create.json":             "emit the API open-factory-session JSON response",
+		"you.session.list.scope":              "session list scope: live, persisted, or all",
+		"you.session.list.json":               "emit the API list-factory-sessions JSON response",
+		"you.session.delete.json":             "emit a JSON confirmation after the session closes",
+		"you.session.dispatches.phase":        "filter by exact Dispatch phase",
+		"you.session.dispatches.status":       "filter by canonical Dispatch status",
+		"you.session.show.port":               "deprecated; use --server",
+		"you.session.dispatches.port":         "deprecated; use --server",
+		"you.session.pause.port":              "deprecated; use --server",
+		"you.session.resume.port":             "deprecated; use --server",
+		"port":                                "HTTP server port",
+	}
 }
 
 func legacySessionParentCommand() *cobra.Command {

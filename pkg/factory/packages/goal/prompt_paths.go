@@ -3,7 +3,6 @@ package goal
 import (
 	"os"
 	"path/filepath"
-	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
@@ -21,5 +20,5 @@ func loadPackagedGoalRolePrompt(factoryDir string, source PackagedGoalRolePrompt
 	if err != nil {
 		return "", err
 	}
-	return strings.TrimSpace(string(data)), nil
+	return string(data), nil
 }

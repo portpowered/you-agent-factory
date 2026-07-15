@@ -2,129 +2,73 @@ package builtingoal_test
 
 import (
 	"encoding/json"
-	"strings"
+	"os"
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
 )
 
-var workstationRoleByName = map[string]string{
-	"execute-goal": "executor",
-}
+const executorPromptPath = "prompts/executor.md"
 
-func TestBuiltInGoalFactoryJSON_AssemblesFromAuthoredPromptFiles(t *testing.T) {
+func TestBuiltInGoalFactoryJSON_AssemblesFromDeclarativePromptAssets(t *testing.T) {
+	wantPrompt, err := os.ReadFile(executorPromptPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", executorPromptPath, err)
+	}
 	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(builtingoal.BuiltInGoalFactoryJSON)
 	if err != nil {
 		t.Fatalf("FactoryConfigFromOpenAPIJSON: %v", err)
 	}
 
-	assertAuthoredRolePromptsNonEmpty(t)
-	assertWorkerBodiesMatchAuthoredPrompts(t, cfg)
-	assertWorkersWithoutAuthoredPromptsHaveEmptyBodies(t, cfg)
-	assertWorkstationBodiesMatchAuthoredPrompts(t, cfg)
-	assertFactoryJSONWorkersHaveNoInlineBodies(t)
-	assertFactoryJSONWorkstationsHaveNoInlineBodies(t)
-	assertFactoryJSONDoesNotEmbedAuthoredPromptContent(t)
+	if len(cfg.Workers) != 1 || cfg.Workers[0].Name != "goal-executor" {
+		t.Fatalf("workers = %#v, want goal-executor", cfg.Workers)
+	}
+	if cfg.Workers[0].Body != string(wantPrompt) {
+		t.Fatalf("goal-executor body does not exactly match authored asset")
+	}
+	if len(cfg.Workstations) != 1 || cfg.Workstations[0].Name != "execute-goal" {
+		t.Fatalf("workstations = %#v, want execute-goal", cfg.Workstations)
+	}
+	if cfg.Workstations[0].Body != string(wantPrompt) {
+		t.Fatalf("execute-goal body does not exactly match authored asset")
+	}
+	if cfg.Workstations[0].PromptFile != executorPromptPath {
+		t.Fatalf("execute-goal promptFile = %q, want %q", cfg.Workstations[0].PromptFile, executorPromptPath)
+	}
 }
 
-func assertAuthoredRolePromptsNonEmpty(t *testing.T) {
+func TestBuiltInGoalFactoryJSON_DeclaresPromptsWithoutInlineBodies(t *testing.T) {
+	var authored map[string]any
+	if err := json.Unmarshal(builtingoal.FactoryJSON(), &authored); err != nil {
+		t.Fatalf("unmarshal authored factory.json: %v", err)
+	}
+
+	assertDeclaredGoalPrompt(t, authored, "workers", "goal-executor")
+	assertDeclaredGoalPrompt(t, authored, "workstations", "execute-goal")
+}
+
+func assertDeclaredGoalPrompt(t *testing.T, authored map[string]any, collection, name string) {
 	t.Helper()
-	for role, authoredPrompt := range builtingoal.AuthoredRolePrompts {
-		if strings.TrimSpace(authoredPrompt) == "" {
-			t.Fatalf("authored prompt for role %q is empty", role)
+	entries, ok := authored[collection].([]any)
+	if !ok {
+		t.Fatalf("authored factory.json %s must be an array", collection)
+	}
+	for _, entry := range entries {
+		subject, ok := entry.(map[string]any)
+		if !ok {
+			t.Fatalf("authored %s entry must be an object", collection)
 		}
-	}
-}
-
-func assertWorkstationBodiesMatchAuthoredPrompts(t *testing.T, cfg *interfaces.FactoryConfig) {
-	t.Helper()
-	workstationBodies := map[string]string{}
-	for _, workstation := range cfg.Workstations {
-		workstationBodies[workstation.Name] = strings.TrimSpace(workstation.Body)
-	}
-	for workstationName, role := range workstationRoleByName {
-		want := strings.TrimSpace(builtingoal.AuthoredRolePrompts[role])
-		if got := workstationBodies[workstationName]; got != want {
-			t.Fatalf("%s body does not match authored %s prompt", workstationName, role)
-		}
-	}
-}
-
-func assertWorkerBodiesMatchAuthoredPrompts(t *testing.T, cfg *interfaces.FactoryConfig) {
-	t.Helper()
-	workerBodies := map[string]string{}
-	for _, worker := range cfg.Workers {
-		workerBodies[worker.Name] = strings.TrimSpace(worker.Body)
-	}
-	want := strings.TrimSpace(builtingoal.AuthoredRolePrompts["executor"])
-	if got := workerBodies["goal-executor"]; got != want {
-		t.Fatalf("goal-executor body does not match authored executor prompt")
-	}
-}
-
-func assertWorkersWithoutAuthoredPromptsHaveEmptyBodies(t *testing.T, cfg *interfaces.FactoryConfig) {
-	t.Helper()
-	authoredWorkers := map[string]struct{}{"goal-executor": {}}
-	for _, worker := range cfg.Workers {
-		if _, ok := authoredWorkers[worker.Name]; ok {
+		if subject["name"] != name {
 			continue
 		}
-		if strings.TrimSpace(worker.Body) != "" {
-			t.Fatalf("worker %q body = %q, want empty body derived only from workstation prompt files", worker.Name, worker.Body)
+		if got := subject["promptFile"]; got != executorPromptPath {
+			t.Fatalf("authored %s %q promptFile = %q, want %q", collection, name, got, executorPromptPath)
 		}
-	}
-}
-
-func assertFactoryJSONWorkersHaveNoInlineBodies(t *testing.T) {
-	t.Helper()
-	var raw map[string]any
-	if err := json.Unmarshal(builtingoal.FactoryJSON(), &raw); err != nil {
-		t.Fatalf("unmarshal authored factory.json: %v", err)
-	}
-	workers, ok := raw["workers"].([]any)
-	if !ok {
-		t.Fatal("authored factory.json workers must be an array")
-	}
-	for _, entry := range workers {
-		worker, ok := entry.(map[string]any)
-		if !ok {
-			t.Fatal("authored worker entry must be an object")
+		if _, hasBody := subject["body"]; hasBody {
+			t.Fatalf("authored %s %q must not inline prompt body", collection, name)
 		}
-		if _, hasBody := worker["body"]; hasBody {
-			t.Fatalf("authored worker %q must not inline prompt body in factory.json", worker["name"])
-		}
+		return
 	}
-}
-
-func assertFactoryJSONDoesNotEmbedAuthoredPromptContent(t *testing.T) {
-	t.Helper()
-	raw := string(builtingoal.FactoryJSON())
-	for _, marker := range []string{"bounded plan", "bounded execution result", "reviewable disposition", "bounded final summary"} {
-		if strings.Contains(raw, marker) {
-			t.Fatalf("authored factory.json must not embed prompt content %q; edit pkg/factory/packages/definitions/goal/prompts instead", marker)
-		}
-	}
-}
-
-func assertFactoryJSONWorkstationsHaveNoInlineBodies(t *testing.T) {
-	t.Helper()
-	var raw map[string]any
-	if err := json.Unmarshal(builtingoal.FactoryJSON(), &raw); err != nil {
-		t.Fatalf("unmarshal authored factory.json: %v", err)
-	}
-	workstations, ok := raw["workstations"].([]any)
-	if !ok {
-		t.Fatal("authored factory.json workstations must be an array")
-	}
-	for _, entry := range workstations {
-		workstation, ok := entry.(map[string]any)
-		if !ok {
-			t.Fatal("authored workstation entry must be an object")
-		}
-		if _, hasBody := workstation["body"]; hasBody {
-			t.Fatalf("authored workstation %q must not inline prompt body in factory.json", workstation["name"])
-		}
-	}
+	t.Fatalf("authored %s missing %q", collection, name)
 }

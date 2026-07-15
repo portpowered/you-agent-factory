@@ -60,8 +60,8 @@ func WithScriptEventRecorder(recorder ScriptEventRecorder) ScriptExecutorOption 
 	}
 }
 
-// WithScriptFactoryDir resolves portable factory/scripts/... references against
-// the active factory directory before subprocess execution.
+// WithScriptFactoryDir resolves portable scripts/... and factory/scripts/...
+// references against the active factory directory before subprocess execution.
 func WithScriptFactoryDir(factoryDir string) ScriptExecutorOption {
 	return func(se *ScriptExecutor) {
 		se.FactoryDir = strings.TrimSpace(factoryDir)
@@ -509,12 +509,11 @@ func resolvePortableFactoryScriptReference(factoryDir, raw string) string {
 
 	trimmed := strings.TrimSpace(raw)
 	normalized := filepath.ToSlash(trimmed)
-	if !strings.HasPrefix(normalized, "factory/scripts/") {
-		return raw
+	relativePath, ok := strings.CutPrefix(normalized, "scripts/")
+	if !ok {
+		relativePath, ok = strings.CutPrefix(normalized, "factory/scripts/")
 	}
-
-	relativePath := strings.TrimPrefix(normalized, "factory/scripts/")
-	if relativePath == "" {
+	if !ok || relativePath == "" {
 		return raw
 	}
 	return filepath.Join(factoryDir, "scripts", filepath.FromSlash(relativePath))

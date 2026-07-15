@@ -1,3 +1,6 @@
+// Package climanifestcobra builds representative, session, work,
+// factory/config/init, models/docs, run/submit, and workflow/MCP Cobra trees
+// from generated manifest metadata and handwritten handler registries.
 package climanifestcobra
 
 import (
@@ -12,6 +15,20 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
+
+const deprecatedPortFlagMessage = "--port is no longer supported; use --server instead (for example, --server http://localhost:7437)"
+
+func rejectDeprecatedPortFlag(cmd *cobra.Command, _ []string) error {
+	if cmd.Flags().Lookup("port") != nil && cmd.Flags().Changed("port") {
+		return fmt.Errorf("%s", deprecatedPortFlagMessage)
+	}
+	return nil
+}
+
+func registerDeprecatedPortFlag(cmd *cobra.Command, target *int) {
+	cmd.Flags().IntVar(target, "port", 0, "deprecated; use --server")
+	_ = cmd.Flags().MarkHidden("port")
+}
 
 // RepresentativeFamilyComponents holds detached representative-family commands
 // before the session/show subtree is attached to the generated root.

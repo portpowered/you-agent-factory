@@ -1,13 +1,15 @@
 package climanifestcobra_test
 
 import (
+	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry/workflowmcp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	"github.com/spf13/cobra"
 )
@@ -146,6 +148,59 @@ func TestNewRepresentativeFamilyCommandRegistersContractedFlagsAndArgs(t *testin
 	}
 }
 
+func TestNewWorkflowMCPFamilyComponentsBuildsClassificationIsolatedTrees(t *testing.T) {
+	registries, err := workflowmcp.NewRegistries(workflowmcp.Handlers{
+		MCPServe: noopRunE, WorkflowPreview: noopRunE, WorkflowValidate: noopRunE,
+	})
+	if err != nil {
+		t.Fatalf("NewRegistries() error = %v", err)
+	}
+	components, err := climanifestcobra.NewWorkflowMCPFamilyComponents(registries, testWorkflowMCPBindings())
+	if err != nil {
+		t.Fatalf("NewWorkflowMCPFamilyComponents() error = %v", err)
+	}
+	if components.MCP.Name() != "mcp" || len(components.MCP.Commands()) != 1 || components.MCPServe.RunE == nil {
+		t.Fatalf("canonical MCP components = %#v, want generated mcp/serve with handler", components)
+	}
+	for _, command := range []*cobra.Command{components.WorkflowPreview, components.WorkflowValidate} {
+		if command.Parent() != nil {
+			t.Fatalf("compatibility command %q parent = %q, want detached from canonical tree", command.Name(), command.Parent().Name())
+		}
+		if command.RunE == nil {
+			t.Fatalf("compatibility command %q RunE = nil", command.Name())
+		}
+	}
+	if got := components.WorkflowValidate.Flags().Lookup("kind").DefValue; got != "WORKFLOW_NAME" {
+		t.Fatalf("workflow validate --kind default = %q, want WORKFLOW_NAME", got)
+	}
+	if components.MCPServe.Flags().Lookup("runtime") == nil || components.MCPServe.Flags().Lookup("fixture-catalog") == nil {
+		t.Fatal("MCP serve generated local flags are incomplete")
+	}
+}
+
+func TestNewWorkflowMCPFamilyComponentsRejectsClassificationMismatch(t *testing.T) {
+	mcpManifest, err := generated.MCPFamilyManifest()
+	if err != nil {
+		t.Fatalf("MCPFamilyManifest() error = %v", err)
+	}
+	workflowManifest, err := generated.WorkflowCompatibilityFamilyManifest()
+	if err != nil {
+		t.Fatalf("WorkflowCompatibilityFamilyManifest() error = %v", err)
+	}
+	mcpManifest.Commands["you.workflow.validate"] = mcpManifest.Commands["you.mcp.serve"]
+	delete(mcpManifest.Commands, "you.mcp.serve")
+	registries, err := workflowmcp.NewRegistries(workflowmcp.Handlers{
+		MCPServe: noopRunE, WorkflowPreview: noopRunE, WorkflowValidate: noopRunE,
+	})
+	if err != nil {
+		t.Fatalf("NewRegistries() error = %v", err)
+	}
+	_, err = climanifestcobra.NewWorkflowMCPFamilyComponentsFromManifests(mcpManifest, workflowManifest, registries, testWorkflowMCPBindings())
+	if err == nil || !strings.Contains(err.Error(), "you.workflow.validate") {
+		t.Fatalf("classification mismatch error = %v, want stable command ID", err)
+	}
+}
+
 func mustRepresentativeFamilyTree(t *testing.T) (*cobra.Command, *commandregistry.Registry) {
 	t.Helper()
 	registry, err := commandregistry.NewRepresentativeRegistry(commandregistry.RepresentativeHandlers{
@@ -176,6 +231,25 @@ func testBindings() climanifestcobra.PersistentFlagBindings {
 		JSON:                       &json,
 		DefaultWorkerModelProvider: &defaultWorkerModelProvider,
 		DefaultWorkerModel:         &defaultWorkerModel,
+	}
+}
+
+func testWorkflowMCPBindings() climanifestcobra.WorkflowMCPFlagBindings {
+	fixtureCatalog, projectRoot := "", ""
+	runtimeBacked := false
+	workflowBindings := func() climanifestcobra.WorkflowSourceFlagBindings {
+		dir, kind, value, inline := "factory", "WORKFLOW_NAME", "", ""
+		artifactRoot, argsSchema, requestedPolicy := "", "", ""
+		return climanifestcobra.WorkflowSourceFlagBindings{
+			Dir: &dir, SourceKind: &kind, SourceValue: &value, InlineSource: &inline,
+			ArtifactRoot: &artifactRoot, ArgsSchema: &argsSchema, RequestedPolicyJSON: &requestedPolicy,
+		}
+	}
+	return climanifestcobra.WorkflowMCPFlagBindings{
+		MCPServe: climanifestcobra.MCPServeFlagBindings{
+			FixtureCatalogPath: &fixtureCatalog, RuntimeBacked: &runtimeBacked, ProjectRoot: &projectRoot,
+		},
+		WorkflowPreview: workflowBindings(), WorkflowValidate: workflowBindings(),
 	}
 }
 
