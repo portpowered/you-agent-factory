@@ -107,6 +107,16 @@
           "visibility": "visible"
         }
       },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
       "channels": {
         "input": [
           "cli",
@@ -282,6 +292,9 @@
           "visibility": "visible"
         }
       },
+      "precedence": {
+        "order": null
+      },
       "channels": {
         "input": null,
         "output": null
@@ -427,6 +440,16 @@
           "completion": "none",
           "visibility": "visible"
         }
+      },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
       },
       "channels": {
         "input": [

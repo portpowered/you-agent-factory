@@ -1,5 +1,3 @@
-// Package climanifestcobra builds classification-aware Cobra trees from
-// generated manifest metadata and handwritten handler registries.
 package climanifestcobra
 
 import (

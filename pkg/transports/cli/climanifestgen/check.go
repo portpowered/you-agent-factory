@@ -34,6 +34,8 @@ func Check(repositoryRoot string) (Drift, error) {
 		SessionFamilyCommandIDsPath:           sessionCommandIDsSource(),
 		FactoryConfigInitFamilyCommandIDsPath: factoryConfigInitCommandIDsSource(),
 		ModelsDocsFamilyCommandIDsPath:        modelsDocsCommandIDsSource(),
+		RunSubmitFamilyJSONPath:               nil,
+		RunSubmitFamilyCommandIDsPath:         runSubmitCommandIDsSource(),
 		MCPFamilyJSONPath:                     nil,
 		WorkflowCompatibilityFamilyJSONPath:   nil,
 		WorkflowMCPFamilyCommandIDsPath:       workflowMCPCommandIDsSource(),
@@ -69,6 +71,12 @@ func Check(repositoryRoot string) (Drift, error) {
 	}
 	expected[ModelsDocsFamilyJSONPath] = modelsDocsPayload
 
+	runSubmitPayload, err := RunSubmitArtifact(repositoryRoot)
+	if err != nil {
+		return Drift{}, err
+	}
+	expected[RunSubmitFamilyJSONPath] = runSubmitPayload
+
 	mcpPayload, err := MCPArtifact(repositoryRoot)
 	if err != nil {
 		return Drift{}, err
@@ -82,6 +90,8 @@ func Check(repositoryRoot string) (Drift, error) {
 
 	drift := Drift{CommandIDs: map[string][]string{}}
 	artifactIDs := map[string][]string{
+		RunSubmitFamilyJSONPath:             RunSubmitFamilyCommandIDs,
+		RunSubmitFamilyCommandIDsPath:       RunSubmitFamilyCommandIDs,
 		MCPFamilyJSONPath:                   MCPFamilyCommandIDs,
 		WorkflowCompatibilityFamilyJSONPath: WorkflowCompatibilityFamilyCommandIDs,
 		WorkflowMCPFamilyCommandIDsPath:     append(append([]string{}, MCPFamilyCommandIDs...), WorkflowCompatibilityFamilyCommandIDs...),

@@ -25,6 +25,16 @@
       "usage": {
         "line": "mcp"
       },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
       "channels": {
         "input": [
           "cli",
@@ -198,15 +208,25 @@
           "kind": "mutually-exclusive",
           "participants": [
             {
-              "id": "you.mcp.serve.flag.runtime",
-              "type": "flag"
+              "type": "flag",
+              "id": "you.mcp.serve.flag.runtime"
             },
             {
-              "id": "you.mcp.serve.flag.fixture-catalog",
-              "type": "flag"
+              "type": "flag",
+              "id": "you.mcp.serve.flag.fixture-catalog"
             }
           ]
         }
+      },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
       },
       "channels": {
         "input": [

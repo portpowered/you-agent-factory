@@ -68,6 +68,32 @@ var WorkFamilyCommandIDs = []string{
 	"you.work.visualize",
 }
 
+// RunSubmitFamilyCommandIDs are the only stable command IDs the generator may
+// emit for the run and submit invocation family.
+var RunSubmitFamilyCommandIDs = []string{
+	"you.run",
+	"you.submit",
+	"you.submit.batch",
+}
+
+// IsRunSubmitFamilyCommandID reports whether id belongs to the run/submit family.
+func IsRunSubmitFamilyCommandID(id string) bool {
+	return slices.Contains(RunSubmitFamilyCommandIDs, id)
+}
+
+// AssertRunSubmitFamilyCommandID returns an error when id is outside the
+// run/submit family scope.
+func AssertRunSubmitFamilyCommandID(id string) error {
+	if IsRunSubmitFamilyCommandID(id) {
+		return nil
+	}
+	return fmt.Errorf(
+		"command id %q is outside the run/submit family %v",
+		id,
+		RunSubmitFamilyCommandIDs,
+	)
+}
+
 // IsWorkFamilyCommandID reports whether id belongs to the work family.
 func IsWorkFamilyCommandID(id string) bool {
 	return slices.Contains(WorkFamilyCommandIDs, id)

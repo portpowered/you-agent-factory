@@ -11,8 +11,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	defaultcmd "github.com/portpowered/infinite-you/pkg/transports/cli/default"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
+	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	workcli "github.com/portpowered/infinite-you/pkg/transports/cli/work"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 )
 
 // useGeneratedRepresentativeFamily toggles production root wiring between the
@@ -29,6 +31,11 @@ const useGeneratedSessionFamily = true
 // metadata constructor and the legacy handwritten path.
 // Flip this constant to false for a one-localized-change rollback.
 const useGeneratedWorkFamily = true
+
+// useGeneratedRunSubmitFamily toggles production run/submit wiring between the
+// generated metadata constructor and the legacy handwritten path.
+// Flip this constant to false for a one-localized-change rollback.
+const useGeneratedRunSubmitFamily = true
 
 func newLegacyRootCommandWithOptions(options RootCommandOptions) *cobra.Command {
 	options = normalizeRootCommandOptions(options)
@@ -175,6 +182,7 @@ func productionRootSubcommands(
 	mcpCmd *cobra.Command,
 	workflowCmd *cobra.Command,
 ) []*cobra.Command {
+	runSubmit := productionRunSubmitCommands(globals, diagnostics, operatorDefaults, options)
 	return []*cobra.Command{
 		docsCmd,
 		factoryConfigInit.Config,
@@ -182,12 +190,59 @@ func productionRootSubcommands(
 		factoryConfigInit.Init,
 		mcpCmd,
 		modelsCmd,
-		newRunCommand(globals, diagnostics, operatorDefaults, options),
-		newSubmitCommand(globals, diagnostics),
+		runSubmit.Run,
+		runSubmit.Submit,
 		session,
 		productionWorkCommand(globals, diagnostics),
 		workflowCmd,
 	}
+}
+
+type runSubmitProductionCommands struct {
+	Run    *cobra.Command
+	Submit *cobra.Command
+}
+
+func productionRunSubmitCommands(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	options RootCommandOptions,
+) runSubmitProductionCommands {
+	commands, err := buildRunSubmitProductionCommands(
+		globals, diagnostics, operatorDefaults, options, useGeneratedRunSubmitFamily,
+	)
+	if err != nil {
+		panic(fmt.Sprintf("build run/submit family commands: %v", err))
+	}
+	return commands
+}
+
+func buildRunSubmitProductionCommands(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	options RootCommandOptions,
+	generatedFamily bool,
+) (runSubmitProductionCommands, error) {
+	if !generatedFamily {
+		return runSubmitProductionCommands{
+			Run:    newRunCommand(globals, diagnostics, operatorDefaults, options),
+			Submit: newSubmitCommandWithHandlers(globals, diagnostics, options.SubmitWork, options.SubmitBatch),
+		}, nil
+	}
+
+	registry, bindings, err := newRunSubmitHandlerRegistry(
+		globals, diagnostics, operatorDefaults, options,
+	)
+	if err != nil {
+		return runSubmitProductionCommands{}, err
+	}
+	components, err := climanifestcobra.NewRunSubmitFamilyComponents(registry, bindings)
+	if err != nil {
+		return runSubmitProductionCommands{}, err
+	}
+	return runSubmitProductionCommands{Run: components.Run, Submit: components.Submit}, nil
 }
 
 func representativePersistentFlagBindings(
@@ -413,6 +468,123 @@ func runCommandExamples() string {
 		"  echo \"Ship the login bugfix\" | " + cliBinaryName + " run --named @you/goal\n\n" +
 		"  # Opt into live internal response-stream progress instead of primary-result-only stdout.\n" +
 		"  " + cliBinaryName + " run --named @you/goal --output response-stream \"Ship the login bugfix\""
+}
+
+// NewGeneratedRunSubmitFamilyCommandForParity builds an isolated you root with
+// generated run/submit metadata and the retained production handler paths.
+// Production registration uses the same generated constructor and handler bindings.
+func NewGeneratedRunSubmitFamilyCommandForParity() (*cobra.Command, error) {
+	return newRunSubmitFamilyRootForParity(RootCommandOptions{}, true)
+}
+
+// NewRunSubmitFamilyParityRoots builds independent handwritten and generated
+// run/submit roots with the same process-owned dependencies. Keeping the roots
+// independent prevents Cobra flag state from leaking between parity executions.
+func NewRunSubmitFamilyParityRoots(options RootCommandOptions) (legacyRoot, generatedRoot *cobra.Command, err error) {
+	legacyRoot, err = newRunSubmitFamilyRootForParity(options, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	generatedRoot, err = newRunSubmitFamilyRootForParity(options, true)
+	if err != nil {
+		return nil, nil, err
+	}
+	return legacyRoot, generatedRoot, nil
+}
+
+func newRunSubmitFamilyRootForParity(options RootCommandOptions, generatedFamily bool) (*cobra.Command, error) {
+	options = normalizeRootCommandOptions(options)
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	if !generatedFamily {
+		root.AddCommand(
+			newRunCommand(globals, diagnostics, operatorDefaults, options),
+			newSubmitCommandWithHandlers(globals, diagnostics, options.SubmitWork, options.SubmitBatch),
+		)
+		return root, nil
+	}
+	registry, bindings, err := newRunSubmitHandlerRegistry(
+		globals,
+		diagnostics,
+		operatorDefaults,
+		options,
+	)
+	if err != nil {
+		return nil, err
+	}
+	components, err := climanifestcobra.NewRunSubmitFamilyComponents(registry, bindings)
+	if err != nil {
+		return nil, err
+	}
+	root.AddCommand(components.Run, components.Submit)
+	return root, nil
+}
+
+func newRunSubmitHandlerRegistry(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	rootOptions RootCommandOptions,
+) (*commandregistry.Registry, climanifestcobra.RunSubmitFlagBindings, error) {
+	runCfg := defaultcmd.ExplicitRunConfig()
+	var invocationOutputMode string
+	submitCfg := submitcli.SubmitConfig{Server: globals.server}
+	batchCfg := submitcli.BatchConfig{Server: globals.server}
+	registry, err := commandregistry.NewRunSubmitRegistry(commandregistry.RunSubmitHandlers{
+		Run: commandregistry.CommandHandlers{
+			PreRunE: rejectDeprecatedPortFlag,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				return executeRunCommand(
+					cmd, args, &runCfg, globals, diagnostics, operatorDefaults, rootOptions,
+				)
+			},
+		},
+		Submit: commandregistry.CommandHandlers{
+			PreRunE: rejectDeprecatedPortFlag,
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				return executeSubmitCommand(cmd, &submitCfg, globals, diagnostics, rootOptions.SubmitWork)
+			},
+		},
+		SubmitBatch: commandregistry.CommandHandlers{
+			PreRunE: rejectDeprecatedPortFlag,
+			RunE: func(cmd *cobra.Command, args []string) error {
+				return executeSubmitBatchCommand(cmd, args, &batchCfg, globals, diagnostics, rootOptions.SubmitBatch)
+			},
+		},
+	})
+	if err != nil {
+		return nil, climanifestcobra.RunSubmitFlagBindings{}, err
+	}
+	return registry, climanifestcobra.RunSubmitFlagBindings{
+		Run:                 &runCfg,
+		RunInvocationOutput: &invocationOutputMode,
+		Submit:              &submitCfg,
+		SubmitBatch:         &batchCfg,
+		FlagUsages:          runSubmitFlagUsages(globals, diagnostics, operatorDefaults, rootOptions),
+	}, nil
+}
+
+func runSubmitFlagUsages(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	rootOptions RootCommandOptions,
+) map[string]string {
+	run := newRunCommand(globals, diagnostics, operatorDefaults, rootOptions)
+	submit := newSubmitCommand(globals, diagnostics)
+	commands := []*cobra.Command{run, submit}
+	commands = append(commands, submit.Commands()...)
+	usages := make(map[string]string)
+	for _, cmd := range commands {
+		cmd.LocalNonPersistentFlags().VisitAll(func(flag *pflag.Flag) {
+			if _, exists := usages[flag.Name]; !exists {
+				usages[flag.Name] = flag.Usage
+			}
+		})
+	}
+	return usages
 }
 
 func productionWorkCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
