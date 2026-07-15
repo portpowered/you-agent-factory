@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 )
 
@@ -31,17 +30,6 @@ type ProcessInput struct {
 	stdout      io.Writer
 	stderr      io.Writer
 	context     context.Context
-}
-
-func BasicInput() Input {
-	return Input{
-		Args:    os.Args,
-		Env:     os.Environ(),
-		Stdin:   os.Stdin,
-		Stdout:  os.Stdout,
-		Stderr:  os.Stderr,
-		Context: context.Background(),
-	}
 }
 
 // Normalize validates and snapshots explicit process input.
