@@ -27,6 +27,11 @@ const useGeneratedRepresentativeFamily = true
 // Flip this constant to false for a one-localized-change rollback.
 const useGeneratedWorkFamily = true
 
+// useGeneratedRunSubmitFamily toggles production run/submit wiring between the
+// generated metadata constructor and the legacy handwritten path.
+// Flip this constant to false for a one-localized-change rollback.
+const useGeneratedRunSubmitFamily = true
+
 func newLegacyRootCommandWithOptions(options RootCommandOptions) *cobra.Command {
 	options = normalizeRootCommandOptions(options)
 	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
@@ -150,6 +155,7 @@ func productionRootSubcommands(
 	docsCmd *cobra.Command,
 	modelsCmd *cobra.Command,
 ) []*cobra.Command {
+	runSubmit := productionRunSubmitCommands(globals, diagnostics, operatorDefaults, options)
 	return []*cobra.Command{
 		docsCmd,
 		factoryConfigInit.Config,
@@ -157,12 +163,59 @@ func productionRootSubcommands(
 		factoryConfigInit.Init,
 		newMCPCommand(options),
 		modelsCmd,
-		newRunCommand(globals, diagnostics, operatorDefaults, options),
-		newSubmitCommandWithHandlers(globals, diagnostics, options.SubmitWork, options.SubmitBatch),
+		runSubmit.Run,
+		runSubmit.Submit,
 		session,
 		productionWorkCommand(globals, diagnostics),
 		newWorkflowCommand(globals, diagnostics, options),
 	}
+}
+
+type runSubmitProductionCommands struct {
+	Run    *cobra.Command
+	Submit *cobra.Command
+}
+
+func productionRunSubmitCommands(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	options RootCommandOptions,
+) runSubmitProductionCommands {
+	commands, err := buildRunSubmitProductionCommands(
+		globals, diagnostics, operatorDefaults, options, useGeneratedRunSubmitFamily,
+	)
+	if err != nil {
+		panic(fmt.Sprintf("build run/submit family commands: %v", err))
+	}
+	return commands
+}
+
+func buildRunSubmitProductionCommands(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	options RootCommandOptions,
+	generatedFamily bool,
+) (runSubmitProductionCommands, error) {
+	if !generatedFamily {
+		return runSubmitProductionCommands{
+			Run:    newRunCommand(globals, diagnostics, operatorDefaults, options),
+			Submit: newSubmitCommandWithHandlers(globals, diagnostics, options.SubmitWork, options.SubmitBatch),
+		}, nil
+	}
+
+	registry, bindings, err := newRunSubmitHandlerRegistry(
+		globals, diagnostics, operatorDefaults, options,
+	)
+	if err != nil {
+		return runSubmitProductionCommands{}, err
+	}
+	components, err := climanifestcobra.NewRunSubmitFamilyComponents(registry, bindings)
+	if err != nil {
+		return runSubmitProductionCommands{}, err
+	}
+	return runSubmitProductionCommands{Run: components.Run, Submit: components.Submit}, nil
 }
 
 func representativePersistentFlagBindings(
@@ -392,7 +445,7 @@ func runCommandExamples() string {
 
 // NewGeneratedRunSubmitFamilyCommandForParity builds an isolated you root with
 // generated run/submit metadata and the retained production handler paths.
-// Production registration remains on the legacy constructors until cutover.
+// Production registration uses the same generated constructor and handler bindings.
 func NewGeneratedRunSubmitFamilyCommandForParity() (*cobra.Command, error) {
 	return newRunSubmitFamilyRootForParity(RootCommandOptions{}, true)
 }

@@ -24,9 +24,12 @@ primary-result behavior.
   constructs only detached `run` and `submit` roots plus the nested `submit batch`
   leaf; `commandregistry.NewRunSubmitRegistry` attaches retained `PreRunE` and
   `RunE` lifecycles by stable command ID. Production execution bindings are
-  assembled by `newRunSubmitHandlerRegistry` in `root_work.go`, and
+  assembled by `newRunSubmitHandlerRegistry` in `root_work.go`.
+  `productionRunSubmitCommands` selects the generated family by default while
+  retaining the handwritten constructors behind the localized
+  `useGeneratedRunSubmitFamily` rollback constant.
   `NewGeneratedRunSubmitFamilyCommandForParity` exposes the isolated generated
-  tree without changing production root registration before the cutover lane.
+  tree for focused verification.
   `NewRunSubmitFamilyParityRoots` builds independent legacy and generated roots
   with injected `RootCommandOptions`; use it for observable parser, resolved
   `RunConfig`, service-call, stdout/stderr, and error parity without sharing
