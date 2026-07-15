@@ -915,20 +915,30 @@ jobs:
         if: always() && needs.classify-pr-impact.outputs.run_ui_browser_integration == 'true' && steps.run_ui_browser_integration.outcome == 'failure'
         run: exit 1
 
-  backend-verification:
-    name: Backend Verification
+  backend-coverage:
+    name: Backend ${{ matrix.label }} Coverage
     runs-on: ubuntu-latest
     needs:
       - classify-pr-impact
       - verify-build-contracts
     if: always()
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: unit
+            label: Unit
+            command: make test-unit-coverage
+          - suite: functional
+            label: Functional
+            command: make test-functional-coverage
     steps:
       - name: Report lane routing
         run: |
           classification="${{ needs.classify-pr-impact.outputs.classification }}"
           areas="${{ needs.classify-pr-impact.outputs.areas }}"
-          command="${{ needs.classify-pr-impact.outputs.backend_verification_command }}"
+          command="${{ matrix.command }}"
           full_rerun="${{ needs.classify-pr-impact.outputs.full_run_command }}"
           decision="${{ needs.classify-pr-impact.outputs.run_backend_verification == 'true' && 'run' || 'skip' }}"
           reason="${{ needs.classify-pr-impact.outputs.backend_verification_reason }}"
@@ -939,7 +949,7 @@ jobs:
             areas="unavailable"
           fi
           if [[ -z "$command" ]]; then
-            command="make test-backend-verification"
+            command="${{ matrix.command }}"
           fi
           if [[ -z "$full_rerun" ]]; then
             full_rerun="make verify-pr"
@@ -952,7 +962,7 @@ jobs:
             reason="Not executed because Build, Lint, and API did not complete successfully."
           fi
           {
-            echo "## Backend Verification"
+            echo "## Backend ${{ matrix.label }} Coverage"
             echo
             echo "- Classification: \`$classification\`"
             echo "- Areas touched: \`$areas\`"
@@ -977,26 +987,37 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Run merged backend coverage and functional verification
-        id: run_backend_verification
+      - name: Run backend ${{ matrix.suite }} coverage
+        id: run_backend_coverage
         if: needs.classify-pr-impact.result == 'success' && needs.verify-build-contracts.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         continue-on-error: true
         shell: bash
         timeout-minutes: 15
         run: |
-          ARTIFACT_ROOT=".artifacts/backend-verification" ./scripts/ci/run-backend-verification.sh
+          set -o pipefail
+          artifact_root=".artifacts/backend-${{ matrix.suite }}-coverage"
+          mkdir -p "$artifact_root"
+          if [[ "${{ matrix.suite }}" == "unit" ]]; then
+            GO_UNIT_COVERAGE_PROFILE="$artifact_root/coverage.out" make test-unit-coverage 2>&1 | tee "$artifact_root/command.log"
+          else
+            GO_FUNCTIONAL_COVERAGE_PROFILE="$artifact_root/coverage.out" make test-functional-coverage 2>&1 | tee "$artifact_root/command.log"
+          fi
+          go tool cover -func="$artifact_root/coverage.out" > "$artifact_root/coverage.txt"
 
       - name: Report lane execution
         if: always() && needs.classify-pr-impact.result == 'success' && needs.verify-build-contracts.result == 'success' && needs.classify-pr-impact.outputs.run_backend_verification == 'true'
         shell: bash
         run: |
-          artifact_name="backend-verification-failure-artifacts"
-          artifact_root=".artifacts/backend-verification"
-          if [[ "${{ steps.run_backend_verification.outcome }}" == "success" ]]; then
+          artifact_name="backend-${{ matrix.suite }}-coverage-report"
+          artifact_root=".artifacts/backend-${{ matrix.suite }}-coverage"
+          if [[ "${{ steps.run_backend_coverage.outcome }}" == "success" ]]; then
+            total="$(grep -E '^total: \(statements\) [0-9.]+%$' "$artifact_root/command.log" | tail -n 1 || true)"
             {
               echo "### Execution result"
               echo
-              echo "- Verified: Backend coverage and required short functional checks through \`${{ needs.classify-pr-impact.outputs.backend_verification_command }}\`."
+              echo "- Verified: Independent backend ${{ matrix.suite }} coverage through \`${{ matrix.command }}\`."
+              echo "- Coverage: \`${total:-unavailable}\`"
+              echo "- Report artifact: \`$artifact_name\`"
               echo "- Result: \`passed\`"
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
@@ -1005,20 +1026,20 @@ jobs:
           {
             go run ./cmd/backendverificationsummary \
               -log "$artifact_root/command.log" \
-              -command "${{ needs.classify-pr-impact.outputs.backend_verification_command }}" \
+              -command "${{ matrix.command }}" \
               -artifact-name "$artifact_name" \
               -primary-log "$artifact_root/command.log"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload backend verification failure artifacts
-        if: always() && needs.classify-pr-impact.outputs.run_backend_verification == 'true' && steps.run_backend_verification.outcome == 'failure'
+      - name: Upload backend ${{ matrix.suite }} coverage report
+        if: always() && needs.classify-pr-impact.outputs.run_backend_verification == 'true' && steps.run_backend_coverage.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
-          name: backend-verification-failure-artifacts
-          path: .artifacts/backend-verification/
+          name: backend-${{ matrix.suite }}-coverage-report
+          path: .artifacts/backend-${{ matrix.suite }}-coverage/
           if-no-files-found: error
           retention-days: 14
 
-      - name: Fail for backend verification lane errors
-        if: always() && needs.classify-pr-impact.outputs.run_backend_verification == 'true' && steps.run_backend_verification.outcome == 'failure'
+      - name: Fail for backend ${{ matrix.suite }} coverage errors
+        if: always() && needs.classify-pr-impact.outputs.run_backend_verification == 'true' && steps.run_backend_coverage.outcome == 'failure'
         run: exit 1

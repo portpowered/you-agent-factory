@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/cmd/factory/compose"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -18,7 +17,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/testutil/testdeps"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/wire"
 	"go.uber.org/zap"
 )
 
@@ -72,7 +72,7 @@ func StartFunctionalAPIServer(t *testing.T, cfg FunctionalAPIServerConfig) *Func
 		cfg.Configure(serviceCfg)
 	}
 
-	svc, err := compose.InjectFactoryService(ctx, serviceCfg)
+	svc, err := wire.InjectFactoryService(ctx, serviceCfg)
 	if err != nil {
 		cancel()
 		t.Fatalf("InjectFactoryService: %v", err)

@@ -64,7 +64,7 @@ func ComposeCore(
 	if err := runtimehost.ValidateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
-	if err := EnsureBackendScope(cfg, root.BaseLogger); err != nil {
+	if err := ensurebackendScope(cfg, root.BaseLogger); err != nil {
 		return nil, err
 	}
 	coreBuilt := false
@@ -210,14 +210,14 @@ func BuildCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core,
 	if err := runtimehost.ValidateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
-	root, err := ResolveRoot(cfg)
+	root, err := resolveRoot(cfg)
 	if err != nil {
 		return nil, err
 	}
-	if err := EnsureBackendScope(cfg, root.BaseLogger); err != nil {
+	if err := ensurebackendScope(cfg, root.BaseLogger); err != nil {
 		return nil, err
 	}
-	load, err := LoadConfig(cfg, root)
+	load, err := loadConfig(cfg, root)
 	if err != nil {
 		return nil, err
 	}

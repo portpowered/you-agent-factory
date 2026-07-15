@@ -59,6 +59,12 @@ endif
 GO_TEST_TIMEOUT ?= 300s
 GO_COVERAGE_TIMEOUT ?= 10m
 GO_COVERAGE_MIN ?= 78.3
+GO_UNIT_COVERAGE_MIN ?= $(GO_COVERAGE_MIN)
+GO_FUNCTIONAL_COVERAGE_MIN ?= 33.1
+GO_FUNCTIONAL_PACKAGE_COVERAGE_MIN ?= 80.0
+GO_FUNCTIONAL_COVERAGE_BASELINE ?= docs/internal/development/go-functional-coverage-package-baseline.txt
+GO_UNIT_COVERAGE_PROFILE ?=
+GO_FUNCTIONAL_COVERAGE_PROFILE ?=
 BACKEND_SIZE_ROOT ?= .
 PACKAGE_MAINT_ROOT ?= .
 PACKAGE_FILE_COUNT_ROOT ?= .
@@ -85,6 +91,7 @@ define run_timed_step
 	exit $$status
 endef
 
+.PHONY: test-unit-coverage test-functional-coverage
 .PHONY: mcp-contract-check
 .PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke api-package-pack-smoke contracts-validate contracts-generate contracts-check contracts-smoke cli-contract-smoke cli-manifest-generate cli-manifest-check docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend test-backend-coverage test-backend-functional test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke config-contract-smoke response-stream-stress-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check model-facade-check readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy init dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install clean
 
@@ -120,13 +127,13 @@ generate-ui-api:
 	cd ui && node ./scripts/generate-openapi-types.mjs ../api/openapi.yaml src/api/generated/openapi.ts
 
 generate-wire:
-	$(GO) generate ./cmd/factory/compose/...
+	$(GO) generate ./pkg/...
 
 wire-smoke:
 	$(MAKE) generate-wire
 	$(MAKE) generate-wire
 	node scripts/check-wire-gen-drift.js
-	$(GO) test ./cmd/factory/compose/... -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/wire/... -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 api-smoke:
 	node scripts/run-quiet-api-command.js validate:main ./api/openapi-main.yaml
@@ -253,14 +260,14 @@ test-ui-durable-session-real-backend:
 	$(MAKE) ui-durable-session-real-backend-integration-test
 
 test-backend-coverage:
-	$(MAKE) test-backend-verification
+	$(MAKE) test-unit-coverage
 
 test-backend-verification:
-	$(MAKE) test-coverage-go
+	$(MAKE) test-unit-coverage
+	$(MAKE) test-functional-coverage
 
 test-backend-functional:
-	@printf '%s\n' "Backend functional verification is merged into make test-backend-verification; rerun that target for the required PR lane."
-	$(MAKE) test-backend-verification
+	$(MAKE) test-functional-coverage
 
 long-tests:
 	@printf '%s\n' "Running opt-in long and specialty suites: managed runtime coverage + real local inference coverage"
@@ -277,7 +284,14 @@ long-tests-functional-runtime:
 	$(MAKE) pr-inference-approval
 
 test-coverage-go:
-	$(GO) run ./cmd/gocoveragecheck -min $(GO_COVERAGE_MIN) -timeout $(GO_COVERAGE_TIMEOUT)
+	@printf '%s\n' "make test-coverage-go is a compatibility alias for unit coverage; use make test-functional-coverage for the independent functional report."
+	$(MAKE) test-unit-coverage
+
+test-unit-coverage:
+	$(GO) run ./cmd/gocoveragecheck -suite unit -min $(GO_UNIT_COVERAGE_MIN) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_UNIT_COVERAGE_PROFILE),-profile $(GO_UNIT_COVERAGE_PROFILE),)
+
+test-functional-coverage:
+	$(GO) run ./cmd/gocoveragecheck -suite functional -min $(GO_FUNCTIONAL_COVERAGE_MIN) -package-min $(GO_FUNCTIONAL_PACKAGE_COVERAGE_MIN) -package-baseline $(GO_FUNCTIONAL_COVERAGE_BASELINE) -timeout $(GO_COVERAGE_TIMEOUT) $(if $(GO_FUNCTIONAL_COVERAGE_PROFILE),-profile $(GO_FUNCTIONAL_COVERAGE_PROFILE),)
 
 script-timeout-companion-smoke-100:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) ./tests/functional/providers -run $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TEST) -count=$(SCRIPT_TIMEOUT_COMPANION_SMOKE_COUNT) -timeout $(SCRIPT_TIMEOUT_COMPANION_SMOKE_TIMEOUT)
@@ -367,11 +381,12 @@ run-concurrent-ui-verification-lanes:
 	./scripts/ci/run-concurrent-ui-verification-lanes.sh
 
 verify-tests:
-	@printf '%s\n' "Running required CI-equivalent test lanes: release surface smoke + built-CLI S24 acceptance + concurrent UI coverage/browser integration + backend verification"
+	@printf '%s\n' "Running required CI-equivalent test lanes: release surface smoke + built-CLI S24 acceptance + concurrent UI coverage/browser integration + independent backend unit and functional coverage"
 	$(call run_verification_step,release-surface-smoke,Release surface smoke lane)
 	$(call run_verification_step,test-built-cli-acceptance,Built-CLI S24 acceptance lane)
 	$(call run_verification_step,run-concurrent-ui-verification-lanes,Concurrent UI Coverage + UI Browser Integration lanes)
-	$(call run_verification_step,test-backend-verification,Backend Verification lane)
+	$(call run_verification_step,test-unit-coverage,Backend Unit Coverage lane)
+	$(call run_verification_step,test-functional-coverage,Backend Functional Coverage lane)
 
 verify:
 	@printf '%s\n' "make verify is a compatibility alias for the canonical pull-request tier; prefer make verify-pr"
@@ -407,7 +422,8 @@ ci-verify-tests: ci-verify-build-contracts
 	$(MAKE) release-surface-smoke
 	$(MAKE) test-built-cli-acceptance
 	$(MAKE) run-concurrent-ui-verification-lanes
-	$(MAKE) test-backend-verification
+	$(MAKE) test-unit-coverage
+	$(MAKE) test-functional-coverage
 
 release:
 	$(GO) run ./cmd/releaseprep -version $(VERSION)

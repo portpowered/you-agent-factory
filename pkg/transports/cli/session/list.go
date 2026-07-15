@@ -15,6 +15,7 @@ import (
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -22,6 +23,7 @@ const listRequestTimeout = 10 * time.Second
 
 // ListConfig holds parameters for the session list command.
 type ListConfig struct {
+	Server        string
 	Port          int
 	Scope         string
 	JSON          bool
@@ -104,7 +106,10 @@ func scopeLabel(scope *factoryapi.FactorySessionListScope) string {
 }
 
 func fetchLiveSessions(cfg ListConfig) ([]fse.LiveSessionSummary, factoryapi.ListFactorySessionsResponse, error) {
-	endpoint := listEndpoint(cfg)
+	endpoint, err := listEndpoint(cfg)
+	if err != nil {
+		return nil, factoryapi.ListFactorySessionsResponse{}, fmt.Errorf("resolve factory sessions endpoint: %w", err)
+	}
 	clidiag.Printf(
 		cfg.Diagnostics,
 		cfg.Verbose,
@@ -171,12 +176,24 @@ func fetchLiveSessions(cfg ListConfig) ([]fse.LiveSessionSummary, factoryapi.Lis
 	return liveSessions, result, nil
 }
 
-func listEndpoint(cfg ListConfig) url.URL {
-	return url.URL{
-		Scheme: "http",
-		Host:   fmt.Sprintf("localhost:%d", cfg.Port),
-		Path:   "/factory-sessions",
+func listEndpoint(cfg ListConfig) (url.URL, error) {
+	if strings.TrimSpace(cfg.Server) == "" {
+		return url.URL{
+			Scheme: "http",
+			Host:   fmt.Sprintf("localhost:%d", cfg.Port),
+			Path:   "/factory-sessions",
+		}, nil
 	}
+
+	endpointURL, err := cliserver.RequestURL(cfg.Server, "/factory-sessions")
+	if err != nil {
+		return url.URL{}, err
+	}
+	parsed, err := url.Parse(endpointURL)
+	if err != nil {
+		return url.URL{}, fmt.Errorf("parse session list endpoint: %w", err)
+	}
+	return *parsed, nil
 }
 
 func defaultMarker(isDefault bool) string {

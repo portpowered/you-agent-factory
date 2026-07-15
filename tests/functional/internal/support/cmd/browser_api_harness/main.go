@@ -13,13 +13,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/portpowered/infinite-you/cmd/factory/compose"
 	"github.com/portpowered/infinite-you/pkg/config"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/service"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/wire"
 	"go.uber.org/zap"
 )
 
@@ -156,7 +156,7 @@ func startFactoryService(
 		},
 	}
 
-	svc, err := compose.InjectFactoryService(ctx, serviceCfg)
+	svc, err := wire.InjectFactoryService(ctx, serviceCfg)
 	if err != nil {
 		return nil, nil, nil, err
 	}
