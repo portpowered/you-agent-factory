@@ -271,6 +271,15 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   Keep their generated stable-ID lists source-labeled and disjoint; `Check` must
   report the affected stable IDs for drift, and generation must reject either
   family when its IDs appear in the wrong classification source.
+- Whole-production-tree CLI boundary validation lives in
+  `pkg/transports/cli/clicontract`. `CheckProduction` joins the read-only
+  `commandidentity.Walk` inventory with `contracts/cli/commands.json`, approved
+  callable entries from `contracts/cli/deprecated.json`, the separately authored
+  compatibility metadata in `contracts/cli/deprecated-commands.json`, and every
+  embedded generated family manifest. Keep this check free of command execution,
+  services, and network access; preserve full lifecycle and input/completion
+  fields in `climanifest` so generated freshness comparisons cannot silently
+  discard authored metadata before validation.
 - Workflow/MCP handwritten handler binding lives in
   `pkg/transports/cli/commandregistry/workflowmcp`. Keep canonical MCP and
   workflow-compatibility registries separate, verify each against its own
@@ -343,6 +352,13 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `TestProductionManifestParsingParity_WorkFamily`,
   `TestProductionManifestOutputModeParity_WorkFamily`) using the shared-root helpers
   above; `WorkFamilyBindings.FlagUsages` bridges handwritten local flag help text.
+- Whole-production CLI closure is checked by `pkg/transports/cli/clicontract`
+  and exposed through `cmd/clicontractsmoke` / `make cli-contract-smoke`.
+  Keep deliberate smoke violations snapshot-only: they must use the production
+  validator and diagnostics without executing commands, invoking services,
+  mutating Cobra state, or requiring network access. The smoke target also runs
+  every `climanifestparity` package so generated and legacy trees stay
+  independently constructible with behavior parity.
 - Models-family manifest parity for `you.models` and list/inspect/invoke/pull leaves lives in
   `pkg/transports/cli/climanifestparity` (`CompareModelsHelpIdentity`,
   `TestProductionManifestHelpIdentityParity_ModelsFamily`,

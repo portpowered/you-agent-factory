@@ -46,8 +46,8 @@ func newLegacyRootCommandWithOptions(options RootCommandOptions) *cobra.Command 
 	factoryConfigInit := productionFactoryConfigInitCommands(globals, diagnostics, options)
 	docsCmd := newDocsCommand(diagnostics)
 	modelsCmd := newModelsCommand(globals, diagnostics, operatorDefaults, options)
-	mcpCmd, workflowCmd := newProductionWorkflowMCPCommands(globals, diagnostics, options)
-	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, productionSessionCommand(globals, diagnostics, options), factoryConfigInit, docsCmd, modelsCmd, mcpCmd, workflowCmd)...)
+	b12 := newB12ProductionFamilies(globals, diagnostics, operatorDefaults, options)
+	root.AddCommand(productionRootSubcommands(globals, diagnostics, factoryConfigInit, docsCmd, modelsCmd, b12)...)
 	return root
 }
 
@@ -137,18 +137,44 @@ func newRootCommandWithGeneratedRepresentativeFamily(options RootCommandOptions)
 		panic(fmt.Sprintf("build representative family command: %v", err))
 	}
 
-	session := productionSessionCommand(globals, diagnostics, options)
-
 	factoryConfigInit := productionFactoryConfigInitCommands(globals, diagnostics, options)
 	docsCmd, modelsCmd, err := newProductionModelsDocsCommands(globals, diagnostics, operatorDefaults, options)
 	if err != nil {
 		panic(fmt.Sprintf("build models/docs family command: %v", err))
 	}
-	mcpCmd, workflowCmd := newProductionWorkflowMCPCommands(globals, diagnostics, options)
+	b12 := newB12ProductionFamilies(globals, diagnostics, operatorDefaults, options)
 
 	root := components.Root
-	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, session, factoryConfigInit, docsCmd, modelsCmd, mcpCmd, workflowCmd)...)
+	root.AddCommand(productionRootSubcommands(globals, diagnostics, factoryConfigInit, docsCmd, modelsCmd, b12)...)
 	return root
+}
+
+// b12ProductionFamilies is the one shared production-root fan-in for the
+// session, workflow/MCP, and run/submit migrations. Each field is constructed
+// once through its family-local generated/legacy cutover seam.
+type b12ProductionFamilies struct {
+	Session  *cobra.Command
+	MCP      *cobra.Command
+	Workflow *cobra.Command
+	Run      *cobra.Command
+	Submit   *cobra.Command
+}
+
+func newB12ProductionFamilies(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	operatorDefaults *cliOperatorDefaultsOptions,
+	options RootCommandOptions,
+) b12ProductionFamilies {
+	mcp, workflow := newProductionWorkflowMCPCommands(globals, diagnostics, options)
+	runSubmit := productionRunSubmitCommands(globals, diagnostics, operatorDefaults, options)
+	return b12ProductionFamilies{
+		Session:  productionSessionCommand(globals, diagnostics, options),
+		MCP:      mcp,
+		Workflow: workflow,
+		Run:      runSubmit.Run,
+		Submit:   runSubmit.Submit,
+	}
 }
 
 func productionSessionCommand(
@@ -173,28 +199,23 @@ func productionSessionCommand(
 func productionRootSubcommands(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
-	operatorDefaults *cliOperatorDefaultsOptions,
-	options RootCommandOptions,
-	session *cobra.Command,
 	factoryConfigInit factoryConfigInitProductionCommands,
 	docsCmd *cobra.Command,
 	modelsCmd *cobra.Command,
-	mcpCmd *cobra.Command,
-	workflowCmd *cobra.Command,
+	b12 b12ProductionFamilies,
 ) []*cobra.Command {
-	runSubmit := productionRunSubmitCommands(globals, diagnostics, operatorDefaults, options)
 	return []*cobra.Command{
 		docsCmd,
 		factoryConfigInit.Config,
 		factoryConfigInit.Factory,
 		factoryConfigInit.Init,
-		mcpCmd,
+		b12.MCP,
 		modelsCmd,
-		runSubmit.Run,
-		runSubmit.Submit,
-		session,
+		b12.Run,
+		b12.Submit,
+		b12.Session,
 		productionWorkCommand(globals, diagnostics),
-		workflowCmd,
+		b12.Workflow,
 	}
 }
 

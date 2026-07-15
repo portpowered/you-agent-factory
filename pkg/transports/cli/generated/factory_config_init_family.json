@@ -20,6 +20,12 @@
           "you config init"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.config",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": false,
       "usage": {
@@ -31,79 +37,139 @@
           "id": "you.config.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.config.flag.default-worker-model": {
           "id": "you.config.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.config.flag.default-worker-model-provider": {
           "id": "you.config.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.config.flag.json": {
           "id": "you.config.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.config.flag.server": {
           "id": "you.config.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.config.flag.verbose": {
           "id": "you.config.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -136,6 +202,12 @@
           "you config init"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.config.init",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -153,6 +225,8 @@
           "minCardinality": 0,
           "maxCardinality": -1,
           "variadic": true,
+          "enum": [],
+          "pattern": "",
           "doubleDash": "terminates-flags",
           "completion": "none",
           "channels": [
@@ -165,79 +239,139 @@
           "id": "you.config.init.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.config.init.flag.default-worker-model": {
           "id": "you.config.init.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.config.init.flag.default-worker-model-provider": {
           "id": "you.config.init.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.config.init.flag.json": {
           "id": "you.config.init.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.config.init.flag.server": {
           "id": "you.config.init.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.config.init.flag.verbose": {
           "id": "you.config.init.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.config.init.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -331,6 +465,12 @@
           "you factory list"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": false,
       "usage": {
@@ -342,79 +482,139 @@
           "id": "you.factory.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.flag.default-worker-model": {
           "id": "you.factory.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.flag.default-worker-model-provider": {
           "id": "you.factory.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.flag.json": {
           "id": "you.factory.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.flag.server": {
           "id": "you.factory.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.flag.verbose": {
           "id": "you.factory.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -449,6 +649,12 @@
           "you factory config expand ./factory.json"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.config",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": false,
       "usage": {
@@ -460,79 +666,139 @@
           "id": "you.factory.config.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.flag.default-worker-model": {
           "id": "you.factory.config.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.flag.default-worker-model-provider": {
           "id": "you.factory.config.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.flag.json": {
           "id": "you.factory.config.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.flag.server": {
           "id": "you.factory.config.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.flag.verbose": {
           "id": "you.factory.config.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -565,6 +831,12 @@
           "you factory config expand"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.config.expand",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -581,6 +853,8 @@
           "minCardinality": 1,
           "maxCardinality": 1,
           "variadic": false,
+          "enum": [],
+          "pattern": "",
           "doubleDash": "terminates-flags",
           "completion": "none",
           "channels": [
@@ -593,79 +867,139 @@
           "id": "you.factory.config.expand.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.expand.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.expand.flag.default-worker-model": {
           "id": "you.factory.config.expand.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.expand.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.expand.flag.default-worker-model-provider": {
           "id": "you.factory.config.expand.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.expand.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.expand.flag.json": {
           "id": "you.factory.config.expand.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.expand.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.expand.flag.server": {
           "id": "you.factory.config.expand.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.expand.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.expand.flag.verbose": {
           "id": "you.factory.config.expand.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.expand.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -752,6 +1086,12 @@
           "you factory config flatten"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.config.flatten",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -768,6 +1108,8 @@
           "minCardinality": 1,
           "maxCardinality": 1,
           "variadic": false,
+          "enum": [],
+          "pattern": "",
           "doubleDash": "terminates-flags",
           "completion": "none",
           "channels": [
@@ -780,79 +1122,139 @@
           "id": "you.factory.config.flatten.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flatten.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.flatten.flag.default-worker-model": {
           "id": "you.factory.config.flatten.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flatten.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.flatten.flag.default-worker-model-provider": {
           "id": "you.factory.config.flatten.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flatten.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.flatten.flag.json": {
           "id": "you.factory.config.flatten.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flatten.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.flatten.flag.server": {
           "id": "you.factory.config.flatten.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flatten.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.flatten.flag.verbose": {
           "id": "you.factory.config.flatten.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.flatten.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -941,6 +1343,12 @@
           "you --json factory config validate ./factory.json"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.config.validate",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -958,6 +1366,8 @@
           "minCardinality": 1,
           "maxCardinality": 1,
           "variadic": false,
+          "enum": [],
+          "pattern": "",
           "doubleDash": "terminates-flags",
           "completion": "none",
           "channels": [
@@ -970,79 +1380,139 @@
           "id": "you.factory.config.validate.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.validate.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.validate.flag.default-worker-model": {
           "id": "you.factory.config.validate.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.validate.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.validate.flag.default-worker-model-provider": {
           "id": "you.factory.config.validate.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.validate.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.validate.flag.json": {
           "id": "you.factory.config.validate.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.validate.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.validate.flag.server": {
           "id": "you.factory.config.validate.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.validate.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.config.validate.flag.verbose": {
           "id": "you.factory.config.validate.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.config.validate.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -1137,6 +1607,12 @@
           "you --json factory create staging --from ./factory.json"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.create",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -1154,6 +1630,8 @@
           "minCardinality": 1,
           "maxCardinality": 1,
           "variadic": false,
+          "enum": [],
+          "pattern": "",
           "doubleDash": "terminates-flags",
           "completion": "none",
           "channels": [
@@ -1166,118 +1644,208 @@
           "id": "you.factory.create.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.create.flag.default-worker-model": {
           "id": "you.factory.create.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.create.flag.default-worker-model-provider": {
           "id": "you.factory.create.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.create.flag.dir": {
           "id": "you.factory.create.flag.dir",
           "long": "dir",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "factory",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.dir",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.create.flag.from": {
           "id": "you.factory.create.flag.from",
           "long": "from",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": true,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.from",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.create.flag.json": {
           "id": "you.factory.create.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.create.flag.server": {
           "id": "you.factory.create.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.create.flag.set-current": {
           "id": "you.factory.create.flag.set-current",
           "long": "set-current",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.set-current",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.create.flag.verbose": {
           "id": "you.factory.create.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.create.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -1370,6 +1938,12 @@
           "you factory delete staging --dir my-factory"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.delete",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -1387,6 +1961,8 @@
           "minCardinality": 1,
           "maxCardinality": 1,
           "variadic": false,
+          "enum": [],
+          "pattern": "",
           "doubleDash": "terminates-flags",
           "completion": "none",
           "channels": [
@@ -1399,92 +1975,162 @@
           "id": "you.factory.delete.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.delete.flag.default-worker-model": {
           "id": "you.factory.delete.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.delete.flag.default-worker-model-provider": {
           "id": "you.factory.delete.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.delete.flag.dir": {
           "id": "you.factory.delete.flag.dir",
           "long": "dir",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "factory",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.flag.dir",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.delete.flag.json": {
           "id": "you.factory.delete.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.delete.flag.server": {
           "id": "you.factory.delete.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.delete.flag.verbose": {
           "id": "you.factory.delete.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.delete.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -1578,6 +2224,12 @@
           "you --json factory list --dir my-factory"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.list",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -1595,6 +2247,8 @@
           "minCardinality": 0,
           "maxCardinality": -1,
           "variadic": true,
+          "enum": [],
+          "pattern": "",
           "doubleDash": "terminates-flags",
           "completion": "none",
           "channels": [
@@ -1607,92 +2261,162 @@
           "id": "you.factory.list.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.list.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.list.flag.default-worker-model": {
           "id": "you.factory.list.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.list.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.list.flag.default-worker-model-provider": {
           "id": "you.factory.list.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.list.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.list.flag.dir": {
           "id": "you.factory.list.flag.dir",
           "long": "dir",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "factory",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.list.flag.dir",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.list.flag.json": {
           "id": "you.factory.list.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.list.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.list.flag.server": {
           "id": "you.factory.list.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.list.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.list.flag.verbose": {
           "id": "you.factory.list.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.list.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -1786,6 +2510,12 @@
           "you --server http://localhost:9090 --json factory query"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.query",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -1803,6 +2533,8 @@
           "minCardinality": 0,
           "maxCardinality": -1,
           "variadic": true,
+          "enum": [],
+          "pattern": "",
           "doubleDash": "terminates-flags",
           "completion": "none",
           "channels": [
@@ -1815,92 +2547,162 @@
           "id": "you.factory.query.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.query.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.query.flag.default-worker-model": {
           "id": "you.factory.query.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.query.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.query.flag.default-worker-model-provider": {
           "id": "you.factory.query.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.query.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.query.flag.json": {
           "id": "you.factory.query.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.query.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.query.flag.port": {
           "id": "you.factory.query.flag.port",
           "long": "port",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "int",
           "required": false,
           "default": "0",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "hidden"
+          "binding": "",
+          "visibility": "hidden",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.query.flag.port",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.query.flag.server": {
           "id": "you.factory.query.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.query.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.query.flag.verbose": {
           "id": "you.factory.query.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.query.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -1994,6 +2796,12 @@
           "you --json factory replace-current --session session-beta"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.replace-current",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -2005,105 +2813,185 @@
           "id": "you.factory.replace-current.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.replace-current.flag.default-worker-model": {
           "id": "you.factory.replace-current.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.replace-current.flag.default-worker-model-provider": {
           "id": "you.factory.replace-current.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.replace-current.flag.json": {
           "id": "you.factory.replace-current.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.replace-current.flag.port": {
           "id": "you.factory.replace-current.flag.port",
           "long": "port",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "int",
           "required": false,
           "default": "0",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "hidden"
+          "binding": "",
+          "visibility": "hidden",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.port",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.replace-current.flag.server": {
           "id": "you.factory.replace-current.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.replace-current.flag.session": {
           "id": "you.factory.replace-current.flag.session",
           "long": "session",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.session",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.replace-current.flag.verbose": {
           "id": "you.factory.replace-current.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.replace-current.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -2197,6 +3085,12 @@
           "you --json factory update staging --from ./factory.json"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.factory.update",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -2214,6 +3108,8 @@
           "minCardinality": 1,
           "maxCardinality": 1,
           "variadic": false,
+          "enum": [],
+          "pattern": "",
           "doubleDash": "terminates-flags",
           "completion": "none",
           "channels": [
@@ -2226,105 +3122,185 @@
           "id": "you.factory.update.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.update.flag.default-worker-model": {
           "id": "you.factory.update.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.update.flag.default-worker-model-provider": {
           "id": "you.factory.update.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.update.flag.dir": {
           "id": "you.factory.update.flag.dir",
           "long": "dir",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "factory",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.dir",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.update.flag.from": {
           "id": "you.factory.update.flag.from",
           "long": "from",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": true,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.from",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.update.flag.json": {
           "id": "you.factory.update.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.update.flag.server": {
           "id": "you.factory.update.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.factory.update.flag.verbose": {
           "id": "you.factory.update.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.factory.update.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -2418,6 +3394,12 @@
           "you init --type ralph --dir ralph-factory"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.init",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -2435,6 +3417,8 @@
           "minCardinality": 0,
           "maxCardinality": -1,
           "variadic": true,
+          "enum": [],
+          "pattern": "",
           "doubleDash": "terminates-flags",
           "completion": "none",
           "channels": [
@@ -2447,118 +3431,208 @@
           "id": "you.init.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.init.flag.default-worker-model": {
           "id": "you.init.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.init.flag.default-worker-model-provider": {
           "id": "you.init.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.init.flag.dir": {
           "id": "you.init.flag.dir",
           "long": "dir",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "factory",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.dir",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.init.flag.executor": {
           "id": "you.init.flag.executor",
           "long": "executor",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "codex",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.executor",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.init.flag.json": {
           "id": "you.init.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.init.flag.server": {
           "id": "you.init.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.init.flag.type": {
           "id": "you.init.flag.type",
           "long": "type",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "default",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.type",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.init.flag.verbose": {
           "id": "you.init.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.init.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
