@@ -72,6 +72,13 @@ envelope, ordering, and canonical time normalization. Keep safe diagnostics in
 their camel-case event encoding and prove generated OpenAPI union compatibility
 at the test boundary instead of constructing generated events in the executor.
 
+Script executors likewise publish worker-execution-owned request and response
+facts through `pkg/workers/execution`; Factory event history owns the canonical
+`SCRIPT_REQUEST` and `SCRIPT_RESPONSE` envelopes, event vocabulary, ordering,
+and time normalization. Keep resolved command arguments and bounded process
+results in the worker payload while excluding environment values and stdin;
+prove the generated OpenAPI union only at the compatibility boundary.
+
 Production command runners must remain blocking without taking lifecycle ownership
 back from `pkg/initializer`. The entrypoint should construct and start the graph
 through `pkg/root`, then let the returned application wait for its selected

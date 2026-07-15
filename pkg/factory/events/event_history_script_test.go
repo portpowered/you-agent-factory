@@ -68,22 +68,13 @@ func TestFactoryEventHistory_RecordScriptEvent_AppendsScriptBoundaryEvents(t *te
 func TestFactoryEventHistory_RecordScriptEvent_IgnoresNonScriptEvents(t *testing.T) {
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
-	history.RecordScriptEvent(factoryEvent(
-		factoryapi.FactoryEventTypeInferenceRequest,
-		"factory-event/inference-request/dispatch-script/1",
-		factoryapi.FactoryEventContext{
-			Tick:       1,
-			EventTime:  time.Unix(0, 0).UTC(),
-			DispatchId: stringPtr("dispatch-script"),
-		},
-		factoryapi.InferenceRequestEventPayload{
-			InferenceRequestId: "dispatch-script/inference-request/1",
-			Attempt:            1,
-			WorkingDirectory:   "/tmp/ignored",
-			Worktree:           "/tmp/ignored/worktree",
-			Prompt:             "ignored",
-		},
-	))
+	history.RecordScriptEvent(workerexecution.ScriptEvent{
+		ID:         "factory-event/script-request/invalid",
+		Kind:       workerexecution.ScriptEventKindRequest,
+		EventTime:  time.Unix(0, 0).UTC(),
+		DispatchID: "dispatch-script",
+		Response:   &workerexecution.ScriptResponseEventPayload{},
+	})
 
 	if events := history.Events(); len(events) != 0 {
 		t.Fatalf("event count = %d, want 0 when script recorder receives non-script event", len(events))
@@ -91,43 +82,41 @@ func TestFactoryEventHistory_RecordScriptEvent_IgnoresNonScriptEvents(t *testing
 }
 
 func recordScriptBoundaryEvents(history *FactoryEventHistory, eventTime time.Time, scriptRequestID string) {
-	context := factoryapi.FactoryEventContext{
-		Tick:       14,
+	base := workerexecution.ScriptEvent{
 		EventTime:  eventTime,
-		DispatchId: stringPtr("dispatch-script"),
-		RequestId:  stringPtr("request-script"),
-		TraceIds:   stringSlicePtr([]string{"trace-script"}),
-		WorkIds:    stringSlicePtr([]string{"work-script-1", "work-script-2"}),
+		Tick:       14,
+		DispatchID: "dispatch-script",
+		RequestID:  "request-script",
+		TraceIDs:   []string{"trace-script"},
+		WorkIDs:    []string{"work-script-1", "work-script-2"},
 	}
+	request := base
+	request.ID = "factory-event/script-request/dispatch-script/1"
+	request.Kind = workerexecution.ScriptEventKindRequest
+	request.Request = &workerexecution.ScriptRequestEventPayload{
+		ScriptRequestID: scriptRequestID,
+		DispatchID:      "dispatch-script",
+		TransitionID:    "build",
+		Attempt:         1,
+		Command:         "python",
+		Args:            []string{"main.py", "--mode", "review"},
+	}
+	history.RecordScriptEvent(request)
 
-	history.RecordScriptEvent(factoryEvent(
-		factoryapi.FactoryEventTypeScriptRequest,
-		"factory-event/script-request/dispatch-script/1",
-		context,
-		factoryapi.ScriptRequestEventPayload{
-			ScriptRequestId: scriptRequestID,
-			DispatchId:      "dispatch-script",
-			TransitionId:    "build",
-			Attempt:         1,
-			Command:         "python",
-			Args:            []string{"main.py", "--mode", "review"},
-		},
-	))
-	history.RecordScriptEvent(factoryEvent(
-		factoryapi.FactoryEventTypeScriptResponse,
-		"factory-event/script-response/dispatch-script/1",
-		context,
-		factoryapi.ScriptResponseEventPayload{
-			ScriptRequestId: scriptRequestID,
-			DispatchId:      "dispatch-script",
-			TransitionId:    "build",
-			Attempt:         1,
-			Outcome:         factoryapi.ScriptExecutionOutcomeSucceeded,
-			Stdout:          "ok",
-			Stderr:          "",
-			DurationMillis:  1250,
-		},
-	))
+	response := base
+	response.ID = "factory-event/script-response/dispatch-script/1"
+	response.Kind = workerexecution.ScriptEventKindResponse
+	response.Response = &workerexecution.ScriptResponseEventPayload{
+		ScriptRequestID: scriptRequestID,
+		DispatchID:      "dispatch-script",
+		TransitionID:    "build",
+		Attempt:         1,
+		Outcome:         workerexecution.ScriptExecutionOutcomeSucceeded,
+		Stdout:          "ok",
+		Stderr:          "",
+		DurationMillis:  1250,
+	}
+	history.RecordScriptEvent(response)
 }
 
 func assertRecordedScriptBoundaryEvents(t *testing.T, events []factoryapi.FactoryEvent) {

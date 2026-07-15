@@ -15,9 +15,7 @@ import (
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
@@ -44,8 +42,8 @@ type ScriptExecutor struct {
 	now           func() time.Time
 }
 
-// ScriptEventRecorder receives generated script-boundary events.
-type ScriptEventRecorder func(factoryapi.FactoryEvent)
+// ScriptEventRecorder receives worker-owned script-boundary facts.
+type ScriptEventRecorder func(workerexecution.ScriptEvent)
 
 // ScriptExecutorOption configures a ScriptExecutor.
 type ScriptExecutorOption func(*ScriptExecutor)
@@ -187,7 +185,7 @@ func (se *ScriptExecutor) commandRequest(request workerexecution.WorkstationExec
 	return commandReq, nil
 }
 
-func (se *ScriptExecutor) record(event factoryapi.FactoryEvent) {
+func (se *ScriptExecutor) record(event workerexecution.ScriptEvent) {
 	if se.recorder != nil {
 		se.recorder(event)
 	}
@@ -200,58 +198,58 @@ func scriptRequestID(dispatchID string, attempt int) string {
 	return fmt.Sprintf("%s/script-request/%d", dispatchID, attempt)
 }
 
-func scriptRequestEvent(req CommandRequest, attempt int, requestID string, eventTime time.Time) factoryapi.FactoryEvent {
-	payload := factoryapi.ScriptRequestEventPayload{
-		ScriptRequestId: requestID,
-		DispatchId:      req.DispatchID,
-		TransitionId:    req.TransitionID,
+func scriptRequestEvent(req CommandRequest, attempt int, requestID string, eventTime time.Time) workerexecution.ScriptEvent {
+	payload := workerexecution.ScriptRequestEventPayload{
+		ScriptRequestID: requestID,
+		DispatchID:      req.DispatchID,
+		TransitionID:    req.TransitionID,
 		Attempt:         attempt,
 		Command:         req.Command,
 		Args:            append([]string(nil), req.Args...),
 	}
-	return factoryapi.FactoryEvent{
-		SchemaVersion: factoryapi.AgentFactoryEventV1,
-		Type:          factoryapi.FactoryEventTypeScriptRequest,
-		Id:            fmt.Sprintf("%s/%s", scriptRequestEventIDPrefix, requestID),
-		Context:       scriptEventContext(req, eventTime),
-		Payload:       scriptRequestFactoryEventPayload(payload),
-	}
+	return scriptEvent(req, eventTime, workerexecution.ScriptEventKindRequest, fmt.Sprintf("%s/%s", scriptRequestEventIDPrefix, requestID), &payload, nil)
 }
 
-func scriptResponseEvent(req CommandRequest, result workerexecution.WorkResult, attempt int, requestID string, eventTime time.Time) factoryapi.FactoryEvent {
+func scriptResponseEvent(req CommandRequest, result workerexecution.WorkResult, attempt int, requestID string, eventTime time.Time) workerexecution.ScriptEvent {
 	outcome, failureType := scriptResponseOutcome(result)
-	payload := factoryapi.ScriptResponseEventPayload{
-		ScriptRequestId: requestID,
-		DispatchId:      req.DispatchID,
-		TransitionId:    req.TransitionID,
+	payload := workerexecution.ScriptResponseEventPayload{
+		ScriptRequestID: requestID,
+		DispatchID:      req.DispatchID,
+		TransitionID:    req.TransitionID,
 		Attempt:         attempt,
 		Outcome:         outcome,
 		Stdout:          scriptResponseStdout(result),
 		Stderr:          scriptResponseStderr(result),
 		DurationMillis:  result.Metrics.Duration.Milliseconds(),
-	}
-	if failureType != nil {
-		payload.FailureType = failureType
+		FailureType:     failureType,
 	}
 	payload.ExitCode = scriptResponseExitCode(result, outcome)
-	return factoryapi.FactoryEvent{
-		SchemaVersion: factoryapi.AgentFactoryEventV1,
-		Type:          factoryapi.FactoryEventTypeScriptResponse,
-		Id:            scriptResponseEventID(req.DispatchID, attempt),
-		Context:       scriptEventContext(req, eventTime),
-		Payload:       scriptResponseFactoryEventPayload(payload),
+	return scriptEvent(req, eventTime, workerexecution.ScriptEventKindResponse, scriptResponseEventID(req.DispatchID, attempt), nil, &payload)
+}
+
+func scriptEvent(req CommandRequest, eventTime time.Time, kind workerexecution.ScriptEventKind, id string, request *workerexecution.ScriptRequestEventPayload, response *workerexecution.ScriptResponseEventPayload) workerexecution.ScriptEvent {
+	return workerexecution.ScriptEvent{
+		ID:         id,
+		Kind:       kind,
+		Tick:       scriptEventTick(req.Execution),
+		EventTime:  eventTime.UTC(),
+		DispatchID: req.DispatchID,
+		RequestID:  req.Execution.RequestID,
+		TraceIDs:   scriptEventStrings(req.Execution.TraceID),
+		WorkIDs:    scriptEventStrings(req.Execution.WorkIDs...),
+		Request:    request,
+		Response:   response,
 	}
 }
 
-func scriptEventContext(req CommandRequest, eventTime time.Time) factoryapi.FactoryEventContext {
-	return factoryapi.FactoryEventContext{
-		Tick:       scriptEventTick(req.Execution),
-		EventTime:  interfaces.CanonicalEventTime(eventTime),
-		DispatchId: stringPtrIfNotEmpty(req.DispatchID),
-		RequestId:  stringPtrIfNotEmpty(req.Execution.RequestID),
-		TraceIds:   stringSlicePtr(req.Execution.TraceID),
-		WorkIds:    stringSlicePtr(req.Execution.WorkIDs...),
+func scriptEventStrings(values ...string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value != "" {
+			out = append(out, value)
+		}
 	}
+	return out
 }
 
 func scriptEventTick(metadata work.ExecutionMetadata) int {
@@ -261,22 +259,6 @@ func scriptEventTick(metadata work.ExecutionMetadata) int {
 	return metadata.DispatchCreatedTick
 }
 
-func scriptRequestFactoryEventPayload(payload factoryapi.ScriptRequestEventPayload) factoryapi.FactoryEvent_Payload {
-	var out factoryapi.FactoryEvent_Payload
-	if err := out.FromScriptRequestEventPayload(payload); err != nil {
-		panic(fmt.Sprintf("script request event payload: %v", err))
-	}
-	return out
-}
-
-func scriptResponseFactoryEventPayload(payload factoryapi.ScriptResponseEventPayload) factoryapi.FactoryEvent_Payload {
-	var out factoryapi.FactoryEvent_Payload
-	if err := out.FromScriptResponseEventPayload(payload); err != nil {
-		panic(fmt.Sprintf("script response event payload: %v", err))
-	}
-	return out
-}
-
 func scriptResponseEventID(dispatchID string, attempt int) string {
 	if dispatchID == "" {
 		return fmt.Sprintf("%s/%d", scriptResponseEventIDPrefix, attempt)
@@ -284,29 +266,29 @@ func scriptResponseEventID(dispatchID string, attempt int) string {
 	return fmt.Sprintf("%s/%s/%d", scriptResponseEventIDPrefix, dispatchID, attempt)
 }
 
-func scriptResponseOutcome(result workerexecution.WorkResult) (factoryapi.ScriptExecutionOutcome, *factoryapi.ScriptFailureType) {
+func scriptResponseOutcome(result workerexecution.WorkResult) (workerexecution.ScriptExecutionOutcome, *workerexecution.ScriptFailureType) {
 	if scriptCommandTimedOut(result) {
-		failureType := factoryapi.ScriptFailureTypeTimeout
-		return factoryapi.ScriptExecutionOutcomeTimedOut, &failureType
+		failureType := workerexecution.ScriptFailureTypeTimeout
+		return workerexecution.ScriptExecutionOutcomeTimedOut, &failureType
 	}
 	if result.Outcome == workerexecution.OutcomeFailed {
 		if command, ok := scriptCommandDiagnostic(result); ok && command.ExitCode != 0 {
-			return factoryapi.ScriptExecutionOutcomeFailedExitCode, nil
+			return workerexecution.ScriptExecutionOutcomeFailedExitCode, nil
 		}
-		failureType := factoryapi.ScriptFailureTypeProcessError
-		return factoryapi.ScriptExecutionOutcomeProcessError, &failureType
+		failureType := workerexecution.ScriptFailureTypeProcessError
+		return workerexecution.ScriptExecutionOutcomeProcessError, &failureType
 	}
-	return factoryapi.ScriptExecutionOutcomeSucceeded, nil
+	return workerexecution.ScriptExecutionOutcomeSucceeded, nil
 }
 
-func scriptResponseExitCode(result workerexecution.WorkResult, outcome factoryapi.ScriptExecutionOutcome) *int {
+func scriptResponseExitCode(result workerexecution.WorkResult, outcome workerexecution.ScriptExecutionOutcome) *int {
 	command, ok := scriptCommandDiagnostic(result)
 	if !ok {
 		return nil
 	}
 	return workerEventExitCode(
 		command.ExitCode,
-		outcome == factoryapi.ScriptExecutionOutcomeSucceeded || outcome == factoryapi.ScriptExecutionOutcomeFailedExitCode,
+		outcome == workerexecution.ScriptExecutionOutcomeSucceeded || outcome == workerexecution.ScriptExecutionOutcomeFailedExitCode,
 		includeZeroWorkerEventExitCode,
 	)
 }

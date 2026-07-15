@@ -467,14 +467,43 @@ func (h *FactoryEventHistory) RecordModelEvent(event factoryapi.FactoryEvent) {
 	h.appendGenerated(event)
 }
 
-// RecordScriptEvent appends a script-boundary event to the same canonical
-// history used for dispatch and replay events.
-func (h *FactoryEventHistory) RecordScriptEvent(event factoryapi.FactoryEvent) {
-	if h == nil || !isScriptEventType(event.Type) {
+// RecordScriptEvent appends worker-owned script facts to the canonical history
+// while Factory owns the envelope, vocabulary, and ordering.
+func (h *FactoryEventHistory) RecordScriptEvent(event workerexecution.ScriptEvent) {
+	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
 		return
 	}
-	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
-	h.appendGenerated(event)
+	eventType, payload := scriptFactoryEventPayload(event)
+	if eventType == "" || payload == nil {
+		return
+	}
+	h.appendEvent(domainFactoryEvent(
+		eventType,
+		event.ID,
+		interfaces.FactoryEventContext{
+			Tick:       event.Tick,
+			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
+			DispatchID: stringPtrIfNotEmpty(event.DispatchID),
+			RequestID:  stringPtrIfNotEmpty(event.RequestID),
+			TraceIDs:   stringSlicePtr(event.TraceIDs),
+			WorkIDs:    stringSlicePtr(event.WorkIDs),
+		},
+		payload,
+	))
+}
+
+func scriptFactoryEventPayload(event workerexecution.ScriptEvent) (interfaces.FactoryEventType, any) {
+	switch event.Kind {
+	case workerexecution.ScriptEventKindRequest:
+		if event.Request != nil && event.Response == nil {
+			return interfaces.FactoryEventTypeScriptRequest, *event.Request
+		}
+	case workerexecution.ScriptEventKindResponse:
+		if event.Response != nil && event.Request == nil {
+			return interfaces.FactoryEventTypeScriptResponse, *event.Response
+		}
+	}
+	return "", nil
 }
 
 // RecordAgentRunEvent appends an agent-run boundary event to the same
@@ -824,15 +853,6 @@ func isInferenceEventType(eventType factoryapi.FactoryEventType) bool {
 func isModelEventType(eventType factoryapi.FactoryEventType) bool {
 	switch eventType {
 	case factoryapi.FactoryEventTypeModelRequest, factoryapi.FactoryEventTypeModelResponse:
-		return true
-	default:
-		return false
-	}
-}
-
-func isScriptEventType(eventType factoryapi.FactoryEventType) bool {
-	switch eventType {
-	case factoryapi.FactoryEventTypeScriptRequest, factoryapi.FactoryEventTypeScriptResponse:
 		return true
 	default:
 		return false

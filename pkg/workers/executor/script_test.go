@@ -17,7 +17,6 @@ import (
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
@@ -336,7 +335,7 @@ func TestScriptExecutor_SharedCommandRunnerReceivesResolvedDispatchRequest(t *te
 func TestScriptExecutor_EmitsScriptRequestEventBeforeCommandRunner(t *testing.T) {
 	localZone := time.FixedZone("Script/Local", -4*60*60)
 	order := make([]string, 0, 3)
-	recorded := make([]factoryapi.FactoryEvent, 0, 2)
+	recorded := make([]workerexecution.ScriptEvent, 0, 2)
 	executor := newRecordedScriptExecutor(
 		commandRunnerFunc(func(_ context.Context, req CommandRequest) (CommandResult, error) {
 			order = append(order, "run")
@@ -345,7 +344,7 @@ func TestScriptExecutor_EmitsScriptRequestEventBeforeCommandRunner(t *testing.T)
 			}
 			return CommandResult{Stdout: []byte("ok")}, nil
 		}),
-		func(event factoryapi.FactoryEvent) {
+		func(event workerexecution.ScriptEvent) {
 			order = append(order, "record")
 			recorded = append(recorded, event)
 		},
@@ -370,10 +369,10 @@ func TestScriptExecutor_EmitsScriptRequestEventBeforeCommandRunner(t *testing.T)
 		t.Fatalf("recorded events = %d, want request and response", len(recorded))
 	}
 	assertScriptRequestEvent(t, recorded[0])
-	if recorded[1].Type != factoryapi.FactoryEventTypeScriptResponse {
-		t.Fatalf("second event type = %s, want %s", recorded[1].Type, factoryapi.FactoryEventTypeScriptResponse)
+	if recorded[1].Kind != workerexecution.ScriptEventKindResponse {
+		t.Fatalf("second event kind = %s, want %s", recorded[1].Kind, workerexecution.ScriptEventKindResponse)
 	}
-	if got := recorded[0].Context.EventTime.Format(time.RFC3339); got != "2026-04-19T12:00:00Z" {
+	if got := recorded[0].EventTime.Format(time.RFC3339); got != "2026-04-19T12:00:00Z" {
 		t.Fatalf("request eventTime = %q, want UTC timestamp", got)
 	}
 }
@@ -381,10 +380,10 @@ func TestScriptExecutor_EmitsScriptRequestEventBeforeCommandRunner(t *testing.T)
 func TestScriptExecutor_EmitsScriptResponseEventForCommandOutcomes(t *testing.T) {
 	for _, tc := range scriptResponseOutcomeCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			recorded := make([]factoryapi.FactoryEvent, 0, 2)
+			recorded := make([]workerexecution.ScriptEvent, 0, 2)
 			result := executeRecordedScript(t, newRecordedScriptExecutor(
 				tc.runner,
-				func(event factoryapi.FactoryEvent) {
+				func(event workerexecution.ScriptEvent) {
 					recorded = append(recorded, event)
 				},
 			))
@@ -399,11 +398,11 @@ func TestScriptExecutor_EmitsScriptResponseEventForCommandOutcomes(t *testing.T)
 			}
 
 			response := recorded[1]
-			if response.Type != factoryapi.FactoryEventTypeScriptResponse {
-				t.Fatalf("response event type = %s, want %s", response.Type, factoryapi.FactoryEventTypeScriptResponse)
+			if response.Kind != workerexecution.ScriptEventKindResponse {
+				t.Fatalf("response event kind = %s, want %s", response.Kind, workerexecution.ScriptEventKindResponse)
 			}
-			if response.Id != "factory-event/script-response/dispatch-script/1" {
-				t.Fatalf("response event id = %q, want stable response id", response.Id)
+			if response.ID != "factory-event/script-response/dispatch-script/1" {
+				t.Fatalf("response event id = %q, want stable response id", response.ID)
 			}
 			assertScriptResponsePayload(t, response, tc.wantOutcome, tc.wantFailure, tc.wantExitCode, tc.wantStdout, tc.wantStderr)
 		})
@@ -413,8 +412,8 @@ func TestScriptExecutor_EmitsScriptResponseEventForCommandOutcomes(t *testing.T)
 type scriptResponseOutcomeCase struct {
 	name          string
 	runner        CommandRunner
-	wantOutcome   factoryapi.ScriptExecutionOutcome
-	wantFailure   *factoryapi.ScriptFailureType
+	wantOutcome   workerexecution.ScriptExecutionOutcome
+	wantFailure   *workerexecution.ScriptFailureType
 	wantExitCode  *int
 	wantStdout    string
 	wantStderr    string
@@ -423,8 +422,8 @@ type scriptResponseOutcomeCase struct {
 }
 
 func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
-	timedOut := factoryapi.ScriptFailureTypeTimeout
-	processError := factoryapi.ScriptFailureTypeProcessError
+	timedOut := workerexecution.ScriptFailureTypeTimeout
+	processError := workerexecution.ScriptFailureTypeProcessError
 
 	return []scriptResponseOutcomeCase{
 		{
@@ -432,7 +431,7 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			runner: fixedCommandRunner{
 				stdout: []byte("script ok\n"),
 			},
-			wantOutcome:  factoryapi.ScriptExecutionOutcomeSucceeded,
+			wantOutcome:  workerexecution.ScriptExecutionOutcomeSucceeded,
 			wantExitCode: intPtr(0),
 			wantStdout:   "script ok\n",
 			wantResult:   workerexecution.OutcomeAccepted,
@@ -444,7 +443,7 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 				stderr:   []byte("boom\n"),
 				exitCode: 17,
 			},
-			wantOutcome:   factoryapi.ScriptExecutionOutcomeFailedExitCode,
+			wantOutcome:   workerexecution.ScriptExecutionOutcomeFailedExitCode,
 			wantExitCode:  intPtr(17),
 			wantStdout:    "before failure\n",
 			wantStderr:    "boom\n",
@@ -456,7 +455,7 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			runner: commandRunnerFunc(func(_ context.Context, _ CommandRequest) (CommandResult, error) {
 				return CommandResult{Stdout: []byte("partial stdout"), Stderr: []byte("partial stderr")}, context.DeadlineExceeded
 			}),
-			wantOutcome:   factoryapi.ScriptExecutionOutcomeTimedOut,
+			wantOutcome:   workerexecution.ScriptExecutionOutcomeTimedOut,
 			wantFailure:   &timedOut,
 			wantStdout:    "partial stdout",
 			wantStderr:    "partial stderr",
@@ -468,7 +467,7 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			runner: commandRunnerFunc(func(_ context.Context, _ CommandRequest) (CommandResult, error) {
 				return CommandResult{Stderr: []byte("exec failed")}, errors.New("exec: file not found")
 			}),
-			wantOutcome:   factoryapi.ScriptExecutionOutcomeProcessError,
+			wantOutcome:   workerexecution.ScriptExecutionOutcomeProcessError,
 			wantFailure:   &processError,
 			wantStderr:    "exec failed",
 			wantResult:    workerexecution.OutcomeFailed,
@@ -479,7 +478,7 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			runner: commandRunnerFunc(func(_ context.Context, _ CommandRequest) (CommandResult, error) {
 				return CommandResult{Stderr: []byte("exec failed"), ExitCode: 0}, errors.New("exec: file not found")
 			}),
-			wantOutcome:   factoryapi.ScriptExecutionOutcomeProcessError,
+			wantOutcome:   workerexecution.ScriptExecutionOutcomeProcessError,
 			wantFailure:   &processError,
 			wantStderr:    "exec failed",
 			wantResult:    workerexecution.OutcomeFailed,
@@ -513,7 +512,7 @@ func sharedRunnerDispatch(execution work.ExecutionMetadata) workerexecution.Work
 	)
 }
 
-func newRecordedScriptExecutor(runner CommandRunner, recorder func(factoryapi.FactoryEvent)) *ScriptExecutor {
+func newRecordedScriptExecutor(runner CommandRunner, recorder func(workerexecution.ScriptEvent)) *ScriptExecutor {
 	return &ScriptExecutor{
 		Command: "script-tool",
 		Args: []string{
@@ -878,33 +877,29 @@ func stringSliceValueForScriptTest(value *[]string) []string {
 }
 
 // pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the script request event contract together across prompt, execution, and dispatch metadata assertions.
-func assertScriptRequestEvent(t *testing.T, event factoryapi.FactoryEvent) {
+func assertScriptRequestEvent(t *testing.T, event workerexecution.ScriptEvent) {
 	t.Helper()
 
-	if event.Type != factoryapi.FactoryEventTypeScriptRequest {
-		t.Fatalf("event type = %s, want %s", event.Type, factoryapi.FactoryEventTypeScriptRequest)
+	if event.Kind != workerexecution.ScriptEventKindRequest {
+		t.Fatalf("event kind = %s, want %s", event.Kind, workerexecution.ScriptEventKindRequest)
 	}
-	if event.Id != "factory-event/script-request/dispatch-script/script-request/1" {
-		t.Fatalf("event id = %q, want stable request event id", event.Id)
+	if event.ID != "factory-event/script-request/dispatch-script/script-request/1" {
+		t.Fatalf("event id = %q, want stable request event id", event.ID)
 	}
-	if stringValueForScriptTest(event.Context.DispatchId) != "dispatch-script" ||
-		stringValueForScriptTest(event.Context.RequestId) != "request-script" {
-		t.Fatalf("event context = %#v, want dispatch/request correlation", event.Context)
+	if event.DispatchID != "dispatch-script" || event.RequestID != "request-script" {
+		t.Fatalf("event = %#v, want dispatch/request correlation", event)
 	}
-	if got := stringSliceValueForScriptTest(event.Context.TraceIds); len(got) != 1 || got[0] != "trace-script" {
+	if got := event.TraceIDs; len(got) != 1 || got[0] != "trace-script" {
 		t.Fatalf("trace IDs = %#v, want trace-script", got)
 	}
-	if got := stringSliceValueForScriptTest(event.Context.WorkIds); len(got) != 1 || got[0] != "work-script" {
+	if got := event.WorkIDs; len(got) != 1 || got[0] != "work-script" {
 		t.Fatalf("work IDs = %#v, want work-script", got)
 	}
 
-	payload, err := event.Payload.AsScriptRequestEventPayload()
-	if err != nil {
-		t.Fatalf("decode script request payload: %v", err)
-	}
-	if payload.ScriptRequestId != "dispatch-script/script-request/1" ||
-		payload.DispatchId != "dispatch-script" ||
-		payload.TransitionId != "transition-script" ||
+	payload := event.Request
+	if payload == nil || payload.ScriptRequestID != "dispatch-script/script-request/1" ||
+		payload.DispatchID != "dispatch-script" ||
+		payload.TransitionID != "transition-script" ||
 		payload.Attempt != 1 ||
 		payload.Command != "script-tool" ||
 		strings.Join(payload.Args, " ") != "--work work-script --priority high" {
@@ -917,33 +912,29 @@ func assertScriptRequestEvent(t *testing.T, event factoryapi.FactoryEvent) {
 // pkgmaintcheck:ignore-cyclomatic-complexity this helper intentionally validates the full script response payload contract in one place.
 func assertScriptResponsePayload(
 	t *testing.T,
-	event factoryapi.FactoryEvent,
-	wantOutcome factoryapi.ScriptExecutionOutcome,
-	wantFailureType *factoryapi.ScriptFailureType,
+	event workerexecution.ScriptEvent,
+	wantOutcome workerexecution.ScriptExecutionOutcome,
+	wantFailureType *workerexecution.ScriptFailureType,
 	wantExitCode *int,
 	wantStdout string,
 	wantStderr string,
 ) {
 	t.Helper()
 
-	if stringValueForScriptTest(event.Context.DispatchId) != "dispatch-script" ||
-		stringValueForScriptTest(event.Context.RequestId) != "request-script" {
-		t.Fatalf("response context = %#v, want dispatch/request correlation", event.Context)
+	if event.DispatchID != "dispatch-script" || event.RequestID != "request-script" {
+		t.Fatalf("response event = %#v, want dispatch/request correlation", event)
 	}
-	if got := stringSliceValueForScriptTest(event.Context.TraceIds); len(got) != 1 || got[0] != "trace-script" {
+	if got := event.TraceIDs; len(got) != 1 || got[0] != "trace-script" {
 		t.Fatalf("response trace IDs = %#v, want trace-script", got)
 	}
-	if got := stringSliceValueForScriptTest(event.Context.WorkIds); len(got) != 1 || got[0] != "work-script" {
+	if got := event.WorkIDs; len(got) != 1 || got[0] != "work-script" {
 		t.Fatalf("response work IDs = %#v, want work-script", got)
 	}
 
-	payload, err := event.Payload.AsScriptResponseEventPayload()
-	if err != nil {
-		t.Fatalf("decode script response payload: %v", err)
-	}
-	if payload.ScriptRequestId != "dispatch-script/script-request/1" ||
-		payload.DispatchId != "dispatch-script" ||
-		payload.TransitionId != "transition-script" ||
+	payload := event.Response
+	if payload == nil || payload.ScriptRequestID != "dispatch-script/script-request/1" ||
+		payload.DispatchID != "dispatch-script" ||
+		payload.TransitionID != "transition-script" ||
 		payload.Attempt != 1 ||
 		payload.Outcome != wantOutcome ||
 		payload.Stdout != wantStdout ||
@@ -961,7 +952,7 @@ func assertScriptResponsePayload(
 	assertEventDoesNotLeakScriptInternals(t, event)
 }
 
-func assertEventDoesNotLeakScriptInternals(t *testing.T, event factoryapi.FactoryEvent) {
+func assertEventDoesNotLeakScriptInternals(t *testing.T, event workerexecution.ScriptEvent) {
 	t.Helper()
 
 	encoded, err := json.Marshal(event)
@@ -976,7 +967,7 @@ func assertEventDoesNotLeakScriptInternals(t *testing.T, event factoryapi.Factor
 	}
 }
 
-func equalOptionalScriptFailureType(left, right *factoryapi.ScriptFailureType) bool {
+func equalOptionalScriptFailureType(left, right *workerexecution.ScriptFailureType) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}

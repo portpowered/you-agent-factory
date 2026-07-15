@@ -2326,7 +2326,7 @@ func TestLoadWorkersFromConfig_ReplayRuntimeLookupDrivesScriptExecutionWorkingDi
 
 func TestLoadWorkersFromConfig_ScriptWorkerUsesWorkstationExecutor(t *testing.T) {
 	dir := t.TempDir()
-	scriptRecorder := func(factoryapi.FactoryEvent) {}
+	scriptRecorder := func(workerexecution.ScriptEvent) {}
 
 	writeScriptWorkerAgentsMD(t, dir, "script-worker")
 	writeWorkstationAgentsMD(t, dir, "run-script")

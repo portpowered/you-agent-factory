@@ -69,6 +69,74 @@ type AgentRunResponseEventPayload struct {
 	Outcome        string          `json:"outcome"`
 }
 
+// ScriptEventKind identifies which worker-owned script boundary fact was
+// observed. Factory owns the corresponding canonical event vocabulary.
+type ScriptEventKind string
+
+const (
+	ScriptEventKindRequest  ScriptEventKind = "REQUEST"
+	ScriptEventKindResponse ScriptEventKind = "RESPONSE"
+)
+
+// ScriptExecutionOutcome is the stable result category for a script attempt.
+type ScriptExecutionOutcome string
+
+const (
+	ScriptExecutionOutcomeSucceeded      ScriptExecutionOutcome = "SUCCEEDED"
+	ScriptExecutionOutcomeFailedExitCode ScriptExecutionOutcome = "FAILED_EXIT_CODE"
+	ScriptExecutionOutcomeTimedOut       ScriptExecutionOutcome = "TIMED_OUT"
+	ScriptExecutionOutcomeProcessError   ScriptExecutionOutcome = "PROCESS_ERROR"
+)
+
+// ScriptFailureType classifies failures where no normal process exit outcome
+// is available.
+type ScriptFailureType string
+
+const (
+	ScriptFailureTypeTimeout      ScriptFailureType = "TIMEOUT"
+	ScriptFailureTypeProcessError ScriptFailureType = "PROCESS_ERROR"
+)
+
+// ScriptEvent carries worker-owned script execution facts to Factory history
+// without coupling the worker executor to a transport or Factory envelope.
+type ScriptEvent struct {
+	ID         string
+	Kind       ScriptEventKind
+	EventTime  time.Time
+	Tick       int
+	DispatchID string
+	RequestID  string
+	TraceIDs   []string
+	WorkIDs    []string
+	Request    *ScriptRequestEventPayload
+	Response   *ScriptResponseEventPayload
+}
+
+// ScriptRequestEventPayload records the concrete command boundary while
+// intentionally excluding environment values and stdin.
+type ScriptRequestEventPayload struct {
+	Args            []string `json:"args"`
+	Attempt         int      `json:"attempt"`
+	Command         string   `json:"command"`
+	DispatchID      string   `json:"dispatchId"`
+	ScriptRequestID string   `json:"scriptRequestId"`
+	TransitionID    string   `json:"transitionId"`
+}
+
+// ScriptResponseEventPayload records one script attempt outcome.
+type ScriptResponseEventPayload struct {
+	Attempt         int                    `json:"attempt"`
+	DispatchID      string                 `json:"dispatchId"`
+	DurationMillis  int64                  `json:"durationMillis"`
+	ExitCode        *int                   `json:"exitCode,omitempty"`
+	FailureType     *ScriptFailureType     `json:"failureType,omitempty"`
+	Outcome         ScriptExecutionOutcome `json:"outcome"`
+	ScriptRequestID string                 `json:"scriptRequestId"`
+	Stderr          string                 `json:"stderr"`
+	Stdout          string                 `json:"stdout"`
+	TransitionID    string                 `json:"transitionId"`
+}
+
 // DispatchResponseEventPayload is the worker-execution-owned completion
 // contract consumed by Factory event reducers. FactoryEvent context remains
 // authoritative for dispatch identity and ordering.
