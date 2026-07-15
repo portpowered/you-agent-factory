@@ -25,13 +25,7 @@ func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpti
 			"Use --session to submit to one specific live factory session instead.",
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Server = globals.server
-			cfg.JSON = globals.json
-			cfg.Output = cmd.OutOrStdout()
-			cfg.Diagnostics = diagnostics.writer(cmd)
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return submitWork(cfg)
+			return executeSubmitCommand(cmd, &cfg, globals, diagnostics)
 		},
 	}
 
@@ -42,6 +36,21 @@ func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpti
 	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
 	cmd.AddCommand(newSubmitBatchCommand(globals, diagnostics))
 	return cmd
+}
+
+func executeSubmitCommand(
+	cmd *cobra.Command,
+	cfg *submitcli.SubmitConfig,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+) error {
+	cfg.Server = globals.server
+	cfg.JSON = globals.json
+	cfg.Output = cmd.OutOrStdout()
+	cfg.Diagnostics = diagnostics.writer(cmd)
+	cfg.Verbose = diagnostics.verboseEnabled()
+	cfg.Debug = diagnostics.debug
+	return submitWork(*cfg)
 }
 
 func newSubmitBatchCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
@@ -82,13 +91,8 @@ func newSubmitBatchCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 			"  # Target a non-default live session with structured output.\n" +
 			"  " + cliBinaryName + " --server http://localhost:9090 --json submit batch --session session-beta ./batch.json",
 		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg.Server = globals.server
-			cfg.JSON = globals.json
-			cfg.Args = args
-			cfg.Verbose = diagnostics.verboseEnabled()
-			cfg.Debug = diagnostics.debug
-			return submitBatch(cfg)
+		RunE: func(_ *cobra.Command, args []string) error {
+			return executeSubmitBatchCommand(args, &cfg, globals, diagnostics)
 		},
 	}
 
@@ -97,6 +101,20 @@ func newSubmitBatchCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 	cmd.Flags().BoolVar(&cfg.DryRun, "dry-run", false, "validate input and print a summary without sending HTTP")
 	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
 	return cmd
+}
+
+func executeSubmitBatchCommand(
+	args []string,
+	cfg *submitcli.BatchConfig,
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+) error {
+	cfg.Server = globals.server
+	cfg.JSON = globals.json
+	cfg.Args = args
+	cfg.Verbose = diagnostics.verboseEnabled()
+	cfg.Debug = diagnostics.debug
+	return submitBatch(*cfg)
 }
 
 func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {

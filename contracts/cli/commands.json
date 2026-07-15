@@ -7845,7 +7845,7 @@
             }
           },
           "examples": [
-            "  # Pause the default compatibility Factory Session.\n  you session pause\n\n  # Pause one named live Factory Session.\n  you session pause session-beta\n\n  # Pause one running durable Factory Session.\n  you session pause dur-sess-js-run-n-001\n\n  # Emit API-shaped JSON for automation.\n  you --json session pause session-beta"
+            "  # Start the current Factory with explicit Work.\n  you run --work ./docs/examples/startup-work.json\n\n  # Run an existing factory once in explicit batch mode.\n  you run --dir factory --work ./docs/examples/startup-work.json\n\n  # Run a persisted named factory from any working directory.\n  you run --named @you/tts --output primary \"Read the release summary.\"\n\n  # Run a portable factory.json with a one-shot prompt (see handlingBehavior DEFAULT).\n  you run --factory ./factory.json \"Fix the lint issues\"\n\n  # Pipe invocation input via stdin (default primary-result stdout).\n  echo \"Ship the login bugfix\" | you run --named @you/goal\n\n  # Opt into live internal response-stream progress instead of primary-result-only stdout.\n  you run --named @you/goal --output response-stream \"Ship the login bugfix\""
           ],
           "visibility": "public",
           "sourceHash": "6b32edebf7ea06619c958a4723cb96eb5f7c10aa2fcc112c273bf3f809c6424c"
@@ -7860,7 +7860,7 @@
         "runnable": true,
         "usage": {
           "line": "run [invocation-input...]",
-          "example": "  # Pause the default compatibility Factory Session.\n  you session pause\n\n  # Pause one named live Factory Session.\n  you session pause session-beta\n\n  # Pause one running durable Factory Session.\n  you session pause dur-sess-js-run-n-001\n\n  # Emit API-shaped JSON for automation.\n  you --json session pause session-beta"
+          "example": "  # Start the current Factory with explicit Work.\n  you run --work ./docs/examples/startup-work.json\n\n  # Run an existing factory once in explicit batch mode.\n  you run --dir factory --work ./docs/examples/startup-work.json\n\n  # Run a persisted named factory from any working directory.\n  you run --named @you/tts --output primary \"Read the release summary.\"\n\n  # Run a portable factory.json with a one-shot prompt (see handlingBehavior DEFAULT).\n  you run --factory ./factory.json \"Fix the lint issues\"\n\n  # Pipe invocation input via stdin (default primary-result stdout).\n  echo \"Ship the login bugfix\" | you run --named @you/goal\n\n  # Opt into live internal response-stream progress instead of primary-result-only stdout.\n  you run --named @you/goal --output response-stream \"Ship the login bugfix\""
         },
         "arguments": {
           "you.run.arg.0": {

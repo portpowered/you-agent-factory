@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestgen"
 )
 
@@ -48,7 +49,8 @@ func TestRunCheckFailsOnStaleArtifact(t *testing.T) {
 
 func writeProductionManifestFixture(t *testing.T, root string) {
 	t.Helper()
-	manifest, err := os.ReadFile(filepath.Join("testdata", "production_manifest.json"))
+	repositoryRoot := testutil.MustRepoPath(t, ".")
+	manifest, err := os.ReadFile(filepath.Join(repositoryRoot, filepath.FromSlash(climanifestgen.ProductionManifestPath)))
 	if err != nil {
 		t.Fatalf("read production manifest fixture: %v", err)
 	}

@@ -18,6 +18,15 @@ primary-result behavior.
   value selects a stable sentinel, as `--with-mock-workers` does. Boolean
   no-option defaults remain restricted to `true` or `false` by
   `contracts/cli/command-manifest.schema.json`.
+- Generated run/submit metadata is embedded from
+  `pkg/transports/cli/generated/run_submit_family.json`, with stable IDs in
+  `run_submit_command_ids_gen.go`. `climanifestcobra.NewRunSubmitFamilyComponents`
+  constructs only detached `run` and `submit` roots plus the nested `submit batch`
+  leaf; `commandregistry.NewRunSubmitRegistry` attaches retained `PreRunE` and
+  `RunE` lifecycles by stable command ID. Production execution bindings are
+  assembled by `newRunSubmitHandlerRegistry` in `root_work.go`, and
+  `NewGeneratedRunSubmitFamilyCommandForParity` exposes the isolated generated
+  tree without changing production root registration before the cutover lane.
 
 ## CLI invocation output modes (primary-result, human response-stream, NDJSON)
 

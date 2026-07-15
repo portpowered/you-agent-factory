@@ -23,13 +23,15 @@ func (drift Drift) Empty() bool {
 // Check compares committed CLI family artifacts with freshly generated output.
 func Check(repositoryRoot string) (Drift, error) {
 	expected := map[string][]byte{
-		RepresentativeFamilyJSONPath:              nil,
-		WorkFamilyJSONPath:                        nil,
-		FactoryConfigInitFamilyJSONPath:           nil,
-		ModelsDocsFamilyJSONPath:                  nil,
-		RepresentativeFamilyCommandIDsPath:        representativeAndWorkCommandIDsSource(),
-		FactoryConfigInitFamilyCommandIDsPath:     factoryConfigInitCommandIDsSource(),
-		ModelsDocsFamilyCommandIDsPath:            modelsDocsCommandIDsSource(),
+		RepresentativeFamilyJSONPath:          nil,
+		WorkFamilyJSONPath:                    nil,
+		FactoryConfigInitFamilyJSONPath:       nil,
+		ModelsDocsFamilyJSONPath:              nil,
+		RepresentativeFamilyCommandIDsPath:    representativeAndWorkCommandIDsSource(),
+		FactoryConfigInitFamilyCommandIDsPath: factoryConfigInitCommandIDsSource(),
+		ModelsDocsFamilyCommandIDsPath:        modelsDocsCommandIDsSource(),
+		RunSubmitFamilyJSONPath:               nil,
+		RunSubmitFamilyCommandIDsPath:         runSubmitCommandIDsSource(),
 	}
 
 	representativePayload, err := RepresentativeFamilyArtifact(repositoryRoot)
@@ -55,6 +57,12 @@ func Check(repositoryRoot string) (Drift, error) {
 		return Drift{}, err
 	}
 	expected[ModelsDocsFamilyJSONPath] = modelsDocsPayload
+
+	runSubmitPayload, err := RunSubmitArtifact(repositoryRoot)
+	if err != nil {
+		return Drift{}, err
+	}
+	expected[RunSubmitFamilyJSONPath] = runSubmitPayload
 
 	drift := Drift{}
 	for path, want := range expected {

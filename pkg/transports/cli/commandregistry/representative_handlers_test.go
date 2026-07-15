@@ -8,9 +8,46 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	"github.com/spf13/cobra"
 )
+
+func noopRunE(*cobra.Command, []string) error { return nil }
+
+func TestRunnableRepresentativeCommandIDsFromGeneratedManifest(t *testing.T) {
+	manifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		t.Fatalf("RepresentativeFamilyManifest() error = %v", err)
+	}
+	ids, err := commandregistry.RunnableRepresentativeCommandIDs(manifest)
+	if err != nil {
+		t.Fatalf("RunnableRepresentativeCommandIDs() error = %v", err)
+	}
+	if len(ids) != 2 || ids[0] != "you" || ids[1] != "you.session.show" {
+		t.Fatalf("runnable IDs = %#v, want [you you.session.show]", ids)
+	}
+}
+
+func TestVerifyRepresentativeRunnableCoverage(t *testing.T) {
+	manifest, err := generated.RepresentativeFamilyManifest()
+	if err != nil {
+		t.Fatalf("RepresentativeFamilyManifest() error = %v", err)
+	}
+	registry := commandregistry.NewRegistry()
+	if err := registry.Register("you.session.show", noopRunE); err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+	if err := registry.VerifyRepresentativeRunnableCoverage(manifest); err == nil {
+		t.Fatal("missing root handler = nil, want error")
+	}
+	if err := registry.Register("you", noopRunE); err != nil {
+		t.Fatalf("Register(you) error = %v", err)
+	}
+	if err := registry.VerifyRepresentativeRunnableCoverage(manifest); err != nil {
+		t.Fatalf("complete coverage error = %v", err)
+	}
+}
 
 func TestNewRepresentativeRegistryRegistersContractedRunnableIDs(t *testing.T) {
 	registry, err := commandregistry.NewRepresentativeRegistry(commandregistry.RepresentativeHandlers{

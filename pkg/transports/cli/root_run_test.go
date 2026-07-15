@@ -48,6 +48,29 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+func TestGeneratedRunSubmitFamilyForParityUsesProductionHandlerBindings(t *testing.T) {
+	root, err := NewGeneratedRunSubmitFamilyCommandForParity()
+	if err != nil {
+		t.Fatalf("NewGeneratedRunSubmitFamilyCommandForParity() error = %v", err)
+	}
+	for _, path := range []struct {
+		args []string
+		name string
+	}{
+		{args: []string{"run"}, name: "run"},
+		{args: []string{"submit"}, name: "submit"},
+		{args: []string{"submit", "batch"}, name: "batch"},
+	} {
+		cmd, _, findErr := root.Find(path.args)
+		if findErr != nil {
+			t.Fatalf("Find(%v) error = %v", path.args, findErr)
+		}
+		if cmd.Name() != path.name || cmd.PreRunE == nil || cmd.RunE == nil {
+			t.Fatalf("Find(%v) = %q lifecycle=(%t,%t)", path.args, cmd.Name(), cmd.PreRunE != nil, cmd.RunE != nil)
+		}
+	}
+}
+
 func newComposedTestRootCommand(t *testing.T) *cobra.Command {
 	t.Helper()
 	return NewRootCommandWithOptions(RootCommandOptions{

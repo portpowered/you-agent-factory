@@ -14,7 +14,7 @@ const successMessage = "[agent-factory:cli-manifest-generate] CLI family metadat
 
 func main() {
 	root := flag.String("root", ".", "repository root")
-	check := flag.Bool("check", false, "verify generated representative-family artifacts are current")
+	check := flag.Bool("check", false, "verify generated CLI family artifacts are current")
 	flag.Parse()
 	os.Exit(run(*root, *check, os.Stdout, os.Stderr))
 }
