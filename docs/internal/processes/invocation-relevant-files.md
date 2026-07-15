@@ -674,12 +674,16 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   initialization is the only catalog-to-disk installation boundary. Named
   resolution in `pkg/config/layout.go` reads project-local then global disk
   state only; it does not install packages or expose compatibility JSON aliases.
-  `pkg/factory/packages/promptassets` owns schema-neutral packaged prompt
-  assembly: definitions declare package-relative `promptFile` paths, package
-  owners supply an explicit embedded `fs.FS`, and the assembler attaches exact
-  asset bytes without installing or persisting anything. Worker declarations
-  become canonical inline bodies, while workstation declarations retain
-  `promptFile` metadata for editable split-layout materialization.
+  `pkg/factory/packages/packageassets` is the shared, side-effect-free packaged
+  asset assembly entry point: package owners supply the authored `factory.json`
+  and an explicit embedded `fs.FS`, and definitions call this assembler before
+  their payload enters the catalog. It delegates prompt declarations to
+  `pkg/factory/packages/promptassets` and discovers regular UTF-8 `scripts/**`
+  assets as deterministic `SCRIPT` bundled files at matching
+  `factory/scripts/**` targets. The assembler attaches exact asset bytes but
+  does not install or persist anything. Worker prompt declarations become
+  canonical inline bodies, while workstation declarations retain `promptFile`
+  metadata for editable split-layout materialization.
   Packaged `@you/goal`
   has one `execute-goal` `AGENT_RUN` workstation with `REPEATER` behavior:
   accepted completion routes to `goal:complete`, continue/reject route back to
