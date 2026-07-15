@@ -141,7 +141,11 @@ Use this map when changing the public REST contract.
   by an authored `contracts/mcp/tools.json` tool record; retarget overlapping
   fixtures to uncontracted tools with fixture-prefixed documentation IDs when
   canonical tool title/description IDs would collide (for example
-  `valid-text-error-result.json` uses `control` with `mcp.fixture.*` IDs).
+  `valid-text-error-result.json` uses `control` with `mcp.fixture.*` IDs;
+  `valid-protocol-failures.json`, `valid-handler-binding.json`, and
+  `invalid-unknown-protocol-version.json` retarget to `list` or `read_events`
+  with fixture-prefixed documentation IDs once `validate_source` / `control` are
+  authored in `tools.json`).
   Invalid fixtures are asserted in focused
   `internal/contractvalidator` tests with path-bearing diagnostics, not in the
   default valid-only registry pass. Consolidated fixture-matrix closure lives in
@@ -152,9 +156,13 @@ Use this map when changing the public REST contract.
   is pinned to `tools-call` and `transports` to `stdio-json-rpc` for the
   supported protocol surface. `closedSchemaNode` requires explicit
   `additionalProperties` on object nodes and allows `additionalProperties: true`
-  for discovery-open maps such as `args` on `start_sync` / `start_async`; start
-  tools reuse shared `#/sharedSchemas/mcp.schema.you.factory_session.source` and
-  `wait` via `$ref` in tool input schemas.
+  for discovery-open maps such as `args` on `start_sync` / `start_async` and
+  `metadata` / `approvedPolicy` on `validate_source` / `control`; start tools
+  reuse shared `#/sharedSchemas/mcp.schema.you.factory_session.source` and
+  `wait` via `$ref` in tool input schemas. `validate_source` mirrors Factory
+  preview request/result shapes from `pkg/transports/mcp/factorysession/schemas.go`;
+  `control` mirrors lifecycle control request/response shapes with closed
+  `links` nested objects in catalog results.
 - Reusable MCP protocol components live under `contracts/mcp/protocol/`
   (`content.schema.json` documents broader MCP content kinds; `call-tool-result.schema.json`
   defines the `pinnedTextCallToolResult` envelope used by tool `result.examples`;

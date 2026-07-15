@@ -2,26 +2,25 @@
   "formatVersion": "1.0.0",
   "protocolVersion": "2024-11-05",
   "tools": {
-    "mcp.tool.you.factory_session.control": {
-      "id": "mcp.tool.you.factory_session.control",
-      "name": "you.factory_session.control",
+    "mcp.tool.you.factory_session.read_events": {
+      "id": "mcp.tool.you.factory_session.read_events",
+      "name": "you.factory_session.read_events",
       "documentation": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.control",
+        "itemId": "mcp.tool.you.factory_session.read_events",
         "documentation": {
           "title": {
-            "id": "mcp.tool.you.factory_session.control.title",
-            "canonicalEnglish": "Control Factory Session"
+            "id": "mcp.fixture.you.factory_session.handler_binding.title",
+            "canonicalEnglish": "Read Factory Session Events"
           },
           "description": {
-            "id": "mcp.tool.you.factory_session.control.description",
-            "canonicalEnglish": "Applies one durable Factory Session lifecycle control through a bound handwritten handler."
+            "id": "mcp.fixture.you.factory_session.handler_binding.description",
+            "canonicalEnglish": "Fixture-only tool record demonstrating handwritten handler binding shape."
           }
         },
         "examples": [
           {
-            "sessionId": "dur-sess-ctl-001",
-            "operation": "PAUSE"
+            "sessionId": "dur-sess-evt-001"
           }
         ],
         "visibility": "public",
@@ -29,7 +28,7 @@
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.control",
+        "itemId": "mcp.tool.you.factory_session.read_events",
         "state": "active",
         "since": "1.0.0"
       },
@@ -40,7 +39,7 @@
         "mode": "tools-call"
       },
       "handler": {
-        "id": "mcp.handler.you.factory_session.control"
+        "id": "mcp.handler.you.factory_session.read_events"
       }
     }
   }
