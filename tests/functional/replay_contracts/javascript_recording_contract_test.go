@@ -53,9 +53,13 @@ func TestJavaScriptRecordingContract_RoundTripsCompletedAndFailedSessionFacts(t 
 			}
 			history.RecordSessionLifecycleCompletion("session-recorded-js", config, 2, testCase.factoryState, testCase.failure, recordedAt.Add(2*time.Second))
 
-			artifact, err := replay.NewEventLogArtifactFromFactory(recordedAt, javascriptRecordingFactory(), nil, interfaces.ReplayDiagnostics{})
+			factorySnapshot, err := interfaces.NewFactorySnapshot(javascriptRecordingFactory())
 			if err != nil {
-				t.Fatalf("NewEventLogArtifactFromFactory: %v", err)
+				t.Fatalf("NewFactorySnapshot: %v", err)
+			}
+			artifact, err := replay.NewEventLogArtifact(recordedAt, factorySnapshot, nil, interfaces.ReplayDiagnostics{})
+			if err != nil {
+				t.Fatalf("NewEventLogArtifact: %v", err)
 			}
 			artifact.Events = append(artifact.Events, testutil.FactoryEvents(t, history.Events())...)
 			path := filepath.Join(t.TempDir(), testCase.name+".replay.json")

@@ -28,6 +28,15 @@ import (
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
 
+func mustFactorySnapshot(t testing.TB, value any) *interfaces.FactorySnapshot {
+	t.Helper()
+	snapshot, err := interfaces.NewFactorySnapshot(value)
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	return snapshot
+}
+
 func TestGeneratedFactoryFromLoadedConfig_EmbedsLoadedFactoryAndRuntimeConfig(t *testing.T) {
 	factoryDir := t.TempDir()
 	writeEmbeddedFactoryFixture(t, factoryDir)
@@ -68,9 +77,9 @@ func TestRuntimeConfigFromGeneratedFactory_RebuildsWithoutOriginalFiles(t *testi
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}
 	artifactPath := filepath.Join(t.TempDir(), "recording.replay.json")
-	artifact, err := replay.NewEventLogArtifactFromFactory(time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC), generated, nil, interfaces.ReplayDiagnostics{})
+	artifact, err := replay.NewEventLogArtifact(time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC), mustFactorySnapshot(t, generated), nil, interfaces.ReplayDiagnostics{})
 	if err != nil {
-		t.Fatalf("NewEventLogArtifactFromFactory: %v", err)
+		t.Fatalf("NewEventLogArtifact: %v", err)
 	}
 	if err := replay.Save(artifactPath, artifact); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -277,9 +286,9 @@ func loadReplayInitialProjectionFromArtifact(t *testing.T, factoryDir string, lo
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}
 	artifactPath := filepath.Join(t.TempDir(), "recording.replay.json")
-	artifact, err := replay.NewEventLogArtifactFromFactory(time.Date(2026, 4, 16, 12, 0, 0, 0, time.UTC), generated, nil, interfaces.ReplayDiagnostics{})
+	artifact, err := replay.NewEventLogArtifact(time.Date(2026, 4, 16, 12, 0, 0, 0, time.UTC), mustFactorySnapshot(t, generated), nil, interfaces.ReplayDiagnostics{})
 	if err != nil {
-		t.Fatalf("NewEventLogArtifactFromFactory: %v", err)
+		t.Fatalf("NewEventLogArtifact: %v", err)
 	}
 	if err := replay.Save(artifactPath, artifact); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -552,9 +561,9 @@ func loadGeneratedFactoryWithoutRetiredExhaustionRules(t *testing.T, factoryDir 
 func roundTripGeneratedFactoryThroughReplayArtifact(t *testing.T, factoryDir string, generated factoryapi.Factory) *replay.EmbeddedRuntimeConfig {
 	t.Helper()
 	artifactPath := filepath.Join(t.TempDir(), "guarded-loop-breaker.replay.json")
-	artifact, err := replay.NewEventLogArtifactFromFactory(time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC), generated, nil, interfaces.ReplayDiagnostics{})
+	artifact, err := replay.NewEventLogArtifact(time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC), mustFactorySnapshot(t, generated), nil, interfaces.ReplayDiagnostics{})
 	if err != nil {
-		t.Fatalf("NewEventLogArtifactFromFactory: %v", err)
+		t.Fatalf("NewEventLogArtifact: %v", err)
 	}
 	if err := replay.Save(artifactPath, artifact); err != nil {
 		t.Fatalf("Save: %v", err)

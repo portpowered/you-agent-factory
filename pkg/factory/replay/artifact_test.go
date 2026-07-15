@@ -130,7 +130,7 @@ func replayArtifactFieldsFixture(t *testing.T, recordedAt time.Time) *interfaces
 func replayArtifactFieldEvents(t *testing.T, recordedAt time.Time, generatedFactory factoryapi.Factory) []interfaces.FactoryEvent {
 	t.Helper()
 
-	runStarted, err := runStartedEventFromFactory(recordedAt, generatedFactory, replayWallClockMetadata(recordedAt), interfaces.ReplayDiagnostics{})
+	runStarted, err := runStartedEventFromSnapshot(recordedAt, mustFactorySnapshot(t, generatedFactory), replayWallClockMetadata(recordedAt), interfaces.ReplayDiagnostics{})
 	if err != nil {
 		t.Fatalf("runStartedEvent: %v", err)
 	}
@@ -621,13 +621,17 @@ func TestSave_ReplacesArtifactThroughRecoverableTempFile(t *testing.T) {
 }
 
 func minimalValidArtifact(recordedAt time.Time) *interfaces.ReplayArtifact {
-	artifact, err := NewEventLogArtifactFromFactory(recordedAt, factoryapi.Factory{
+	factorySnapshot, err := interfaces.NewFactorySnapshot(factoryapi.Factory{
 		Name:         "minimal-artifact-factory",
 		WorkTypes:    &[]factoryapi.WorkType{},
 		Resources:    &[]factoryapi.Resource{},
 		Workers:      &[]factoryapi.Worker{},
 		Workstations: &[]factoryapi.Workstation{},
-	}, nil, interfaces.ReplayDiagnostics{})
+	})
+	if err != nil {
+		panic(err)
+	}
+	artifact, err := NewEventLogArtifact(recordedAt, factorySnapshot, nil, interfaces.ReplayDiagnostics{})
 	if err != nil {
 		panic(err)
 	}

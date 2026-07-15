@@ -480,9 +480,13 @@ func newReplayArtifactFromLoadedFactory(t *testing.T, recordedAt time.Time, load
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}
-	artifact, err := replay.NewEventLogArtifactFromFactory(recordedAt, generatedFactory, nil, interfaces.ReplayDiagnostics{})
+	factorySnapshot, err := interfaces.NewFactorySnapshot(generatedFactory)
 	if err != nil {
-		t.Fatalf("NewEventLogArtifactFromFactory: %v", err)
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	artifact, err := replay.NewEventLogArtifact(recordedAt, factorySnapshot, nil, interfaces.ReplayDiagnostics{})
+	if err != nil {
+		t.Fatalf("NewEventLogArtifact: %v", err)
 	}
 	return artifact
 }

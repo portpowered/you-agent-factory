@@ -13,6 +13,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 )
 
 // GeneratedFactoryOption customizes the generated Factory payload captured for
@@ -251,6 +252,57 @@ func generatedFactoryFromSnapshot(snapshot *interfaces.FactorySnapshot) (factory
 		return factoryapi.Factory{}, fmt.Errorf("decode replay artifact factory: %w", err)
 	}
 	return generated, nil
+}
+
+func validatedFactorySnapshotFromOpenAPIJSON(data []byte) (*interfaces.FactorySnapshot, error) {
+	generated, err := config.GeneratedFactoryFromOpenAPIJSON(data)
+	if err != nil {
+		return nil, err
+	}
+	return interfaces.NewFactorySnapshot(generated)
+}
+
+func generatedRunRequestPayload(payload interfaces.RunRequestEventPayload) (factoryapi.RunRequestEventPayload, error) {
+	generatedFactory, err := generatedFactoryFromSnapshot(payload.Factory)
+	if err != nil {
+		return factoryapi.RunRequestEventPayload{}, err
+	}
+	return factoryapi.RunRequestEventPayload{
+		RecordedAt:  payload.RecordedAt,
+		Factory:     generatedFactory,
+		WallClock:   generatedWallClock(replayWallClockFromRunEvent(payload.WallClock)),
+		Diagnostics: generatedDiagnostics(replayDiagnosticsFromRunEvent(payload.Diagnostics)),
+	}, nil
+}
+
+func generatedDiagnostics(diagnostics interfaces.ReplayDiagnostics) *factoryapi.Diagnostics {
+	return &factoryapi.Diagnostics{
+		Notes:   slicePtr(diagnostics.Notes),
+		Workers: generatedWorkDiagnosticsMapPtr(diagnostics.Workers),
+	}
+}
+
+func generatedWorkDiagnosticsMapPtr(in map[string]workerdiagnostics.SafeWorkDiagnostics) *map[string]factoryapi.SafeWorkDiagnostics {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]factoryapi.SafeWorkDiagnostics, len(in))
+	for key, value := range in {
+		if converted := workerdiagnostics.GeneratedSafeWorkDiagnostics(&value); converted != nil {
+			out[key] = *converted
+		}
+	}
+	return &out
+}
+
+func generatedWallClock(wallClock *interfaces.ReplayWallClockMetadata) *factoryapi.WallClock {
+	if wallClock == nil {
+		return nil
+	}
+	return &factoryapi.WallClock{
+		StartedAt:  timePtrIfNotZero(wallClock.StartedAt),
+		FinishedAt: timePtrIfNotZero(wallClock.FinishedAt),
+	}
 }
 
 func generatedFactoryAPIFromConfig(cfg *interfaces.FactoryConfig) factoryapi.Factory {

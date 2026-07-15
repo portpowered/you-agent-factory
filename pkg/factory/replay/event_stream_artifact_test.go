@@ -50,7 +50,7 @@ func TestArtifactFromEventStream_ParsesCanonicalEventStreamAndSkipsTruncatedTail
 
 func TestArtifactFromEventStream_NormalizesLegacyCronPayloads(t *testing.T) {
 	recordedAt := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
-	artifact, err := NewEventLogArtifactFromFactory(recordedAt, factoryapi.Factory{
+	artifact, err := NewEventLogArtifact(recordedAt, mustFactorySnapshot(t, factoryapi.Factory{
 		Name: "legacy-cron-factory",
 		WorkTypes: &[]factoryapi.WorkType{{
 			Name: "task",
@@ -71,9 +71,9 @@ func TestArtifactFromEventStream_NormalizesLegacyCronPayloads(t *testing.T) {
 				State:    "complete",
 			}},
 		}},
-	}, nil, interfaces.ReplayDiagnostics{})
+	}), nil, interfaces.ReplayDiagnostics{})
 	if err != nil {
-		t.Fatalf("NewEventLogArtifactFromFactory: %v", err)
+		t.Fatalf("NewEventLogArtifact: %v", err)
 	}
 
 	stream := marshalReplayEventStream(t, artifact.Events...)
@@ -260,9 +260,9 @@ func writeReplayEventStreamFixture(t *testing.T, factoryDir string, recordedAt t
 	t.Helper()
 
 	recordedFactory := replayRecordedFactoryFixture()
-	runStarted, err := runStartedEventFromFactory(recordedAt, recordedFactory, nil, interfaces.ReplayDiagnostics{})
+	runStarted, err := runStartedEventFromSnapshot(recordedAt, mustFactorySnapshot(t, recordedFactory), nil, interfaces.ReplayDiagnostics{})
 	if err != nil {
-		t.Fatalf("runStartedEventFromFactory: %v", err)
+		t.Fatalf("runStartedEventFromSnapshot: %v", err)
 	}
 	initial, err := interfaces.NewFactoryEvent(replayInitialStructureEvent(t, recordedFactory, recordedAt))
 	if err != nil {

@@ -24,7 +24,7 @@ func testReplayArtifact(t *testing.T, events ...factoryapi.FactoryEvent) *interf
 
 	recordedAt := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
 	generatedFactory := testGeneratedFactory()
-	runStarted, err := runStartedEventFromFactory(recordedAt, generatedFactory, &interfaces.ReplayWallClockMetadata{StartedAt: recordedAt}, interfaces.ReplayDiagnostics{})
+	runStarted, err := runStartedEventFromSnapshot(recordedAt, mustFactorySnapshot(t, generatedFactory), &interfaces.ReplayWallClockMetadata{StartedAt: recordedAt}, interfaces.ReplayDiagnostics{})
 	if err != nil {
 		t.Fatalf("build run started event: %v", err)
 	}

@@ -440,7 +440,11 @@ func newRecordingArtifact(
 	if err != nil {
 		return nil, fmt.Errorf("build replay artifact config: %w", err)
 	}
-	return replay.NewEventLogArtifactFromFactory(now, generatedFactory, &interfaces.ReplayWallClockMetadata{
+	factorySnapshot, err := interfaces.NewFactorySnapshot(generatedFactory)
+	if err != nil {
+		return nil, fmt.Errorf("capture replay artifact config: %w", err)
+	}
+	return replay.NewEventLogArtifact(now, factorySnapshot, &interfaces.ReplayWallClockMetadata{
 		StartedAt: now,
 	}, interfaces.ReplayDiagnostics{})
 }

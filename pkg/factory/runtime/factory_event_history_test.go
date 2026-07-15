@@ -368,9 +368,13 @@ func assertDispatchResponseCount(t *testing.T, events []factoryapi.FactoryEvent,
 func roundTripSafeBoundaryArtifact(t *testing.T, events []factoryapi.FactoryEvent) *interfaces.ReplayArtifact {
 	t.Helper()
 	recordedAt := time.Date(2026, time.April, 21, 20, 0, 0, 0, time.UTC)
-	artifact, err := replay.NewEventLogArtifactFromFactory(recordedAt, safeBoundaryGeneratedFactory(), nil, interfaces.ReplayDiagnostics{})
+	factorySnapshot, err := interfaces.NewFactorySnapshot(safeBoundaryGeneratedFactory())
 	if err != nil {
-		t.Fatalf("NewEventLogArtifactFromFactory: %v", err)
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	artifact, err := replay.NewEventLogArtifact(recordedAt, factorySnapshot, nil, interfaces.ReplayDiagnostics{})
+	if err != nil {
+		t.Fatalf("NewEventLogArtifact: %v", err)
 	}
 	artifact.Events = append(artifact.Events, runtimeDomainReplayEvents(t, events)...)
 

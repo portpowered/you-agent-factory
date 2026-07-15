@@ -9,7 +9,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
@@ -71,19 +70,6 @@ func canonicalizeRunRequestEventPayloads(artifact *interfaces.ReplayArtifact) er
 	return nil
 }
 
-func generatedRunRequestPayload(payload interfaces.RunRequestEventPayload) (factoryapi.RunRequestEventPayload, error) {
-	generatedFactory, err := generatedFactoryFromSnapshot(payload.Factory)
-	if err != nil {
-		return factoryapi.RunRequestEventPayload{}, err
-	}
-	return factoryapi.RunRequestEventPayload{
-		RecordedAt:  payload.RecordedAt,
-		Factory:     generatedFactory,
-		WallClock:   generatedWallClock(replayWallClockFromRunEvent(payload.WallClock)),
-		Diagnostics: generatedDiagnostics(replayDiagnosticsFromRunEvent(payload.Diagnostics)),
-	}, nil
-}
-
 func encodeRunRequestEventPayload(payload interfaces.RunRequestEventPayload) (json.RawMessage, error) {
 	generated, err := generatedRunRequestPayload(payload)
 	if err != nil {
@@ -96,16 +82,12 @@ func encodeRunRequestEventPayload(payload interfaces.RunRequestEventPayload) (js
 	return encoded, nil
 }
 
-// NewEventLogArtifactFromFactory creates a replay artifact shell whose first
-// event carries the already-serialized generated Factory config contract.
-func NewEventLogArtifactFromFactory(recordedAt time.Time, generatedFactory factoryapi.Factory, wallClock *interfaces.ReplayWallClockMetadata, diagnostics interfaces.ReplayDiagnostics) (*interfaces.ReplayArtifact, error) {
-	event, err := runStartedEventFromFactory(recordedAt, generatedFactory, wallClock, diagnostics)
+// NewEventLogArtifact creates a replay artifact shell whose first event carries
+// the detached Factory-owned snapshot.
+func NewEventLogArtifact(recordedAt time.Time, factorySnapshot *interfaces.FactorySnapshot, wallClock *interfaces.ReplayWallClockMetadata, diagnostics interfaces.ReplayDiagnostics) (*interfaces.ReplayArtifact, error) {
+	event, err := runStartedEventFromSnapshot(recordedAt, factorySnapshot, wallClock, diagnostics)
 	if err != nil {
 		return nil, err
-	}
-	factorySnapshot, err := interfaces.NewFactorySnapshot(generatedFactory)
-	if err != nil {
-		return nil, fmt.Errorf("capture replay factory: %w", err)
 	}
 	artifact := &interfaces.ReplayArtifact{
 		SchemaVersion: CurrentSchemaVersion,
@@ -119,17 +101,17 @@ func NewEventLogArtifactFromFactory(recordedAt time.Time, generatedFactory facto
 	return artifact, nil
 }
 
-func runStartedEventFromFactory(recordedAt time.Time, generatedFactory factoryapi.Factory, wallClock *interfaces.ReplayWallClockMetadata, diagnostics interfaces.ReplayDiagnostics) (interfaces.FactoryEvent, error) {
+func runStartedEventFromSnapshot(recordedAt time.Time, factorySnapshot *interfaces.FactorySnapshot, wallClock *interfaces.ReplayWallClockMetadata, diagnostics interfaces.ReplayDiagnostics) (interfaces.FactoryEvent, error) {
 	if recordedAt.IsZero() {
 		recordedAt = time.Now().UTC()
 	}
-	payload := factoryapi.RunRequestEventPayload{
+	payload := interfaces.RunRequestEventPayload{
 		RecordedAt:  recordedAt,
-		Factory:     generatedFactory,
-		WallClock:   generatedWallClock(wallClock),
-		Diagnostics: generatedDiagnostics(diagnostics),
+		Factory:     factorySnapshot.Clone(),
+		WallClock:   runEventWallClock(wallClock),
+		Diagnostics: replayDiagnosticsPtr(diagnostics),
 	}
-	encodedPayload, err := json.Marshal(payload)
+	encodedPayload, err := encodeRunRequestEventPayload(payload)
 	if err != nil {
 		return interfaces.FactoryEvent{}, fmt.Errorf("encode run started event payload: %w", err)
 	}
@@ -207,13 +189,9 @@ func runStartedPayloadFromEvent(event interfaces.FactoryEvent) (interfaces.RunRe
 	if err := event.DecodePayload(&raw); err != nil {
 		return interfaces.RunRequestEventPayload{}, fmt.Errorf("decode run started event %q: %w", event.Id, err)
 	}
-	factoryBoundary, err := runStartedFactoryBoundaryFromEvent(event)
+	factorySnapshot, err := runStartedFactorySnapshotFromEvent(event)
 	if err != nil {
 		return interfaces.RunRequestEventPayload{}, err
-	}
-	factorySnapshot, err := interfaces.NewFactorySnapshot(factoryBoundary)
-	if err != nil {
-		return interfaces.RunRequestEventPayload{}, fmt.Errorf("capture run started event %q factory: %w", event.Id, err)
 	}
 	diagnostics, err := replayDiagnosticsFromRunRequestEnvelope(raw.Diagnostics)
 	if err != nil {
@@ -252,29 +230,29 @@ func replayDiagnosticsFromRunRequestEnvelope(envelope *runRequestDiagnosticsEnve
 	return diagnostics, nil
 }
 
-func runStartedFactoryBoundaryFromEvent(event interfaces.FactoryEvent) (factoryapi.Factory, error) {
+func runStartedFactorySnapshotFromEvent(event interfaces.FactoryEvent) (*interfaces.FactorySnapshot, error) {
 	payloadJSON := event.Payload
 
 	var raw struct {
 		Factory json.RawMessage `json:"factory"`
 	}
 	if err := json.Unmarshal(payloadJSON, &raw); err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("decode run started event %q payload envelope: %w", event.Id, err)
+		return nil, fmt.Errorf("decode run started event %q payload envelope: %w", event.Id, err)
 	}
 	if len(raw.Factory) == 0 {
-		return factoryapi.Factory{}, fmt.Errorf("run started event %q factory is required", event.Id)
+		return nil, fmt.Errorf("run started event %q factory is required", event.Id)
 	}
 
 	normalizedFactoryJSON, err := normalizeLegacyReplayFactoryBoundary(raw.Factory)
 	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("normalize run started event %q factory boundary: %w", event.Id, err)
+		return nil, fmt.Errorf("normalize run started event %q factory boundary: %w", event.Id, err)
 	}
 
-	factoryBoundary, err := config.GeneratedFactoryFromOpenAPIJSON(normalizedFactoryJSON)
+	factorySnapshot, err := validatedFactorySnapshotFromOpenAPIJSON(normalizedFactoryJSON)
 	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("decode run started event %q factory boundary: %w", event.Id, err)
+		return nil, fmt.Errorf("decode run started event %q factory boundary: %w", event.Id, err)
 	}
-	return factoryBoundary, nil
+	return factorySnapshot, nil
 }
 
 func normalizeLegacyReplayFactoryBoundary(data json.RawMessage) ([]byte, error) {
@@ -575,13 +553,6 @@ func restoreReplayResourceUsage(source factoryapi.Factory, target *interfaces.Fa
 	}
 }
 
-func generatedDiagnostics(diagnostics interfaces.ReplayDiagnostics) *factoryapi.Diagnostics {
-	return &factoryapi.Diagnostics{
-		Notes:   slicePtr(diagnostics.Notes),
-		Workers: generatedWorkDiagnosticsMapPtr(diagnostics.Workers),
-	}
-}
-
 func replayDiagnosticsPtr(diagnostics interfaces.ReplayDiagnostics) *interfaces.ReplayDiagnostics {
 	detached := replayDiagnosticsFromRunEvent(&diagnostics)
 	return &detached
@@ -601,29 +572,6 @@ func replayDiagnosticsFromRunEvent(diagnostics *interfaces.ReplayDiagnostics) in
 	return interfaces.ReplayDiagnostics{
 		Notes:   append([]string(nil), diagnostics.Notes...),
 		Workers: workers,
-	}
-}
-
-func generatedWorkDiagnosticsMapPtr(in map[string]workerdiagnostics.SafeWorkDiagnostics) *map[string]factoryapi.SafeWorkDiagnostics {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]factoryapi.SafeWorkDiagnostics, len(in))
-	for key, value := range in {
-		if converted := workerdiagnostics.GeneratedSafeWorkDiagnostics(&value); converted != nil {
-			out[key] = *converted
-		}
-	}
-	return &out
-}
-
-func generatedWallClock(wallClock *interfaces.ReplayWallClockMetadata) *factoryapi.WallClock {
-	if wallClock == nil {
-		return nil
-	}
-	return &factoryapi.WallClock{
-		StartedAt:  timePtrIfNotZero(wallClock.StartedAt),
-		FinishedAt: timePtrIfNotZero(wallClock.FinishedAt),
 	}
 }
 

@@ -199,9 +199,9 @@ func assertGeneratedFactoryMetadata(t *testing.T, generated factoryapi.Factory, 
 
 func assertFactoryArtifactUsesGeneratedFactoryOnly(t *testing.T, generated factoryapi.Factory) {
 	t.Helper()
-	artifact, err := replay.NewEventLogArtifactFromFactory(time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC), generated, nil, interfaces.ReplayDiagnostics{})
+	artifact, err := replay.NewEventLogArtifact(time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC), mustFactorySnapshot(t, generated), nil, interfaces.ReplayDiagnostics{})
 	if err != nil {
-		t.Fatalf("NewEventLogArtifactFromFactory: %v", err)
+		t.Fatalf("NewEventLogArtifact: %v", err)
 	}
 	data, err := replay.MarshalArtifact(artifact)
 	if err != nil {
