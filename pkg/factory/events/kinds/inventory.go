@@ -6,13 +6,13 @@ package factoryeventkinds
 import (
 	"sort"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorycontracts "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // PublicEmittableKind names one public FactoryEvent kind the runtime can append
 // to canonical factory event history today.
 type PublicEmittableKind struct {
-	Kind             factoryapi.FactoryEventType
+	Kind             factorycontracts.FactoryEventType
 	EmissionEvidence string
 }
 
@@ -27,7 +27,7 @@ type ExcludedNonPublicKind struct {
 // ContractOnlyKind names a public FactoryEventType documented in OpenAPI that
 // does not yet have a canonical runtime emission path on factory event history.
 type ContractOnlyKind struct {
-	Kind     factoryapi.FactoryEventType
+	Kind     factorycontracts.FactoryEventType
 	Evidence string
 }
 
@@ -37,35 +37,35 @@ type ContractOnlyKind struct {
 // existing runtime emission path.
 func PublicEmittableFactoryEventKinds() []PublicEmittableKind {
 	kinds := []PublicEmittableKind{
-		{Kind: factoryapi.FactoryEventTypeRunRequest, EmissionEvidence: "pkg/factory/events/event_history.go RecordRunRequest"},
-		{Kind: factoryapi.FactoryEventTypeInitialStructureRequest, EmissionEvidence: "pkg/factory/events/event_history.go RecordInitialStructure"},
-		{Kind: factoryapi.FactoryEventTypeFactoryChange, EmissionEvidence: "pkg/factory/events/event_history.go RecordFactoryChange"},
-		{Kind: factoryapi.FactoryEventTypeWorkRequest, EmissionEvidence: "pkg/factory/events/event_history.go RecordWorkRequest"},
-		{Kind: factoryapi.FactoryEventTypeRelationshipChangeRequest, EmissionEvidence: "pkg/factory/events/event_history.go RecordRelationshipChange"},
-		{Kind: factoryapi.FactoryEventTypeDispatchRequest, EmissionEvidence: "pkg/factory/events/event_history.go RecordWorkstationRequest"},
-		{Kind: factoryapi.FactoryEventTypeDispatchResponse, EmissionEvidence: "pkg/factory/events/event_history.go RecordWorkstationResponse"},
-		{Kind: factoryapi.FactoryEventTypeFactoryStateResponse, EmissionEvidence: "pkg/factory/events/event_history.go RecordFactoryStateChange"},
-		{Kind: factoryapi.FactoryEventTypeRunResponse, EmissionEvidence: "pkg/factory/events/event_history.go RecordRunResponse"},
-		{Kind: factoryapi.FactoryEventTypeWorkStateChange, EmissionEvidence: "pkg/factory/events/event_history.go RecordWorkStateChange"},
-		{Kind: factoryapi.FactoryEventTypeInferenceRequest, EmissionEvidence: "pkg/workers/provider/recording_provider.go and pkg/factory/events/event_history.go RecordInferenceEvent"},
-		{Kind: factoryapi.FactoryEventTypeInferenceResponse, EmissionEvidence: "pkg/workers/provider/recording_provider.go and pkg/factory/events/event_history.go RecordInferenceEvent"},
-		{Kind: factoryapi.FactoryEventTypeModelRequest, EmissionEvidence: "pkg/service/factory_runtime_state.go and pkg/factory/events/event_history.go RecordModelEvent"},
-		{Kind: factoryapi.FactoryEventTypeModelResponse, EmissionEvidence: "pkg/service/factory_runtime_state.go and pkg/factory/events/event_history.go RecordModelEvent"},
-		{Kind: factoryapi.FactoryEventTypeScriptRequest, EmissionEvidence: "pkg/workers/executor/script.go and pkg/factory/events/event_history.go RecordScriptEvent"},
-		{Kind: factoryapi.FactoryEventTypeScriptResponse, EmissionEvidence: "pkg/workers/executor/script.go and pkg/factory/events/event_history.go RecordScriptEvent"},
-		{Kind: factoryapi.FactoryEventTypeAgentRunResponse, EmissionEvidence: "pkg/workers/executor/agentrun/events.go and pkg/factory/events/event_history.go RecordAgentRunEvent"},
-		{Kind: factoryapi.FactoryEventTypeSessionStarted, EmissionEvidence: "pkg/factory/events/event_history_session_lifecycle.go RecordSessionStarted"},
-		{Kind: factoryapi.FactoryEventTypeSessionPaused, EmissionEvidence: "pkg/factory/events/event_history_session_lifecycle.go RecordSessionPaused"},
-		{Kind: factoryapi.FactoryEventTypeSessionResumed, EmissionEvidence: "pkg/factory/events/event_history_session_lifecycle.go RecordSessionResumed"},
-		{Kind: factoryapi.FactoryEventTypeSessionResultUpdated, EmissionEvidence: "pkg/factory/events/event_history_session_lifecycle.go RecordSessionResultUpdated"},
-		{Kind: factoryapi.FactoryEventTypeSessionCompleted, EmissionEvidence: "pkg/factory/events/event_history_session_lifecycle.go RecordSessionCompleted"},
-		{Kind: factoryapi.FactoryEventTypeSessionLifecycleControl, EmissionEvidence: "pkg/factory/events/event_history_session_lifecycle.go RecordSessionLifecycleControl"},
-		{Kind: factoryapi.FactoryEventTypeOrchestratorPhaseChanged, EmissionEvidence: "pkg/factory/events/event_history_orchestrator_progress.go RecordOrchestratorPhaseChanged"},
-		{Kind: factoryapi.FactoryEventTypeOrchestratorCheckpointWritten, EmissionEvidence: "pkg/factory/events/event_history_orchestrator_progress.go RecordOrchestratorCheckpointWritten"},
-		{Kind: factoryapi.FactoryEventTypeDispatchQueued, EmissionEvidence: "pkg/factory/events/event_history_dispatch_lifecycle.go RecordDispatchQueued"},
-		{Kind: factoryapi.FactoryEventTypeDispatchInterrupted, EmissionEvidence: "pkg/factory/events/event_history_dispatch_lifecycle.go RecordDispatchInterrupted"},
-		{Kind: factoryapi.FactoryEventTypeDispatchReconciled, EmissionEvidence: "pkg/factory/events/event_history_dispatch_lifecycle.go RecordDispatchReconciled"},
-		{Kind: factoryapi.FactoryEventTypeArtifactCreated, EmissionEvidence: "pkg/factory/events/event_history_dispatch_lifecycle.go RecordArtifactCreated"},
+		{Kind: factorycontracts.FactoryEventTypeRunRequest, EmissionEvidence: "pkg/factory/events/event_history.go RecordRunRequest"},
+		{Kind: factorycontracts.FactoryEventTypeInitialStructureRequest, EmissionEvidence: "pkg/factory/events/event_history.go RecordInitialStructure"},
+		{Kind: factorycontracts.FactoryEventTypeFactoryChange, EmissionEvidence: "pkg/factory/events/event_history.go RecordFactoryChange"},
+		{Kind: factorycontracts.FactoryEventTypeWorkRequest, EmissionEvidence: "pkg/factory/events/event_history.go RecordWorkRequest"},
+		{Kind: factorycontracts.FactoryEventTypeRelationshipChangeRequest, EmissionEvidence: "pkg/factory/events/event_history.go RecordRelationshipChange"},
+		{Kind: factorycontracts.FactoryEventTypeDispatchRequest, EmissionEvidence: "pkg/factory/events/event_history.go RecordWorkstationRequest"},
+		{Kind: factorycontracts.FactoryEventTypeDispatchResponse, EmissionEvidence: "pkg/factory/events/event_history.go RecordWorkstationResponse"},
+		{Kind: factorycontracts.FactoryEventTypeFactoryStateResponse, EmissionEvidence: "pkg/factory/events/event_history.go RecordFactoryStateChange"},
+		{Kind: factorycontracts.FactoryEventTypeRunResponse, EmissionEvidence: "pkg/factory/events/event_history.go RecordRunResponse"},
+		{Kind: factorycontracts.FactoryEventTypeWorkStateChange, EmissionEvidence: "pkg/factory/events/event_history.go RecordWorkStateChange"},
+		{Kind: factorycontracts.FactoryEventTypeInferenceRequest, EmissionEvidence: "pkg/workers/provider/recording_provider.go and pkg/factory/events/event_history.go RecordInferenceEvent"},
+		{Kind: factorycontracts.FactoryEventTypeInferenceResponse, EmissionEvidence: "pkg/workers/provider/recording_provider.go and pkg/factory/events/event_history.go RecordInferenceEvent"},
+		{Kind: factorycontracts.FactoryEventTypeModelRequest, EmissionEvidence: "pkg/service/factory_runtime_state.go and pkg/factory/events/event_history.go RecordModelEvent"},
+		{Kind: factorycontracts.FactoryEventTypeModelResponse, EmissionEvidence: "pkg/service/factory_runtime_state.go and pkg/factory/events/event_history.go RecordModelEvent"},
+		{Kind: factorycontracts.FactoryEventTypeScriptRequest, EmissionEvidence: "pkg/workers/executor/script.go and pkg/factory/events/event_history.go RecordScriptEvent"},
+		{Kind: factorycontracts.FactoryEventTypeScriptResponse, EmissionEvidence: "pkg/workers/executor/script.go and pkg/factory/events/event_history.go RecordScriptEvent"},
+		{Kind: factorycontracts.FactoryEventTypeAgentRunResponse, EmissionEvidence: "pkg/workers/executor/agentrun/events.go and pkg/factory/events/event_history.go RecordAgentRunEvent"},
+		{Kind: factorycontracts.FactoryEventTypeSessionStarted, EmissionEvidence: "pkg/factory/events/event_history_session_lifecycle.go RecordSessionStarted"},
+		{Kind: factorycontracts.FactoryEventTypeSessionPaused, EmissionEvidence: "pkg/factory/events/event_history_session_lifecycle.go RecordSessionPaused"},
+		{Kind: factorycontracts.FactoryEventTypeSessionResumed, EmissionEvidence: "pkg/factory/events/event_history_session_lifecycle.go RecordSessionResumed"},
+		{Kind: factorycontracts.FactoryEventTypeSessionResultUpdated, EmissionEvidence: "pkg/factory/events/event_history_session_lifecycle.go RecordSessionResultUpdated"},
+		{Kind: factorycontracts.FactoryEventTypeSessionCompleted, EmissionEvidence: "pkg/factory/events/event_history_session_lifecycle.go RecordSessionCompleted"},
+		{Kind: factorycontracts.FactoryEventTypeSessionLifecycleControl, EmissionEvidence: "pkg/factory/events/event_history_session_lifecycle.go RecordSessionLifecycleControl"},
+		{Kind: factorycontracts.FactoryEventTypeOrchestratorPhaseChanged, EmissionEvidence: "pkg/factory/events/event_history_orchestrator_progress.go RecordOrchestratorPhaseChanged"},
+		{Kind: factorycontracts.FactoryEventTypeOrchestratorCheckpointWritten, EmissionEvidence: "pkg/factory/events/event_history_orchestrator_progress.go RecordOrchestratorCheckpointWritten"},
+		{Kind: factorycontracts.FactoryEventTypeDispatchQueued, EmissionEvidence: "pkg/factory/events/event_history_dispatch_lifecycle.go RecordDispatchQueued"},
+		{Kind: factorycontracts.FactoryEventTypeDispatchInterrupted, EmissionEvidence: "pkg/factory/events/event_history_dispatch_lifecycle.go RecordDispatchInterrupted"},
+		{Kind: factorycontracts.FactoryEventTypeDispatchReconciled, EmissionEvidence: "pkg/factory/events/event_history_dispatch_lifecycle.go RecordDispatchReconciled"},
+		{Kind: factorycontracts.FactoryEventTypeArtifactCreated, EmissionEvidence: "pkg/factory/events/event_history_dispatch_lifecycle.go RecordArtifactCreated"},
 	}
 	sort.Slice(kinds, func(i, j int) bool {
 		return kinds[i].Kind < kinds[j].Kind
@@ -143,11 +143,11 @@ func ExcludedNonPublicFactoryEventKinds() []ExcludedNonPublicKind {
 func ContractOnlyFactoryEventKinds() []ContractOnlyKind {
 	kinds := []ContractOnlyKind{
 		{
-			Kind:     factoryapi.FactoryEventTypeJavaScriptCheckpointRef,
+			Kind:     factorycontracts.FactoryEventTypeJavaScriptCheckpointRef,
 			Evidence: "Authored OpenAPI and fixture vocabulary for JavaScript workflow checkpoint refs. Canonical durable runtime emission uses ORCHESTRATOR_CHECKPOINT_WRITTEN via pkg/factory/events/event_history_orchestrator_progress.go RecordOrchestratorCheckpointWritten; projection_consistency.go accepts JAVASCRIPT_CHECKPOINT_REF for replay compatibility only.",
 		},
 		{
-			Kind:     factoryapi.FactoryEventTypeJavaScriptPhaseChange,
+			Kind:     factorycontracts.FactoryEventTypeJavaScriptPhaseChange,
 			Evidence: "Authored OpenAPI and fixture vocabulary for JavaScript workflow phase transitions. Canonical durable runtime emission uses ORCHESTRATOR_PHASE_CHANGED via pkg/factory/events/event_history_orchestrator_progress.go RecordOrchestratorPhaseChanged; projection_consistency.go accepts JAVASCRIPT_PHASE_CHANGE for replay compatibility only.",
 		},
 	}

@@ -5,14 +5,14 @@ import (
 	"sort"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorycontracts "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"gopkg.in/yaml.v3"
 )
 
 // FactoryEventTypePayloadMappingEntry names one FactoryEventType discriminator
 // key and the OpenAPI payload schema component selected for that type.
 type FactoryEventTypePayloadMappingEntry struct {
-	EventType     factoryapi.FactoryEventType
+	EventType     factorycontracts.FactoryEventType
 	PayloadSchema string
 }
 
@@ -39,11 +39,11 @@ func ParseFactoryEventTypePayloadMapping(rawMapping map[string]string) ([]Factor
 	}
 
 	entries := make([]FactoryEventTypePayloadMappingEntry, 0, len(rawMapping))
-	seenTypes := make(map[factoryapi.FactoryEventType]struct{}, len(rawMapping))
-	seenPayloadSchemas := make(map[string]factoryapi.FactoryEventType, len(rawMapping))
+	seenTypes := make(map[factorycontracts.FactoryEventType]struct{}, len(rawMapping))
+	seenPayloadSchemas := make(map[string]factorycontracts.FactoryEventType, len(rawMapping))
 
 	for eventTypeValue, payloadRef := range rawMapping {
-		eventType := factoryapi.FactoryEventType(eventTypeValue)
+		eventType := factorycontracts.FactoryEventType(eventTypeValue)
 		if eventType == "" {
 			return nil, fmt.Errorf("factory event type payload mapping contains an empty event type key")
 		}
@@ -83,10 +83,10 @@ func ParseFactoryEventTypePayloadMapping(rawMapping map[string]string) ([]Factor
 // or a mapped payload schema is absent from the authored payload oneOf union.
 func ValidateFactoryEventTypePayloadMapping(
 	mapping []FactoryEventTypePayloadMappingEntry,
-	enumValues []factoryapi.FactoryEventType,
+	enumValues []factorycontracts.FactoryEventType,
 	payloadUnionSchemaNames []string,
 ) error {
-	mappingByType := make(map[factoryapi.FactoryEventType]FactoryEventTypePayloadMappingEntry, len(mapping))
+	mappingByType := make(map[factorycontracts.FactoryEventType]FactoryEventTypePayloadMappingEntry, len(mapping))
 	for _, entry := range mapping {
 		mappingByType[entry.EventType] = entry
 	}
@@ -96,7 +96,7 @@ func ValidateFactoryEventTypePayloadMapping(
 		unionSet[schemaName] = struct{}{}
 	}
 
-	enumSet := make(map[factoryapi.FactoryEventType]struct{}, len(enumValues))
+	enumSet := make(map[factorycontracts.FactoryEventType]struct{}, len(enumValues))
 	for _, eventType := range enumValues {
 		enumSet[eventType] = struct{}{}
 		entry, ok := mappingByType[eventType]
@@ -137,7 +137,7 @@ func parseOpenAPIComponentsSchemas(openAPIYAML []byte) (map[string]any, error) {
 	return schemas, nil
 }
 
-func parseFactoryEventTypeEnumFromSchemas(schemas map[string]any) ([]factoryapi.FactoryEventType, error) {
+func parseFactoryEventTypeEnumFromSchemas(schemas map[string]any) ([]factorycontracts.FactoryEventType, error) {
 	eventTypeSchema, ok := schemas["FactoryEventType"].(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("components.schemas.FactoryEventType is missing")
@@ -146,13 +146,13 @@ func parseFactoryEventTypeEnumFromSchemas(schemas map[string]any) ([]factoryapi.
 	if !ok {
 		return nil, fmt.Errorf("FactoryEventType.enum is missing")
 	}
-	enumValues := make([]factoryapi.FactoryEventType, 0, len(rawEnum))
+	enumValues := make([]factorycontracts.FactoryEventType, 0, len(rawEnum))
 	for index, value := range rawEnum {
 		eventType, ok := value.(string)
 		if !ok {
 			return nil, fmt.Errorf("FactoryEventType.enum[%d] = %T, want string", index, value)
 		}
-		enumValues = append(enumValues, factoryapi.FactoryEventType(eventType))
+		enumValues = append(enumValues, factorycontracts.FactoryEventType(eventType))
 	}
 	return enumValues, nil
 }
@@ -233,7 +233,7 @@ func factoryEventKindParityInputFromSchemas(schemas map[string]any) (FactoryEven
 	if err != nil {
 		return FactoryEventKindParityInput{}, err
 	}
-	openAPIMappingKinds := make([]factoryapi.FactoryEventType, 0, len(parsedMapping))
+	openAPIMappingKinds := make([]factorycontracts.FactoryEventType, 0, len(parsedMapping))
 	for _, entry := range parsedMapping {
 		openAPIMappingKinds = append(openAPIMappingKinds, entry.EventType)
 	}

@@ -5,43 +5,43 @@ import (
 	"sort"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorycontracts "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // FactoryEventKindParityDrift names kinds that differ between the public
 // runtime-emittable inventory and the OpenAPI FactoryEvent discriminator mapping.
 type FactoryEventKindParityDrift struct {
-	RuntimeOnlyKinds  []factoryapi.FactoryEventType
-	ContractOnlyKinds []factoryapi.FactoryEventType
+	RuntimeOnlyKinds  []factorycontracts.FactoryEventType
+	ContractOnlyKinds []factorycontracts.FactoryEventType
 }
 
 // FactoryEventKindParityInput carries the inventories compared by parity checks.
 type FactoryEventKindParityInput struct {
 	RuntimeKinds        []PublicEmittableKind
 	ContractOnlyKinds   []ContractOnlyKind
-	OpenAPIMappingKinds []factoryapi.FactoryEventType
+	OpenAPIMappingKinds []factorycontracts.FactoryEventType
 }
 
 // CompareFactoryEventKindParity returns drift between the runtime public inventory
 // and OpenAPI mapping keys. Contract-only kinds that are already classified with
 // evidence are not reported as unexplained contract-only drift.
 func CompareFactoryEventKindParity(input FactoryEventKindParityInput) FactoryEventKindParityDrift {
-	runtimeSet := make(map[factoryapi.FactoryEventType]struct{}, len(input.RuntimeKinds))
+	runtimeSet := make(map[factorycontracts.FactoryEventType]struct{}, len(input.RuntimeKinds))
 	for _, entry := range input.RuntimeKinds {
 		runtimeSet[entry.Kind] = struct{}{}
 	}
 
-	classifiedContractOnly := make(map[factoryapi.FactoryEventType]struct{}, len(input.ContractOnlyKinds))
+	classifiedContractOnly := make(map[factorycontracts.FactoryEventType]struct{}, len(input.ContractOnlyKinds))
 	for _, entry := range input.ContractOnlyKinds {
 		classifiedContractOnly[entry.Kind] = struct{}{}
 	}
 
-	openAPISet := make(map[factoryapi.FactoryEventType]struct{}, len(input.OpenAPIMappingKinds))
+	openAPISet := make(map[factorycontracts.FactoryEventType]struct{}, len(input.OpenAPIMappingKinds))
 	for _, kind := range input.OpenAPIMappingKinds {
 		openAPISet[kind] = struct{}{}
 	}
 
-	var runtimeOnly []factoryapi.FactoryEventType
+	var runtimeOnly []factorycontracts.FactoryEventType
 	for kind := range runtimeSet {
 		if _, ok := openAPISet[kind]; !ok {
 			runtimeOnly = append(runtimeOnly, kind)
@@ -51,7 +51,7 @@ func CompareFactoryEventKindParity(input FactoryEventKindParityInput) FactoryEve
 		return runtimeOnly[i] < runtimeOnly[j]
 	})
 
-	var contractOnly []factoryapi.FactoryEventType
+	var contractOnly []factorycontracts.FactoryEventType
 	for kind := range openAPISet {
 		if _, inRuntime := runtimeSet[kind]; inRuntime {
 			continue
@@ -109,7 +109,7 @@ func ValidateBundledFactoryEventKindParity(openAPIYAML []byte) error {
 	return ValidateFactoryEventKindParity(input)
 }
 
-func formatFactoryEventKinds(kinds []factoryapi.FactoryEventType) string {
+func formatFactoryEventKinds(kinds []factorycontracts.FactoryEventType) string {
 	names := make([]string, 0, len(kinds))
 	for _, kind := range kinds {
 		names = append(names, string(kind))

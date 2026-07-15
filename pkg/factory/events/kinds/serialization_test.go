@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	factorycontracts "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -21,7 +22,7 @@ func TestPublicEmittableFactoryEventKinds_HaveRepresentativeSerializationCoverag
 	}
 
 	for _, entry := range publicKinds {
-		event, ok := eventsByType[entry.Kind]
+		event, ok := eventsByType[factoryapi.FactoryEventType(entry.Kind)]
 		if !ok {
 			t.Fatalf("representative serialization fixture missing public emittable kind %s", entry.Kind)
 		}
@@ -53,7 +54,7 @@ func TestRoundTripFactoryEventEnvelope_NamesKindOnFailure(t *testing.T) {
 	if !ok {
 		t.Fatalf("error = %T %v, want FactoryEventSerializationError", err, err)
 	}
-	if serializationErr.Kind != factoryapi.FactoryEventTypeWorkRequest {
+	if serializationErr.Kind != factorycontracts.FactoryEventTypeWorkRequest {
 		t.Fatalf("serialization error kind = %q, want WORK_REQUEST", serializationErr.Kind)
 	}
 	if !strings.Contains(err.Error(), "WORK_REQUEST") {

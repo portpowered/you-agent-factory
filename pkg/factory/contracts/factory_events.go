@@ -7,6 +7,50 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
+// FactoryEventSchemaVersion identifies the serialized canonical event envelope.
+// The value is owned by Factory even though OpenAPI publishes the same wire value.
+type FactoryEventSchemaVersion string
+
+const FactoryEventSchemaVersionV1 FactoryEventSchemaVersion = "agent-factory.event.v1"
+
+// FactoryEventType is the canonical Factory event vocabulary. Transport
+// adapters map these stable values to generated OpenAPI enums at the edge.
+type FactoryEventType string
+
+const (
+	FactoryEventTypeAgentRunResponse              FactoryEventType = "AGENT_RUN_RESPONSE"
+	FactoryEventTypeArtifactCreated               FactoryEventType = "ARTIFACT_CREATED"
+	FactoryEventTypeDispatchInterrupted           FactoryEventType = "DISPATCH_INTERRUPTED"
+	FactoryEventTypeDispatchQueued                FactoryEventType = "DISPATCH_QUEUED"
+	FactoryEventTypeDispatchReconciled            FactoryEventType = "DISPATCH_RECONCILED"
+	FactoryEventTypeDispatchRequest               FactoryEventType = "DISPATCH_REQUEST"
+	FactoryEventTypeDispatchResponse              FactoryEventType = "DISPATCH_RESPONSE"
+	FactoryEventTypeFactoryChange                 FactoryEventType = "FACTORY_CHANGE"
+	FactoryEventTypeFactoryStateResponse          FactoryEventType = "FACTORY_STATE_RESPONSE"
+	FactoryEventTypeInferenceRequest              FactoryEventType = "INFERENCE_REQUEST"
+	FactoryEventTypeInferenceResponse             FactoryEventType = "INFERENCE_RESPONSE"
+	FactoryEventTypeInitialStructureRequest       FactoryEventType = "INITIAL_STRUCTURE_REQUEST"
+	FactoryEventTypeJavaScriptCheckpointRef       FactoryEventType = "JAVASCRIPT_CHECKPOINT_REF"
+	FactoryEventTypeJavaScriptPhaseChange         FactoryEventType = "JAVASCRIPT_PHASE_CHANGE"
+	FactoryEventTypeModelRequest                  FactoryEventType = "MODEL_REQUEST"
+	FactoryEventTypeModelResponse                 FactoryEventType = "MODEL_RESPONSE"
+	FactoryEventTypeOrchestratorCheckpointWritten FactoryEventType = "ORCHESTRATOR_CHECKPOINT_WRITTEN"
+	FactoryEventTypeOrchestratorPhaseChanged      FactoryEventType = "ORCHESTRATOR_PHASE_CHANGED"
+	FactoryEventTypeRelationshipChangeRequest     FactoryEventType = "RELATIONSHIP_CHANGE_REQUEST"
+	FactoryEventTypeRunRequest                    FactoryEventType = "RUN_REQUEST"
+	FactoryEventTypeRunResponse                   FactoryEventType = "RUN_RESPONSE"
+	FactoryEventTypeScriptRequest                 FactoryEventType = "SCRIPT_REQUEST"
+	FactoryEventTypeScriptResponse                FactoryEventType = "SCRIPT_RESPONSE"
+	FactoryEventTypeSessionCompleted              FactoryEventType = "SESSION_COMPLETED"
+	FactoryEventTypeSessionLifecycleControl       FactoryEventType = "SESSION_LIFECYCLE_CONTROL"
+	FactoryEventTypeSessionPaused                 FactoryEventType = "SESSION_PAUSED"
+	FactoryEventTypeSessionResultUpdated          FactoryEventType = "SESSION_RESULT_UPDATED"
+	FactoryEventTypeSessionResumed                FactoryEventType = "SESSION_RESUMED"
+	FactoryEventTypeSessionStarted                FactoryEventType = "SESSION_STARTED"
+	FactoryEventTypeWorkRequest                   FactoryEventType = "WORK_REQUEST"
+	FactoryEventTypeWorkStateChange               FactoryEventType = "WORK_STATE_CHANGE"
+)
+
 // FactoryEventReconnectCursor identifies the last acknowledged event for stream
 // reconnect. Clients may supply AfterEventID or AfterSequence; when both are
 // set, AfterEventID wins.

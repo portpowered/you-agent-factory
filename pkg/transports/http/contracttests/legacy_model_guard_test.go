@@ -25,7 +25,6 @@ func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 	deletedTypeNames := map[string]struct{}{
 		"FactoryEventEnvelope": {},
 		"FactoryEventContext":  {},
-		"FactoryEventType":     {},
 		"RecordedWorkRequest":  {},
 		"RecordedSubmission":   {},
 		"RecordedDispatch":     {},
@@ -33,6 +32,7 @@ func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 		"SubmissionDiagnostic": {},
 		"DispatchDiagnostic":   {},
 	}
+	canonicalFactoryEventTypeOwner := filepath.Join(moduleRoot, "pkg", "factory", "contracts", "factory_events.go")
 
 	fset := token.NewFileSet()
 	err := filepath.WalkDir(moduleRoot, func(path string, entry os.DirEntry, walkErr error) error {
@@ -68,6 +68,9 @@ func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 			}
 			for _, spec := range genDecl.Specs {
 				typeSpec := spec.(*ast.TypeSpec)
+				if typeSpec.Name.Name == "FactoryEventType" && path != canonicalFactoryEventTypeOwner {
+					t.Fatalf("%s declares FactoryEventType outside canonical Factory owner %s", path, canonicalFactoryEventTypeOwner)
+				}
 				if _, deleted := deletedTypeNames[typeSpec.Name.Name]; deleted {
 					t.Fatalf("%s declares deleted legacy replay/event type %s", path, typeSpec.Name.Name)
 				}
