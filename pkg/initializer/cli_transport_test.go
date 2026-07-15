@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/portpowered/infinite-you/cmd/factory/compose"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
@@ -71,30 +70,5 @@ func TestInitializeCLITransport_ComposesRuntimeRunnerWithoutBuildFactoryService(
 	}
 	if transport.Services.Models != transport.Host.ModelService() {
 		t.Fatal("expected CLI transport and runtime host to share one model service")
-	}
-}
-
-func TestInjectCLITransport_MatchesInitializeCLITransport(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
-
-	ctx := context.Background()
-	initCfg := &initializer.Config{Dir: dir}
-
-	direct, err := initializer.InitializeCLITransport(ctx, initCfg)
-	if err != nil {
-		t.Fatalf("InitializeCLITransport: %v", err)
-	}
-	wired, err := compose.InjectCLITransport(ctx, initCfg)
-	if err != nil {
-		t.Fatalf("InjectCLITransport: %v", err)
-	}
-	if direct.Runner() == nil || wired.Runner() == nil {
-		t.Fatal("expected runtime runners from both composition paths")
-	}
-	if direct.Services == nil || wired.Services == nil {
-		t.Fatal("expected composed domain services from both composition paths")
 	}
 }

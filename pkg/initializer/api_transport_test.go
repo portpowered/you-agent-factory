@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/cmd/factory/compose"
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
@@ -20,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
+	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 )
@@ -137,13 +137,13 @@ func TestInitializeAPITransport_ServesSessionModelAndFactoryEndpoints(t *testing
 				return listenErr
 			}
 			close(ready)
-			return compose.ServeAPIServer(ctx, runtime, bindPort, l, apiListener)
+			srv := api.NewServer(runtime, port, l)
+			return srv.Serve(ctx, apiListener)
 		},
 	}
-
-	transport, err := compose.InjectAPITransport(ctx, svcCfg)
+	transport, err := initializer.InitializeAPITransport(ctx, svcCfg)
 	if err != nil {
-		t.Fatalf("InjectAPITransport: %v", err)
+		t.Fatalf("InitializeAPITransport: %v", err)
 	}
 
 	runErrCh := make(chan error, 1)

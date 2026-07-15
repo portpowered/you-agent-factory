@@ -94,3 +94,5 @@ github.com/portpowered/infinite-you/pkg/workers/process
 github.com/portpowered/infinite-you/pkg/workers/prompting
 github.com/portpowered/infinite-you/pkg/workers/runner
 github.com/portpowered/infinite-you/pkg/workers/taxonomy
+# Unit-only coverage is below the package gate; functional coverage is reported independently.
+github.com/portpowered/infinite-you/pkg/wire

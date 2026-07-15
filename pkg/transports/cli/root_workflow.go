@@ -540,7 +540,7 @@ func newSessionHandlerRegistry(
 		}),
 		ListRunE: commandregistry.SessionListRunE(commandregistry.SessionListBinding{
 			Config: configs.List, SessionDiagnosticsBinding: diagnosticsBinding,
-			Prepare: sessionListPrepare(options), ListSessions: listSessions,
+			Server: &globals.server, Prepare: sessionListPrepare(options), ListSessions: listSessions,
 		}),
 		ShowRunE: commandregistry.SessionShowRunE(commandregistry.SessionShowBinding{
 			Server: &globals.server, JSON: &globals.json, Verbose: diagnostics.verboseEnabled,
@@ -814,7 +814,7 @@ func newSessionResumeCommand(globals *cliGlobalOptions, diagnostics *cliDiagnost
 	return cmd
 }
 
-func newSessionListCommand(diagnostics *cliDiagnosticsOptions, options RootCommandOptions) *cobra.Command {
+func newSessionListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions, options RootCommandOptions) *cobra.Command {
 	cfg := sessioncli.ListConfig{Port: defaultcmd.FactoryPort, Scope: "live"}
 
 	cmd := &cobra.Command{
@@ -839,11 +839,14 @@ func newSessionListCommand(diagnostics *cliDiagnosticsOptions, options RootComma
 				}
 				cfg.DurableLister = service.ListSessions
 			}
+			if cmd.Root().PersistentFlags().Changed("server") {
+				cfg.Server = globals.server
+			}
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()
 			cfg.Debug = diagnostics.debug
-			return listSessions(cfg)
+			return sessioncli.List(cfg)
 		},
 	}
 

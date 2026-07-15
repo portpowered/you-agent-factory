@@ -209,9 +209,6 @@ func TestSessionInvocationAPI_PausedSessionReturnsPausedStatus(t *testing.T) {
 			cfg.Logger = zap.NewNop()
 		},
 	})
-	if svc == nil {
-		t.Fatal("expected functional server to capture factory service")
-	}
 	if _, err := svc.PauseLiveFactorySession(context.Background(), factorysessions.DefaultSessionID, factoryapi.FactorySessionLifecycleControlRequest{}); err != nil {
 		t.Fatalf("PauseLiveFactorySession: %v", err)
 	}

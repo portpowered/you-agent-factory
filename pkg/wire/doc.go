@@ -6,3 +6,5 @@
 // and unwound on failure; Build never starts a component. pkg/root and
 // pkg/initializer own mode selection and lifecycle activation respectively.
 package wire
+
+//go:generate go run github.com/google/wire/cmd/wire

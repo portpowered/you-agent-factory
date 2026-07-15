@@ -104,6 +104,7 @@ func TestBuildCore_ComposesCoreForValidFactoryConfig(t *testing.T) {
 	ctx := context.Background()
 	cfg := &runtimehost.Config{
 		Dir:                                     dir,
+		SystemConfigPath:                        filepath.Join(t.TempDir(), "operator-config.json"),
 		Logger:                                  zap.NewNop(),
 		SkipBuiltInRunnerPrerequisiteValidation: true,
 	}
@@ -143,6 +144,7 @@ func TestBuildCore_ComposesExplicitlyDisabledPersistence(t *testing.T) {
 	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
 	core, err := composebridge.BuildCore(context.Background(), &runtimehost.Config{
 		Dir:                                     dir,
+		SystemConfigPath:                        filepath.Join(t.TempDir(), "operator-config.json"),
 		Logger:                                  zap.NewNop(),
 		DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
 		SkipBuiltInRunnerPrerequisiteValidation: true,
@@ -170,6 +172,7 @@ func TestBuildCore_RejectsUnavailablePersistenceLocation(t *testing.T) {
 	core, err := composebridge.BuildCore(context.Background(), &runtimehost.Config{
 		Dir:                                     dir,
 		ExecutionBaseDir:                        blockedRoot,
+		SystemConfigPath:                        filepath.Join(t.TempDir(), "operator-config.json"),
 		Logger:                                  zap.NewNop(),
 		SkipBuiltInRunnerPrerequisiteValidation: true,
 	})

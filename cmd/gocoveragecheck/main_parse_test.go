@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 )
 
@@ -48,29 +47,17 @@ func TestSplitList(t *testing.T) {
 	}
 }
 
-func TestParsePackageCoverageSummariesFromReport(t *testing.T) {
+func TestCompactCoverageOutputRemovesCoverpkgInventory(t *testing.T) {
 	t.Parallel()
 
-	report := strings.Join([]string{
-		"",
-		"ok  " + modulePath + "/pkg/config\t0.123s\tcoverage: 0.0% of statements",
-		modulePath + "/pkg/service\t\tcoverage: 82.5% of statements",
-		"total: (statements) 82.5%",
-		"not a package coverage line",
-		"",
-	}, "\n")
-
-	got, err := parsePackageCoverageSummariesFromReport(report)
-	if err != nil {
-		t.Fatalf("parsePackageCoverageSummariesFromReport() error = %v", err)
-	}
-
-	want := map[string]float64{
-		modulePath + "/pkg/config":  0,
-		modulePath + "/pkg/service": 82.5,
-	}
-	if fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Fatalf("parsePackageCoverageSummariesFromReport() = %v, want %v", got, want)
+	input := "ok  " + modulePath + "/tests/functional/runtime_api\t0.123s\t" +
+		"coverage: 33.2% of statements in " + modulePath + "/pkg/config, " +
+		modulePath + "/pkg/workers/worktree\nFAIL\n"
+	got := compactCoverageOutput(input)
+	want := "ok  " + modulePath + "/tests/functional/runtime_api\t0.123s\t" +
+		"coverage: 33.2% of statements\nFAIL\n"
+	if got != want {
+		t.Fatalf("compactCoverageOutput() = %q, want %q", got, want)
 	}
 }
 
@@ -85,21 +72,6 @@ func TestParseTotalCoverageRejectsMalformedPercentageToken(t *testing.T) {
 	wantErr := "parse go coverage percentage \"1.2.3\": strconv.ParseFloat: parsing \"1.2.3\": invalid syntax"
 	if err.Error() != wantErr {
 		t.Fatalf("parseTotalCoverage() error = %q, want %q", err.Error(), wantErr)
-	}
-}
-
-func TestParsePackageCoverageSummariesFromReportRejectsMalformedPercentageToken(t *testing.T) {
-	t.Parallel()
-
-	report := modulePath + "/pkg/config\t\tcoverage: 1.2.3% of statements\n"
-	_, err := parsePackageCoverageSummariesFromReport(report)
-	if err == nil {
-		t.Fatal("parsePackageCoverageSummariesFromReport() unexpectedly succeeded")
-	}
-
-	wantErr := "parse go coverage package percentage \"1.2.3\": strconv.ParseFloat: parsing \"1.2.3\": invalid syntax"
-	if err.Error() != wantErr {
-		t.Fatalf("parsePackageCoverageSummariesFromReport() error = %q, want %q", err.Error(), wantErr)
 	}
 }
 

@@ -203,6 +203,7 @@ func SessionCreateRunE(binding SessionCreateBinding) RunE {
 // SessionListBinding supplies handwritten session list dependencies.
 type SessionListBinding struct {
 	Config *sessioncli.ListConfig
+	Server *string
 	SessionDiagnosticsBinding
 	Prepare      func(context.Context, *sessioncli.ListConfig) error
 	ListSessions func(sessioncli.ListConfig) error
@@ -219,6 +220,9 @@ func SessionListRunE(binding SessionListBinding) RunE {
 			return fmt.Errorf("session list config is required")
 		}
 		cfg := *binding.Config
+		if binding.Server != nil && cmd.Root().PersistentFlags().Changed("server") {
+			cfg.Server = *binding.Server
+		}
 		if binding.Prepare != nil {
 			if err := binding.Prepare(cmd.Context(), &cfg); err != nil {
 				return err

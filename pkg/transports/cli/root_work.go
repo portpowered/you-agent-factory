@@ -299,7 +299,7 @@ func handwrittenSessionSubcommands(
 	generatedShow *cobra.Command,
 ) []*cobra.Command {
 	return []*cobra.Command{
-		newSessionListCommand(diagnostics, options),
+		newSessionListCommand(globals, diagnostics, options),
 		generatedShow,
 		newSessionDispatchesCommand(globals, diagnostics),
 		newSessionPauseCommand(globals, diagnostics),

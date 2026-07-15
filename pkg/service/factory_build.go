@@ -245,7 +245,6 @@ const (
 	runtimeMetricStateIdle            = "runtime.state.idle"
 	runtimeMetricStatePaused          = "runtime.state.paused"
 	runtimeMetricStateFailed          = "runtime.state.failed"
-	runtimeMetricQueueInFlight        = "runtime.queue.in_flight"
 	runtimeMetricQueueSubmissionCount = "queue.submission_count"
 	runtimeMetricDispatchStarted      = "dispatch.started"
 	runtimeMetricDispatchComplete     = "dispatch.completed"
