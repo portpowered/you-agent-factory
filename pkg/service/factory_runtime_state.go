@@ -821,7 +821,11 @@ func warnReplayMetadataMismatches(cfg *FactoryServiceConfig, artifact *interface
 	if err != nil {
 		return
 	}
-	for _, warning := range replay.FactorySnapshotMetadataWarnings(artifact.Factory, currentFactory) {
+	currentSnapshot, err := interfaces.NewFactorySnapshot(currentFactory)
+	if err != nil {
+		return
+	}
+	for _, warning := range replay.FactoryMetadataWarnings(artifact.Factory, currentSnapshot) {
 		logger.Warn("replay artifact metadata differs from current checkout",
 			zap.String("category", replay.DivergenceCategoryConfigMismatch),
 			zap.String("metadata_key", warning.Key),

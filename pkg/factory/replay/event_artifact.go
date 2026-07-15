@@ -680,17 +680,6 @@ func generatedDispatchRequestMetadata(values map[string]string) *factoryapi.Disp
 	}
 }
 
-func stringMapValue(values *factoryapi.StringMap) map[string]string {
-	if values == nil || len(*values) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(*values))
-	for key, value := range *values {
-		out[key] = value
-	}
-	return out
-}
-
 func uniqueNonEmpty(values []string) []string {
 	seen := make(map[string]bool, len(values))
 	out := make([]string, 0, len(values))

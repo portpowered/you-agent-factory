@@ -33,14 +33,6 @@ const (
 	metadataReplaySourceFormat = "source_format"
 )
 
-// MetadataMismatchWarning describes replay artifact metadata that differs from
-// the current checkout's loadable runtime config.
-type MetadataMismatchWarning struct {
-	Key      string
-	Artifact string
-	Current  string
-}
-
 // EmbeddedRuntimeConfig is the canonical runtime lookup reconstructed from an
 // artifact's embedded configuration. It intentionally avoids filesystem reads.
 type EmbeddedRuntimeConfig struct {
@@ -259,45 +251,6 @@ func generatedFactoryFromSnapshot(snapshot *interfaces.FactorySnapshot) (factory
 		return factoryapi.Factory{}, fmt.Errorf("decode replay artifact factory: %w", err)
 	}
 	return generated, nil
-}
-
-// FactoryMetadataWarnings compares replay Factory metadata against the current
-// checkout's generated Factory metadata. Replay callers should warn but still
-// allow replay because artifacts are authoritative for runtime configuration.
-func FactoryMetadataWarnings(artifactFactory, currentFactory factoryapi.Factory) []MetadataMismatchWarning {
-	artifactMetadata := stringMapValue(artifactFactory.Metadata)
-	currentMetadata := stringMapValue(currentFactory.Metadata)
-	keys := []string{
-		metadataFactoryHash,
-		metadataWorkersHash,
-		metadataWorkstationsHash,
-		metadataRuntimeConfigHash,
-	}
-	warnings := make([]MetadataMismatchWarning, 0, len(keys))
-	for _, key := range keys {
-		artifactValue := artifactMetadata[key]
-		currentValue := currentMetadata[key]
-		if artifactValue == "" || currentValue == "" || artifactValue == currentValue {
-			continue
-		}
-		warnings = append(warnings, MetadataMismatchWarning{
-			Key:      key,
-			Artifact: artifactValue,
-			Current:  currentValue,
-		})
-	}
-	return warnings
-}
-
-// FactorySnapshotMetadataWarnings compares a replay artifact's domain snapshot
-// with the current generated boundary without exposing the generated type from
-// the ReplayArtifact contract.
-func FactorySnapshotMetadataWarnings(snapshot *interfaces.FactorySnapshot, currentFactory factoryapi.Factory) []MetadataMismatchWarning {
-	artifactFactory, err := generatedFactoryFromSnapshot(snapshot)
-	if err != nil {
-		return nil
-	}
-	return FactoryMetadataWarnings(artifactFactory, currentFactory)
 }
 
 func generatedFactoryAPIFromConfig(cfg *interfaces.FactoryConfig) factoryapi.Factory {

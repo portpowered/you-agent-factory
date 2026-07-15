@@ -494,7 +494,7 @@ func TestFactoryMetadataWarnings_ReportsConfigHashMismatch(t *testing.T) {
 	artifactConfig := factoryapi.Factory{Metadata: generatedStringMapPtr(map[string]string{metadataFactoryHash: "sha256:recorded"})}
 	currentConfig := factoryapi.Factory{Metadata: generatedStringMapPtr(map[string]string{metadataFactoryHash: "sha256:current"})}
 
-	warnings := FactoryMetadataWarnings(artifactConfig, currentConfig)
+	warnings := FactoryMetadataWarnings(mustFactorySnapshot(t, artifactConfig), mustFactorySnapshot(t, currentConfig))
 	if len(warnings) != 1 {
 		t.Fatalf("expected 1 warning, got %d", len(warnings))
 	}

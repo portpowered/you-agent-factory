@@ -2,6 +2,7 @@ package replay
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -22,6 +23,51 @@ import (
 
 const replaySubmissionHookName = "replay-artifact-submissions"
 const replayWorkStateChangeHookName = "replay-artifact-work-state-changes"
+
+// MetadataMismatchWarning describes replay artifact metadata that differs from
+// the current checkout's loadable runtime config.
+type MetadataMismatchWarning struct {
+	Key      string
+	Artifact string
+	Current  string
+}
+
+// FactoryMetadataWarnings compares two Factory-owned snapshots. Replay callers
+// should warn but still allow replay because the artifact remains authoritative
+// for runtime configuration.
+func FactoryMetadataWarnings(artifactFactory, currentFactory *interfaces.FactorySnapshot) []MetadataMismatchWarning {
+	artifactMetadata := factorySnapshotMetadata(artifactFactory)
+	currentMetadata := factorySnapshotMetadata(currentFactory)
+	keys := []string{
+		metadataFactoryHash,
+		metadataWorkersHash,
+		metadataWorkstationsHash,
+		metadataRuntimeConfigHash,
+	}
+	warnings := make([]MetadataMismatchWarning, 0, len(keys))
+	for _, key := range keys {
+		artifactValue := artifactMetadata[key]
+		currentValue := currentMetadata[key]
+		if artifactValue == "" || currentValue == "" || artifactValue == currentValue {
+			continue
+		}
+		warnings = append(warnings, MetadataMismatchWarning{Key: key, Artifact: artifactValue, Current: currentValue})
+	}
+	return warnings
+}
+
+func factorySnapshotMetadata(snapshot *interfaces.FactorySnapshot) map[string]string {
+	if snapshot == nil {
+		return nil
+	}
+	var boundary struct {
+		Metadata map[string]string `json:"metadata"`
+	}
+	if err := json.Unmarshal(*snapshot, &boundary); err != nil {
+		return nil
+	}
+	return boundary.Metadata
+}
 
 // NewArtifactClock returns a replay clock aligned to recorded event times when
 // the artifact includes wall-clock timestamps for specific ticks.
