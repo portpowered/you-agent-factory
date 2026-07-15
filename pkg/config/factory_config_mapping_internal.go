@@ -1096,10 +1096,6 @@ func internalFactoryWorkstationTypeFromPublic(value *factoryapi.WorkstationType)
 	return strings.TrimSpace(string(*value))
 }
 
-func publicFactoryGuardTypeFromInternal(value interfaces.GuardType) factoryapi.GuardType {
-	return factoryapi.GuardType(publicFactoryGuardTypeStringFromInternal(value))
-}
-
 func publicFactoryGuardTypeStringFromInternal(value interfaces.GuardType) string {
 	switch strings.TrimSpace(string(value)) {
 	case string(interfaces.GuardTypeVisitCount), publicFactoryGuardTypeVisitCount:

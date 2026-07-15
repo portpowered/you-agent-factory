@@ -156,19 +156,6 @@ func GenerateFactorySchemaFromGraphForTest(
 	return generateFactorySchemaFromGraph(repositoryRoot, factory, components)
 }
 
-// FactorySchemaDiagnosticMatchesGapRecordForTest reports whether one diagnostic
-// is covered by the checked-in B16 gap record.
-func FactorySchemaDiagnosticMatchesGapRecordForTest(
-	repositoryRoot string,
-	diagnostic contractvalidator.Diagnostic,
-) (bool, error) {
-	record, err := loadFactorySchemaB16Gaps(repositoryRoot)
-	if err != nil {
-		return false, err
-	}
-	return factorySchemaDiagnosticMatchesGapRecord(diagnostic, record), nil
-}
-
 func deepCopyValue(value any) any {
 	payload, err := json.Marshal(value)
 	if err != nil {
@@ -184,14 +171,4 @@ func deepCopyValue(value any) any {
 // DeepCopyValueForTest returns a deep copy of a YAML/JSON-decoded value.
 func DeepCopyValueForTest(value any) any {
 	return deepCopyValue(value)
-}
-
-// StripFactorySchemaConverterGapForTest removes one recorded converter gap from
-// a mutable Factory graph copy.
-func StripFactorySchemaConverterGapForTest(
-	factory map[string]any,
-	components map[string]any,
-	diagnostic contractvalidator.Diagnostic,
-) bool {
-	return stripFactorySchemaConverterGap(factory, components, diagnostic)
 }

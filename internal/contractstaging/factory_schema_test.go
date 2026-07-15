@@ -197,6 +197,8 @@ func TestFactorySchemaDigestsStableAcrossRepeatedArtifactsCalls(t *testing.T) {
 }
 
 func TestFactorySchemaGenerationLeavesAuthoredAndStagedDigestsStableOnSecondRun(t *testing.T) {
+	defer contractstaging.LockRepositoryStagingForTest()()
+
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
 	factoryPaths := []string{
 		contractstaging.FactorySchemaAuthoredPath,

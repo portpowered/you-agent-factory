@@ -498,6 +498,8 @@ func TestMockWorkersSchema_StagedProjectionMatchesAuthoredCopy(t *testing.T) {
 }
 
 func TestMockWorkersSchema_StaleStagingDetectedByContractCheck(t *testing.T) {
+	defer contractstaging.LockRepositoryStagingForTest()()
+
 	repositoryRoot := testutil.MustRepoPath(t, ".")
 	target := "packages/api/generated/schemas/mock-workers.schema.json"
 	stagedPath := filepath.Join(repositoryRoot, filepath.FromSlash(target))
