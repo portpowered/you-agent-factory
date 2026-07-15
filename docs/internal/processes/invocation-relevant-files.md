@@ -581,6 +581,10 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `@you/goal` JSON invocations with distinct `requestId`/`traceId` and stable
   installed-factory reuse, and named `@you/subagent` primary JSON plus
   primary-only versus response-stream terminal parity on mock-worker fixtures.
+  S24 scenario-to-outcome mapping is canonical in `internal/builtcliacceptance/scenarios.go`
+  (`S24Scenarios`) and locked by `tests/functional/acceptance/scenario_matrix_test.go`;
+  PR verification runs the focused suite through `make test-built-cli-acceptance`
+  inside `make verify-tests`.
   Later S24 scenario stories should compose scenario assertions on top of this
   package rather than re-building binary/home/log wiring in each test file.
 - `pkg/factory/packages/catalog.go` owns packaged factory lookup and metadata;
