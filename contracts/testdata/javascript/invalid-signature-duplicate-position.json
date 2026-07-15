@@ -1,0 +1,59 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.bad.duplicate-position": {
+      "id": "example.bad.duplicate-position",
+      "name": "phase",
+      "path": "phase",
+      "kind": "function",
+      "async": false,
+      "parameters": [
+        {
+          "id": "example.bad.duplicate-position.param.first",
+          "name": "first",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "string"
+        },
+        {
+          "id": "example.bad.duplicate-position.param.second",
+          "name": "second",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "string"
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.bad.duplicate-position",
+        "documentation": {
+          "title": {
+            "id": "example.bad.duplicate-position.title",
+            "canonicalEnglish": "Invalid duplicate position"
+          },
+          "description": {
+            "id": "example.bad.duplicate-position.description",
+            "canonicalEnglish": "Fixture proving duplicate parameter positions fail semantic validation."
+          }
+        },
+        "examples": [
+          "phase(\"a\", \"b\")"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.bad.duplicate-position",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

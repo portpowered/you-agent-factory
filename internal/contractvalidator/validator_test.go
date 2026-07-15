@@ -183,6 +183,116 @@ func mcpCatalogFixtureRegistry(fixture string) contractvalidator.Registry {
 	})
 }
 
+func TestJavaScriptRegistryValidFixtures(t *testing.T) {
+	root := repositoryRoot(t)
+	diagnostics := contractvalidator.Validate(root, contractvalidator.JavaScriptRegistry(), "javascript", "1.0.0")
+	if len(diagnostics) != 0 {
+		t.Fatalf("Validate() diagnostics = %+v, want none", diagnostics)
+	}
+}
+
+func TestValidateJavaScriptInvalidManifestDiagnostics(t *testing.T) {
+	root := repositoryRoot(t)
+
+	tests := []struct {
+		name     string
+		fixture  string
+		code     string
+		wantPath string
+	}{
+		{
+			name:     "duplicate symbol paths",
+			fixture:  "contracts/testdata/javascript/invalid-duplicate-symbol-path.json",
+			code:     "javascript.path.duplicate",
+			wantPath: "/symbols/example.workflow/path",
+		},
+		{
+			name:     "broken parent reference",
+			fixture:  "contracts/testdata/javascript/invalid-broken-parent.json",
+			code:     "javascript.parent.unresolved",
+			wantPath: "/symbols/example.workflow.ops/parent",
+		},
+		{
+			name:     "unresolved namespace member",
+			fixture:  "contracts/testdata/javascript/invalid-unresolved-member.json",
+			code:     "javascript.member.unresolved",
+			wantPath: "/symbols/example.workflow/members/2",
+		},
+		{
+			name:     "duplicate parameter positions",
+			fixture:  "contracts/testdata/javascript/invalid-signature-duplicate-position.json",
+			code:     "javascript.signature.duplicate_position",
+			wantPath: "/symbols/example.bad.duplicate-position/parameters/1/position",
+		},
+		{
+			name:     "rest parameter not last",
+			fixture:  "contracts/testdata/javascript/invalid-signature-rest-not-last.json",
+			code:     "javascript.signature.rest_not_last",
+			wantPath: "/symbols/example.bad.rest-not-last/parameters/0/rest",
+		},
+		{
+			name:     "open serializable value schema",
+			fixture:  "contracts/testdata/javascript/invalid-open-serializable-value.json",
+			code:     "javascript.serializable_value.open",
+			wantPath: "/symbols/example.bad.open-serializable/parameters/0/serializableValue",
+		},
+		{
+			name:     "context global",
+			fixture:  "contracts/testdata/javascript/invalid-unsupported-context-global.json",
+			code:     "javascript.surface.forbidden_global",
+			wantPath: "/symbols/example.context/path",
+		},
+		{
+			name:     "orchestrator global",
+			fixture:  "contracts/testdata/javascript/invalid-unsupported-orchestrator-global.json",
+			code:     "javascript.surface.forbidden_global",
+			wantPath: "/symbols/example.orchestrator/path",
+		},
+		{
+			name:     "comparison-project helper",
+			fixture:  "contracts/testdata/javascript/invalid-unsupported-comparison-helper.json",
+			code:     "javascript.surface.unsupported_helper",
+			wantPath: "/symbols/example.workflow.sleep/path",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			diagnostics := contractvalidator.Validate(root, javascriptManifestFixtureRegistry(test.fixture), "javascript", "1.0.0")
+			if len(diagnostics) == 0 {
+				t.Fatal("expected diagnostics, got none")
+			}
+			found := false
+			for _, diagnostic := range diagnostics {
+				if diagnostic.Code == test.code && diagnostic.Path == test.wantPath && diagnostic.Document == test.fixture {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("diagnostics = %+v, want code=%q path=%q document=%q", diagnostics, test.code, test.wantPath, test.fixture)
+			}
+		})
+	}
+}
+
+func javascriptManifestFixtureRegistry(fixture string) contractvalidator.Registry {
+	const (
+		documentationID = "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+		deprecationsID  = "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+	)
+	return contractvalidator.NewRegistry(contractvalidator.Entry{
+		Family:        "javascript",
+		FormatVersion: "1.0.0",
+		Schemas: []contractvalidator.Schema{
+			{ID: documentationID, Path: "contracts/common/documentation.schema.json"},
+			{ID: deprecationsID, Path: "contracts/common/deprecations.schema.json"},
+			{ID: "https://schemas.portpowered.com/you/contracts/javascript/runtime-manifest.schema.json", Path: "contracts/javascript/runtime-manifest.schema.json"},
+		},
+		Documents: []contractvalidator.Document{{Path: fixture, SchemaID: "https://schemas.portpowered.com/you/contracts/javascript/runtime-manifest.schema.json"}},
+	})
+}
+
 func TestValidateCLIInvalidManifestDiagnostics(t *testing.T) {
 	root := repositoryRoot(t)
 

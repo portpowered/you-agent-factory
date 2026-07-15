@@ -1,0 +1,136 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.logging": {
+      "id": "example.logging",
+      "name": "log",
+      "path": "log",
+      "kind": "function",
+      "async": false,
+      "parameters": [
+        {
+          "id": "example.logging.param.message",
+          "name": "message",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "string"
+        },
+        {
+          "id": "example.logging.param.fields",
+          "name": "fields",
+          "position": 1,
+          "required": false,
+          "rest": false,
+          "type": "object",
+          "default": "{}",
+          "serializableValue": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          }
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "emittedRecords": [
+        "log"
+      ],
+      "errors": [
+        {
+          "condition": "missing-or-non-string-message",
+          "type": "TypeError",
+          "message": "log() requires a string message"
+        },
+        {
+          "condition": "non-json-fields",
+          "type": "GoError",
+          "message": "log() fields must be JSON-compatible"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.logging",
+        "documentation": {
+          "title": {
+            "id": "example.logging.title",
+            "canonicalEnglish": "Workflow log helper"
+          },
+          "description": {
+            "id": "example.logging.description",
+            "canonicalEnglish": "Emits a workflow-scoped log record with an optional fields object."
+          }
+        },
+        "examples": [
+          "log(\"checkpoint\", { step: 1 })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.logging",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "example.phase-marker": {
+      "id": "example.phase-marker",
+      "name": "phase",
+      "path": "phase",
+      "kind": "function",
+      "async": false,
+      "parameters": [
+        {
+          "id": "example.phase-marker.param.name",
+          "name": "name",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "string"
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "emittedRecords": [
+        "phase"
+      ],
+      "errors": [
+        {
+          "condition": "missing-or-non-string-name",
+          "type": "TypeError",
+          "message": "phase() requires a string name"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.phase-marker",
+        "documentation": {
+          "title": {
+            "id": "example.phase-marker.title",
+            "canonicalEnglish": "Phase marker"
+          },
+          "description": {
+            "id": "example.phase-marker.description",
+            "canonicalEnglish": "Records a named workflow phase for progress tracking."
+          }
+        },
+        "examples": [
+          "phase(\"draft\")"
+        ],
+        "visibility": "public",
+        "sourceHash": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.phase-marker",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

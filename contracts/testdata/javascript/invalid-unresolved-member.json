@@ -1,0 +1,116 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.workflow": {
+      "id": "example.workflow",
+      "name": "workflow",
+      "path": "workflow",
+      "kind": "namespace",
+      "members": [
+        "checkpoint",
+        "ops",
+        "ghost"
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow",
+        "documentation": {
+          "title": {
+            "id": "example.workflow.title",
+            "canonicalEnglish": "Workflow namespace"
+          },
+          "description": {
+            "id": "example.workflow.description",
+            "canonicalEnglish": "Root workflow namespace with one unresolved member declaration."
+          }
+        },
+        "examples": [
+          "workflow.checkpoint"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
+    },
+    "example.workflow.checkpoint": {
+      "id": "example.workflow.checkpoint",
+      "name": "checkpoint",
+      "path": "workflow.checkpoint",
+      "kind": "namespace",
+      "parent": "example.workflow",
+      "members": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow.checkpoint",
+        "documentation": {
+          "title": {
+            "id": "example.workflow.checkpoint.title",
+            "canonicalEnglish": "Workflow checkpoint namespace"
+          },
+          "description": {
+            "id": "example.workflow.checkpoint.description",
+            "canonicalEnglish": "Nested namespace for workflow checkpoint helpers."
+          }
+        },
+        "examples": [
+          "workflow.checkpoint"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow.checkpoint",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
+    },
+    "example.workflow.ops": {
+      "id": "example.workflow.ops",
+      "name": "ops",
+      "path": "workflow.ops",
+      "kind": "namespace",
+      "parent": "example.workflow",
+      "members": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow.ops",
+        "documentation": {
+          "title": {
+            "id": "example.workflow.ops.title",
+            "canonicalEnglish": "Workflow operations namespace"
+          },
+          "description": {
+            "id": "example.workflow.ops.description",
+            "canonicalEnglish": "Nested namespace reserved for workflow operation helpers."
+          }
+        },
+        "examples": [
+          "workflow.ops"
+        ],
+        "visibility": "public",
+        "sourceHash": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow.ops",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
+    }
+  }
+}

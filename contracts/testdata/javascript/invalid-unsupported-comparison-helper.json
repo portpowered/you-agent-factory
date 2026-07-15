@@ -1,0 +1,89 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.workflow": {
+      "id": "example.workflow",
+      "name": "workflow",
+      "path": "workflow",
+      "kind": "namespace",
+      "members": [
+        "sleep"
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow",
+        "documentation": {
+          "title": {
+            "id": "example.workflow.title",
+            "canonicalEnglish": "Workflow namespace"
+          },
+          "description": {
+            "id": "example.workflow.description",
+            "canonicalEnglish": "Root workflow namespace grouping installed helpers."
+          }
+        },
+        "examples": [
+          "workflow.sleep"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
+    },
+    "example.workflow.sleep": {
+      "id": "example.workflow.sleep",
+      "name": "sleep",
+      "path": "workflow.sleep",
+      "kind": "method",
+      "parent": "example.workflow",
+      "async": true,
+      "parameters": [
+        {
+          "id": "example.workflow.sleep.param.ms",
+          "name": "ms",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "number"
+        }
+      ],
+      "return": {
+        "kind": "promise",
+        "type": "void"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow.sleep",
+        "documentation": {
+          "title": {
+            "id": "example.workflow.sleep.title",
+            "canonicalEnglish": "Workflow sleep helper"
+          },
+          "description": {
+            "id": "example.workflow.sleep.description",
+            "canonicalEnglish": "Comparison-project-only helper that is not installed in the supported runtime surface."
+          }
+        },
+        "examples": [
+          "await workflow.sleep(1000)"
+        ],
+        "visibility": "public",
+        "sourceHash": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow.sleep",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

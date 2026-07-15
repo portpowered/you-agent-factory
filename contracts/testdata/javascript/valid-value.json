@@ -1,0 +1,73 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.args": {
+      "id": "example.args",
+      "name": "args",
+      "path": "args",
+      "kind": "value",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.args",
+        "documentation": {
+          "title": {
+            "id": "example.args.title",
+            "canonicalEnglish": "Invocation arguments"
+          },
+          "description": {
+            "id": "example.args.description",
+            "canonicalEnglish": "Read-only invocation argument map exposed to workflow scripts."
+          }
+        },
+        "examples": [
+          "{ \"topic\": \"release\" }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.args",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "mutable-object",
+      "nullability": "non-null",
+      "bindingLifecycle": "snapshot-at-bind"
+    },
+    "example.meta": {
+      "id": "example.meta",
+      "name": "meta",
+      "path": "meta",
+      "kind": "value",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.meta",
+        "documentation": {
+          "title": {
+            "id": "example.meta.title",
+            "canonicalEnglish": "Invocation metadata"
+          },
+          "description": {
+            "id": "example.meta.description",
+            "canonicalEnglish": "Read-only invocation metadata object exposed to workflow scripts."
+          }
+        },
+        "examples": [
+          "{ \"sessionId\": \"00000000-0000-4000-8000-000000000001\" }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.meta",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "mutable-object",
+      "nullability": "non-null",
+      "bindingLifecycle": "snapshot-at-bind"
+    }
+  }
+}

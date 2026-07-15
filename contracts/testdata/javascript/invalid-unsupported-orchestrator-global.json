@@ -1,0 +1,39 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.orchestrator": {
+      "id": "example.orchestrator",
+      "name": "orchestrator",
+      "path": "orchestrator",
+      "kind": "value",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.orchestrator",
+        "documentation": {
+          "title": {
+            "id": "example.orchestrator.title",
+            "canonicalEnglish": "Host orchestrator handle"
+          },
+          "description": {
+            "id": "example.orchestrator.description",
+            "canonicalEnglish": "Forbidden host-only global that must not appear in the installed customer surface."
+          }
+        },
+        "examples": [
+          "orchestrator.kind"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.orchestrator",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "mutable-object",
+      "nullability": "non-null",
+      "bindingLifecycle": "snapshot-at-bind"
+    }
+  }
+}

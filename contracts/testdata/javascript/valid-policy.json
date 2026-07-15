@@ -1,0 +1,133 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.agent": {
+      "id": "example.agent",
+      "name": "agent",
+      "path": "agent",
+      "kind": "namespace",
+      "members": [
+        "run"
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.agent",
+        "documentation": {
+          "title": {
+            "id": "example.agent.title",
+            "canonicalEnglish": "Agent namespace"
+          },
+          "description": {
+            "id": "example.agent.description",
+            "canonicalEnglish": "Root namespace grouping agent invocation helpers."
+          }
+        },
+        "examples": [
+          "agent.run"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.agent",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
+    },
+    "example.agent.run": {
+      "id": "example.agent.run",
+      "name": "run",
+      "path": "agent.run",
+      "kind": "method",
+      "parent": "example.agent",
+      "async": true,
+      "parameters": [
+        {
+          "id": "example.agent.run.param.spec",
+          "name": "spec",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "prompt": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "preset": {
+                "type": "string"
+              },
+              "modelProvider": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "reasoningEffort": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "prompt"
+            ]
+          }
+        }
+      ],
+      "return": {
+        "kind": "promise",
+        "type": "child-result-object"
+      },
+      "emittedRecords": [
+        "child_dispatch"
+      ],
+      "policyChecks": [
+        {
+          "kind": "maxAgents",
+          "message": "policy denied: requested fanout exceeds maxAgents"
+        },
+        {
+          "kind": "allowedModels",
+          "field": "model"
+        },
+        {
+          "kind": "allowedReasoningEfforts",
+          "field": "reasoningEffort"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.agent.run",
+        "documentation": {
+          "title": {
+            "id": "example.agent.run.title",
+            "canonicalEnglish": "Agent run method"
+          },
+          "description": {
+            "id": "example.agent.run.description",
+            "canonicalEnglish": "Starts or resumes one child agent dispatch with documented policy gates."
+          }
+        },
+        "examples": [
+          "await agent.run({ prompt: \"summarize\" })"
+        ],
+        "visibility": "public",
+        "sourceHash": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.agent.run",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

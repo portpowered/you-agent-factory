@@ -1,0 +1,39 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.context": {
+      "id": "example.context",
+      "name": "context",
+      "path": "context",
+      "kind": "value",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.context",
+        "documentation": {
+          "title": {
+            "id": "example.context.title",
+            "canonicalEnglish": "Host execution context"
+          },
+          "description": {
+            "id": "example.context.description",
+            "canonicalEnglish": "Forbidden host-only global that must not appear in the installed customer surface."
+          }
+        },
+        "examples": [
+          "context.sessionId"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.context",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "mutable-object",
+      "nullability": "non-null",
+      "bindingLifecycle": "snapshot-at-bind"
+    }
+  }
+}

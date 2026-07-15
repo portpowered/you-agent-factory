@@ -1,0 +1,113 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.pipeline": {
+      "id": "example.pipeline",
+      "name": "pipeline",
+      "path": "pipeline",
+      "kind": "function",
+      "async": true,
+      "parameters": [
+        {
+          "id": "example.pipeline.param.items",
+          "name": "items",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "array"
+        },
+        {
+          "id": "example.pipeline.param.worker",
+          "name": "worker",
+          "position": 1,
+          "required": true,
+          "rest": false,
+          "type": "function"
+        },
+        {
+          "id": "example.pipeline.param.rest",
+          "name": "rest",
+          "position": 2,
+          "required": false,
+          "rest": true,
+          "type": "any"
+        }
+      ],
+      "return": {
+        "kind": "promise",
+        "type": "pipeline-result-array"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.pipeline",
+        "documentation": {
+          "title": {
+            "id": "example.pipeline.title",
+            "canonicalEnglish": "Pipeline helper"
+          },
+          "description": {
+            "id": "example.pipeline.description",
+            "canonicalEnglish": "Runs staged asynchronous work over an item list and optional trailing arguments."
+          }
+        },
+        "examples": [
+          "await pipeline(items, worker)"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.pipeline",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "example.parallel": {
+      "id": "example.parallel",
+      "name": "parallel",
+      "path": "parallel",
+      "kind": "function",
+      "async": true,
+      "parameters": [
+        {
+          "id": "example.parallel.param.items",
+          "name": "items",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "array"
+        }
+      ],
+      "return": {
+        "kind": "promise",
+        "type": "array"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.parallel",
+        "documentation": {
+          "title": {
+            "id": "example.parallel.title",
+            "canonicalEnglish": "Parallel helper"
+          },
+          "description": {
+            "id": "example.parallel.description",
+            "canonicalEnglish": "Runs bounded child work concurrently and resolves to an ordered result array."
+          }
+        },
+        "examples": [
+          "await parallel(items)"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.parallel",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}
