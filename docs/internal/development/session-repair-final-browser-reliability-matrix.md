@@ -64,8 +64,9 @@ proofs and should not be copied into new variants.
 Results in this section must be refreshed after the last documentation or
 contract change; results from an earlier revision are not reusable.
 
-The following commands ran on 2026-07-15 at 10:44 UTC against the story 002
-working tree based on `66d01d7b0d` and containing this matrix revision.
+The following commands ran on 2026-07-15 UTC against the final story 003
+working tree containing this matrix revision and the hermetic contract-staging
+Git fixture repair.
 
 | Gate | Final-revision result |
 | --- | --- |
@@ -74,7 +75,7 @@ working tree based on `66d01d7b0d` and containing this matrix revision.
 | `make ui-integration-test` / `UI Browser Integration` | Passed: 18 files and 50 mandatory browser tests, including quiet recovery and the two-page shared-IndexedDB scenario. |
 | `make ui-lint` | Passed, including localization, semantic-token, feature-boundary, shared-boundary, form-control, and disclosure guards. |
 | UI typecheck | Passed through the `make verify-fast` `make typecheck` phase. |
-| `make verify-fast` | Did not pass. Typecheck and all 789 UI files passed; the short Go phase failed only in unchanged `internal/contractstaging/manifest_test.go`: `TestMergeCommitTipResolvesSourceCommitWithoutFalseShallowFailure` and `TestMergeCommitInRevListWithoutPathChangesResolvesSourceCommit` attempted `git checkout master` after system Git configuration initialized their temporary repositories on `main`. A focused rerun reproduced both failures, and `git diff --exit-code origin/main -- internal/contractstaging/manifest_test.go` confirmed this story did not change the failing file. No aggregate pass is claimed. |
+| `make verify-fast` | Passed: typecheck, all 789 UI files, and the short Go suite. The contract-staging Git fixture now selects one explicit initial branch instead of combining the host's `init.defaultBranch` with hard-coded `master` checkouts; focused package runs also passed with host defaults forced separately to `master` and `main`. |
 | `make api-smoke` | Not required: this closeout made no public REST, authored OpenAPI, handler, or generated-client change. |
 
 ## Optional interactive viewport evidence
