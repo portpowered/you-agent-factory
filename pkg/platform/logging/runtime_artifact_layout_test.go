@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
+	"github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
 )
 
 // Regression guard for you-goal-b03-date-layout: runtime logs and metrics must
@@ -113,9 +114,9 @@ func TestRuntimeArtifactInjectedClockReservesFilesOnFreshRoot(t *testing.T) {
 			rootDir := t.TempDir()
 			assertRuntimeArtifactRootLacksCalendarDirectories(t, rootDir)
 
-			path, err := reserveAvailableRuntimeArtifactPath(rootDir, at, tc.kind, tc.suffix)
+			path, err := runtimeartifact.ReserveAvailablePath(rootDir, at, tc.kind, tc.suffix)
 			if err != nil {
-				t.Fatalf("reserveAvailableRuntimeArtifactPath: %v", err)
+				t.Fatalf("runtimeartifact.ReserveAvailablePath: %v", err)
 			}
 
 			assertInjectedClockSharedLayoutPath(t, rootDir, path, at, tc.kind)
@@ -155,17 +156,17 @@ func TestRuntimeArtifactInjectedClockCollisionPreservesTimeKindShape(t *testing.
 		t.Run(tc.name, func(t *testing.T) {
 			rootDir := t.TempDir()
 
-			firstPath, err := reserveAvailableRuntimeArtifactPath(rootDir, at, tc.kind, tc.suffix)
+			firstPath, err := runtimeartifact.ReserveAvailablePath(rootDir, at, tc.kind, tc.suffix)
 			if err != nil {
-				t.Fatalf("reserveAvailableRuntimeArtifactPath first: %v", err)
+				t.Fatalf("runtimeartifact.ReserveAvailablePath first: %v", err)
 			}
 			if err := os.WriteFile(firstPath, []byte("preserved"), 0o644); err != nil {
 				t.Fatalf("WriteFile(%s): %v", firstPath, err)
 			}
 
-			secondPath, err := reserveAvailableRuntimeArtifactPath(rootDir, at, tc.kind, tc.suffix)
+			secondPath, err := runtimeartifact.ReserveAvailablePath(rootDir, at, tc.kind, tc.suffix)
 			if err != nil {
-				t.Fatalf("reserveAvailableRuntimeArtifactPath second: %v", err)
+				t.Fatalf("runtimeartifact.ReserveAvailablePath second: %v", err)
 			}
 			if firstPath == secondPath {
 				t.Fatalf("collision paths must differ, both %q", firstPath)

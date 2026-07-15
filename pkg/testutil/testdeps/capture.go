@@ -5,7 +5,7 @@ import (
 	"maps"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/internal/metrics"
+	"github.com/portpowered/infinite-you/pkg/factory/metrics"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"
@@ -176,6 +176,6 @@ func (r *RecordingInvocationMetrics) Contains(name string, labels map[string]str
 }
 
 var (
-	_ metrics.MetricsEmitter           = (*RecordingMetricsEmitter)(nil)
+	_ metrics.MetricsEmitter            = (*RecordingMetricsEmitter)(nil)
 	_ service.InvocationMetricsRecorder = (*RecordingInvocationMetrics)(nil)
 )

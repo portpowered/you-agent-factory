@@ -25,8 +25,8 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recording"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recordingreplay"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
@@ -35,14 +35,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -4584,13 +4585,13 @@ func newSlowSubscriberCompactionTestHarness(t *testing.T) (*FactoryService, work
 	t.Helper()
 	const sessionID = "session-progress-backpressure"
 
-	metricsSink, err := logging.BuildRuntimeMetricsSink(
+	metricsSink, err := platformmetrics.BuildRuntimeMetricsSink(
 		"session-progress-backpressure",
 		"runtime-progress-backpressure",
 		"/factory",
 		"/factory",
 		t.TempDir(),
-		logging.RuntimeMetricsConfig{},
+		platformmetrics.RuntimeMetricsConfig{},
 	)
 	if err != nil {
 		t.Fatalf("BuildRuntimeMetricsSink: %v", err)

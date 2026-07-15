@@ -1,4 +1,4 @@
-package logging
+package metrics
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/internal/metrics"
+	factorymetrics "github.com/portpowered/infinite-you/pkg/factory/metrics"
 )
 
 func TestNormalizeRuntimeMetricsConfig(t *testing.T) {
@@ -128,7 +128,7 @@ func TestBuildRuntimeMetricsSinkCreatesDatedDirectoriesOnFreshRoot(t *testing.T)
 		after,
 	)
 
-	if err := sink.Counter(context.Background(), "runtime.started", 1, metrics.Fields{}); err != nil {
+	if err := sink.Counter(context.Background(), "runtime.started", 1, factorymetrics.Fields{}); err != nil {
 		t.Fatalf("Counter on fresh root metrics sink: %v", err)
 	}
 	if _, err := os.Stat(sink.Path()); err != nil {
@@ -160,7 +160,9 @@ func TestBuildRuntimeMetricsSinkCreatesUTCPathUnderConfiguredRoot(t *testing.T) 
 }
 
 func TestBuildRuntimeMetricsSinkUsesCanonicalDefaultMetricsDirectoryAsRoot(t *testing.T) {
-	fixture := newRuntimeLogHomeFixture(t)
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("USERPROFILE", homeDir)
 	before := time.Now().UTC()
 
 	sink, err := BuildRuntimeMetricsSink("session-default", "runtime-default", "", "", "", RuntimeMetricsConfig{})
@@ -173,7 +175,7 @@ func TestBuildRuntimeMetricsSinkUsesCanonicalDefaultMetricsDirectoryAsRoot(t *te
 	assertRuntimeMetricsPathFormat(
 		t,
 		sink.Path(),
-		defaultpaths.RuntimeMetricsRoot(fixture.homeDir),
+		defaultpaths.RuntimeMetricsRoot(homeDir),
 		"session-default",
 		"runtime-default",
 		before,
@@ -188,7 +190,7 @@ func TestRuntimeMetricsSinkDoesNotRecreateFileAfterClose(t *testing.T) {
 		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
 	}
 
-	if err := sink.Counter(context.Background(), "runtime.started", 1, metrics.Fields{}); err != nil {
+	if err := sink.Counter(context.Background(), "runtime.started", 1, factorymetrics.Fields{}); err != nil {
 		t.Fatalf("Counter before close: %v", err)
 	}
 	record := readSingleRuntimeMetricsRecord(t, sink.Path())
@@ -206,7 +208,7 @@ func TestRuntimeMetricsSinkDoesNotRecreateFileAfterClose(t *testing.T) {
 		t.Fatalf("remove runtime metrics path after close: %v", err)
 	}
 
-	if err := sink.Counter(context.Background(), "runtime.after_close", 1, metrics.Fields{}); !errors.Is(err, errRuntimeMetricsSinkClosed) {
+	if err := sink.Counter(context.Background(), "runtime.after_close", 1, factorymetrics.Fields{}); !errors.Is(err, errRuntimeMetricsSinkClosed) {
 		t.Fatalf("Counter after close error = %v, want %v", err, errRuntimeMetricsSinkClosed)
 	}
 	if _, err := os.Stat(sink.Path()); !os.IsNotExist(err) {
@@ -229,7 +231,7 @@ func TestRuntimeMetricsSinkWritesStableJSONLEnvelope(t *testing.T) {
 	}
 	defer sink.Close()
 
-	fields := metrics.Fields{
+	fields := factorymetrics.Fields{
 		DispatchID:  "dispatch-123",
 		WorkID:      "work-456",
 		TraceID:     "trace-789",
@@ -283,10 +285,10 @@ func TestRuntimeMetricsSinkCounterAndGaugeKeepEnvelopeStableWithoutOptionalField
 	}
 	defer sink.Close()
 
-	if err := sink.Counter(context.Background(), "runtime.started", 1, metrics.Fields{}); err != nil {
+	if err := sink.Counter(context.Background(), "runtime.started", 1, factorymetrics.Fields{}); err != nil {
 		t.Fatalf("Counter: %v", err)
 	}
-	if err := sink.Gauge(context.Background(), "queue.depth", 3, metrics.Fields{}); err != nil {
+	if err := sink.Gauge(context.Background(), "queue.depth", 3, factorymetrics.Fields{}); err != nil {
 		t.Fatalf("Gauge: %v", err)
 	}
 
@@ -380,7 +382,7 @@ func TestBuildRuntimeMetricsSinkManyConcurrentStartsKeepCorrelationIsolated(t *t
 				errs <- err
 				return
 			}
-			if err := sink.Counter(context.Background(), "runtime.started", 1, metrics.Fields{}); err != nil {
+			if err := sink.Counter(context.Background(), "runtime.started", 1, factorymetrics.Fields{}); err != nil {
 				_ = sink.Close()
 				errs <- err
 				return
@@ -443,7 +445,7 @@ func TestRuntimeMetricsSinkRotatesUnderLoad(t *testing.T) {
 
 	largeReason := strings.Repeat("rotation-payload-", 8192)
 	for i := 0; i < 16; i++ {
-		if err := sink.Sample(context.Background(), "dispatch.duration", float64(i+1), "ms", metrics.Fields{
+		if err := sink.Sample(context.Background(), "dispatch.duration", float64(i+1), "ms", factorymetrics.Fields{
 			DispatchID: "dispatch-rotate",
 			Reason:     largeReason,
 		}); err != nil {

@@ -1,9 +1,8 @@
-package logging
+package runtimeartifact
 
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -30,9 +29,9 @@ func TestReserveAvailableRuntimeArtifactPathCreatesDatedParentDirectories(t *tes
 
 			assertRuntimeArtifactDatedDirAbsent(t, datedDir)
 
-			path, err := reserveAvailableRuntimeArtifactPath(rootDir, at, tc.kind, suffix)
+			path, err := ReserveAvailablePath(rootDir, at, tc.kind, suffix)
 			if err != nil {
-				t.Fatalf("reserveAvailableRuntimeArtifactPath: %v", err)
+				t.Fatalf("ReserveAvailablePath: %v", err)
 			}
 
 			assertRuntimeArtifactDatedDirPresent(t, datedDir)
@@ -56,9 +55,9 @@ func TestReserveAvailableRuntimeArtifactPathUsesPlatformSeparators(t *testing.T)
 	at := time.Date(2026, time.January, 2, 3, 4, 5, 0, time.UTC)
 	suffix := defaultpaths.RuntimeArtifactPathComponents("runtime-platform-sep")
 
-	path, err := reserveAvailableRuntimeArtifactPath(rootDir, at, defaultpaths.RuntimeArtifactKindLog, suffix)
+	path, err := ReserveAvailablePath(rootDir, at, defaultpaths.RuntimeArtifactKindLog, suffix)
 	if err != nil {
-		t.Fatalf("reserveAvailableRuntimeArtifactPath: %v", err)
+		t.Fatalf("ReserveAvailablePath: %v", err)
 	}
 
 	assertPathUsesPlatformSeparators(t, path)
@@ -73,17 +72,17 @@ func TestReserveAvailableRuntimeArtifactPathAvoidsExistingFile(t *testing.T) {
 	at := time.Date(2026, time.May, 29, 4, 45, 3, 0, time.UTC)
 	suffix := defaultpaths.RuntimeArtifactPathComponents("runtime-collision", "fixed-token")
 
-	firstPath, err := reserveAvailableRuntimeArtifactPath(rootDir, at, defaultpaths.RuntimeArtifactKindLog, suffix)
+	firstPath, err := ReserveAvailablePath(rootDir, at, defaultpaths.RuntimeArtifactKindLog, suffix)
 	if err != nil {
-		t.Fatalf("reserveAvailableRuntimeArtifactPath first: %v", err)
+		t.Fatalf("ReserveAvailablePath first: %v", err)
 	}
 	if err := os.WriteFile(firstPath, []byte("first-log"), 0o644); err != nil {
 		t.Fatalf("WriteFile(%s): %v", firstPath, err)
 	}
 
-	secondPath, err := reserveAvailableRuntimeArtifactPath(rootDir, at, defaultpaths.RuntimeArtifactKindLog, suffix)
+	secondPath, err := ReserveAvailablePath(rootDir, at, defaultpaths.RuntimeArtifactKindLog, suffix)
 	if err != nil {
-		t.Fatalf("reserveAvailableRuntimeArtifactPath second: %v", err)
+		t.Fatalf("ReserveAvailablePath second: %v", err)
 	}
 	if firstPath == secondPath {
 		t.Fatalf("collision paths must differ, both %q", firstPath)
@@ -106,7 +105,7 @@ func TestReserveAvailableRuntimeArtifactPathAvoidsConcurrentCollisions(t *testin
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			path, err := reserveAvailableRuntimeArtifactPath(rootDir, at, defaultpaths.RuntimeArtifactKindMetrics, suffix)
+			path, err := ReserveAvailablePath(rootDir, at, defaultpaths.RuntimeArtifactKindMetrics, suffix)
 			if err != nil {
 				errs <- err
 				return
@@ -120,7 +119,7 @@ func TestReserveAvailableRuntimeArtifactPathAvoidsConcurrentCollisions(t *testin
 
 	for err := range errs {
 		if err != nil {
-			t.Fatalf("reserveAvailableRuntimeArtifactPath concurrent: %v", err)
+			t.Fatalf("ReserveAvailablePath concurrent: %v", err)
 		}
 	}
 
@@ -141,17 +140,17 @@ func TestReserveAvailableRuntimeArtifactPathPreservesMetricsCollisionShape(t *te
 	at := time.Date(2026, time.May, 29, 4, 45, 3, 0, time.UTC)
 	suffix := defaultpaths.RuntimeArtifactPathComponents("session-same-ts", "runtime-same-ts", "fixed-token")
 
-	firstPath, err := reserveAvailableRuntimeArtifactPath(metricsDir, at, defaultpaths.RuntimeArtifactKindMetrics, suffix)
+	firstPath, err := ReserveAvailablePath(metricsDir, at, defaultpaths.RuntimeArtifactKindMetrics, suffix)
 	if err != nil {
-		t.Fatalf("reserveAvailableRuntimeArtifactPath first: %v", err)
+		t.Fatalf("ReserveAvailablePath first: %v", err)
 	}
 	if err := os.WriteFile(firstPath, []byte(`{"metric":"preserved"}`+"\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile(%s): %v", firstPath, err)
 	}
 
-	secondPath, err := reserveAvailableRuntimeArtifactPath(metricsDir, at, defaultpaths.RuntimeArtifactKindMetrics, suffix)
+	secondPath, err := ReserveAvailablePath(metricsDir, at, defaultpaths.RuntimeArtifactKindMetrics, suffix)
 	if err != nil {
-		t.Fatalf("reserveAvailableRuntimeArtifactPath second: %v", err)
+		t.Fatalf("ReserveAvailablePath second: %v", err)
 	}
 	if firstPath == secondPath {
 		t.Fatalf("collision paths must differ, both %q", firstPath)
@@ -166,25 +165,6 @@ func assertRuntimeArtifactDatedDirAbsent(t *testing.T, datedDir string) {
 
 	if _, err := os.Stat(datedDir); !os.IsNotExist(err) {
 		t.Fatalf("dated dir %q should not exist before sink creation, stat err = %v", datedDir, err)
-	}
-}
-
-func assertRuntimeArtifactRootLacksCalendarDirectories(t *testing.T, rootDir string) {
-	t.Helper()
-
-	entries, err := os.ReadDir(rootDir)
-	if err != nil {
-		t.Fatalf("ReadDir(%q): %v", rootDir, err)
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		if ok, err := regexp.MatchString(`^\d{4}$`, entry.Name()); err != nil {
-			t.Fatalf("match year directory name %q: %v", entry.Name(), err)
-		} else if ok {
-			t.Fatalf("root %q should not contain calendar year directory %q before sink creation", rootDir, entry.Name())
-		}
 	}
 }
 
@@ -241,5 +221,16 @@ func assertRuntimeArtifactCollisionPath(
 	}
 	if !strings.HasPrefix(parts[3], at.UTC().Format(defaultpaths.RuntimeArtifactTimeLayout)+"-"+string(kind)+"-") {
 		t.Fatalf("filename = %q, want time-kind prefix", parts[3])
+	}
+}
+
+func assertFileContents(t *testing.T, path, want string) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	if string(data) != want {
+		t.Fatalf("file %s contents = %q, want %q", path, string(data), want)
 	}
 }

@@ -1,7 +1,7 @@
 package testdeps
 
 import (
-	"github.com/portpowered/infinite-you/pkg/internal/metrics"
+	"github.com/portpowered/infinite-you/pkg/factory/metrics"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"go.uber.org/zap"

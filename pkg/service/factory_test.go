@@ -24,9 +24,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
@@ -408,13 +409,13 @@ func TestFactoryService_WaitToComplete_DelegatesToActiveRuntime(t *testing.T) {
 }
 
 func TestFactoryService_ObserveRuntimeMetrics_EmitsFailedLifecycleMetric(t *testing.T) {
-	metricsSink, err := logging.BuildRuntimeMetricsSink(
+	metricsSink, err := platformmetrics.BuildRuntimeMetricsSink(
 		"session-failed",
 		"runtime-failed",
 		"/factory",
 		"/factory/current",
 		t.TempDir(),
-		logging.RuntimeMetricsConfig{},
+		platformmetrics.RuntimeMetricsConfig{},
 	)
 	if err != nil {
 		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
@@ -492,13 +493,13 @@ func startRuntimeMetricsShutdownTestHandle(
 ) (*FactoryService, *liveRuntimeHandle, *runtimeMetricsObserverFactory, string) {
 	t.Helper()
 
-	metricsSink, err := logging.BuildRuntimeMetricsSink(
+	metricsSink, err := platformmetrics.BuildRuntimeMetricsSink(
 		"session-shutdown",
 		"runtime-shutdown",
 		"/factory",
 		"/factory/current",
 		t.TempDir(),
-		logging.RuntimeMetricsConfig{},
+		platformmetrics.RuntimeMetricsConfig{},
 	)
 	if err != nil {
 		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
@@ -864,7 +865,7 @@ func removeRunningSessionServiceRoot(t *testing.T, rootDir string) {
 func closeSessionServiceRuntimeLogs(t *testing.T, svc *FactoryService) {
 	t.Helper()
 	closed := make(map[*logging.RuntimeLogSink]struct{})
-	closedMetrics := make(map[*logging.RuntimeMetricsSink]struct{})
+	closedMetrics := make(map[*platformmetrics.RuntimeMetricsSink]struct{})
 	closeBundle := func(bundle *factoryRuntimeBundle) {
 		if bundle == nil {
 			return
@@ -4397,7 +4398,7 @@ func TestFactoryService_RuntimeLogDiagnostics_ReportsRuntimeArtifacts(t *testing
 			t.Fatalf("close log sink: %v", closeErr)
 		}
 	}()
-	metricsSink, err := logging.BuildRuntimeMetricsSink("session-1", "runtime-1", "/tmp/folder", "/tmp/factory", metricsDir, logging.RuntimeMetricsConfig{})
+	metricsSink, err := platformmetrics.BuildRuntimeMetricsSink("session-1", "runtime-1", "/tmp/folder", "/tmp/factory", metricsDir, platformmetrics.RuntimeMetricsConfig{})
 	if err != nil {
 		t.Fatalf("BuildRuntimeMetricsSink: %v", err)
 	}

@@ -78,11 +78,13 @@ func TestRunAllowsCanonicalTransportImports(t *testing.T) {
 	}
 }
 
-func TestRunAllowsPlatformLoggingAndRejectsRetiredLoggingImport(t *testing.T) {
+func TestRunAllowsPlatformObservabilityAndRejectsRetiredImports(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
 	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/canonical.go", "runtime", "github.com/portpowered/infinite-you/pkg/platform/logging")
+	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/metrics.go", "runtime", "github.com/portpowered/infinite-you/pkg/factory/metrics")
+	writeGoImportFile(t, repoRoot, "pkg/wire/metrics.go", "wire", "github.com/portpowered/infinite-you/pkg/platform/metrics")
 
 	stderr := &bytes.Buffer{}
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
@@ -98,6 +100,21 @@ func TestRunAllowsPlatformLoggingAndRejectsRetiredLoggingImport(t *testing.T) {
 	for _, want := range []string{
 		"prohibited retired package import: github.com/portpowered/infinite-you/pkg/logging",
 		"canonical owner: pkg/platform/logging",
+	} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
+		}
+	}
+
+	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/retired_metrics.go", "runtime", "github.com/portpowered/infinite-you/pkg/internal/metrics")
+	stderr.Reset()
+	err = run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want retired metrics import rejected")
+	}
+	for _, want := range []string{
+		"prohibited retired package import: github.com/portpowered/infinite-you/pkg/internal/metrics",
+		"canonical owner: pkg/factory/metrics for domain contracts and pkg/platform/metrics for file-backed recording",
 	} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)

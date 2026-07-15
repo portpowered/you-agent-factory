@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/portpowered/infinite-you/pkg/factory/metrics"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/internal/metrics"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"go.uber.org/zap"
 )

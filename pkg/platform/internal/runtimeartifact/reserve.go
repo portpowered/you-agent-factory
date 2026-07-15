@@ -1,4 +1,4 @@
-package logging
+package runtimeartifact
 
 import (
 	"errors"
@@ -14,11 +14,11 @@ const maxRuntimeArtifactPathCollisions = 1000
 
 var errRuntimeArtifactPathCollisionBudget = errors.New("runtime artifact path collision budget exhausted")
 
-// reserveAvailableRuntimeArtifactPath selects a non-colliding runtime artifact
+// ReserveAvailablePath selects a non-colliding runtime artifact
 // path under the shared dated directory. It reserves the chosen path with an
 // exclusive create so concurrent sink creation does not truncate an existing
 // file.
-func reserveAvailableRuntimeArtifactPath(
+func ReserveAvailablePath(
 	rootDir string,
 	at time.Time,
 	kind defaultpaths.RuntimeArtifactKind,

@@ -7,9 +7,10 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
@@ -41,7 +42,7 @@ type Config struct {
 	RuntimeFileLoggingPolicy                RuntimeFileLoggingPolicy
 	RuntimeMetricsPolicy                    RuntimeMetricsPolicy
 	RuntimeMetricsDir                       string
-	RuntimeMetricsConfig                    logging.RuntimeMetricsConfig
+	RuntimeMetricsConfig                    platformmetrics.RuntimeMetricsConfig
 	RecordPath                              string
 	WorkflowID                              string
 	MockWorkersConfig                       *factoryconfig.MockWorkersConfig
@@ -157,7 +158,7 @@ type HostConfigInput struct {
 	RuntimeFileLoggingPolicy                RuntimeFileLoggingPolicy
 	RuntimeMetricsPolicy                    RuntimeMetricsPolicy
 	RuntimeMetricsDir                       string
-	RuntimeMetricsConfig                    logging.RuntimeMetricsConfig
+	RuntimeMetricsConfig                    platformmetrics.RuntimeMetricsConfig
 	RecordPath                              string
 	WorkflowID                              string
 	MockWorkersConfig                       *factoryconfig.MockWorkersConfig

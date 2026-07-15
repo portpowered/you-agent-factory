@@ -3,6 +3,7 @@ package defaultcmd
 
 import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
 
@@ -20,7 +21,7 @@ func ExplicitRunConfig() runcli.RunConfig {
 		Port:                 FactoryPort,
 		AutoPort:             true,
 		RuntimeLogConfig:     logging.DefaultRuntimeLogConfig(),
-		RuntimeMetricsConfig: logging.DefaultRuntimeMetricsConfig(),
+		RuntimeMetricsConfig: platformmetrics.DefaultRuntimeMetricsConfig(),
 	}
 }
 

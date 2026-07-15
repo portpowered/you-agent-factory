@@ -15,8 +15,8 @@ type Fields struct {
 	Reason      string
 }
 
-// MetricsEmitter records logical runtime measurements without exposing sink,
-// encoder, or path-layout details to runtime and worker packages.
+// MetricsEmitter records logical factory runtime measurements without exposing
+// sink, encoder, or path-layout details to runtime and worker packages.
 type MetricsEmitter interface {
 	// Counter records a monotonic increment for a named metric.
 	Counter(ctx context.Context, name string, delta float64, fields Fields) error

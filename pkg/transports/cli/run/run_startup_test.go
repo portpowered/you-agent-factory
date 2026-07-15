@@ -20,11 +20,11 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -387,7 +387,7 @@ func TestRun_VerboseStartupDiagnosticsReportResolvedRuntimeMetadata(t *testing.T
 		DisableDefaultRecording:    true,
 		RuntimeLogDir:              "logs/runtime",
 		RuntimeMetricsDir:          "logs/metrics",
-		RuntimeMetricsConfig:       logging.RuntimeMetricsConfig{MaxSize: 19, MaxBackups: 8, MaxAge: 17, Compress: true},
+		RuntimeMetricsConfig:       platformmetrics.RuntimeMetricsConfig{MaxSize: 19, MaxBackups: 8, MaxAge: 17, Compress: true},
 		MockWorkersEnabled:         true,
 		SuppressDashboardRendering: true,
 		Verbose:                    true,

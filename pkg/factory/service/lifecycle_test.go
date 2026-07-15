@@ -18,8 +18,8 @@ import (
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"go.uber.org/zap"
 )
 
@@ -123,13 +123,13 @@ func TestRuntimeStopOutcome_PrefersTerminalResultOverForcedCancel(t *testing.T) 
 }
 
 func TestStop_EmitsCompletedLifecycleMetricWithoutRootService(t *testing.T) {
-	metricsSink, err := logging.BuildRuntimeMetricsSink(
+	metricsSink, err := platformmetrics.BuildRuntimeMetricsSink(
 		"session-shutdown",
 		"runtime-shutdown",
 		"/factory",
 		"/factory/current",
 		t.TempDir(),
-		logging.RuntimeMetricsConfig{},
+		platformmetrics.RuntimeMetricsConfig{},
 	)
 	if err != nil {
 		t.Fatalf("BuildRuntimeMetricsSink: %v", err)

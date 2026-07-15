@@ -30,15 +30,16 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recordingreplay"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
@@ -370,21 +371,21 @@ func (fs *FactoryService) RuntimeLogDiagnostics() RuntimeLogDiagnostics {
 	}
 }
 
-func runtimeMetricsPath(sink *logging.RuntimeMetricsSink) string {
+func runtimeMetricsPath(sink *platformmetrics.RuntimeMetricsSink) string {
 	if sink == nil {
 		return ""
 	}
 	return sink.Path()
 }
 
-func runtimeMetricsRootDir(sink *logging.RuntimeMetricsSink) string {
+func runtimeMetricsRootDir(sink *platformmetrics.RuntimeMetricsSink) string {
 	if sink == nil {
 		return ""
 	}
 	return sink.RootDir()
 }
 
-func runtimeMetricsStartTime(sink *logging.RuntimeMetricsSink) time.Time {
+func runtimeMetricsStartTime(sink *platformmetrics.RuntimeMetricsSink) time.Time {
 	if sink == nil {
 		return time.Time{}
 	}
@@ -629,7 +630,7 @@ func wrapLocalModelRunner(
 	return factoryservice.WrapLocalModelRunner(inner, runtimeCfg, factoryCfg, workerDef, modelDomain)
 }
 
-func closeRuntimeBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *logging.RuntimeMetricsSink) error {
+func closeRuntimeBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *platformmetrics.RuntimeMetricsSink) error {
 	return factoryservice.CloseBundleSinks(logSink, metricsSink)
 }
 
@@ -1482,7 +1483,7 @@ func HostedWorkersForCompose(
 }
 
 // CloseRuntimeBundleSinksForCompose closes startup bundle sinks when compose fails.
-func CloseRuntimeBundleSinksForCompose(logSink *logging.RuntimeLogSink, metricsSink *logging.RuntimeMetricsSink) error {
+func CloseRuntimeBundleSinksForCompose(logSink *logging.RuntimeLogSink, metricsSink *platformmetrics.RuntimeMetricsSink) error {
 	return closeRuntimeBundleSinks(logSink, metricsSink)
 }
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
@@ -18,7 +19,7 @@ func asRuntimeBundle(bundle any) *factoryRuntimeBundle {
 	return bundle.(*factoryRuntimeBundle)
 }
 
-func closeRuntimeBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *logging.RuntimeMetricsSink) error {
+func closeRuntimeBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *platformmetrics.RuntimeMetricsSink) error {
 	var errs []error
 	if logSink != nil {
 		if err := logSink.Close(); err != nil {

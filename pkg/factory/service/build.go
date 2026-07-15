@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -152,7 +153,7 @@ func assembleRuntimeBundle(
 	input BuildInput,
 	logger *zap.Logger,
 	logSink *logging.RuntimeLogSink,
-	metricsSink *logging.RuntimeMetricsSink,
+	metricsSink *platformmetrics.RuntimeMetricsSink,
 	net *state.Net,
 	eventHistory *factoryevents.FactoryEventHistory,
 	localModels LocalModelDomain,
@@ -352,11 +353,11 @@ func buildRuntimeMetricsSink(
 	runtimeInstanceID string,
 	folderPath string,
 	factoryDir string,
-) (*logging.RuntimeMetricsSink, error) {
+) (*platformmetrics.RuntimeMetricsSink, error) {
 	if !runtimeMetricsEnabled(cfg.RuntimeMetricsPolicy) {
 		return nil, nil
 	}
-	metricsSink, err := logging.BuildRuntimeMetricsSink(
+	metricsSink, err := platformmetrics.BuildRuntimeMetricsSink(
 		sessionID,
 		runtimeInstanceID,
 		folderPath,
@@ -371,7 +372,7 @@ func buildRuntimeMetricsSink(
 }
 
 // CloseBundleSinks closes runtime log and metrics sinks created during bundle build.
-func CloseBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *logging.RuntimeMetricsSink) error {
+func CloseBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *platformmetrics.RuntimeMetricsSink) error {
 	var errs []error
 	if logSink != nil {
 		if err := logSink.Close(); err != nil {

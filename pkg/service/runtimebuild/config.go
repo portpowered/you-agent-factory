@@ -7,8 +7,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -24,7 +25,7 @@ type Config struct {
 	RuntimeLogDir                           string
 	RuntimeLogConfig                        logging.RuntimeLogConfig
 	RuntimeMetricsDir                       string
-	RuntimeMetricsConfig                    logging.RuntimeMetricsConfig
+	RuntimeMetricsConfig                    platformmetrics.RuntimeMetricsConfig
 	RecordPath                              string
 	WorkflowID                              string
 	MockWorkersConfig                       *factoryconfig.MockWorkersConfig

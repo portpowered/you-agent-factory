@@ -33,8 +33,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"
@@ -88,7 +89,7 @@ type RunConfig struct {
 	RuntimeMetricsDir string
 	// RuntimeMetricsConfig controls service-owned structured runtime metrics
 	// rolling behavior.
-	RuntimeMetricsConfig logging.RuntimeMetricsConfig
+	RuntimeMetricsConfig platformmetrics.RuntimeMetricsConfig
 	// MockWorkersEnabled enables deterministic mock-worker execution. When
 	// true and MockWorkersConfigPath is empty, the runtime uses the default
 	// accept behavior for all worker dispatches.

@@ -8,10 +8,11 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service"
 	modelscli "github.com/portpowered/infinite-you/pkg/transports/cli/models"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // BuildModelInvocation constructs the model invocation collaborator selected
@@ -27,7 +28,7 @@ func BuildModelInvocation(ctx context.Context, request modelscli.InvocationReque
 		Logger:               request.Logger,
 		Verbose:              request.Verbose,
 		RuntimeLogConfig:     logging.DefaultRuntimeLogConfig(),
-		RuntimeMetricsConfig: logging.DefaultRuntimeMetricsConfig(),
+		RuntimeMetricsConfig: platformmetrics.DefaultRuntimeMetricsConfig(),
 	}
 	if strings.TrimSpace(request.HomeDir) != "" {
 		cfg.RuntimeLogDir = defaultpaths.RuntimeLogsRoot(request.HomeDir)

@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -630,7 +631,7 @@ func TestRun_RuntimeMetricsConfigPassedToServiceConfig(t *testing.T) {
 		}, nil
 	}
 
-	runtimeMetricsConfig := logging.RuntimeMetricsConfig{
+	runtimeMetricsConfig := platformmetrics.RuntimeMetricsConfig{
 		MaxSize:    14,
 		MaxBackups: 7,
 		MaxAge:     28,

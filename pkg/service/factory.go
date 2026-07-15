@@ -22,15 +22,16 @@ import (
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
@@ -325,7 +326,7 @@ type FactoryServiceConfig struct {
 	RuntimeMetricsDir string
 	// RuntimeMetricsConfig controls bounded runtime metrics file behavior.
 	// Zero values use defaults that match the runtime log rolling policy.
-	RuntimeMetricsConfig logging.RuntimeMetricsConfig
+	RuntimeMetricsConfig platformmetrics.RuntimeMetricsConfig
 	// WorkFile is an optional path to a FACTORY_REQUEST_BATCH JSON file
 	// containing initial work to submit when the factory starts.
 	WorkFile string

@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
+	"github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
 	"gopkg.in/natefinch/lumberjack.v2"
 
 	"go.uber.org/zap"
@@ -20,8 +21,8 @@ import (
 const (
 	legacyRuntimeLogDirName  = ".agent-factory"
 	runtimeLogSubdirName     = "logs"
-	runtimeLogExtension  = defaultpaths.RuntimeArtifactExtension
-	runtimeLogTimeLayout = defaultpaths.RuntimeArtifactTimeLayout
+	runtimeLogExtension      = defaultpaths.RuntimeArtifactExtension
+	runtimeLogTimeLayout     = defaultpaths.RuntimeArtifactTimeLayout
 	defaultRuntimeLogMaxSize = 100
 	defaultRuntimeLogBackups = 20
 	defaultRuntimeLogMaxAge  = 30
@@ -226,7 +227,7 @@ func BuildRuntimeLogger(base *zap.Logger, runtimeInstanceID, runtimeLogDir strin
 		runtimeLogDir = dir
 	}
 	startTimeUTC := time.Now().UTC()
-	path, err := reserveAvailableRuntimeArtifactPath(
+	path, err := runtimeartifact.ReserveAvailablePath(
 		runtimeLogDir,
 		startTimeUTC,
 		defaultpaths.RuntimeArtifactKindLog,

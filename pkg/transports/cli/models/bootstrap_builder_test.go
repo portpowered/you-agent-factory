@@ -8,9 +8,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // These hooks keep transport-focused tests able to inject deterministic
@@ -32,7 +33,7 @@ func testModelInvocationBuilder(ctx context.Context, request InvocationRequest) 
 		Logger:               request.Logger,
 		Verbose:              request.Verbose,
 		RuntimeLogConfig:     logging.DefaultRuntimeLogConfig(),
-		RuntimeMetricsConfig: logging.DefaultRuntimeMetricsConfig(),
+		RuntimeMetricsConfig: platformmetrics.DefaultRuntimeMetricsConfig(),
 	}
 	if strings.TrimSpace(request.HomeDir) != "" {
 		cfg.RuntimeLogDir = defaultpaths.RuntimeLogsRoot(request.HomeDir)

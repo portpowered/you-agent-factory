@@ -34,6 +34,7 @@ var retiredPackageRoots = append([]retiredPackageRoot{
 	{packagePath: "pkg/cli", canonicalOwner: "pkg/transports/cli"},
 	{packagePath: "pkg/generatedclient", canonicalOwner: "pkg/transports/http/client"},
 	{packagePath: "pkg/hostedworkers", canonicalOwner: "pkg/workers/hosted"},
+	{packagePath: "pkg/internal/metrics", canonicalOwner: "pkg/factory/metrics for domain contracts and pkg/platform/metrics for file-backed recording"},
 	{packagePath: "pkg/invocations", canonicalOwner: "pkg/work/invocation, pkg/factory/sessions/invocation, pkg/workers/inference, or pkg/workers/skippermissions, according to the concern"},
 	{packagePath: "pkg/localmodels", canonicalOwner: "pkg/models/local or pkg/models/assets"},
 	{packagePath: "pkg/logging", canonicalOwner: "pkg/platform/logging"},

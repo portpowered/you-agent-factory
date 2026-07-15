@@ -1,4 +1,4 @@
-package logging
+package metrics
 
 import (
 	"context"
@@ -12,19 +12,32 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
-	"github.com/portpowered/infinite-you/pkg/internal/metrics"
+	factorymetrics "github.com/portpowered/infinite-you/pkg/factory/metrics"
+	"github.com/portpowered/infinite-you/pkg/platform/internal/runtimeartifact"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 const (
-	metricsMetricTypeCounter = "counter"
-	metricsMetricTypeGauge   = "gauge"
-	metricsMetricTypeSample  = "sample"
+	metricsMetricTypeCounter     = "counter"
+	metricsMetricTypeGauge       = "gauge"
+	metricsMetricTypeSample      = "sample"
+	defaultRuntimeMetricsMaxSize = 100
+	defaultRuntimeMetricsBackups = 20
+	defaultRuntimeMetricsMaxAge  = 30
 )
 
 // RuntimeMetricsConfig controls rolling-file policy for runtime metrics.
 // Values are in megabytes (MaxSize) and days (MaxAge).
-type RuntimeMetricsConfig = RuntimeLogConfig
+type RuntimeMetricsConfig struct {
+	// MaxSize sets the maximum size in megabytes before rotation.
+	MaxSize int
+	// MaxBackups controls how many backup files are retained.
+	MaxBackups int
+	// MaxAge controls how many days backup files are retained.
+	MaxAge int
+	// Compress enables gzip compression for rotated files.
+	Compress bool
+}
 
 // RuntimeMetricsSink owns the file-backed JSONL metrics emitter and rolling
 // writer for one live runtime/session bundle.
@@ -48,7 +61,11 @@ var errRuntimeMetricsSinkClosed = errors.New("runtime metrics sink closed")
 // DefaultRuntimeMetricsConfig returns the production rolling-file policy used
 // when callers do not set explicit runtime metrics limits.
 func DefaultRuntimeMetricsConfig() RuntimeMetricsConfig {
-	return RuntimeMetricsConfig(DefaultRuntimeLogConfig())
+	return RuntimeMetricsConfig{
+		MaxSize:    defaultRuntimeMetricsMaxSize,
+		MaxBackups: defaultRuntimeMetricsBackups,
+		MaxAge:     defaultRuntimeMetricsMaxAge,
+	}
 }
 
 // BuildRuntimeMetricsSink creates a bounded rolling JSONL metrics sink.
@@ -72,7 +89,7 @@ func BuildRuntimeMetricsSink(
 	}
 
 	startTimeUTC := time.Now().UTC()
-	path, err := reserveAvailableRuntimeArtifactPath(
+	path, err := runtimeartifact.ReserveAvailablePath(
 		metricsDir,
 		startTimeUTC,
 		defaultpaths.RuntimeArtifactKindMetrics,
@@ -106,17 +123,17 @@ func BuildRuntimeMetricsSink(
 }
 
 // Counter records a monotonic increment.
-func (s *RuntimeMetricsSink) Counter(ctx context.Context, name string, delta float64, fields metrics.Fields) error {
+func (s *RuntimeMetricsSink) Counter(ctx context.Context, name string, delta float64, fields factorymetrics.Fields) error {
 	return s.emit(ctx, name, metricsMetricTypeCounter, delta, "", fields)
 }
 
 // Gauge records a point-in-time level.
-func (s *RuntimeMetricsSink) Gauge(ctx context.Context, name string, value float64, fields metrics.Fields) error {
+func (s *RuntimeMetricsSink) Gauge(ctx context.Context, name string, value float64, fields factorymetrics.Fields) error {
 	return s.emit(ctx, name, metricsMetricTypeGauge, value, "", fields)
 }
 
 // Sample records a measured value.
-func (s *RuntimeMetricsSink) Sample(ctx context.Context, name string, value float64, unit string, fields metrics.Fields) error {
+func (s *RuntimeMetricsSink) Sample(ctx context.Context, name string, value float64, unit string, fields factorymetrics.Fields) error {
 	return s.emit(ctx, name, metricsMetricTypeSample, value, unit, fields)
 }
 
@@ -167,7 +184,7 @@ func (s *RuntimeMetricsSink) Close() error {
 	return s.writer.Close()
 }
 
-func (s *RuntimeMetricsSink) emit(ctx context.Context, name string, metricType string, value float64, unit string, fields metrics.Fields) error {
+func (s *RuntimeMetricsSink) emit(ctx context.Context, name string, metricType string, value float64, unit string, fields factorymetrics.Fields) error {
 	if s == nil {
 		return nil
 	}
@@ -184,7 +201,7 @@ func (s *RuntimeMetricsSink) emit(ctx context.Context, name string, metricType s
 	return s.encoder.Encode(s.newRecord(name, metricType, value, unit, fields))
 }
 
-func (s *RuntimeMetricsSink) newRecord(name string, metricType string, value float64, unit string, fields metrics.Fields) runtimeMetricsRecord {
+func (s *RuntimeMetricsSink) newRecord(name string, metricType string, value float64, unit string, fields factorymetrics.Fields) runtimeMetricsRecord {
 	return runtimeMetricsRecord{
 		Timestamp:         time.Now().UTC().Format(time.RFC3339Nano),
 		MetricName:        name,
@@ -255,7 +272,21 @@ func (w *runtimeMetricsWriter) Close() error {
 	return w.writer.Close()
 }
 func normalizeRuntimeMetricsConfig(config RuntimeMetricsConfig) RuntimeMetricsConfig {
-	return RuntimeMetricsConfig(normalizeRuntimeLogConfig(RuntimeLogConfig(config)))
+	if config.MaxSize <= 0 {
+		config.MaxSize = DefaultRuntimeMetricsConfig().MaxSize
+	}
+	if config.MaxBackups < 0 {
+		config.MaxBackups = 0
+	}
+	if config.MaxAge < 0 {
+		config.MaxAge = 0
+	}
+	if config.MaxBackups == 0 && config.MaxAge == 0 {
+		defaults := DefaultRuntimeMetricsConfig()
+		config.MaxBackups = defaults.MaxBackups
+		config.MaxAge = defaults.MaxAge
+	}
+	return config
 }
 
 func defaultRuntimeMetricsDir() (string, error) {
@@ -266,4 +297,4 @@ func defaultRuntimeMetricsDir() (string, error) {
 	return defaultpaths.RuntimeMetricsRoot(home), nil
 }
 
-var _ metrics.MetricsEmitter = (*RuntimeMetricsSink)(nil)
+var _ factorymetrics.MetricsEmitter = (*RuntimeMetricsSink)(nil)
