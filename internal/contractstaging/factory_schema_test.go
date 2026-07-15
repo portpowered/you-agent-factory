@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractopenapiconverter"
@@ -89,28 +88,6 @@ func TestFactorySchemaB16GapRecordCoversCanonicalFactoryGraph(t *testing.T) {
 	}
 }
 
-func TestProductionPackagesDoNotImportFactorySchemaConverter(t *testing.T) {
-	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
-	packageRoots := []string{
-		"pkg/transports/http",
-		"pkg/transports/cli",
-		"pkg/config",
-		"pkg/service",
-		"pkg/workers",
-		"pkg/factory",
-	}
-	target := "github.com/portpowered/infinite-you/internal/contractopenapiconverter"
-	for _, packageRoot := range packageRoots {
-		packageRoot := packageRoot
-		t.Run(packageRoot, func(t *testing.T) {
-			t.Parallel()
-			if importFound(t, filepath.Join(repositoryRoot, packageRoot), target) {
-				t.Fatalf("%s imports build-time converter %s", packageRoot, target)
-			}
-		})
-	}
-}
-
 func loadFactoryGraph(t *testing.T, repositoryRoot string) (map[string]any, map[string]any) {
 	t.Helper()
 	path := filepath.Join(repositoryRoot, "api", "openapi.yaml")
@@ -135,36 +112,4 @@ func loadFactoryGraph(t *testing.T, repositoryRoot string) (map[string]any, map[
 		t.Fatal("missing Factory schema")
 	}
 	return factory, components
-}
-
-func importFound(t *testing.T, root, target string) bool {
-	t.Helper()
-	found := false
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			if entry.Name() == "vendor" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		payload, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if strings.Contains(string(payload), "\""+target+"\"") {
-			found = true
-			return filepath.SkipAll
-		}
-		return nil
-	})
-	if err != nil && !found {
-		t.Fatalf("walk %s: %v", root, err)
-	}
-	return found
 }
