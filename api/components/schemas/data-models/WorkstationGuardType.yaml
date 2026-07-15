@@ -1,0 +1,5 @@
+type: string
+description: Guard condition attached to a workstation as a whole.
+enum:
+  - VISIT_COUNT
+  - MATCHES_FIELDS

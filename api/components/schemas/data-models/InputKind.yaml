@@ -1,8 +1,4 @@
 type: string
-x-enum-varnames:
-  - InputKindDefault
 enum:
-  - DEFAULT
-x-enum-descriptions:
-  - Opaque input accepted by the factory without a specialized input schema.
+    - DEFAULT
 description: Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.

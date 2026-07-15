@@ -2059,7 +2059,7 @@ describe("workstation taxonomy save projection", () => {
         {
           model: "gpt-5",
           name: "writer",
-          type: WorkerType.WorkerTypeInferenceWorker,
+          type: WorkerType.INFERENCE_WORKER,
         },
       ],
       workTypes: [
@@ -2077,7 +2077,7 @@ describe("workstation taxonomy save projection", () => {
           inputs: [{ state: "queued", workType: "story" }],
           name: "draft",
           outputs: [{ state: "done", workType: "story" }],
-          type: WorkstationType.WorkstationTypeAgentRun,
+          type: WorkstationType.AGENT_RUN,
           worker: "writer",
         },
       ],
@@ -2086,7 +2086,7 @@ describe("workstation taxonomy save projection", () => {
     const values = resolveEditableWorkstationValues(taxonomyFactory, {
       node_id: "draft",
       transition_id: "draft",
-      workstation_kind: WorkstationType.WorkstationTypeAgentRun,
+      workstation_kind: WorkstationType.AGENT_RUN,
       workstation_name: "draft",
     });
     if (!values) {
@@ -2095,7 +2095,7 @@ describe("workstation taxonomy save projection", () => {
 
     const draft = editableWorkstationDraftFromValues({
       ...values,
-      workstationType: WorkstationType.WorkstationTypeInferenceRun,
+      workstationType: WorkstationType.INFERENCE_RUN,
       operation: "TTS",
       operationBindings: [],
     });
@@ -2104,18 +2104,18 @@ describe("workstation taxonomy save projection", () => {
       {
         node_id: "draft",
         transition_id: "draft",
-        workstation_kind: WorkstationType.WorkstationTypeAgentRun,
+        workstation_kind: WorkstationType.AGENT_RUN,
         workstation_name: "draft",
       },
       {
         ...draft,
-        workstationType: WorkstationType.WorkstationTypeInferenceRun,
+        workstationType: WorkstationType.INFERENCE_RUN,
       },
     );
 
     expect(saved?.workstations?.[0]).toMatchObject({
       name: "draft",
-      type: WorkstationType.WorkstationTypeInferenceRun,
+      type: WorkstationType.INFERENCE_RUN,
       worker: "writer",
     });
   });

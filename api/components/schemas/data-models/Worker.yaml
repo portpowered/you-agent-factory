@@ -13,22 +13,27 @@ properties:
     type: string
     description: Worker name referenced by Workstation.worker.
   type:
-    $ref: './WorkerType.yaml'
+    allOf:
+      - $ref: './WorkerType.yaml'
     description: Worker implementation family to instantiate for this definition.
   provider:
-    $ref: './HostedWorkerProvider.yaml'
+    allOf:
+      - $ref: './HostedWorkerProvider.yaml'
     description: Built-in hosted provider identity when this worker uses repository-owned hosted execution.
   model:
     type: string
     description: Model identifier to request from the configured model provider when this worker uses model execution.
   modelProvider:
-    $ref: './WorkerModelProvider.yaml'
+    allOf:
+      - $ref: './WorkerModelProvider.yaml'
     description: Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
   modelLocality:
-    $ref: './WorkerModelLocality.yaml'
+    allOf:
+      - $ref: './WorkerModelLocality.yaml'
     description: Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution.
   executorProvider:
-    $ref: './WorkerProvider.yaml'
+    allOf:
+      - $ref: './WorkerProvider.yaml'
     description: Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`.
   operations:
     type: array
@@ -64,13 +69,16 @@ properties:
       runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent
       names with `opencode agent list` (see https://opencode.ai/docs/cli/).
   auth:
-    $ref: './HostedWorkerAuth.yaml'
+    allOf:
+      - $ref: './HostedWorkerAuth.yaml'
     description: Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef.
   linear:
-    $ref: './HostedLinearWorkerConfig.yaml'
+    allOf:
+      - $ref: './HostedLinearWorkerConfig.yaml'
     description: Provider-specific configuration for the built-in hosted LINEAR worker.
   agentTools:
-    $ref: './AgentWorkerToolsConfig.yaml'
+    allOf:
+      - $ref: './AgentWorkerToolsConfig.yaml'
     description: >-
       Explicit agent-loop tool policy for AGENT_WORKER definitions. Omit or set
       policy DISABLED to run agent loops without advertising or executing tools.

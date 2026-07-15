@@ -29,17 +29,17 @@ type Command struct {
 	Handler       *Handler                `json:"handler,omitempty"`
 }
 
-// Relationship describes a parser constraint between flags or arguments.
+// Relationship is one contracted Cobra input relationship.
 type Relationship struct {
-	ID           string                    `json:"id"`
-	Kind         string                    `json:"kind"`
-	Participants []RelationshipParticipant `json:"participants"`
+	ID           string           `json:"id"`
+	Kind         string           `json:"kind"`
+	Participants []ParticipantRef `json:"participants"`
 }
 
-// RelationshipParticipant identifies one flag or argument in a relationship.
-type RelationshipParticipant struct {
-	Type string `json:"type"`
+// ParticipantRef identifies one flag or argument in a relationship.
+type ParticipantRef struct {
 	ID   string `json:"id"`
+	Type string `json:"type"`
 }
 
 // Handler carries stable handler identity and optional OpenAPI operation binding.

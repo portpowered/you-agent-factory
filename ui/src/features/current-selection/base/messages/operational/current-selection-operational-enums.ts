@@ -32,7 +32,7 @@ function isRepeaterRejectedOutcome(
   return (
     value.trim().toUpperCase() === RAW_REJECTED_OUTCOME &&
     workstationKind?.trim().toUpperCase() ===
-      WorkstationKind.WorkstationKindRepeater
+      WorkstationKind.REPEATER
   );
 }
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/testutil"
@@ -87,6 +88,44 @@ func TestExtractRepresentativeFamilyFromProductionManifest(t *testing.T) {
 		if record.Path == "" {
 			t.Fatalf("command %q missing path", id)
 		}
+	}
+}
+
+func TestExtractSessionFamilyFromProductionManifest(t *testing.T) {
+	repoRoot := testutil.MustRepoPath(t, ".")
+	manifest, err := climanifest.LoadProduction(filepath.Join(repoRoot, climanifest.ProductionManifestPath))
+	if err != nil {
+		t.Fatalf("LoadProduction() error = %v", err)
+	}
+
+	family, err := climanifestgen.ExtractSessionFamily(manifest)
+	if err != nil {
+		t.Fatalf("ExtractSessionFamily() error = %v", err)
+	}
+	if len(family.Commands) != len(climanifestgen.SessionFamilyCommandIDs) {
+		t.Fatalf("command count = %d, want %d", len(family.Commands), len(climanifestgen.SessionFamilyCommandIDs))
+	}
+	for _, id := range climanifestgen.SessionFamilyCommandIDs {
+		record, ok := family.Commands[id]
+		if !ok || record.ID != id {
+			t.Fatalf("session command %q = %#v", id, record)
+		}
+	}
+}
+
+func TestExtractSessionFamilyRejectsMissingCommand(t *testing.T) {
+	manifest := climanifest.Manifest{
+		RootPath: "you",
+		Commands: map[string]climanifest.Command{"you.session": {ID: "you.session"}},
+	}
+	if _, err := climanifestgen.ExtractSessionFamily(manifest); err == nil || !strings.Contains(err.Error(), "you.session.create") {
+		t.Fatalf("ExtractSessionFamily() error = %v, want stable missing command ID", err)
+	}
+}
+
+func TestAssertSessionFamilyCommandIDRejectsCrossFamilyID(t *testing.T) {
+	if err := climanifestgen.AssertSessionFamilyCommandID("you.work.list"); err == nil {
+		t.Fatal("expected cross-family command rejection")
 	}
 }
 

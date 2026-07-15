@@ -198,12 +198,12 @@
           "kind": "mutually-exclusive",
           "participants": [
             {
-              "type": "flag",
-              "id": "you.mcp.serve.flag.runtime"
+              "id": "you.mcp.serve.flag.runtime",
+              "type": "flag"
             },
             {
-              "type": "flag",
-              "id": "you.mcp.serve.flag.fixture-catalog"
+              "id": "you.mcp.serve.flag.fixture-catalog",
+              "type": "flag"
             }
           ]
         }

@@ -44,7 +44,7 @@ const workTypePlace: DashboardPlaceRef = {
 
 const workstation: DashboardWorkstationNode = {
   node_id: "workstation:draft",
-  workstation_kind: WorkstationKind.WorkstationKindStandard,
+  workstation_kind: WorkstationKind.STANDARD,
   workstation_name: "Draft",
 };
 

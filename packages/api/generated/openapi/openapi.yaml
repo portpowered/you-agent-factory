@@ -2835,9 +2835,6 @@ components:
           type: string
           format: int64
           pattern: ^[0-9]+$
-          x-go-type: apitypes.Int64String
-          x-go-type-import:
-            path: github.com/portpowered/infinite-you/pkg/transports/http/apitypes
           description: Monotonic Lamport-style logical component derived from the persisted factory definition version. Serialized as a decimal string so JavaScript clients can round-trip the 64-bit value without precision loss.
         physical:
           type: string
@@ -5771,7 +5768,6 @@ components:
       minLength: 1
       pattern: ^(UNDEFINED|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$
       description: Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
-      example: customer-support-triage
     FactoryWorldWorkstationRequestProjectionSlice:
       type: object
       additionalProperties: false
@@ -8140,101 +8136,6 @@ components:
       additionalProperties: false
       required:
         - name
-      example:
-        name: customer-support-triage
-        inputTypes:
-          - name: brief
-            type: DEFAULT
-        guards:
-          - type: INFERENCE_THROTTLE_GUARD
-            modelProvider: CLAUDE
-            model: claude-sonnet-4-20250514
-            refreshWindow: 15m
-        workTypes:
-          - name: story
-            states:
-              - name: init
-                type: INITIAL
-              - name: inReview
-                type: PROCESSING
-              - name: failed
-                type: FAILED
-              - name: complete
-                type: TERMINAL
-        invocationReturn:
-          policy: SUBMITTED_WORK_TERMINAL
-        supportingFiles:
-          requiredTools:
-            - name: python
-              command: python3
-              purpose: Runs bundled translation scripts
-              versionArgs:
-                - '--version'
-          bundledFiles:
-            - type: ROOT_HELPER
-              targetPath: Makefile
-              content:
-                encoding: utf-8
-                inline: "test:\n\tgo test ./...\n"
-            - type: SCRIPT
-              targetPath: factory/scripts/setup-workspace.py
-              content:
-                encoding: utf-8
-                inline: |
-                  print("portable")
-            - type: DOC
-              targetPath: factory/docs/usage.md
-              content:
-                encoding: utf-8
-                inline: |
-                  # Usage
-            - type: INPUT
-              targetPath: factory/inputs/story/default/seed.md
-              content:
-                encoding: utf-8
-                inline: |
-                  Shared starter work
-        workers:
-          - name: reviewer
-            type: MODEL_WORKER
-            executorProvider: SCRIPT_WRAP
-            modelProvider: CLAUDE
-            model: claude-sonnet-4-20250514
-          - name: review-loop-breaker
-            type: MODEL_WORKER
-            executorProvider: SCRIPT_WRAP
-            modelProvider: CLAUDE
-            model: claude-sonnet-4-20250514
-        workstations:
-          - name: review-story
-            behavior: REPEATER
-            type: MODEL_WORKSTATION
-            worker: reviewer
-            inputs:
-              - workType: story
-                state: init
-            outputs:
-              - workType: story
-                state: inReview
-            onRejection:
-              - workType: story
-                state: init
-            onFailure:
-              - workType: story
-                state: failed
-          - name: review-loop-breaker
-            worker: review-loop-breaker
-            type: LOGICAL_MOVE
-            guards:
-              - type: VISIT_COUNT
-                workstation: review-story
-                maxVisits: 3
-            inputs:
-              - workType: story
-                state: init
-            outputs:
-              - workType: story
-                state: failed
       properties:
         name:
           $ref: '#/components/schemas/FactoryName'
@@ -8242,7 +8143,8 @@ components:
           type: string
           description: Factory identifier used as the factory-level template context fallback.
         runner:
-          $ref: '#/components/schemas/RunnerID'
+          allOf:
+            - $ref: '#/components/schemas/RunnerID'
           description: Default runner selection for the factory when a workstation does not declare its own runner override.
         factoryDirectory:
           type: string
@@ -8251,13 +8153,16 @@ components:
           type: string
           description: Original source directory for record/replay and drift diagnostics.
         version:
-          $ref: '#/components/schemas/HybridLogicalTimestamp'
+          allOf:
+            - $ref: '#/components/schemas/HybridLogicalTimestamp'
           description: Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology.
         metadata:
-          $ref: '#/components/schemas/StringMap'
+          allOf:
+            - $ref: '#/components/schemas/StringMap'
           description: Free-form factory-level metadata carried through runtime serialization and replay diagnostics.
         orchestrator:
-          $ref: '#/components/schemas/FactoryOrchestrator'
+          allOf:
+            - $ref: '#/components/schemas/FactoryOrchestrator'
           description: Authored orchestrator identity for this factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
         inputTypes:
           type: array
@@ -8265,10 +8170,12 @@ components:
           items:
             $ref: '#/components/schemas/InputType'
         invocationReturn:
-          $ref: '#/components/schemas/InvocationReturn'
+          allOf:
+            - $ref: '#/components/schemas/InvocationReturn'
           description: Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation.
         invocationSignature:
-          $ref: '#/components/schemas/FactoryInvocationSignature'
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationSignature'
           description: Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior.
         guards:
           type: array
@@ -8286,10 +8193,12 @@ components:
           items:
             $ref: '#/components/schemas/Resource'
         supportingFiles:
-          $ref: '#/components/schemas/ResourceManifest'
+          allOf:
+            - $ref: '#/components/schemas/ResourceManifest'
           description: Optional portability manifest for validation-only external tools and portable bundled files. During v1 factory sharing, bundled INPUT files represent a share-time snapshot of the source factory's current inputs work so recipients restore detached starter-work copies that no longer sync back to the original factory. This contract is distinct from runtime-capacity resources.
         layout:
-          $ref: '#/components/schemas/FactoryLayout'
+          allOf:
+            - $ref: '#/components/schemas/FactoryLayout'
           description: Optional non-executable graph editor layout metadata keyed by canonical graph node and edge ids.
         workers:
           type: array
@@ -8311,10 +8220,12 @@ components:
         kind:
           $ref: '#/components/schemas/FactoryOrchestratorKind'
         petri:
-          $ref: '#/components/schemas/FactoryOrchestratorPetriConfig'
+          allOf:
+            - $ref: '#/components/schemas/FactoryOrchestratorPetriConfig'
           description: Petri-specific orchestrator configuration. Required only when kind = PETRI and additional Petri options are authored.
         javascript:
-          $ref: '#/components/schemas/FactoryOrchestratorJavaScriptConfig'
+          allOf:
+            - $ref: '#/components/schemas/FactoryOrchestratorJavaScriptConfig'
           description: JavaScript-specific orchestrator configuration. Required when kind = JAVASCRIPT.
     FactoryOrchestratorKind:
       type: string
@@ -8322,9 +8233,6 @@ components:
       enum:
         - PETRI
         - JAVASCRIPT
-      x-enum-descriptions:
-        - Petri-net orchestration backed by work types, workers, and workstations.
-        - JavaScript workflow orchestration backed by authored source identity and policy.
     FactoryOrchestratorPetriConfig:
       type: object
       additionalProperties: false
@@ -8341,7 +8249,8 @@ components:
           type: string
           description: Factory-relative or authored reference to the workflow source file.
         inlineSource:
-          $ref: '#/components/schemas/FactoryOrchestratorJavaScriptInlineSource'
+          allOf:
+            - $ref: '#/components/schemas/FactoryOrchestratorJavaScriptInlineSource'
           description: Inline workflow source when the factory carries source text directly.
         sourceHash:
           type: string
@@ -8350,7 +8259,8 @@ components:
           type: string
           description: Optional exported entrypoint or phase name used to start the workflow.
         metadata:
-          $ref: '#/components/schemas/StringMap'
+          allOf:
+            - $ref: '#/components/schemas/StringMap'
           description: Free-form JavaScript orchestrator metadata for authoring and diagnostics.
         argsSchema:
           type: object
@@ -8392,10 +8302,12 @@ components:
           items:
             $ref: '#/components/schemas/FactoryInvocationParameter'
         unknownNamedArgumentPolicy:
-          $ref: '#/components/schemas/FactoryInvocationUnknownNamedArgumentPolicy'
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationUnknownNamedArgumentPolicy'
           description: Policy for named inputs that do not match any declared parameter binding.
         outputContract:
-          $ref: '#/components/schemas/FactoryInvocationOutputContract'
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationOutputContract'
           description: Optional customer-facing hint for the factory's primary output shape.
         examples:
           type: array
@@ -8424,10 +8336,12 @@ components:
           items:
             type: string
         typeHint:
-          $ref: '#/components/schemas/FactoryInvocationParameterTypeHint'
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationParameterTypeHint'
           description: String-first hint that guides parsing, docs, and dashboard form selection.
         valueMode:
-          $ref: '#/components/schemas/FactoryInvocationParameterValueMode'
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationParameterValueMode'
           description: Declares whether the parameter consumes one value, repeated values, variadic values, or file contents.
         required:
           type: boolean
@@ -8461,7 +8375,8 @@ components:
       description: One public binding that exposes a parameter to callers.
       properties:
         kind:
-          $ref: '#/components/schemas/FactoryInvocationParameterBindingKind'
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationParameterBindingKind'
           description: Binding kind used to route invocation input into the parameter.
         position:
           type: integer
@@ -8470,31 +8385,14 @@ components:
     FactoryInvocationParameterBindingKind:
       type: string
       description: Public invocation binding kinds supported by factory signatures.
-      x-enum-varnames:
-        - FactoryInvocationParameterBindingKindPositional
-        - FactoryInvocationParameterBindingKindNamed
-        - FactoryInvocationParameterBindingKindStdin
-        - FactoryInvocationParameterBindingKindNamedRest
       enum:
         - POSITIONAL
         - NAMED
         - STDIN
         - NAMED_REST
-      x-enum-descriptions:
-        - Consume a positional CLI-style argument at a declared 1-based slot.
-        - Consume one named argument key matched through the parameter's externalName or aliases.
-        - Consume invocation stdin routed into one declared parameter.
-        - Collect otherwise-unbound named arguments into one rest-style parameter.
     FactoryInvocationParameterTypeHint:
       type: string
       description: String-first parsing and UI hint for one factory invocation parameter.
-      x-enum-varnames:
-        - FactoryInvocationParameterTypeHintString
-        - FactoryInvocationParameterTypeHintPath
-        - FactoryInvocationParameterTypeHintFilePath
-        - FactoryInvocationParameterTypeHintDirectoryPath
-        - FactoryInvocationParameterTypeHintNumberString
-        - FactoryInvocationParameterTypeHintBooleanString
       enum:
         - STRING
         - PATH
@@ -8502,53 +8400,29 @@ components:
         - DIRECTORY_PATH
         - NUMBER_STRING
         - BOOLEAN_STRING
-      x-enum-descriptions:
-        - Generic free-form string input.
-        - Path-like string input with no stronger file or directory guarantee.
-        - File path string input.
-        - Directory path string input.
-        - Numeric value encoded as a string for transport parity.
-        - Boolean value encoded as a string with CLI-friendly flag behavior.
     FactoryInvocationParameterValueMode:
       type: string
       description: Declares how one invocation parameter consumes one or more string values.
-      x-enum-varnames:
-        - FactoryInvocationParameterValueModeExact
-        - FactoryInvocationParameterValueModeRepeated
-        - FactoryInvocationParameterValueModeVariadic
-        - FactoryInvocationParameterValueModeFileContents
       enum:
         - EXACT
         - REPEATED
         - VARIADIC
         - FILE_CONTENTS
-      x-enum-descriptions:
-        - Consume exactly one effective string value.
-        - Consume zero or more repeated effective string values.
-        - Consume positional overflow values as one variadic parameter.
-        - Resolve supplied path values to file contents before interpolation.
     FactoryInvocationUnknownNamedArgumentPolicy:
       type: string
       description: Policy for named inputs that do not match any declared parameter binding.
-      x-enum-varnames:
-        - FactoryInvocationUnknownNamedArgumentPolicyReject
-        - FactoryInvocationUnknownNamedArgumentPolicyAllow
-        - FactoryInvocationUnknownNamedArgumentPolicyCollect
       enum:
         - REJECT
         - ALLOW
         - COLLECT
-      x-enum-descriptions:
-        - Reject unknown named arguments during normalization.
-        - Preserve unknown named arguments for compatibility handling.
-        - Route unknown named arguments into one declared NAMED_REST parameter.
     FactoryInvocationOutputContract:
       type: object
       additionalProperties: false
       description: Customer-facing output hint for a factory invocation signature.
       properties:
         mode:
-          $ref: '#/components/schemas/FactoryInvocationOutputContractMode'
+          allOf:
+            - $ref: '#/components/schemas/FactoryInvocationOutputContractMode'
           description: High-level output contract mode exposed to callers.
         pathParameter:
           type: string
@@ -8565,18 +8439,10 @@ components:
     FactoryInvocationOutputContractMode:
       type: string
       description: High-level output shape hint exposed by a factory invocation signature.
-      x-enum-varnames:
-        - FactoryInvocationOutputContractModeInline
-        - FactoryInvocationOutputContractModeFile
-        - FactoryInvocationOutputContractModeJson
       enum:
         - INLINE
         - FILE
         - JSON
-      x-enum-descriptions:
-        - The primary result is expected inline in the invocation response.
-        - The primary result is expected to be written to a caller-supplied file path.
-        - The primary result is expected to be structured JSON-like content.
     FactoryInvocationExample:
       type: object
       additionalProperties: false
@@ -8606,7 +8472,8 @@ components:
       description: Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.
       properties:
         policy:
-          $ref: '#/components/schemas/InvocationReturnPolicy'
+          allOf:
+            - $ref: '#/components/schemas/InvocationReturnPolicy'
           description: Return selection policy for this factory.
         workTypeName:
           type: string
@@ -8623,12 +8490,6 @@ components:
       enum:
         - SUBMITTED_WORK_TERMINAL
         - EXPLICIT
-      x-enum-varnames:
-        - InvocationReturnPolicySubmittedWorkTerminal
-        - InvocationReturnPolicyExplicit
-      x-enum-descriptions:
-        - Use the invocation-submitted work item terminal content as the primary result.
-        - Use the configured work type, terminal state, and optional work name as the primary result.
     FactoryGuard:
       type: object
       description: Factory-level guard attached at the root factory definition.
@@ -8640,7 +8501,7 @@ components:
       properties:
         type:
           allOf:
-            - $ref: '#/components/schemas/GuardType'
+            - $ref: '#/components/schemas/FactoryGuardType'
           description: Factory-level guard condition to evaluate before dispatch-ready transitions can proceed.
         modelProvider:
           allOf:
@@ -8745,12 +8606,8 @@ components:
           $ref: '#/components/schemas/InputKind'
     InputKind:
       type: string
-      x-enum-varnames:
-        - InputKindDefault
       enum:
         - DEFAULT
-      x-enum-descriptions:
-        - Opaque input accepted by the factory without a specialized input schema.
       description: Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.
     WorkType:
       type: object
@@ -8791,26 +8648,17 @@ components:
           type: string
           description: Customer-authored state name referenced by workstation inputs and outputs.
         type:
-          $ref: '#/components/schemas/WorkStateType'
+          allOf:
+            - $ref: '#/components/schemas/WorkStateType'
           description: Lifecycle category for this state, such as initial, processing, terminal, or failed.
     WorkStateType:
       type: string
-      x-enum-varnames:
-        - WorkStateTypeINITIAL
-        - WorkStateTypePROCESSING
-        - WorkStateTypeTERMINAL
-        - WorkStateTypeFAILED
       description: 'Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.'
       enum:
         - INITIAL
         - PROCESSING
         - TERMINAL
         - FAILED
-      x-enum-descriptions:
-        - Work is newly submitted and waiting for its first processing step.
-        - Work is in progress and can continue through additional workstation steps.
-        - Work completed successfully and should not be scheduled for more processing.
-        - Work reached a failed terminal state.
     Resource:
       description: Shared capacity that limits how much work the factory can run at once, such as worker slots or external service quotas.
       type: object
@@ -8826,7 +8674,8 @@ components:
           type: string
           description: Resource name referenced from worker requirements and workstation resourceUsage entries.
         type:
-          $ref: '#/components/schemas/ResourceType'
+          allOf:
+            - $ref: '#/components/schemas/ResourceType'
           description: Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`.
         capacity:
           type: integer
@@ -8847,18 +8696,10 @@ components:
     ResourceType:
       type: string
       description: Uppercase resource families supported by the public factory-config contract.
-      x-enum-varnames:
-        - ResourceTypeModel
-        - ResourceTypeProviderQuota
-        - ResourceTypeInvocationSlot
       enum:
         - MODEL
         - PROVIDER_QUOTA
         - INVOCATION_SLOT
-      x-enum-descriptions:
-        - Local or embedded model capacity resource.
-        - Cloud-provider quota resource for one provider or model lane.
-        - Generic invocation concurrency slot resource.
     Worker:
       description: A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.
       type: object
@@ -8873,22 +8714,27 @@ components:
           type: string
           description: Worker name referenced by Workstation.worker.
         type:
-          $ref: '#/components/schemas/WorkerType'
+          allOf:
+            - $ref: '#/components/schemas/WorkerType'
           description: Worker implementation family to instantiate for this definition.
         provider:
-          $ref: '#/components/schemas/HostedWorkerProvider'
+          allOf:
+            - $ref: '#/components/schemas/HostedWorkerProvider'
           description: Built-in hosted provider identity when this worker uses repository-owned hosted execution.
         model:
           type: string
           description: Model identifier to request from the configured model provider when this worker uses model execution.
         modelProvider:
-          $ref: '#/components/schemas/WorkerModelProvider'
+          allOf:
+            - $ref: '#/components/schemas/WorkerModelProvider'
           description: Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
         modelLocality:
-          $ref: '#/components/schemas/WorkerModelLocality'
+          allOf:
+            - $ref: '#/components/schemas/WorkerModelLocality'
           description: Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution.
         executorProvider:
-          $ref: '#/components/schemas/WorkerProvider'
+          allOf:
+            - $ref: '#/components/schemas/WorkerProvider'
           description: Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`.
         operations:
           type: array
@@ -8921,13 +8767,16 @@ components:
           type: string
           description: Optional OpenCode agent profile name for model workers that dispatch through the OpenCode runner. When set, OpenCode dispatches invoke `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
         auth:
-          $ref: '#/components/schemas/HostedWorkerAuth'
+          allOf:
+            - $ref: '#/components/schemas/HostedWorkerAuth'
           description: Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef.
         linear:
-          $ref: '#/components/schemas/HostedLinearWorkerConfig'
+          allOf:
+            - $ref: '#/components/schemas/HostedLinearWorkerConfig'
           description: Provider-specific configuration for the built-in hosted LINEAR worker.
         agentTools:
-          $ref: '#/components/schemas/AgentWorkerToolsConfig'
+          allOf:
+            - $ref: '#/components/schemas/AgentWorkerToolsConfig'
           description: Explicit agent-loop tool policy for AGENT_WORKER definitions. Omit or set policy DISABLED to run agent loops without advertising or executing tools.
         body:
           type: string
@@ -8940,7 +8789,8 @@ components:
         - policy
       properties:
         policy:
-          $ref: '#/components/schemas/AgentWorkerToolPolicy'
+          allOf:
+            - $ref: '#/components/schemas/AgentWorkerToolPolicy'
           description: Required executor policy for agent-loop tool use on this worker.
     AgentWorkerToolPolicy:
       type: string
@@ -8949,20 +8799,9 @@ components:
         - DISABLED
         - READ_ONLY
         - ENABLED
-      x-enum-varnames:
-        - AgentWorkerToolPolicyDISABLED
-        - AgentWorkerToolPolicyREADONLY
-        - AgentWorkerToolPolicyENABLED
     WorkerType:
       type: string
       description: Worker implementation families supported by the public factory-config contract.
-      x-enum-varnames:
-        - WorkerTypeInferenceWorker
-        - WorkerTypeAgentWorker
-        - WorkerTypeScriptWorker
-        - WorkerTypePollerWorker
-        - WorkerTypeModelWorker
-        - WorkerTypeHostedWorker
       enum:
         - INFERENCE_WORKER
         - AGENT_WORKER
@@ -8970,25 +8809,9 @@ components:
         - POLLER_WORKER
         - MODEL_WORKER
         - HOSTED_WORKER
-      x-enum-descriptions:
-        - Inference worker that performs one bounded model operation through the configured provider or managed runtime.
-        - Agent worker that executes prompt-rendered agent loops through AGENT_RUN workstations. Model capability declarations belong on INFERENCE_WORKER, not AGENT_WORKER.
-        - Script-backed worker that executes a configured command instead of calling a model provider.
-        - Poller worker that watches an external source and emits work through repository-owned hosted runtime code.
-        - Legacy alias for inference-worker behavior during the migration window.
-        - Legacy alias for poller-worker behavior during the migration window.
     WorkerModelProvider:
       type: string
       description: Canonical model-provider identifiers supported by model workers in factory config.
-      x-enum-varnames:
-        - WorkerModelProviderClaude
-        - WorkerModelProviderCodex
-        - WorkerModelProviderCursor
-        - WorkerModelProviderGemini
-        - WorkerModelProviderKiro
-        - WorkerModelProviderOpenCode
-        - WorkerModelProviderPi
-        - WorkerModelProviderAgy
       enum:
         - CLAUDE
         - CODEX
@@ -8998,36 +8821,17 @@ components:
         - OPENCODE
         - PI
         - AGY
-      x-enum-descriptions:
-        - Claude model execution routed through the `claude` provider command.
-        - Codex model execution routed through the `codex` provider command.
-        - Cursor model execution routed through the `agent` provider command.
-        - Gemini model execution routed through the `gemini` provider command.
-        - Kiro model execution routed through the `kiro-cli` provider command.
-        - OpenCode model execution routed through the `opencode` provider command.
-        - Pi model execution routed through the `pi` provider command.
-        - Agy model execution routed through the `agy` provider command.
     WorkerModelLocality:
       type: string
       description: Provider locality for a model worker capability declaration.
-      x-enum-varnames:
-        - WorkerModelLocalityLocal
-        - WorkerModelLocalityCloud
       enum:
         - LOCAL
         - CLOUD
-      x-enum-descriptions:
-        - The model runs through local embedded or host-managed inference resources.
-        - The model runs through a remote cloud-backed provider.
     WorkerProvider:
       type: string
       description: Concrete worker-provider wrappers supported by the public factory-config contract.
-      x-enum-varnames:
-        - WorkerProviderScriptWrap
       enum:
         - SCRIPT_WRAP
-      x-enum-descriptions:
-        - Public worker executor adapter that shells out through the configured worker command path.
     ModelOperation:
       type: object
       additionalProperties: false
@@ -9070,34 +8874,15 @@ components:
     ModelOperationContentType:
       type: string
       description: Uppercase content-part categories supported by worker model-operation capability slots.
-      x-enum-varnames:
-        - ModelOperationContentTypeText
-        - ModelOperationContentTypeImage
-        - ModelOperationContentTypeAudio
-        - ModelOperationContentTypeJSON
-        - ModelOperationContentTypeBinary
       enum:
         - TEXT
         - IMAGE
         - AUDIO
         - JSON
         - BINARY
-      x-enum-descriptions:
-        - Textual content.
-        - Image content.
-        - Audio content.
-        - Structured JSON content.
-        - Opaque binary content.
     RunnerID:
       type: string
       description: Stable built-in runner identifiers supported by factory and workstation runner selection.
-      x-enum-varnames:
-        - RunnerIDCodex
-        - RunnerIDGemini
-        - RunnerIDKiro
-        - RunnerIDCursorCLI
-        - RunnerIDOpenCode
-        - RunnerIDPi
       enum:
         - codex
         - gemini
@@ -9105,13 +8890,6 @@ components:
         - cursor-cli
         - opencode
         - pi
-      x-enum-descriptions:
-        - Codex runner selected through the shared runner contract.
-        - Gemini runner selected through the shared runner contract.
-        - Kiro runner selected through the shared runner contract.
-        - Cursor CLI runner selected through the shared runner contract.
-        - OpenCode runner selected through the shared runner contract.
-        - Pi runner selected through the shared runner contract.
     RunnerSelectionSource:
       type: string
       description: Configuration layer that supplied the resolved built-in runner selection for a dispatch.
@@ -9141,13 +8919,16 @@ components:
           type: string
           description: Customer-authored workstation name used by guards, diagnostics, and authored references.
         behavior:
-          $ref: '#/components/schemas/WorkstationKind'
+          allOf:
+            - $ref: '#/components/schemas/WorkstationKind'
           description: Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution.
         type:
-          $ref: '#/components/schemas/WorkstationType'
+          allOf:
+            - $ref: '#/components/schemas/WorkstationType'
           description: Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type.
         operation:
-          $ref: '#/components/schemas/ModelOperationName'
+          allOf:
+            - $ref: '#/components/schemas/ModelOperationName'
           description: Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`.
         operationBindings:
           type: array
@@ -9158,7 +8939,8 @@ components:
           type: string
           description: Name of a worker declared in the workers list.
         runner:
-          $ref: '#/components/schemas/RunnerID'
+          allOf:
+            - $ref: '#/components/schemas/RunnerID'
           description: Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then worker modelProvider compatibility when no explicit runner is configured, then the default codex runner.
         openCodeAgent:
           type: string
@@ -9170,19 +8952,23 @@ components:
           type: string
           description: JSON schema string used to validate or parse structured model output when configured.
         outcomeFormat:
-          $ref: '#/components/schemas/WorkstationOutcomeFormat'
+          allOf:
+            - $ref: '#/components/schemas/WorkstationOutcomeFormat'
           description: Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
         limits:
-          $ref: '#/components/schemas/WorkstationLimits'
+          allOf:
+            - $ref: '#/components/schemas/WorkstationLimits'
           description: Retry and execution ceilings applied to this workstation.
         workPropagation:
-          $ref: '#/components/schemas/WorkPropagation'
+          allOf:
+            - $ref: '#/components/schemas/WorkPropagation'
           description: Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload.
         body:
           type: string
           description: Inline workstation instructions or script body when authored directly in factory config.
         cron:
-          $ref: '#/components/schemas/WorkstationCron'
+          allOf:
+            - $ref: '#/components/schemas/WorkstationCron'
           description: Cron trigger configuration for workstations whose behavior is CRON.
         inputs:
           type: array
@@ -9226,7 +9012,7 @@ components:
           type: array
           description: Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
           items:
-            $ref: '#/components/schemas/Guard'
+            $ref: '#/components/schemas/WorkstationGuard'
         stopWords:
           type: array
           description: Stop words authored on the topology entry for model-oriented dispatches.
@@ -9239,17 +9025,14 @@ components:
           type: string
           description: Go template resolved and passed as the worktree path to CLI dispatchers.
         env:
-          $ref: '#/components/schemas/StringMap'
+          allOf:
+            - $ref: '#/components/schemas/StringMap'
           description: Environment variables added to the workstation execution context.
     WorkstationOutcomeFormat:
       type: string
       description: Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
-      x-enum-varnames:
-        - WorkstationOutcomeFormatDecisionEnvelope
       enum:
         - decision-envelope
-      x-enum-descriptions:
-        - Parse agent output as a reviewer/checker decision envelope instead of stop-token routing.
     ClassificationRoute:
       type: object
       additionalProperties: false
@@ -9280,33 +9063,14 @@ components:
       type: string
       default: STANDARD
       description: Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
-      x-enum-varnames:
-        - WorkstationKindStandard
-        - WorkstationKindRepeater
-        - WorkstationKindCron
-        - WorkstationKindPoller
       enum:
         - STANDARD
         - REPEATER
         - CRON
         - POLLER
-      x-enum-descriptions:
-        - Schedules when its inputs are ready and emits configured outputs.
-        - Re-runs when observed inputs change and can loop rejected work back to an earlier state.
-        - Produces internal time work from a cron schedule and dispatches through the normal worker path when inputs are ready.
-        - Binds a poller-capable worker that emits canonical ingress work under service supervision.
     WorkstationType:
       type: string
       description: Runtime workstation implementation types supported by the public factory-config contract.
-      x-enum-varnames:
-        - WorkstationTypeInferenceRun
-        - WorkstationTypeAgentRun
-        - WorkstationTypeScriptRun
-        - WorkstationTypePollerRun
-        - WorkstationTypeModelWorkstation
-        - WorkstationTypeModelInvoke
-        - WorkstationTypeLogicalMove
-        - WorkstationTypeClassifierWorkstation
       enum:
         - INFERENCE_RUN
         - AGENT_RUN
@@ -9316,15 +9080,6 @@ components:
         - MODEL_INVOKE
         - LOGICAL_MOVE
         - CLASSIFIER_WORKSTATION
-      x-enum-descriptions:
-        - One-shot inference workstation that resolves operation bindings and dispatches through an inference worker.
-        - Agent-run workstation that renders prompts and dispatches through an agent worker for iterative agent-loop execution.
-        - Script-run workstation that executes deterministic command or script behavior through a script worker.
-        - Poller-run workstation that supervises ingress polling through a poller worker.
-        - Legacy alias for agent-run behavior during the migration window.
-        - Legacy alias for inference-run behavior during the migration window.
-        - Logical pass-through workstation used for routing and guarded loop-breaker transitions without model execution.
-        - Label-based classifier workstation that returns one plain string label and routes through classificationRoutes.
     WorkstationCron:
       type: object
       description: Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported.
@@ -9353,7 +9108,8 @@ components:
       description: Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.
       properties:
         mode:
-          $ref: '#/components/schemas/WorkPropagationMode'
+          allOf:
+            - $ref: '#/components/schemas/WorkPropagationMode'
           description: Propagation mode for downstream work payload selection after this workstation succeeds.
     WorkPropagationMode:
       type: string
@@ -9361,23 +9117,9 @@ components:
       enum:
         - OUTPUT_AS_PAYLOAD
         - PRESERVE_INPUT
-      x-enum-varnames:
-        - WorkPropagationModeOutputAsPayload
-        - WorkPropagationModePreserveInput
-      x-enum-descriptions:
-        - Downstream work receives the workstation output payload.
-        - Downstream work keeps the consumed input payload instead of the workstation output.
     GuardType:
       type: string
       description: Guard condition attached to a workstation or one of its specific inputs.
-      x-enum-varnames:
-        - GuardTypeVisitCount
-        - GuardTypeMatchesFields
-        - GuardTypeAllChildrenComplete
-        - GuardTypeAnyChildFailed
-        - GuardTypeSameName
-        - GuardTypeSameTraceID
-        - GuardTypeInferenceThrottle
       enum:
         - VISIT_COUNT
         - MATCHES_FIELDS
@@ -9385,15 +9127,6 @@ components:
         - ANY_CHILD_FAILED
         - SAME_NAME
         - SAME_TRACE_ID
-        - INFERENCE_THROTTLE_GUARD
-      x-enum-descriptions:
-        - Allows or blocks work based on how many times a workstation has already handled it.
-        - Requires all candidate workstation inputs to resolve the same configured field value.
-        - This input is available only after all matching child work completes.
-        - This input is available when any matching child work fails.
-        - This input is available only when its token name exactly matches the bound token name from another input.
-        - This input is available only when its token trace identity exactly matches the bound token trace identity from another input.
-        - Blocks factory dispatch when provider or model throttle history still falls inside the authored refresh window.
     Guard:
       type: object
       description: Shared guard attached either to a workstation as a whole or to one specific workstation input.
@@ -9453,7 +9186,7 @@ components:
           type: array
           description: Per-input guards that must pass before this specific input can be used.
           items:
-            $ref: '#/components/schemas/Guard'
+            $ref: '#/components/schemas/InputGuard'
     Transition:
       type: object
       additionalProperties: false
@@ -10060,14 +9793,6 @@ components:
     WorkContentPartType:
       type: string
       description: Supported canonical work content part types. Legacy lowercase text and image values remain accepted for backward compatibility.
-      x-enum-varnames:
-        - WorkContentPartTypeText
-        - WorkContentPartTypeImage
-        - WorkContentPartTypeTextUpper
-        - WorkContentPartTypeImageUpper
-        - WorkContentPartTypeAudio
-        - WorkContentPartTypeJSON
-        - WorkContentPartTypeBinary
       enum:
         - text
         - image
@@ -10076,14 +9801,6 @@ components:
         - AUDIO
         - JSON
         - BINARY
-      x-enum-descriptions:
-        - Legacy inline text content.
-        - Legacy image content referenced by file path.
-        - Canonical uppercase inline text content.
-        - Canonical uppercase image content referenced by file path.
-        - Audio content referenced by file path or artifact.
-        - JSON content preserved in canonical part order.
-        - Binary content referenced by file path or artifact.
     WorkContentMetadata:
       type: object
       additionalProperties: true
@@ -10113,7 +9830,6 @@ components:
       allOf:
         - $ref: '#/components/schemas/WorkContentCommonFields'
         - type: object
-          additionalProperties: false
           required:
             - type
             - text
@@ -10132,7 +9848,6 @@ components:
       allOf:
         - $ref: '#/components/schemas/WorkContentCommonFields'
         - type: object
-          additionalProperties: false
           required:
             - type
             - url
@@ -10152,7 +9867,6 @@ components:
       allOf:
         - $ref: '#/components/schemas/WorkContentCommonFields'
         - type: object
-          additionalProperties: false
           required:
             - type
             - url
@@ -10171,7 +9885,6 @@ components:
       allOf:
         - $ref: '#/components/schemas/WorkContentCommonFields'
         - type: object
-          additionalProperties: false
           required:
             - type
             - json
@@ -10188,7 +9901,6 @@ components:
       allOf:
         - $ref: '#/components/schemas/WorkContentCommonFields'
         - type: object
-          additionalProperties: false
           required:
             - type
             - url
@@ -10241,7 +9953,6 @@ components:
       description: Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.
     WorkContentDeprecatedFileProperty:
       type: string
-      deprecated: true
       description: Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
     SubmitWorkContentURLProperty:
       type: string
@@ -10263,7 +9974,8 @@ components:
           type: string
           description: Match a content part by its label field.
         type:
-          $ref: '#/components/schemas/ModelOperationContentType'
+          allOf:
+            - $ref: '#/components/schemas/ModelOperationContentType'
           description: Match a content part by its uppercase public type.
         role:
           type: string
@@ -10279,13 +9991,16 @@ components:
           type: string
           description: Stable input slot name declared by the worker operation.
         selector:
-          $ref: '#/components/schemas/WorkstationOperationBindingSelector'
+          allOf:
+            - $ref: '#/components/schemas/WorkstationOperationBindingSelector'
           description: Ordered runtime-input selector used before falling back to config or default content.
         config:
-          $ref: '#/components/schemas/WorkContent'
+          allOf:
+            - $ref: '#/components/schemas/WorkContent'
           description: Static authored content bound directly or used as the first fallback when runtime input does not match.
         defaultContent:
-          $ref: '#/components/schemas/WorkContent'
+          allOf:
+            - $ref: '#/components/schemas/WorkContent'
           description: Optional final fallback content when neither runtime input nor config content resolves the slot.
     FactoryOrchestratorJavaScriptAgent:
       type: object
@@ -10298,15 +10013,16 @@ components:
           type: string
           minLength: 1
           description: Operator worker preset inherited by child calls using this agent id.
+    FactoryGuardType:
+      type: string
+      description: Factory-level guard condition attached at the root factory definition.
+      enum:
+        - INFERENCE_THROTTLE_GUARD
     WorkTypeHandlingBehavior:
       type: string
       description: Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
-      x-enum-varnames:
-        - WorkTypeHandlingBehaviorDefault
       enum:
         - DEFAULT
-      x-enum-descriptions:
-        - Receives simplified CLI prompt submissions when exactly one work type in the factory declares this behavior.
     FactoryLayoutPoint:
       type: object
       description: Two-dimensional authored graph layout coordinate.
@@ -10489,12 +10205,8 @@ components:
     HostedWorkerProvider:
       type: string
       description: Built-in repository-owned hosted worker providers supported by the public factory-config contract.
-      x-enum-varnames:
-        - HostedWorkerProviderLinear
       enum:
         - LINEAR
-      x-enum-descriptions:
-        - Built-in hosted poller integration for the Linear GraphQL API.
     HostedWorkerAuth:
       description: Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields.
       type: object
@@ -10541,8 +10253,87 @@ components:
           items:
             type: string
         mapping:
-          $ref: '#/components/schemas/HostedLinearWorkerMapping'
+          allOf:
+            - $ref: '#/components/schemas/HostedLinearWorkerMapping'
           description: Deterministic mapping fields for canonical work submission generation.
         claim:
-          $ref: '#/components/schemas/HostedLinearWorkerClaim'
+          allOf:
+            - $ref: '#/components/schemas/HostedLinearWorkerClaim'
           description: Optional claim-related configuration that v1 hosted Linear polling allows.
+    InputGuardType:
+      type: string
+      description: Guard condition attached to one specific workstation input.
+      enum:
+        - VISIT_COUNT
+        - ALL_CHILDREN_COMPLETE
+        - ANY_CHILD_FAILED
+        - SAME_NAME
+        - SAME_TRACE_ID
+    InputGuard:
+      type: object
+      description: Guard attached to one specific workstation input.
+      additionalProperties: false
+      required:
+        - type
+      properties:
+        type:
+          allOf:
+            - $ref: '#/components/schemas/InputGuardType'
+          description: Guard condition to evaluate for this input-level attachment.
+        workstation:
+          type: string
+          description: For `VISIT_COUNT` guards, the workstation whose visits are counted.
+        maxVisits:
+          type: integer
+          minimum: 1
+          description: For `VISIT_COUNT` guards, the visit threshold.
+        matchConfig:
+          allOf:
+            - $ref: '#/components/schemas/GuardMatchConfig'
+          description: For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
+        parentInput:
+          type: string
+          description: For parent-aware input guards, the parent workType name from another input in the same workstation.
+        matchInput:
+          type: string
+          description: For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
+        spawnedBy:
+          type: string
+          description: For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+    WorkstationGuardType:
+      type: string
+      description: Guard condition attached to a workstation as a whole.
+      enum:
+        - VISIT_COUNT
+        - MATCHES_FIELDS
+    WorkstationGuard:
+      type: object
+      description: Guard attached to a workstation as a whole.
+      additionalProperties: false
+      required:
+        - type
+      properties:
+        type:
+          allOf:
+            - $ref: '#/components/schemas/WorkstationGuardType'
+          description: Guard condition to evaluate for this workstation-level attachment.
+        workstation:
+          type: string
+          description: For `VISIT_COUNT` guards, the workstation whose visits are counted.
+        maxVisits:
+          type: integer
+          minimum: 1
+          description: For `VISIT_COUNT` guards, the visit threshold.
+        matchConfig:
+          allOf:
+            - $ref: '#/components/schemas/GuardMatchConfig'
+          description: For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
+        parentInput:
+          type: string
+          description: For parent-aware input guards, the parent workType name from another input in the same workstation.
+        matchInput:
+          type: string
+          description: For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
+        spawnedBy:
+          type: string
+          description: For dynamic fanout input guards, the workstation that spawns the children for count tracking.

@@ -5,3 +5,6 @@ generate:
   gorilla-server: true
 output-options:
   skip-prune: true
+  overlay:
+    path: ../../../api/codegen_config/factory-codegen-overlay.yaml
+    strict: false

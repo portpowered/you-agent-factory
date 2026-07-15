@@ -46,7 +46,7 @@ export function isClassifierWorkstation(
   workstation: WorkstationProgressOutcomeRouteContext,
 ): boolean {
   return (
-    workstation.type === WorkstationType.WorkstationTypeClassifierWorkstation ||
+    workstation.type === WorkstationType.CLASSIFIER_WORKSTATION ||
     (workstation.classificationRoutes?.length ?? 0) > 0
   );
 }
@@ -60,17 +60,17 @@ export function workstationSupportsProgressOutcomeRoutes(
 
   if (
     resolveEditableWorkstationType(workstation) ===
-    WorkstationType.WorkstationTypeLogicalMove
+    WorkstationType.LOGICAL_MOVE
   ) {
     return false;
   }
 
   const behavior = resolveEditableWorkstationBehavior(workstation);
-  if (behavior === WorkstationKind.WorkstationKindRepeater) {
+  if (behavior === WorkstationKind.REPEATER) {
     return true;
   }
 
-  if (behavior !== WorkstationKind.WorkstationKindStandard) {
+  if (behavior !== WorkstationKind.STANDARD) {
     return true;
   }
 
@@ -91,7 +91,7 @@ export function workstationSupportsProgressOutcomeFailureRoute(
 ): boolean {
   return (
     resolveEditableWorkstationType(workstation) !==
-    WorkstationType.WorkstationTypeLogicalMove
+    WorkstationType.LOGICAL_MOVE
   );
 }
 
@@ -104,7 +104,7 @@ export function workstationHasZAxisIncompleteForConnections(
   }
 
   const behavior = resolveEditableWorkstationBehavior(workstation);
-  if (behavior !== WorkstationKind.WorkstationKindStandard) {
+  if (behavior !== WorkstationKind.STANDARD) {
     return false;
   }
 

@@ -20,25 +20,47 @@ Use this map when changing the public REST contract.
   `docs/internal/contract/factory-schema-b16-gaps.json` record when the canonical
   Factory graph is not yet fully endorsable. Golden fixtures and byte-stability
   tests live beside the converter package; reuse
-  `contractjoiner.MarshalCanonicalJSON` for canonical output bytes.
+  `contractjoiner.MarshalCanonicalJSON` for canonical output bytes. Prove the
+  converter stays outside API/config/service/CLI/worker/runtime dependency paths in
+  `contracts/converter_boundary_test.go`.
 - `internal/contractstaging` owns joined generation, the reviewed raw
   source-to-package projection map, the Factory JSON Schema projection from the
   canonical bundled OpenAPI `Factory` component graph, and the package contract
   manifest with artifact hashes. Factory schema staging calls
-  `contractopenapiconverter.ConvertFailClosedSchema` first; when the canonical
-  Factory graph is blocked by documented B16 gaps in
-  `docs/internal/contract/factory-schema-b16-gaps.json`, staging falls back to
-  the legacy ref-materialization projection without broadening the converter
-  profile. Authored configuration schemas live under
+  `ConvertFailClosedSchema` first; when the canonical Factory graph converts
+  without blocking diagnostics, staging emits
+  `contracts/config/factory.schema.json` and copies the same bytes to
+  `packages/api/generated/schemas/factory.schema.json` through
+  `marshalFactorySchemaDocument` only. When the B16 gap record status is
+  `converter_endorsed`, any converter diagnostic fails staging closed and does
+  not use the legacy ref-materialization fallback. When the record status is still
+  `blocks_full_endorsement`, staging may fall back only for diagnostics explicitly
+  covered by `blockingCategories` or `approvedResidualExclusions` in
+  `docs/internal/contract/factory-schema-b16-gaps.json`. When removing OpenAPI-only keywords or generator hints from authored
+  Factory fragments for converter endorsement, keep stable Go enum/type names via
+  `api/codegen_config/factory-codegen-overlay.yaml` referenced from the oapi-codegen
+  configs rather than leaving `x-enum-varnames` / `x-go-type` in authored schema
+  bodies. When a Factory property needs both an internal component `$ref` and a
+  `description`, wrap the ref in `allOf: [{ $ref: ... }]` and keep
+  `description` as a sibling of `allOf` so the refs profile sees `$ref`-only
+  objects inside the composition array. Authored configuration schemas live under
   `contracts/config/`; do not substitute topology or parity inventories for
   those schemas. `make contracts-check` reports stale, missing, and unexpected
   staged paths across the complete projection.
 - Raw JSON/YAML projections in `policy.go#rawArtifacts` are byte-identical copies
   from their canonical owners (CLI/MCP baselines, `contracts/config/` schemas,
   authored JavaScript runtime catalog). Factory schema is the only reviewed raw
-  export derived from OpenAPI rather than copied. Prove repository parity in
-  `internal/contractstaging/raw_artifacts_test.go`; later-phase export-map
-  families such as `components/*` stay omitted until a truthful owner exists.
+  export derived from OpenAPI rather than copied; generation writes the
+  converter-backed authored root at `contracts/config/factory.schema.json` and
+  the staged package projection at
+  `packages/api/generated/schemas/factory.schema.json` with identical bytes.
+  Prove repository parity in `internal/contractstaging/raw_artifacts_test.go`;
+  prove repeated authored/staged Factory schema digest stability in
+  `internal/contractstaging/factory_schema_test.go`
+  (`TestFactorySchemaDigestsStableAcrossRepeatedArtifactsCalls`,
+  `TestFactorySchemaGenerationLeavesAuthoredAndStagedDigestsStableOnSecondRun`);
+  later-phase export-map families such as `components/*` stay omitted until a
+  truthful owner exists.
 - Authored JavaScript runtime symbol manifests live at
   `contracts/javascript/runtime-manifest.schema.json` with the authored product
   catalog at `contracts/javascript/runtime-api.json`, fixtures under
@@ -59,11 +81,38 @@ Use this map when changing the public REST contract.
   `internal/contractvalidator/javascript_catalog_call_behavior_parity.go`.
   Focused runtime execution parity for the same representative symbols remains
   in `pkg/orchestrators/javascript/runtime/callbehavior_inventory_test.go`.
-  Prove runtime dependency isolation and catalog boundaries in `contracts/runtime_manifest_boundary_test.go` and
+  Prove runtime manifest independence behaviorally in `contracts/runtime_manifest_boundary_test.go` by
+  executing representative invocation, emitted-record, policy-denial, and resume behavior from a
+  subprocess whose authored and staged manifests are unusable. Catalog boundaries remain in
   `contracts/javascript_runtime_api_test.go`; staged
   `packages/api/generated/javascript/runtime-api.json` is a byte-identical copy
   of the authored catalog at `contracts/javascript/runtime-api.json` through
-  `internal/contractstaging/policy.go#rawArtifacts`.
+  `internal/contractstaging/policy.go#rawArtifacts`. Maintainer-facing
+  catalog/projection/binding/behavior parity closeout lives in
+  `internal/javascriptcontractsmoke` with CLI entrypoint
+  `cmd/javascriptcontractsmoke` and `make javascript-contract-smoke`; the same
+  target runs focused installed-runtime regressions for signature, async result,
+  emitted records, policy rejection, and resume, plus the unusable-manifest behavioral
+  proof. Canonical forbidden host-global and comparison-project-helper classification
+  lives in `pkg/orchestrators/javascript/runtime/symbolidentity`; route both schema
+  validation and smoke/catalog checks through `symbolidentity.ClassifySurface` so the
+  supported-surface policy cannot drift. Reuse
+  `symbolidentity.ProjectInstalledBindings`, `callbehavior.ProjectInstalledCallBehavior`,
+  `catalog.CatalogPathCompletenessIssues`, `catalog.CatalogForbiddenSymbolIssues`, and
+  `catalog.CatalogCallBehaviorParityIssues`
+  rather than inventing a second runtime descriptor. Prove missing/extra/duplicate
+  symbol-path failures and forbidden/comparison-project helper failures with
+  temp-dir catalog copies that keep authored and staged bytes aligned in
+  `internal/javascriptcontractsmoke/check_test.go` and
+  `cmd/javascriptcontractsmoke/main_test.go`. Stale staged-projection diagnostics
+  report the generated repository-relative file path and, when valid JSON differs
+  inside symbol records, the affected public symbol paths; the check remains
+  read-only and directs maintainers to `make contracts-generate` followed by
+  `make contracts-check`. Behavior-incomplete fixtures should delete or contradict
+  call metadata in synchronized authored/staged temp catalogs, then assert the
+  public symbol path, `/symbols/<key>/<field>` location, and call-behavior baseline
+  remediation for signature, async/result, emitted-record, policy, and resume
+  fields; this proves the smoke boundary without making the catalog executable.
 - Staged OpenAPI byte policy lives in `internal/contractstaging/openapi.go`
   (`CanonicalOpenAPIPath`, `StagedOpenAPIPath`, `ReviewedOpenAPIBytePolicy`,
   `ProjectStagedOpenAPI`, `VerifyStagedOpenAPIParity`). The reviewed policy is
@@ -616,7 +665,7 @@ dashboard state, and event connections. This agrees with
 - Worker taxonomy changes start in `api/components/schemas/data-models/WorkerType.yaml`; keep public alias canonicalization in `pkg/interfaces/public_factory_enums.go` (`publicFactoryWorkerTypeAliases`, `InternalRuntimeWorkerTypeFromPublic`, `PublicWorkerTypeFromInternalRuntime`) and wire load/save projection through `pkg/config/factory_config_mapping_internal.go` (`internalFactoryWorkerTypeFromPublic`, `publicFactoryWorkerTypeFromInternal`). Preserve legacy runtime identifiers (`MODEL_WORKER`, `HOSTED_WORKER`) internally while accepting `INFERENCE_WORKER`, `AGENT_WORKER`, `SCRIPT_WORKER`, and `POLLER_WORKER` at the public boundary.
 - Workstation taxonomy changes start in `api/components/schemas/data-models/WorkstationType.yaml`; keep public alias canonicalization in `pkg/interfaces/public_factory_enums.go` (`publicFactoryWorkerTypeAliases`, `InternalRuntimeWorkstationTypeFromPublic`, `PublicWorkstationTypeFromInternalRuntime`, `GeneratedPublicFactoryWorkstationTypeFromWorkstation`) and wire load/save projection through `pkg/config/factory_config_mapping_internal.go` (`internalFactoryWorkstationTypeFromPublic`, `publicFactoryWorkstationTypeFromInternal`) plus `pkg/config/factory_config_mapping.go` (`workstationTypePtrIfNotEmpty` with worker-type and poller-kind context). Preserve legacy runtime identifiers (`MODEL_INVOKE`, `MODEL_WORKSTATION`) internally while accepting `INFERENCE_RUN`, `AGENT_RUN`, `SCRIPT_RUN`, and `POLLER_RUN` at the public boundary.
 - Workstation outcome parsing modes such as `outcomeFormat: decision-envelope` start in `api/components/schemas/data-models/WorkstationOutcomeFormat.yaml` (referenced from `Workstation.yaml`); keep closed-vocabulary canonicalization in `pkg/interfaces/public_factory_enums.go` (`StrictPublicFactoryWorkstationOutcomeFormat`) and boundary normalization in `pkg/config/openapi_factory.go` (`normalizeFactoryWorkstationEntries`); wire through `pkg/interfaces/factory_config.go` (`FactoryWorkstationConfig.OutcomeFormat`) and `pkg/config/factory_config_mapping{,_internal}.go` (`workstationAPIFromInternal`, `workstationInternalFromAPI`) so checked-in `factory.json` passes the generated-schema boundary. Prove unsupported values fail at the boundary through `pkg/config/openapitests/openapi_factory_boundary_enum_test.go`.
-- Factory/OpenAPI config parity evidence belongs in `pkg/config/openapitests` (`ProjectParityInventory`, `MarshalParityInventoryJSON`, committed `testdata/baseline/factory-openapi-parity-index.json`, table-driven `parity_inventory_test.go`). Regenerate the baseline with `WRITE_OPENAPI_PARITY_BASELINE=1 go test ./pkg/config/openapitests/... -run TestWriteFactoryOpenAPIParityIndexBaseline`. Keep this lane inventory-only: `lane_gate_test.go` hashes Factory schema fragments, mapping sources, and generated clients so parity work cannot drift boundary behavior; do not start mock-worker or JS-call inventories here.
+- Factory/OpenAPI/projected-schema config parity evidence belongs in `pkg/config/openapitests` (`ProjectParityInventory`, `MarshalParityInventoryJSON`, committed `testdata/baseline/factory-openapi-parity-index.json`, `parity_inventory_test.go`). `TestIndexedParityCases_MatchProjectedFactorySchema` exercises representative accept/reject fixtures against `contracts/config/factory.schema.json` in addition to `GeneratedFactoryFromOpenAPIJSON` and `FactoryConfigFromOpenAPIJSON`. Regenerate the baseline with `WRITE_OPENAPI_PARITY_BASELINE=1 go test ./pkg/config/openapitests/... -run TestWriteFactoryOpenAPIParityIndexBaseline`. Keep this lane inventory-only: `parity_inventory_test.go` hashes Factory schema fragments, mapping sources, and generated clients so parity work cannot drift boundary behavior; do not start mock-worker or JS-call inventories here.
 - Dashboard taxonomy UI: centralize worker/workstation alias handling and editor defaults in `ui/src/features/current-factory-definition/lib/worker-workstation-taxonomy.ts`; extend `ui/src/api/factory-definition/api.ts` enum sets (`WORKER_TYPE_VALUES`, `WORKSTATION_TYPE_VALUES`) whenever OpenAPI adds public taxonomy names so current-factory save round trips accept new and legacy values.
 - Worker/workstation compatibility validation lives in `pkg/interfaces/worker_workstation_compatibility.go` (`WorkerMatchesWorkstationBehavior`, `PublicWorkerTypeForFactoryUsage`, `ExpectedWorkerBehaviorClassForWorkstation`); structural targets in `pkg/factory/validation/worker_workstation_compatibility.go` and API-boundary targets in `pkg/factory/validation/worker_workstation_compatibility_api.go` (`WorkerWorkstationCompatibilityTargetsFromAPI` for pre-projection public types). Wire API validation through `pkg/factory/validationentry/api.go` and structural validation through `pkg/factory/validation/validate.go`. Usage-aware `MODEL_WORKER` projection to `AGENT_WORKER` vs `INFERENCE_WORKER` belongs in `PublicWorkerTypeForFactoryUsage` and post-load normalization in `pkg/config/openapi_factory.go` (`normalizeFactoryWorkerTypesForFactoryUsage`); when one legacy `MODEL_WORKER` is referenced from both agent and inference workstations, preserve `MODEL_WORKER` and accept `MODEL_WORKER` with normalized `AGENT_RUN` / `INFERENCE_RUN` at the API validation boundary. Keep replay merge paths (`pkg/replay/generated_factory.go`, `pkg/replay/event_artifact.go`) and topology projection (`pkg/factory/projections/topology_projection.go`) aligned. Service runtime metrics for provider-boundary workers must treat `MODEL_WORKER`, `AGENT_WORKER`, and `INFERENCE_WORKER` equivalently in `pkg/service/factory_build.go`.
 - Agent-run execution wiring lives in `pkg/workers/executor/agentrun/` (`LibraryHarnessAdapter` on `github.com/portpowered/go-agent-harness/go-agent-loop/pkg/agentloop`, `AgentRunExecutor`, runner-backed `messages.Inferencer` bridge, `PolicyToolExecutor` for bounded filesystem tools, explicit `agentTools.policy` wiring from `Worker.agentTools`, and agent-run failure diagnostics including modelhost lease/readiness and tool-policy classes) with taxonomy routing in `pkg/workers/executor/workstation_behavior_router.go` and runtime assembly in `pkg/service/factory_build.go` (`buildProviderBackedWorkerExecutor`, `wrapLocalModelRunner`, `eventHistory.RecordAgentRunEvent` on `loadWorkersFromConfig`). Keep `INFERENCE_RUN` on the existing provider `AgentExecutor` path; route `AGENT_RUN` + `AGENT_WORKER` (and legacy agent aliases) through the harness adapter. Author explicit agent tool policy on `api/components/schemas/data-models/AgentWorkerToolsConfig.yaml` / `AgentWorkerToolPolicy.yaml`, map through `pkg/interfaces/agent_worker_tools.go`, validate with `ruleAgentWorkerTools` in `pkg/config/config_validator.go`, and prove AGENT_WORKER-only policy validation in `pkg/config/config_validator_test.go`. Local model calls for both inference and agent workers acquire modelhost inferencer leases through `interfaces.UsesModelhostLease` in `pkg/modelhost/execution.go` (`LeaseExecution.WrapRunner`) with fallback alignment in `pkg/localmodels/runtime.go`. Reuse packaged goal decision-envelope shaping from `pkg/packagedfactories/goal` inside `AgentRunExecutor` when workstation config requires it. Agent-run inspection is replay-safe through `AGENT_RUN_RESPONSE` events (`api/components/schemas/events/payloads/AgentRunResponseEventPayload.yaml`, `SafeAgentRunDiagnostic.yaml`) recorded by `pkg/workers/executor/agentrun/events.go`, projected in `pkg/factory/projections/world_state_dispatch.go` (`AgentRunResponsesByDispatchID`), surfaced on workstation response views via `pkg/api/workstationprojection/projection.go` (`agentRunInspection`), and rendered in the dashboard dispatch detail lane (`ui/src/features/current-selection/dispatch-selection/components/sections/agent-run-inspection-section.tsx`, `workstation-request-detail.tsx`). Customer-facing agent runtime docs belong in `docs/reference/workers.md` (tool policy and failure classes), `docs/reference/workstations.md` (`AGENT_RUN` execution), `docs/reference/models.md` (modelhost lease boundary for agent runs), and `docs/reference/sessions.md` (dispatch inspection); route `you docs agents` topic-router links there instead of duplicating long guides.

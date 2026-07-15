@@ -3,19 +3,9 @@ package contractvalidator
 import (
 	"fmt"
 	"strconv"
-	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/symbolidentity"
 )
-
-var forbiddenInstalledRootGlobals = []string{
-	"context",
-	"orchestrator",
-}
-
-var comparisonProjectHelperPaths = map[string]struct{}{
-	"workflow.sleep": {},
-	"agent.verify":   {},
-	"agent.parallel": {},
-}
 
 func runtimeManifestSupportedSurfaceDiagnostics(document string, keys []string, pathByKey map[string]string, symbolKindByKey map[string]string) []Diagnostic {
 	var diagnostics []Diagnostic
@@ -28,25 +18,22 @@ func runtimeManifestSupportedSurfaceDiagnostics(document string, keys []string, 
 		symbolPath := "/symbols/" + escapeJSONPointerToken(key) + "/path"
 		kind := symbolKindByKey[key]
 
-		if isForbiddenInstalledRootGlobalPath(path) {
+		switch symbolidentity.ClassifySurface(path, kind) {
+		case symbolidentity.SurfaceForbiddenHostGlobal:
 			diagnostics = append(diagnostics, newDiagnostic(
 				"javascript.surface.forbidden_global",
 				symbolPath,
 				fmt.Sprintf("symbol path %s documents a forbidden host-only global", strconv.Quote(path)),
 				document,
 			))
-			continue
-		}
-		if isComparisonProjectHelperPath(path) {
+		case symbolidentity.SurfaceComparisonProjectHelper:
 			diagnostics = append(diagnostics, newDiagnostic(
 				"javascript.surface.unsupported_helper",
 				symbolPath,
 				fmt.Sprintf("symbol path %s documents a comparison-project-only helper that is not part of the installed supported surface", strconv.Quote(path)),
 				document,
 			))
-			continue
-		}
-		if path == "agent" && kind == "function" {
+		case symbolidentity.SurfaceCallableAgentGlobal:
 			diagnostics = append(diagnostics, newDiagnostic(
 				"javascript.surface.unsupported_helper",
 				symbolPath,
@@ -57,18 +44,4 @@ func runtimeManifestSupportedSurfaceDiagnostics(document string, keys []string, 
 	}
 
 	return diagnostics
-}
-
-func isForbiddenInstalledRootGlobalPath(path string) bool {
-	for _, forbidden := range forbiddenInstalledRootGlobals {
-		if path == forbidden || strings.HasPrefix(path, forbidden+".") {
-			return true
-		}
-	}
-	return false
-}
-
-func isComparisonProjectHelperPath(path string) bool {
-	_, ok := comparisonProjectHelperPaths[path]
-	return ok
 }

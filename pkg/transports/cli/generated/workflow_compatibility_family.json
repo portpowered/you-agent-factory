@@ -146,12 +146,12 @@
           "kind": "mutually-exclusive",
           "participants": [
             {
-              "type": "flag",
-              "id": "you.workflow.preview.flag.value"
+              "id": "you.workflow.preview.flag.value",
+              "type": "flag"
             },
             {
-              "type": "flag",
-              "id": "you.workflow.preview.flag.inline"
+              "id": "you.workflow.preview.flag.inline",
+              "type": "flag"
             }
           ]
         },
@@ -160,12 +160,12 @@
           "kind": "at-least-one",
           "participants": [
             {
-              "type": "flag",
-              "id": "you.workflow.preview.flag.value"
+              "id": "you.workflow.preview.flag.value",
+              "type": "flag"
             },
             {
-              "type": "flag",
-              "id": "you.workflow.preview.flag.inline"
+              "id": "you.workflow.preview.flag.inline",
+              "type": "flag"
             }
           ]
         }
@@ -379,12 +379,12 @@
           "kind": "mutually-exclusive",
           "participants": [
             {
-              "type": "flag",
-              "id": "you.workflow.validate.flag.value"
+              "id": "you.workflow.validate.flag.value",
+              "type": "flag"
             },
             {
-              "type": "flag",
-              "id": "you.workflow.validate.flag.inline"
+              "id": "you.workflow.validate.flag.inline",
+              "type": "flag"
             }
           ]
         },
@@ -393,12 +393,12 @@
           "kind": "at-least-one",
           "participants": [
             {
-              "type": "flag",
-              "id": "you.workflow.validate.flag.value"
+              "id": "you.workflow.validate.flag.value",
+              "type": "flag"
             },
             {
-              "type": "flag",
-              "id": "you.workflow.validate.flag.inline"
+              "id": "you.workflow.validate.flag.inline",
+              "type": "flag"
             }
           ]
         }

@@ -1,23 +1,9 @@
 type: string
 description: String-first parsing and UI hint for one factory invocation parameter.
-x-enum-varnames:
-  - FactoryInvocationParameterTypeHintString
-  - FactoryInvocationParameterTypeHintPath
-  - FactoryInvocationParameterTypeHintFilePath
-  - FactoryInvocationParameterTypeHintDirectoryPath
-  - FactoryInvocationParameterTypeHintNumberString
-  - FactoryInvocationParameterTypeHintBooleanString
 enum:
-  - STRING
-  - PATH
-  - FILE_PATH
-  - DIRECTORY_PATH
-  - NUMBER_STRING
-  - BOOLEAN_STRING
-x-enum-descriptions:
-  - Generic free-form string input.
-  - Path-like string input with no stronger file or directory guarantee.
-  - File path string input.
-  - Directory path string input.
-  - Numeric value encoded as a string for transport parity.
-  - Boolean value encoded as a string with CLI-friendly flag behavior.
+    - STRING
+    - PATH
+    - FILE_PATH
+    - DIRECTORY_PATH
+    - NUMBER_STRING
+    - BOOLEAN_STRING

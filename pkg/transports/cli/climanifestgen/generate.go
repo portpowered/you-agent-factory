@@ -18,6 +18,12 @@ const (
 	// RepresentativeFamilyJSONPath is the generated representative-family metadata artifact.
 	RepresentativeFamilyJSONPath = "pkg/transports/cli/generated/representative_family.json"
 
+	// SessionFamilyJSONPath is the generated complete session-family metadata artifact.
+	SessionFamilyJSONPath = "pkg/transports/cli/generated/session_family.json"
+
+	// SessionFamilyCommandIDsPath is the generated stable session command ID list.
+	SessionFamilyCommandIDsPath = "pkg/transports/cli/generated/session_command_ids_gen.go"
+
 	// WorkFamilyJSONPath is the generated work-family metadata artifact.
 	WorkFamilyJSONPath = "pkg/transports/cli/generated/work_family.json"
 
@@ -49,6 +55,20 @@ func RepresentativeFamilyArtifact(repositoryRoot string) ([]byte, error) {
 		return nil, err
 	}
 	family, err := ExtractRepresentativeFamily(manifest)
+	if err != nil {
+		return nil, err
+	}
+	return contractjoiner.MarshalCanonicalJSON(family)
+}
+
+// SessionFamilyArtifact returns deterministic generated session-family metadata bytes.
+func SessionFamilyArtifact(repositoryRoot string) ([]byte, error) {
+	manifestPath := filepath.Join(repositoryRoot, filepath.FromSlash(ProductionManifestPath))
+	manifest, err := climanifest.LoadProduction(manifestPath)
+	if err != nil {
+		return nil, err
+	}
+	family, err := ExtractSessionFamily(manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -164,6 +184,13 @@ func Generate(repositoryRoot string) error {
 	if err := writeArtifact(repositoryRoot, WorkFamilyJSONPath, WorkArtifact); err != nil {
 		return err
 	}
+	if err := writeArtifact(repositoryRoot, SessionFamilyJSONPath, SessionFamilyArtifact); err != nil {
+		return err
+	}
+	sessionIDsTarget := filepath.Join(repositoryRoot, filepath.FromSlash(SessionFamilyCommandIDsPath))
+	if err := os.WriteFile(sessionIDsTarget, sessionCommandIDsSource(), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", SessionFamilyCommandIDsPath, err)
+	}
 	idsTarget := filepath.Join(repositoryRoot, filepath.FromSlash(RepresentativeFamilyCommandIDsPath))
 	if err := os.WriteFile(idsTarget, representativeAndWorkCommandIDsSource(), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", RepresentativeFamilyCommandIDsPath, err)
@@ -248,6 +275,14 @@ func workflowMCPCommandIDsSource() []byte {
 	builder.WriteString("\n")
 	writeCommandIDVar(&builder, "WorkflowCompatibilityFamilyCommandIDs", CompatibilityManifestPath, "separately classified workflow compatibility family", WorkflowCompatibilityFamilyCommandIDs)
 	return []byte(builder.String())
+}
+
+func sessionCommandIDsSource() []byte {
+	return renderCommandIDsSource(
+		"SessionFamilyCommandIDs lists the stable command IDs emitted from\n// contracts/cli/commands.json for the canonical Factory Session family.",
+		"SessionFamilyCommandIDs",
+		SessionFamilyCommandIDs,
+	)
 }
 
 func renderCommandIDsSource(comment, varName string, ids []string) []byte {

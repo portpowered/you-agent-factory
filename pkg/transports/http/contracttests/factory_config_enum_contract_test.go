@@ -24,7 +24,7 @@ func TestFactoryConfigContract_OpenAPIEnumBackedFieldsReferenceNamedSchemas(t *t
 
 	schemas := componentSchemas(t, doc)
 	assertSchemaPropertyRef(t, schemas, "InputType", "type", "#/components/schemas/InputKind")
-	assertSchemaPropertyRef(t, schemas, "FactoryGuard", "type", "#/components/schemas/GuardType")
+	assertSchemaPropertyRef(t, schemas, "FactoryGuard", "type", "#/components/schemas/FactoryGuardType")
 	assertSchemaPropertyRef(t, schemas, "FactoryGuard", "modelProvider", "#/components/schemas/WorkerModelProvider")
 	assertSchemaArrayItemRef(t, schemas, "Factory", "guards", "#/components/schemas/FactoryGuard")
 	assertSchemaPropertyRef(t, schemas, "WorkState", "type", "#/components/schemas/WorkStateType")
@@ -40,12 +40,14 @@ func TestFactoryConfigContract_OpenAPIEnumBackedFieldsReferenceNamedSchemas(t *t
 	assertSchemaPropertyRef(t, schemas, "Workstation", "type", "#/components/schemas/WorkstationType")
 	assertSchemaArrayItemRef(t, schemas, "Workstation", "classificationRoutes", "#/components/schemas/ClassificationRoute")
 	assertSchemaPropertyRef(t, schemas, "Guard", "type", "#/components/schemas/GuardType")
+	assertSchemaPropertyRef(t, schemas, "WorkstationGuard", "type", "#/components/schemas/WorkstationGuardType")
+	assertSchemaPropertyRef(t, schemas, "InputGuard", "type", "#/components/schemas/InputGuardType")
 }
 
 func TestFactoryConfigContract_GeneratedModelsUseEnumBackedFieldsForTightenedConfigFields(t *testing.T) {
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.InputType{}), "Type", reflect.TypeOf(generated.InputKind("")))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Factory{}), "Guards", reflect.TypeOf((*[]generated.FactoryGuard)(nil)))
-	assertGeneratedFieldType(t, reflect.TypeOf(generated.FactoryGuard{}), "Type", reflect.TypeOf(generated.GuardType("")))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.FactoryGuard{}), "Type", reflect.TypeOf(generated.FactoryGuardType("")))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.FactoryGuard{}), "ModelProvider", reflect.TypeOf(generated.WorkerModelProvider("")))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.WorkState{}), "Type", reflect.TypeOf(generated.WorkStateType("")))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Worker{}), "Type", reflect.TypeOf((*generated.WorkerType)(nil)))
@@ -63,6 +65,8 @@ func TestFactoryConfigContract_GeneratedModelsUseEnumBackedFieldsForTightenedCon
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "OnRejection", reflect.TypeOf((*[]generated.WorkstationIO)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Workstation{}), "OnFailure", reflect.TypeOf((*[]generated.WorkstationIO)(nil)))
 	assertGeneratedFieldType(t, reflect.TypeOf(generated.Guard{}), "Type", reflect.TypeOf(generated.GuardType("")))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.WorkstationGuard{}), "Type", reflect.TypeOf(generated.WorkstationGuardType("")))
+	assertGeneratedFieldType(t, reflect.TypeOf(generated.InputGuard{}), "Type", reflect.TypeOf(generated.InputGuardType("")))
 }
 
 func TestFactoryConfigContract_CanonicalPayloadExercisesGeneratedEnumBackedFields(t *testing.T) {
@@ -89,7 +93,7 @@ func assertCanonicalFactoryTopLevelEnums(t *testing.T, factory generated.Factory
 	if factory.Runner == nil || *factory.Runner != generated.RunnerIDGemini {
 		t.Fatalf("canonical factory runner = %#v, want gemini", factory.Runner)
 	}
-	if (*factory.Guards)[0].Type != generated.GuardTypeInferenceThrottle {
+	if (*factory.Guards)[0].Type != generated.FactoryGuardTypeInferenceThrottle {
 		t.Fatalf("canonical factory guard type = %q, want INFERENCE_THROTTLE_GUARD", (*factory.Guards)[0].Type)
 	}
 	if (*factory.Guards)[0].ModelProvider != generated.WorkerModelProviderClaude {
@@ -169,10 +173,10 @@ func assertCanonicalExecuteStoryBoundaryFields(t *testing.T, executeStory genera
 
 func assertCanonicalExecuteStoryGuardFields(t *testing.T, executeStory generated.Workstation) {
 	t.Helper()
-	if executeStory.Guards == nil || len(*executeStory.Guards) != 1 || (*executeStory.Guards)[0].Type != generated.GuardTypeVisitCount {
+	if executeStory.Guards == nil || len(*executeStory.Guards) != 1 || (*executeStory.Guards)[0].Type != generated.WorkstationGuardTypeVISITCOUNT {
 		t.Fatalf("canonical workstation guards = %#v, want one VISIT_COUNT guard", executeStory.Guards)
 	}
-	if len(executeStory.Inputs) < 2 || executeStory.Inputs[1].Guards == nil || len(*executeStory.Inputs[1].Guards) != 1 || (*executeStory.Inputs[1].Guards)[0].Type != generated.GuardTypeAllChildrenComplete {
+	if len(executeStory.Inputs) < 2 || executeStory.Inputs[1].Guards == nil || len(*executeStory.Inputs[1].Guards) != 1 || (*executeStory.Inputs[1].Guards)[0].Type != generated.InputGuardTypeALLCHILDRENCOMPLETE {
 		t.Fatalf("canonical workstation input guards = %#v, want ALL_CHILDREN_COMPLETE", executeStory.Inputs)
 	}
 }

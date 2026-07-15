@@ -4,6 +4,9 @@ generate:
   models: true
   client: true
 output-options:
+  overlay:
+    path: ../../../api/codegen_config/factory-codegen-overlay.yaml
+    strict: false
   include-operation-ids:
     - getEditableCurrentFactoryDefinition
     - getCurrentFactory

@@ -517,7 +517,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameNameInputGuard(t *testing.T)
 			],
 			"outputs":[{"workType":"taskItem","state":"matched"}]
 		}]
-	}`), factoryapi.GuardTypeSameName, interfaces.GuardTypeSameName)
+	}`), factoryapi.InputGuardTypeSAMENAME, interfaces.GuardTypeSameName)
 }
 
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameTraceIDInputGuard(t *testing.T) {
@@ -537,7 +537,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesSameTraceIDInputGuard(t *testing
 			],
 			"outputs":[{"workType":"taskItem","state":"matched"}]
 		}]
-	}`), factoryapi.GuardTypeSameTraceID, interfaces.GuardTypeSameTraceID)
+	}`), factoryapi.InputGuardTypeSAMETRACEID, interfaces.GuardTypeSameTraceID)
 }
 
 func TestGeneratedFactoryFromOpenAPIJSON_DecodesMatchesFieldsWorkstationGuard(t *testing.T) {
@@ -565,7 +565,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesMatchesFieldsWorkstationGuard(t 
 		t.Fatalf("expected generated matches-fields guard to survive boundary decode, got %#v", workstation.Guards)
 	}
 	guard := (*workstation.Guards)[0]
-	if guard.Type != factoryapi.GuardTypeMatchesFields {
+	if guard.Type != factoryapi.WorkstationGuardTypeMATCHESFIELDS {
 		t.Fatalf("expected generated guard type MATCHES_FIELDS, got %#v", guard.Type)
 	}
 	if guard.MatchConfig == nil || guard.MatchConfig.InputKey != `.Tags["_last_output"]` {
@@ -609,7 +609,7 @@ func TestGeneratedFactoryFromOpenAPIJSON_DecodesFactoryInferenceThrottleGuard(t 
 		t.Fatalf("expected generated factory guard to survive boundary decode, got %#v", generated.Guards)
 	}
 	guard := (*generated.Guards)[0]
-	if guard.Type != factoryapi.GuardTypeInferenceThrottle {
+	if guard.Type != factoryapi.FactoryGuardTypeInferenceThrottle {
 		t.Fatalf("expected generated guard type INFERENCE_THROTTLE_GUARD, got %#v", guard.Type)
 	}
 	if guard.ModelProvider != factoryapi.WorkerModelProviderClaude {
@@ -906,7 +906,7 @@ func assertRuntimeNestedFactoryConfig(t *testing.T, cfg *interfaces.FactoryConfi
 	}
 }
 
-func assertGeneratedAndRuntimeInputGuardMapping(t *testing.T, cfgJSON []byte, generatedType factoryapi.GuardType, runtimeType interfaces.GuardType) {
+func assertGeneratedAndRuntimeInputGuardMapping(t *testing.T, cfgJSON []byte, generatedType factoryapi.InputGuardType, runtimeType interfaces.GuardType) {
 	t.Helper()
 
 	generated, err := GeneratedFactoryFromOpenAPIJSON(cfgJSON)
@@ -940,7 +940,7 @@ func assertGeneratedAndRuntimeInputGuardMapping(t *testing.T, cfgJSON []byte, ge
 	}
 }
 
-func requireGeneratedInputGuard(t *testing.T, generated factoryapi.Factory) factoryapi.Guard {
+func requireGeneratedInputGuard(t *testing.T, generated factoryapi.Factory) factoryapi.InputGuard {
 	t.Helper()
 
 	workstation := requireSingleGeneratedWorkstation(t, generated)

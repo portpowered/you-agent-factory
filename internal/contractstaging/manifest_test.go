@@ -61,6 +61,9 @@ func TestGeneratedManifestHashesEveryStagedArtifact(t *testing.T) {
 		if repositoryPath == manifestTarget {
 			continue
 		}
+		if !strings.HasPrefix(repositoryPath, "packages/api/") {
+			continue
+		}
 		packagePath := strings.TrimPrefix(repositoryPath, "packages/api/")
 		export, ok := exportForPackagePath(exports, packagePath)
 		if !ok {
@@ -75,8 +78,8 @@ func TestGeneratedManifestHashesEveryStagedArtifact(t *testing.T) {
 			t.Errorf("export %q documentation.sourceHash = %#v, want %q", export["path"], documentation["sourceHash"], wantDigest)
 		}
 	}
-	if len(exports) != len(artifacts)-1 {
-		t.Fatalf("export count = %d, want %d staged artifacts excluding manifest", len(exports), len(artifacts)-1)
+	if len(exports) != packageArtifactCount(artifacts) {
+		t.Fatalf("export count = %d, want %d staged artifacts excluding manifest", len(exports), packageArtifactCount(artifacts))
 	}
 }
 
@@ -314,6 +317,19 @@ func manifestExports(t *testing.T, manifest map[string]any) map[string]any {
 		t.Fatalf("exports = %#v", manifest["exports"])
 	}
 	return exports
+}
+
+func packageArtifactCount(artifacts map[string][]byte) int {
+	count := 0
+	for path := range artifacts {
+		if path == manifestTarget {
+			continue
+		}
+		if strings.HasPrefix(path, "packages/api/") {
+			count++
+		}
+	}
+	return count
 }
 
 func exportForPackagePath(exports map[string]any, packagePath string) (map[string]any, bool) {

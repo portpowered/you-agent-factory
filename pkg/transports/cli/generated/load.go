@@ -11,6 +11,9 @@ import (
 //go:embed representative_family.json
 var representativeFamilyJSON []byte
 
+//go:embed session_family.json
+var sessionFamilyJSON []byte
+
 //go:embed work_family.json
 var workFamilyJSON []byte
 
@@ -30,6 +33,12 @@ var workflowCompatibilityFamilyJSON []byte
 // representative root/session-show command family.
 func RepresentativeFamilyManifest() (climanifest.Manifest, error) {
 	return parseFamilyManifest(representativeFamilyJSON, "representative")
+}
+
+// SessionFamilyManifest returns generated metadata for the complete canonical
+// Factory Session command family.
+func SessionFamilyManifest() (climanifest.Manifest, error) {
+	return parseFamilyManifest(sessionFamilyJSON, "session")
 }
 
 // WorkFamilyManifest returns generated §4.3 metadata for the work

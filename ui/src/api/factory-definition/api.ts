@@ -42,7 +42,8 @@ export type CanonicalFactoryDefinition = components["schemas"]["Factory"];
 
 type FactorySchemas = components["schemas"];
 type FactoryRootGuard = FactorySchemas["FactoryGuard"];
-type FactoryGuard = FactorySchemas["Guard"];
+type FactoryWorkstationGuard = FactorySchemas["WorkstationGuard"];
+type FactoryInputGuard = FactorySchemas["InputGuard"];
 type FactoryHostedLinearWorkerClaim = FactorySchemas["HostedLinearWorkerClaim"];
 type FactoryHostedLinearWorkerConfig =
   FactorySchemas["HostedLinearWorkerConfig"];
@@ -282,12 +283,12 @@ const WORK_STATE_TYPE_VALUES = new Set<FactoryWorkState["type"]>([
   "TERMINAL",
 ]);
 const WORKER_TYPE_VALUES = new Set<NonNullable<FactoryWorker["type"]>>([
-  WorkerType.WorkerTypeInferenceWorker,
-  WorkerType.WorkerTypeAgentWorker,
-  WorkerType.WorkerTypeScriptWorker,
-  WorkerType.WorkerTypePollerWorker,
-  WorkerType.WorkerTypeModelWorker,
-  WorkerType.WorkerTypeHostedWorker,
+  WorkerType.INFERENCE_WORKER,
+  WorkerType.AGENT_WORKER,
+  WorkerType.SCRIPT_WORKER,
+  WorkerType.POLLER_WORKER,
+  WorkerType.MODEL_WORKER,
+  WorkerType.HOSTED_WORKER,
 ]);
 const WORKER_MODEL_PROVIDER_VALUES = new Set<
   NonNullable<FactoryWorker["modelProvider"]>
@@ -316,23 +317,23 @@ const WORKSTATION_BEHAVIOR_VALUES = new Set<
 const WORKSTATION_TYPE_VALUES = new Set<
   NonNullable<FactoryWorkstation["type"]>
 >([
-  WorkstationType.WorkstationTypeInferenceRun,
-  WorkstationType.WorkstationTypeAgentRun,
-  WorkstationType.WorkstationTypeScriptRun,
-  WorkstationType.WorkstationTypePollerRun,
-  WorkstationType.WorkstationTypeClassifierWorkstation,
-  WorkstationType.WorkstationTypeLogicalMove,
-  WorkstationType.WorkstationTypeModelInvoke,
-  WorkstationType.WorkstationTypeModelWorkstation,
+  WorkstationType.INFERENCE_RUN,
+  WorkstationType.AGENT_RUN,
+  WorkstationType.SCRIPT_RUN,
+  WorkstationType.POLLER_RUN,
+  WorkstationType.CLASSIFIER_WORKSTATION,
+  WorkstationType.LOGICAL_MOVE,
+  WorkstationType.MODEL_INVOKE,
+  WorkstationType.MODEL_WORKSTATION,
 ]);
 const FACTORY_ROOT_GUARD_TYPE_VALUES = new Set<FactoryRootGuard["type"]>([
   "INFERENCE_THROTTLE_GUARD",
 ]);
-const WORKSTATION_GUARD_TYPE_VALUES = new Set<FactoryGuard["type"]>([
+const WORKSTATION_GUARD_TYPE_VALUES = new Set<FactoryWorkstationGuard["type"]>([
   "VISIT_COUNT",
   "MATCHES_FIELDS",
 ]);
-const INPUT_GUARD_TYPE_VALUES = new Set<FactoryGuard["type"]>([
+const INPUT_GUARD_TYPE_VALUES = new Set<FactoryInputGuard["type"]>([
   "VISIT_COUNT",
   "ALL_CHILDREN_COMPLETE",
   "ANY_CHILD_FAILED",
@@ -1464,11 +1465,14 @@ function decodeFactoryGuard(value: unknown, path: string): FactoryRootGuard {
   return guard;
 }
 
-function decodeWorkstationGuard(value: unknown, path: string): FactoryGuard {
+function decodeWorkstationGuard(
+  value: unknown,
+  path: string,
+): FactoryWorkstationGuard {
   const record = expectObject(value, path);
   rejectUnknownKeys(record, GUARD_KEYS, path);
 
-  const guard: FactoryGuard = {
+  const guard: FactoryWorkstationGuard = {
     type: readRequiredEnum(record, "type", path, WORKSTATION_GUARD_TYPE_VALUES),
   };
   const matchConfig = readOptionalGuardMatchConfig(record, path);
@@ -1486,11 +1490,11 @@ function decodeWorkstationGuard(value: unknown, path: string): FactoryGuard {
   return guard;
 }
 
-function decodeInputGuard(value: unknown, path: string): FactoryGuard {
+function decodeInputGuard(value: unknown, path: string): FactoryInputGuard {
   const record = expectObject(value, path);
   rejectUnknownKeys(record, GUARD_KEYS, path);
 
-  const guard: FactoryGuard = {
+  const guard: FactoryInputGuard = {
     type: readRequiredEnum(record, "type", path, INPUT_GUARD_TYPE_VALUES),
   };
   const matchInput = readOptionalString(record, "matchInput", path);
@@ -1511,7 +1515,7 @@ function decodeInputGuard(value: unknown, path: string): FactoryGuard {
 function readOptionalGuardMatchConfig(
   record: Record<string, unknown>,
   path: string,
-): FactoryGuard["matchConfig"] | undefined {
+): FactoryWorkstationGuard["matchConfig"] | undefined {
   const rawValue = record.matchConfig;
   if (rawValue === undefined) {
     return undefined;

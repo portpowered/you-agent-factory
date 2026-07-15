@@ -97,7 +97,7 @@ export function FactoryGraphEditorAddWorkstationFields({
         }))}
         value={draft.behavior}
       />
-      {draft.behavior === WorkstationKind.WorkstationKindCron && draft.cron ? (
+      {draft.behavior === WorkstationKind.CRON && draft.cron ? (
         <FactoryGraphEditorAddWorkstationCronFields
           cron={draft.cron}
           errors={errors}

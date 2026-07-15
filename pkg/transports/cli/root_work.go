@@ -20,6 +20,11 @@ import (
 // Flip this constant to false for a one-localized-change rollback.
 const useGeneratedRepresentativeFamily = true
 
+// useGeneratedSessionFamily toggles only the production session subtree between
+// the generated metadata constructor and the retained handwritten rollback path.
+// Flip this constant to false for a one-localized-change rollback.
+const useGeneratedSessionFamily = true
+
 // useGeneratedWorkFamily toggles production work wiring between the generated
 // metadata constructor and the legacy handwritten path.
 // Flip this constant to false for a one-localized-change rollback.
@@ -35,7 +40,7 @@ func newLegacyRootCommandWithOptions(options RootCommandOptions) *cobra.Command 
 	docsCmd := newDocsCommand(diagnostics)
 	modelsCmd := newModelsCommand(globals, diagnostics, operatorDefaults, options)
 	mcpCmd, workflowCmd := newProductionWorkflowMCPCommands(globals, diagnostics, options)
-	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, newSessionCommand(globals, diagnostics, options), factoryConfigInit, docsCmd, modelsCmd, mcpCmd, workflowCmd)...)
+	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, productionSessionCommand(globals, diagnostics, options), factoryConfigInit, docsCmd, modelsCmd, mcpCmd, workflowCmd)...)
 	return root
 }
 
@@ -125,8 +130,7 @@ func newRootCommandWithGeneratedRepresentativeFamily(options RootCommandOptions)
 		panic(fmt.Sprintf("build representative family command: %v", err))
 	}
 
-	session := components.Session
-	session.AddCommand(handwrittenSessionSubcommands(globals, diagnostics, options, components.Show)...)
+	session := productionSessionCommand(globals, diagnostics, options)
 
 	factoryConfigInit := productionFactoryConfigInitCommands(globals, diagnostics, options)
 	docsCmd, modelsCmd, err := newProductionModelsDocsCommands(globals, diagnostics, operatorDefaults, options)
@@ -138,6 +142,25 @@ func newRootCommandWithGeneratedRepresentativeFamily(options RootCommandOptions)
 	root := components.Root
 	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, session, factoryConfigInit, docsCmd, modelsCmd, mcpCmd, workflowCmd)...)
 	return root
+}
+
+func productionSessionCommand(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	options RootCommandOptions,
+) *cobra.Command {
+	if !useGeneratedSessionFamily {
+		return newSessionCommand(globals, diagnostics, options)
+	}
+	registry, bindings, err := newSessionHandlerRegistry(globals, diagnostics, options)
+	if err != nil {
+		panic(fmt.Sprintf("build session handler registry: %v", err))
+	}
+	session, err := climanifestcobra.NewSessionFamilyCommand(registry, bindings)
+	if err != nil {
+		panic(fmt.Sprintf("build session family command: %v", err))
+	}
+	return session
 }
 
 func productionRootSubcommands(

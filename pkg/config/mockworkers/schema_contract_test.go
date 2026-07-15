@@ -164,8 +164,8 @@ func TestMockWorkersSchema_DoesNotAdvertiseUnsupportedCapabilities(t *testing.T)
 
 	schema := loadAuthoredMockWorkersSchema(t)
 	instanceSurface := map[string]any{
-		"properties": schema["properties"],
-		"$defs":      schema["$defs"],
+		"properties":  schema["properties"],
+		"$defs":       schema["$defs"],
 		"description": schema["description"],
 	}
 	encoded, err := json.Marshal(instanceSurface)
@@ -498,6 +498,8 @@ func TestMockWorkersSchema_StagedProjectionMatchesAuthoredCopy(t *testing.T) {
 }
 
 func TestMockWorkersSchema_StaleStagingDetectedByContractCheck(t *testing.T) {
+	defer contractstaging.LockRepositoryStagingForTest()()
+
 	repositoryRoot := testutil.MustRepoPath(t, ".")
 	target := "packages/api/generated/schemas/mock-workers.schema.json"
 	stagedPath := filepath.Join(repositoryRoot, filepath.FromSlash(target))
@@ -506,11 +508,15 @@ func TestMockWorkersSchema_StaleStagingDetectedByContractCheck(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read staged schema: %v", err)
 	}
-	t.Cleanup(func() {
+	defer func() {
 		_ = os.WriteFile(stagedPath, before, 0o644)
-	})
+	}()
 
 	corrupted := append(append([]byte(nil), before...), '\n')
+	wantStale := []string{
+		"packages/api/generated/manifest.json",
+		target,
+	}
 	var (
 		drift    contractstaging.Drift
 		detected bool
@@ -523,13 +529,13 @@ func TestMockWorkersSchema_StaleStagingDetectedByContractCheck(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Check() error = %v", err)
 		}
-		if len(drift.Stale) == 1 && drift.Stale[0] == target {
+		if len(drift.Stale) == len(wantStale) && drift.Stale[0] == wantStale[0] && drift.Stale[1] == wantStale[1] {
 			detected = true
 			break
 		}
 	}
 	if !detected {
-		t.Fatalf("Check() stale = %#v, want [%q]", drift.Stale, target)
+		t.Fatalf("Check() stale = %#v, want %#v", drift.Stale, wantStale)
 	}
 }
 
