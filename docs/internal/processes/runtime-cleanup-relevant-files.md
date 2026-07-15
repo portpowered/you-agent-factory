@@ -55,6 +55,12 @@ content filtering and relationship name/ID fallbacks before marshaling the
 owner payload; generated union decoding belongs in boundary compatibility
 tests, not canonical history construction.
 
+Initial-structure and run-request producers carry the Factory-owned detached
+`FactorySnapshot` inside Factory-owned payloads. Runtime composition should
+hand the editable snapshot to event history without decoding it through a
+generated transport model; generated Factory event unions remain an outward
+compatibility boundary only.
+
 Production command runners must remain blocking without taking lifecycle ownership
 back from `pkg/initializer`. The entrypoint should construct and start the graph
 through `pkg/root`, then let the returned application wait for its selected

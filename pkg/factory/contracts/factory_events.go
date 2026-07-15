@@ -514,6 +514,15 @@ type InitialStructurePayload struct {
 	Relations        []work.FactoryRelation          `json:"relations,omitempty"`
 }
 
+// InitialStructureRequestEventPayload carries the canonical Factory snapshot
+// emitted before Work begins moving. Optional recording metadata remains
+// detached from the snapshot for compatibility with historical artifacts.
+type InitialStructureRequestEventPayload struct {
+	Factory         *FactorySnapshot   `json:"factory"`
+	Metadata        *map[string]string `json:"metadata,omitempty"`
+	SourceDirectory *string            `json:"sourceDirectory,omitempty"`
+}
+
 // WorkInputPayload describes a work item submitted to the factory.
 type WorkInputPayload struct {
 	TokenID   string                 `json:"token_id"`

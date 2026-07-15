@@ -20,8 +20,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
@@ -128,19 +126,19 @@ func Build(ctx context.Context, input BuildInput) (*Bundle, error) {
 	return assembleRuntimeBundle(input, logger, logSink, metricsSink, net, eventHistory, localModels, workerOpts)
 }
 
-func editableEventFactorySnapshot(input BuildInput) (factoryapi.Factory, error) {
+func editableEventFactorySnapshot(input BuildInput) (*interfaces.FactorySnapshot, error) {
 	if input.LoadedFactoryCfg == nil || input.LoadedFactoryCfg.FactoryConfig() == nil {
-		return factoryapi.Factory{}, fmt.Errorf("loaded factory config is unavailable")
+		return nil, fmt.Errorf("loaded factory config is unavailable")
 	}
 	factoryCfg, err := factoryconfig.CloneFactoryConfig(input.LoadedFactoryCfg.FactoryConfig())
 	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("clone factory config: %w", err)
+		return nil, fmt.Errorf("clone factory config: %w", err)
 	}
 	if err := factoryconfig.ApplySupportedPortableBundledFiles(input.LoadedFactoryCfg.FactoryDir(), factoryCfg, true, false); err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("inline portable bundled files: %w", err)
+		return nil, fmt.Errorf("inline portable bundled files: %w", err)
 	}
 	if err := factoryconfig.ApplySharedFactoryStarterWork(input.LoadedFactoryCfg.FactoryDir(), factoryCfg); err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("inline shared factory starter work: %w", err)
+		return nil, fmt.Errorf("inline shared factory starter work: %w", err)
 	}
 	snapshot, err := replay.FactorySnapshotFromRuntimeConfig(
 		input.LoadedFactoryCfg.FactoryDir(),
@@ -150,13 +148,9 @@ func editableEventFactorySnapshot(input BuildInput) (factoryapi.Factory, error) 
 		replay.WithFactorySnapshotWorkflowID(input.WorkflowID),
 	)
 	if err != nil {
-		return factoryapi.Factory{}, err
+		return nil, err
 	}
-	generated, err := factorysnapshot.ToAPI(snapshot)
-	if err != nil {
-		return factoryapi.Factory{}, err
-	}
-	return *generated, nil
+	return snapshot, nil
 }
 
 func assembleRuntimeBundle(

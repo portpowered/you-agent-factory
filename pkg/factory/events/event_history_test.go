@@ -44,6 +44,61 @@ func TestFactoryEventHistory_EventRecorderCannotMutateCanonicalHistory(t *testin
 	}
 }
 
+func TestFactoryEventHistory_InitialStructureAndRunRequestUseFactoryOwnedPayloads(t *testing.T) {
+	recordedAt := time.Date(2026, 7, 15, 23, 0, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return recordedAt })
+	editable, err := interfaces.NewFactorySnapshot(map[string]any{
+		"name":         "editable-factory",
+		"unknownField": "preserved",
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	history.SetInitialStructureFactory(editable)
+	(*editable)[0] = 'X'
+
+	var canonical []interfaces.FactoryEvent
+	history.AddEventRecorder(func(event interfaces.FactoryEvent) {
+		canonical = append(canonical, event)
+	})
+	history.RecordInitialStructure()
+	history.RecordRunRequest()
+
+	if len(canonical) != 2 {
+		t.Fatalf("canonical event count = %d, want 2", len(canonical))
+	}
+	if canonical[0].Type != interfaces.FactoryEventTypeInitialStructureRequest || canonical[1].Type != interfaces.FactoryEventTypeRunRequest {
+		t.Fatalf("canonical event types = [%s, %s], want initial structure then run request", canonical[0].Type, canonical[1].Type)
+	}
+
+	var initial interfaces.InitialStructureRequestEventPayload
+	if err := canonical[0].DecodePayload(&initial); err != nil {
+		t.Fatalf("decode canonical initial structure payload: %v", err)
+	}
+	var initialFactory map[string]any
+	if err := initial.Factory.Decode(&initialFactory); err != nil {
+		t.Fatalf("decode canonical initial Factory snapshot: %v", err)
+	}
+	if initialFactory["name"] != "editable-factory" || initialFactory["unknownField"] != "preserved" {
+		t.Fatalf("initial Factory snapshot = %#v, want detached editable document", initialFactory)
+	}
+
+	var run interfaces.RunRequestEventPayload
+	if err := canonical[1].DecodePayload(&run); err != nil {
+		t.Fatalf("decode canonical run request payload: %v", err)
+	}
+	if !run.RecordedAt.Equal(recordedAt) || run.Factory == nil {
+		t.Fatalf("run request payload = %#v, want recorded time and Factory snapshot", run)
+	}
+	var generated factoryapi.FactoryEvent
+	if err := canonical[1].Decode(&generated); err != nil {
+		t.Fatalf("decode run request at generated boundary: %v", err)
+	}
+	if _, err := generated.Payload.AsRunRequestEventPayload(); err != nil {
+		t.Fatalf("generated run request payload compatibility: %v", err)
+	}
+}
+
 func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(t *testing.T) {
 	runtimeConfig := eventHistoryRuntimeConfig{
 		Workers: map[string]*workerconfig.Config{

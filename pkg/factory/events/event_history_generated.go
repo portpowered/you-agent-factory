@@ -64,6 +64,14 @@ func generatedFactory(payload interfaces.InitialStructurePayload) factoryapi.Fac
 	}
 }
 
+func factorySnapshotFromInitialStructure(payload interfaces.InitialStructurePayload) *interfaces.FactorySnapshot {
+	snapshot, err := interfaces.NewFactorySnapshot(generatedFactory(payload))
+	if err != nil {
+		panic(fmt.Sprintf("capture initial Factory snapshot: %v", err))
+	}
+	return snapshot
+}
+
 func generatedFactoryName(name string) factoryapi.FactoryName {
 	if strings.TrimSpace(name) == "" {
 		return "factory"

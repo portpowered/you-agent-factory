@@ -54,7 +54,7 @@ type FactoryEventHistory struct {
 	net                 *state.Net
 	runtimeConfig       interfaces.RuntimeDefinitionLookup
 	factoryRunner       string
-	initialFactory      *factoryapi.Factory
+	initialFactory      *interfaces.FactorySnapshot
 	now                 func() time.Time
 	streamGenerationID  string
 	events              []interfaces.FactoryEvent
@@ -108,16 +108,16 @@ func (h *FactoryEventHistory) SetFactoryRunnerOverride(runnerID string) {
 	h.factoryRunner = workerrunner.NormalizeRunnerID(runnerID)
 }
 
-// SetInitialStructureFactory overrides the public factory snapshot emitted by
-// INITIAL_STRUCTURE. Runtime callers can keep execution configs thin while
+// SetInitialStructureFactory overrides the canonical Factory snapshot emitted
+// by INITIAL_STRUCTURE. Runtime callers can keep execution configs thin while
 // service callers expose an editable event-sourced document.
-func (h *FactoryEventHistory) SetInitialStructureFactory(factory factoryapi.Factory) {
+func (h *FactoryEventHistory) SetInitialStructureFactory(factory *interfaces.FactorySnapshot) {
 	if h == nil {
 		return
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	h.initialFactory = &factory
+	h.initialFactory = factory.Clone()
 }
 
 // Events returns the recorded events in append order.
@@ -239,17 +239,17 @@ func (h *FactoryEventHistory) RecordInitialStructure() {
 	}
 	eventTime := interfaces.CanonicalEventTime(h.now())
 	payload := projections.ProjectInitialStructure(h.net, h.runtimeConfig)
-	factory := generatedFactory(payload)
+	factory := factorySnapshotFromInitialStructure(payload)
 	h.mu.RLock()
 	if h.initialFactory != nil {
-		factory = *h.initialFactory
+		factory = h.initialFactory.Clone()
 	}
 	h.mu.RUnlock()
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeInitialStructureRequest,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeInitialStructureRequest,
 		eventIDInitialStructure,
-		factoryapi.FactoryEventContext{Tick: 0, EventTime: eventTime},
-		factoryapi.InitialStructureRequestEventPayload{Factory: factory},
+		interfaces.FactoryEventContext{Tick: 0, EventTime: eventTime},
+		interfaces.InitialStructureRequestEventPayload{Factory: factory},
 	))
 }
 
@@ -285,13 +285,13 @@ func (h *FactoryEventHistory) RecordRunRequest() {
 	h.mu.Unlock()
 
 	payload := projections.ProjectInitialStructure(h.net, h.runtimeConfig)
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeRunRequest,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeRunRequest,
 		eventIDRunRequest,
-		factoryapi.FactoryEventContext{Tick: 0, EventTime: recordedAt},
-		factoryapi.RunRequestEventPayload{
+		interfaces.FactoryEventContext{Tick: 0, EventTime: recordedAt},
+		interfaces.RunRequestEventPayload{
 			RecordedAt: recordedAt,
-			Factory:    generatedFactory(payload),
+			Factory:    factorySnapshotFromInitialStructure(payload),
 		},
 	))
 }
