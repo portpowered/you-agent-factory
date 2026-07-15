@@ -185,6 +185,134 @@
       "nullability": "non-null",
       "bindingLifecycle": "snapshot-at-bind"
     },
+    "javascript.log": {
+      "id": "javascript.log",
+      "name": "log",
+      "path": "log",
+      "kind": "function",
+      "async": false,
+      "parameters": [
+        {
+          "id": "javascript.log.param.message",
+          "name": "message",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "string"
+        },
+        {
+          "id": "javascript.log.param.fields",
+          "name": "fields",
+          "position": 1,
+          "required": false,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "$ref": "#/sharedSchemas/javascript.schema.json_compatible/schema"
+          }
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "emittedRecords": [
+        "log"
+      ],
+      "errors": [
+        {
+          "condition": "missing-or-non-string-message",
+          "type": "TypeError",
+          "message": "log() requires a string message"
+        },
+        {
+          "condition": "non-json-fields",
+          "type": "GoError",
+          "message": "log() fields must be JSON-compatible"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.log",
+        "documentation": {
+          "title": {
+            "id": "javascript.log.title",
+            "canonicalEnglish": "Root workflow log helper"
+          },
+          "description": {
+            "id": "javascript.log.description",
+            "canonicalEnglish": "Synchronously emits one workflow-scoped log record. The first argument must be a non-empty string message; an optional second argument supplies JSON-compatible structured fields."
+          }
+        },
+        "examples": [
+          "log(\"checkpoint\", { step: 1 })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.log",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "javascript.phase": {
+      "id": "javascript.phase",
+      "name": "phase",
+      "path": "phase",
+      "kind": "function",
+      "async": false,
+      "parameters": [
+        {
+          "id": "javascript.phase.param.name",
+          "name": "name",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "string"
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "emittedRecords": [
+        "phase"
+      ],
+      "errors": [
+        {
+          "condition": "missing-or-non-string-name",
+          "type": "TypeError",
+          "message": "phase() requires a string name"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.phase",
+        "documentation": {
+          "title": {
+            "id": "javascript.phase.title",
+            "canonicalEnglish": "Phase marker"
+          },
+          "description": {
+            "id": "javascript.phase.description",
+            "canonicalEnglish": "Synchronously records one named workflow phase transition for progress tracking. The name must be a non-empty string."
+          }
+        },
+        "examples": [
+          "phase(\"draft\")"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.phase",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
     "javascript.workflow": {
       "id": "javascript.workflow",
       "name": "workflow",
