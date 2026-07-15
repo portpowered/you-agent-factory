@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -39,10 +38,7 @@ func TestMaterializePackagedGoalFactory_DerivesRolePromptsFromCanonicalSource(t 
 	factoryDir := materializePackagedGoalFactory(t, t.TempDir())
 
 	for _, source := range PackagedGoalRolePromptSources {
-		authoredPrompt, ok := builtingoal.AuthoredRolePrompt(source.Role)
-		if !ok {
-			t.Fatalf("missing authored prompt source for role %q", source.Role)
-		}
+		authoredPrompt := authoredGoalPrompt(t, source)
 
 		materializedPrompt, err := loadPackagedGoalRolePrompt(factoryDir, source)
 		if err != nil {
@@ -54,6 +50,16 @@ func TestMaterializePackagedGoalFactory_DerivesRolePromptsFromCanonicalSource(t 
 	}
 
 	assertPersistedPackagedGoalFactoryJSONOmitsInlinePromptBodies(t, factoryDir)
+}
+
+func authoredGoalPrompt(t *testing.T, source PackagedGoalRolePromptSource) string {
+	t.Helper()
+	path := filepath.Join("..", "definitions", "goal", filepath.FromSlash(source.PromptFile))
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read authored prompt for role %q: %v", source.Role, err)
+	}
+	return string(content)
 }
 
 func TestMaterializePackagedGoalFactory_DeterministicFreshMaterialization(t *testing.T) {

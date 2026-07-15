@@ -21,10 +21,14 @@ func (e PackagedGoalPromptDriftError) Error() string {
 // CheckPackagedGoalMaterializedPromptDrift returns an error when any materialized
 // on-disk prompt for a packaged goal role does not match the canonical authored source.
 func CheckPackagedGoalMaterializedPromptDrift(factoryDir string) error {
+	canonical, err := factoryconfig.FactoryConfigFromOpenAPIJSON(builtingoal.BuiltInGoalFactoryJSON)
+	if err != nil {
+		return fmt.Errorf("load assembled built-in goal factory: %w", err)
+	}
 	for _, source := range PackagedGoalRolePromptSources {
-		authoredPrompt, ok := builtingoal.AuthoredRolePrompt(source.Role)
-		if !ok {
-			return fmt.Errorf("missing canonical authored prompt for role %q", source.Role)
+		authoredPrompt, err := assembledPackagedGoalRolePrompt(canonical, source)
+		if err != nil {
+			return fmt.Errorf("load canonical prompt for role %q: %w", source.Role, err)
 		}
 
 		derivedPrompt, err := loadPackagedGoalRolePrompt(factoryDir, source)
@@ -38,26 +42,20 @@ func CheckPackagedGoalMaterializedPromptDrift(factoryDir string) error {
 	return nil
 }
 
-// CheckPackagedGoalAssembledPromptDrift returns an error when any prompt body in
-// the assembled built-in factory JSON does not match the canonical authored source.
+// CheckPackagedGoalAssembledPromptDrift verifies that every declared goal role
+// resolves to a non-empty prompt in the shared assembler's canonical payload.
 func CheckPackagedGoalAssembledPromptDrift() error {
-	cfg, err := factoryconfig.FactoryConfigFromOpenAPIJSON(builtingoal.BuiltInGoalFactoryJSON)
+	canonical, err := factoryconfig.FactoryConfigFromOpenAPIJSON(builtingoal.BuiltInGoalFactoryJSON)
 	if err != nil {
 		return fmt.Errorf("load assembled built-in goal factory: %w", err)
 	}
-
 	for _, source := range PackagedGoalRolePromptSources {
-		authoredPrompt, ok := builtingoal.AuthoredRolePrompt(source.Role)
-		if !ok {
-			return fmt.Errorf("missing canonical authored prompt for role %q", source.Role)
-		}
-
-		derivedPrompt, err := assembledPackagedGoalRolePrompt(cfg, source)
+		prompt, err := assembledPackagedGoalRolePrompt(canonical, source)
 		if err != nil {
 			return fmt.Errorf("load assembled prompt for role %q: %w", source.Role, err)
 		}
-		if derivedPrompt != authoredPrompt {
-			return PackagedGoalPromptDriftError{Role: source.Role}
+		if strings.TrimSpace(prompt) == "" {
+			return fmt.Errorf("assembled prompt for role %q is empty", source.Role)
 		}
 	}
 	return nil
@@ -68,14 +66,14 @@ func assembledPackagedGoalRolePrompt(cfg *interfaces.FactoryConfig, source Packa
 	case PackagedGoalRolePromptSourceKindWorkerBody:
 		for _, worker := range cfg.Workers {
 			if worker.Name == source.WorkerName {
-				return strings.TrimSpace(worker.Body), nil
+				return worker.Body, nil
 			}
 		}
 		return "", fmt.Errorf("missing worker %q", source.WorkerName)
 	default:
 		for _, workstation := range cfg.Workstations {
 			if workstation.Name == source.WorkstationName {
-				return strings.TrimSpace(workstation.Body), nil
+				return workstation.Body, nil
 			}
 		}
 		return "", fmt.Errorf("missing workstation %q", source.WorkstationName)

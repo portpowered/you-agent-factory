@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -166,10 +165,7 @@ func TestMaterializedPackagedGoalFactory_AuthoredPromptSourcesMatchMaterializedF
 	factoryDir, loaded := materializeAndLoadPackagedGoalFactory(t)
 
 	for _, source := range PackagedGoalRolePromptSources {
-		authoredPrompt, ok := builtingoal.AuthoredRolePrompt(source.Role)
-		if !ok {
-			t.Fatalf("missing authored prompt source for role %q", source.Role)
-		}
+		authoredPrompt := authoredGoalPrompt(t, source)
 
 		materializedPrompt, err := loadPackagedGoalRolePrompt(factoryDir, source)
 		if err != nil {
@@ -311,15 +307,12 @@ func assertPackagedGoalMaterializedPromptMatchesAuthoredSource(t *testing.T, fac
 	if err != nil {
 		t.Fatalf("role %q prompt file %s: %v", source.Role, promptPath, err)
 	}
-	promptOnDisk := strings.TrimSpace(string(promptBytes))
-	if promptOnDisk == "" {
+	promptOnDisk := string(promptBytes)
+	if strings.TrimSpace(promptOnDisk) == "" {
 		t.Fatalf("role %q prompt file %s is empty", source.Role, promptPath)
 	}
 
-	authoredPrompt, ok := builtingoal.AuthoredRolePrompt(source.Role)
-	if !ok {
-		t.Fatalf("missing authored prompt source for role %q", source.Role)
-	}
+	authoredPrompt := authoredGoalPrompt(t, source)
 	if promptOnDisk != authoredPrompt {
 		t.Fatalf("role %q materialized prompt does not match authored source file", source.Role)
 	}
@@ -350,7 +343,7 @@ func assertPackagedGoalLoadedWorkstationPrompt(t *testing.T, loaded *factoryconf
 	if workstation.PromptFile != source.PromptFile {
 		t.Fatalf("workstation %q promptFile = %q, want %q", source.WorkstationName, workstation.PromptFile, source.PromptFile)
 	}
-	if strings.TrimSpace(workstation.PromptTemplate) != wantPrompt {
+	if workstation.PromptTemplate != wantPrompt {
 		t.Fatalf("workstation %q prompt template = %q, want loaded split file %q", source.WorkstationName, workstation.PromptTemplate, wantPrompt)
 	}
 }
@@ -380,14 +373,14 @@ func loadedPackagedGoalRolePrompt(loaded *factoryconfig.LoadedFactoryConfig, sou
 		if !ok {
 			return "", os.ErrNotExist
 		}
-		return strings.TrimSpace(workstation.PromptTemplate), nil
+		return workstation.PromptTemplate, nil
 	}
 }
 
 func loadedPackagedGoalWorkerBody(loaded *factoryconfig.LoadedFactoryConfig, workerName string) (string, bool) {
 	for _, worker := range loaded.FactoryConfig().Workers {
 		if worker.Name == workerName {
-			return strings.TrimSpace(worker.Body), true
+			return worker.Body, true
 		}
 	}
 	return "", false
