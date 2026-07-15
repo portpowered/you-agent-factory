@@ -121,6 +121,41 @@ Use this map when changing the public REST contract.
   versions, removal gates, approval status). Per-family schema validation stays
   in `contracts/*_deprecated_inventory_test.go`.
 
+## MCP tool catalog contract ownership
+
+- Authored MCP tool catalog schema lives at
+  `contracts/mcp/tool-catalog.schema.json` (Draft 2020-12, protocol pin
+  `2024-11-05`, format version `1.0.0`). Tool records compose B04 documentation
+  and lifecycle shapes via `$ref` to `contracts/common/documentation.schema.json`
+  and `contracts/common/deprecations.schema.json`.
+- Valid MCP catalog fixtures live under `contracts/testdata/mcp/` and register
+  through `internal/contractvalidator.MCPRegistry()` into
+  `make contracts-validate`. Invalid fixtures are asserted in focused
+  `internal/contractvalidator` tests with path-bearing diagnostics, not in the
+  default valid-only registry pass. Consolidated fixture-matrix closure lives in
+  `contracts/mcp_tool_catalog_fixture_matrix_test.go` (valid/invalid classes,
+  directory coverage, registry alignment, and no-production-cutover boundary).
+- Tool `input` combines a closed Draft `schema` (`#/$defs/closedDraftSchema`)
+  with object-keyed `arguments` using `mcp.arg.*` stable IDs; `execution.mode`
+  is pinned to `tools-call` and `transports` to `stdio-json-rpc` for the
+  supported protocol surface.
+- Reusable MCP protocol components live under `contracts/mcp/protocol/`
+  (`content.schema.json` documents broader MCP content kinds; `call-tool-result.schema.json`
+  defines the `pinnedTextCallToolResult` envelope used by tool `result.examples`;
+  `domain-tool-response.schema.json` documents typed domain success/failure payloads
+  serialized into text; `json-rpc-error.schema.json` documents protocol failures
+  distinct from domain errors). Tool `result.domain` groups domain success/failure
+  documentation separately from `result.transport` and `result.examples`; catalog-level
+  `protocolFailures` documents JSON-RPC invalid-params/unknown-method failures.
+- Compatibility aliases remain only in `contracts/mcp/deprecated.json`; the
+  tool-catalog schema is build-time contract validation only and does not cut
+  over `packages/api/generated/mcp/tools.json` or runtime discovery.
+- Tool `handler` binds handwritten implementations with `mcp.handler.*` stable
+  IDs (`#/$defs/handler`). Duplicate documentation IDs, broken handler IDs,
+  unknown `protocolVersion`, and malformed lifecycle/documentation records fail
+  through schema validation or family-neutral `identity.duplicate` diagnostics in
+  focused `validator_test.go` cases.
+
 ## Focused compatibility alias internal-use lint
 
 - `internal/contractguard` loads inventoried compatibility alias match values from

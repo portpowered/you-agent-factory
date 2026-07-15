@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/mcp/protocol/content.schema.json",
+  "title": "MCP protocol content items",
+  "description": "Reusable MCP 2024-11-05 content item shapes. Broader protocol kinds are documented for reference; the pinned tool-catalog result policy admits only text.",
+  "$defs": {
+    "textContent": {
+      "description": "Text content carried in one CallToolResult content item.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "text"
+      ],
+      "properties": {
+        "type": {
+          "const": "text"
+        },
+        "text": {
+          "type": "string"
+        }
+      }
+    },
+    "imageContent": {
+      "description": "Image content documented for the broader MCP protocol surface.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "data",
+        "mimeType"
+      ],
+      "properties": {
+        "type": {
+          "const": "image"
+        },
+        "data": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mimeType": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "audioContent": {
+      "description": "Audio content documented for the broader MCP protocol surface.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "data",
+        "mimeType"
+      ],
+      "properties": {
+        "type": {
+          "const": "audio"
+        },
+        "data": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mimeType": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "embeddedResourceContent": {
+      "description": "Embedded resource content documented for the broader MCP protocol surface.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "resource"
+      ],
+      "properties": {
+        "type": {
+          "const": "resource"
+        },
+        "resource": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "uri"
+          ],
+          "properties": {
+            "uri": {
+              "type": "string",
+              "minLength": 1
+            },
+            "mimeType": {
+              "type": "string",
+              "minLength": 1
+            },
+            "text": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "content": {
+      "description": "One MCP CallToolResult content item across the documented protocol surface.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/textContent"
+        },
+        {
+          "$ref": "#/$defs/imageContent"
+        },
+        {
+          "$ref": "#/$defs/audioContent"
+        },
+        {
+          "$ref": "#/$defs/embeddedResourceContent"
+        }
+      ]
+    }
+  }
+}

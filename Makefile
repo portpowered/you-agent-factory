@@ -29,6 +29,8 @@ CROSS_PROVIDER_PARITY_SMOKE_TEST := TestCrossProviderParity
 CROSS_PROVIDER_PARITY_SMOKE_TIMEOUT ?= 120s
 RESPONSE_STREAM_STRESS_SMOKE_TEST := TestSessionResponseEventStore_Backpressure
 RESPONSE_STREAM_STRESS_SMOKE_TIMEOUT ?= 120s
+BUILT_CLI_ACCEPTANCE_PACKAGES := ./tests/functional/acceptance
+BUILT_CLI_ACCEPTANCE_TIMEOUT ?= 300s
 
 ifeq ($(OS),Windows_NT)
 	BINARY_NAME := you.exe
@@ -79,7 +81,7 @@ define run_timed_step
 	exit $$status
 endef
 
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke api-package-pack-smoke contracts-validate contracts-generate contracts-check contracts-smoke cli-manifest-generate cli-manifest-check docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend test-backend-coverage test-backend-functional test-backend-verification long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke response-stream-stress-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check logging-boundary-check compatibility-alias-check model-facade-check readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy init dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke api-package-pack-smoke contracts-validate contracts-generate contracts-check contracts-smoke cli-manifest-generate cli-manifest-check docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend test-backend-coverage test-backend-functional test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke response-stream-stress-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check logging-boundary-check compatibility-alias-check model-facade-check readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy init dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install clean
 
 default:
 	$(MAKE) generate-api
@@ -177,6 +179,10 @@ test-functional:
 
 test-functional-long:
 	$(GO) test -tags=$(FUNCTIONAL_LONG_TAGS) $(FUNCTIONAL_LONG_PACKAGES) -count=1 -timeout $(GO_TEST_TIMEOUT)
+
+test-built-cli-acceptance:
+	$(MAKE) build
+	$(GO) test $(BUILT_CLI_ACCEPTANCE_PACKAGES) -count=1 -timeout $(BUILT_CLI_ACCEPTANCE_TIMEOUT)
 
 verify-fast:
 	@printf '%s\n' "Running fast verification tier: typecheck + short UI/unit suite + short Go suite"
@@ -316,8 +322,9 @@ run-concurrent-ui-verification-lanes:
 	./scripts/ci/run-concurrent-ui-verification-lanes.sh
 
 verify-tests:
-	@printf '%s\n' "Running required CI-equivalent test lanes: release surface smoke + concurrent UI coverage/browser integration + backend verification"
+	@printf '%s\n' "Running required CI-equivalent test lanes: release surface smoke + built-CLI S24 acceptance + concurrent UI coverage/browser integration + backend verification"
 	$(call run_verification_step,release-surface-smoke,Release surface smoke lane)
+	$(call run_verification_step,test-built-cli-acceptance,Built-CLI S24 acceptance lane)
 	$(call run_verification_step,run-concurrent-ui-verification-lanes,Concurrent UI Coverage + UI Browser Integration lanes)
 	$(call run_verification_step,test-backend-verification,Backend Verification lane)
 
@@ -353,6 +360,7 @@ ci-verify-build-contracts: ci-typecheck
 ci-verify-tests: ci-verify-build-contracts
 	$(MAKE) ui-install-playwright
 	$(MAKE) release-surface-smoke
+	$(MAKE) test-built-cli-acceptance
 	$(MAKE) run-concurrent-ui-verification-lanes
 	$(MAKE) test-backend-verification
 

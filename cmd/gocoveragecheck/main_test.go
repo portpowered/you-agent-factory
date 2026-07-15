@@ -92,6 +92,7 @@ func TestResolveCoverageLaneDefaults(t *testing.T) {
 		t.Fatalf("test packages missing backend functional package: %v", testPackages)
 	}
 	for _, functionalPackage := range []string{
+		modulePath + "/tests/functional/acceptance",
 		modulePath + "/tests/functional/bootstrap_portability",
 		modulePath + "/tests/functional/guards_batch",
 		modulePath + "/tests/functional/providers",
