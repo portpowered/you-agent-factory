@@ -1212,13 +1212,13 @@ describe("factory graph React Flow projection waypoint semantics", () => {
         {
           model: "gpt-5",
           name: "writer",
-          type: WorkerType.WorkerTypeInferenceWorker,
+          type: WorkerType.INFERENCE_WORKER,
         },
       ],
       workstations: [
         {
           ...legacyWorkstation,
-          type: WorkstationType.WorkstationTypeAgentRun,
+          type: WorkstationType.AGENT_RUN,
         },
       ],
     };

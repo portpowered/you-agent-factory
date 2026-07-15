@@ -59,6 +59,12 @@ type CanonicalWorkstationCron = NonNullable<CanonicalWorkstation["cron"]>;
 type CanonicalWorkstationGuard = NonNullable<
   CanonicalWorkstation["guards"]
 >[number];
+type CanonicalWorkstationInput = NonNullable<
+  CanonicalWorkstation["inputs"]
+>[number];
+type CanonicalInputGuard = NonNullable<
+  CanonicalWorkstationInput["guards"]
+>[number];
 
 export type EditableWorkstationCronDraft = Pick<
   components["schemas"]["WorkstationCron"],
@@ -71,7 +77,7 @@ export type EditableWorkstationCronDraft = Pick<
 };
 
 export interface EditableWorkstationInputDraft {
-  guards: CanonicalWorkstationGuard[];
+  guards: CanonicalInputGuard[];
   state: string;
   workType: string;
 }

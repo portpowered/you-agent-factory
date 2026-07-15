@@ -92,12 +92,12 @@ describe("factory graph editor additions model operations", () => {
     const operation = createEmptyFactoryGraphAddModelOperationDraft();
     operation.name = "TTS";
     operation.inputs[0] = {
-      contentTypes: [ModelOperationContentType.ModelOperationContentTypeText],
+      contentTypes: [ModelOperationContentType.TEXT],
       name: "text",
       required: true,
     };
     operation.outputs[0] = {
-      contentTypes: [ModelOperationContentType.ModelOperationContentTypeAudio],
+      contentTypes: [ModelOperationContentType.AUDIO],
       name: "audio",
       required: false,
     };

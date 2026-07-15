@@ -83,7 +83,7 @@ export function classifyWorkstationOperationKind(
 ): "workstation" | "logical-move-dispatch" {
   const workstationKind = resolveWorkstationKind(request, snapshot);
   return workstationKind?.toUpperCase() ===
-    WorkstationType.WorkstationTypeLogicalMove
+    WorkstationType.LOGICAL_MOVE
     ? "logical-move-dispatch"
     : "workstation";
 }

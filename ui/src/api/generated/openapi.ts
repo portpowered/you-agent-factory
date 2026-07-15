@@ -2859,10 +2859,7 @@ export interface components {
     IntegerMap: {
       [key: string]: number;
     };
-    /**
-     * @description Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
-     * @example customer-support-triage
-     */
+    /** @description Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier. */
     FactoryName: string;
     /** @description Additive dashboard read-model contract slice that publishes workstation-request projections keyed by dispatch ID without reintroducing removed `/dashboard` endpoints. */
     FactoryWorldWorkstationRequestProjectionSlice: {
@@ -4016,170 +4013,7 @@ export interface components {
       mode: components["schemas"]["FactorySaveMode"];
       factory: components["schemas"]["Factory"];
     };
-    /**
-     * @description Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
-     * @example {
-     *       "name": "customer-support-triage",
-     *       "inputTypes": [
-     *         {
-     *           "name": "brief",
-     *           "type": "DEFAULT"
-     *         }
-     *       ],
-     *       "guards": [
-     *         {
-     *           "type": "INFERENCE_THROTTLE_GUARD",
-     *           "modelProvider": "CLAUDE",
-     *           "model": "claude-sonnet-4-20250514",
-     *           "refreshWindow": "15m"
-     *         }
-     *       ],
-     *       "workTypes": [
-     *         {
-     *           "name": "story",
-     *           "states": [
-     *             {
-     *               "name": "init",
-     *               "type": "INITIAL"
-     *             },
-     *             {
-     *               "name": "inReview",
-     *               "type": "PROCESSING"
-     *             },
-     *             {
-     *               "name": "failed",
-     *               "type": "FAILED"
-     *             },
-     *             {
-     *               "name": "complete",
-     *               "type": "TERMINAL"
-     *             }
-     *           ]
-     *         }
-     *       ],
-     *       "invocationReturn": {
-     *         "policy": "SUBMITTED_WORK_TERMINAL"
-     *       },
-     *       "supportingFiles": {
-     *         "requiredTools": [
-     *           {
-     *             "name": "python",
-     *             "command": "python3",
-     *             "purpose": "Runs bundled translation scripts",
-     *             "versionArgs": [
-     *               "--version"
-     *             ]
-     *           }
-     *         ],
-     *         "bundledFiles": [
-     *           {
-     *             "type": "ROOT_HELPER",
-     *             "targetPath": "Makefile",
-     *             "content": {
-     *               "encoding": "utf-8",
-     *               "inline": "test:\n\tgo test ./...\n"
-     *             }
-     *           },
-     *           {
-     *             "type": "SCRIPT",
-     *             "targetPath": "factory/scripts/setup-workspace.py",
-     *             "content": {
-     *               "encoding": "utf-8",
-     *               "inline": "print(\"portable\")\n"
-     *             }
-     *           },
-     *           {
-     *             "type": "DOC",
-     *             "targetPath": "factory/docs/usage.md",
-     *             "content": {
-     *               "encoding": "utf-8",
-     *               "inline": "# Usage\n"
-     *             }
-     *           },
-     *           {
-     *             "type": "INPUT",
-     *             "targetPath": "factory/inputs/story/default/seed.md",
-     *             "content": {
-     *               "encoding": "utf-8",
-     *               "inline": "Shared starter work\n"
-     *             }
-     *           }
-     *         ]
-     *       },
-     *       "workers": [
-     *         {
-     *           "name": "reviewer",
-     *           "type": "MODEL_WORKER",
-     *           "executorProvider": "SCRIPT_WRAP",
-     *           "modelProvider": "CLAUDE",
-     *           "model": "claude-sonnet-4-20250514"
-     *         },
-     *         {
-     *           "name": "review-loop-breaker",
-     *           "type": "MODEL_WORKER",
-     *           "executorProvider": "SCRIPT_WRAP",
-     *           "modelProvider": "CLAUDE",
-     *           "model": "claude-sonnet-4-20250514"
-     *         }
-     *       ],
-     *       "workstations": [
-     *         {
-     *           "name": "review-story",
-     *           "behavior": "REPEATER",
-     *           "type": "MODEL_WORKSTATION",
-     *           "worker": "reviewer",
-     *           "inputs": [
-     *             {
-     *               "workType": "story",
-     *               "state": "init"
-     *             }
-     *           ],
-     *           "outputs": [
-     *             {
-     *               "workType": "story",
-     *               "state": "inReview"
-     *             }
-     *           ],
-     *           "onRejection": [
-     *             {
-     *               "workType": "story",
-     *               "state": "init"
-     *             }
-     *           ],
-     *           "onFailure": [
-     *             {
-     *               "workType": "story",
-     *               "state": "failed"
-     *             }
-     *           ]
-     *         },
-     *         {
-     *           "name": "review-loop-breaker",
-     *           "worker": "review-loop-breaker",
-     *           "type": "LOGICAL_MOVE",
-     *           "guards": [
-     *             {
-     *               "type": "VISIT_COUNT",
-     *               "workstation": "review-story",
-     *               "maxVisits": 3
-     *             }
-     *           ],
-     *           "inputs": [
-     *             {
-     *               "workType": "story",
-     *               "state": "init"
-     *             }
-     *           ],
-     *           "outputs": [
-     *             {
-     *               "workType": "story",
-     *               "state": "failed"
-     *             }
-     *           ]
-     *         }
-     *       ]
-     *     }
-     */
+    /** @description Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field. */
     Factory: {
       name: components["schemas"]["FactoryName"];
       /** @description Factory identifier used as the factory-level template context fallback. */
@@ -4384,7 +4218,7 @@ export interface components {
     /** @description Factory-level guard attached at the root factory definition. */
     FactoryGuard: {
       /** @description Factory-level guard condition to evaluate before dispatch-ready transitions can proceed. */
-      type: components["schemas"]["GuardType"];
+      type: components["schemas"]["FactoryGuardType"];
       /** @description Provider whose inference-throttle history controls this factory-level guard. */
       modelProvider: components["schemas"]["WorkerModelProvider"];
       /** @description Optional model name to scope throttling more narrowly than the provider-level window. */
@@ -4649,7 +4483,7 @@ export interface components {
       /** @description Copy supported referenced script files into the expanded workstation layout when config expand runs. */
       copyReferencedScripts?: boolean;
       /** @description Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules. */
-      guards?: components["schemas"]["Guard"][];
+      guards?: components["schemas"]["WorkstationGuard"][];
       /** @description Stop words authored on the topology entry for model-oriented dispatches. */
       stopWords?: string[];
       /** @description Go template resolved from token tags at dispatch time. */
@@ -4745,7 +4579,7 @@ export interface components {
       /** @description Name of the work state consumed or emitted for the referenced work type. */
       state: string;
       /** @description Per-input guards that must pass before this specific input can be used. */
-      guards?: components["schemas"]["Guard"][];
+      guards?: components["schemas"]["InputGuard"][];
     };
     Transition: {
       /** @description Source workstation name. */
@@ -5152,10 +4986,7 @@ export interface components {
     RelationType: RelationType;
     /** @description Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs. */
     WorkContentURLProperty: string;
-    /**
-     * @deprecated
-     * @description Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
-     */
+    /** @description Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration. */
     WorkContentDeprecatedFileProperty: string;
     /** @description Canonical content URL for the submitted file-backed item. Supported schemes are file://, http://, https://, and data:. */
     SubmitWorkContentURLProperty: string;
@@ -5188,6 +5019,11 @@ export interface components {
       /** @description Operator worker preset inherited by child calls using this agent id. */
       preset: string;
     };
+    /**
+     * @description Factory-level guard condition attached at the root factory definition.
+     * @enum {string}
+     */
+    FactoryGuardType: FactoryGuardType;
     /**
      * @description Declares how the CLI should route simplified one-shot prompt submissions for this work type. DEFAULT marks the single work type that receives positional prompts from you run --factory.
      * @enum {string}
@@ -5318,6 +5154,50 @@ export interface components {
       mapping?: components["schemas"]["HostedLinearWorkerMapping"];
       /** @description Optional claim-related configuration that v1 hosted Linear polling allows. */
       claim?: components["schemas"]["HostedLinearWorkerClaim"];
+    };
+    /**
+     * @description Guard condition attached to one specific workstation input.
+     * @enum {string}
+     */
+    InputGuardType: InputGuardType;
+    /** @description Guard attached to one specific workstation input. */
+    InputGuard: {
+      /** @description Guard condition to evaluate for this input-level attachment. */
+      type: components["schemas"]["InputGuardType"];
+      /** @description For `VISIT_COUNT` guards, the workstation whose visits are counted. */
+      workstation?: string;
+      /** @description For `VISIT_COUNT` guards, the visit threshold. */
+      maxVisits?: number;
+      /** @description For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs. */
+      matchConfig?: components["schemas"]["GuardMatchConfig"];
+      /** @description For parent-aware input guards, the parent workType name from another input in the same workstation. */
+      parentInput?: string;
+      /** @description For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation. */
+      matchInput?: string;
+      /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
+      spawnedBy?: string;
+    };
+    /**
+     * @description Guard condition attached to a workstation as a whole.
+     * @enum {string}
+     */
+    WorkstationGuardType: WorkstationGuardType;
+    /** @description Guard attached to a workstation as a whole. */
+    WorkstationGuard: {
+      /** @description Guard condition to evaluate for this workstation-level attachment. */
+      type: components["schemas"]["WorkstationGuardType"];
+      /** @description For `VISIT_COUNT` guards, the workstation whose visits are counted. */
+      workstation?: string;
+      /** @description For `VISIT_COUNT` guards, the visit threshold. */
+      maxVisits?: number;
+      /** @description For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs. */
+      matchConfig?: components["schemas"]["GuardMatchConfig"];
+      /** @description For parent-aware input guards, the parent workType name from another input in the same workstation. */
+      parentInput?: string;
+      /** @description For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation. */
+      matchInput?: string;
+      /** @description For dynamic fanout input guards, the workstation that spawns the children for count tracking. */
+      spawnedBy?: string;
     };
   };
   responses: {
@@ -7748,9 +7628,7 @@ export const FactorySaveMode = {
 export type FactorySaveMode =
   (typeof FactorySaveMode)[keyof typeof FactorySaveMode];
 export const FactoryOrchestratorKind = {
-  // Petri-net orchestration backed by work types, workers, and workstations.
   PETRI: "PETRI",
-  // JavaScript workflow orchestration backed by authored source identity and policy.
   JAVASCRIPT: "JAVASCRIPT",
 } as const;
 export type FactoryOrchestratorKind =
@@ -7761,70 +7639,48 @@ export const FactoryOrchestratorJavaScriptInlineSourceEncoding = {
 export type FactoryOrchestratorJavaScriptInlineSourceEncoding =
   (typeof FactoryOrchestratorJavaScriptInlineSourceEncoding)[keyof typeof FactoryOrchestratorJavaScriptInlineSourceEncoding];
 export const FactoryInvocationParameterBindingKind = {
-  // Consume a positional CLI-style argument at a declared 1-based slot.
-  FactoryInvocationParameterBindingKindPositional: "POSITIONAL",
-  // Consume one named argument key matched through the parameter's externalName or aliases.
-  FactoryInvocationParameterBindingKindNamed: "NAMED",
-  // Consume invocation stdin routed into one declared parameter.
-  FactoryInvocationParameterBindingKindStdin: "STDIN",
-  // Collect otherwise-unbound named arguments into one rest-style parameter.
-  FactoryInvocationParameterBindingKindNamedRest: "NAMED_REST",
+  POSITIONAL: "POSITIONAL",
+  NAMED: "NAMED",
+  STDIN: "STDIN",
+  NAMED_REST: "NAMED_REST",
 } as const;
 export type FactoryInvocationParameterBindingKind =
   (typeof FactoryInvocationParameterBindingKind)[keyof typeof FactoryInvocationParameterBindingKind];
 export const FactoryInvocationParameterTypeHint = {
-  // Generic free-form string input.
-  FactoryInvocationParameterTypeHintString: "STRING",
-  // Path-like string input with no stronger file or directory guarantee.
-  FactoryInvocationParameterTypeHintPath: "PATH",
-  // File path string input.
-  FactoryInvocationParameterTypeHintFilePath: "FILE_PATH",
-  // Directory path string input.
-  FactoryInvocationParameterTypeHintDirectoryPath: "DIRECTORY_PATH",
-  // Numeric value encoded as a string for transport parity.
-  FactoryInvocationParameterTypeHintNumberString: "NUMBER_STRING",
-  // Boolean value encoded as a string with CLI-friendly flag behavior.
-  FactoryInvocationParameterTypeHintBooleanString: "BOOLEAN_STRING",
+  STRING: "STRING",
+  PATH: "PATH",
+  FILE_PATH: "FILE_PATH",
+  DIRECTORY_PATH: "DIRECTORY_PATH",
+  NUMBER_STRING: "NUMBER_STRING",
+  BOOLEAN_STRING: "BOOLEAN_STRING",
 } as const;
 export type FactoryInvocationParameterTypeHint =
   (typeof FactoryInvocationParameterTypeHint)[keyof typeof FactoryInvocationParameterTypeHint];
 export const FactoryInvocationParameterValueMode = {
-  // Consume exactly one effective string value.
-  FactoryInvocationParameterValueModeExact: "EXACT",
-  // Consume zero or more repeated effective string values.
-  FactoryInvocationParameterValueModeRepeated: "REPEATED",
-  // Consume positional overflow values as one variadic parameter.
-  FactoryInvocationParameterValueModeVariadic: "VARIADIC",
-  // Resolve supplied path values to file contents before interpolation.
-  FactoryInvocationParameterValueModeFileContents: "FILE_CONTENTS",
+  EXACT: "EXACT",
+  REPEATED: "REPEATED",
+  VARIADIC: "VARIADIC",
+  FILE_CONTENTS: "FILE_CONTENTS",
 } as const;
 export type FactoryInvocationParameterValueMode =
   (typeof FactoryInvocationParameterValueMode)[keyof typeof FactoryInvocationParameterValueMode];
 export const FactoryInvocationUnknownNamedArgumentPolicy = {
-  // Reject unknown named arguments during normalization.
-  FactoryInvocationUnknownNamedArgumentPolicyReject: "REJECT",
-  // Preserve unknown named arguments for compatibility handling.
-  FactoryInvocationUnknownNamedArgumentPolicyAllow: "ALLOW",
-  // Route unknown named arguments into one declared NAMED_REST parameter.
-  FactoryInvocationUnknownNamedArgumentPolicyCollect: "COLLECT",
+  REJECT: "REJECT",
+  ALLOW: "ALLOW",
+  COLLECT: "COLLECT",
 } as const;
 export type FactoryInvocationUnknownNamedArgumentPolicy =
   (typeof FactoryInvocationUnknownNamedArgumentPolicy)[keyof typeof FactoryInvocationUnknownNamedArgumentPolicy];
 export const FactoryInvocationOutputContractMode = {
-  // The primary result is expected inline in the invocation response.
-  FactoryInvocationOutputContractModeInline: "INLINE",
-  // The primary result is expected to be written to a caller-supplied file path.
-  FactoryInvocationOutputContractModeFile: "FILE",
-  // The primary result is expected to be structured JSON-like content.
-  FactoryInvocationOutputContractModeJson: "JSON",
+  INLINE: "INLINE",
+  FILE: "FILE",
+  JSON: "JSON",
 } as const;
 export type FactoryInvocationOutputContractMode =
   (typeof FactoryInvocationOutputContractMode)[keyof typeof FactoryInvocationOutputContractMode];
 export const InvocationReturnPolicy = {
-  // Use the invocation-submitted work item terminal content as the primary result.
-  InvocationReturnPolicySubmittedWorkTerminal: "SUBMITTED_WORK_TERMINAL",
-  // Use the configured work type, terminal state, and optional work name as the primary result.
-  InvocationReturnPolicyExplicit: "EXPLICIT",
+  SUBMITTED_WORK_TERMINAL: "SUBMITTED_WORK_TERMINAL",
+  EXPLICIT: "EXPLICIT",
 } as const;
 export type InvocationReturnPolicy =
   (typeof InvocationReturnPolicy)[keyof typeof InvocationReturnPolicy];
@@ -7842,113 +7698,77 @@ export const BundledFileContentEncoding = {
 export type BundledFileContentEncoding =
   (typeof BundledFileContentEncoding)[keyof typeof BundledFileContentEncoding];
 export const InputKind = {
-  // Opaque input accepted by the factory without a specialized input schema.
-  InputKindDefault: "DEFAULT",
+  DEFAULT: "DEFAULT",
 } as const;
 export type InputKind = (typeof InputKind)[keyof typeof InputKind];
 export const WorkStateType = {
-  // Work is newly submitted and waiting for its first processing step.
-  WorkStateTypeINITIAL: "INITIAL",
-  // Work is in progress and can continue through additional workstation steps.
-  WorkStateTypePROCESSING: "PROCESSING",
-  // Work completed successfully and should not be scheduled for more processing.
-  WorkStateTypeTERMINAL: "TERMINAL",
-  // Work reached a failed terminal state.
-  WorkStateTypeFAILED: "FAILED",
+  INITIAL: "INITIAL",
+  PROCESSING: "PROCESSING",
+  TERMINAL: "TERMINAL",
+  FAILED: "FAILED",
 } as const;
 export type WorkStateType = (typeof WorkStateType)[keyof typeof WorkStateType];
 export const ResourceType = {
-  // Local or embedded model capacity resource.
-  ResourceTypeModel: "MODEL",
-  // Cloud-provider quota resource for one provider or model lane.
-  ResourceTypeProviderQuota: "PROVIDER_QUOTA",
-  // Generic invocation concurrency slot resource.
-  ResourceTypeInvocationSlot: "INVOCATION_SLOT",
+  MODEL: "MODEL",
+  PROVIDER_QUOTA: "PROVIDER_QUOTA",
+  INVOCATION_SLOT: "INVOCATION_SLOT",
 } as const;
 export type ResourceType = (typeof ResourceType)[keyof typeof ResourceType];
 export const AgentWorkerToolPolicy = {
-  AgentWorkerToolPolicyDISABLED: "DISABLED",
-  AgentWorkerToolPolicyREADONLY: "READ_ONLY",
-  AgentWorkerToolPolicyENABLED: "ENABLED",
+  DISABLED: "DISABLED",
+  READ_ONLY: "READ_ONLY",
+  ENABLED: "ENABLED",
 } as const;
 export type AgentWorkerToolPolicy =
   (typeof AgentWorkerToolPolicy)[keyof typeof AgentWorkerToolPolicy];
 export const WorkerType = {
-  // Inference worker that performs one bounded model operation through the configured provider or managed runtime.
-  WorkerTypeInferenceWorker: "INFERENCE_WORKER",
-  // Agent worker that executes prompt-rendered agent loops through AGENT_RUN workstations. Model capability declarations belong on INFERENCE_WORKER, not AGENT_WORKER.
-  WorkerTypeAgentWorker: "AGENT_WORKER",
-  // Script-backed worker that executes a configured command instead of calling a model provider.
-  WorkerTypeScriptWorker: "SCRIPT_WORKER",
-  // Poller worker that watches an external source and emits work through repository-owned hosted runtime code.
-  WorkerTypePollerWorker: "POLLER_WORKER",
-  // Legacy alias for inference-worker behavior during the migration window.
-  WorkerTypeModelWorker: "MODEL_WORKER",
-  // Legacy alias for poller-worker behavior during the migration window.
-  WorkerTypeHostedWorker: "HOSTED_WORKER",
+  INFERENCE_WORKER: "INFERENCE_WORKER",
+  AGENT_WORKER: "AGENT_WORKER",
+  SCRIPT_WORKER: "SCRIPT_WORKER",
+  POLLER_WORKER: "POLLER_WORKER",
+  MODEL_WORKER: "MODEL_WORKER",
+  HOSTED_WORKER: "HOSTED_WORKER",
 } as const;
 export type WorkerType = (typeof WorkerType)[keyof typeof WorkerType];
 export const WorkerModelProvider = {
-  // Claude model execution routed through the `claude` provider command.
-  WorkerModelProviderClaude: "CLAUDE",
-  // Codex model execution routed through the `codex` provider command.
-  WorkerModelProviderCodex: "CODEX",
-  // Cursor model execution routed through the `agent` provider command.
-  WorkerModelProviderCursor: "CURSOR",
-  // Gemini model execution routed through the `gemini` provider command.
-  WorkerModelProviderGemini: "GEMINI",
-  // Kiro model execution routed through the `kiro-cli` provider command.
-  WorkerModelProviderKiro: "KIRO",
-  // OpenCode model execution routed through the `opencode` provider command.
-  WorkerModelProviderOpenCode: "OPENCODE",
-  // Pi model execution routed through the `pi` provider command.
-  WorkerModelProviderPi: "PI",
-  // Agy model execution routed through the `agy` provider command.
-  WorkerModelProviderAgy: "AGY",
+  CLAUDE: "CLAUDE",
+  CODEX: "CODEX",
+  CURSOR: "CURSOR",
+  GEMINI: "GEMINI",
+  KIRO: "KIRO",
+  OPENCODE: "OPENCODE",
+  PI: "PI",
+  AGY: "AGY",
 } as const;
 export type WorkerModelProvider =
   (typeof WorkerModelProvider)[keyof typeof WorkerModelProvider];
 export const WorkerModelLocality = {
-  // The model runs through local embedded or host-managed inference resources.
-  WorkerModelLocalityLocal: "LOCAL",
-  // The model runs through a remote cloud-backed provider.
-  WorkerModelLocalityCloud: "CLOUD",
+  LOCAL: "LOCAL",
+  CLOUD: "CLOUD",
 } as const;
 export type WorkerModelLocality =
   (typeof WorkerModelLocality)[keyof typeof WorkerModelLocality];
 export const WorkerProvider = {
-  // Public worker executor adapter that shells out through the configured worker command path.
-  WorkerProviderScriptWrap: "SCRIPT_WRAP",
+  SCRIPT_WRAP: "SCRIPT_WRAP",
 } as const;
 export type WorkerProvider =
   (typeof WorkerProvider)[keyof typeof WorkerProvider];
 export const ModelOperationContentType = {
-  // Textual content.
-  ModelOperationContentTypeText: "TEXT",
-  // Image content.
-  ModelOperationContentTypeImage: "IMAGE",
-  // Audio content.
-  ModelOperationContentTypeAudio: "AUDIO",
-  // Structured JSON content.
-  ModelOperationContentTypeJSON: "JSON",
-  // Opaque binary content.
-  ModelOperationContentTypeBinary: "BINARY",
+  TEXT: "TEXT",
+  IMAGE: "IMAGE",
+  AUDIO: "AUDIO",
+  JSON: "JSON",
+  BINARY: "BINARY",
 } as const;
 export type ModelOperationContentType =
   (typeof ModelOperationContentType)[keyof typeof ModelOperationContentType];
 export const RunnerID = {
-  // Codex runner selected through the shared runner contract.
-  RunnerIDCodex: "codex",
-  // Gemini runner selected through the shared runner contract.
-  RunnerIDGemini: "gemini",
-  // Kiro runner selected through the shared runner contract.
-  RunnerIDKiro: "kiro",
-  // Cursor CLI runner selected through the shared runner contract.
-  RunnerIDCursorCLI: "cursor-cli",
-  // OpenCode runner selected through the shared runner contract.
-  RunnerIDOpenCode: "opencode",
-  // Pi runner selected through the shared runner contract.
-  RunnerIDPi: "pi",
+  codex: "codex",
+  gemini: "gemini",
+  kiro: "kiro",
+  cursor_cli: "cursor-cli",
+  opencode: "opencode",
+  pi: "pi",
 } as const;
 export type RunnerID = (typeof RunnerID)[keyof typeof RunnerID];
 export const RunnerSelectionSource = {
@@ -7964,66 +7784,43 @@ export const RunnerSelectionSource = {
 export type RunnerSelectionSource =
   (typeof RunnerSelectionSource)[keyof typeof RunnerSelectionSource];
 export const WorkstationOutcomeFormat = {
-  // Parse agent output as a reviewer/checker decision envelope instead of stop-token routing.
-  WorkstationOutcomeFormatDecisionEnvelope: "decision-envelope",
+  decision_envelope: "decision-envelope",
 } as const;
 export type WorkstationOutcomeFormat =
   (typeof WorkstationOutcomeFormat)[keyof typeof WorkstationOutcomeFormat];
 export const WorkstationKind = {
-  // Schedules when its inputs are ready and emits configured outputs.
-  WorkstationKindStandard: "STANDARD",
-  // Re-runs when observed inputs change and can loop rejected work back to an earlier state.
-  WorkstationKindRepeater: "REPEATER",
-  // Produces internal time work from a cron schedule and dispatches through the normal worker path when inputs are ready.
-  WorkstationKindCron: "CRON",
-  // Binds a poller-capable worker that emits canonical ingress work under service supervision.
-  WorkstationKindPoller: "POLLER",
+  STANDARD: "STANDARD",
+  REPEATER: "REPEATER",
+  CRON: "CRON",
+  POLLER: "POLLER",
 } as const;
 export type WorkstationKind =
   (typeof WorkstationKind)[keyof typeof WorkstationKind];
 export const WorkstationType = {
-  // One-shot inference workstation that resolves operation bindings and dispatches through an inference worker.
-  WorkstationTypeInferenceRun: "INFERENCE_RUN",
-  // Agent-run workstation that renders prompts and dispatches through an agent worker for iterative agent-loop execution.
-  WorkstationTypeAgentRun: "AGENT_RUN",
-  // Script-run workstation that executes deterministic command or script behavior through a script worker.
-  WorkstationTypeScriptRun: "SCRIPT_RUN",
-  // Poller-run workstation that supervises ingress polling through a poller worker.
-  WorkstationTypePollerRun: "POLLER_RUN",
-  // Legacy alias for agent-run behavior during the migration window.
-  WorkstationTypeModelWorkstation: "MODEL_WORKSTATION",
-  // Legacy alias for inference-run behavior during the migration window.
-  WorkstationTypeModelInvoke: "MODEL_INVOKE",
-  // Logical pass-through workstation used for routing and guarded loop-breaker transitions without model execution.
-  WorkstationTypeLogicalMove: "LOGICAL_MOVE",
-  // Label-based classifier workstation that returns one plain string label and routes through classificationRoutes.
-  WorkstationTypeClassifierWorkstation: "CLASSIFIER_WORKSTATION",
+  INFERENCE_RUN: "INFERENCE_RUN",
+  AGENT_RUN: "AGENT_RUN",
+  SCRIPT_RUN: "SCRIPT_RUN",
+  POLLER_RUN: "POLLER_RUN",
+  MODEL_WORKSTATION: "MODEL_WORKSTATION",
+  MODEL_INVOKE: "MODEL_INVOKE",
+  LOGICAL_MOVE: "LOGICAL_MOVE",
+  CLASSIFIER_WORKSTATION: "CLASSIFIER_WORKSTATION",
 } as const;
 export type WorkstationType =
   (typeof WorkstationType)[keyof typeof WorkstationType];
 export const WorkPropagationMode = {
-  // Downstream work receives the workstation output payload.
-  WorkPropagationModeOutputAsPayload: "OUTPUT_AS_PAYLOAD",
-  // Downstream work keeps the consumed input payload instead of the workstation output.
-  WorkPropagationModePreserveInput: "PRESERVE_INPUT",
+  OUTPUT_AS_PAYLOAD: "OUTPUT_AS_PAYLOAD",
+  PRESERVE_INPUT: "PRESERVE_INPUT",
 } as const;
 export type WorkPropagationMode =
   (typeof WorkPropagationMode)[keyof typeof WorkPropagationMode];
 export const GuardType = {
-  // Allows or blocks work based on how many times a workstation has already handled it.
-  GuardTypeVisitCount: "VISIT_COUNT",
-  // Requires all candidate workstation inputs to resolve the same configured field value.
-  GuardTypeMatchesFields: "MATCHES_FIELDS",
-  // This input is available only after all matching child work completes.
-  GuardTypeAllChildrenComplete: "ALL_CHILDREN_COMPLETE",
-  // This input is available when any matching child work fails.
-  GuardTypeAnyChildFailed: "ANY_CHILD_FAILED",
-  // This input is available only when its token name exactly matches the bound token name from another input.
-  GuardTypeSameName: "SAME_NAME",
-  // This input is available only when its token trace identity exactly matches the bound token trace identity from another input.
-  GuardTypeSameTraceID: "SAME_TRACE_ID",
-  // Blocks factory dispatch when provider or model throttle history still falls inside the authored refresh window.
-  GuardTypeInferenceThrottle: "INFERENCE_THROTTLE_GUARD",
+  VISIT_COUNT: "VISIT_COUNT",
+  MATCHES_FIELDS: "MATCHES_FIELDS",
+  ALL_CHILDREN_COMPLETE: "ALL_CHILDREN_COMPLETE",
+  ANY_CHILD_FAILED: "ANY_CHILD_FAILED",
+  SAME_NAME: "SAME_NAME",
+  SAME_TRACE_ID: "SAME_TRACE_ID",
 } as const;
 export type GuardType = (typeof GuardType)[keyof typeof GuardType];
 export const PromptTemplateVariableReferenceCategory = {
@@ -8089,20 +7886,13 @@ export const WorkRequestType = {
 export type WorkRequestType =
   (typeof WorkRequestType)[keyof typeof WorkRequestType];
 export const WorkContentPartType = {
-  // Legacy inline text content.
-  WorkContentPartTypeText: "text",
-  // Legacy image content referenced by file path.
-  WorkContentPartTypeImage: "image",
-  // Canonical uppercase inline text content.
-  WorkContentPartTypeTextUpper: "TEXT",
-  // Canonical uppercase image content referenced by file path.
-  WorkContentPartTypeImageUpper: "IMAGE",
-  // Audio content referenced by file path or artifact.
-  WorkContentPartTypeAudio: "AUDIO",
-  // JSON content preserved in canonical part order.
-  WorkContentPartTypeJSON: "JSON",
-  // Binary content referenced by file path or artifact.
-  WorkContentPartTypeBinary: "BINARY",
+  text: "text",
+  image: "image",
+  TEXT: "TEXT",
+  IMAGE: "IMAGE",
+  AUDIO: "AUDIO",
+  JSON: "JSON",
+  BINARY: "BINARY",
 } as const;
 export type WorkContentPartType =
   (typeof WorkContentPartType)[keyof typeof WorkContentPartType];
@@ -8142,9 +7932,13 @@ export const RelationType = {
   RelationTypeSpawnedBy: "SPAWNED_BY",
 } as const;
 export type RelationType = (typeof RelationType)[keyof typeof RelationType];
+export const FactoryGuardType = {
+  INFERENCE_THROTTLE_GUARD: "INFERENCE_THROTTLE_GUARD",
+} as const;
+export type FactoryGuardType =
+  (typeof FactoryGuardType)[keyof typeof FactoryGuardType];
 export const WorkTypeHandlingBehavior = {
-  // Receives simplified CLI prompt submissions when exactly one work type in the factory declares this behavior.
-  WorkTypeHandlingBehaviorDefault: "DEFAULT",
+  DEFAULT: "DEFAULT",
 } as const;
 export type WorkTypeHandlingBehavior =
   (typeof WorkTypeHandlingBehavior)[keyof typeof WorkTypeHandlingBehavior];
@@ -8157,11 +7951,25 @@ export const FactoryLayoutPreferencesDirection = {
 export type FactoryLayoutPreferencesDirection =
   (typeof FactoryLayoutPreferencesDirection)[keyof typeof FactoryLayoutPreferencesDirection];
 export const HostedWorkerProvider = {
-  // Built-in hosted poller integration for the Linear GraphQL API.
-  HostedWorkerProviderLinear: "LINEAR",
+  LINEAR: "LINEAR",
 } as const;
 export type HostedWorkerProvider =
   (typeof HostedWorkerProvider)[keyof typeof HostedWorkerProvider];
+export const InputGuardType = {
+  VISIT_COUNT: "VISIT_COUNT",
+  ALL_CHILDREN_COMPLETE: "ALL_CHILDREN_COMPLETE",
+  ANY_CHILD_FAILED: "ANY_CHILD_FAILED",
+  SAME_NAME: "SAME_NAME",
+  SAME_TRACE_ID: "SAME_TRACE_ID",
+} as const;
+export type InputGuardType =
+  (typeof InputGuardType)[keyof typeof InputGuardType];
+export const WorkstationGuardType = {
+  VISIT_COUNT: "VISIT_COUNT",
+  MATCHES_FIELDS: "MATCHES_FIELDS",
+} as const;
+export type WorkstationGuardType =
+  (typeof WorkstationGuardType)[keyof typeof WorkstationGuardType];
 export const ComponentsParametersSortBy = {
   state_type: "state.type",
 } as const;
