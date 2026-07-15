@@ -143,6 +143,15 @@ Use this map when changing the public REST contract.
   plus missing/extra/duplicate/alias failures in
   `contracts/mcp_tool_catalog_identity_test.go` and
   `pkg/transports/mcp/factorysession/catalog_identity_test.go`.
+- Authored catalog input-schema parity is proven by
+  `pkg/transports/mcp/factorysession/catalog_input_schema.go`
+  (`CatalogInputSchemasFromCatalogDocument`, `PrepareCatalogInputSchemaForParity`,
+  `VerifyCatalogInputSchemaParity`) against resolved `input.schema` maps and
+  `DiscoverTools()` semantics; wire into `make contracts-validate` via
+  `internal/contractvalidator/mcp_tool_catalog_input_schema.go`, and prove
+  success plus nested valid/invalid argument validation in
+  `contracts/mcp_tool_catalog_input_schema_test.go` and
+  `pkg/transports/mcp/factorysession/catalog_input_schema_test.go`.
 - Valid MCP catalog fixtures live under `contracts/testdata/mcp/` and register
   through `internal/contractvalidator.MCPRegistry()` into
   `make contracts-validate`. The authored `contracts/mcp/tools.json` registers in

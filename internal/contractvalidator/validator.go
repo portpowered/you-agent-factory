@@ -253,6 +253,7 @@ func validateEntry(repositoryRoot string, entry Entry) []Diagnostic {
 		}
 		if document.SchemaID == toolCatalogSchemaID {
 			diagnostics = append(diagnostics, mcpToolCatalogIdentityDiagnostics(document.Path, value)...)
+			diagnostics = append(diagnostics, mcpToolCatalogInputSchemaDiagnostics(document.Path, value)...)
 		}
 		for _, source := range sourceDocuments {
 			loadedDocuments[source.path] = source

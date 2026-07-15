@@ -55,7 +55,8 @@
           },
           "inlineWorkflow": {
             "type": "object",
-            "additionalProperties": false
+            "additionalProperties": true,
+            "description": "Inline workflow payload when kind is INLINE_WORKFLOW."
           }
         }
       }
