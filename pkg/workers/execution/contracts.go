@@ -3,6 +3,7 @@
 package workerexecution
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -25,6 +26,28 @@ type InferenceResponse struct {
 	Content         string                   `json:"content"`
 	ProviderSession *ProviderSessionMetadata `json:"provider_session,omitempty"`
 	Diagnostics     *WorkDiagnostics         `json:"diagnostics,omitempty"`
+}
+
+// InferenceResponseEventPayload is the worker-execution-owned response
+// contract consumed by Factory event reducers. Diagnostics retain their public
+// event JSON until the diagnostics owner projects them onto execution details.
+type InferenceResponseEventPayload struct {
+	Attempt            int                             `json:"attempt"`
+	Diagnostics        json.RawMessage                 `json:"diagnostics,omitempty"`
+	DurationMillis     int64                           `json:"durationMillis"`
+	ExitCode           *int                            `json:"exitCode,omitempty"`
+	FailureDetail      *InferenceResponseFailureDetail `json:"failureDetail,omitempty"`
+	InferenceRequestID string                          `json:"inferenceRequestId"`
+	Outcome            string                          `json:"outcome"`
+	ProviderSession    *ProviderSessionMetadata        `json:"providerSession,omitempty"`
+	Response           *string                         `json:"response,omitempty"`
+}
+
+// InferenceResponseFailureDetail carries the safe provider failure reported by
+// an inference response event.
+type InferenceResponseFailureDetail struct {
+	Reason  WorkFailureType `json:"reason"`
+	Message string          `json:"message"`
 }
 
 // WorkResult is returned by a worker after processing.

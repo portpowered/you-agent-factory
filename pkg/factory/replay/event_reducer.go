@@ -94,14 +94,14 @@ func reduceReplayEvent(
 		return applyReplayWorkRequest(reduced, event, workByID)
 	case interfaces.FactoryEventTypeRunResponse:
 		return applyReplayRunResponse(reduced, event)
+	case interfaces.FactoryEventTypeInferenceResponse:
+		return applyReplayInferenceResponse(event, inferenceAttemptsByDispatchID)
 	}
 	generatedEvent, err := generatedEventFromDomain(event)
 	if err != nil {
 		return err
 	}
 	switch event.Type {
-	case interfaces.FactoryEventTypeInferenceResponse:
-		return applyReplayInferenceResponse(generatedEvent, inferenceAttemptsByDispatchID)
 	case interfaces.FactoryEventTypeDispatchResponse:
 		return applyReplayDispatchResponse(reduced, generatedEvent, inferenceAttemptsByDispatchID)
 	default:
@@ -185,7 +185,7 @@ func applyReplayDispatchRequest(reduced *replayEventLog, event interfaces.Factor
 	return nil
 }
 
-func applyReplayInferenceResponse(event factoryapi.FactoryEvent, inferenceAttemptsByDispatchID map[string]replayInferenceAttempt) error {
+func applyReplayInferenceResponse(event interfaces.FactoryEvent, inferenceAttemptsByDispatchID map[string]replayInferenceAttempt) error {
 	dispatchID, attempt, err := replayInferenceAttemptFromEvent(event)
 	if err != nil {
 		return err
@@ -441,15 +441,19 @@ func replayDispatchFromEvent(factory factoryapi.Factory, event interfaces.Factor
 	}, nil
 }
 
-func replayInferenceAttemptFromEvent(event factoryapi.FactoryEvent) (string, replayInferenceAttempt, error) {
-	payload, err := event.Payload.AsInferenceResponseEventPayload()
+func replayInferenceAttemptFromEvent(event interfaces.FactoryEvent) (string, replayInferenceAttempt, error) {
+	var payload workerexecution.InferenceResponseEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
+		return "", replayInferenceAttempt{}, fmt.Errorf("decode inference response event %q: %w", event.Id, err)
+	}
+	diagnostics, err := workerdiagnostics.WorkDiagnosticsFromSafeEventPayload(payload.Diagnostics)
 	if err != nil {
 		return "", replayInferenceAttempt{}, fmt.Errorf("decode inference response event %q: %w", event.Id, err)
 	}
-	return stringValue(event.Context.DispatchId), replayInferenceAttempt{
+	return stringValue(event.Context.DispatchID), replayInferenceAttempt{
 		attempt:         payload.Attempt,
-		providerSession: workerdiagnostics.ProviderSessionMetadataFromGenerated(payload.ProviderSession),
-		diagnostics:     workerdiagnostics.WorkDiagnosticsFromSafeWorkDiagnostics(workerdiagnostics.SafeWorkDiagnosticsFromGenerated(payload.Diagnostics)),
+		providerSession: workerexecution.CloneProviderSessionMetadata(payload.ProviderSession),
+		diagnostics:     diagnostics,
 	}, nil
 }
 

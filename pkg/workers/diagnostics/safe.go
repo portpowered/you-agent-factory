@@ -3,6 +3,8 @@
 package diagnostics
 
 import (
+	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -78,6 +80,75 @@ func SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics *workerexecution.WorkDia
 		return nil
 	}
 	return out
+}
+
+// WorkDiagnosticsFromSafeEventPayload decodes the public camel-case event shape
+// into canonical worker diagnostics without involving generated transport types.
+func WorkDiagnosticsFromSafeEventPayload(payload json.RawMessage) (*workerexecution.WorkDiagnostics, error) {
+	if len(payload) == 0 || string(payload) == "null" {
+		return nil, nil
+	}
+	var eventFields any
+	if err := json.Unmarshal(payload, &eventFields); err != nil {
+		return nil, fmt.Errorf("decode safe inference diagnostics: %w", err)
+	}
+	normalizeSafeEventFieldNames(eventFields)
+	normalized, err := json.Marshal(eventFields)
+	if err != nil {
+		return nil, fmt.Errorf("normalize safe inference diagnostics: %w", err)
+	}
+	var safe SafeWorkDiagnostics
+	if err := json.Unmarshal(normalized, &safe); err != nil {
+		return nil, fmt.Errorf("decode normalized safe inference diagnostics: %w", err)
+	}
+	return WorkDiagnosticsFromSafeWorkDiagnostics(&safe), nil
+}
+
+func normalizeSafeEventFieldNames(value any) {
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			normalizeSafeEventFieldNames(item)
+		}
+	case map[string]any:
+		for key, item := range typed {
+			canonical := key
+			if target := canonicalSafeEventFieldName(key); target != key {
+				delete(typed, key)
+				typed[target] = item
+				canonical = target
+			}
+			if canonical == "variables" || canonical == "request_metadata" || canonical == "response_metadata" {
+				continue
+			}
+			normalizeSafeEventFieldNames(item)
+		}
+	}
+}
+
+func canonicalSafeEventFieldName(field string) string {
+	names := map[string]string{
+		"agentRun":          "agent_run",
+		"executionBehavior": "execution_behavior",
+		"failureClass":      "failure_class",
+		"recoveryAction":    "recovery_action",
+		"renderedPrompt":    "rendered_prompt",
+		"requestMetadata":   "request_metadata",
+		"responseMetadata":  "response_metadata",
+		"signatureHash":     "signature_hash",
+		"sourceKinds":       "source_kinds",
+		"systemPromptHash":  "system_prompt_hash",
+		"toolCallCount":     "tool_call_count",
+		"toolDiagnostics":   "tool_diagnostics",
+		"toolName":          "tool_name",
+		"toolPolicy":        "tool_policy",
+		"userMessageHash":   "user_message_hash",
+		"valueCount":        "value_count",
+	}
+	if canonical, ok := names[field]; ok {
+		return canonical
+	}
+	return field
 }
 
 // SafeWorkDiagnosticsFromGenerated converts the generated safe diagnostics
