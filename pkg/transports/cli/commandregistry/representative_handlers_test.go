@@ -2,6 +2,7 @@ package commandregistry_test
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -113,6 +114,83 @@ func TestSessionHandlerBindingsMapFlagsArgumentsAndDiagnostics(t *testing.T) {
 	})
 	if err := deleteRunE(&cobra.Command{Use: "delete"}, []string{"session-beta"}); err != nil {
 		t.Fatalf("delete RunE() error = %v", err)
+	}
+}
+
+func TestSessionListBindingPreparesAndMapsExecutionConfig(t *testing.T) {
+	listCfg := sessioncli.ListConfig{Scope: "persisted"}
+	prepared := false
+	runE := commandregistry.SessionListRunE(commandregistry.SessionListBinding{
+		Config: &listCfg,
+		Prepare: func(_ context.Context, cfg *sessioncli.ListConfig) error {
+			prepared = true
+			cfg.Scope = "all"
+			return nil
+		},
+		ListSessions: func(cfg sessioncli.ListConfig) error {
+			if cfg.Scope != "all" || cfg.Output == nil {
+				t.Fatalf("list config = %#v", cfg)
+			}
+			return nil
+		},
+	})
+	if err := runE(&cobra.Command{Use: "list"}, nil); err != nil {
+		t.Fatalf("list RunE() error = %v", err)
+	}
+	if !prepared {
+		t.Fatal("list Prepare was not invoked")
+	}
+}
+
+func TestSessionDispatchAndLifecycleBindingsMapExecutionConfig(t *testing.T) {
+	server := "https://factory.example.test"
+	jsonOutput := true
+	dispatchCfg := sessioncli.DispatchesConfig{Phase: "completed"}
+	dispatchRunE := commandregistry.SessionDispatchesRunE(commandregistry.SessionDispatchesBinding{
+		Config: &dispatchCfg, Server: &server, JSON: &jsonOutput,
+		ListDispatches: func(cfg sessioncli.DispatchesConfig) error {
+			if cfg.SessionID != "dur-sess-1" || cfg.Server != server || !cfg.JSON || cfg.Output == nil {
+				t.Fatalf("dispatch config = %#v", cfg)
+			}
+			return nil
+		},
+	})
+	if err := dispatchRunE(&cobra.Command{Use: "dispatches"}, []string{"dur-sess-1"}); err != nil {
+		t.Fatalf("dispatches RunE() error = %v", err)
+	}
+
+	lifecycleCfg := sessioncli.LifecycleControlConfig{}
+	lifecycleRunE := commandregistry.SessionLifecycleRunE(commandregistry.SessionLifecycleBinding{
+		Config: &lifecycleCfg, Server: &server, JSON: &jsonOutput,
+		Control: func(cfg sessioncli.LifecycleControlConfig) error {
+			if cfg.SessionID != "session-beta" || cfg.Server != server || !cfg.JSON || cfg.Output == nil {
+				t.Fatalf("lifecycle config = %#v", cfg)
+			}
+			return nil
+		},
+	})
+	if err := lifecycleRunE(&cobra.Command{Use: "pause"}, []string{"session-beta"}); err != nil {
+		t.Fatalf("lifecycle RunE() error = %v", err)
+	}
+}
+
+func TestSessionHandlerBindingsRejectMissingRequirements(t *testing.T) {
+	if _, err := commandregistry.NewSessionRegistry(commandregistry.SessionHandlers{}); err == nil || !strings.Contains(err.Error(), "you.session.create") {
+		t.Fatalf("NewSessionRegistry() error = %v, want missing stable handler ID", err)
+	}
+	if err := commandregistry.SessionListRunE(commandregistry.SessionListBinding{})(&cobra.Command{Use: "list"}, nil); err == nil {
+		t.Fatal("SessionListRunE() missing config = nil, want error")
+	}
+	if err := commandregistry.SessionDispatchesRunE(commandregistry.SessionDispatchesBinding{})(&cobra.Command{Use: "dispatches"}, nil); err == nil {
+		t.Fatal("SessionDispatchesRunE() missing config = nil, want error")
+	}
+	lifecycle := commandregistry.SessionLifecycleRunE(commandregistry.SessionLifecycleBinding{})
+	if err := lifecycle(&cobra.Command{Use: "pause"}, nil); err == nil {
+		t.Fatal("SessionLifecycleRunE() missing config = nil, want error")
+	}
+	lifecycle = commandregistry.SessionLifecycleRunE(commandregistry.SessionLifecycleBinding{Config: &sessioncli.LifecycleControlConfig{}})
+	if err := lifecycle(&cobra.Command{Use: "pause"}, nil); err == nil {
+		t.Fatal("SessionLifecycleRunE() missing control = nil, want error")
 	}
 }
 
