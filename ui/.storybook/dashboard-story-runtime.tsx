@@ -358,7 +358,7 @@ export const withDashboardStoryRuntime: Decorator = (Story, context) => {
 
   return (
     <StorybookDashboardRuntime>
-      <DashboardSessionTestProvider sessionID={dashboardApi?.sessionID}>
+      <DashboardSessionTestProvider sessionID={dashboardApi?.sessionID ?? null}>
         <Story />
       </DashboardSessionTestProvider>
     </StorybookDashboardRuntime>

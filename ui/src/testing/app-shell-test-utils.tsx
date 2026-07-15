@@ -333,7 +333,7 @@ export function renderApp({
 
   const result = render(
     <QueryClientProvider client={queryClient}>
-      <DashboardSessionTestProvider sessionID={sessionID}>
+      <DashboardSessionTestProvider sessionID={sessionID ?? null}>
         <App
           browserLanguage={browserLanguage}
           browserLanguages={browserLanguages}

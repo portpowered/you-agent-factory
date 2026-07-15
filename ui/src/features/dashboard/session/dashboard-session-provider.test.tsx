@@ -9,6 +9,7 @@ import {
 import type { ReactNode } from "react";
 
 import { DEFAULT_FACTORY_SESSION_ID } from "../../../api/session-routing";
+import { buildSessionScope } from "../../../api/session-scope";
 import {
   resetDashboardSessionStore,
   useDashboardSessionStore,
@@ -16,6 +17,7 @@ import {
 import {
   type DashboardSessionDiscoveryState,
   DashboardSessionProvider,
+  DashboardSessionScopeProvider,
   useDashboardSession,
 } from "./dashboard-session-provider";
 
@@ -176,6 +178,23 @@ describe("DashboardSessionProvider", () => {
     expect(() => render(<SessionScopeProbe />)).toThrow(
       "useDashboardSession must be used within DashboardSessionProvider.",
     );
+  });
+
+  it("preserves an inherited test scope without running session discovery", () => {
+    const fetchMock = vi.mocked(fetch);
+
+    render(
+      <DashboardSessionScopeProvider scope={buildSessionScope(null, [], false)}>
+        <DashboardSessionProvider>
+          <SessionScopeProbe />
+        </DashboardSessionProvider>
+      </DashboardSessionScopeProvider>,
+    );
+
+    expect(screen.getByTestId("session-scope-probe").textContent).toBe(
+      "~default|/factory-sessions/~default/factory|/factory-sessions/~default/work|/factory-sessions/~default/events|false|true",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("does not guess a concrete identity when discovery is empty", async () => {
