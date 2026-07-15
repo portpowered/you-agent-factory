@@ -1,0 +1,59 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2024-11-05",
+  "tools": {
+    "mcp.tool.you.factory_session.list": {
+      "id": "mcp.tool.you.factory_session.list",
+      "name": "you.factory_session.list",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.list",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.list.title",
+            "canonicalEnglish": "List Factory Sessions"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.list.description",
+            "canonicalEnglish": "Lists Factory Sessions for one scope using durable Factory Session listing vocabulary."
+          }
+        },
+        "examples": [
+          {
+            "scope": "live"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.list",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "result": {
+        "transport": {
+          "contentTypes": [
+            "text"
+          ],
+          "textEncoding": "serialized-json",
+          "allowsStructuredContent": false,
+          "allowsOutputSchema": false
+        },
+        "examples": [
+          {
+            "content": [
+              {
+                "type": "image",
+                "data": "aGVsbG8=",
+                "mimeType": "image/png"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      }
+    }
+  }
+}

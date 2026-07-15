@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/mcp/protocol/call-tool-result.schema.json",
+  "title": "MCP CallToolResult transport envelope",
+  "description": "Reusable MCP 2024-11-05 tools/call result envelope with pinned text-only catalog policy.",
+  "$defs": {
+    "callToolResult": {
+      "description": "The MCP tools/call result envelope across the documented protocol surface.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "content",
+        "isError"
+      ],
+      "properties": {
+        "content": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/mcp/protocol/content.schema.json#/$defs/content"
+          }
+        },
+        "isError": {
+          "type": "boolean"
+        },
+        "structuredContent": true,
+        "outputSchema": true
+      }
+    },
+    "pinnedTextCallToolResult": {
+      "description": "Pinned catalog policy: text-only content, no structuredContent or outputSchema.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "content",
+        "isError"
+      ],
+      "properties": {
+        "content": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/mcp/protocol/content.schema.json#/$defs/textContent"
+          }
+        },
+        "isError": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2024-11-05",
+  "tools": {
+    "mcp.tool.you.factory_session.list_dispatches": {
+      "id": "mcp.tool.you.factory_session.list_dispatches",
+      "name": "you.factory_session.list_dispatches",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.list_dispatches",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.shared.title",
+            "canonicalEnglish": "List Factory Session Dispatches"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.list_dispatches.description",
+            "canonicalEnglish": "Lists dispatches for one durable Factory Session."
+          }
+        },
+        "examples": [
+          {
+            "sessionId": "dur-sess-disp-001"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.list_dispatches",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "mcp.tool.you.factory_session.list_artifacts": {
+      "id": "mcp.tool.you.factory_session.list_artifacts",
+      "name": "you.factory_session.list_artifacts",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.list_artifacts",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.shared.title",
+            "canonicalEnglish": "List Factory Session Artifacts"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.list_artifacts.description",
+            "canonicalEnglish": "Lists artifacts for one durable Factory Session."
+          }
+        },
+        "examples": [
+          {
+            "sessionId": "dur-sess-art-001"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.list_artifacts",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

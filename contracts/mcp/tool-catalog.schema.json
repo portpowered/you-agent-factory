@@ -1,0 +1,561 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/mcp/tool-catalog.schema.json",
+  "title": "You MCP tool catalog",
+  "description": "Authored MCP tool metadata, documentation, and lifecycle records for one protocol-pinned tool catalog.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "protocolVersion",
+    "tools"
+  ],
+  "properties": {
+    "formatVersion": {
+      "description": "The explicitly supported version of this tool-catalog format.",
+      "const": "1.0.0"
+    },
+    "protocolVersion": {
+      "description": "The MCP protocol revision pinned by this catalog.",
+      "const": "2024-11-05"
+    },
+    "tools": {
+      "description": "Tool records keyed by stable tool identifiers. Object keys make duplicate tool IDs structurally unrepresentable.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/toolId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/tool"
+      }
+    },
+    "protocolFailures": {
+      "description": "JSON-RPC protocol failure documentation distinct from tool domain failures.",
+      "$ref": "#/$defs/protocolFailureDocumentation"
+    }
+  },
+  "$defs": {
+    "toolId": {
+      "description": "Stable MCP tool identity with the mcp.tool prefix.",
+      "allOf": [
+        {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        {
+          "pattern": "^mcp[.]tool[.].+"
+        }
+      ]
+    },
+    "argumentId": {
+      "description": "Stable MCP tool argument identity with the mcp.arg prefix.",
+      "allOf": [
+        {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        {
+          "pattern": "^mcp[.]arg[.].+"
+        }
+      ]
+    },
+    "failureId": {
+      "description": "Stable MCP domain failure identity with the mcp.failure prefix.",
+      "allOf": [
+        {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        {
+          "pattern": "^mcp[.]failure[.].+"
+        }
+      ]
+    },
+    "handlerId": {
+      "description": "Stable MCP tool handler identity with the mcp.handler prefix.",
+      "allOf": [
+        {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        {
+          "pattern": "^mcp[.]handler[.].+"
+        }
+      ]
+    },
+    "handler": {
+      "description": "Stable handler identity binding one canonical MCP tool to its handwritten implementation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/handlerId"
+        }
+      }
+    },
+    "canonicalToolName": {
+      "description": "The canonical MCP protocol tool name exposed to clients.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^you[.][a-z0-9_]+(?:[.][a-z0-9_]+)*$"
+    },
+    "transport": {
+      "description": "One supported MCP transport surface for tool discovery and invocation.",
+      "enum": [
+        "stdio-json-rpc"
+      ]
+    },
+    "executionMode": {
+      "description": "The supported execution model for one tool under the pinned protocol.",
+      "enum": [
+        "tools-call"
+      ]
+    },
+    "toolAnnotations": {
+      "description": "Closed behavioral hints advertised with one MCP tool.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "readOnlyHint": {
+          "type": "boolean"
+        },
+        "destructiveHint": {
+          "type": "boolean"
+        },
+        "idempotentHint": {
+          "type": "boolean"
+        },
+        "openWorldHint": {
+          "type": "boolean"
+        }
+      }
+    },
+    "argumentConstraints": {
+      "description": "Optional scalar constraints represented alongside one argument record.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enum": {
+          "type": "array",
+          "minItems": 1,
+          "items": true,
+          "uniqueItems": true
+        },
+        "pattern": {
+          "type": "string",
+          "minLength": 1
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        },
+        "minLength": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "inputArgument": {
+      "description": "One authored MCP tool argument with stable identity and Draft input metadata.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "required"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/argumentId"
+        },
+        "name": {
+          "description": "The JSON property name accepted by tools/call arguments.",
+          "type": "string",
+          "minLength": 1
+        },
+        "required": {
+          "description": "Whether the argument must be present in tools/call arguments.",
+          "type": "boolean"
+        },
+        "documentation": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+        },
+        "sensitivity": {
+          "description": "How sensitive the argument value is when documented or exemplified.",
+          "enum": [
+            "public",
+            "internal",
+            "secret"
+          ]
+        },
+        "default": true,
+        "examples": {
+          "description": "Representative argument values in any JSON shape.",
+          "type": "array",
+          "minItems": 1,
+          "items": true
+        },
+        "constraints": {
+          "$ref": "#/$defs/argumentConstraints"
+        }
+      }
+    },
+    "closedSchemaNode": {
+      "description": "Recursive Draft schema node requiring closed objects and closed array items.",
+      "type": "object",
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "object"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "additionalProperties"
+            ],
+            "properties": {
+              "additionalProperties": {
+                "const": false
+              },
+              "properties": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/closedSchemaNode"
+                }
+              },
+              "patternProperties": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/closedSchemaNode"
+                }
+              },
+              "propertyNames": {
+                "$ref": "#/$defs/closedSchemaNode"
+              },
+              "$defs": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/closedSchemaNode"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "const": "array"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "items": {
+                "$ref": "#/$defs/closedSchemaNode"
+              },
+              "prefixItems": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/closedSchemaNode"
+                }
+              },
+              "contains": {
+                "$ref": "#/$defs/closedSchemaNode"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "closedDraftSchema": {
+      "description": "Draft 2020-12 tools/call input object schema with closed nested object and array shapes.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/closedSchemaNode"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "$schema",
+            "type",
+            "additionalProperties"
+          ],
+          "properties": {
+            "$schema": {
+              "const": "https://json-schema.org/draft/2020-12/schema"
+            },
+            "type": {
+              "const": "object"
+            },
+            "additionalProperties": {
+              "const": false
+            },
+            "required": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            },
+            "properties": {
+              "type": "object",
+              "additionalProperties": {
+                "$ref": "#/$defs/closedSchemaNode"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "toolInput": {
+      "description": "Authored tools/call input schema and stable argument metadata for one tool.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "arguments"
+      ],
+      "properties": {
+        "schema": {
+          "$ref": "#/$defs/closedDraftSchema"
+        },
+        "arguments": {
+          "description": "Argument records keyed by stable argument identifiers. Object keys make duplicate argument IDs structurally unrepresentable.",
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/argumentId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/inputArgument"
+          }
+        }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "documentation",
+        "lifecycle"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/toolId"
+        },
+        "name": {
+          "$ref": "#/$defs/canonicalToolName"
+        },
+        "documentation": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        },
+        "transports": {
+          "description": "Supported MCP transports for discovery and tools/call invocation.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/transport"
+          }
+        },
+        "execution": {
+          "description": "Execution and task-support metadata limited to currently supported behavior.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "$ref": "#/$defs/executionMode"
+            }
+          }
+        },
+        "annotations": {
+          "$ref": "#/$defs/toolAnnotations"
+        },
+        "input": {
+          "$ref": "#/$defs/toolInput"
+        },
+        "result": {
+          "$ref": "#/$defs/toolResult"
+        },
+        "handler": {
+          "$ref": "#/$defs/handler"
+        }
+      }
+    },
+    "domainSuccessDocumentation": {
+      "description": "Typed domain success payload documentation serialized into CallToolResult text content.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "examples"
+      ],
+      "properties": {
+        "schema": {
+          "$ref": "#/$defs/closedDraftSchema"
+        },
+        "examples": {
+          "description": "Representative domain success payloads distinct from the CallToolResult transport envelope.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/mcp/protocol/domain-tool-response.schema.json#/$defs/domainSuccessPayload"
+          }
+        }
+      }
+    },
+    "domainFailureDocumentation": {
+      "description": "One typed tool/domain failure record distinct from transport isError and JSON-RPC protocol errors.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "schema",
+        "examples"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/failureId"
+        },
+        "schema": {
+          "$ref": "#/$defs/closedDraftSchema"
+        },
+        "examples": {
+          "description": "Representative domain/tool failure payloads distinct from CallToolResult and JSON-RPC protocol errors.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/mcp/protocol/domain-tool-response.schema.json#/$defs/domainFailurePayload"
+          }
+        }
+      }
+    },
+    "toolResultDomain": {
+      "description": "Domain output and failure documentation distinct from the CallToolResult transport envelope.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "success": {
+          "$ref": "#/$defs/domainSuccessDocumentation"
+        },
+        "failures": {
+          "description": "Typed domain failure records keyed by stable failure identifiers.",
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "$ref": "#/$defs/failureId"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/domainFailureDocumentation"
+          }
+        }
+      }
+    },
+    "protocolFailureDocumentation": {
+      "description": "Catalog-level JSON-RPC protocol failure examples distinct from tool domain failures.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "examples"
+      ],
+      "properties": {
+        "examples": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/mcp/protocol/json-rpc-error.schema.json#/$defs/protocolFailureExample"
+          }
+        }
+      }
+    },
+    "toolResultTransport": {
+      "description": "Pinned tools/call transport policy for one tool under MCP 2024-11-05.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contentTypes",
+        "textEncoding",
+        "allowsStructuredContent",
+        "allowsOutputSchema"
+      ],
+      "properties": {
+        "contentTypes": {
+          "description": "Supported CallToolResult content kinds for this tool. The pinned initial cut admits only text.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "const": "text"
+          }
+        },
+        "textEncoding": {
+          "description": "How serialized tool payloads are encoded in text content items.",
+          "enum": [
+            "serialized-json",
+            "plain-text"
+          ]
+        },
+        "allowsStructuredContent": {
+          "const": false
+        },
+        "allowsOutputSchema": {
+          "const": false
+        }
+      }
+    },
+    "toolResult": {
+      "description": "Authored tools/call result transport policy, domain documentation, and representative CallToolResult examples.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transport",
+        "examples"
+      ],
+      "properties": {
+        "transport": {
+          "$ref": "#/$defs/toolResultTransport"
+        },
+        "domain": {
+          "$ref": "#/$defs/toolResultDomain"
+        },
+        "examples": {
+          "description": "Representative pinned text-only CallToolResult envelopes for this tool.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/mcp/protocol/call-tool-result.schema.json#/$defs/pinnedTextCallToolResult"
+          }
+        }
+      }
+    }
+  }
+}

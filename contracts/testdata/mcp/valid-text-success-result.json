@@ -1,0 +1,95 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2024-11-05",
+  "tools": {
+    "mcp.tool.you.factory_session.get_result": {
+      "id": "mcp.tool.you.factory_session.get_result",
+      "name": "you.factory_session.get_result",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.get_result",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.get_result.title",
+            "canonicalEnglish": "Get Factory Session Result"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.get_result.description",
+            "canonicalEnglish": "Reads the terminal or partial result for one durable Factory Session."
+          }
+        },
+        "examples": [
+          {
+            "sessionId": "dur-sess-001"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.get_result",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "transports": [
+        "stdio-json-rpc"
+      ],
+      "execution": {
+        "mode": "tools-call"
+      },
+      "result": {
+        "transport": {
+          "contentTypes": [
+            "text"
+          ],
+          "textEncoding": "serialized-json",
+          "allowsStructuredContent": false,
+          "allowsOutputSchema": false
+        },
+        "domain": {
+          "success": {
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sessionId",
+                "status"
+              ],
+              "properties": {
+                "sessionId": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "status": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "examples": [
+              {
+                "result": {
+                  "sessionId": "dur-sess-001",
+                  "status": "SUCCEEDED"
+                }
+              }
+            ]
+          }
+        },
+        "examples": [
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"result\":{\"sessionId\":\"dur-sess-001\",\"status\":\"SUCCEEDED\"}}"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      }
+    }
+  }
+}

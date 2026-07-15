@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/mcp/protocol/domain-tool-response.schema.json",
+  "title": "MCP domain tool response payloads",
+  "description": "Typed domain success and failure payloads serialized into CallToolResult text content, distinct from the transport envelope and JSON-RPC protocol errors.",
+  "$defs": {
+    "domainErrorEnvelope": {
+      "description": "Typed tool/domain failure payload carried inside serialized tools/call text content.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "retryable"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "sessionId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "details": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "domainSuccessPayload": {
+      "description": "One domain success payload serialized into tools/call text content.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "result"
+      ],
+      "properties": {
+        "result": true
+      }
+    },
+    "domainFailurePayload": {
+      "description": "One domain/tool failure payload serialized into tools/call text content.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "error"
+      ],
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/domainErrorEnvelope"
+        }
+      }
+    }
+  }
+}
