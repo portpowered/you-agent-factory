@@ -37,17 +37,9 @@ Read these architecture notes when the work touches their area:
 
 - `docs/architecture/architecture.md` for backend loop, service/session
   boundaries, event stream, frontend composition, and graph-editor state flow.
+- `docs/architecture/structure.md` to understand the overall interaction of components within the system. 
 - `docs/architecture/data-model.md` for public resource vocabulary and the
   customer/internal data-model split.
-- `docs/architecture/invocation-contract.md` for `you run --factory`,
-  invocation input resolution, return policy, and CLI/API equivalence.
-- `docs/architecture/managed-model-runtime.md` for managed runtime identity,
-  readiness, lifecycle, pull/install outcomes, and invocation gating.
-- `docs/internal/processes/api-relevant-files.md` when changing public REST
-  contract, generated OpenAPI types, factory-session surfaces, events, managed
-  runtime surfaces, workflow preview/session APIs, or dashboard API consumers.
-- `docs/internal/processes/invocation-relevant-files.md` when changing
-  invocation input, return-policy, or primary-result behavior.
 
 ## Standards
 
@@ -80,16 +72,7 @@ the standards.
 - `examples/` contains example factory directories.
 - `factory/` contains this repository's checked-in factory scaffold and
   factory-local docs.
-- `pkg/transports/http/` contains handwritten HTTP handlers, API boundary and
-  server tests, OpenAPI contract tests, HTTP test data, and generated-only
-  server-contract and client child packages.
-- `pkg/transports/mapping/` contains transport-neutral public contracts,
-  request/response shaping, and stateless composition of explicit wired
-  collaborators into transport-facing application surfaces.
-- `pkg/transports/cli/` contains CLI commands and adapters for shared service
-  logic, including the production root command.
-- `pkg/transports/mcp/` contains Factory Session MCP tools and the stdio
-  protocol server.
+- `pkg/transports/` for various API entrypoints such as CLI, MCP, REST
 - `pkg/config/` contains factory config loading, persistence, mapping,
   validation entrypoints, built-in factory layout, and runtime config
   projections.
