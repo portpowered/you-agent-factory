@@ -3,11 +3,27 @@ package mcpcontractcheck
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/portpowered/infinite-you/pkg/transports/mcp/discoverygen"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
+
+const retainedAliasInventoryPath = "contracts/mcp/deprecated.json"
+
+type retainedAliasInventory struct {
+	Records map[string]struct {
+		ItemID     string `json:"itemId"`
+		PublicName string `json:"publicName"`
+		Lifecycle  struct {
+			Successor struct {
+				TargetItemID string `json:"targetItemId"`
+			} `json:"successor"`
+		} `json:"lifecycle"`
+	} `json:"records"`
+}
 
 // Check loads the repository-owned boundary projections and runs the pure
 // structural comparison. It is read-only.
@@ -69,8 +85,32 @@ func LoadInputs(repositoryRoot string) (Inputs, error) {
 	for _, binding := range mcpfactorysession.ProjectCanonicalToolHandlerBindings() {
 		inputs.Registry = append(inputs.Registry, HandlerBinding(binding))
 	}
+	inputs.Aliases, err = loadRetainedAliases(repositoryRoot)
+	if err != nil {
+		return Inputs{}, err
+	}
 	for _, alias := range mcpfactorysession.DiscoverCompatibilityAliases() {
-		inputs.Aliases = append(inputs.Aliases, AliasBinding{Name: alias.Name, CanonicalName: alias.CanonicalName})
+		inputs.RuntimeAliases = append(inputs.RuntimeAliases, RuntimeAliasBinding{Name: alias.Name, CanonicalName: alias.CanonicalName})
 	}
 	return inputs, nil
+}
+
+func loadRetainedAliases(repositoryRoot string) ([]AliasBinding, error) {
+	path := filepath.Join(repositoryRoot, filepath.FromSlash(retainedAliasInventoryPath))
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read retained MCP alias inventory %s: %w", filepath.ToSlash(path), err)
+	}
+	var inventory retainedAliasInventory
+	if err := json.Unmarshal(payload, &inventory); err != nil {
+		return nil, fmt.Errorf("decode retained MCP alias inventory %s: %w", filepath.ToSlash(path), err)
+	}
+	aliases := make([]AliasBinding, 0, len(inventory.Records))
+	for _, record := range inventory.Records {
+		aliases = append(aliases, AliasBinding{
+			ID: record.ItemID, Name: record.PublicName,
+			CanonicalToolID: record.Lifecycle.Successor.TargetItemID,
+		})
+	}
+	return aliases, nil
 }

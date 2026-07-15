@@ -34,6 +34,7 @@ func TestRunCleanRepositoryIsDeterministic(t *testing.T) {
 		discoverygen.AuthoredCatalogPath,
 		discoverygen.DiscoveryJSONPath,
 		discoverygen.DiscoveryGoPath,
+		"contracts/mcp/deprecated.json",
 	}
 	before := snapshotFiles(t, root, paths)
 

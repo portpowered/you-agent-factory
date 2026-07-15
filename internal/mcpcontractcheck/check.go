@@ -28,16 +28,25 @@ type HandlerBinding struct {
 // AliasBinding is one compatibility-only name mapping supplied separately
 // from canonical records.
 type AliasBinding struct {
+	ID              string
+	Name            string
+	CanonicalToolID string
+}
+
+// RuntimeAliasBinding is one handwritten compatibility route. It remains
+// separate from the retained inventory so the checker can detect routing drift.
+type RuntimeAliasBinding struct {
 	Name          string
 	CanonicalName string
 }
 
 // Inputs contains every explicit value consumed by the pure parity checker.
 type Inputs struct {
-	Catalog   []ToolRecord
-	Discovery []ToolRecord
-	Registry  []HandlerBinding
-	Aliases   []AliasBinding
+	Catalog        []ToolRecord
+	Discovery      []ToolRecord
+	Registry       []HandlerBinding
+	Aliases        []AliasBinding
+	RuntimeAliases []RuntimeAliasBinding
 }
 
 // Diagnostic records one deterministic stable-ID parity failure.
@@ -56,6 +65,10 @@ func Validate(inputs Inputs) []Diagnostic {
 	diagnostics = append(diagnostics, discoveryDiagnostics...)
 	registry, registryDiagnostics := indexBindings(inputs.Registry)
 	diagnostics = append(diagnostics, registryDiagnostics...)
+	aliases, aliasNames, aliasDiagnostics := indexAliases(inputs.Aliases)
+	diagnostics = append(diagnostics, aliasDiagnostics...)
+	runtimeAliases, runtimeAliasDiagnostics := indexRuntimeAliases(inputs.RuntimeAliases)
+	diagnostics = append(diagnostics, runtimeAliasDiagnostics...)
 	if len(diagnostics) != 0 {
 		return sortDiagnostics(diagnostics)
 	}
@@ -101,7 +114,7 @@ func Validate(inputs Inputs) []Diagnostic {
 			})
 		}
 	}
-	diagnostics = append(diagnostics, aliasSeparationDiagnostics(inputs.Aliases, catalog, discovery)...)
+	diagnostics = append(diagnostics, aliasBoundaryDiagnostics(aliases, aliasNames, runtimeAliases, catalog, discovery)...)
 
 	return sortDiagnostics(diagnostics)
 }
@@ -249,25 +262,4 @@ func normalizeJSON(value any) any {
 		return value
 	}
 	return normalized
-}
-
-func aliasSeparationDiagnostics(aliases []AliasBinding, catalog, discovery map[string]ToolRecord) []Diagnostic {
-	var diagnostics []Diagnostic
-	for _, alias := range aliases {
-		for _, records := range []struct {
-			name  string
-			items map[string]ToolRecord
-		}{{"catalog", catalog}, {"discovery", discovery}} {
-			for id, record := range records.items {
-				if record.Name != alias.Name {
-					continue
-				}
-				diagnostics = append(diagnostics, Diagnostic{
-					Code: "mcp.alias.canonical", ToolID: id, Surface: records.name,
-					Message: fmt.Sprintf("compatibility alias %q must not appear in canonical %s", alias.Name, records.name),
-				})
-			}
-		}
-	}
-	return diagnostics
 }

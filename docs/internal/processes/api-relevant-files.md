@@ -252,7 +252,10 @@ Use this map when changing the public REST contract.
   the read-only `cmd/mcpcontractcheck` entrypoint. Keep the pure `Validate`
   function explicit over authored catalog, generated primary discovery,
   handwritten stable-ID registry, and compatibility-alias inputs. Repository
-  loading may project handler identities through
+  loading reads retained alias identity and canonical target IDs from
+  `contracts/mcp/deprecated.json` separately from the handwritten runtime alias
+  routes; validate inventory/runtime parity without promoting aliases into
+  canonical discovery. Repository loading may project handler identities through
   `factorysession.ProjectCanonicalToolHandlerBindings`, which intentionally
   omits executable functions and returns stable tool/handler IDs in sorted
   order; do not move handler behavior into catalog or generated code.

@@ -84,5 +84,6 @@ func cloneInputs(t *testing.T, inputs mcpcontractcheck.Inputs) mcpcontractcheck.
 	clone.Discovery = append([]mcpcontractcheck.ToolRecord(nil), inputs.Discovery...)
 	clone.Registry = append([]mcpcontractcheck.HandlerBinding(nil), inputs.Registry...)
 	clone.Aliases = append([]mcpcontractcheck.AliasBinding(nil), inputs.Aliases...)
+	clone.RuntimeAliases = append([]mcpcontractcheck.RuntimeAliasBinding(nil), inputs.RuntimeAliases...)
 	return clone
 }

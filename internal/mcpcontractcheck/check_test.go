@@ -25,6 +25,9 @@ func TestValidateCleanExplicitBoundaryInputs(t *testing.T) {
 			ToolID: "mcp.tool.you.factory_session.list", HandlerID: "mcp.handler.you.factory_session.list",
 		}},
 		Aliases: []mcpcontractcheck.AliasBinding{{
+			ID: "mcp.alias.you.workflow.status", Name: "you.workflow.status", CanonicalToolID: "mcp.tool.you.factory_session.list",
+		}},
+		RuntimeAliases: []mcpcontractcheck.RuntimeAliasBinding{{
 			Name: "you.workflow.status", CanonicalName: "you.factory_session.list",
 		}},
 	}
