@@ -72,7 +72,7 @@ func MergeRegistries(registries ...Registry) Registry {
 
 // DefaultRegistry registers every contract family validated by make contracts-validate.
 func DefaultRegistry() Registry {
-	return MergeRegistries(CommonRegistry(), CLIRegistry(), CompatibilityInventoryRegistry())
+	return MergeRegistries(CommonRegistry(), CLIRegistry(), CompatibilityInventoryRegistry(), MCPRegistry())
 }
 
 // CommonRegistry registers the common schemas and their merged valid fixtures.
@@ -102,6 +102,41 @@ func CommonRegistry() Registry {
 			{Path: "contracts/testdata/common/precedence/valid-file-only.json", SchemaID: precedenceID},
 			{Path: "contracts/testdata/common/precedence/valid-no-layers.json", SchemaID: precedenceID},
 			{Path: "contracts/testdata/common/sensitivity/valid-public.json", SchemaID: sensitivityID},
+		},
+	})
+}
+
+// MCPRegistry registers the MCP tool-catalog schema and its valid fixtures.
+func MCPRegistry() Registry {
+	const (
+		toolCatalogID        = "https://schemas.portpowered.com/you/contracts/mcp/tool-catalog.schema.json"
+		contentID            = "https://schemas.portpowered.com/you/contracts/mcp/protocol/content.schema.json"
+		callToolResultID     = "https://schemas.portpowered.com/you/contracts/mcp/protocol/call-tool-result.schema.json"
+		domainToolResponseID = "https://schemas.portpowered.com/you/contracts/mcp/protocol/domain-tool-response.schema.json"
+		jsonRPCErrorID       = "https://schemas.portpowered.com/you/contracts/mcp/protocol/json-rpc-error.schema.json"
+		documentationID      = "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+		deprecationsID       = "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+	)
+	return NewRegistry(Entry{
+		Family:        "mcp",
+		FormatVersion: "1.0.0",
+		Schemas: []Schema{
+			{ID: documentationID, Path: "contracts/common/documentation.schema.json"},
+			{ID: deprecationsID, Path: "contracts/common/deprecations.schema.json"},
+			{ID: contentID, Path: "contracts/mcp/protocol/content.schema.json"},
+			{ID: callToolResultID, Path: "contracts/mcp/protocol/call-tool-result.schema.json"},
+			{ID: domainToolResponseID, Path: "contracts/mcp/protocol/domain-tool-response.schema.json"},
+			{ID: jsonRPCErrorID, Path: "contracts/mcp/protocol/json-rpc-error.schema.json"},
+			{ID: toolCatalogID, Path: "contracts/mcp/tool-catalog.schema.json"},
+		},
+		Documents: []Document{
+			{Path: "contracts/testdata/mcp/valid-minimal.json", SchemaID: toolCatalogID},
+			{Path: "contracts/testdata/mcp/valid-input-closed-nested.json", SchemaID: toolCatalogID},
+			{Path: "contracts/testdata/mcp/valid-text-success-result.json", SchemaID: toolCatalogID},
+			{Path: "contracts/testdata/mcp/valid-text-error-result.json", SchemaID: toolCatalogID},
+			{Path: "contracts/testdata/mcp/valid-domain-failure-result.json", SchemaID: toolCatalogID},
+			{Path: "contracts/testdata/mcp/valid-protocol-failures.json", SchemaID: toolCatalogID},
+			{Path: "contracts/testdata/mcp/valid-handler-binding.json", SchemaID: toolCatalogID},
 		},
 	})
 }

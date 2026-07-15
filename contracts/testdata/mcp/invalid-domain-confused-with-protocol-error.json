@@ -1,0 +1,93 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2024-11-05",
+  "tools": {
+    "mcp.tool.you.factory_session.get": {
+      "id": "mcp.tool.you.factory_session.get",
+      "name": "you.factory_session.get",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.get",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.get.title",
+            "canonicalEnglish": "Get Factory Session"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.get.description",
+            "canonicalEnglish": "Reads one durable Factory Session by id."
+          }
+        },
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.get",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "result": {
+        "transport": {
+          "contentTypes": [
+            "text"
+          ],
+          "textEncoding": "serialized-json",
+          "allowsStructuredContent": false,
+          "allowsOutputSchema": false
+        },
+        "domain": {
+          "failures": {
+            "mcp.failure.you.factory_session.get.protocol_confusion": {
+              "id": "mcp.failure.you.factory_session.get.protocol_confusion",
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "code",
+                  "message",
+                  "retryable"
+                ],
+                "properties": {
+                  "code": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "message": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "retryable": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "examples": [
+                {
+                  "jsonrpc": "2.0",
+                  "id": 1,
+                  "error": {
+                    "code": -32602,
+                    "message": "tool name is required"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "examples": [
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"error\":{\"code\":\"factory_session.session.not_found\",\"message\":\"factory session not found\",\"retryable\":false}}"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      }
+    }
+  }
+}
