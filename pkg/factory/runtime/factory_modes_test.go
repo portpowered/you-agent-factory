@@ -12,12 +12,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
@@ -36,7 +36,7 @@ func TestFactoryEventHistory_SubscribeReplaysHistoryThenStreamsLiveEvents(t *tes
 		t.Fatalf("replayed history count = %d, want %d startup events", len(stream.History), runtimePreWorkEventCount)
 	}
 	for i, wantType := range runtimeStartupEventTypes() {
-		if stream.History[i].Type != wantType {
+		if stream.History[i].Type != interfaces.FactoryEventType(wantType) {
 			t.Fatalf("replayed history[%d] = %q, want %q", i, stream.History[i].Type, wantType)
 		}
 	}
@@ -50,7 +50,7 @@ func TestFactoryEventHistory_SubscribeReplaysHistoryThenStreamsLiveEvents(t *tes
 
 	select {
 	case event := <-stream.Events:
-		if event.Type != factoryapi.FactoryEventTypeWorkRequest {
+		if event.Type != interfaces.FactoryEventType(factoryapi.FactoryEventTypeWorkRequest) {
 			t.Fatalf("live event = %#v, want work request event", event)
 		}
 	case <-time.After(time.Second):

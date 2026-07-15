@@ -46,7 +46,7 @@ func (m *mockFactory) SubmitWorkRequest(_ context.Context, request work.WorkRequ
 
 func (m *mockFactory) Run(_ context.Context) error { return nil }
 func (m *mockFactory) SubscribeFactoryEvents(_ context.Context, _ *interfaces.FactoryEventReconnectCursor, _ interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
-	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
+	return &interfaces.FactoryEventStream{Events: make(chan interfaces.FactoryEvent)}, nil
 }
 func (m *mockFactory) Pause(_ context.Context) error  { return nil }
 func (m *mockFactory) Resume(_ context.Context) error { return nil }

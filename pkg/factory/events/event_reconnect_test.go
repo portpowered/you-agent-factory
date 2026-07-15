@@ -43,7 +43,7 @@ func TestFactoryEventHistory_Subscribe_InvalidReconnectCursorDoesNotRegisterStre
 
 	select {
 	case event := <-stream.Events:
-		if event.Type != factoryapi.FactoryEventTypeFactoryStateResponse {
+		if event.Type != interfaces.FactoryEventType(factoryapi.FactoryEventTypeFactoryStateResponse) {
 			t.Fatalf("live event type = %s, want %s", event.Type, factoryapi.FactoryEventTypeFactoryStateResponse)
 		}
 	case <-time.After(time.Second):

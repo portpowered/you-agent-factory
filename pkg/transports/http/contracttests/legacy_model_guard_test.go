@@ -24,7 +24,6 @@ func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 	}
 	deletedTypeNames := map[string]struct{}{
 		"FactoryEventEnvelope": {},
-		"FactoryEventContext":  {},
 		"RecordedWorkRequest":  {},
 		"RecordedSubmission":   {},
 		"RecordedDispatch":     {},
@@ -68,21 +67,33 @@ func TestNoHandwrittenLegacyReplayModelsOrGeneratedAliases(t *testing.T) {
 			}
 			for _, spec := range genDecl.Specs {
 				typeSpec := spec.(*ast.TypeSpec)
-				if typeSpec.Name.Name == "FactoryEventType" && path != canonicalFactoryEventTypeOwner {
-					t.Fatalf("%s declares FactoryEventType outside canonical Factory owner %s", path, canonicalFactoryEventTypeOwner)
-				}
-				if _, deleted := deletedTypeNames[typeSpec.Name.Name]; deleted {
-					t.Fatalf("%s declares deleted legacy replay/event type %s", path, typeSpec.Name.Name)
-				}
-				if typeSpec.Assign.IsValid() && aliasesGeneratedAPI(typeSpec.Type, generatedImportNames) {
-					t.Fatalf("%s aliases generated API type %s; use generated types directly", path, typeSpec.Name.Name)
-				}
+				assertAllowedFactoryContractType(t, path, canonicalFactoryEventTypeOwner, typeSpec, deletedTypeNames, generatedImportNames)
 			}
 		}
 		return nil
 	})
 	if err != nil {
 		t.Fatalf("scan handwritten API models: %v", err)
+	}
+}
+
+func assertAllowedFactoryContractType(
+	t *testing.T,
+	path string,
+	canonicalFactoryEventTypeOwner string,
+	typeSpec *ast.TypeSpec,
+	deletedTypeNames map[string]struct{},
+	generatedImportNames map[string]struct{},
+) {
+	t.Helper()
+	if (typeSpec.Name.Name == "FactoryEventType" || typeSpec.Name.Name == "FactoryEventContext") && path != canonicalFactoryEventTypeOwner {
+		t.Fatalf("%s declares %s outside canonical Factory owner %s", path, typeSpec.Name.Name, canonicalFactoryEventTypeOwner)
+	}
+	if _, deleted := deletedTypeNames[typeSpec.Name.Name]; deleted {
+		t.Fatalf("%s declares deleted legacy replay/event type %s", path, typeSpec.Name.Name)
+	}
+	if typeSpec.Assign.IsValid() && aliasesGeneratedAPI(typeSpec.Type, generatedImportNames) {
+		t.Fatalf("%s aliases generated API type %s; use generated types directly", path, typeSpec.Name.Name)
 	}
 }
 

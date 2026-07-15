@@ -253,13 +253,13 @@ func TestGetFactorySessionEvents_RuntimeBackedReplayMatchesReadAndResultAPIs(t *
 }
 
 func TestGetFactorySessionEvents_LivePetriSessionRemainsCompatible(t *testing.T) {
-	closed := make(chan factoryapi.FactoryEvent)
+	closed := make(chan interfaces.FactoryEvent)
 	close(closed)
 	srv := newAPITestServer(&testutil.MockFactory{
 		SessionFactories: map[string]*testutil.MockFactory{
 			"session-beta": {
 				FactoryEventStream: &interfaces.FactoryEventStream{
-					History: []factoryapi.FactoryEvent{{Id: "event-1", Type: factoryapi.FactoryEventTypeWorkRequest}},
+					History: []interfaces.FactoryEvent{testutil.FactoryEvent(t, factoryapi.FactoryEvent{Id: "event-1", Type: factoryapi.FactoryEventTypeWorkRequest})},
 					Events:  closed,
 				},
 			},

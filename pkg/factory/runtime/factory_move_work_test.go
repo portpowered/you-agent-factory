@@ -118,11 +118,11 @@ func TestMoveWork_SubscribeReceivesWorkStateChangeInOrder(t *testing.T) {
 	for {
 		select {
 		case event := <-stream.Events:
-			if event.Type != factoryapi.FactoryEventTypeWorkStateChange {
+			if event.Type != interfaces.FactoryEventType(factoryapi.FactoryEventTypeWorkStateChange) {
 				continue
 			}
-			payload, err := event.Payload.AsWorkStateChangeEventPayload()
-			if err != nil {
+			var payload factoryapi.WorkStateChangeEventPayload
+			if err := event.DecodePayload(&payload); err != nil {
 				t.Fatalf("work state change payload: %v", err)
 			}
 			if payload.WorkId != "work-stream-move" || payload.Source != factoryapi.WorkStateChangeSourceAPI {

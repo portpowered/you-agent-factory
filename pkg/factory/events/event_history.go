@@ -43,7 +43,7 @@ const (
 )
 
 type eventHistorySubscription struct {
-	events chan factoryapi.FactoryEvent
+	events chan interfaces.FactoryEvent
 	inbox  chan factoryapi.FactoryEvent
 	done   <-chan struct{}
 }
@@ -140,7 +140,7 @@ func (h *FactoryEventHistory) Subscribe(
 	scope interfaces.FactoryEventReconnectScope,
 ) (interfaces.FactoryEventStream, error) {
 	if h == nil {
-		ch := make(chan factoryapi.FactoryEvent)
+		ch := make(chan interfaces.FactoryEvent)
 		close(ch)
 		return interfaces.FactoryEventStream{Events: ch}, nil
 	}
@@ -157,10 +157,15 @@ func (h *FactoryEventHistory) Subscribe(
 		}
 		events = replayed
 	}
+	domainEvents, err := domainFactoryEvents(events)
+	if err != nil {
+		h.mu.Unlock()
+		return interfaces.FactoryEventStream{}, err
+	}
 	id := h.nextID
 	h.nextID++
 	subscription := &eventHistorySubscription{
-		events: make(chan factoryapi.FactoryEvent, eventHistoryStreamBufferSize),
+		events: make(chan interfaces.FactoryEvent, eventHistoryStreamBufferSize),
 		inbox:  make(chan factoryapi.FactoryEvent, eventHistoryStreamBufferSize),
 		done:   ctx.Done(),
 	}
@@ -177,13 +182,20 @@ func (h *FactoryEventHistory) Subscribe(
 				h.mu.Unlock()
 				return
 			case event := <-subscription.inbox:
+				domainEvent, err := interfaces.NewFactoryEvent(event)
+				if err != nil {
+					h.mu.Lock()
+					delete(h.streams, id)
+					h.mu.Unlock()
+					return
+				}
 				select {
 				case <-subscription.done:
 					h.mu.Lock()
 					delete(h.streams, id)
 					h.mu.Unlock()
 					return
-				case subscription.events <- event:
+				case subscription.events <- domainEvent:
 				}
 			}
 		}
@@ -191,9 +203,21 @@ func (h *FactoryEventHistory) Subscribe(
 
 	return interfaces.FactoryEventStream{
 		StreamGenerationID: streamGenerationID,
-		History:            events,
+		History:            domainEvents,
 		Events:             subscription.events,
 	}, nil
+}
+
+func domainFactoryEvents(events []factoryapi.FactoryEvent) ([]interfaces.FactoryEvent, error) {
+	converted := make([]interfaces.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		domainEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return nil, fmt.Errorf("convert factory event %q to domain envelope: %w", event.Id, err)
+		}
+		converted = append(converted, domainEvent)
+	}
+	return converted, nil
 }
 
 // AddGeneratedRecorder registers a callback invoked for every future generated

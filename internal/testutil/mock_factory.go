@@ -587,9 +587,16 @@ func (m *MockFactory) acceptedWorkRequest(requestID string) (work.WorkRequestSub
 
 func (m *MockFactory) SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	m.FactoryEventStreamCtx = ctx
-	history := m.FactoryEvents
+	history := append([]factoryapi.FactoryEvent(nil), m.FactoryEvents...)
 	if m.FactoryEventStream != nil && len(m.FactoryEventStream.History) > 0 {
-		history = m.FactoryEventStream.History
+		history = make([]factoryapi.FactoryEvent, 0, len(m.FactoryEventStream.History))
+		for _, event := range m.FactoryEventStream.History {
+			var generated factoryapi.FactoryEvent
+			if err := event.Decode(&generated); err != nil {
+				return nil, err
+			}
+			history = append(history, generated)
+		}
 	}
 	if reconnect != nil {
 		replayed, err := factoryevents.BuildReconnectReplay(history, *reconnect, scope)
@@ -598,18 +605,26 @@ func (m *MockFactory) SubscribeFactoryEvents(ctx context.Context, reconnect *int
 		}
 		history = replayed
 	}
+	domainHistory := make([]interfaces.FactoryEvent, 0, len(history))
+	for _, event := range history {
+		domainEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			return nil, err
+		}
+		domainHistory = append(domainHistory, domainEvent)
+	}
 	if m.FactoryEventStream != nil {
 		return &interfaces.FactoryEventStream{
 			BackendScopeID:      m.FactoryEventStream.BackendScopeID,
 			LogicalSessionKeyID: m.FactoryEventStream.LogicalSessionKeyID,
 			FactorySessionID:    m.FactoryEventStream.FactorySessionID,
 			StreamGenerationID:  m.FactoryEventStream.StreamGenerationID,
-			History:             history,
+			History:             domainHistory,
 			Events:              m.FactoryEventStream.Events,
 		}, nil
 	}
-	ch := make(chan factoryapi.FactoryEvent)
-	return &interfaces.FactoryEventStream{History: history, Events: ch}, nil
+	ch := make(chan interfaces.FactoryEvent)
+	return &interfaces.FactoryEventStream{History: domainHistory, Events: ch}, nil
 }
 
 func (m *MockFactory) GetEngineStateSnapshot(_ context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {

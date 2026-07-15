@@ -51,15 +51,15 @@ func TestReconnectCursorFromParams(t *testing.T) {
 // TestCompatibilityGetEvents_* exercises handler regressions for compatibility-only GET /events.
 func TestCompatibilityGetEvents_WritesHistoricalAndLiveSSE(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
-	liveEvents := make(chan factoryapi.FactoryEvent, 1)
-	liveEvents <- factoryapi.FactoryEvent{Id: "event-live", Type: factoryapi.FactoryEventTypeDispatchRequest}
+	liveEvents := make(chan interfaces.FactoryEvent, 1)
+	liveEvents <- testutil.FactoryEvent(t, factoryapi.FactoryEvent{Id: "event-live", Type: factoryapi.FactoryEventTypeDispatchRequest})
 	close(liveEvents)
 
 	req := httptest.NewRequest(http.MethodGet, "/events", nil)
 	rec := httptest.NewRecorder()
 	srv.getEvents(rec, req, false, func(context.Context) (*interfaces.FactoryEventStream, error) {
 		return &interfaces.FactoryEventStream{
-			History: []factoryapi.FactoryEvent{{Id: "event-history", Type: factoryapi.FactoryEventTypeWorkRequest}},
+			History: []interfaces.FactoryEvent{testutil.FactoryEvent(t, factoryapi.FactoryEvent{Id: "event-history", Type: factoryapi.FactoryEventTypeWorkRequest})},
 			Events:  liveEvents,
 		}, nil
 	})
@@ -163,7 +163,7 @@ func TestCompatibilityGetEvents_ErrorResponses(t *testing.T) {
 
 func TestSessionScopedGetEvents_SessionHandshakeWritesResolvedIdentityHeaders(t *testing.T) {
 	srv := newTestServer(&testutil.MockFactory{})
-	liveEvents := make(chan factoryapi.FactoryEvent)
+	liveEvents := make(chan interfaces.FactoryEvent)
 	close(liveEvents)
 
 	req := httptest.NewRequest(http.MethodGet, "/factory-sessions/session-a/events", nil)

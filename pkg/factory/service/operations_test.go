@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
@@ -74,7 +73,7 @@ func (f *operationsFactory) SubscribeFactoryEvents(_ context.Context, reconnect 
 		}
 	}
 	return &interfaces.FactoryEventStream{
-		Events:             make(chan factoryapi.FactoryEvent),
+		Events:             make(chan interfaces.FactoryEvent),
 		StreamGenerationID: "gen-1",
 	}, nil
 }

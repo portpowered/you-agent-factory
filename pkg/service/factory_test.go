@@ -322,7 +322,7 @@ func (f *aggregateSnapshotFactory) SubscribeFactoryEvents(context.Context, *inte
 	}
 	return &interfaces.FactoryEventStream{
 		StreamGenerationID: streamGenerationID,
-		Events:             make(chan factoryapi.FactoryEvent),
+		Events:             make(chan interfaces.FactoryEvent),
 	}, nil
 }
 func (f *aggregateSnapshotFactory) Pause(context.Context) error  { return f.pauseErr }
@@ -361,7 +361,7 @@ func (f *runtimeMetricsObserverFactory) SubmitWorkRequest(context.Context, work.
 	return work.WorkRequestSubmitResult{}, nil
 }
 func (f *runtimeMetricsObserverFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
-	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
+	return &interfaces.FactoryEventStream{Events: make(chan interfaces.FactoryEvent)}, nil
 }
 func (f *runtimeMetricsObserverFactory) Pause(context.Context) error  { return nil }
 func (f *runtimeMetricsObserverFactory) Resume(context.Context) error { return nil }

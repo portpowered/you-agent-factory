@@ -50,7 +50,7 @@ func (f *lifecycleObserverFactory) SubmitWorkRequest(context.Context, work.WorkR
 	return work.WorkRequestSubmitResult{}, nil
 }
 func (f *lifecycleObserverFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
-	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
+	return &interfaces.FactoryEventStream{Events: make(chan interfaces.FactoryEvent)}, nil
 }
 func (f *lifecycleObserverFactory) Pause(context.Context) error  { return nil }
 func (f *lifecycleObserverFactory) Resume(context.Context) error { return nil }

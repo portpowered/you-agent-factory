@@ -29,7 +29,8 @@ var factorySessionSSEFixtureEventTime = time.Date(2026, 7, 14, 12, 0, 0, 0, time
 type FactorySessionSSEFixture struct {
 	SessionID string
 	Retained  []factoryapi.FactoryEvent
-	Live      chan factoryapi.FactoryEvent
+	domain    []interfaces.FactoryEvent
+	Live      chan interfaces.FactoryEvent
 }
 
 // NewFactorySessionSSEFixture returns the canonical B08 session-scoped SSE fixture
@@ -37,10 +38,11 @@ type FactorySessionSSEFixture struct {
 func NewFactorySessionSSEFixture(t *testing.T) *FactorySessionSSEFixture {
 	t.Helper()
 	retained := factorySessionSSEFixtureRetainedEvents(t)
-	live := make(chan factoryapi.FactoryEvent, 4)
+	live := make(chan interfaces.FactoryEvent, 4)
 	return &FactorySessionSSEFixture{
 		SessionID: factorySessionSSEFixtureSessionID,
 		Retained:  retained,
+		domain:    testutil.FactoryEvents(t, retained),
 		Live:      live,
 	}
 }
@@ -55,7 +57,7 @@ func (f *FactorySessionSSEFixture) RootMockFactory() *testutil.MockFactory {
 					BackendScopeID:      factorySessionSSEFixtureBackendScopeID,
 					LogicalSessionKeyID: factorySessionSSEFixtureLogicalSessionKey,
 					FactorySessionID:    f.SessionID,
-					History:             append([]factoryapi.FactoryEvent(nil), f.Retained...),
+					History:             append([]interfaces.FactoryEvent(nil), f.domain...),
 					Events:              f.Live,
 				},
 			},
@@ -65,7 +67,11 @@ func (f *FactorySessionSSEFixture) RootMockFactory() *testutil.MockFactory {
 
 // PublishLive enqueues one live FactoryEvent on the fixture stream channel.
 func (f *FactorySessionSSEFixture) PublishLive(event factoryapi.FactoryEvent) {
-	f.Live <- event
+	converted, err := interfaces.NewFactoryEvent(event)
+	if err != nil {
+		panic(err)
+	}
+	f.Live <- converted
 }
 
 // LiveDispatchEvent returns the canonical post-retained live fixture event.

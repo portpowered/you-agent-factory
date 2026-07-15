@@ -743,7 +743,7 @@ func TestSubmitWorkAutoTraceID(t *testing.T) {
 
 func TestServer_APISurfaceSmokePreservesEmbeddedFactoryContract(t *testing.T) {
 	eventTime := testSubmitSurfaceSmokeEventTime()
-	liveEvents := make(chan factoryapi.FactoryEvent, 1)
+	liveEvents := make(chan interfaces.FactoryEvent, 1)
 	mf := newSubmitSurfaceSmokeFactory(t, eventTime, liveEvents)
 
 	server := httptest.NewServer(newTestServer(mf).Handler())
@@ -758,7 +758,7 @@ func testSubmitSurfaceSmokeEventTime() time.Time {
 	return time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 }
 
-func newSubmitSurfaceSmokeFactory(t *testing.T, eventTime time.Time, liveEvents chan factoryapi.FactoryEvent) *testutil.MockFactory {
+func newSubmitSurfaceSmokeFactory(t *testing.T, eventTime time.Time, liveEvents chan interfaces.FactoryEvent) *testutil.MockFactory {
 	t.Helper()
 
 	currentFactoryID := "beta"
@@ -780,12 +780,12 @@ func newSubmitSurfaceSmokeFactory(t *testing.T, eventTime time.Time, liveEvents 
 			},
 		},
 		FactoryEventStream: &interfaces.FactoryEventStream{
-			History: []factoryapi.FactoryEvent{
-				testFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "factory-event/work-request/api-surface-history", factoryapi.FactoryEventContext{
+			History: []interfaces.FactoryEvent{
+				testutil.FactoryEvent(t, testFactoryEvent(t, factoryapi.FactoryEventTypeWorkRequest, "factory-event/work-request/api-surface-history", factoryapi.FactoryEventContext{
 					Tick:      1,
 					EventTime: eventTime,
 					RequestId: stringPointerForAPITest("request-api-surface"),
-				}, factoryapi.WorkRequestEventPayload{Type: factoryapi.WorkRequestTypeFactoryRequestBatch}),
+				}, factoryapi.WorkRequestEventPayload{Type: factoryapi.WorkRequestTypeFactoryRequestBatch})),
 			},
 			Events: liveEvents,
 		},

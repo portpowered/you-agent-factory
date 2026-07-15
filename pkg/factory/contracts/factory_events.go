@@ -1,7 +1,10 @@
 package factorycontracts
 
 import (
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"encoding/json"
+	"fmt"
+	"time"
+
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
@@ -87,8 +90,78 @@ type FactoryEventStream struct {
 	LogicalSessionKeyID string
 	FactorySessionID    string
 	StreamGenerationID  string
-	History             []factoryapi.FactoryEvent
-	Events              <-chan factoryapi.FactoryEvent
+	History             []FactoryEvent
+	Events              <-chan FactoryEvent
+}
+
+// FactoryEvent is the canonical, transport-independent event envelope. Payload
+// interpretation belongs to the Factory reducer that handles Type; transports
+// may decode the detached JSON at their boundary when a generated union is
+// required.
+type FactoryEvent struct {
+	Context       FactoryEventContext       `json:"context"`
+	Id            string                    `json:"id"`
+	Payload       json.RawMessage           `json:"payload"`
+	SchemaVersion FactoryEventSchemaVersion `json:"schemaVersion"`
+	Type          FactoryEventType          `json:"type"`
+}
+
+// FactoryEventContext carries canonical ordering and correlation metadata.
+type FactoryEventContext struct {
+	CheckpointID             *string   `json:"checkpointId,omitempty"`
+	CurrentChainingTraceID   *string   `json:"currentChainingTraceId,omitempty"`
+	DispatchID               *string   `json:"dispatchId,omitempty"`
+	EventTime                time.Time `json:"eventTime"`
+	OrchestratorDialect      *string   `json:"orchestratorDialect,omitempty"`
+	OrchestratorKind         *string   `json:"orchestratorKind,omitempty"`
+	PhaseID                  *string   `json:"phaseId,omitempty"`
+	PhaseName                *string   `json:"phaseName,omitempty"`
+	PreviousChainingTraceIDs *[]string `json:"previousChainingTraceIds,omitempty"`
+	RequestID                *string   `json:"requestId,omitempty"`
+	Sequence                 int       `json:"sequence"`
+	SessionID                *string   `json:"sessionId,omitempty"`
+	SessionSequence          *int      `json:"sessionSequence,omitempty"`
+	Source                   *string   `json:"source,omitempty"`
+	Tick                     int       `json:"tick"`
+	TraceIDs                 *[]string `json:"traceIds,omitempty"`
+	WorkIDs                  *[]string `json:"workIds,omitempty"`
+}
+
+// NewFactoryEvent converts an event-compatible value into the detached domain
+// envelope. It is intended for temporary producer and transport adapters while
+// event payload contracts migrate to their domain owners.
+func NewFactoryEvent(value any) (FactoryEvent, error) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return FactoryEvent{}, fmt.Errorf("encode factory event: %w", err)
+	}
+	var event FactoryEvent
+	if err := json.Unmarshal(encoded, &event); err != nil {
+		return FactoryEvent{}, fmt.Errorf("decode factory event envelope: %w", err)
+	}
+	event.Payload = append(json.RawMessage(nil), event.Payload...)
+	return event, nil
+}
+
+// Decode writes the domain envelope into an event-compatible destination.
+func (e FactoryEvent) Decode(destination any) error {
+	encoded, err := json.Marshal(e)
+	if err != nil {
+		return fmt.Errorf("encode factory event envelope: %w", err)
+	}
+	if err := json.Unmarshal(encoded, destination); err != nil {
+		return fmt.Errorf("decode factory event: %w", err)
+	}
+	return nil
+}
+
+// DecodePayload decodes the detached payload into its domain or boundary
+// representation. Callers select the payload contract from Type.
+func (e FactoryEvent) DecodePayload(destination any) error {
+	if err := json.Unmarshal(e.Payload, destination); err != nil {
+		return fmt.Errorf("decode %s factory event payload: %w", e.Type, err)
+	}
+	return nil
 }
 
 // InitialStructurePayload describes the topology available before work moves.

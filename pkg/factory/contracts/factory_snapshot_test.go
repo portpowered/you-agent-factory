@@ -3,6 +3,7 @@ package factorycontracts
 import (
 	"encoding/json"
 	"testing"
+	"time"
 )
 
 func TestFactorySnapshotPreservesUnknownFieldsAndCloneIsolation(t *testing.T) {
@@ -31,6 +32,62 @@ func TestFactorySnapshotPreservesUnknownFieldsAndCloneIsolation(t *testing.T) {
 	future, ok := decoded["futureField"].(map[string]any)
 	if !ok || future["enabled"] != true {
 		t.Fatalf("futureField = %#v, want preserved unknown object", decoded["futureField"])
+	}
+}
+
+func TestFactoryEventEnvelopeDetachesPayloadAndPreservesUnknownFields(t *testing.T) {
+	t.Parallel()
+
+	payload := map[string]any{
+		"workId": "work-1",
+		"future": map[string]any{"enabled": true},
+	}
+	boundary := struct {
+		Context       FactoryEventContext       `json:"context"`
+		ID            string                    `json:"id"`
+		Payload       map[string]any            `json:"payload"`
+		SchemaVersion FactoryEventSchemaVersion `json:"schemaVersion"`
+		Type          FactoryEventType          `json:"type"`
+	}{
+		Context: FactoryEventContext{
+			EventTime: time.Date(2026, 7, 15, 18, 0, 0, 0, time.UTC),
+			Sequence:  4,
+			Tick:      3,
+		},
+		ID:            "event-4",
+		Payload:       payload,
+		SchemaVersion: FactoryEventSchemaVersionV1,
+		Type:          FactoryEventTypeWorkStateChange,
+	}
+
+	event, err := NewFactoryEvent(boundary)
+	if err != nil {
+		t.Fatalf("NewFactoryEvent() error = %v", err)
+	}
+	payload["workId"] = "mutated"
+	delete(payload, "future")
+
+	var decoded map[string]any
+	if err := event.DecodePayload(&decoded); err != nil {
+		t.Fatalf("DecodePayload() error = %v", err)
+	}
+	if decoded["workId"] != "work-1" {
+		t.Fatalf("detached workId = %#v, want work-1", decoded["workId"])
+	}
+	if _, ok := decoded["future"]; !ok {
+		t.Fatalf("decoded payload = %#v, want unknown future field preserved", decoded)
+	}
+
+	encoded, err := json.Marshal(event)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	var roundTrip map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &roundTrip); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+	if string(roundTrip["id"]) != `"event-4"` || string(roundTrip["schemaVersion"]) != `"agent-factory.event.v1"` {
+		t.Fatalf("round-trip envelope = %s", encoded)
 	}
 }
 

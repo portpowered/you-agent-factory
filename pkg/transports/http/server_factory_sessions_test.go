@@ -429,8 +429,8 @@ func TestSessionScopedAPI_ReadsAndMutationsTargetOnlyRequestedSession(t *testing
 	now := time.Date(2026, 5, 21, 12, 0, 0, 0, time.UTC)
 	defaultFactoryID := "root-runtime"
 	betaFactoryID := "beta-runtime"
-	defaultSession := newSessionScopedMockFactory(now, &defaultFactoryID, apisurface.DefaultCurrentFactoryName, "tok-default-1", "default-work-1", "factory-event/work-request/default-history")
-	betaSession := newSessionScopedMockFactory(now, &betaFactoryID, "beta", "tok-beta-1", "beta-work-1", "factory-event/work-request/beta-history")
+	defaultSession := newSessionScopedMockFactory(t, now, &defaultFactoryID, apisurface.DefaultCurrentFactoryName, "tok-default-1", "default-work-1", "factory-event/work-request/default-history")
+	betaSession := newSessionScopedMockFactory(t, now, &betaFactoryID, "beta", "tok-beta-1", "beta-work-1", "factory-event/work-request/beta-history")
 	srv := newTestServer(&testutil.MockFactory{
 		CurrentFactory: &factoryapi.Factory{Name: apisurface.DefaultCurrentFactoryName, Id: &defaultFactoryID},
 		SessionFactories: map[string]*testutil.MockFactory{
@@ -450,6 +450,7 @@ func TestSessionScopedAPI_ReadsAndMutationsTargetOnlyRequestedSession(t *testing
 }
 
 func newSessionScopedMockFactory(
+	t *testing.T,
 	now time.Time,
 	factoryID *string,
 	factoryName string,
@@ -466,8 +467,8 @@ func newSessionScopedMockFactory(
 		Net: sessionScopedStateNet(),
 		FactoryEventStream: &interfaces.FactoryEventStream{
 			StreamGenerationID: "stream-gen-" + factoryName,
-			History:            []factoryapi.FactoryEvent{{Id: historyEventID, Type: factoryapi.FactoryEventTypeWorkRequest}},
-			Events:             make(chan factoryapi.FactoryEvent),
+			History:            []interfaces.FactoryEvent{testutil.FactoryEvent(t, factoryapi.FactoryEvent{Id: historyEventID, Type: factoryapi.FactoryEventTypeWorkRequest})},
+			Events:             make(chan interfaces.FactoryEvent),
 		},
 		CurrentFactory: &factoryapi.Factory{Name: factoryName, Id: factoryID},
 	}
