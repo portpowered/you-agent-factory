@@ -35,8 +35,8 @@ Use this map when changing the public REST contract.
   staged paths across the complete projection.
 - Raw JSON/YAML projections in `policy.go#rawArtifacts` are byte-identical copies
   from their canonical owners (CLI/MCP baselines, `contracts/config/` schemas,
-  JavaScript runtime inventory). Factory schema is the only reviewed raw export
-  derived from OpenAPI rather than copied. Prove repository parity in
+  authored JavaScript runtime catalog). Factory schema is the only reviewed raw
+  export derived from OpenAPI rather than copied. Prove repository parity in
   `internal/contractstaging/raw_artifacts_test.go`; later-phase export-map
   families such as `components/*` stay omitted until a truthful owner exists.
 - Authored JavaScript runtime symbol manifests live at
@@ -61,8 +61,9 @@ Use this map when changing the public REST contract.
   in `pkg/orchestrators/javascript/runtime/callbehavior_inventory_test.go`.
   Prove runtime dependency isolation and catalog boundaries in `contracts/runtime_manifest_boundary_test.go` and
   `contracts/javascript_runtime_api_test.go`; staged
-  `packages/api/generated/javascript/runtime-api.json` remains inventory-sourced
-  until the catalog lane retargets generation in story 008.
+  `packages/api/generated/javascript/runtime-api.json` is a byte-identical copy
+  of the authored catalog at `contracts/javascript/runtime-api.json` through
+  `internal/contractstaging/policy.go#rawArtifacts`.
 - Staged OpenAPI byte policy lives in `internal/contractstaging/openapi.go`
   (`CanonicalOpenAPIPath`, `StagedOpenAPIPath`, `ReviewedOpenAPIBytePolicy`,
   `ProjectStagedOpenAPI`, `VerifyStagedOpenAPIParity`). The reviewed policy is

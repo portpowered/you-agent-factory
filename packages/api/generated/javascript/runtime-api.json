@@ -1,1 +1,1245 @@
-{"formatVersion":"javascript-runtime-symbol-identity/v1","symbols":[{"idCandidate":"agent","name":"agent","path":"agent","kind":"namespace","members":["run"],"callable":false,"async":false},{"idCandidate":"agent-run","name":"run","path":"agent.run","kind":"function","parent":"agent","callable":true,"async":true},{"idCandidate":"args","name":"args","path":"args","kind":"value","callable":false,"async":false},{"idCandidate":"log","name":"log","path":"log","kind":"function","callable":true,"async":false},{"idCandidate":"meta","name":"meta","path":"meta","kind":"value","callable":false,"async":false},{"idCandidate":"parallel","name":"parallel","path":"parallel","kind":"function","callable":true,"async":true},{"idCandidate":"phase","name":"phase","path":"phase","kind":"function","callable":true,"async":false},{"idCandidate":"pipeline","name":"pipeline","path":"pipeline","kind":"function","callable":true,"async":true},{"idCandidate":"workflow","name":"workflow","path":"workflow","kind":"namespace","members":["artifact","budget","checkpoint","final","log","resumeState"],"callable":false,"async":false},{"idCandidate":"workflow-artifact","name":"artifact","path":"workflow.artifact","kind":"function","parent":"workflow","callable":true,"async":false},{"idCandidate":"workflow-budget","name":"budget","path":"workflow.budget","kind":"function","parent":"workflow","callable":true,"async":false},{"idCandidate":"workflow-checkpoint","name":"checkpoint","path":"workflow.checkpoint","kind":"function","parent":"workflow","callable":true,"async":false},{"idCandidate":"workflow-final","name":"final","path":"workflow.final","kind":"function","parent":"workflow","callable":true,"async":false},{"idCandidate":"workflow-log","name":"log","path":"workflow.log","kind":"function","parent":"workflow","callable":true,"async":false},{"idCandidate":"workflow-resumeState","name":"resumeState","path":"workflow.resumeState","kind":"function","parent":"workflow","callable":true,"async":false}]}
+{
+  "formatVersion": "1.0.0",
+  "sharedSchemas": {
+    "javascript.schema.checkpoint_spec": {
+      "id": "javascript.schema.checkpoint_spec",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.schema.checkpoint_spec",
+        "documentation": {
+          "title": {
+            "id": "javascript.schema.checkpoint_spec.title",
+            "canonicalEnglish": "Checkpoint specification object"
+          },
+          "description": {
+            "id": "javascript.schema.checkpoint_spec.description",
+            "canonicalEnglish": "Closed object shape for workflow.checkpoint spec arguments."
+          }
+        },
+        "examples": [
+          "{ \"label\": \"draft\", \"state\": {} }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/sharedSchemas/javascript.schema.json_compatible/schema"
+          }
+        },
+        "required": [
+          "label"
+        ]
+      }
+    },
+    "javascript.schema.artifact_spec": {
+      "id": "javascript.schema.artifact_spec",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.schema.artifact_spec",
+        "documentation": {
+          "title": {
+            "id": "javascript.schema.artifact_spec.title",
+            "canonicalEnglish": "Artifact specification object"
+          },
+          "description": {
+            "id": "javascript.schema.artifact_spec.description",
+            "canonicalEnglish": "Closed object shape for workflow.artifact spec arguments."
+          }
+        },
+        "examples": [
+          "{ \"kind\": \"log\", \"label\": \"step\" }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "content": {
+            "$ref": "#/sharedSchemas/javascript.schema.json_compatible/schema"
+          },
+          "visibility": {
+            "type": "string",
+            "default": "WORKFLOW_RUNTIME"
+          }
+        },
+        "required": [
+          "kind",
+          "label"
+        ]
+      }
+    },
+    "javascript.schema.budget_snapshot": {
+      "id": "javascript.schema.budget_snapshot",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.schema.budget_snapshot",
+        "documentation": {
+          "title": {
+            "id": "javascript.schema.budget_snapshot.title",
+            "canonicalEnglish": "Workflow budget snapshot object"
+          },
+          "description": {
+            "id": "javascript.schema.budget_snapshot.description",
+            "canonicalEnglish": "Closed object shape returned by workflow.budget."
+          }
+        },
+        "examples": [
+          "{ \"maxAgents\": 4, \"concurrency\": 2 }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "maxAgents": {
+            "type": "number"
+          },
+          "concurrency": {
+            "type": "number"
+          },
+          "sandboxMode": {
+            "type": "string"
+          },
+          "maxRunDurationMs": {
+            "type": "number"
+          },
+          "maxWorkerDurationMs": {
+            "type": "number"
+          },
+          "maxOutputBytesPerWorker": {
+            "type": "number"
+          },
+          "maxArtifactBytes": {
+            "type": "number"
+          },
+          "maxTokens": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "maxAgents",
+          "concurrency"
+        ]
+      }
+    },
+    "javascript.schema.json_compatible": {
+      "id": "javascript.schema.json_compatible",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.schema.json_compatible",
+        "documentation": {
+          "title": {
+            "id": "javascript.schema.json_compatible.title",
+            "canonicalEnglish": "JSON-compatible serializable value"
+          },
+          "description": {
+            "id": "javascript.schema.json_compatible.description",
+            "canonicalEnglish": "Closed union of JSON-compatible serializable values accepted by installed runtime helpers."
+          }
+        },
+        "examples": [
+          "{ \"step\": 1 }",
+          "\"note\"",
+          "null"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "schema": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "array"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          }
+        ]
+      }
+    },
+    "javascript.schema.agent_run_spec": {
+      "id": "javascript.schema.agent_run_spec",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.schema.agent_run_spec",
+        "documentation": {
+          "title": {
+            "id": "javascript.schema.agent_run_spec.title",
+            "canonicalEnglish": "Agent run specification object"
+          },
+          "description": {
+            "id": "javascript.schema.agent_run_spec.description",
+            "canonicalEnglish": "Closed object shape for agent.run spec arguments."
+          }
+        },
+        "examples": [
+          "{ \"prompt\": \"Summarize findings\", \"label\": \"summarize\" }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "preset": {
+            "type": "string"
+          },
+          "modelProvider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "reasoningEffort": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      }
+    },
+    "javascript.schema.string_key_record": {
+      "id": "javascript.schema.string_key_record",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.schema.string_key_record",
+        "documentation": {
+          "title": {
+            "id": "javascript.schema.string_key_record.title",
+            "canonicalEnglish": "String-keyed invocation record"
+          },
+          "description": {
+            "id": "javascript.schema.string_key_record.description",
+            "canonicalEnglish": "Closed top-level object for args and meta value bindings exposed at workflow bind time."
+          }
+        },
+        "examples": [
+          "{ \"topic\": \"release\" }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
+    }
+  },
+  "symbols": {
+    "javascript.args": {
+      "id": "javascript.args",
+      "name": "args",
+      "path": "args",
+      "kind": "value",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.args",
+        "documentation": {
+          "title": {
+            "id": "javascript.args.title",
+            "canonicalEnglish": "Invocation arguments"
+          },
+          "description": {
+            "id": "javascript.args.description",
+            "canonicalEnglish": "Mutable invocation argument value bound from workflow request args JSON at script start. The binding is a non-null object snapshot; property reads and writes affect only the in-script view and do not change the original request payload."
+          }
+        },
+        "examples": [
+          "{ \"subject\": \"release\", \"count\": 2, \"prefix\": \"echo\" }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.args",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "mutable-object",
+      "nullability": "non-null",
+      "bindingLifecycle": "snapshot-at-bind"
+    },
+    "javascript.meta": {
+      "id": "javascript.meta",
+      "name": "meta",
+      "path": "meta",
+      "kind": "value",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.meta",
+        "documentation": {
+          "title": {
+            "id": "javascript.meta.title",
+            "canonicalEnglish": "Invocation metadata"
+          },
+          "description": {
+            "id": "javascript.meta.description",
+            "canonicalEnglish": "Mutable invocation metadata object bound from workflow request metadata at script start. The binding is a non-null object snapshot with string-valued entries; when name is absent the runtime supplies the default simple-final label."
+          }
+        },
+        "examples": [
+          "{ \"name\": \"simple-final\", \"description\": \"Example workflow metadata\" }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.meta",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "mutable-object",
+      "nullability": "non-null",
+      "bindingLifecycle": "snapshot-at-bind"
+    },
+    "javascript.log": {
+      "id": "javascript.log",
+      "name": "log",
+      "path": "log",
+      "kind": "function",
+      "async": false,
+      "parameters": [
+        {
+          "id": "javascript.log.param.message",
+          "name": "message",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "string"
+        },
+        {
+          "id": "javascript.log.param.fields",
+          "name": "fields",
+          "position": 1,
+          "required": false,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "$ref": "#/sharedSchemas/javascript.schema.json_compatible/schema"
+          }
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "emittedRecords": [
+        "log"
+      ],
+      "errors": [
+        {
+          "condition": "missing-or-non-string-message",
+          "type": "TypeError",
+          "message": "log() requires a string message"
+        },
+        {
+          "condition": "non-json-fields",
+          "type": "GoError",
+          "message": "log() fields must be JSON-compatible"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.log",
+        "documentation": {
+          "title": {
+            "id": "javascript.log.title",
+            "canonicalEnglish": "Root workflow log helper"
+          },
+          "description": {
+            "id": "javascript.log.description",
+            "canonicalEnglish": "Synchronously emits one workflow-scoped log record. The first argument must be a non-empty string message; an optional second argument supplies JSON-compatible structured fields."
+          }
+        },
+        "examples": [
+          "log(\"checkpoint\", { step: 1 })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.log",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "javascript.agent": {
+      "id": "javascript.agent",
+      "name": "agent",
+      "path": "agent",
+      "kind": "namespace",
+      "members": [
+        "run"
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.agent",
+        "documentation": {
+          "title": {
+            "id": "javascript.agent.title",
+            "canonicalEnglish": "Agent namespace"
+          },
+          "description": {
+            "id": "javascript.agent.description",
+            "canonicalEnglish": "Root agent namespace for the installed agent.run child-dispatch helper."
+          }
+        },
+        "examples": [
+          "agent.run({ prompt: \"Summarize findings\", label: \"summarize\" })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.agent",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
+    },
+    "javascript.agent.run": {
+      "id": "javascript.agent.run",
+      "name": "run",
+      "path": "agent.run",
+      "kind": "method",
+      "parent": "javascript.agent",
+      "async": true,
+      "parameters": [
+        {
+          "id": "javascript.agent.run.param.spec",
+          "name": "spec",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "$ref": "#/sharedSchemas/javascript.schema.agent_run_spec/schema"
+          }
+        }
+      ],
+      "return": {
+        "kind": "promise",
+        "type": "child-result-object"
+      },
+      "emittedRecords": [
+        "child_dispatch"
+      ],
+      "policyChecks": [
+        {
+          "kind": "maxAgents",
+          "message": "policy denied: requested fanout exceeds maxAgents"
+        },
+        {
+          "kind": "allowedModels",
+          "field": "model"
+        },
+        {
+          "kind": "allowedReasoningEfforts",
+          "field": "reasoningEffort"
+        },
+        {
+          "kind": "allowedCommands",
+          "field": "command"
+        },
+        {
+          "kind": "sandboxMode",
+          "field": "sandbox"
+        },
+        {
+          "kind": "writableRoots",
+          "field": "writableRoots"
+        },
+        {
+          "kind": "allowNetwork",
+          "field": "allowNetwork"
+        },
+        {
+          "kind": "concurrency",
+          "field": "concurrency"
+        }
+      ],
+      "errors": [
+        {
+          "condition": "missing-or-non-object-argument",
+          "type": "TypeError",
+          "message": "agent.run() requires an object argument"
+        },
+        {
+          "condition": "unsupported-field",
+          "type": "TypeError",
+          "message": "agent.run() does not support field"
+        },
+        {
+          "condition": "missing-prompt",
+          "type": "TypeError",
+          "message": "agent.run() requires a non-empty string \"prompt\" property"
+        },
+        {
+          "condition": "unknown-preset",
+          "type": "TypeError",
+          "message": "agent.run() references unknown operator worker preset"
+        },
+        {
+          "condition": "unsupported-model-provider",
+          "type": "TypeError",
+          "message": "agent.run() has unsupported effective modelProvider"
+        },
+        {
+          "condition": "unsupported-reasoning-effort",
+          "type": "TypeError",
+          "message": "agent.run() has unsupported effective reasoningEffort"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.agent.run",
+        "documentation": {
+          "title": {
+            "id": "javascript.agent.run.title",
+            "canonicalEnglish": "Agent child dispatch"
+          },
+          "description": {
+            "id": "javascript.agent.run.description",
+            "canonicalEnglish": "Dispatches one child agent run from a closed spec object with a required prompt and optional model or preset fields. Returns a promise that resolves to the child result object after policy checks and child_dispatch emission."
+          }
+        },
+        "examples": [
+          "await agent.run({ prompt: \"Summarize findings\", label: \"summarize\", preset: \"operator\" })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.agent.run",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "javascript.parallel": {
+      "id": "javascript.parallel",
+      "name": "parallel",
+      "path": "parallel",
+      "kind": "function",
+      "async": true,
+      "parameters": [
+        {
+          "id": "javascript.parallel.param.items",
+          "name": "items",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "array"
+        }
+      ],
+      "callback": {
+        "role": "item",
+        "parameters": [
+          {
+            "id": "javascript.parallel.callback.this",
+            "name": "this",
+            "position": 0,
+            "required": false,
+            "rest": false,
+            "type": "undefined",
+            "default": "undefined"
+          }
+        ],
+        "notes": "array items may be agent run specs (object with prompt) or functions invoked with undefined this"
+      },
+      "return": {
+        "kind": "promise",
+        "type": "array"
+      },
+      "emittedRecords": [
+        "child_dispatch"
+      ],
+      "policyChecks": [
+        {
+          "kind": "maxAgents",
+          "message": "policy denied: requested fanout exceeds maxAgents"
+        },
+        {
+          "kind": "childRequest",
+          "message": "policy denied"
+        }
+      ],
+      "determinism": "agent-spec completion order may differ from input order under concurrency",
+      "errors": [
+        {
+          "condition": "missing-or-non-array-argument",
+          "type": "TypeError",
+          "message": "parallel() requires an array argument"
+        },
+        {
+          "condition": "null-or-undefined-item",
+          "type": "TypeError",
+          "message": "parallel() items must not contain null or undefined entries"
+        },
+        {
+          "condition": "invalid-item-shape",
+          "type": "TypeError",
+          "message": "parallel() items must be agent run specs or functions"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.parallel",
+        "documentation": {
+          "title": {
+            "id": "javascript.parallel.title",
+            "canonicalEnglish": "Parallel child dispatch"
+          },
+          "description": {
+            "id": "javascript.parallel.description",
+            "canonicalEnglish": "Runs an array of agent run specs or item functions concurrently and returns a promise that resolves to an array of child results. Each function item is invoked with undefined this."
+          }
+        },
+        "examples": [
+          "await parallel([{ prompt: \"first\" }, { prompt: \"second\", label: \"two\" }])"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.parallel",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "javascript.pipeline": {
+      "id": "javascript.pipeline",
+      "name": "pipeline",
+      "path": "pipeline",
+      "kind": "function",
+      "async": true,
+      "parameters": [
+        {
+          "id": "javascript.pipeline.param.items",
+          "name": "items",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "array"
+        },
+        {
+          "id": "javascript.pipeline.param.worker",
+          "name": "worker",
+          "position": 1,
+          "required": true,
+          "rest": false,
+          "type": "function"
+        },
+        {
+          "id": "javascript.pipeline.param.next",
+          "name": "next",
+          "position": 2,
+          "required": false,
+          "rest": false,
+          "type": "function"
+        }
+      ],
+      "callback": {
+        "role": "worker",
+        "parameters": [
+          {
+            "id": "javascript.pipeline.callback.this",
+            "name": "this",
+            "position": 0,
+            "required": false,
+            "rest": false,
+            "type": "undefined",
+            "default": "undefined"
+          },
+          {
+            "id": "javascript.pipeline.callback.item",
+            "name": "item",
+            "position": 1,
+            "required": true,
+            "rest": false,
+            "type": "any"
+          },
+          {
+            "id": "javascript.pipeline.callback.index",
+            "name": "index",
+            "position": 2,
+            "required": true,
+            "rest": false,
+            "type": "number"
+          }
+        ],
+        "notes": "optional next stage receives (priorResult, item, index)"
+      },
+      "return": {
+        "kind": "promise",
+        "type": "pipeline-result-array"
+      },
+      "determinism": "stages run sequentially per item; worker and next may return values or Promises",
+      "errors": [
+        {
+          "condition": "missing-items-or-worker",
+          "type": "TypeError",
+          "message": "pipeline() requires items and worker arguments"
+        },
+        {
+          "condition": "missing-or-non-array-items",
+          "type": "TypeError",
+          "message": "pipeline() requires an array items argument"
+        },
+        {
+          "condition": "missing-worker-function",
+          "type": "TypeError",
+          "message": "pipeline() requires a worker function argument"
+        },
+        {
+          "condition": "invalid-next-function",
+          "type": "TypeError",
+          "message": "pipeline() next argument must be a function when provided"
+        },
+        {
+          "condition": "null-or-undefined-item",
+          "type": "TypeError",
+          "message": "pipeline() items must not contain null or undefined entries"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.pipeline",
+        "documentation": {
+          "title": {
+            "id": "javascript.pipeline.title",
+            "canonicalEnglish": "Pipeline composition"
+          },
+          "description": {
+            "id": "javascript.pipeline.description",
+            "canonicalEnglish": "Maps each items entry through a required worker function and optional next stage callback, running stages sequentially per item. Returns a promise that resolves to a pipeline result array."
+          }
+        },
+        "examples": [
+          "await pipeline([1, 2], (item) => item * 2, (prior, item) => prior + item)"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.pipeline",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "javascript.phase": {
+      "id": "javascript.phase",
+      "name": "phase",
+      "path": "phase",
+      "kind": "function",
+      "async": false,
+      "parameters": [
+        {
+          "id": "javascript.phase.param.name",
+          "name": "name",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "string"
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "emittedRecords": [
+        "phase"
+      ],
+      "errors": [
+        {
+          "condition": "missing-or-non-string-name",
+          "type": "TypeError",
+          "message": "phase() requires a string name"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.phase",
+        "documentation": {
+          "title": {
+            "id": "javascript.phase.title",
+            "canonicalEnglish": "Phase marker"
+          },
+          "description": {
+            "id": "javascript.phase.description",
+            "canonicalEnglish": "Synchronously records one named workflow phase transition for progress tracking. The name must be a non-empty string."
+          }
+        },
+        "examples": [
+          "phase(\"draft\")"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.phase",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "javascript.workflow": {
+      "id": "javascript.workflow",
+      "name": "workflow",
+      "path": "workflow",
+      "kind": "namespace",
+      "members": [
+        "artifact",
+        "budget",
+        "checkpoint",
+        "final",
+        "log",
+        "resumeState"
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow",
+        "documentation": {
+          "title": {
+            "id": "javascript.workflow.title",
+            "canonicalEnglish": "Workflow namespace"
+          },
+          "description": {
+            "id": "javascript.workflow.description",
+            "canonicalEnglish": "Root workflow namespace for installed checkpoint, artifact, budget, final, log, and resumeState helpers."
+          }
+        },
+        "examples": [
+          "workflow.artifact({ kind: \"log\", label: \"step\" })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
+    },
+    "javascript.workflow.artifact": {
+      "id": "javascript.workflow.artifact",
+      "name": "artifact",
+      "path": "workflow.artifact",
+      "kind": "method",
+      "parent": "javascript.workflow",
+      "async": false,
+      "parameters": [
+        {
+          "id": "javascript.workflow.artifact.param.spec",
+          "name": "spec",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "$ref": "#/sharedSchemas/javascript.schema.artifact_spec/schema"
+          }
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "string"
+      },
+      "emittedRecords": [
+        "artifact"
+      ],
+      "errors": [
+        {
+          "condition": "missing-or-non-object-argument",
+          "type": "TypeError",
+          "message": "workflow.artifact() requires an object argument"
+        },
+        {
+          "condition": "missing-kind-or-label",
+          "type": "TypeError",
+          "message": "workflow.artifact() requires string \"kind\" and \"label\" properties"
+        },
+        {
+          "condition": "non-json-content",
+          "type": "GoError",
+          "message": "workflow.artifact content must be JSON-compatible"
+        }
+      ],
+      "policyChecks": [
+        {
+          "kind": "maxArtifactBytes",
+          "field": "content",
+          "message": "policy denied: artifact content size exceeds maxArtifactBytes"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.artifact",
+        "documentation": {
+          "title": {
+            "id": "javascript.workflow.artifact.title",
+            "canonicalEnglish": "Workflow artifact"
+          },
+          "description": {
+            "id": "javascript.workflow.artifact.description",
+            "canonicalEnglish": "Registers one workflow artifact with kind and label metadata. Optional content must be JSON-compatible and is subject to maxArtifactBytes policy."
+          }
+        },
+        "examples": [
+          "workflow.artifact({ kind: \"log\", label: \"step\", content: { step: 1 } })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.artifact",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "javascript.workflow.budget": {
+      "id": "javascript.workflow.budget",
+      "name": "budget",
+      "path": "workflow.budget",
+      "kind": "method",
+      "parent": "javascript.workflow",
+      "async": false,
+      "parameters": [],
+      "return": {
+        "kind": "sync",
+        "type": "object",
+        "serializableValue": {
+          "$ref": "#/sharedSchemas/javascript.schema.budget_snapshot/schema"
+        }
+      },
+      "emittedRecords": [
+        "budget"
+      ],
+      "errors": [
+        {
+          "condition": "arguments-provided",
+          "type": "TypeError",
+          "message": "workflow.budget() does not accept arguments"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.budget",
+        "documentation": {
+          "title": {
+            "id": "javascript.workflow.budget.title",
+            "canonicalEnglish": "Workflow budget snapshot"
+          },
+          "description": {
+            "id": "javascript.workflow.budget.description",
+            "canonicalEnglish": "Returns the current workflow budget counters and emits one budget record. The helper does not accept arguments."
+          }
+        },
+        "examples": [
+          "workflow.budget()"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.budget",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "javascript.workflow.checkpoint": {
+      "id": "javascript.workflow.checkpoint",
+      "name": "checkpoint",
+      "path": "workflow.checkpoint",
+      "kind": "method",
+      "parent": "javascript.workflow",
+      "async": false,
+      "parameters": [
+        {
+          "id": "javascript.workflow.checkpoint.param.spec",
+          "name": "spec",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "$ref": "#/sharedSchemas/javascript.schema.checkpoint_spec/schema"
+          }
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "emittedRecords": [
+        "checkpoint"
+      ],
+      "errors": [
+        {
+          "condition": "missing-or-non-object-argument",
+          "type": "TypeError",
+          "message": "workflow.checkpoint() requires an object argument"
+        },
+        {
+          "condition": "missing-label",
+          "type": "TypeError",
+          "message": "workflow.checkpoint() requires a string \"label\" property"
+        },
+        {
+          "condition": "non-json-state",
+          "type": "GoError",
+          "message": "workflow.checkpoint state must be JSON-compatible"
+        }
+      ],
+      "resumeNotes": "persists checkpoint state for workflow.resumeState() on resumed sessions",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.checkpoint",
+        "documentation": {
+          "title": {
+            "id": "javascript.workflow.checkpoint.title",
+            "canonicalEnglish": "Workflow checkpoint"
+          },
+          "description": {
+            "id": "javascript.workflow.checkpoint.description",
+            "canonicalEnglish": "Persists one labeled checkpoint with optional JSON-compatible state for later resume through workflow.resumeState()."
+          }
+        },
+        "examples": [
+          "workflow.checkpoint({ label: \"draft\", state: { step: 1 } })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.checkpoint",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "javascript.workflow.final": {
+      "id": "javascript.workflow.final",
+      "name": "final",
+      "path": "workflow.final",
+      "kind": "method",
+      "parent": "javascript.workflow",
+      "async": false,
+      "parameters": [
+        {
+          "id": "javascript.workflow.final.param.value",
+          "name": "value",
+          "position": 0,
+          "required": false,
+          "rest": false,
+          "type": "any"
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "determinism": "workflow.final wins over a returned workflow value for terminal result selection",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.final",
+        "documentation": {
+          "title": {
+            "id": "javascript.workflow.final.title",
+            "canonicalEnglish": "Workflow final result"
+          },
+          "description": {
+            "id": "javascript.workflow.final.description",
+            "canonicalEnglish": "Terminates the workflow with an optional final value. When both workflow.final and a returned value are present, workflow.final wins for terminal result selection."
+          }
+        },
+        "examples": [
+          "workflow.final({ ok: true, result: { count: 1 } })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.final",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "javascript.workflow.log": {
+      "id": "javascript.workflow.log",
+      "name": "log",
+      "path": "workflow.log",
+      "kind": "method",
+      "parent": "javascript.workflow",
+      "async": false,
+      "parameters": [
+        {
+          "id": "javascript.workflow.log.param.message",
+          "name": "message",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "string"
+        },
+        {
+          "id": "javascript.workflow.log.param.fields",
+          "name": "fields",
+          "position": 1,
+          "required": false,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "$ref": "#/sharedSchemas/javascript.schema.json_compatible/schema"
+          }
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "emittedRecords": [
+        "log"
+      ],
+      "errors": [
+        {
+          "condition": "missing-or-non-string-message",
+          "type": "TypeError",
+          "message": "workflow.log() requires a string message"
+        },
+        {
+          "condition": "non-json-fields",
+          "type": "GoError",
+          "message": "workflow.log() fields must be JSON-compatible"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.log",
+        "documentation": {
+          "title": {
+            "id": "javascript.workflow.log.title",
+            "canonicalEnglish": "Workflow-scoped log helper"
+          },
+          "description": {
+            "id": "javascript.workflow.log.description",
+            "canonicalEnglish": "Synchronously emits one workflow-scoped log record. The first argument must be a string message; an optional second argument supplies JSON-compatible structured fields."
+          }
+        },
+        "examples": [
+          "workflow.log(\"checkpoint\", { step: 1 })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.log",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "javascript.workflow.resume-state": {
+      "id": "javascript.workflow.resume-state",
+      "name": "resumeState",
+      "path": "workflow.resumeState",
+      "kind": "method",
+      "parent": "javascript.workflow",
+      "async": false,
+      "parameters": [],
+      "return": {
+        "kind": "sync",
+        "type": "object-or-undefined",
+        "serializableValue": {
+          "$ref": "#/sharedSchemas/javascript.schema.checkpoint_spec/schema"
+        }
+      },
+      "errors": [
+        {
+          "condition": "arguments-provided",
+          "type": "TypeError",
+          "message": "workflow.resumeState() does not accept arguments"
+        }
+      ],
+      "resumeNotes": "returns bound resume checkpoint state or undefined when absent",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.resume-state",
+        "documentation": {
+          "title": {
+            "id": "javascript.workflow.resume-state.title",
+            "canonicalEnglish": "Workflow resume state"
+          },
+          "description": {
+            "id": "javascript.workflow.resume-state.description",
+            "canonicalEnglish": "Reads checkpoint state restored for a resumed workflow session, or undefined when no resume state is bound."
+          }
+        },
+        "examples": [
+          "workflow.resumeState()"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.resume-state",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

@@ -99,11 +99,11 @@ func TestJavaScriptAuthoredCatalogBoundary(t *testing.T) {
 	}
 }
 
-func TestJavaScriptStagedRuntimeAPIRemainsInventorySourced(t *testing.T) {
+func TestJavaScriptStagedRuntimeAPIProjectsFromAuthoredCatalog(t *testing.T) {
 	t.Parallel()
 
 	const (
-		wantSource = "pkg/orchestrators/javascript/runtime/javascript-runtime-symbols.json"
+		wantSource = "contracts/javascript/runtime-api.json"
 		wantTarget = "packages/api/generated/javascript/runtime-api.json"
 	)
 
@@ -114,7 +114,7 @@ func TestJavaScriptStagedRuntimeAPIRemainsInventorySourced(t *testing.T) {
 		}
 		found = true
 		if artifact.Source != wantSource {
-			t.Fatalf("staged runtime-api source = %q, want inventory %q", artifact.Source, wantSource)
+			t.Fatalf("staged runtime-api source = %q, want authored catalog %q", artifact.Source, wantSource)
 		}
 	}
 	if !found {

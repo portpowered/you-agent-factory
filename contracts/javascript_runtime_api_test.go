@@ -1,10 +1,12 @@
 package contracts_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractvalidator"
@@ -345,6 +347,103 @@ func TestJavaScriptRuntimeAPIAuthoredCatalogBoundary(t *testing.T) {
 	diagnostics := contractvalidator.Validate(root, contractvalidator.JavaScriptRegistry(), "javascript", "1.0.0")
 	if len(diagnostics) != 0 {
 		t.Fatalf("authored catalog validation diagnostics = %+v", diagnostics)
+	}
+}
+
+func TestJavaScriptRuntimeAPICatalogContainsNoUnsupportedSurfaces(t *testing.T) {
+	t.Parallel()
+
+	catalog := loadAuthoredJavaScriptRuntimeCatalog(t)
+	byPath := catalogSymbolsByPath(t, catalog)
+
+	forbiddenRoots := []string{"context", "orchestrator"}
+	comparisonHelpers := []string{"workflow.sleep", "agent.verify", "agent.parallel"}
+	for path := range byPath {
+		for _, forbidden := range forbiddenRoots {
+			if path == forbidden || strings.HasPrefix(path, forbidden+".") {
+				t.Fatalf("authored catalog documents forbidden global path %q", path)
+			}
+		}
+		if slices.Contains(comparisonHelpers, path) {
+			t.Fatalf("authored catalog documents comparison-project-only helper path %q", path)
+		}
+		if path == "agent" {
+			if symbol, ok := byPath[path]; ok {
+				if kind, _ := symbol["kind"].(string); kind == "function" {
+					t.Fatalf("authored catalog documents comparison-project-only callable agent global at path %q", path)
+				}
+			}
+		}
+	}
+}
+
+func TestJavaScriptRuntimeAPICatalogRejectsUnsupportedSurfaceFixtures(t *testing.T) {
+	t.Parallel()
+
+	root, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatalf("repository root: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		fixture  string
+		wantCode string
+		wantPath string
+	}{
+		{
+			name:     "context global",
+			fixture:  "contracts/testdata/javascript/invalid-unsupported-context-global.json",
+			wantCode: "javascript.surface.forbidden_global",
+			wantPath: "/symbols/example.context/path",
+		},
+		{
+			name:     "orchestrator global",
+			fixture:  "contracts/testdata/javascript/invalid-unsupported-orchestrator-global.json",
+			wantCode: "javascript.surface.forbidden_global",
+			wantPath: "/symbols/example.orchestrator/path",
+		},
+		{
+			name:     "comparison-project helper",
+			fixture:  "contracts/testdata/javascript/invalid-unsupported-comparison-helper.json",
+			wantCode: "javascript.surface.unsupported_helper",
+			wantPath: "/symbols/example.workflow.sleep/path",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			diagnostics := contractvalidator.Validate(root, javascriptManifestFixtureRegistry(test.fixture), "javascript", "1.0.0")
+			if len(diagnostics) == 0 {
+				t.Fatal("expected unsupported-surface diagnostics, got none")
+			}
+			found := false
+			for _, diagnostic := range diagnostics {
+				if diagnostic.Code == test.wantCode && diagnostic.Path == test.wantPath && diagnostic.Document == test.fixture {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("diagnostics = %+v, want code=%q path=%q document=%q", diagnostics, test.wantCode, test.wantPath, test.fixture)
+			}
+		})
+	}
+}
+
+func TestJavaScriptStagedRuntimeAPIMatchesAuthoredCatalog(t *testing.T) {
+	t.Parallel()
+
+	authored, err := os.ReadFile(filepath.Join("javascript", "runtime-api.json"))
+	if err != nil {
+		t.Fatalf("read authored catalog: %v", err)
+	}
+	staged, err := os.ReadFile(filepath.Join("..", "packages", "api", "generated", "javascript", "runtime-api.json"))
+	if err != nil {
+		t.Fatalf("read staged runtime-api projection: %v", err)
+	}
+	if !bytes.Equal(authored, staged) {
+		t.Fatal("staged packages/api/generated/javascript/runtime-api.json must be a byte-identical copy of contracts/javascript/runtime-api.json")
 	}
 }
 
