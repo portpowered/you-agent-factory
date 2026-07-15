@@ -87,6 +87,24 @@ func TestValidateJavaScriptInvalidManifestDiagnostics(t *testing.T) {
 			code:     "javascript.serializable_value.open",
 			wantPath: "/symbols/example.bad.open-serializable/parameters/0/serializableValue",
 		},
+		{
+			name:     "context global",
+			fixture:  "contracts/testdata/javascript/invalid-unsupported-context-global.json",
+			code:     "javascript.surface.forbidden_global",
+			wantPath: "/symbols/example.context/path",
+		},
+		{
+			name:     "orchestrator global",
+			fixture:  "contracts/testdata/javascript/invalid-unsupported-orchestrator-global.json",
+			code:     "javascript.surface.forbidden_global",
+			wantPath: "/symbols/example.orchestrator/path",
+		},
+		{
+			name:     "comparison-project helper",
+			fixture:  "contracts/testdata/javascript/invalid-unsupported-comparison-helper.json",
+			code:     "javascript.surface.unsupported_helper",
+			wantPath: "/symbols/example.workflow.sleep/path",
+		},
 	}
 
 	for _, test := range tests {

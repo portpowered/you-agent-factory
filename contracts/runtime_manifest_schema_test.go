@@ -272,3 +272,56 @@ func TestRuntimeManifestSchemaObjectBindingFixtures(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeManifestSchemaSupportedSurfaceFixtures(t *testing.T) {
+	schema := runtimeManifestSchema(t)
+
+	tests := []struct {
+		name     string
+		fixture  string
+		wantPath string
+		wantCode string
+	}{
+		{
+			name:     "context global",
+			fixture:  "invalid-unsupported-context-global.json",
+			wantPath: "/symbols/example.context/path",
+			wantCode: "javascript.surface.forbidden_global",
+		},
+		{
+			name:     "orchestrator global",
+			fixture:  "invalid-unsupported-orchestrator-global.json",
+			wantPath: "/symbols/example.orchestrator/path",
+			wantCode: "javascript.surface.forbidden_global",
+		},
+		{
+			name:     "comparison-project helper",
+			fixture:  "invalid-unsupported-comparison-helper.json",
+			wantPath: "/symbols/example.workflow.sleep/path",
+			wantCode: "javascript.surface.unsupported_helper",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			instance := readJSON(t, filepath.Join("testdata", "javascript", test.fixture))
+			if err := schema.Validate(instance); err != nil {
+				t.Fatalf("schema validation should pass before semantics: %v", err)
+			}
+			diagnostics := contractvalidator.RuntimeManifestSemanticsDiagnostics(test.fixture, instance)
+			if len(diagnostics) == 0 {
+				t.Fatal("expected semantic validation to fail")
+			}
+			found := false
+			for _, diagnostic := range diagnostics {
+				if diagnostic.Code == test.wantCode && diagnostic.Path == test.wantPath {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("semantic diagnostics = %#v, want code=%q path=%q", diagnostics, test.wantCode, test.wantPath)
+			}
+		})
+	}
+}

@@ -150,6 +150,13 @@ func runtimeManifestDiagnostics(document string, value any) []Diagnostic {
 		}
 	}
 
+	diagnostics = append(diagnostics, runtimeManifestSupportedSurfaceDiagnostics(
+		document,
+		keys,
+		pathByKey,
+		symbolKindByKey,
+	)...)
+
 	sortDiagnostics(diagnostics)
 	return diagnostics
 }
