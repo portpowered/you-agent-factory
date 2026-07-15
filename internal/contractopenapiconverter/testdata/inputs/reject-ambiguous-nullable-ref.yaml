@@ -1,0 +1,11 @@
+root:
+  $ref: '#/components/schemas/Widget'
+  nullable: true
+components:
+  Widget:
+    type: string
+expect:
+  code: openapi.convert.ambiguous_nullable
+  path: /nullable
+  document: schema
+  message: 'nullable: true cannot appear with $ref in the fail-closed converter profile'

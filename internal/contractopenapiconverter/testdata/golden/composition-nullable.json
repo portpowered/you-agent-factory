@@ -1,0 +1,15 @@
+{
+  "properties": {
+    "parentGroupId": {
+      "description": "Reserved for future nested groups. Omit or set null for flat groups.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "parentGroupId"
+  ],
+  "type": "object"
+}

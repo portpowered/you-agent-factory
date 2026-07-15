@@ -1,0 +1,25 @@
+{
+  "$defs": {
+    "WorkerModelProvider": {
+      "enum": [
+        "openai",
+        "anthropic"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "modelProvider": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/WorkerModelProvider"
+        }
+      ],
+      "description": "Provider whose inference-throttle history controls this factory-level guard."
+    }
+  },
+  "required": [
+    "modelProvider"
+  ],
+  "type": "object"
+}

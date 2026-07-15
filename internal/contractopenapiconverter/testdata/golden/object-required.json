@@ -1,0 +1,17 @@
+{
+  "additionalProperties": false,
+  "description": "Required object with bounded integer property",
+  "properties": {
+    "count": {
+      "minimum": 0,
+      "type": "integer"
+    },
+    "name": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,10 @@
+root:
+  type: object
+  properties:
+    parentGroupId:
+      description: Reserved for future nested groups. Omit or set null for flat groups.
+      nullable: true
+      type: string
+  required:
+    - parentGroupId
+components: {}

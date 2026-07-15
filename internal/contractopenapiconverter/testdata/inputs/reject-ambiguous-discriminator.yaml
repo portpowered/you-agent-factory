@@ -1,0 +1,10 @@
+root:
+  type: object
+  discriminator:
+    propertyName: type
+components: {}
+expect:
+  code: openapi.convert.ambiguous_discriminator
+  path: /discriminator
+  document: schema
+  message: 'discriminator is outside the fail-closed converter profile'

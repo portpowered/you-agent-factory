@@ -1,0 +1,12 @@
+root:
+  $ref: '#/components/schemas/Alpha'
+components:
+  Alpha:
+    $ref: '#/components/schemas/Beta'
+  Beta:
+    $ref: '#/components/schemas/Alpha'
+expect:
+  code: openapi.convert.reference_cycle
+  path: /$defs/Alpha
+  document: schema
+  message: 'component schema "Alpha" participates in a reference cycle'

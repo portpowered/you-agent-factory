@@ -6,10 +6,30 @@ Use this map when changing the public REST contract.
 
 ## Package staging artifacts
 
+- `internal/contractopenapiconverter` owns the restricted OpenAPI 3.0.3 → Draft
+  2020-12 conversion profile for Factory schema staging. The reviewed mapping
+  lives in
+  `docs/internal/contract/openapi-to-draft-2020-12-converter-profile.md`;
+  `ConvertCoreSchema` covers the story-001 primitive/object/array/enum/required
+  surface, `ConvertRefsSchema` covers story-002 internal component references and
+  deterministic `$defs` materialization, `ConvertCompositionNullableSchema` covers
+  story-003 composition and nullable forms, `ConvertFailClosedSchema` covers
+  story-004 fail-closed ambiguous and unsupported rejection, with story-005
+  expanding `internal/contractstaging` integration through
+  `ConvertFailClosedSchema` and the checked-in
+  `docs/internal/contract/factory-schema-b16-gaps.json` record when the canonical
+  Factory graph is not yet fully endorsable. Golden fixtures and byte-stability
+  tests live beside the converter package; reuse
+  `contractjoiner.MarshalCanonicalJSON` for canonical output bytes.
 - `internal/contractstaging` owns joined generation, the reviewed raw
   source-to-package projection map, the Factory JSON Schema projection from the
   canonical bundled OpenAPI `Factory` component graph, and the package contract
-  manifest with artifact hashes. Authored configuration schemas live under
+  manifest with artifact hashes. Factory schema staging calls
+  `contractopenapiconverter.ConvertFailClosedSchema` first; when the canonical
+  Factory graph is blocked by documented B16 gaps in
+  `docs/internal/contract/factory-schema-b16-gaps.json`, staging falls back to
+  the legacy ref-materialization projection without broadening the converter
+  profile. Authored configuration schemas live under
   `contracts/config/`; do not substitute topology or parity inventories for
   those schemas. `make contracts-check` reports stale, missing, and unexpected
   staged paths across the complete projection.

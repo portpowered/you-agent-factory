@@ -1,0 +1,13 @@
+root:
+  type: object
+  properties:
+    primary:
+      $ref: '#/components/schemas/Widget'
+    secondary:
+      $ref: '#/components/schemas/Widget'
+components:
+  Widget:
+    type: string
+    enum:
+      - A
+      - B

@@ -1,0 +1,41 @@
+{
+  "additionalProperties": false,
+  "description": "Combined core-shape fixture",
+  "properties": {
+    "id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "labels": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "status": {
+      "enum": [
+        "ACTIVE",
+        "INACTIVE"
+      ],
+      "type": "string"
+    },
+    "widget": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    }
+  },
+  "required": [
+    "id",
+    "status"
+  ],
+  "type": "object"
+}

@@ -1,0 +1,27 @@
+{
+  "$defs": {
+    "Part": {
+      "type": "string"
+    },
+    "Widget": {
+      "properties": {
+        "part": {
+          "$ref": "#/$defs/Part"
+        }
+      },
+      "required": [
+        "part"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "widget": {
+      "$ref": "#/$defs/Widget"
+    }
+  },
+  "required": [
+    "widget"
+  ],
+  "type": "object"
+}

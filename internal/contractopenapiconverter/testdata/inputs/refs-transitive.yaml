@@ -1,0 +1,16 @@
+root:
+  $ref: '#/components/schemas/LevelA'
+components:
+  LevelA:
+    type: object
+    properties:
+      child:
+        $ref: '#/components/schemas/LevelB'
+  LevelB:
+    type: object
+    properties:
+      leaf:
+        $ref: '#/components/schemas/LevelC'
+  LevelC:
+    type: integer
+    minimum: 0

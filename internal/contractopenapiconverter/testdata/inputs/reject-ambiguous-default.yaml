@@ -1,0 +1,9 @@
+root:
+  default: foo
+  description: example
+components: {}
+expect:
+  code: openapi.convert.ambiguous_default
+  path: /default
+  document: schema
+  message: 'default requires a supported type or enum keyword in the fail-closed converter profile'
