@@ -1,0 +1,256 @@
+package clicontract
+
+import (
+	"path/filepath"
+	"reflect"
+	"testing"
+
+	"github.com/portpowered/infinite-you/pkg/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
+)
+
+func TestCheckProductionAcceptsCompleteApprovedTree(t *testing.T) {
+	root := cli.NewRootCommand()
+	before, err := commandidentity.Walk(root)
+	if err != nil {
+		t.Fatalf("Walk(before) error = %v", err)
+	}
+
+	findings, err := CheckProduction(root, repositoryRoot(t))
+	if err != nil {
+		t.Fatalf("CheckProduction() error = %v", err)
+	}
+	if len(findings) != 0 {
+		t.Fatalf("CheckProduction() findings =\n%s", formatFindings(findings))
+	}
+
+	after, err := commandidentity.Walk(root)
+	if err != nil {
+		t.Fatalf("Walk(after) error = %v", err)
+	}
+	if !reflect.DeepEqual(before, after) {
+		t.Fatal("CheckProduction mutated the Cobra command tree")
+	}
+}
+
+func TestCheckProductionViolationUsesProductionDiagnosticsWithoutMutatingTree(t *testing.T) {
+	tests := []struct {
+		violation DeliberateViolation
+		kind      string
+		stableID  string
+		path      string
+		field     string
+	}{
+		{ViolationUncontractedCommand, KindUncontractedCommand, "you.experimental", "you experimental", ""},
+		{ViolationStaleMetadata, KindStaleMetadata, "you", "you", "name"},
+		{ViolationMissingHandler, KindMissingHandler, "you.run", "you run", "handler"},
+		{ViolationAliasAsCanonical, KindAliasAsCanonical, "you.workflow.preview", "you workflow preview", "classification"},
+	}
+
+	for _, tc := range tests {
+		t.Run(string(tc.violation), func(t *testing.T) {
+			root := cli.NewRootCommand()
+			before, err := commandidentity.Walk(root)
+			if err != nil {
+				t.Fatalf("Walk(before) error = %v", err)
+			}
+
+			findings, err := CheckProductionViolation(root, repositoryRoot(t), tc.violation)
+			if err != nil {
+				t.Fatalf("CheckProductionViolation() error = %v", err)
+			}
+			assertFinding(t, findings, tc.kind, tc.stableID, tc.path, tc.field)
+
+			after, err := commandidentity.Walk(root)
+			if err != nil {
+				t.Fatalf("Walk(after) error = %v", err)
+			}
+			if !reflect.DeepEqual(before, after) {
+				t.Fatal("CheckProductionViolation mutated the Cobra command tree")
+			}
+		})
+	}
+}
+
+func TestCheckProductionViolationRejectsUnknownFixture(t *testing.T) {
+	findings, err := CheckProductionViolation(cli.NewRootCommand(), repositoryRoot(t), DeliberateViolation("unknown"))
+	if err == nil || err.Error() != `unknown deliberate CLI contract violation "unknown"` {
+		t.Fatalf("CheckProductionViolation() findings = %#v, error = %v", findings, err)
+	}
+}
+
+func TestValidateRejectsMissingAndUncontractedProductionCommands(t *testing.T) {
+	input := productionInput(t)
+	commands := append([]commandidentity.CommandRecord(nil), input.Production.Commands...)
+	commands = removeProductionCommand(commands, "you run")
+	commands = append(commands, commandidentity.CommandRecord{
+		IDCandidate: "you.experimental", Name: "experimental", Path: "you experimental",
+		Visibility: "visible", Runnable: true, HandlerPresent: true,
+	})
+	input.Production.Commands = commands
+
+	findings := Validate(input)
+	assertFinding(t, findings, KindMissingCommand, "you.run", "you run", "")
+	assertFinding(t, findings, KindUncontractedCommand, "you.experimental", "you experimental", "")
+}
+
+func TestValidateKeepsCompatibilityOutOfCanonicalContracts(t *testing.T) {
+	input := productionInput(t)
+	compatibility := input.Compatibility.Commands["you.workflow.preview"]
+	input.Canonical.Commands[compatibility.ID] = compatibility
+	input.GeneratedCanonical[0].Commands[compatibility.ID] = compatibility
+
+	findings := Validate(input)
+	assertFinding(t, findings, KindAliasAsCanonical, compatibility.ID, compatibility.Path, "classification")
+}
+
+func TestValidateRejectsStaleGeneratedMetadataFields(t *testing.T) {
+	tests := []struct {
+		name      string
+		wantField string
+		mutate    func(*climanifest.Command)
+	}{
+		{name: "identity", wantField: "path", mutate: func(command *climanifest.Command) { command.Path = "you stale" }},
+		{name: "help", wantField: "documentation", mutate: func(command *climanifest.Command) {
+			command.Documentation.Documentation.Title.CanonicalEnglish = "stale title"
+		}},
+		{name: "input completion", wantField: "flags", mutate: func(command *climanifest.Command) {
+			flags := cloneFlags(command.Flags)
+			flag := flags["you.flag.debug"]
+			flag.Completion = "stale"
+			flags[flag.ID] = flag
+			command.Flags = flags
+		}},
+		{name: "lifecycle", wantField: "lifecycle", mutate: func(command *climanifest.Command) {
+			command.Lifecycle.State = "stale"
+		}},
+		{name: "handler ID", wantField: "handler", mutate: func(command *climanifest.Command) {
+			handler := *command.Handler
+			handler.ID = "you.stale.handler"
+			command.Handler = &handler
+		}},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			input := productionInput(t)
+			manifest := cloneManifest(input.GeneratedCanonical[0])
+			command := manifest.Commands["you"]
+			tc.mutate(&command)
+			manifest.Commands["you"] = command
+			input.GeneratedCanonical[0] = manifest
+
+			findings := Validate(input)
+			assertFinding(t, findings, KindStaleMetadata, "you", "you", tc.wantField)
+		})
+	}
+}
+
+func TestValidateRejectsMissingRunnableHandlerDeterministically(t *testing.T) {
+	input := productionInput(t)
+	for index := range input.Production.Commands {
+		if input.Production.Commands[index].Path == "you run" {
+			input.Production.Commands[index].HandlerPresent = false
+		}
+	}
+
+	first := Validate(input)
+	second := Validate(input)
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("repeated findings differ:\nfirst:  %#v\nsecond: %#v", first, second)
+	}
+	assertFinding(t, first, KindMissingHandler, "you.run", "you run", "handler")
+}
+
+func productionInput(t *testing.T) Input {
+	t.Helper()
+	root := repositoryRoot(t)
+	production, err := commandidentity.Walk(cli.NewRootCommand())
+	if err != nil {
+		t.Fatalf("Walk(production) error = %v", err)
+	}
+	canonical, err := climanifest.LoadProduction(filepath.Join(root, filepath.FromSlash(climanifest.ProductionManifestPath)))
+	if err != nil {
+		t.Fatalf("LoadProduction() error = %v", err)
+	}
+	compatibility, err := climanifest.LoadCompatibility(filepath.Join(root, filepath.FromSlash(climanifest.CompatibilityManifestPath)))
+	if err != nil {
+		t.Fatalf("LoadCompatibility() error = %v", err)
+	}
+	approved, err := LoadApprovedCompatibility(filepath.Join(root, filepath.FromSlash(CompatibilityInventoryPath)))
+	if err != nil {
+		t.Fatalf("LoadApprovedCompatibility() error = %v", err)
+	}
+	canonicalGenerated, compatibilityGenerated, err := loadGeneratedManifests()
+	if err != nil {
+		t.Fatalf("loadGeneratedManifests() error = %v", err)
+	}
+	return Input{
+		Production: production, Canonical: cloneManifest(canonical), Compatibility: cloneManifest(compatibility),
+		ApprovedCompatibility: approved, GeneratedCanonical: cloneManifests(canonicalGenerated),
+		GeneratedCompatibility: cloneManifests(compatibilityGenerated),
+	}
+}
+
+func cloneManifests(source []climanifest.Manifest) []climanifest.Manifest {
+	result := make([]climanifest.Manifest, len(source))
+	for index, manifest := range source {
+		result[index] = cloneManifest(manifest)
+	}
+	return result
+}
+
+func cloneManifest(source climanifest.Manifest) climanifest.Manifest {
+	commands := make(map[string]climanifest.Command, len(source.Commands))
+	for id, command := range source.Commands {
+		commands[id] = command
+	}
+	source.Commands = commands
+	return source
+}
+
+func cloneFlags(source map[string]climanifest.Flag) map[string]climanifest.Flag {
+	result := make(map[string]climanifest.Flag, len(source))
+	for id, flag := range source {
+		result[id] = flag
+	}
+	return result
+}
+
+func removeProductionCommand(commands []commandidentity.CommandRecord, path string) []commandidentity.CommandRecord {
+	result := commands[:0]
+	for _, command := range commands {
+		if command.Path != path {
+			result = append(result, command)
+		}
+	}
+	return result
+}
+
+func assertFinding(t *testing.T, findings []Finding, kind, stableID, path, field string) {
+	t.Helper()
+	for _, finding := range findings {
+		if finding.Kind == kind && finding.StableID == stableID && finding.Path == path && finding.Field == field {
+			return
+		}
+	}
+	t.Fatalf("missing finding kind=%q stableID=%q path=%q field=%q in\n%s", kind, stableID, path, field, formatFindings(findings))
+}
+
+func formatFindings(findings []Finding) string {
+	result := ""
+	for _, finding := range findings {
+		result += finding.Error() + "\n"
+	}
+	return result
+}
+
+func repositoryRoot(t *testing.T) string {
+	t.Helper()
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repository root: %v", err)
+	}
+	return root
+}

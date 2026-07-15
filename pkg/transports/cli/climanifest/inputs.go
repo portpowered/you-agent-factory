@@ -13,7 +13,8 @@ type Argument struct {
 	MinCardinality int      `json:"minCardinality"`
 	MaxCardinality int      `json:"maxCardinality"`
 	Variadic       bool     `json:"variadic"`
-	Enum           []string `json:"enum,omitempty"`
+	Enum           []string `json:"enum"`
+	Pattern        string   `json:"pattern"`
 	DoubleDash     string   `json:"doubleDash"`
 	Completion     string   `json:"completion"`
 	Channels       []string `json:"channels"`
@@ -21,18 +22,23 @@ type Argument struct {
 
 // Flag is one flag input record from the production manifest.
 type Flag struct {
-	ID              string   `json:"id"`
-	Long            string   `json:"long"`
-	Shorthand       string   `json:"shorthand"`
-	Scope           string   `json:"scope"`
-	ValueType       string   `json:"valueType"`
-	Enum            []string `json:"enum,omitempty"`
-	Required        bool     `json:"required"`
-	Default         string   `json:"default"`
-	ChangedDefault  bool     `json:"changedDefault"`
-	NoOptionDefault string   `json:"noOptionDefault"`
-	Completion      string   `json:"completion"`
-	Visibility      string   `json:"visibility"`
+	ID              string    `json:"id"`
+	Long            string    `json:"long"`
+	Shorthand       string    `json:"shorthand"`
+	Aliases         []string  `json:"aliases"`
+	Scope           string    `json:"scope"`
+	ValueType       string    `json:"valueType"`
+	Enum            []string  `json:"enum,omitempty"`
+	Required        bool      `json:"required"`
+	Default         string    `json:"default"`
+	ChangedDefault  bool      `json:"changedDefault"`
+	NoOptionDefault string    `json:"noOptionDefault"`
+	Repeatable      bool      `json:"repeatable"`
+	Normalization   string    `json:"normalization"`
+	Completion      string    `json:"completion"`
+	Binding         string    `json:"binding"`
+	Visibility      string    `json:"visibility"`
+	Lifecycle       Lifecycle `json:"lifecycle"`
 }
 
 // ArgumentAt returns the argument record for one position.

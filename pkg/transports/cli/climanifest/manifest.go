@@ -13,8 +13,10 @@ type Command struct {
 	Name          string                  `json:"name"`
 	Path          string                  `json:"path"`
 	Aliases       []string                `json:"aliases"`
+	Completeness  string                  `json:"completeness,omitempty"`
 	GroupID       string                  `json:"groupId,omitempty"`
 	Documentation Documentation           `json:"documentation"`
+	Lifecycle     Lifecycle               `json:"lifecycle"`
 	Visibility    string                  `json:"visibility"`
 	Runnable      bool                    `json:"runnable"`
 	Usage         Usage                   `json:"usage"`
@@ -101,6 +103,14 @@ type DocumentationCopy struct {
 // DocumentationField is one canonical documentation string.
 type DocumentationField struct {
 	CanonicalEnglish string `json:"canonicalEnglish"`
+}
+
+// Lifecycle carries the stable lifecycle metadata shared by commands and inputs.
+type Lifecycle struct {
+	FormatVersion string `json:"formatVersion"`
+	ItemID        string `json:"itemId"`
+	State         string `json:"state"`
+	Since         string `json:"since"`
 }
 
 // Usage carries invocation-line and example metadata.

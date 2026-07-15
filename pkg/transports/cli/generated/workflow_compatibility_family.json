@@ -7,6 +7,7 @@
       "name": "preview",
       "path": "you workflow preview",
       "aliases": [],
+      "completeness": "authoritative",
       "documentation": {
         "documentation": {
           "title": {
@@ -21,6 +22,12 @@
           "you workflow preview --kind INLINE_WORKFLOW --inline \"phase('setup');\""
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.workflow.preview",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -32,71 +39,122 @@
           "id": "you.workflow.preview.flag.args-schema",
           "long": "args-schema",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.preview.flag.args-schema",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.workflow.preview.flag.artifact-root": {
           "id": "you.workflow.preview.flag.artifact-root",
           "long": "artifact-root",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.preview.flag.artifact-root",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.workflow.preview.flag.dir": {
           "id": "you.workflow.preview.flag.dir",
           "long": "dir",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "factory",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.preview.flag.dir",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.workflow.preview.flag.inline": {
           "id": "you.workflow.preview.flag.inline",
           "long": "inline",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.preview.flag.inline",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.workflow.preview.flag.json": {
           "id": "you.workflow.preview.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.preview.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.workflow.preview.flag.kind": {
           "id": "you.workflow.preview.flag.kind",
           "long": "kind",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "enum": [
@@ -110,34 +168,63 @@
           "default": "WORKFLOW_NAME",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.preview.flag.kind",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.workflow.preview.flag.requested-policy": {
           "id": "you.workflow.preview.flag.requested-policy",
           "long": "requested-policy",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.preview.flag.requested-policy",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.workflow.preview.flag.value": {
           "id": "you.workflow.preview.flag.value",
           "long": "value",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.preview.flag.value",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "relationships": {
@@ -250,6 +337,7 @@
       "name": "validate",
       "path": "you workflow validate",
       "aliases": [],
+      "completeness": "authoritative",
       "documentation": {
         "documentation": {
           "title": {
@@ -264,6 +352,12 @@
           "you workflow validate --kind INLINE_WORKFLOW --inline \"phase('setup');\""
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.workflow.validate",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -275,71 +369,122 @@
           "id": "you.workflow.validate.flag.args-schema",
           "long": "args-schema",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.validate.flag.args-schema",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.workflow.validate.flag.artifact-root": {
           "id": "you.workflow.validate.flag.artifact-root",
           "long": "artifact-root",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.validate.flag.artifact-root",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.workflow.validate.flag.dir": {
           "id": "you.workflow.validate.flag.dir",
           "long": "dir",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "factory",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.validate.flag.dir",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.workflow.validate.flag.inline": {
           "id": "you.workflow.validate.flag.inline",
           "long": "inline",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.validate.flag.inline",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.workflow.validate.flag.json": {
           "id": "you.workflow.validate.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.validate.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.workflow.validate.flag.kind": {
           "id": "you.workflow.validate.flag.kind",
           "long": "kind",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "enum": [
@@ -353,34 +498,63 @@
           "default": "WORKFLOW_NAME",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.validate.flag.kind",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.workflow.validate.flag.requested-policy": {
           "id": "you.workflow.validate.flag.requested-policy",
           "long": "requested-policy",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.validate.flag.requested-policy",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.workflow.validate.flag.value": {
           "id": "you.workflow.validate.flag.value",
           "long": "value",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.workflow.validate.flag.value",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "relationships": {
