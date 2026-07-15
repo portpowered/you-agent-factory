@@ -1,0 +1,71 @@
+{
+  "formatVersion": "1.0.0",
+  "sharedSchemas": {
+    "javascript.schema.checkpoint_spec": {
+      "id": "javascript.schema.checkpoint_spec",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ]
+      }
+    }
+  },
+  "symbols": {
+    "javascript.workflow.checkpoint": {
+      "id": "javascript.workflow.checkpoint",
+      "name": "checkpoint",
+      "path": "workflow.checkpoint",
+      "kind": "function",
+      "async": false,
+      "parameters": [
+        {
+          "id": "javascript.workflow.checkpoint.param.spec",
+          "name": "spec",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "$ref": "#/sharedSchemas/javascript.schema.missing/schema"
+          }
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.checkpoint",
+        "documentation": {
+          "title": {
+            "id": "javascript.workflow.checkpoint.title",
+            "canonicalEnglish": "Broken shared schema reference"
+          },
+          "description": {
+            "id": "javascript.workflow.checkpoint.description",
+            "canonicalEnglish": "Fixture proving unresolved shared-schema references fail with a deterministic validation path."
+          }
+        },
+        "examples": [
+          "workflow.checkpoint({ label: \"draft\" })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.checkpoint",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

@@ -181,6 +181,7 @@ func TestRuntimeManifestSchemaSignatureAndSerializableFixtures(t *testing.T) {
 		wantPath string
 	}{
 		{name: "closed serializable values", fixture: "valid-closed-serializable-value.json", valid: true},
+		{name: "shared schema references", fixture: "valid-shared-schema-refs.json", valid: true},
 		{
 			name:     "duplicate parameter positions",
 			fixture:  "invalid-signature-duplicate-position.json",

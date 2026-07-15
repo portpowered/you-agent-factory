@@ -39,7 +39,7 @@ var (
 		{Source: "contracts/testdata/baseline/mcp-tools.json", Target: "packages/api/generated/mcp/tools.json"},
 		{Source: "contracts/config/you-config.schema.json", Target: "packages/api/generated/schemas/you-config.schema.json"},
 		{Source: "contracts/config/mock-workers.schema.json", Target: "packages/api/generated/schemas/mock-workers.schema.json"},
-		{Source: "pkg/orchestrators/javascript/runtime/javascript-runtime-symbols.json", Target: "packages/api/generated/javascript/runtime-api.json"},
+		{Source: "contracts/javascript/runtime-api.json", Target: "packages/api/generated/javascript/runtime-api.json"},
 	}
 )
 

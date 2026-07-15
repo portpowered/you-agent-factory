@@ -35,21 +35,35 @@ Use this map when changing the public REST contract.
   staged paths across the complete projection.
 - Raw JSON/YAML projections in `policy.go#rawArtifacts` are byte-identical copies
   from their canonical owners (CLI/MCP baselines, `contracts/config/` schemas,
-  JavaScript runtime inventory). Factory schema is the only reviewed raw export
-  derived from OpenAPI rather than copied. Prove repository parity in
+  authored JavaScript runtime catalog). Factory schema is the only reviewed raw
+  export derived from OpenAPI rather than copied. Prove repository parity in
   `internal/contractstaging/raw_artifacts_test.go`; later-phase export-map
   families such as `components/*` stay omitted until a truthful owner exists.
 - Authored JavaScript runtime symbol manifests live at
-  `contracts/javascript/runtime-manifest.schema.json` with fixtures under
-  `contracts/testdata/javascript/` and registration in
+  `contracts/javascript/runtime-manifest.schema.json` with the authored product
+  catalog at `contracts/javascript/runtime-api.json`, fixtures under
+  `contracts/testdata/javascript/`, and registration in
   `internal/contractvalidator/javascript_registry.go` (`JavaScriptRegistry`,
   merged into `DefaultRegistry()`). Post-schema semantics for path/parent/member
-  integrity, callable signatures, closed serializable values, and supported
+  integrity, callable signatures, closed serializable values (including
+  `sharedSchemas` entries keyed by `javascript.schema.*`), and supported
   surfaces live in `internal/contractvalidator/javascript_manifest.go` and
-  `javascript_surface.go`. Prove runtime dependency isolation and catalog
-  boundaries in `contracts/runtime_manifest_boundary_test.go`; do not promote
-  B06 staged `packages/api/generated/javascript/runtime-api.json` or author
-  `contracts/javascript/runtime-api.json` as the product catalog in this lane.
+  `javascript_surface.go`. Authored-catalog path completeness against the
+  identity baseline and installed binding descriptor lives in
+  `pkg/orchestrators/javascript/runtime/catalog/catalog_identity.go` and is
+  wired through `internal/contractvalidator/javascript_catalog_identity.go`.
+  Representative call-behavior parity for `workflow.final`,
+  `workflow.checkpoint`, `agent.run`, `parallel`, and `pipeline` lives in
+  `pkg/orchestrators/javascript/runtime/catalog/catalog_call_behavior_parity.go`
+  and is wired through
+  `internal/contractvalidator/javascript_catalog_call_behavior_parity.go`.
+  Focused runtime execution parity for the same representative symbols remains
+  in `pkg/orchestrators/javascript/runtime/callbehavior_inventory_test.go`.
+  Prove runtime dependency isolation and catalog boundaries in `contracts/runtime_manifest_boundary_test.go` and
+  `contracts/javascript_runtime_api_test.go`; staged
+  `packages/api/generated/javascript/runtime-api.json` is a byte-identical copy
+  of the authored catalog at `contracts/javascript/runtime-api.json` through
+  `internal/contractstaging/policy.go#rawArtifacts`.
 - Staged OpenAPI byte policy lives in `internal/contractstaging/openapi.go`
   (`CanonicalOpenAPIPath`, `StagedOpenAPIPath`, `ReviewedOpenAPIBytePolicy`,
   `ProjectStagedOpenAPI`, `VerifyStagedOpenAPIParity`). The reviewed policy is

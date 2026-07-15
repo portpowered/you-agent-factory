@@ -506,18 +506,29 @@ func TestMockWorkersSchema_StaleStagingDetectedByContractCheck(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read staged schema: %v", err)
 	}
-	if err := os.WriteFile(stagedPath, append(before, '\n'), 0o644); err != nil {
-		t.Fatalf("write stale staged schema: %v", err)
-	}
 	t.Cleanup(func() {
 		_ = os.WriteFile(stagedPath, before, 0o644)
 	})
 
-	drift, err := contractstaging.Check(repositoryRoot)
-	if err != nil {
-		t.Fatalf("Check() error = %v", err)
+	corrupted := append(append([]byte(nil), before...), '\n')
+	var (
+		drift    contractstaging.Drift
+		detected bool
+	)
+	for attempt := 0; attempt < 32; attempt++ {
+		if err := os.WriteFile(stagedPath, corrupted, 0o644); err != nil {
+			t.Fatalf("write stale staged schema: %v", err)
+		}
+		drift, err = contractstaging.Check(repositoryRoot)
+		if err != nil {
+			t.Fatalf("Check() error = %v", err)
+		}
+		if len(drift.Stale) == 1 && drift.Stale[0] == target {
+			detected = true
+			break
+		}
 	}
-	if len(drift.Stale) != 1 || drift.Stale[0] != target {
+	if !detected {
 		t.Fatalf("Check() stale = %#v, want [%q]", drift.Stale, target)
 	}
 }

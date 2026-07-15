@@ -237,6 +237,18 @@ func TestValidateJavaScriptInvalidManifestDiagnostics(t *testing.T) {
 			wantPath: "/symbols/example.bad.open-serializable/parameters/0/serializableValue",
 		},
 		{
+			name:     "broken shared schema reference",
+			fixture:  "contracts/testdata/javascript/invalid-broken-shared-schema-ref.json",
+			code:     "reference.fragment",
+			wantPath: "/symbols/javascript.workflow.checkpoint/parameters/0/serializableValue/$ref",
+		},
+		{
+			name:     "open shared schema",
+			fixture:  "contracts/testdata/javascript/invalid-open-shared-schema.json",
+			code:     "javascript.serializable_value.open",
+			wantPath: "/sharedSchemas/javascript.schema.open_object/schema",
+		},
+		{
 			name:     "context global",
 			fixture:  "contracts/testdata/javascript/invalid-unsupported-context-global.json",
 			code:     "javascript.surface.forbidden_global",

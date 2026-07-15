@@ -1,0 +1,53 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "javascript.workflow.final": {
+      "id": "javascript.workflow.final",
+      "name": "final",
+      "path": "workflow.final",
+      "kind": "method",
+      "parent": "javascript.workflow",
+      "async": false,
+      "parameters": [
+        {
+          "id": "javascript.workflow.final.param.value",
+          "name": "value",
+          "position": 0,
+          "required": false,
+          "rest": false,
+          "type": "any"
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "determinism": "returned workflow value wins over workflow.final",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.final",
+        "documentation": {
+          "title": {
+            "id": "javascript.workflow.final.title",
+            "canonicalEnglish": "Workflow final result"
+          },
+          "description": {
+            "id": "javascript.workflow.final.description",
+            "canonicalEnglish": "Fixture with drifted determinism semantics for representative parity checks."
+          }
+        },
+        "examples": [
+          "workflow.final({ ok: true })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.final",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

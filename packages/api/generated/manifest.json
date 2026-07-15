@@ -31,7 +31,7 @@
       "path": "generated/cli/commands.json"
     },
     "generated.javascript.runtime-api": {
-      "artifactHash": "3fbe2603cd9dded76339015d105507d3afa43d48345d2de99326e15a9b954e83",
+      "artifactHash": "4d1c70325407b340fdd6e072cf9f2f8c77c499001b1553a06691418e6e988247",
       "documentation": {
         "documentation": {
           "description": {
@@ -48,7 +48,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.javascript.runtime-api",
-        "sourceHash": "3fbe2603cd9dded76339015d105507d3afa43d48345d2de99326e15a9b954e83",
+        "sourceHash": "4d1c70325407b340fdd6e072cf9f2f8c77c499001b1553a06691418e6e988247",
         "visibility": "public"
       },
       "family": "javascript",
@@ -312,5 +312,5 @@
   "formatVersion": "1.0.0",
   "packageId": "you-agent-factory.api",
   "packageVersion": "0.0.0",
-  "sourceCommit": "ed38fc06498b3206c31d9f1d3513f752ca193088"
+  "sourceCommit": "79b5e9c691a1a9e04a5778cee379d274f25b8672"
 }

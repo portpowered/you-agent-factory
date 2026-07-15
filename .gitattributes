@@ -3,6 +3,7 @@ contracts/testdata/baseline/** text eol=lf
 contracts/config/** text eol=lf
 contracts/common/** text eol=lf
 contracts/mcp/** text eol=lf
+contracts/javascript/** text eol=lf
 contracts/manifest.schema.json text eol=lf
 api/openapi.yaml text eol=lf
 packages/api/generated/** text eol=lf
