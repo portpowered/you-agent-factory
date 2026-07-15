@@ -11,13 +11,14 @@ import (
 )
 
 func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
-	return newSubmitCommandWithHandler(globals, diagnostics, submitWork)
+	return newSubmitCommandWithHandlers(globals, diagnostics, submitWork, submitBatch)
 }
 
-func newSubmitCommandWithHandler(
+func newSubmitCommandWithHandlers(
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
 	submitHandler func(submitcli.SubmitConfig) error,
+	batchHandler func(submitcli.BatchConfig) error,
 ) *cobra.Command {
 	cfg := submitcli.SubmitConfig{Server: globals.server}
 
@@ -42,7 +43,7 @@ func newSubmitCommandWithHandler(
 	cmd.Flags().StringVar(&cfg.WorkTypeName, "work-type-name", "", "work type name to submit to (required)")
 	cmd.Flags().StringVar(&cfg.Payload, "payload", "", "path to payload file (.json or .md) (required)")
 	cmd.Flags().StringVar(&cfg.SessionID, "session", "", "target one live factory session; omit to use the default compatibility session")
-	cmd.AddCommand(newSubmitBatchCommand(globals, diagnostics))
+	cmd.AddCommand(newSubmitBatchCommandWithHandler(globals, diagnostics, batchHandler))
 	return cmd
 }
 
@@ -63,6 +64,14 @@ func executeSubmitCommand(
 }
 
 func newSubmitBatchCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	return newSubmitBatchCommandWithHandler(globals, diagnostics, submitBatch)
+}
+
+func newSubmitBatchCommandWithHandler(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	batchHandler func(submitcli.BatchConfig) error,
+) *cobra.Command {
 	cfg := submitcli.BatchConfig{Server: globals.server}
 
 	cmd := &cobra.Command{
@@ -100,8 +109,8 @@ func newSubmitBatchCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 			"  # Target a non-default live session with structured output.\n" +
 			"  " + cliBinaryName + " --server http://localhost:9090 --json submit batch --session session-beta ./batch.json",
 		PreRunE: rejectDeprecatedPortFlag,
-		RunE: func(_ *cobra.Command, args []string) error {
-			return executeSubmitBatchCommand(args, &cfg, globals, diagnostics)
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return executeSubmitBatchCommand(cmd, args, &cfg, globals, diagnostics, batchHandler)
 		},
 	}
 
@@ -113,17 +122,22 @@ func newSubmitBatchCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 }
 
 func executeSubmitBatchCommand(
+	cmd *cobra.Command,
 	args []string,
 	cfg *submitcli.BatchConfig,
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
+	batchHandler func(submitcli.BatchConfig) error,
 ) error {
 	cfg.Server = globals.server
 	cfg.JSON = globals.json
 	cfg.Args = args
+	cfg.Stdin = cmd.InOrStdin()
+	cfg.Output = cmd.OutOrStdout()
+	cfg.Diagnostics = diagnostics.writer(cmd)
 	cfg.Verbose = diagnostics.verboseEnabled()
 	cfg.Debug = diagnostics.debug
-	return submitBatch(*cfg)
+	return batchHandler(*cfg)
 }
 
 func parseRunCommandArgs(cmd *cobra.Command, args []string) ([]string, error) {

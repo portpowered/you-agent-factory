@@ -35,8 +35,15 @@ primary-result behavior.
   must prove request path/body, default or explicit session selection, and
   human/JSON output. Manifest-required submit inputs remain validated by the
   retained handwritten handler so generated construction does not preempt its
-  stable diagnostics or validation ordering. Run-specific coverage lives in
-  `pkg/transports/cli/climanifestparity/runparity/run_parity_test.go`.
+  stable diagnostics or validation ordering. Batch positional cardinality is
+  likewise retained in `submit.resolveBatchInput`; inject the real batch
+  transport through `RootCommandOptions.SubmitBatch` so parity roots receive
+  independent Cobra stdin/stdout/stderr streams while proving `--file`,
+  positional file, inline JSON, explicit or implicit stdin, dry-run, session
+  routing, request, output, diagnostic, and failure behavior. Run-specific
+  coverage lives in `pkg/transports/cli/climanifestparity/runparity/run_parity_test.go`;
+  unary and batch submit coverage lives in the sibling `submitparity` and
+  `submitbatchparity` packages.
 
 ## CLI invocation output modes (primary-result, human response-stream, NDJSON)
 

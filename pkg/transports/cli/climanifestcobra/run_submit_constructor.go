@@ -96,7 +96,12 @@ func buildRunnableRunSubmitCommand(
 	if !record.Runnable {
 		return nil, fmt.Errorf("build run/submit family command: %q must remain runnable", record.ID)
 	}
-	cmd.Args = positionalArgsFromManifest(record)
+	// Batch historically validates positional cardinality while resolving its
+	// handwritten input channels. Preserve that diagnostic and side-effect
+	// ordering instead of adding earlier Cobra rejection on the generated path.
+	if record.ID != "you.submit.batch" {
+		cmd.Args = positionalArgsFromManifest(record)
+	}
 	if err := registerRunSubmitLocalFlags(cmd, record, bindings); err != nil {
 		return nil, fmt.Errorf("build run/submit family command: %w", err)
 	}

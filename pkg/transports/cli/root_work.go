@@ -158,7 +158,7 @@ func productionRootSubcommands(
 		newMCPCommand(options),
 		modelsCmd,
 		newRunCommand(globals, diagnostics, operatorDefaults, options),
-		newSubmitCommandWithHandler(globals, diagnostics, options.SubmitWork),
+		newSubmitCommandWithHandlers(globals, diagnostics, options.SubmitWork, options.SubmitBatch),
 		session,
 		productionWorkCommand(globals, diagnostics),
 		newWorkflowCommand(globals, diagnostics, options),
@@ -421,7 +421,7 @@ func newRunSubmitFamilyRootForParity(options RootCommandOptions, generatedFamily
 	if !generatedFamily {
 		root.AddCommand(
 			newRunCommand(globals, diagnostics, operatorDefaults, options),
-			newSubmitCommandWithHandler(globals, diagnostics, options.SubmitWork),
+			newSubmitCommandWithHandlers(globals, diagnostics, options.SubmitWork, options.SubmitBatch),
 		)
 		return root, nil
 	}
@@ -469,8 +469,8 @@ func newRunSubmitHandlerRegistry(
 		},
 		SubmitBatch: commandregistry.CommandHandlers{
 			PreRunE: rejectDeprecatedPortFlag,
-			RunE: func(_ *cobra.Command, args []string) error {
-				return executeSubmitBatchCommand(args, &batchCfg, globals, diagnostics)
+			RunE: func(cmd *cobra.Command, args []string) error {
+				return executeSubmitBatchCommand(cmd, args, &batchCfg, globals, diagnostics, rootOptions.SubmitBatch)
 			},
 		},
 	})

@@ -207,8 +207,8 @@ func TestNewRunSubmitFamilyComponentsRegistersLocalFlagsWithoutChangingHandlerVa
 			t.Fatalf("generated submit batch missing local flag %q", flagName)
 		}
 	}
-	if err := components.SubmitBatch.Args(components.SubmitBatch, []string{"one", "two"}); err == nil {
-		t.Fatal("submit batch accepted more than one positional input")
+	if components.SubmitBatch.Args != nil {
+		t.Fatal("submit batch Cobra Args validation should remain in the handwritten input resolver")
 	}
 }
 
