@@ -25,6 +25,7 @@ func JavaScriptRegistry() Registry {
 			{Path: "contracts/testdata/javascript/valid-emitted-record.json", SchemaID: runtimeManifestSchemaID},
 			{Path: "contracts/testdata/javascript/valid-policy.json", SchemaID: runtimeManifestSchemaID},
 			{Path: "contracts/testdata/javascript/valid-resume.json", SchemaID: runtimeManifestSchemaID},
+			{Path: "contracts/testdata/javascript/valid-lifecycle-constraints.json", SchemaID: runtimeManifestSchemaID},
 		},
 	})
 }

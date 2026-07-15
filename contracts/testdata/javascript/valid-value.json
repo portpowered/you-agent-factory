@@ -30,7 +30,10 @@
         "itemId": "example.args",
         "state": "active",
         "since": "1.0.0"
-      }
+      },
+      "mutability": "mutable-object",
+      "nullability": "non-null",
+      "bindingLifecycle": "snapshot-at-bind"
     },
     "example.meta": {
       "id": "example.meta",
@@ -61,7 +64,10 @@
         "itemId": "example.meta",
         "state": "active",
         "since": "1.0.0"
-      }
+      },
+      "mutability": "mutable-object",
+      "nullability": "non-null",
+      "bindingLifecycle": "snapshot-at-bind"
     }
   }
 }

@@ -113,3 +113,40 @@ func TestRuntimeManifestSchemaCallableMetadataFixtures(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeManifestSchemaObjectBindingFixtures(t *testing.T) {
+	schema := runtimeManifestSchema(t)
+
+	tests := []struct {
+		name     string
+		fixture  string
+		valid    bool
+		wantPath string
+	}{
+		{name: "lifecycle constraints and root metadata", fixture: "valid-lifecycle-constraints.json", valid: true},
+		{
+			name:     "active lifecycle with deprecated version",
+			fixture:  "invalid-malformed-lifecycle.json",
+			wantPath: "/symbols/example.malformed-lifecycle.args/lifecycle/deprecated",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			instance := readJSON(t, filepath.Join("testdata", "javascript", test.fixture))
+			err := schema.Validate(instance)
+			if test.valid {
+				if err != nil {
+					t.Fatalf("validate valid fixture: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("expected fixture validation to fail")
+			}
+			if paths := validationPaths(t, err); !slices.Contains(paths, test.wantPath) {
+				t.Fatalf("validation paths = %v, want %q", paths, test.wantPath)
+			}
+		})
+	}
+}

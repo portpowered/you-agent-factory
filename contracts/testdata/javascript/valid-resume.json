@@ -34,7 +34,10 @@
         "itemId": "example.workflow-resume",
         "state": "active",
         "since": "1.0.0"
-      }
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
     },
     "example.workflow-resume.checkpoint": {
       "id": "example.workflow-resume.checkpoint",

@@ -33,7 +33,10 @@
         "itemId": "example.sync-logging",
         "state": "active",
         "since": "1.0.0"
-      }
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
     },
     "example.sync-logging.log": {
       "id": "example.sync-logging.log",

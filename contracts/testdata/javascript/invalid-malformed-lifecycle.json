@@ -1,0 +1,40 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.malformed-lifecycle.args": {
+      "id": "example.malformed-lifecycle.args",
+      "name": "args",
+      "path": "args",
+      "kind": "value",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.malformed-lifecycle.args",
+        "documentation": {
+          "title": {
+            "id": "example.malformed-lifecycle.args.title",
+            "canonicalEnglish": "Invocation arguments"
+          },
+          "description": {
+            "id": "example.malformed-lifecycle.args.description",
+            "canonicalEnglish": "Value global with malformed publication lifecycle metadata."
+          }
+        },
+        "examples": [
+          "{ \"topic\": \"release\" }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.malformed-lifecycle.args",
+        "state": "active",
+        "since": "1.0.0",
+        "deprecated": "2.0.0"
+      },
+      "mutability": "mutable-object",
+      "nullability": "non-null",
+      "bindingLifecycle": "snapshot-at-bind"
+    }
+  }
+}

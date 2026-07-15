@@ -14,6 +14,15 @@
       "description": "The explicitly supported version of this runtime-manifest format.",
       "const": "1.0.0"
     },
+    "limits": {
+      "$ref": "#/$defs/runtimeLimits"
+    },
+    "capabilities": {
+      "$ref": "#/$defs/runtimeCapabilityList"
+    },
+    "versionAvailability": {
+      "$ref": "#/$defs/versionAvailability"
+    },
     "symbols": {
       "description": "Installed runtime symbols keyed by stable symbol identifiers. Object keys make duplicate symbol IDs structurally unrepresentable.",
       "type": "object",
@@ -363,6 +372,132 @@
       "type": "string",
       "minLength": 1
     },
+    "mutability": {
+      "description": "Descriptive installed-runtime mutability of a namespace or value binding.",
+      "type": "string",
+      "enum": [
+        "fixed-binding",
+        "mutable-object"
+      ]
+    },
+    "nullability": {
+      "description": "Descriptive installed-runtime nullability of a namespace or value binding.",
+      "type": "string",
+      "enum": [
+        "non-null",
+        "nullable"
+      ]
+    },
+    "bindingLifecycle": {
+      "description": "Descriptive installed-runtime binding lifecycle for a namespace or value symbol.",
+      "type": "string",
+      "enum": [
+        "live-namespace",
+        "snapshot-at-bind"
+      ]
+    },
+    "runtimeLimits": {
+      "description": "Descriptive installed-runtime policy and resource limits documented for the manifest.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxAgents": {
+          "description": "Maximum concurrent child dispatches permitted by effective policy.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "concurrency": {
+          "description": "Maximum concurrent in-flight work permitted by effective policy.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxDepth": {
+          "description": "Maximum nested child depth permitted by effective policy.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxRetries": {
+          "description": "Maximum retry attempts permitted by effective policy.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxArtifactBytes": {
+          "description": "Maximum artifact payload size in bytes.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxRunDurationMs": {
+          "description": "Maximum workflow run duration in milliseconds.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxWorkerDurationMs": {
+          "description": "Maximum single worker duration in milliseconds.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxOutputBytesPerWorker": {
+          "description": "Maximum worker output size in bytes.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxTokens": {
+          "description": "Maximum token budget documented for the runtime surface.",
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "runtimeCapability": {
+      "description": "Descriptive host capability that effective policy may grant or deny.",
+      "type": "string",
+      "enum": [
+        "workspace-write",
+        "filesystem-write",
+        "shell-process",
+        "network",
+        "connectors",
+        "danger-full-access"
+      ]
+    },
+    "runtimeCapabilityList": {
+      "description": "Host capabilities documented for the installed runtime surface.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/runtimeCapability"
+      }
+    },
+    "versionAvailability": {
+      "description": "Manifest and installed-runtime version availability metadata.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifestFormat",
+        "runtimeVersions"
+      ],
+      "properties": {
+        "manifestFormat": {
+          "description": "Manifest format versions this document is written for.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json#/$defs/version"
+          }
+        },
+        "runtimeVersions": {
+          "description": "Installed runtime release versions this manifest documents.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json#/$defs/version"
+          }
+        }
+      }
+    },
     "asyncReturnConstraints": {
       "allOf": [
         {
@@ -455,6 +590,15 @@
         "lifecycle": {
           "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
         },
+        "mutability": {
+          "$ref": "#/$defs/mutability"
+        },
+        "nullability": {
+          "$ref": "#/$defs/nullability"
+        },
+        "bindingLifecycle": {
+          "$ref": "#/$defs/bindingLifecycle"
+        },
         "async": {
           "description": "Whether the installed callable returns a Promise.",
           "type": "boolean"
@@ -493,11 +637,23 @@
         {
           "type": "object",
           "required": [
-            "members"
+            "members",
+            "mutability",
+            "nullability",
+            "bindingLifecycle"
           ],
           "properties": {
             "kind": {
               "const": "namespace"
+            },
+            "mutability": {
+              "$ref": "#/$defs/mutability"
+            },
+            "nullability": {
+              "$ref": "#/$defs/nullability"
+            },
+            "bindingLifecycle": {
+              "$ref": "#/$defs/bindingLifecycle"
             },
             "async": false,
             "parameters": false,
@@ -526,11 +682,23 @@
           "type": "object",
           "required": [
             "parent",
-            "members"
+            "members",
+            "mutability",
+            "nullability",
+            "bindingLifecycle"
           ],
           "properties": {
             "kind": {
               "const": "namespace"
+            },
+            "mutability": {
+              "$ref": "#/$defs/mutability"
+            },
+            "nullability": {
+              "$ref": "#/$defs/nullability"
+            },
+            "bindingLifecycle": {
+              "$ref": "#/$defs/bindingLifecycle"
             },
             "async": false,
             "parameters": false,
@@ -552,9 +720,23 @@
         },
         {
           "type": "object",
+          "required": [
+            "mutability",
+            "nullability",
+            "bindingLifecycle"
+          ],
           "properties": {
             "kind": {
               "const": "value"
+            },
+            "mutability": {
+              "$ref": "#/$defs/mutability"
+            },
+            "nullability": {
+              "$ref": "#/$defs/nullability"
+            },
+            "bindingLifecycle": {
+              "$ref": "#/$defs/bindingLifecycle"
             },
             "async": false,
             "parameters": false,
@@ -601,7 +783,10 @@
           "properties": {
             "kind": {
               "const": "function"
-            }
+            },
+            "mutability": false,
+            "nullability": false,
+            "bindingLifecycle": false
           },
           "not": {
             "anyOf": [
@@ -639,7 +824,10 @@
           "properties": {
             "kind": {
               "const": "method"
-            }
+            },
+            "mutability": false,
+            "nullability": false,
+            "bindingLifecycle": false
           },
           "not": {
             "required": [

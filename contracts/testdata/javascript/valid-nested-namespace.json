@@ -34,7 +34,10 @@
         "itemId": "example.workflow",
         "state": "active",
         "since": "1.0.0"
-      }
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
     },
     "example.workflow.checkpoint": {
       "id": "example.workflow.checkpoint",
@@ -69,7 +72,10 @@
         "itemId": "example.workflow.checkpoint",
         "state": "active",
         "since": "1.0.0"
-      }
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
     },
     "example.workflow.ops": {
       "id": "example.workflow.ops",
@@ -102,7 +108,10 @@
         "itemId": "example.workflow.ops",
         "state": "active",
         "since": "1.0.0"
-      }
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
     }
   }
 }
