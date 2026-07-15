@@ -1,0 +1,40 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2024-11-05",
+  "tools": {
+    "mcp.tool.you.factory_session.read_events": {
+      "id": "mcp.tool.you.factory_session.read_events",
+      "name": "you.factory_session.read_events",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.read_events",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.read_events.title",
+            "canonicalEnglish": "Read Factory Session Events"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.read_events.description",
+            "canonicalEnglish": "Reads canonical Factory Session events with a broken handler identity."
+          }
+        },
+        "examples": [
+          {
+            "sessionId": "dur-sess-evt-001"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.read_events",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "handler": {
+        "id": "Invalid_Handler"
+      }
+    }
+  }
+}

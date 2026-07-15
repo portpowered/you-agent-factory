@@ -128,6 +128,7 @@ func MCPRegistry() Registry {
 			{Path: "contracts/testdata/mcp/valid-text-error-result.json", SchemaID: toolCatalogID},
 			{Path: "contracts/testdata/mcp/valid-domain-failure-result.json", SchemaID: toolCatalogID},
 			{Path: "contracts/testdata/mcp/valid-protocol-failures.json", SchemaID: toolCatalogID},
+			{Path: "contracts/testdata/mcp/valid-handler-binding.json", SchemaID: toolCatalogID},
 		},
 	})
 }

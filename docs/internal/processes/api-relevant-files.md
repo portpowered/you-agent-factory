@@ -137,6 +137,11 @@ Use this map when changing the public REST contract.
 - Compatibility aliases remain only in `contracts/mcp/deprecated.json`; the
   tool-catalog schema is build-time contract validation only and does not cut
   over `packages/api/generated/mcp/tools.json` or runtime discovery.
+- Tool `handler` binds handwritten implementations with `mcp.handler.*` stable
+  IDs (`#/$defs/handler`). Duplicate documentation IDs, broken handler IDs,
+  unknown `protocolVersion`, and malformed lifecycle/documentation records fail
+  through schema validation or family-neutral `identity.duplicate` diagnostics in
+  focused `validator_test.go` cases.
 
 ## Focused compatibility alias internal-use lint
 

@@ -69,6 +69,30 @@
         }
       ]
     },
+    "handlerId": {
+      "description": "Stable MCP tool handler identity with the mcp.handler prefix.",
+      "allOf": [
+        {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        {
+          "pattern": "^mcp[.]handler[.].+"
+        }
+      ]
+    },
+    "handler": {
+      "description": "Stable handler identity binding one canonical MCP tool to its handwritten implementation.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/handlerId"
+        }
+      }
+    },
     "canonicalToolName": {
       "description": "The canonical MCP protocol tool name exposed to clients.",
       "type": "string",
@@ -379,6 +403,9 @@
         },
         "result": {
           "$ref": "#/$defs/toolResult"
+        },
+        "handler": {
+          "$ref": "#/$defs/handler"
         }
       }
     },

@@ -1,0 +1,47 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2024-11-05",
+  "tools": {
+    "mcp.tool.you.factory_session.control": {
+      "id": "mcp.tool.you.factory_session.control",
+      "name": "you.factory_session.control",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.control",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.control.title",
+            "canonicalEnglish": "Control Factory Session"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.control.description",
+            "canonicalEnglish": "Applies one durable Factory Session lifecycle control through a bound handwritten handler."
+          }
+        },
+        "examples": [
+          {
+            "sessionId": "dur-sess-ctl-001",
+            "operation": "PAUSE"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.control",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "transports": [
+        "stdio-json-rpc"
+      ],
+      "execution": {
+        "mode": "tools-call"
+      },
+      "handler": {
+        "id": "mcp.handler.you.factory_session.control"
+      }
+    }
+  }
+}

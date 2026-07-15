@@ -48,47 +48,86 @@ func TestValidateMCPInvalidCatalogDiagnostics(t *testing.T) {
 	tests := []struct {
 		name     string
 		fixture  string
+		code     string
 		wantPath string
 	}{
 		{
 			name:     "open nested input object",
 			fixture:  "contracts/testdata/mcp/invalid-open-nested-input.json",
+			code:     "schema.validation",
 			wantPath: "/tools/mcp.tool.you.factory_session.start_async/input/schema/properties/source/additionalProperties",
 		},
 		{
 			name:     "unsupported task behavior",
 			fixture:  "contracts/testdata/mcp/invalid-unsupported-task.json",
+			code:     "schema.validation",
 			wantPath: "/tools/mcp.tool.you.factory_session.list/execution/mode",
 		},
 		{
 			name:     "result image content",
 			fixture:  "contracts/testdata/mcp/invalid-result-image.json",
+			code:     "schema.validation",
 			wantPath: "/tools/mcp.tool.you.factory_session.list/result/examples/0/content/0/type",
 		},
 		{
 			name:     "result audio content",
 			fixture:  "contracts/testdata/mcp/invalid-result-audio.json",
+			code:     "schema.validation",
 			wantPath: "/tools/mcp.tool.you.factory_session.list/result/examples/0/content/0/type",
 		},
 		{
 			name:     "result embedded resource content",
 			fixture:  "contracts/testdata/mcp/invalid-result-embedded-resource.json",
+			code:     "schema.validation",
 			wantPath: "/tools/mcp.tool.you.factory_session.list/result/examples/0/content/0/type",
 		},
 		{
 			name:     "result structured content field",
 			fixture:  "contracts/testdata/mcp/invalid-result-structured-content.json",
+			code:     "schema.validation",
 			wantPath: "/tools/mcp.tool.you.factory_session.list/result/examples/0",
 		},
 		{
 			name:     "result output schema field",
 			fixture:  "contracts/testdata/mcp/invalid-result-output-schema.json",
+			code:     "schema.validation",
 			wantPath: "/tools/mcp.tool.you.factory_session.list/result/examples/0",
 		},
 		{
 			name:     "domain failure confused with protocol error",
 			fixture:  "contracts/testdata/mcp/invalid-domain-confused-with-protocol-error.json",
+			code:     "schema.validation",
 			wantPath: "/tools/mcp.tool.you.factory_session.get/result/domain/failures/mcp.failure.you.factory_session.get.protocol_confusion/examples/0",
+		},
+		{
+			name:     "duplicate stable documentation IDs",
+			fixture:  "contracts/testdata/mcp/invalid-duplicate-stable-id.json",
+			code:     "identity.duplicate",
+			wantPath: "/tools/mcp.tool.you.factory_session.list_dispatches/documentation/documentation/title/id",
+		},
+		{
+			name:     "broken handler ID",
+			fixture:  "contracts/testdata/mcp/invalid-handler-id.json",
+			code:     "schema.validation",
+			wantPath: "/tools/mcp.tool.you.factory_session.read_events/handler/id",
+		},
+		{
+			name:     "unknown protocol version",
+			fixture:  "contracts/testdata/mcp/invalid-unknown-protocol-version.json",
+			code:     "schema.validation",
+			wantPath: "/protocolVersion",
+		},
+		{
+			name:     "malformed lifecycle record",
+			fixture:  "contracts/testdata/mcp/invalid-malformed-lifecycle.json",
+			code:     "schema.validation",
+			wantPath: "/tools/mcp.tool.you.factory_session.start_sync/lifecycle",
+		},
+		{
+			name:     "malformed documentation record",
+			fixture:  "contracts/testdata/mcp/invalid-malformed-documentation.json",
+			code:     "schema.validation",
+			wantPath: "/tools/mcp.tool.you.factory_session.get/documentation/documentation/title/id",
 		},
 	}
 
@@ -99,14 +138,18 @@ func TestValidateMCPInvalidCatalogDiagnostics(t *testing.T) {
 				t.Fatal("expected diagnostics, got none")
 			}
 			found := false
+			wantCode := test.code
+			if wantCode == "" {
+				wantCode = "schema.validation"
+			}
 			for _, diagnostic := range diagnostics {
-				if diagnostic.Code == "schema.validation" && diagnostic.Path == test.wantPath && diagnostic.Document == test.fixture {
+				if diagnostic.Code == wantCode && diagnostic.Path == test.wantPath && diagnostic.Document == test.fixture {
 					found = true
 					break
 				}
 			}
 			if !found {
-				t.Fatalf("diagnostics = %+v, want code=%q path=%q document=%q", diagnostics, "schema.validation", test.wantPath, test.fixture)
+				t.Fatalf("diagnostics = %+v, want code=%q path=%q document=%q", diagnostics, wantCode, test.wantPath, test.fixture)
 			}
 		})
 	}
