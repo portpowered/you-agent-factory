@@ -471,31 +471,31 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/replay/configtests/effective_config_generated_test.go#assertEmbeddedGeneratedFactory",
+      "target": "pkg/platform/replay/configtests/effective_config_generated_test.go#assertEmbeddedGeneratedFactory",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper keeps the embedded generated-factory artifact contract together across all authored sections."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/replay/configtests/effective_config_test.go#TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind",
+      "target": "pkg/platform/replay/configtests/effective_config_test.go#TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this generated-factory contract test keeps the canonical workstation projection assertions in one readable flow."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/replay/configtests/generated_factory_test.go#TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory",
+      "target": "pkg/platform/replay/configtests/generated_factory_test.go#TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this generated-factory artifact test keeps split-definition embedding assertions together on the public contract seam."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/replay/event_artifact_test.go#assertMergedGeneratedWorkstations",
+      "target": "pkg/platform/replay/event_artifact_test.go#assertMergedGeneratedWorkstations",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper intentionally validates the merged generated workstation artifact contract in one place."
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/replay/event_log_test.go#assertReducedCompletionSafeDiagnostics",
+      "target": "pkg/platform/replay/event_log_test.go#assertReducedCompletionSafeDiagnostics",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: this helper keeps the replay completion diagnostics contract together across all supported branches."
     },

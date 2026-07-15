@@ -1,3 +1,5 @@
+// Package replay owns policy-free recording, artifact persistence, and replay
+// delivery mechanics for canonical Factory events supplied by domain owners.
 package replay
 
 import (

@@ -1,8 +1,10 @@
 package replay
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -825,6 +827,50 @@ func TestRecorder_PersistsWorkStateChangeEvents(t *testing.T) {
 	if payload.WorkId != "work-recover" || payload.Source != factoryapi.WorkStateChangeSourceCLI {
 		t.Fatalf("payload = %#v, want work-recover cli source", payload)
 	}
+}
+
+func TestRecorder_FlushFailureIsActionableAndRetained(t *testing.T) {
+	parent := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(parent, []byte("occupied"), 0o600); err != nil {
+		t.Fatalf("write occupied parent: %v", err)
+	}
+	recorder, err := NewRecorder(filepath.Join(parent, "run.replay.json"), testReplayArtifact(t))
+	if err != nil {
+		t.Fatalf("NewRecorder: %v", err)
+	}
+
+	err = recorder.Flush()
+	if err == nil {
+		t.Fatal("Flush error = nil, want destination creation failure")
+	}
+	if retained := recorder.Err(); retained == nil || retained.Error() != err.Error() {
+		t.Fatalf("retained error = %v, want %v", retained, err)
+	}
+}
+
+func TestRecorder_StopJoinsPeriodicFlushLoop(t *testing.T) {
+	recorder, err := NewRecorder(
+		filepath.Join(t.TempDir(), "run.replay.json"),
+		testReplayArtifact(t),
+		WithFlushInterval(time.Millisecond),
+	)
+	if err != nil {
+		t.Fatalf("NewRecorder: %v", err)
+	}
+	recorder.Start(context.Background())
+
+	stopped := make(chan struct{})
+	go func() {
+		recorder.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		t.Fatal("Stop did not join the periodic flush loop")
+	}
+
+	recorder.Stop()
 }
 
 func loadReplayArtifactForTest(t *testing.T, path string) *interfaces.ReplayArtifact {

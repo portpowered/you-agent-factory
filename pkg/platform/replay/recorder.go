@@ -28,6 +28,8 @@ type Recorder struct {
 	mu       sync.Mutex
 	flushErr error
 	started  bool
+	cancel   context.CancelFunc
+	done     chan struct{}
 	version  int64
 	flushed  int64
 }
@@ -78,11 +80,36 @@ func (r *Recorder) Start(ctx context.Context) {
 		r.mu.Unlock()
 		return
 	}
+	loopCtx, cancel := context.WithCancel(ctx)
 	r.started = true
+	r.cancel = cancel
+	r.done = make(chan struct{})
 	interval := r.flushInterval
+	done := r.done
 	r.mu.Unlock()
 
-	go r.flushLoop(ctx, interval)
+	go func() {
+		defer close(done)
+		r.flushLoop(loopCtx, interval)
+	}()
+}
+
+// Stop cancels and joins the recorder's periodic flush loop. It is safe to
+// call more than once and does not perform the caller-owned final flush.
+func (r *Recorder) Stop() {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	cancel := r.cancel
+	done := r.done
+	r.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		<-done
+	}
 }
 
 // RecordEvent appends a canonical generated event and marks the artifact for

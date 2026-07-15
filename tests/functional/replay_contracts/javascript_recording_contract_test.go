@@ -9,7 +9,7 @@ import (
 
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/platform/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 

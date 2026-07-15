@@ -223,6 +223,7 @@ func TestRunRejectsRetiredPackageRootsWithCanonicalOwners(t *testing.T) {
 		{packagePath: "pkg/workcontent", canonicalOwner: "pkg/work/content"},
 		{packagePath: "pkg/workgraph", canonicalOwner: "pkg/work/graph"},
 		{packagePath: "pkg/workquery", canonicalOwner: "pkg/work/query"},
+		{packagePath: "pkg/replay", canonicalOwner: "pkg/platform/replay"},
 	} {
 		t.Run(tt.packagePath, func(t *testing.T) {
 			t.Parallel()
@@ -304,6 +305,11 @@ func TestRunRejectsRetiredPackageImportsWithCanonicalOwners(t *testing.T) {
 			importPath:     "github.com/portpowered/infinite-you/pkg/workquery",
 			retiredRoot:    "pkg/workquery",
 			canonicalOwner: "pkg/work/query",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/replay",
+			retiredRoot:    "pkg/replay",
+			canonicalOwner: "pkg/platform/replay",
 		},
 	} {
 		t.Run(tt.retiredRoot, func(t *testing.T) {
