@@ -60,6 +60,31 @@ func TestValidateMCPInvalidCatalogDiagnostics(t *testing.T) {
 			fixture:  "contracts/testdata/mcp/invalid-unsupported-task.json",
 			wantPath: "/tools/mcp.tool.you.factory_session.list/execution/mode",
 		},
+		{
+			name:     "result image content",
+			fixture:  "contracts/testdata/mcp/invalid-result-image.json",
+			wantPath: "/tools/mcp.tool.you.factory_session.list/result/examples/0/content/0/type",
+		},
+		{
+			name:     "result audio content",
+			fixture:  "contracts/testdata/mcp/invalid-result-audio.json",
+			wantPath: "/tools/mcp.tool.you.factory_session.list/result/examples/0/content/0/type",
+		},
+		{
+			name:     "result embedded resource content",
+			fixture:  "contracts/testdata/mcp/invalid-result-embedded-resource.json",
+			wantPath: "/tools/mcp.tool.you.factory_session.list/result/examples/0/content/0/type",
+		},
+		{
+			name:     "result structured content field",
+			fixture:  "contracts/testdata/mcp/invalid-result-structured-content.json",
+			wantPath: "/tools/mcp.tool.you.factory_session.list/result/examples/0",
+		},
+		{
+			name:     "result output schema field",
+			fixture:  "contracts/testdata/mcp/invalid-result-output-schema.json",
+			wantPath: "/tools/mcp.tool.you.factory_session.list/result/examples/0",
+		},
 	}
 
 	for _, test := range tests {
@@ -84,9 +109,11 @@ func TestValidateMCPInvalidCatalogDiagnostics(t *testing.T) {
 
 func mcpCatalogFixtureRegistry(fixture string) contractvalidator.Registry {
 	const (
-		toolCatalogID   = "https://schemas.portpowered.com/you/contracts/mcp/tool-catalog.schema.json"
-		documentationID = "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
-		deprecationsID  = "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+		toolCatalogID    = "https://schemas.portpowered.com/you/contracts/mcp/tool-catalog.schema.json"
+		contentID        = "https://schemas.portpowered.com/you/contracts/mcp/protocol/content.schema.json"
+		callToolResultID = "https://schemas.portpowered.com/you/contracts/mcp/protocol/call-tool-result.schema.json"
+		documentationID  = "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+		deprecationsID   = "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
 	)
 	return contractvalidator.NewRegistry(contractvalidator.Entry{
 		Family:        "mcp",
@@ -94,6 +121,8 @@ func mcpCatalogFixtureRegistry(fixture string) contractvalidator.Registry {
 		Schemas: []contractvalidator.Schema{
 			{ID: documentationID, Path: "contracts/common/documentation.schema.json"},
 			{ID: deprecationsID, Path: "contracts/common/deprecations.schema.json"},
+			{ID: contentID, Path: "contracts/mcp/protocol/content.schema.json"},
+			{ID: callToolResultID, Path: "contracts/mcp/protocol/call-tool-result.schema.json"},
 			{ID: toolCatalogID, Path: "contracts/mcp/tool-catalog.schema.json"},
 		},
 		Documents: []contractvalidator.Document{{Path: fixture, SchemaID: toolCatalogID}},

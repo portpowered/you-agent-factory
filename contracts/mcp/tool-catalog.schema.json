@@ -361,6 +361,67 @@
         },
         "input": {
           "$ref": "#/$defs/toolInput"
+        },
+        "result": {
+          "$ref": "#/$defs/toolResult"
+        }
+      }
+    },
+    "toolResultTransport": {
+      "description": "Pinned tools/call transport policy for one tool under MCP 2024-11-05.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contentTypes",
+        "textEncoding",
+        "allowsStructuredContent",
+        "allowsOutputSchema"
+      ],
+      "properties": {
+        "contentTypes": {
+          "description": "Supported CallToolResult content kinds for this tool. The pinned initial cut admits only text.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "const": "text"
+          }
+        },
+        "textEncoding": {
+          "description": "How serialized tool payloads are encoded in text content items.",
+          "enum": [
+            "serialized-json",
+            "plain-text"
+          ]
+        },
+        "allowsStructuredContent": {
+          "const": false
+        },
+        "allowsOutputSchema": {
+          "const": false
+        }
+      }
+    },
+    "toolResult": {
+      "description": "Authored tools/call result transport policy and representative CallToolResult examples.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transport",
+        "examples"
+      ],
+      "properties": {
+        "transport": {
+          "$ref": "#/$defs/toolResultTransport"
+        },
+        "examples": {
+          "description": "Representative pinned text-only CallToolResult envelopes for this tool.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/mcp/protocol/call-tool-result.schema.json#/$defs/pinnedTextCallToolResult"
+          }
         }
       }
     }

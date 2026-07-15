@@ -126,6 +126,11 @@ Use this map when changing the public REST contract.
   with object-keyed `arguments` using `mcp.arg.*` stable IDs; `execution.mode`
   is pinned to `tools-call` and `transports` to `stdio-json-rpc` for the
   supported protocol surface.
+- Reusable MCP protocol components live under `contracts/mcp/protocol/`
+  (`content.schema.json` documents broader MCP content kinds; `call-tool-result.schema.json`
+  defines the `pinnedTextCallToolResult` envelope used by tool `result.examples`).
+  Tool `result.transport` pins text-only content types and rejects
+  `structuredContent` / `outputSchema` advertising.
 - Compatibility aliases remain only in `contracts/mcp/deprecated.json`; the
   tool-catalog schema is build-time contract validation only and does not cut
   over `packages/api/generated/mcp/tools.json` or runtime discovery.
