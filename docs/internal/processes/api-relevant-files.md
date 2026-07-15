@@ -244,7 +244,12 @@ Use this map when changing the public REST contract.
   IDs (`#/$defs/handler`). Duplicate documentation IDs, broken handler IDs,
   unknown `protocolVersion`, and malformed lifecycle/documentation records fail
   through schema validation or family-neutral `identity.duplicate` diagnostics in
-  focused `validator_test.go` cases.
+  focused `validator_test.go` cases. Runtime `tools/call` binding stays handwritten
+  in `pkg/transports/mcp/factorysession/client.go`: resolve canonical protocol names
+  from generated discovery to stable `mcp.tool.*` IDs, then select the handwritten
+  registry entry that records its contracted `mcp.handler.*` ID and implementation.
+  Resolve compatibility aliases before stable-ID lookup; never add aliases to the
+  generated primary discovery or move handler functions into generated code.
 
 ## Focused compatibility alias internal-use lint
 

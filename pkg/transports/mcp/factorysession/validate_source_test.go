@@ -2,16 +2,112 @@ package factorysession_test
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
 	workflowpreview "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	workflowvalidation "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
+	mcpgenerated "github.com/portpowered/infinite-you/pkg/transports/mcp/generated"
 )
+
+func TestStableIDHandlerRegistryCoversGeneratedCanonicalDiscovery(t *testing.T) {
+	t.Parallel()
+
+	for _, tool := range mcpgenerated.PrimaryDiscovery() {
+		binding, ok := mcpfactorysession.ResolveToolHandlerBinding(tool.Name)
+		if !ok {
+			t.Fatalf("generated tool %q (%s) has no handwritten handler binding", tool.Name, tool.ID)
+		}
+		if binding.ToolID != tool.ID {
+			t.Fatalf("tool %q binding tool ID = %q, want generated %q", tool.Name, binding.ToolID, tool.ID)
+		}
+		wantHandlerID := strings.Replace(tool.ID, "mcp.tool.", "mcp.handler.", 1)
+		if binding.HandlerID != wantHandlerID {
+			t.Fatalf("tool %q handler ID = %q, want contracted %q", tool.Name, binding.HandlerID, wantHandlerID)
+		}
+		if !mcpfactorysession.IsCanonicalToolHandlerRegistered(tool.Name) {
+			t.Fatalf("generated tool %q is not registered as canonical", tool.Name)
+		}
+	}
+}
+
+func TestStableIDHandlerRegistryMatchesAuthoredHandlerBindings(t *testing.T) {
+	t.Parallel()
+
+	payload, err := os.ReadFile(testutil.MustRepoPath(t, "contracts/mcp/tools.json"))
+	if err != nil {
+		t.Fatalf("read authored MCP catalog: %v", err)
+	}
+	var catalog struct {
+		Tools map[string]struct {
+			Name    string `json:"name"`
+			Handler struct {
+				ID string `json:"id"`
+			} `json:"handler"`
+		} `json:"tools"`
+	}
+	if err := json.Unmarshal(payload, &catalog); err != nil {
+		t.Fatalf("decode authored MCP catalog: %v", err)
+	}
+
+	for toolID, authored := range catalog.Tools {
+		binding, ok := mcpfactorysession.ResolveToolHandlerBinding(authored.Name)
+		if !ok {
+			t.Fatalf("authored tool %q (%s) has no handwritten handler binding", authored.Name, toolID)
+		}
+		if binding.ToolID != toolID || binding.HandlerID != authored.Handler.ID {
+			t.Fatalf("tool %q binding = %#v, want tool ID %q and handler ID %q", authored.Name, binding, toolID, authored.Handler.ID)
+		}
+	}
+}
+
+func TestStableIDHandlerRegistryCompatibilityAliasesResolveToCanonicalBindings(t *testing.T) {
+	t.Parallel()
+
+	for _, alias := range mcpfactorysession.DiscoverCompatibilityAliases() {
+		aliasBinding, ok := mcpfactorysession.ResolveToolHandlerBinding(alias.Name)
+		if !ok {
+			t.Fatalf("compatibility alias %q has no handler binding", alias.Name)
+		}
+		canonicalBinding, ok := mcpfactorysession.ResolveToolHandlerBinding(alias.CanonicalName)
+		if !ok {
+			t.Fatalf("canonical tool %q has no handler binding", alias.CanonicalName)
+		}
+		if aliasBinding != canonicalBinding {
+			t.Fatalf("alias %q binding = %#v, want canonical %#v", alias.Name, aliasBinding, canonicalBinding)
+		}
+		if mcpfactorysession.IsCanonicalToolHandlerRegistered(alias.Name) {
+			t.Fatalf("compatibility alias %q must not be registered as canonical", alias.Name)
+		}
+	}
+}
+
+func TestStableIDHandlerRegistryPreservesSuccessAndDomainErrorOutcomes(t *testing.T) {
+	t.Parallel()
+
+	client := newFixtureMCPClient(t)
+	successRaw, err := client.CallTool(mcpfactorysession.ToolListSessions, json.RawMessage(`{"scope":"persisted"}`))
+	if err != nil {
+		t.Fatalf("CallTool(success) error = %v", err)
+	}
+	if !strings.Contains(string(successRaw), `"durableSessions"`) {
+		t.Fatalf("CallTool(success) = %s, want durable session result", successRaw)
+	}
+
+	domainErrorRaw, err := client.CallTool(mcpfactorysession.ToolGetSession, json.RawMessage(`{"sessionId":"missing-session"}`))
+	if err != nil {
+		t.Fatalf("CallTool(domain error) transport error = %v", err)
+	}
+	if !strings.Contains(string(domainErrorRaw), `"error"`) || !strings.Contains(string(domainErrorRaw), `"retryable":false`) {
+		t.Fatalf("CallTool(domain error) = %s, want typed non-retryable error envelope", domainErrorRaw)
+	}
+}
 
 const simpleValidWorkflowSource = `
 meta({ name: "review", version: 1 });
