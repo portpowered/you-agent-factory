@@ -133,7 +133,7 @@ wire-smoke:
 	$(MAKE) generate-wire
 	$(MAKE) generate-wire
 	node scripts/check-wire-gen-drift.js
-	$(GO) test ./cmd/factory/compose/... -count=1 -timeout $(GO_TEST_TIMEOUT)
+	$(GO) test ./pkg/wire/... -count=1 -timeout $(GO_TEST_TIMEOUT)
 
 api-smoke:
 	node scripts/run-quiet-api-command.js validate:main ./api/openapi-main.yaml
