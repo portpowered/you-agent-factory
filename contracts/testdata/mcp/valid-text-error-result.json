@@ -2,25 +2,25 @@
   "formatVersion": "1.0.0",
   "protocolVersion": "2024-11-05",
   "tools": {
-    "mcp.tool.you.factory_session.get": {
-      "id": "mcp.tool.you.factory_session.get",
-      "name": "you.factory_session.get",
+    "mcp.tool.you.factory_session.read_events": {
+      "id": "mcp.tool.you.factory_session.read_events",
+      "name": "you.factory_session.read_events",
       "documentation": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.get",
+        "itemId": "mcp.tool.you.factory_session.read_events",
         "documentation": {
           "title": {
-            "id": "mcp.tool.you.factory_session.get.title",
-            "canonicalEnglish": "Get Factory Session"
+            "id": "mcp.tool.you.factory_session.read_events.title",
+            "canonicalEnglish": "Read Factory Session Events"
           },
           "description": {
-            "id": "mcp.tool.you.factory_session.get.description",
-            "canonicalEnglish": "Reads one durable Factory Session by id."
+            "id": "mcp.tool.you.factory_session.read_events.description",
+            "canonicalEnglish": "Fixture-only tool record demonstrating plain-text transport-level error CallToolResult encoding with isError true."
           }
         },
         "examples": [
           {
-            "sessionId": "dur-sess-missing-999"
+            "sessionId": "dur-sess-evt-fixture-001"
           }
         ],
         "visibility": "public",
@@ -28,7 +28,7 @@
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.get",
+        "itemId": "mcp.tool.you.factory_session.read_events",
         "state": "active",
         "since": "1.0.0"
       },

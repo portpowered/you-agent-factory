@@ -137,6 +137,10 @@ Use this map when changing the public REST contract.
   through `internal/contractvalidator.MCPRegistry()` into
   `make contracts-validate`. The authored `contracts/mcp/tools.json` registers in
   `MCPRegistry()`; `valid-minimal.json` remains a focused schema fixture only.
+  Registry-valid fixtures must not reuse stable documentation IDs already claimed
+  by an authored `contracts/mcp/tools.json` tool record; retarget overlapping
+  fixtures to uncontracted tools (for example `valid-text-error-result.json`
+  uses `read_events` while `get` is authored in the catalog).
   Invalid fixtures are asserted in focused
   `internal/contractvalidator` tests with path-bearing diagnostics, not in the
   default valid-only registry pass. Consolidated fixture-matrix closure lives in
