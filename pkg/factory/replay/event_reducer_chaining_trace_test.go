@@ -1,6 +1,7 @@
 package replay
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -10,6 +11,58 @@ import (
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
+
+func TestReplayWorkStateChangeFromEvent_DecodesDomainPayloadAndContextFallbacks(t *testing.T) {
+	requestID := "request-recover"
+	workIDs := []string{"work-recover"}
+	triggerWorkID := "work-trigger"
+	reason := "operator retry"
+	payload, err := json.Marshal(interfaces.WorkStateChangeEventPayload{
+		WorkTypeName:  "task",
+		FromState:     "failed",
+		ToState:       "init",
+		FromPlaceID:   "task:failed",
+		ToPlaceID:     "task:init",
+		Source:        work.WorkStateChangeSourceCLI,
+		TriggerWorkID: &triggerWorkID,
+		Reason:        &reason,
+	})
+	if err != nil {
+		t.Fatalf("marshal domain payload: %v", err)
+	}
+
+	change, err := replayWorkStateChangeFromEvent(interfaces.FactoryEvent{
+		Id:      "factory-event/work-state-change/work-recover/4",
+		Type:    interfaces.FactoryEventTypeWorkStateChange,
+		Payload: payload,
+		Context: interfaces.FactoryEventContext{
+			Tick:      4,
+			RequestID: &requestID,
+			WorkIDs:   &workIDs,
+		},
+	})
+	if err != nil {
+		t.Fatalf("replayWorkStateChangeFromEvent: %v", err)
+	}
+	if change == nil {
+		t.Fatal("change = nil, want operator move")
+	}
+	want := work.WorkStateChangeRecord{
+		WorkID:        "work-recover",
+		WorkTypeName:  "task",
+		FromState:     "failed",
+		ToState:       "init",
+		FromPlaceID:   "task:failed",
+		ToPlaceID:     "task:init",
+		Source:        work.WorkStateChangeSourceCLI,
+		RequestID:     requestID,
+		TriggerWorkID: triggerWorkID,
+		Reason:        reason,
+	}
+	if change.observedTick != 4 || change.change != want {
+		t.Fatalf("change = %#v, want tick 4 and %#v", change, want)
+	}
+}
 
 func replayDispatchFromGeneratedEvent(t testing.TB, factory factoryapi.Factory, event factoryapi.FactoryEvent, workByID map[string]work.Work) (replayDispatch, error) {
 	t.Helper()

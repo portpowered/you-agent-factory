@@ -262,6 +262,20 @@ type DispatchRequestEventPayload struct {
 	TransitionID             string                        `json:"transitionId"`
 }
 
+// WorkStateChangeEventPayload describes a canonical Petri marking position
+// change. Correlation and ordering remain authoritative in FactoryEventContext.
+type WorkStateChangeEventPayload struct {
+	FromPlaceID   string                     `json:"fromPlaceId"`
+	FromState     string                     `json:"fromState"`
+	Reason        *string                    `json:"reason,omitempty"`
+	Source        work.WorkStateChangeSource `json:"source"`
+	ToPlaceID     string                     `json:"toPlaceId"`
+	ToState       string                     `json:"toState"`
+	TriggerWorkID *string                    `json:"triggerWorkId,omitempty"`
+	WorkID        string                     `json:"workId"`
+	WorkTypeName  string                     `json:"workTypeName"`
+}
+
 // FactoryStateChangePayload describes a lifecycle state change.
 type FactoryStateChangePayload struct {
 	PreviousState string `json:"previous_state,omitempty"`

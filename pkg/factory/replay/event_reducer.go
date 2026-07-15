@@ -87,6 +87,8 @@ func reduceReplayEvent(
 		return applyReplayRunRequest(reduced, event)
 	case interfaces.FactoryEventTypeDispatchRequest:
 		return applyReplayDispatchRequest(reduced, event, workByID)
+	case interfaces.FactoryEventTypeWorkStateChange:
+		return applyReplayWorkStateChange(reduced, event)
 	}
 	generatedEvent, err := generatedEventFromDomain(event)
 	if err != nil {
@@ -101,14 +103,12 @@ func reduceReplayEvent(
 		return applyReplayDispatchResponse(reduced, generatedEvent, inferenceAttemptsByDispatchID)
 	case interfaces.FactoryEventTypeRunResponse:
 		return applyReplayRunResponse(reduced, generatedEvent)
-	case interfaces.FactoryEventTypeWorkStateChange:
-		return applyReplayWorkStateChange(reduced, generatedEvent)
 	default:
 		return nil
 	}
 }
 
-func applyReplayWorkStateChange(reduced *replayEventLog, event factoryapi.FactoryEvent) error {
+func applyReplayWorkStateChange(reduced *replayEventLog, event interfaces.FactoryEvent) error {
 	change, err := replayWorkStateChangeFromEvent(event)
 	if err != nil {
 		return err
@@ -120,18 +120,18 @@ func applyReplayWorkStateChange(reduced *replayEventLog, event factoryapi.Factor
 	return nil
 }
 
-func replayWorkStateChangeFromEvent(event factoryapi.FactoryEvent) (*replayWorkStateChange, error) {
-	payload, err := event.Payload.AsWorkStateChangeEventPayload()
-	if err != nil {
+func replayWorkStateChangeFromEvent(event interfaces.FactoryEvent) (*replayWorkStateChange, error) {
+	var payload interfaces.WorkStateChangeEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return nil, fmt.Errorf("decode work state change event %q: %w", event.Id, err)
 	}
-	source := work.WorkStateChangeSource(payload.Source)
+	source := payload.Source
 	if source != work.WorkStateChangeSourceAPI && source != work.WorkStateChangeSourceCLI {
 		return nil, nil
 	}
-	workID := payload.WorkId
+	workID := payload.WorkID
 	if workID == "" {
-		workID = firstString(event.Context.WorkIds)
+		workID = firstString(event.Context.WorkIDs)
 	}
 	if workID == "" {
 		return nil, fmt.Errorf("work state change event %q payload.workId is required", event.Id)
@@ -144,11 +144,11 @@ func replayWorkStateChangeFromEvent(event factoryapi.FactoryEvent) (*replayWorkS
 			WorkTypeName:  payload.WorkTypeName,
 			FromState:     payload.FromState,
 			ToState:       payload.ToState,
-			FromPlaceID:   payload.FromPlaceId,
-			ToPlaceID:     payload.ToPlaceId,
+			FromPlaceID:   payload.FromPlaceID,
+			ToPlaceID:     payload.ToPlaceID,
 			Source:        source,
-			RequestID:     stringValue(event.Context.RequestId),
-			TriggerWorkID: stringValue(payload.TriggerWorkId),
+			RequestID:     stringValue(event.Context.RequestID),
+			TriggerWorkID: stringValue(payload.TriggerWorkID),
 			Reason:        stringValue(payload.Reason),
 		},
 	}, nil
