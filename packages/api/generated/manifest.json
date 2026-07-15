@@ -241,7 +241,7 @@
       "path": "generated/schemas/factory.schema.json"
     },
     "generated.schemas.mock-workers": {
-      "artifactHash": "e72779ea5b6372d6b9650ffdfbb8bb32e86d8b717d84a400121f7a13298494fc",
+      "artifactHash": "1aad74057b85a8c0d5c195e945832b373a0d37bbc7fc7efece5aa88085efd7d3",
       "documentation": {
         "documentation": {
           "description": {
@@ -258,7 +258,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.mock-workers",
-        "sourceHash": "e72779ea5b6372d6b9650ffdfbb8bb32e86d8b717d84a400121f7a13298494fc",
+        "sourceHash": "1aad74057b85a8c0d5c195e945832b373a0d37bbc7fc7efece5aa88085efd7d3",
         "visibility": "public"
       },
       "family": "config",
@@ -312,5 +312,5 @@
   "formatVersion": "1.0.0",
   "packageId": "you-agent-factory.api",
   "packageVersion": "0.0.0",
-  "sourceCommit": "cb22e59a990ba90bc7ef4daca6b7001eacfe0b9e"
+  "sourceCommit": "d56f9d8f8d2c8cd8a80bd5f84e193bf098f38a21"
 }

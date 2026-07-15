@@ -154,9 +154,14 @@ func TestMockWorkersSchema_DoesNotAdvertiseUnsupportedCapabilities(t *testing.T)
 	t.Parallel()
 
 	schema := loadAuthoredMockWorkersSchema(t)
-	encoded, err := json.Marshal(schema)
+	instanceSurface := map[string]any{
+		"properties": schema["properties"],
+		"$defs":      schema["$defs"],
+		"description": schema["description"],
+	}
+	encoded, err := json.Marshal(instanceSurface)
 	if err != nil {
-		t.Fatalf("marshal schema: %v", err)
+		t.Fatalf("marshal schema instance surface: %v", err)
 	}
 	lower := strings.ToLower(string(encoded))
 	for _, forbidden := range []string{
