@@ -19,6 +19,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
@@ -29,7 +30,6 @@ import (
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -791,7 +791,7 @@ func loadFactoryConfigForMode(cfg *FactoryServiceConfig) (*factoryconfig.LoadedF
 	if err != nil {
 		return nil, nil, fmt.Errorf("load replay artifact: %w", err)
 	}
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(artifact.Factory)
+	runtimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(artifact.Factory)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load embedded replay config: %w", err)
 	}
@@ -821,7 +821,7 @@ func warnReplayMetadataMismatches(cfg *FactoryServiceConfig, artifact *interface
 	if err != nil {
 		return
 	}
-	for _, warning := range replay.FactoryMetadataWarnings(artifact.Factory, currentFactory) {
+	for _, warning := range replay.FactorySnapshotMetadataWarnings(artifact.Factory, currentFactory) {
 		logger.Warn("replay artifact metadata differs from current checkout",
 			zap.String("category", replay.DivergenceCategoryConfigMismatch),
 			zap.String("metadata_key", warning.Key),

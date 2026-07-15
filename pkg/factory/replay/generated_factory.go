@@ -240,6 +240,27 @@ func RuntimeConfigFromGeneratedFactory(generated factoryapi.Factory) (*EmbeddedR
 	return runtimeCfg, nil
 }
 
+// RuntimeConfigFromFactorySnapshot rebuilds the runtime lookup from the
+// Factory-owned snapshot hydrated from a replay artifact.
+func RuntimeConfigFromFactorySnapshot(snapshot *interfaces.FactorySnapshot) (*EmbeddedRuntimeConfig, error) {
+	generated, err := generatedFactoryFromSnapshot(snapshot)
+	if err != nil {
+		return nil, err
+	}
+	return RuntimeConfigFromGeneratedFactory(generated)
+}
+
+func generatedFactoryFromSnapshot(snapshot *interfaces.FactorySnapshot) (factoryapi.Factory, error) {
+	if snapshot == nil {
+		return factoryapi.Factory{}, errors.New("replay artifact factory is required")
+	}
+	var generated factoryapi.Factory
+	if err := snapshot.Decode(&generated); err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("decode replay artifact factory: %w", err)
+	}
+	return generated, nil
+}
+
 // FactoryMetadataWarnings compares replay Factory metadata against the current
 // checkout's generated Factory metadata. Replay callers should warn but still
 // allow replay because artifacts are authoritative for runtime configuration.
@@ -266,6 +287,17 @@ func FactoryMetadataWarnings(artifactFactory, currentFactory factoryapi.Factory)
 		})
 	}
 	return warnings
+}
+
+// FactorySnapshotMetadataWarnings compares a replay artifact's domain snapshot
+// with the current generated boundary without exposing the generated type from
+// the ReplayArtifact contract.
+func FactorySnapshotMetadataWarnings(snapshot *interfaces.FactorySnapshot, currentFactory factoryapi.Factory) []MetadataMismatchWarning {
+	artifactFactory, err := generatedFactoryFromSnapshot(snapshot)
+	if err != nil {
+		return nil
+	}
+	return FactoryMetadataWarnings(artifactFactory, currentFactory)
 }
 
 func generatedFactoryAPIFromConfig(cfg *interfaces.FactoryConfig) factoryapi.Factory {

@@ -34,9 +34,18 @@ func testReplayArtifact(t *testing.T, events ...factoryapi.FactoryEvent) *interf
 		SchemaVersion: CurrentSchemaVersion,
 		RecordedAt:    recordedAt,
 		Events:        allEvents,
-		Factory:       generatedFactory,
+		Factory:       mustFactorySnapshot(t, generatedFactory),
 		WallClock:     &interfaces.ReplayWallClockMetadata{StartedAt: recordedAt},
 	}
+}
+
+func mustFactorySnapshot(t *testing.T, generated factoryapi.Factory) *interfaces.FactorySnapshot {
+	t.Helper()
+	snapshot, err := interfaces.NewFactorySnapshot(generated)
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	return snapshot
 }
 
 func testGeneratedFactory() factoryapi.Factory {

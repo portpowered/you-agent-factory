@@ -7,13 +7,14 @@ import (
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 )
 
-// ReplayArtifact remains a Factory replay compatibility contract until the
-// Factory ownership migration moves the remaining event and projection types.
+// ReplayArtifact is the Factory-owned in-memory view of one replay recording.
+// Serialized events remain the compatibility source of the embedded Factory;
+// Factory is hydrated as a detached snapshot for runtime consumers.
 type ReplayArtifact struct {
 	SchemaVersion string                    `json:"schemaVersion"`
 	RecordedAt    time.Time                 `json:"recordedAt"`
 	Events        []factoryapi.FactoryEvent `json:"events"`
-	Factory       factoryapi.Factory        `json:"-"`
+	Factory       *FactorySnapshot          `json:"-"`
 	Diagnostics   ReplayDiagnostics         `json:"-"`
 	WallClock     *ReplayWallClockMetadata  `json:"-"`
 }

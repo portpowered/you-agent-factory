@@ -11,6 +11,7 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
 
 func TestJavaScriptRecordingContract_RoundTripsCompletedAndFailedSessionFacts(t *testing.T) {
@@ -67,7 +68,22 @@ func TestJavaScriptRecordingContract_RoundTripsCompletedAndFailedSessionFacts(t 
 
 			assertRecordedJavaScriptLifecycle(t, loaded.Events, testCase.wantStatus, testCase.failure)
 			assertRecordingOmitsRawJavaScriptInternals(t, loaded)
+			publicFactory, err := factorysnapshot.ToAPI(loaded.Factory)
+			if err != nil {
+				t.Fatalf("map replay Factory snapshot: %v", err)
+			}
+			if publicFactory == nil || publicFactory.Name != "recorded-javascript-factory" {
+				t.Fatalf("mapped replay Factory = %#v, want recorded-javascript-factory", publicFactory)
+			}
 		})
+	}
+}
+
+func TestReplayFactorySnapshotMappingPreservesAbsentOptionalFactory(t *testing.T) {
+	t.Parallel()
+	publicFactory, err := factorysnapshot.ToAPI(nil)
+	if err != nil || publicFactory != nil {
+		t.Fatalf("ToAPI(nil) = (%#v, %v), want (nil, nil)", publicFactory, err)
 	}
 }
 

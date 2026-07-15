@@ -1,6 +1,7 @@
 package factorysnapshot
 
 import (
+	"strings"
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
@@ -31,5 +32,20 @@ func TestToAPIPreservesPublicFactoryShape(t *testing.T) {
 	}
 	if got.Workstations == nil || len(*got.Workstations) != 1 || (*got.Workstations)[0].Name != "review" {
 		t.Fatalf("ToAPI workstations = %#v, want review", got.Workstations)
+	}
+}
+
+func TestToAPIHandlesAbsentAndMalformedSnapshots(t *testing.T) {
+	t.Parallel()
+
+	got, err := ToAPI(nil)
+	if err != nil || got != nil {
+		t.Fatalf("ToAPI(nil) = (%#v, %v), want (nil, nil)", got, err)
+	}
+
+	malformed := interfaces.FactorySnapshot(`{"workers":`)
+	got, err = ToAPI(&malformed)
+	if err == nil || !strings.Contains(err.Error(), "map factory snapshot to public contract") {
+		t.Fatalf("ToAPI(malformed) = (%#v, %v), want contextual decode error", got, err)
 	}
 }

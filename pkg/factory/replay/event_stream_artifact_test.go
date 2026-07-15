@@ -42,7 +42,8 @@ func TestArtifactFromEventStream_ParsesCanonicalEventStreamAndSkipsTruncatedTail
 	if result.SkippedTrailingBlocks != 1 {
 		t.Fatalf("SkippedTrailingBlocks = %d, want 1", result.SkippedTrailingBlocks)
 	}
-	if got := result.Artifact.Factory.Workers; got == nil || len(*got) != 1 {
+	factory := decodeReplayFactorySnapshot(t, result.Artifact.Factory)
+	if got := factory.Workers; got == nil || len(*got) != 1 {
 		t.Fatalf("artifact factory workers = %#v, want hydrated factory config", got)
 	}
 }
@@ -84,10 +85,11 @@ func TestArtifactFromEventStream_NormalizesLegacyCronPayloads(t *testing.T) {
 	if result.ParsedEvents != 1 {
 		t.Fatalf("ParsedEvents = %d, want 1", result.ParsedEvents)
 	}
-	if result.Artifact.Factory.Workstations == nil || len(*result.Artifact.Factory.Workstations) != 1 {
-		t.Fatalf("artifact workstations = %#v, want one normalized cron workstation", result.Artifact.Factory.Workstations)
+	factory := decodeReplayFactorySnapshot(t, result.Artifact.Factory)
+	if factory.Workstations == nil || len(*factory.Workstations) != 1 {
+		t.Fatalf("artifact workstations = %#v, want one normalized cron workstation", factory.Workstations)
 	}
-	workstation := (*result.Artifact.Factory.Workstations)[0]
+	workstation := (*factory.Workstations)[0]
 	if workstation.Cron == nil || workstation.Cron.Schedule != legacyEventStreamCronPlaceholderSchedule {
 		t.Fatalf("normalized cron = %#v, want placeholder schedule %q", workstation.Cron, legacyEventStreamCronPlaceholderSchedule)
 	}
@@ -122,7 +124,7 @@ func TestSaveArtifactFromEventStreamFile_HydratesAdjacentFactoryAndRewritesEmbed
 	if err != nil {
 		t.Fatalf("Load(%s): %v", artifactPath, err)
 	}
-	assertReplayHydratedFactoryRuntime(t, loaded.Factory)
+	assertReplayHydratedFactoryRuntime(t, decodeReplayFactorySnapshot(t, loaded.Factory))
 
 	runStartedPayload, err := loaded.Events[0].Payload.AsRunRequestEventPayload()
 	if err != nil {
@@ -135,6 +137,15 @@ func TestSaveArtifactFromEventStreamFile_HydratesAdjacentFactoryAndRewritesEmbed
 		t.Fatalf("AsInitialStructureRequestEventPayload: %v", err)
 	}
 	assertReplayHydratedFactoryRuntime(t, initialPayload.Factory)
+}
+
+func decodeReplayFactorySnapshot(t *testing.T, snapshot *interfaces.FactorySnapshot) factoryapi.Factory {
+	t.Helper()
+	var factory factoryapi.Factory
+	if err := snapshot.Decode(&factory); err != nil {
+		t.Fatalf("decode replay Factory snapshot: %v", err)
+	}
+	return factory
 }
 
 func writeReplayArtifactHydrationFixture(t *testing.T, factoryDir string) {

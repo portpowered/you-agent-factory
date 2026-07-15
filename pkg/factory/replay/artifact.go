@@ -91,7 +91,8 @@ func Validate(artifact *interfaces.ReplayArtifact) error {
 	if err := validateReplayEventEnvelope(artifact); err != nil {
 		return err
 	}
-	if !generatedFactoryHasConfig(artifact.Factory) {
+	generatedFactory, err := generatedFactoryFromSnapshot(artifact.Factory)
+	if err != nil || !generatedFactoryHasConfig(generatedFactory) {
 		return errors.New("replay artifact factory is required")
 	}
 	return nil

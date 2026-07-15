@@ -15,6 +15,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -59,7 +60,7 @@ func TestReplayRuntimeConfigSmoke_CanonicalWorkstationsDriveDispatchAndReplay(t 
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertCanonicalReplayWorkstationMap(t, artifactPath, artifact)
-	replayRuntime, err := replay.RuntimeConfigFromGeneratedFactory(artifact.Factory)
+	replayRuntime, err := replay.RuntimeConfigFromFactorySnapshot(artifact.Factory)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
@@ -138,18 +139,22 @@ func assertCanonicalReplayWorkstationMap(t *testing.T, artifactPath string, arti
 	if strings.Contains(string(data), "workstation_configs") {
 		t.Fatalf("replay artifact contains legacy workstation_configs map")
 	}
-	if artifact.Factory.Workstations == nil || len(*artifact.Factory.Workstations) != 2 {
-		t.Fatalf("factory workstations = %#v, want 2", artifact.Factory.Workstations)
+	generatedFactory, err := factorysnapshot.ToAPI(artifact.Factory)
+	if err != nil {
+		t.Fatalf("map replay Factory snapshot: %v", err)
+	}
+	if generatedFactory.Workstations == nil || len(*generatedFactory.Workstations) != 2 {
+		t.Fatalf("factory workstations = %#v, want 2", generatedFactory.Workstations)
 	}
 	found := false
-	for _, workstation := range *artifact.Factory.Workstations {
+	for _, workstation := range *generatedFactory.Workstations {
 		if workstation.Name == "step-one" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("factory payload missing step-one workstation: %#v", artifact.Factory.Workstations)
+		t.Fatalf("factory payload missing step-one workstation: %#v", generatedFactory.Workstations)
 	}
 }
 

@@ -206,11 +206,19 @@ func hydrateArtifactFromAdjacentFactory(eventStreamPath string, artifact *interf
 	if !ok {
 		return nil
 	}
-	merged := mergeGeneratedFactoryMissingRuntimeFields(artifact.Factory, generated)
+	recorded, err := generatedFactoryFromSnapshot(artifact.Factory)
+	if err != nil {
+		return err
+	}
+	merged := mergeGeneratedFactoryMissingRuntimeFields(recorded, generated)
 	if err := rewriteArtifactFactoryEvents(artifact, merged); err != nil {
 		return err
 	}
-	artifact.Factory = merged
+	snapshot, err := interfaces.NewFactorySnapshot(merged)
+	if err != nil {
+		return fmt.Errorf("capture hydrated replay factory: %w", err)
+	}
+	artifact.Factory = snapshot
 	return nil
 }
 

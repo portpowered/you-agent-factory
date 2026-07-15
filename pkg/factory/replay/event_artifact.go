@@ -33,6 +33,7 @@ func artifactForStorage(artifact *interfaces.ReplayArtifact) (*interfaces.Replay
 	}
 	out := *artifact
 	out.Events = append([]factoryapi.FactoryEvent(nil), artifact.Events...)
+	out.Factory = artifact.Factory.Clone()
 	assignEventSequences(out.Events)
 	if err := canonicalizeRunRequestEventPayloads(&out); err != nil {
 		return nil, err
@@ -75,11 +76,15 @@ func NewEventLogArtifactFromFactory(recordedAt time.Time, generatedFactory facto
 	if err != nil {
 		return nil, err
 	}
+	factorySnapshot, err := interfaces.NewFactorySnapshot(generatedFactory)
+	if err != nil {
+		return nil, fmt.Errorf("capture replay factory: %w", err)
+	}
 	artifact := &interfaces.ReplayArtifact{
 		SchemaVersion: CurrentSchemaVersion,
 		RecordedAt:    recordedAt,
 		Events:        []factoryapi.FactoryEvent{event},
-		Factory:       generatedFactory,
+		Factory:       factorySnapshot,
 		WallClock:     wallClock,
 		Diagnostics:   diagnostics,
 	}
@@ -146,7 +151,11 @@ func hydrateArtifactFromEvents(artifact *interfaces.ReplayArtifact) error {
 			if err != nil {
 				return err
 			}
-			artifact.Factory = payload.Factory
+			factorySnapshot, err := interfaces.NewFactorySnapshot(payload.Factory)
+			if err != nil {
+				return fmt.Errorf("capture run started event %q factory: %w", event.Id, err)
+			}
+			artifact.Factory = factorySnapshot
 			artifact.RecordedAt = payload.RecordedAt
 			artifact.WallClock = replayWallClockFromGenerated(payload.WallClock)
 			artifact.Diagnostics = replayDiagnosticsFromGenerated(payload.Diagnostics)

@@ -662,11 +662,12 @@ func TestBuildFactoryService_RecordModeWritesInitialArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load(recording): %v", err)
 	}
-	if artifact.Factory.Workers == nil {
+	generatedFactory := decodeRecordedFactorySnapshot(t, artifact.Factory)
+	if generatedFactory.Workers == nil {
 		t.Fatal("expected embedded factory config")
 	}
-	if artifact.Factory.FactoryDirectory == nil || *artifact.Factory.FactoryDirectory != dir {
-		t.Fatalf("factory directory = %#v, want %q", artifact.Factory.FactoryDirectory, dir)
+	if generatedFactory.FactoryDirectory == nil || *generatedFactory.FactoryDirectory != dir {
+		t.Fatalf("factory directory = %#v, want %q", generatedFactory.FactoryDirectory, dir)
 	}
 }
 
@@ -709,9 +710,19 @@ func TestBuildFactoryService_RecordModeResolvesGeneratedDefaultSessionPathAndCre
 	if err != nil {
 		t.Fatalf("Load(recording): %v", err)
 	}
-	if artifact.Factory.FactoryDirectory == nil || *artifact.Factory.FactoryDirectory != dir {
-		t.Fatalf("factory directory = %#v, want %q", artifact.Factory.FactoryDirectory, dir)
+	generatedFactory := decodeRecordedFactorySnapshot(t, artifact.Factory)
+	if generatedFactory.FactoryDirectory == nil || *generatedFactory.FactoryDirectory != dir {
+		t.Fatalf("factory directory = %#v, want %q", generatedFactory.FactoryDirectory, dir)
 	}
+}
+
+func decodeRecordedFactorySnapshot(t *testing.T, snapshot *interfaces.FactorySnapshot) factoryapi.Factory {
+	t.Helper()
+	var generated factoryapi.Factory
+	if err := snapshot.Decode(&generated); err != nil {
+		t.Fatalf("decode recorded Factory snapshot: %v", err)
+	}
+	return generated
 }
 
 // portos:func-length-exception owner=agent-factory reason=legacy-runtime-log-fixture review=2026-07-18 removal=split-runtime-log-fixture-before-next-runtime-logging-change

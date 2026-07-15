@@ -122,7 +122,7 @@ func replayArtifactFieldsFixture(t *testing.T, recordedAt time.Time) *interfaces
 		SchemaVersion: CurrentSchemaVersion,
 		RecordedAt:    recordedAt,
 		Events:        events,
-		Factory:       generatedFactory,
+		Factory:       mustFactorySnapshot(t, generatedFactory),
 		WallClock:     replayWallClockMetadata(recordedAt),
 	}
 }
@@ -432,8 +432,9 @@ func TestLoad_RunStartedFactoryBoundaryMatchesFileBoundaryDecode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if !reflect.DeepEqual(artifact.Factory, want) {
-		t.Fatalf("run-started factory mismatch\n got: %#v\nwant: %#v", artifact.Factory, want)
+	got := decodeReplayFactorySnapshot(t, artifact.Factory)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("run-started factory mismatch\n got: %#v\nwant: %#v", got, want)
 	}
 }
 

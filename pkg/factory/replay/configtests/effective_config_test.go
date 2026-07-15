@@ -15,10 +15,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -83,7 +83,7 @@ func TestRuntimeConfigFromGeneratedFactory_RebuildsWithoutOriginalFiles(t *testi
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(loadedArtifact.Factory)
+	runtimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(loadedArtifact.Factory)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
@@ -291,7 +291,7 @@ func loadReplayInitialProjectionFromArtifact(t *testing.T, factoryDir string, lo
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	replayRuntimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(loadedArtifact.Factory)
+	replayRuntimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(loadedArtifact.Factory)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
@@ -566,7 +566,7 @@ func roundTripGeneratedFactoryThroughReplayArtifact(t *testing.T, factoryDir str
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	replayRuntimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(loadedArtifact.Factory)
+	replayRuntimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(loadedArtifact.Factory)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
