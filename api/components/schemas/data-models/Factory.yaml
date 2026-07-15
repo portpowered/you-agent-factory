@@ -1,182 +1,83 @@
 type: object
 description: >-
-  Top-level factory.json contract. Declare the work types, resources,
-  portability resources, workers, and workstations that make up one
-  authored factory here.
-  Guarded loop breakers should be authored as guarded LOGICAL_MOVE
-  workstations using VISIT_COUNT guards instead of a top-level
-  exhaustion-rules field.
+    Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.
 additionalProperties: false
 required:
-  - name
-example:
-  name: customer-support-triage
-  inputTypes:
-    - name: brief
-      type: DEFAULT
-  guards:
-    - type: INFERENCE_THROTTLE_GUARD
-      modelProvider: CLAUDE
-      model: claude-sonnet-4-20250514
-      refreshWindow: 15m
-  workTypes:
-    - name: story
-      states:
-        - name: init
-          type: INITIAL
-        - name: inReview
-          type: PROCESSING
-        - name: failed
-          type: FAILED
-        - name: complete
-          type: TERMINAL
-  invocationReturn:
-    policy: SUBMITTED_WORK_TERMINAL
-  supportingFiles:
-    requiredTools:
-      - name: python
-        command: python3
-        purpose: Runs bundled translation scripts
-        versionArgs:
-          - --version
-    bundledFiles:
-      - type: ROOT_HELPER
-        targetPath: Makefile
-        content:
-          encoding: utf-8
-          inline: "test:\n\tgo test ./...\n"
-      - type: SCRIPT
-        targetPath: factory/scripts/setup-workspace.py
-        content:
-          encoding: utf-8
-          inline: |
-            print("portable")
-      - type: DOC
-        targetPath: factory/docs/usage.md
-        content:
-          encoding: utf-8
-          inline: |
-            # Usage
-      - type: INPUT
-        targetPath: factory/inputs/story/default/seed.md
-        content:
-          encoding: utf-8
-          inline: |
-            Shared starter work
-  workers:
-    - name: reviewer
-      type: MODEL_WORKER
-      executorProvider: SCRIPT_WRAP
-      modelProvider: CLAUDE
-      model: claude-sonnet-4-20250514
-    - name: review-loop-breaker
-      type: MODEL_WORKER
-      executorProvider: SCRIPT_WRAP
-      modelProvider: CLAUDE
-      model: claude-sonnet-4-20250514
-  workstations:
-    - name: review-story
-      behavior: REPEATER
-      type: MODEL_WORKSTATION
-      worker: reviewer
-      inputs:
-        - workType: story
-          state: init
-      outputs:
-        - workType: story
-          state: inReview
-      onRejection:
-        - workType: story
-          state: init
-      onFailure:
-        - workType: story
-          state: failed
-    - name: review-loop-breaker
-      worker: review-loop-breaker
-      type: LOGICAL_MOVE
-      guards:
-        - type: VISIT_COUNT
-          workstation: review-story
-          maxVisits: 3
-      inputs:
-        - workType: story
-          state: init
-      outputs:
-        - workType: story
-          state: failed
+    - name
 properties:
-  name:
-    $ref: './FactoryName.yaml'
-  id:
-    type: string
-    description: Factory identifier used as the factory-level template context fallback.
-  runner:
-    $ref: './RunnerID.yaml'
-    description: Default runner selection for the factory when a workstation does not declare its own runner override.
-  factoryDirectory:
-    type: string
-    description: Directory that contained the factory.json used for this serialized runtime config.
-  sourceDirectory:
-    type: string
-    description: Original source directory for record/replay and drift diagnostics.
-  version:
-    $ref: '../api/HybridLogicalTimestamp.yaml'
-    description: Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology.
-  metadata:
-    $ref: '../shared/StringMap.yaml'
-    description: Free-form factory-level metadata carried through runtime serialization and replay diagnostics.
-  orchestrator:
-    $ref: './FactoryOrchestrator.yaml'
-    description: >-
-      Authored orchestrator identity for this factory. When omitted, existing
-      Petri factories load through compatibility defaulting to
-      orchestrator.kind = PETRI.
-  inputTypes:
-    type: array
-    description: Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
-    items:
-      $ref: './InputType.yaml'
-  invocationReturn:
-    $ref: './InvocationReturn.yaml'
-    description: >-
-      Optional factory-authored invocation primary-result policy shared by CLI
-      and API entrypoints. When omitted, runtimes use the
-      SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for
-      the work item originally submitted by the invocation.
-  invocationSignature:
-    $ref: './FactoryInvocationSignature.yaml'
-    description: >-
-      Optional canonical callable argument contract shared by CLI, API,
-      dashboard, docs, and packaged factories. When omitted, callers use the
-      factory's compatibility invocation behavior.
-  guards:
-    type: array
-    description: Root-level guards that apply across the factory instead of one specific workstation or input.
-    items:
-      $ref: './FactoryGuard.yaml'
-  workTypes:
-    type: array
-    description: Customer-authored work item categories and the lifecycle states each one can occupy.
-    items:
-      $ref: './WorkType.yaml'
-  resources:
-    type: array
-    description: Shared capacity pools that workers or workstations can consume while work is executing.
-    items:
-      $ref: './Resource.yaml'
-  supportingFiles:
-    $ref: './ResourceManifest.yaml'
-    description: Optional portability manifest for validation-only external tools and portable bundled files. During v1 factory sharing, bundled INPUT files represent a share-time snapshot of the source factory's current inputs work so recipients restore detached starter-work copies that no longer sync back to the original factory. This contract is distinct from runtime-capacity resources.
-  layout:
-    $ref: './FactoryLayout.yaml'
-    description: Optional non-executable graph editor layout metadata keyed by canonical graph node and edge ids.
-  workers:
-    type: array
-    description: Reusable worker definitions that workstations reference by name when dispatching work.
-    items:
-      $ref: './Worker.yaml'
-  workstations:
-    type: array
-    description: Processing steps that consume work, invoke workers, and emit the next work states.
-    items:
-      $ref: './Workstation.yaml'
+    name:
+        $ref: './FactoryName.yaml'
+    id:
+        type: string
+        description: Factory identifier used as the factory-level template context fallback.
+    runner:
+        allOf:
+            - $ref: './RunnerID.yaml'
+        description: Default runner selection for the factory when a workstation does not declare its own runner override.
+    factoryDirectory:
+        type: string
+        description: Directory that contained the factory.json used for this serialized runtime config.
+    sourceDirectory:
+        type: string
+        description: Original source directory for record/replay and drift diagnostics.
+    version:
+        allOf:
+            - $ref: '../api/HybridLogicalTimestamp.yaml'
+        description: Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology.
+    metadata:
+        allOf:
+            - $ref: '../shared/StringMap.yaml'
+        description: Free-form factory-level metadata carried through runtime serialization and replay diagnostics.
+    orchestrator:
+        allOf:
+            - $ref: './FactoryOrchestrator.yaml'
+        description: >-
+            Authored orchestrator identity for this factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
+    inputTypes:
+        type: array
+        description: Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
+        items:
+            $ref: './InputType.yaml'
+    invocationReturn:
+        allOf:
+            - $ref: './InvocationReturn.yaml'
+        description: >-
+            Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation.
+    invocationSignature:
+        allOf:
+            - $ref: './FactoryInvocationSignature.yaml'
+        description: >-
+            Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior.
+    guards:
+        type: array
+        description: Root-level guards that apply across the factory instead of one specific workstation or input.
+        items:
+            $ref: './FactoryGuard.yaml'
+    workTypes:
+        type: array
+        description: Customer-authored work item categories and the lifecycle states each one can occupy.
+        items:
+            $ref: './WorkType.yaml'
+    resources:
+        type: array
+        description: Shared capacity pools that workers or workstations can consume while work is executing.
+        items:
+            $ref: './Resource.yaml'
+    supportingFiles:
+        allOf:
+            - $ref: './ResourceManifest.yaml'
+        description: Optional portability manifest for validation-only external tools and portable bundled files. During v1 factory sharing, bundled INPUT files represent a share-time snapshot of the source factory's current inputs work so recipients restore detached starter-work copies that no longer sync back to the original factory. This contract is distinct from runtime-capacity resources.
+    layout:
+        allOf:
+            - $ref: './FactoryLayout.yaml'
+        description: Optional non-executable graph editor layout metadata keyed by canonical graph node and edge ids.
+    workers:
+        type: array
+        description: Reusable worker definitions that workstations reference by name when dispatching work.
+        items:
+            $ref: './Worker.yaml'
+    workstations:
+        type: array
+        description: Processing steps that consume work, invoke workers, and emit the next work states.
+        items:
+            $ref: './Workstation.yaml'

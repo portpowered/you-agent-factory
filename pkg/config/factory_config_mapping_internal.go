@@ -747,7 +747,7 @@ func factoryGuardsInternalFromAPI(guards *[]factoryapi.FactoryGuard) []interface
 	values := make([]interfaces.FactoryGuardConfig, len(*guards))
 	for i, guard := range *guards {
 		values[i] = interfaces.FactoryGuardConfig{
-			Type:          internalFactoryGuardTypeFromPublic(guard.Type),
+			Type:          internalFactoryGuardTypeFromPublicFactoryGuard(guard.Type),
 			ModelProvider: internalFactoryWorkerModelProviderFromPublic(&guard.ModelProvider),
 			Model:         stringValue(guard.Model),
 			RefreshWindow: guard.RefreshWindow,
@@ -768,7 +768,7 @@ func workstationIOInternalFromAPI(cfg factoryapi.WorkstationIO, fieldPath string
 	}, nil
 }
 
-func inputGuardInternalFromAPI(guards *[]factoryapi.Guard, fieldPath string) (*interfaces.InputGuardConfig, error) {
+func inputGuardInternalFromAPI(guards *[]factoryapi.InputGuard, fieldPath string) (*interfaces.InputGuardConfig, error) {
 	if guards == nil || len(*guards) == 0 {
 		return nil, nil
 	}
@@ -777,7 +777,7 @@ func inputGuardInternalFromAPI(guards *[]factoryapi.Guard, fieldPath string) (*i
 	}
 	guard := (*guards)[0]
 	return &interfaces.InputGuardConfig{
-		Type:        internalFactoryGuardTypeFromPublic(guard.Type),
+		Type:        internalFactoryGuardTypeFromPublicInputGuard(guard.Type),
 		MatchInput:  stringValue(guard.MatchInput),
 		ParentInput: stringValue(guard.ParentInput),
 		SpawnedBy:   stringValue(guard.SpawnedBy),
@@ -805,14 +805,14 @@ func enumStringValue[T ~string](value *T) string {
 	return string(*value)
 }
 
-func workstationGuardsInternalFromAPI(guards *[]factoryapi.Guard) []interfaces.GuardConfig {
+func workstationGuardsInternalFromAPI(guards *[]factoryapi.WorkstationGuard) []interfaces.GuardConfig {
 	if guards == nil {
 		return nil
 	}
 	values := make([]interfaces.GuardConfig, len(*guards))
 	for i, guard := range *guards {
 		values[i] = interfaces.GuardConfig{
-			Type:        internalFactoryGuardTypeFromPublic(guard.Type),
+			Type:        internalFactoryGuardTypeFromPublicWorkstationGuard(guard.Type),
 			Workstation: stringValue(guard.Workstation),
 			MaxVisits:   intValue(guard.MaxVisits),
 			MatchConfig: guardMatchConfigInternalFromAPI(guard.MatchConfig),
@@ -1096,10 +1096,6 @@ func internalFactoryWorkstationTypeFromPublic(value *factoryapi.WorkstationType)
 	return strings.TrimSpace(string(*value))
 }
 
-func publicFactoryGuardTypeFromInternal(value interfaces.GuardType) factoryapi.GuardType {
-	return factoryapi.GuardType(publicFactoryGuardTypeStringFromInternal(value))
-}
-
 func publicFactoryGuardTypeStringFromInternal(value interfaces.GuardType) string {
 	switch strings.TrimSpace(string(value)) {
 	case string(interfaces.GuardTypeVisitCount), publicFactoryGuardTypeVisitCount:
@@ -1139,6 +1135,30 @@ func internalFactoryGuardTypeFromPublic(value factoryapi.GuardType) interfaces.G
 	default:
 		return interfaces.GuardType(strings.TrimSpace(string(value)))
 	}
+}
+
+func internalFactoryGuardTypeFromPublicWorkstationGuard(value factoryapi.WorkstationGuardType) interfaces.GuardType {
+	return internalFactoryGuardTypeFromPublic(factoryapi.GuardType(value))
+}
+
+func internalFactoryGuardTypeFromPublicInputGuard(value factoryapi.InputGuardType) interfaces.GuardType {
+	return internalFactoryGuardTypeFromPublic(factoryapi.GuardType(value))
+}
+
+func internalFactoryGuardTypeFromPublicFactoryGuard(value factoryapi.FactoryGuardType) interfaces.GuardType {
+	return internalFactoryGuardTypeFromPublic(factoryapi.GuardType(value))
+}
+
+func publicWorkstationGuardTypeFromInternal(value interfaces.GuardType) factoryapi.WorkstationGuardType {
+	return factoryapi.WorkstationGuardType(publicFactoryGuardTypeStringFromInternal(value))
+}
+
+func publicInputGuardTypeFromInternal(value interfaces.GuardType) factoryapi.InputGuardType {
+	return factoryapi.InputGuardType(publicFactoryGuardTypeStringFromInternal(value))
+}
+
+func publicFactoryRootGuardTypeFromInternal(value interfaces.GuardType) factoryapi.FactoryGuardType {
+	return factoryapi.FactoryGuardType(publicFactoryGuardTypeStringFromInternal(value))
 }
 
 func orchestratorInternalFromAPI(value *factoryapi.FactoryOrchestrator) (*interfaces.FactoryOrchestratorConfig, error) {

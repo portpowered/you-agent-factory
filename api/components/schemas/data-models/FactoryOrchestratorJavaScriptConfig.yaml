@@ -12,7 +12,8 @@ properties:
     type: string
     description: Factory-relative or authored reference to the workflow source file.
   inlineSource:
-    $ref: './FactoryOrchestratorJavaScriptInlineSource.yaml'
+    allOf:
+      - $ref: './FactoryOrchestratorJavaScriptInlineSource.yaml'
     description: Inline workflow source when the factory carries source text directly.
   sourceHash:
     type: string
@@ -21,7 +22,8 @@ properties:
     type: string
     description: Optional exported entrypoint or phase name used to start the workflow.
   metadata:
-    $ref: '../shared/StringMap.yaml'
+    allOf:
+      - $ref: '../shared/StringMap.yaml'
     description: Free-form JavaScript orchestrator metadata for authoring and diagnostics.
   argsSchema:
     type: object

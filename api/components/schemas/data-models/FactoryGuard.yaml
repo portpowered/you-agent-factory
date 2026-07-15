@@ -8,7 +8,7 @@ required:
 properties:
   type:
     allOf:
-      - $ref: './GuardType.yaml'
+      - $ref: './FactoryGuardType.yaml'
     description: Factory-level guard condition to evaluate before dispatch-ready transitions can proceed.
   modelProvider:
     allOf:

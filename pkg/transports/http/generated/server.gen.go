@@ -183,6 +183,11 @@ const (
 	FactoryEventTypeWorkStateChange               FactoryEventType = "WORK_STATE_CHANGE"
 )
 
+// Defines values for FactoryGuardType.
+const (
+	FactoryGuardTypeInferenceThrottle FactoryGuardType = "INFERENCE_THROTTLE_GUARD"
+)
+
 // Defines values for FactoryInvocationOutputContractMode.
 const (
 	FactoryInvocationOutputContractModeFile   FactoryInvocationOutputContractMode = "FILE"
@@ -550,7 +555,6 @@ const (
 const (
 	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
 	GuardTypeAnyChildFailed      GuardType = "ANY_CHILD_FAILED"
-	GuardTypeInferenceThrottle   GuardType = "INFERENCE_THROTTLE_GUARD"
 	GuardTypeMatchesFields       GuardType = "MATCHES_FIELDS"
 	GuardTypeSameName            GuardType = "SAME_NAME"
 	GuardTypeSameTraceID         GuardType = "SAME_TRACE_ID"
@@ -566,6 +570,15 @@ const (
 const (
 	InferenceOutcomeFailed    InferenceOutcome = "FAILED"
 	InferenceOutcomeSucceeded InferenceOutcome = "SUCCEEDED"
+)
+
+// Defines values for InputGuardType.
+const (
+	InputGuardTypeALLCHILDRENCOMPLETE InputGuardType = "ALL_CHILDREN_COMPLETE"
+	InputGuardTypeANYCHILDFAILED      InputGuardType = "ANY_CHILD_FAILED"
+	InputGuardTypeSAMENAME            InputGuardType = "SAME_NAME"
+	InputGuardTypeSAMETRACEID         InputGuardType = "SAME_TRACE_ID"
+	InputGuardTypeVISITCOUNT          InputGuardType = "VISIT_COUNT"
 )
 
 // Defines values for InputKind.
@@ -887,6 +900,12 @@ const (
 	WorkerTypeScriptWorker    WorkerType = "SCRIPT_WORKER"
 )
 
+// Defines values for WorkstationGuardType.
+const (
+	WorkstationGuardTypeMATCHESFIELDS WorkstationGuardType = "MATCHES_FIELDS"
+	WorkstationGuardTypeVISITCOUNT    WorkstationGuardType = "VISIT_COUNT"
+)
+
 // Defines values for WorkstationKind.
 const (
 	WorkstationKindCron     WorkstationKind = "CRON"
@@ -963,7 +982,7 @@ type AgentWorkerToolPolicy string
 
 // AgentWorkerToolsConfig Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy.
 type AgentWorkerToolsConfig struct {
-	// Policy Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.
+	// Policy Required executor policy for agent-loop tool use on this worker.
 	Policy AgentWorkerToolPolicy `json:"policy"`
 }
 
@@ -1235,34 +1254,38 @@ type Factory struct {
 	// InputTypes Named input kinds accepted by the factory. The default input type is implicit and must not be declared.
 	InputTypes *[]InputType `json:"inputTypes,omitempty"`
 
-	// InvocationReturn Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.
+	// InvocationReturn Optional factory-authored invocation primary-result policy shared by CLI and API entrypoints. When omitted, runtimes use the SUBMITTED_WORK_TERMINAL fallback and return the first terminal content for the work item originally submitted by the invocation.
 	InvocationReturn *InvocationReturn `json:"invocationReturn,omitempty"`
 
-	// InvocationSignature Canonical callable argument contract for invoking one factory. When present, CLI, API, dashboard, docs, and packaged-factory surfaces should discover and normalize invocation inputs from this shared schema instead of transport- or factory-specific argument definitions.
+	// InvocationSignature Optional canonical callable argument contract shared by CLI, API, dashboard, docs, and packaged factories. When omitted, callers use the factory's compatibility invocation behavior.
 	InvocationSignature *FactoryInvocationSignature `json:"invocationSignature,omitempty"`
 
-	// Layout Non-executable portable graph editor layout metadata keyed by canonical graph ids.
-	Layout   *FactoryLayout `json:"layout,omitempty"`
-	Metadata *StringMap     `json:"metadata,omitempty"`
+	// Layout Optional non-executable graph editor layout metadata keyed by canonical graph node and edge ids.
+	Layout *FactoryLayout `json:"layout,omitempty"`
+
+	// Metadata Free-form factory-level metadata carried through runtime serialization and replay diagnostics.
+	Metadata *StringMap `json:"metadata,omitempty"`
 
 	// Name Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.
 	Name FactoryName `json:"name"`
 
-	// Orchestrator Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
+	// Orchestrator Authored orchestrator identity for this factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
 	Orchestrator *FactoryOrchestrator `json:"orchestrator,omitempty"`
 
 	// Resources Shared capacity pools that workers or workstations can consume while work is executing.
 	Resources *[]Resource `json:"resources,omitempty"`
 
-	// Runner Stable built-in runner identifiers supported by factory and workstation runner selection.
+	// Runner Default runner selection for the factory when a workstation does not declare its own runner override.
 	Runner *RunnerID `json:"runner,omitempty"`
 
 	// SourceDirectory Original source directory for record/replay and drift diagnostics.
 	SourceDirectory *string `json:"sourceDirectory,omitempty"`
 
-	// SupportingFiles Canonical portability manifest for Agent Factory bundles. Required tools are validation-only PATH dependencies; bundled files carry portable content for restoration inside the factory boundary.
-	SupportingFiles *ResourceManifest       `json:"supportingFiles,omitempty"`
-	Version         *HybridLogicalTimestamp `json:"version,omitempty"`
+	// SupportingFiles Optional portability manifest for validation-only external tools and portable bundled files. During v1 factory sharing, bundled INPUT files represent a share-time snapshot of the source factory's current inputs work so recipients restore detached starter-work copies that no longer sync back to the original factory. This contract is distinct from runtime-capacity resources.
+	SupportingFiles *ResourceManifest `json:"supportingFiles,omitempty"`
+
+	// Version Server-managed current-factory version metadata. Clients should echo this value on complete replacement saves when they want stale-write detection, but durable factory configuration does not treat it as customer-authored topology.
+	Version *HybridLogicalTimestamp `json:"version,omitempty"`
 
 	// WorkTypes Customer-authored work item categories and the lifecycle states each one can occupy.
 	WorkTypes *[]WorkType `json:"workTypes,omitempty"`
@@ -1578,8 +1601,11 @@ type FactoryGuard struct {
 	RefreshWindow string `json:"refreshWindow"`
 
 	// Type Factory-level guard condition to evaluate before dispatch-ready transitions can proceed.
-	Type GuardType `json:"type"`
+	Type FactoryGuardType `json:"type"`
 }
+
+// FactoryGuardType Factory-level guard condition attached at the root factory definition.
+type FactoryGuardType string
 
 // FactoryInvocationExample One example invocation for docs, help, and packaged-factory inspection.
 type FactoryInvocationExample struct {
@@ -1607,7 +1633,7 @@ type FactoryInvocationOutputContract struct {
 	// FileExtension Suggested file extension when the output mode writes a file.
 	FileExtension *string `json:"fileExtension,omitempty"`
 
-	// Mode High-level output shape hint exposed by a factory invocation signature.
+	// Mode High-level output contract mode exposed to callers.
 	Mode *FactoryInvocationOutputContractMode `json:"mode,omitempty"`
 
 	// PathParameter Parameter name that controls the destination path when the factory writes output to disk.
@@ -1649,16 +1675,16 @@ type FactoryInvocationParameter struct {
 	// Sensitive When true, diagnostics must preserve names and source metadata but redact concrete values.
 	Sensitive *bool `json:"sensitive,omitempty"`
 
-	// TypeHint String-first parsing and UI hint for one factory invocation parameter.
+	// TypeHint String-first hint that guides parsing, docs, and dashboard form selection.
 	TypeHint *FactoryInvocationParameterTypeHint `json:"typeHint,omitempty"`
 
-	// ValueMode Declares how one invocation parameter consumes one or more string values.
+	// ValueMode Declares whether the parameter consumes one value, repeated values, variadic values, or file contents.
 	ValueMode *FactoryInvocationParameterValueMode `json:"valueMode,omitempty"`
 }
 
 // FactoryInvocationParameterBinding One public binding that exposes a parameter to callers.
 type FactoryInvocationParameterBinding struct {
-	// Kind Public invocation binding kinds supported by factory signatures.
+	// Kind Binding kind used to route invocation input into the parameter.
 	Kind FactoryInvocationParameterBindingKind `json:"kind"`
 
 	// Position 1-based positional slot used when kind is POSITIONAL.
@@ -1679,7 +1705,7 @@ type FactoryInvocationSignature struct {
 	// Examples Example invocations rendered in docs, help, and inspection surfaces.
 	Examples *[]FactoryInvocationExample `json:"examples,omitempty"`
 
-	// OutputContract Customer-facing output hint for a factory invocation signature.
+	// OutputContract Optional customer-facing hint for the factory's primary output shape.
 	OutputContract *FactoryInvocationOutputContract `json:"outputContract,omitempty"`
 
 	// Parameters Declared invocation parameters keyed by canonical parameter name.
@@ -1823,13 +1849,13 @@ type FactoryName = string
 
 // FactoryOrchestrator Authored orchestrator identity for one factory. When omitted, existing Petri factories load through compatibility defaulting to orchestrator.kind = PETRI.
 type FactoryOrchestrator struct {
-	// Javascript JavaScript-specific orchestrator configuration. JavaScript factories do not require Petri graph fields and instead declare workflow source identity, metadata, args schema, and default policy here.
+	// Javascript JavaScript-specific orchestrator configuration. Required when kind = JAVASCRIPT.
 	Javascript *FactoryOrchestratorJavaScriptConfig `json:"javascript,omitempty"`
 
 	// Kind Authored orchestration engine for one factory. PETRI factories use the existing Petri graph semantics. JAVASCRIPT factories use workflow source identity and policy instead of Petri graph fields.
 	Kind FactoryOrchestratorKind `json:"kind"`
 
-	// Petri Petri-specific orchestrator configuration. Existing Petri factories may omit this block and rely on compatibility defaulting to orchestrator.kind = PETRI.
+	// Petri Petri-specific orchestrator configuration. Required only when kind = PETRI and additional Petri options are authored.
 	Petri *FactoryOrchestratorPetriConfig `json:"petri,omitempty"`
 }
 
@@ -1856,9 +1882,11 @@ type FactoryOrchestratorJavaScriptConfig struct {
 	// Entrypoint Optional exported entrypoint or phase name used to start the workflow.
 	Entrypoint *string `json:"entrypoint,omitempty"`
 
-	// InlineSource Inline JavaScript workflow source carried directly in the factory definition.
+	// InlineSource Inline workflow source when the factory carries source text directly.
 	InlineSource *FactoryOrchestratorJavaScriptInlineSource `json:"inlineSource,omitempty"`
-	Metadata     *StringMap                                 `json:"metadata,omitempty"`
+
+	// Metadata Free-form JavaScript orchestrator metadata for authoring and diagnostics.
+	Metadata *StringMap `json:"metadata,omitempty"`
 
 	// SourceHash Optional content hash for the resolved workflow source.
 	SourceHash *string `json:"sourceHash,omitempty"`
@@ -3829,10 +3857,10 @@ type HostedLinearWorkerClaim struct {
 
 // HostedLinearWorkerConfig Provider-specific poller configuration for the built-in hosted Linear worker.
 type HostedLinearWorkerConfig struct {
-	// Claim Optional claim-related configuration that v1 hosted Linear workers explicitly allow.
+	// Claim Optional claim-related configuration that v1 hosted Linear polling allows.
 	Claim *HostedLinearWorkerClaim `json:"claim,omitempty"`
 
-	// Mapping Deterministic issue-to-work mapping fields owned by a hosted Linear worker.
+	// Mapping Deterministic mapping fields for canonical work submission generation.
 	Mapping *HostedLinearWorkerMapping `json:"mapping,omitempty"`
 
 	// PollInterval Optional Go duration that controls how often the hosted Linear worker polls for updates.
@@ -3927,6 +3955,33 @@ type InitialStructureRequestEventPayload struct {
 	SourceDirectory *string    `json:"sourceDirectory,omitempty"`
 }
 
+// InputGuard Guard attached to one specific workstation input.
+type InputGuard struct {
+	// MatchConfig For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
+	MatchConfig *GuardMatchConfig `json:"matchConfig,omitempty"`
+
+	// MatchInput For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
+	MatchInput *string `json:"matchInput,omitempty"`
+
+	// MaxVisits For `VISIT_COUNT` guards, the visit threshold.
+	MaxVisits *int `json:"maxVisits,omitempty"`
+
+	// ParentInput For parent-aware input guards, the parent workType name from another input in the same workstation.
+	ParentInput *string `json:"parentInput,omitempty"`
+
+	// SpawnedBy For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+	SpawnedBy *string `json:"spawnedBy,omitempty"`
+
+	// Type Guard condition to evaluate for this input-level attachment.
+	Type InputGuardType `json:"type"`
+
+	// Workstation For `VISIT_COUNT` guards, the workstation whose visits are counted.
+	Workstation *string `json:"workstation,omitempty"`
+}
+
+// InputGuardType Guard condition attached to one specific workstation input.
+type InputGuardType string
+
 // InputKind Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.
 type InputKind string
 
@@ -4015,7 +4070,7 @@ type InvocationResponseErrorCode string
 
 // InvocationReturn Factory-authored policy for selecting the primary result returned by CLI and API invocations. When omitted from a Factory, runtimes use the documented SUBMITTED_WORK_TERMINAL fallback.
 type InvocationReturn struct {
-	// Policy Primary-result selection policy for factory invocation responses. SUBMITTED_WORK_TERMINAL traces the work submitted by the invocation until it reaches its first terminal output. EXPLICIT selects configured work content from the invocation submit scope.
+	// Policy Return selection policy for this factory.
 	Policy InvocationReturnPolicy `json:"policy"`
 
 	// TerminalState Authored terminal state name used by EXPLICIT policy selection.
@@ -4979,7 +5034,7 @@ type Resource struct {
 	// Provider Provider identity associated with this resource, especially for `PROVIDER_QUOTA` resources.
 	Provider *string `json:"provider,omitempty"`
 
-	// Type Uppercase resource families supported by the public factory-config contract.
+	// Type Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`.
 	Type *ResourceType `json:"type,omitempty"`
 }
 
@@ -5547,7 +5602,6 @@ type WorkAudioContentPart struct {
 	ContentType *string `json:"contentType,omitempty"`
 
 	// File Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	File *WorkContentDeprecatedFileProperty `json:"file,omitempty"`
 
 	// Label Optional caller-defined label for slot binding or diagnostics.
@@ -5576,7 +5630,6 @@ type WorkBinaryContentPart struct {
 	ContentType *string `json:"contentType,omitempty"`
 
 	// File Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	File *WorkContentDeprecatedFileProperty `json:"file,omitempty"`
 
 	// Label Optional caller-defined label for slot binding or diagnostics.
@@ -5662,7 +5715,6 @@ type WorkImageContentPart struct {
 	ContentType *string `json:"contentType,omitempty"`
 
 	// File Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	File *WorkContentDeprecatedFileProperty `json:"file,omitempty"`
 
 	// Label Optional caller-defined label for slot binding or diagnostics.
@@ -5719,7 +5771,7 @@ type WorkOutcome string
 
 // WorkPropagation Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.
 type WorkPropagation struct {
-	// Mode Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.
+	// Mode Propagation mode for downstream work payload selection after this workstation succeeds.
 	Mode WorkPropagationMode `json:"mode"`
 }
 
@@ -5766,7 +5818,7 @@ type WorkState struct {
 	// Name Customer-authored state name referenced by workstation inputs and outputs.
 	Name string `json:"name"`
 
-	// Type Categories of work states. The factory runtime treats these categories differently for lifecycle tracking and metrics purposes. Initial: The work is waiting to be picked up by a workstation. Processing: The work has been partially processed, and is continuing through its lifecycle. Terminal: The work has completed successfully. Failed: The work has failed.
+	// Type Lifecycle category for this state, such as initial, processing, terminal, or failed.
 	Type WorkStateType `json:"type"`
 }
 
@@ -5847,13 +5899,13 @@ type WorkTypeHandlingBehavior string
 
 // Worker A reusable worker definition that tells the factory how a workstation should execute work, such as through a model-backed agent or a script.
 type Worker struct {
-	// AgentTools Explicit agent-loop tool policy for AGENT_WORKER definitions. Tool execution stays disabled unless this block is present with a non-DISABLED policy.
+	// AgentTools Explicit agent-loop tool policy for AGENT_WORKER definitions. Omit or set policy DISABLED to run agent loops without advertising or executing tools.
 	AgentTools *AgentWorkerToolsConfig `json:"agentTools,omitempty"`
 
 	// Args Additional command arguments passed to the configured command.
 	Args *[]string `json:"args,omitempty"`
 
-	// Auth Hosted-worker authentication contract. V1 hosted workers accept only secret references rather than inline credentials or OAuth-style fields.
+	// Auth Hosted-worker authentication contract. V1 hosted workers accept only auth.secretRef.
 	Auth *HostedWorkerAuth `json:"auth,omitempty"`
 
 	// Body Inline worker instructions or script body when the worker is authored directly in factory config.
@@ -5862,22 +5914,22 @@ type Worker struct {
 	// Command Command to execute when this worker runs through a command or script provider.
 	Command *string `json:"command,omitempty"`
 
-	// ExecutorProvider Concrete worker-provider wrappers supported by the public factory-config contract.
+	// ExecutorProvider Canonical executor adapter identifier used to select the worker execution provider or wrapper. The current public built-in value is `SCRIPT_WRAP`.
 	ExecutorProvider *WorkerProvider `json:"executorProvider,omitempty"`
 
 	// Id Optional durable public identifier for this worker. When present, graph and layout references should use this id instead of the mutable name.
 	Id *string `json:"id,omitempty"`
 
-	// Linear Provider-specific poller configuration for the built-in hosted Linear worker.
+	// Linear Provider-specific configuration for the built-in hosted LINEAR worker.
 	Linear *HostedLinearWorkerConfig `json:"linear,omitempty"`
 
 	// Model Model identifier to request from the configured model provider when this worker uses model execution.
 	Model *string `json:"model,omitempty"`
 
-	// ModelLocality Provider locality for a model worker capability declaration.
+	// ModelLocality Provider locality for this model capability declaration. Use `LOCAL` for embedded or host-managed inference and `CLOUD` for remote provider execution.
 	ModelLocality *WorkerModelLocality `json:"modelLocality,omitempty"`
 
-	// ModelProvider Canonical model-provider identifiers supported by model workers in factory config.
+	// ModelProvider Canonical model-provider identifier used for model routing and provider diagnostics. Current public built-in values are `CLAUDE` and `CODEX`; the runtime maps them onto the underlying provider command IDs.
 	ModelProvider *WorkerModelProvider `json:"modelProvider,omitempty"`
 
 	// Name Worker name referenced by Workstation.worker.
@@ -5889,7 +5941,7 @@ type Worker struct {
 	// Operations Provider-agnostic model operations that this worker can execute, including named input and output slots.
 	Operations *[]ModelOperation `json:"operations,omitempty"`
 
-	// Provider Built-in repository-owned hosted worker providers supported by the public factory-config contract.
+	// Provider Built-in hosted provider identity when this worker uses repository-owned hosted execution.
 	Provider *HostedWorkerProvider `json:"provider,omitempty"`
 
 	// Resources Resource capacity this worker requires before it can be dispatched.
@@ -5904,7 +5956,7 @@ type Worker struct {
 	// Timeout Optional Go duration that caps one worker execution attempt.
 	Timeout *string `json:"timeout,omitempty"`
 
-	// Type Worker implementation families supported by the public factory-config contract.
+	// Type Worker implementation family to instantiate for this definition.
 	Type *WorkerType `json:"type,omitempty"`
 }
 
@@ -6045,7 +6097,7 @@ type WorkflowSourceResolution struct {
 
 // Workstation A processing step in the factory graph. Workstations consume authored work states, run a worker or logical move, and emit the next work states.
 type Workstation struct {
-	// Behavior Scheduling kind for a workstation, which determines how the engine schedules and dispatches work to it. Standard workstations are scheduled as soon as their inputs are ready, and can have multiple work items in-flight at the same time.  Repeater workstations are triggered whenever their inputs change, and will reloop the outputs on rejection back to the initial place. Cron workstations create internal time work and dispatch their configured worker when time and input guards are satisfied. Poller workstations bind a poller-capable worker that the service runtime supervises as a long-lived ingress loop.
+	// Behavior Scheduling behavior for this workstation, such as STANDARD, REPEATER, or CRON execution.
 	Behavior *WorkstationKind `json:"behavior,omitempty"`
 
 	// Body Inline workstation instructions or script body when authored directly in factory config.
@@ -6057,12 +6109,14 @@ type Workstation struct {
 	// CopyReferencedScripts Copy supported referenced script files into the expanded workstation layout when config expand runs.
 	CopyReferencedScripts *bool `json:"copyReferencedScripts,omitempty"`
 
-	// Cron Trigger timing for cron workstations. Cron workstations use a schedule expression; interval triggers are not supported.
+	// Cron Cron trigger configuration for workstations whose behavior is CRON.
 	Cron *WorkstationCron `json:"cron,omitempty"`
-	Env  *StringMap       `json:"env,omitempty"`
+
+	// Env Environment variables added to the workstation execution context.
+	Env *StringMap `json:"env,omitempty"`
 
 	// Guards Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
-	Guards *[]Guard `json:"guards,omitempty"`
+	Guards *[]WorkstationGuard `json:"guards,omitempty"`
 
 	// Id Optional durable public identifier for this workstation. Graph and layout references should use this id instead of the mutable name.
 	Id *string `json:"id,omitempty"`
@@ -6070,7 +6124,7 @@ type Workstation struct {
 	// Inputs Work states this workstation can consume before it dispatches.
 	Inputs []WorkstationIO `json:"inputs"`
 
-	// Limits Retry and execution ceilings applied to one workstation definition.
+	// Limits Retry and execution ceilings applied to this workstation.
 	Limits *WorkstationLimits `json:"limits,omitempty"`
 
 	// Name Customer-authored workstation name used by guards, diagnostics, and authored references.
@@ -6088,7 +6142,7 @@ type Workstation struct {
 	// OpenCodeAgent Optional OpenCode agent profile override for this workstation. When set, overrides the worker default for OpenCode dispatches and invokes `opencode run --agent <name>`. Discover agent names with `opencode agent list` (see https://opencode.ai/docs/cli/).
 	OpenCodeAgent *string `json:"openCodeAgent,omitempty"`
 
-	// Operation Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.
+	// Operation Uppercase provider-agnostic operation requested by `MODEL_INVOKE` workstations, such as `TTS`.
 	Operation *ModelOperationName `json:"operation,omitempty"`
 
 	// OperationBindings Optional workstation-authored slot bindings that resolve operation inputs from runtime content or static config content.
@@ -6109,16 +6163,16 @@ type Workstation struct {
 	// Resources Resource capacity this workstation consumes while one dispatch is in flight.
 	Resources *[]ResourceRequirement `json:"resources,omitempty"`
 
-	// Runner Stable built-in runner identifiers supported by factory and workstation runner selection.
+	// Runner Optional workstation-specific runner override. When omitted, dispatch falls back to the factory runner, then worker modelProvider compatibility when no explicit runner is configured, then the default codex runner.
 	Runner *RunnerID `json:"runner,omitempty"`
 
 	// StopWords Stop words authored on the topology entry for model-oriented dispatches.
 	StopWords *[]string `json:"stopWords,omitempty"`
 
-	// Type Runtime workstation implementation types supported by the public factory-config contract.
+	// Type Runtime workstation implementation type, equivalent to the workstation AGENTS.md frontmatter type.
 	Type *WorkstationType `json:"type,omitempty"`
 
-	// WorkPropagation Optional workstation policy for how downstream work receives payload content after this workstation completes. When omitted, downstream work uses the workstation output payload.
+	// WorkPropagation Optional policy for whether downstream work uses the workstation output payload or preserves the consumed input payload.
 	WorkPropagation *WorkPropagation `json:"workPropagation,omitempty"`
 
 	// Worker Name of a worker declared in the workers list.
@@ -6146,10 +6200,37 @@ type WorkstationCron struct {
 	TriggerAtStart *bool `json:"triggerAtStart,omitempty"`
 }
 
+// WorkstationGuard Guard attached to a workstation as a whole.
+type WorkstationGuard struct {
+	// MatchConfig For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
+	MatchConfig *GuardMatchConfig `json:"matchConfig,omitempty"`
+
+	// MatchInput For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
+	MatchInput *string `json:"matchInput,omitempty"`
+
+	// MaxVisits For `VISIT_COUNT` guards, the visit threshold.
+	MaxVisits *int `json:"maxVisits,omitempty"`
+
+	// ParentInput For parent-aware input guards, the parent workType name from another input in the same workstation.
+	ParentInput *string `json:"parentInput,omitempty"`
+
+	// SpawnedBy For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+	SpawnedBy *string `json:"spawnedBy,omitempty"`
+
+	// Type Guard condition to evaluate for this workstation-level attachment.
+	Type WorkstationGuardType `json:"type"`
+
+	// Workstation For `VISIT_COUNT` guards, the workstation whose visits are counted.
+	Workstation *string `json:"workstation,omitempty"`
+}
+
+// WorkstationGuardType Guard condition attached to a workstation as a whole.
+type WorkstationGuardType string
+
 // WorkstationIO One authored work-state reference consumed or emitted by a workstation.
 type WorkstationIO struct {
 	// Guards Per-input guards that must pass before this specific input can be used.
-	Guards *[]Guard `json:"guards,omitempty"`
+	Guards *[]InputGuard `json:"guards,omitempty"`
 
 	// State Name of the work state consumed or emitted for the referenced work type.
 	State string `json:"state"`
@@ -6172,13 +6253,13 @@ type WorkstationLimits struct {
 
 // WorkstationOperationBinding One workstation-authored binding for a provider-agnostic model-operation input slot.
 type WorkstationOperationBinding struct {
-	// Config Ordered canonical content parts for one work item.
+	// Config Static authored content bound directly or used as the first fallback when runtime input does not match.
 	Config *WorkContent `json:"config,omitempty"`
 
-	// DefaultContent Ordered canonical content parts for one work item.
+	// DefaultContent Optional final fallback content when neither runtime input nor config content resolves the slot.
 	DefaultContent *WorkContent `json:"defaultContent,omitempty"`
 
-	// Selector Selector fields used to resolve one content part from ordered runtime input.
+	// Selector Ordered runtime-input selector used before falling back to config or default content.
 	Selector *WorkstationOperationBindingSelector `json:"selector,omitempty"`
 
 	// Slot Stable input slot name declared by the worker operation.
@@ -6196,7 +6277,7 @@ type WorkstationOperationBindingSelector struct {
 	// Slot Match a content part by its authored slot field.
 	Slot *string `json:"slot,omitempty"`
 
-	// Type Uppercase content-part categories supported by worker model-operation capability slots.
+	// Type Match a content part by its uppercase public type.
 	Type *ModelOperationContentType `json:"type,omitempty"`
 }
 

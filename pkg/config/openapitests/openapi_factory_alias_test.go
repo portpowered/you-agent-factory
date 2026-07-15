@@ -431,9 +431,9 @@ func TestFactoryConfigFromOpenAPI_ExplicitMapperMatchesJSONBoundary(t *testing.T
 }
 
 func TestFactoryConfigFromOpenAPI_ReportsNestedGeneratedFieldPathOnMappingError(t *testing.T) {
-	guards := []factoryapi.Guard{
-		{Type: factoryapi.GuardTypeAllChildrenComplete},
-		{Type: factoryapi.GuardTypeAnyChildFailed},
+	guards := []factoryapi.InputGuard{
+		{Type: factoryapi.InputGuardTypeALLCHILDRENCOMPLETE},
+		{Type: factoryapi.InputGuardTypeANYCHILDFAILED},
 	}
 	workstations := []factoryapi.Workstation{{
 		Name:   "finish-story",

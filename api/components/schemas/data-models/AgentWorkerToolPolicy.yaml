@@ -1,13 +1,7 @@
 type: string
 description: >-
-  Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the
-  harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools.
-  ENABLED adds bounded filesystem write capability for the first supported tool set.
+    Explicit tool execution policy for AGENT_WORKER agent loops. DISABLED runs the harness in no-tools mode. READ_ONLY exposes bounded filesystem read tools. ENABLED adds bounded filesystem write capability for the first supported tool set.
 enum:
-  - DISABLED
-  - READ_ONLY
-  - ENABLED
-x-enum-varnames:
-  - AgentWorkerToolPolicyDISABLED
-  - AgentWorkerToolPolicyREADONLY
-  - AgentWorkerToolPolicyENABLED
+    - DISABLED
+    - READ_ONLY
+    - ENABLED

@@ -1,0 +1,8 @@
+type: string
+description: Guard condition attached to one specific workstation input.
+enum:
+  - VISIT_COUNT
+  - ALL_CHILDREN_COMPLETE
+  - ANY_CHILD_FAILED
+  - SAME_NAME
+  - SAME_TRACE_ID

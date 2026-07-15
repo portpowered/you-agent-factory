@@ -26,8 +26,8 @@ export function buildWorkstationRequestDetailView(
     request.script_request !== undefined ||
     request.script_response !== undefined;
   const isAgentBackedRequest =
-    request.workstation_type === WorkstationType.WorkstationTypeAgentRun ||
-    request.workstation_type === WorkstationType.WorkstationTypeModelWorkstation;
+    request.workstation_type === WorkstationType.AGENT_RUN ||
+    request.workstation_type === WorkstationType.MODEL_WORKSTATION;
   const normalizedFailureReason = normalizeDetailText(request.failure_reason);
   const normalizedFailureMessage = normalizeDetailText(request.failure_message);
   const hasFailureDetails =

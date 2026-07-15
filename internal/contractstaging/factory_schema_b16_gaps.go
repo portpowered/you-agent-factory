@@ -13,16 +13,27 @@ import (
 const factorySchemaB16GapsRelativePath = "docs/internal/contract/factory-schema-b16-gaps.json"
 
 type factorySchemaB16Gaps struct {
-	Profile            string `json:"profile"`
-	Status             string `json:"status"`
-	Summary            string `json:"summary"`
-	BlockingCategories []struct {
-		Code          string   `json:"code"`
-		Keywords      []string `json:"keywords,omitempty"`
-		Pattern       string   `json:"pattern,omitempty"`
-		Why           string   `json:"why"`
-		InstanceCount int      `json:"instanceCount"`
-	} `json:"blockingCategories"`
+	Profile                    string `json:"profile"`
+	Status                     string `json:"status"`
+	Summary                    string `json:"summary"`
+	BlockingCategories         []blockingCategory `json:"blockingCategories"`
+	ApprovedResidualExclusions []approvedResidualExclusion `json:"approvedResidualExclusions,omitempty"`
+}
+
+type blockingCategory struct {
+	Code          string   `json:"code"`
+	Keywords      []string `json:"keywords,omitempty"`
+	Pattern       string   `json:"pattern,omitempty"`
+	Why           string   `json:"why"`
+	InstanceCount int      `json:"instanceCount"`
+}
+
+type approvedResidualExclusion struct {
+	Code     string `json:"code"`
+	Path     string `json:"path,omitempty"`
+	Pattern  string `json:"pattern,omitempty"`
+	Why      string `json:"why"`
+	Approval string `json:"approval"`
 }
 
 func loadFactorySchemaB16Gaps(repositoryRoot string) (factorySchemaB16Gaps, error) {
@@ -35,10 +46,21 @@ func loadFactorySchemaB16Gaps(repositoryRoot string) (factorySchemaB16Gaps, erro
 	if err := json.Unmarshal(payload, &record); err != nil {
 		return factorySchemaB16Gaps{}, fmt.Errorf("decode factory schema B16 gap record: %w", err)
 	}
-	if record.Profile != "fail-closed" || record.Status != "blocks_full_endorsement" {
+	switch record.Profile {
+	case "fail-closed":
+	default:
+		return factorySchemaB16Gaps{}, fmt.Errorf("factory schema B16 gap record has unexpected profile/status")
+	}
+	switch record.Status {
+	case "blocks_full_endorsement", "converter_endorsed":
+	default:
 		return factorySchemaB16Gaps{}, fmt.Errorf("factory schema B16 gap record has unexpected profile/status")
 	}
 	return record, nil
+}
+
+func factorySchemaGapRecordEndorsesConverter(record factorySchemaB16Gaps) bool {
+	return record.Status == "converter_endorsed"
 }
 
 func factorySchemaConverterFailureExpected(
@@ -85,6 +107,18 @@ func factorySchemaDiagnosticMatchesGapRecord(
 			}
 		}
 	}
+	for _, exclusion := range record.ApprovedResidualExclusions {
+		if diagnostic.Code != exclusion.Code {
+			continue
+		}
+		if exclusion.Path != "" && diagnostic.Path != exclusion.Path {
+			continue
+		}
+		if exclusion.Pattern != "" && !strings.Contains(diagnostic.Message, exclusion.Pattern) {
+			continue
+		}
+		return true
+	}
 	return false
 }
 
@@ -112,17 +146,14 @@ func CollectFactorySchemaConverterDiagnosticsForTest(
 	return collectFactorySchemaConverterDiagnostics(factoryCopy, componentsCopy)
 }
 
-// FactorySchemaDiagnosticMatchesGapRecordForTest reports whether one diagnostic
-// is covered by the checked-in B16 gap record.
-func FactorySchemaDiagnosticMatchesGapRecordForTest(
+// GenerateFactorySchemaFromGraphForTest runs the reviewed Factory schema
+// generation policy against an in-memory Factory graph copy.
+func GenerateFactorySchemaFromGraphForTest(
 	repositoryRoot string,
-	diagnostic contractvalidator.Diagnostic,
-) (bool, error) {
-	record, err := loadFactorySchemaB16Gaps(repositoryRoot)
-	if err != nil {
-		return false, err
-	}
-	return factorySchemaDiagnosticMatchesGapRecord(diagnostic, record), nil
+	factory map[string]any,
+	components map[string]any,
+) ([]byte, error) {
+	return generateFactorySchemaFromGraph(repositoryRoot, factory, components)
 }
 
 func deepCopyValue(value any) any {
@@ -140,14 +171,4 @@ func deepCopyValue(value any) any {
 // DeepCopyValueForTest returns a deep copy of a YAML/JSON-decoded value.
 func DeepCopyValueForTest(value any) any {
 	return deepCopyValue(value)
-}
-
-// StripFactorySchemaConverterGapForTest removes one recorded converter gap from
-// a mutable Factory graph copy.
-func StripFactorySchemaConverterGapForTest(
-	factory map[string]any,
-	components map[string]any,
-	diagnostic contractvalidator.Diagnostic,
-) bool {
-	return stripFactorySchemaConverterGap(factory, components, diagnostic)
 }

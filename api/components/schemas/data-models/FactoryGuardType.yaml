@@ -1,0 +1,4 @@
+type: string
+description: Factory-level guard condition attached at the root factory definition.
+enum:
+  - INFERENCE_THROTTLE_GUARD

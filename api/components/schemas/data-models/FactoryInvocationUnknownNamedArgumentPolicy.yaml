@@ -1,14 +1,6 @@
 type: string
 description: Policy for named inputs that do not match any declared parameter binding.
-x-enum-varnames:
-  - FactoryInvocationUnknownNamedArgumentPolicyReject
-  - FactoryInvocationUnknownNamedArgumentPolicyAllow
-  - FactoryInvocationUnknownNamedArgumentPolicyCollect
 enum:
-  - REJECT
-  - ALLOW
-  - COLLECT
-x-enum-descriptions:
-  - Reject unknown named arguments during normalization.
-  - Preserve unknown named arguments for compatibility handling.
-  - Route unknown named arguments into one declared NAMED_REST parameter.
+    - REJECT
+    - ALLOW
+    - COLLECT

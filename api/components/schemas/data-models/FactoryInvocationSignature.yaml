@@ -12,10 +12,12 @@ properties:
     items:
       $ref: './FactoryInvocationParameter.yaml'
   unknownNamedArgumentPolicy:
-    $ref: './FactoryInvocationUnknownNamedArgumentPolicy.yaml'
+    allOf:
+      - $ref: './FactoryInvocationUnknownNamedArgumentPolicy.yaml'
     description: Policy for named inputs that do not match any declared parameter binding.
   outputContract:
-    $ref: './FactoryInvocationOutputContract.yaml'
+    allOf:
+      - $ref: './FactoryInvocationOutputContract.yaml'
     description: Optional customer-facing hint for the factory's primary output shape.
   examples:
     type: array

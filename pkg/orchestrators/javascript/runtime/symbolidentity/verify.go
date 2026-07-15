@@ -10,6 +10,45 @@ import (
 // installed binding surface or symbol identity inventory.
 var ForbiddenRootGlobals = []string{"context", "orchestrator"}
 
+var comparisonProjectHelperPaths = map[string]struct{}{
+	"workflow.sleep": {},
+	"agent.verify":   {},
+	"agent.parallel": {},
+}
+
+// SurfaceClassification describes whether a documented JavaScript symbol is
+// part of the installed supported surface.
+type SurfaceClassification string
+
+const (
+	SurfaceSupported               SurfaceClassification = "supported"
+	SurfaceForbiddenHostGlobal     SurfaceClassification = "forbidden_host_global"
+	SurfaceComparisonProjectHelper SurfaceClassification = "comparison_project_helper"
+	SurfaceCallableAgentGlobal     SurfaceClassification = "callable_agent_global"
+)
+
+// ClassifySurface centralizes forbidden and comparison-project-only symbol
+// policy for contract validation and installed-catalog parity checks.
+func ClassifySurface(path, kind string) SurfaceClassification {
+	if isForbiddenSymbolPath(path) {
+		return SurfaceForbiddenHostGlobal
+	}
+	if _, ok := comparisonProjectHelperPaths[path]; ok {
+		return SurfaceComparisonProjectHelper
+	}
+	if path == "agent" && kind == "function" {
+		return SurfaceCallableAgentGlobal
+	}
+	return SurfaceSupported
+}
+
+// IsUnsupportedSurfacePath reports path-only unsupported surfaces. Callable
+// agent classification additionally requires the catalog symbol kind.
+func IsUnsupportedSurfacePath(path string) bool {
+	classification := ClassifySurface(path, "")
+	return classification != SurfaceSupported
+}
+
 // VerifyProjectedInstalledBindings projects the canonical inventory and fails
 // when paths are missing, duplicated, unexpected, unsorted, or forbidden.
 func VerifyProjectedInstalledBindings() error {

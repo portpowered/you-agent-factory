@@ -12,6 +12,8 @@ import (
 )
 
 func TestRepositoryGenerateLeavesOwnedStagingCleanOnSecondRun(t *testing.T) {
+	defer contractstaging.LockRepositoryStagingForTest()()
+
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
 	protected := []string{
 		contractstaging.CanonicalOpenAPIPath,

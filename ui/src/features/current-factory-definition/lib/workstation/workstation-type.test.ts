@@ -12,7 +12,7 @@ describe("workstation type helpers", () => {
   it("defaults missing workstation types to AGENT_RUN", () => {
     expect(resolveEditableWorkstationType({})).toBe(DEFAULT_WORKSTATION_TYPE);
     expect(DEFAULT_WORKSTATION_TYPE).toBe(
-      WorkstationType.WorkstationTypeAgentRun,
+      WorkstationType.AGENT_RUN,
     );
   });
 

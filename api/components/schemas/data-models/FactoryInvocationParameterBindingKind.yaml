@@ -1,17 +1,7 @@
 type: string
 description: Public invocation binding kinds supported by factory signatures.
-x-enum-varnames:
-  - FactoryInvocationParameterBindingKindPositional
-  - FactoryInvocationParameterBindingKindNamed
-  - FactoryInvocationParameterBindingKindStdin
-  - FactoryInvocationParameterBindingKindNamedRest
 enum:
-  - POSITIONAL
-  - NAMED
-  - STDIN
-  - NAMED_REST
-x-enum-descriptions:
-  - Consume a positional CLI-style argument at a declared 1-based slot.
-  - Consume one named argument key matched through the parameter's externalName or aliases.
-  - Consume invocation stdin routed into one declared parameter.
-  - Collect otherwise-unbound named arguments into one rest-style parameter.
+    - POSITIONAL
+    - NAMED
+    - STDIN
+    - NAMED_REST

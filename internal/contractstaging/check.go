@@ -45,6 +45,9 @@ func Check(repositoryRoot string) (Drift, error) {
 
 	drift := Drift{}
 	for path, expectedPayload := range expected {
+		if path == FactorySchemaAuthoredPath {
+			continue
+		}
 		actualFile, exists := actual[path]
 		if !exists {
 			drift.Missing = append(drift.Missing, path)
@@ -58,10 +61,33 @@ func Check(repositoryRoot string) (Drift, error) {
 	for path := range actual {
 		drift.Unexpected = append(drift.Unexpected, path)
 	}
+	if category, path := authoredArtifactDrift(repositoryRoot, FactorySchemaAuthoredPath, expected[FactorySchemaAuthoredPath]); category != "" {
+		switch category {
+		case "stale":
+			drift.Stale = append(drift.Stale, path)
+		case "missing":
+			drift.Missing = append(drift.Missing, path)
+		}
+	}
 	sort.Strings(drift.Stale)
 	sort.Strings(drift.Missing)
 	sort.Strings(drift.Unexpected)
 	return drift, nil
+}
+
+func authoredArtifactDrift(repositoryRoot, path string, expected []byte) (category, repositoryPath string) {
+	target := filepath.Join(repositoryRoot, filepath.FromSlash(path))
+	actual, err := os.ReadFile(target)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "missing", path
+		}
+		return "missing", path
+	}
+	if !bytes.Equal(actual, expected) {
+		return "stale", path
+	}
+	return "", path
 }
 
 // Artifacts returns the complete deterministic package staging projection.
@@ -102,6 +128,7 @@ func Artifacts(repositoryRoot string) (map[string][]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	expected[FactorySchemaAuthoredPath] = factorySchema
 	expected[factorySchemaTarget] = factorySchema
 	manifest, err := generateManifest(repositoryRoot, expected)
 	if err != nil {

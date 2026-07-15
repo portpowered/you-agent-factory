@@ -1,12 +1,5 @@
 type: string
 description: >-
-  Optional worker-output parsing mode for model workstations. When set to
-  `decision-envelope`, agent output is parsed as a reviewer/checker JSON
-  envelope that maps directly onto WorkResult outcome, feedback, output, and
-  optional recorded output work instead of stop-token routing.
-x-enum-varnames:
-  - WorkstationOutcomeFormatDecisionEnvelope
+    Optional worker-output parsing mode for model workstations. When set to `decision-envelope`, agent output is parsed as a reviewer/checker JSON envelope that maps directly onto WorkResult outcome, feedback, output, and optional recorded output work instead of stop-token routing.
 enum:
-  - decision-envelope
-x-enum-descriptions:
-  - Parse agent output as a reviewer/checker decision envelope instead of stop-token routing.
+    - decision-envelope
