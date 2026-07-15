@@ -59,7 +59,7 @@ func ReplaceNamedFactoryWithReport(rootDir, name string, canonicalFactoryJSON []
 // FactoryLayoutReplaceOptions configures ReplaceFactoryLayoutAtDir.
 type FactoryLayoutReplaceOptions = config.FactoryLayoutReplaceOptions
 
-// DefaultFactoryLayoutReplaceOptions returns persist-from-save layout options.
+// DefaultFactoryLayoutReplaceOptions returns split-layout replace options.
 func DefaultFactoryLayoutReplaceOptions(targetDir string) FactoryLayoutReplaceOptions {
 	return config.DefaultFactoryLayoutReplaceOptions(targetDir)
 }
@@ -132,18 +132,6 @@ func NamedFactoryNameFromPathSegments(segments []string) (string, error) {
 // hierarchical on-disk directory under factoriesRoot.
 func MapNamedFactoryDir(factoriesRoot, name string) (string, error) {
 	return config.MapNamedFactoryDir(factoriesRoot, name)
-}
-
-// NamedFactoryNameToLayoutSegment maps a canonical named-factory display name
-// into the single on-disk directory segment used under a factory root.
-func NamedFactoryNameToLayoutSegment(name string) (string, error) {
-	return config.NamedFactoryNameToLayoutSegment(name)
-}
-
-// NamedFactoryLayoutSegmentToName maps an on-disk named-factory directory
-// segment back to the canonical display name shown by list and API callers.
-func NamedFactoryLayoutSegmentToName(segment string) (string, error) {
-	return config.NamedFactoryLayoutSegmentToName(segment)
 }
 
 // GlobalNamedFactoryRootForHome builds the customer-owned global named-factory
