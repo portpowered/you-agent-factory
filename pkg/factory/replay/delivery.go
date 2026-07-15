@@ -15,7 +15,6 @@ import (
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
@@ -78,7 +77,7 @@ func NewSubmissionHook(artifact *interfaces.ReplayArtifact) (*SubmissionHook, er
 	}
 	submissions := append([]replaySubmission(nil), eventLog.Submissions...)
 	applyReplaySubmissionDispatchDefaults(submissions, eventLog.Dispatches)
-	applyReplaySubmissionDefaults(submissions, eventLog.Factory)
+	applyReplaySubmissionDefaults(submissions, eventLog.RuntimeConfig.FactoryConfig())
 	return &SubmissionHook{submissions: submissions}, nil
 }
 
@@ -185,16 +184,17 @@ func replayDispatchDefaultsForWork(
 	return defaults
 }
 
-func applyReplaySubmissionDefaults(submissions []replaySubmission, generatedFactory factoryapi.Factory) {
+func applyReplaySubmissionDefaults(submissions []replaySubmission, factoryConfig *interfaces.FactoryConfig) {
+	if factoryConfig == nil {
+		return
+	}
 	defaultWorkType := ""
-	if generatedFactory.WorkTypes != nil && len(*generatedFactory.WorkTypes) == 1 {
-		defaultWorkType = (*generatedFactory.WorkTypes)[0].Name
+	if len(factoryConfig.WorkTypes) == 1 {
+		defaultWorkType = factoryConfig.WorkTypes[0].Name
 	}
 	validWorkTypes := make(map[string]bool)
-	if generatedFactory.WorkTypes != nil {
-		for _, workType := range *generatedFactory.WorkTypes {
-			validWorkTypes[workType.Name] = true
-		}
+	for _, workType := range factoryConfig.WorkTypes {
+		validWorkTypes[workType.Name] = true
 	}
 	if defaultWorkType == "" && len(validWorkTypes) == 0 {
 		return

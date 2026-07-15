@@ -195,8 +195,8 @@ func TestApplyReplayRunRequest_DecodesFactoryOwnedPayloadAndSafeDiagnostics(t *t
 	if err := applyReplayRunRequest(reduced, event); err != nil {
 		t.Fatalf("applyReplayRunRequest: %v", err)
 	}
-	if reduced.Factory.Name != testGeneratedFactory().Name {
-		t.Fatalf("factory name = %q, want %q", reduced.Factory.Name, testGeneratedFactory().Name)
+	if reduced.RuntimeConfig == nil || reduced.RuntimeConfig.FactoryConfig().Name != testGeneratedFactory().Name {
+		t.Fatalf("runtime config = %#v, want factory name %q", reduced.RuntimeConfig, testGeneratedFactory().Name)
 	}
 	if reduced.WallClock == nil || !reduced.WallClock.StartedAt.Equal(recordedAt) {
 		t.Fatalf("wall clock = %#v, want startedAt %s", reduced.WallClock, recordedAt)

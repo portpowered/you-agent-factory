@@ -7,7 +7,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -16,7 +15,7 @@ import (
 )
 
 type replayEventLog struct {
-	Factory          factoryapi.Factory
+	RuntimeConfig    *EmbeddedRuntimeConfig
 	Submissions      []replaySubmission
 	Dispatches       []replayDispatch
 	Completions      []replayCompletion
@@ -72,7 +71,7 @@ func reduceReplayEvents(artifact *interfaces.ReplayArtifact) (*replayEventLog, e
 			return nil, err
 		}
 	}
-	if !generatedFactoryHasConfig(reduced.Factory) {
+	if reduced.RuntimeConfig == nil || reduced.RuntimeConfig.FactoryConfig() == nil {
 		return nil, fmt.Errorf("replay event log RUN_REQUEST factory is required")
 	}
 	return reduced, nil
@@ -157,11 +156,11 @@ func applyReplayRunRequest(reduced *replayEventLog, event interfaces.FactoryEven
 	if err != nil {
 		return err
 	}
-	generatedFactory, err := generatedFactoryFromSnapshot(payload.Factory)
+	runtimeConfig, err := RuntimeConfigFromFactorySnapshot(payload.Factory)
 	if err != nil {
 		return fmt.Errorf("decode run started event %q factory: %w", event.Id, err)
 	}
-	reduced.Factory = generatedFactory
+	reduced.RuntimeConfig = runtimeConfig
 	reduced.WallClock = replayWallClockFromRunEvent(payload.WallClock)
 	reduced.Diagnostics = replayDiagnosticsFromRunEvent(payload.Diagnostics)
 	return nil
@@ -178,7 +177,7 @@ func applyReplayWorkRequest(reduced *replayEventLog, event interfaces.FactoryEve
 }
 
 func applyReplayDispatchRequest(reduced *replayEventLog, event interfaces.FactoryEvent, workByID map[string]work.Work) error {
-	dispatch, err := replayDispatchFromEvent(reduced.Factory, event, workByID)
+	dispatch, err := replayDispatchFromEvent(reduced.RuntimeConfig, event, workByID)
 	if err != nil {
 		return err
 	}
@@ -394,7 +393,7 @@ func replayWorkRequestRelations(works []work.WorkRequestEventWork, relations []w
 	return out
 }
 
-func replayDispatchFromEvent(factory factoryapi.Factory, event interfaces.FactoryEvent, workByID map[string]work.Work) (replayDispatch, error) {
+func replayDispatchFromEvent(runtimeConfig *EmbeddedRuntimeConfig, event interfaces.FactoryEvent, workByID map[string]work.Work) (replayDispatch, error) {
 	var payload interfaces.DispatchRequestEventPayload
 	if err := event.DecodePayload(&payload); err != nil {
 		return replayDispatch{}, fmt.Errorf("decode dispatch created event %q: %w", event.Id, err)
@@ -403,12 +402,12 @@ func replayDispatchFromEvent(factory factoryapi.Factory, event interfaces.Factor
 	if dispatchID == "" {
 		return replayDispatch{}, fmt.Errorf("dispatch created event %q context.dispatchId is required", event.Id)
 	}
-	workstation := generatedReplayWorkstation(factory, payload.TransitionID)
+	workstation := replayWorkstation(runtimeConfig, payload.TransitionID)
 	dispatch := work.WorkDispatch{
 		DispatchID:      dispatchID,
 		TransitionID:    payload.TransitionID,
-		WorkerType:      generatedReplayWorkerName(workstation),
-		WorkstationName: generatedReplayWorkstationName(workstation, payload.TransitionID),
+		WorkerType:      replayWorkerName(workstation),
+		WorkstationName: replayWorkstationName(workstation, payload.TransitionID),
 		InputTokens:     replayInputTokensFromDispatchPayload(event.Context, payload, workByID),
 		Execution: work.ExecutionMetadata{
 			RequestID:           stringValue(event.Context.RequestID),
@@ -627,16 +626,18 @@ func replayDispatchPreviousChainingTraceIDs(
 	return factorytoken.PreviousChainingTraceIDs(inputTokens)
 }
 
-func generatedReplayWorkstation(factory factoryapi.Factory, transitionID string) *factoryapi.Workstation {
-	for _, workstation := range generatedWorkstationSlice(factory.Workstations) {
-		if stringValue(workstation.Id) == transitionID || workstation.Name == transitionID {
-			return &workstation
-		}
+func replayWorkstation(runtimeConfig *EmbeddedRuntimeConfig, transitionID string) *interfaces.FactoryWorkstationConfig {
+	if runtimeConfig == nil {
+		return nil
 	}
-	return nil
+	if workstation, ok := runtimeConfig.WorkstationsByID[transitionID]; ok {
+		return workstation
+	}
+	workstation, _ := runtimeConfig.Workstation(transitionID)
+	return workstation
 }
 
-func generatedReplayWorkstationName(workstation *factoryapi.Workstation, transitionID string) string {
+func replayWorkstationName(workstation *interfaces.FactoryWorkstationConfig, transitionID string) string {
 	if workstation == nil {
 		return transitionID
 	}
@@ -646,11 +647,11 @@ func generatedReplayWorkstationName(workstation *factoryapi.Workstation, transit
 	return transitionID
 }
 
-func generatedReplayWorkerName(workstation *factoryapi.Workstation) string {
+func replayWorkerName(workstation *interfaces.FactoryWorkstationConfig) string {
 	if workstation == nil {
 		return ""
 	}
-	return workstation.Worker
+	return workstation.WorkerTypeName
 }
 
 func workIDsFromDispatchRefs(refs []interfaces.DispatchConsumedWorkRef, contextWorkIDs []string) []string {

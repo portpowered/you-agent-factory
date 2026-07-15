@@ -209,11 +209,15 @@ func TestReplayWorkStateChangeFromEvent_DecodesDomainPayloadAndContextFallbacks(
 
 func replayDispatchFromGeneratedEvent(t testing.TB, factory factoryapi.Factory, event factoryapi.FactoryEvent, workByID map[string]work.Work) (replayDispatch, error) {
 	t.Helper()
+	runtimeConfig, err := RuntimeConfigFromGeneratedFactory(factory)
+	if err != nil && generatedFactoryHasConfig(factory) {
+		t.Fatalf("convert generated replay factory: %v", err)
+	}
 	domainEvent, err := interfaces.NewFactoryEvent(event)
 	if err != nil {
 		t.Fatalf("convert generated dispatch event: %v", err)
 	}
-	return replayDispatchFromEvent(factory, domainEvent, workByID)
+	return replayDispatchFromEvent(runtimeConfig, domainEvent, workByID)
 }
 
 func TestReplayDispatchFromEvent_PreservesConsumedInputChainingLineage(t *testing.T) {
