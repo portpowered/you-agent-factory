@@ -32,6 +32,79 @@ func javascriptManifestFixtureRegistry(fixture string) contractvalidator.Registr
 	})
 }
 
+func TestJavaScriptRuntimeAPICatalogAgentRunParallelAndPipeline(t *testing.T) {
+	t.Parallel()
+
+	catalog := loadAuthoredJavaScriptRuntimeCatalog(t)
+	symbolsByPath := catalogSymbolsByPath(t, catalog)
+
+	identity := symbolidentity.ProjectInstalledBindings()
+	identityByPath := symbolRecordsByPath(identity)
+	wantAgent, ok := identityByPath["agent"]
+	if !ok {
+		t.Fatal("identity baseline missing agent namespace")
+	}
+
+	agentSymbol, ok := symbolsByPath["agent"]
+	if !ok {
+		t.Fatal("catalog missing agent namespace")
+	}
+	if got := countCatalogPaths(symbolsByPath, "agent"); got != 1 {
+		t.Fatalf("catalog path agent appears %d times, want exactly once", got)
+	}
+	assertCatalogNamespaceMatchesIdentityBaseline(t, "agent", agentSymbol, wantAgent)
+
+	callInventory := callbehavior.ProjectInstalledCallBehavior()
+	callByPath := callRecordsByPath(callInventory)
+	wantAgentCallBehavior, ok := callByPath["agent"]
+	if !ok {
+		t.Fatal("call-behavior baseline missing agent namespace")
+	}
+	assertCatalogNamespaceMatchesCallBehaviorBaseline(t, "agent", agentSymbol, wantAgentCallBehavior)
+
+	agentRunSymbol, ok := symbolsByPath["agent.run"]
+	if !ok {
+		t.Fatal("catalog missing agent.run")
+	}
+	if got := countCatalogPaths(symbolsByPath, "agent.run"); got != 1 {
+		t.Fatalf("catalog path agent.run appears %d times, want exactly once", got)
+	}
+
+	wantAgentRunIdentity, ok := identityByPath["agent.run"]
+	if !ok {
+		t.Fatal("identity baseline missing agent.run")
+	}
+	assertCatalogMethodMatchesIdentityBaseline(t, "agent.run", agentRunSymbol, wantAgentRunIdentity)
+
+	wantAgentRunCallBehavior, ok := callByPath["agent.run"]
+	if !ok {
+		t.Fatal("call-behavior baseline missing agent.run")
+	}
+	assertCatalogMethodMatchesCallBehaviorBaseline(t, "agent.run", agentRunSymbol, wantAgentRunCallBehavior)
+
+	for _, path := range []string{"parallel", "pipeline"} {
+		symbol, ok := symbolsByPath[path]
+		if !ok {
+			t.Fatalf("catalog missing async root helper at path %q", path)
+		}
+		if got := countCatalogPaths(symbolsByPath, path); got != 1 {
+			t.Fatalf("catalog path %q appears %d times, want exactly once", path, got)
+		}
+
+		wantIdentity, ok := identityByPath[path]
+		if !ok {
+			t.Fatalf("identity baseline missing path %q", path)
+		}
+		assertCatalogCallableMatchesIdentityBaseline(t, path, symbol, wantIdentity)
+
+		wantCallBehavior, ok := callByPath[path]
+		if !ok {
+			t.Fatalf("call-behavior baseline missing path %q", path)
+		}
+		assertCatalogAsyncCallableMatchesCallBehaviorBaseline(t, path, symbol, wantCallBehavior)
+	}
+}
+
 func TestJavaScriptRuntimeAPICatalogWorkflowNamespaceAndMembers(t *testing.T) {
 	t.Parallel()
 
@@ -425,6 +498,21 @@ func assertCatalogCallableMatchesCallBehaviorBaseline(
 	assertCatalogCallableErrorsMatchBaseline(t, path, symbol, want.Errors)
 }
 
+func assertCatalogAsyncCallableMatchesCallBehaviorBaseline(
+	t *testing.T,
+	path string,
+	symbol map[string]any,
+	want callbehavior.CallBehaviorRecord,
+) {
+	t.Helper()
+
+	assertCatalogCallableMatchesCallBehaviorBaseline(t, path, symbol, want)
+	assertCatalogCallbackMatchesBaseline(t, path, symbol, want.Callback)
+	assertCatalogPolicyChecksMatchBaseline(t, path, symbol, want.PolicyChecks)
+	assertCatalogDeterminismMatchesBaseline(t, path, symbol, want.Determinism)
+	assertCatalogResumeNotesMatchBaseline(t, path, symbol, want.ResumeNotes)
+}
+
 func assertCatalogCallableParametersMatchBaseline(
 	t *testing.T,
 	path string,
@@ -488,6 +576,9 @@ func assertCatalogCallableReturnMatchesBaseline(
 	if want.Async {
 		if got, _ := returnValue["kind"].(string); got != "promise" {
 			t.Fatalf("catalog %q return.kind = %q, want promise", path, got)
+		}
+		if got, _ := returnValue["type"].(string); got != want.PromiseType {
+			t.Fatalf("catalog %q return.type = %q, want %q", path, got, want.PromiseType)
 		}
 		return
 	}
@@ -565,6 +656,35 @@ func assertCatalogCallableErrorsMatchBaseline(
 			t.Fatalf("catalog %q errors[%d].message = %q, want %q", path, i, got, wantErr.Message)
 		}
 	}
+}
+
+func assertCatalogCallbackMatchesBaseline(
+	t *testing.T,
+	path string,
+	symbol map[string]any,
+	want *callbehavior.CallbackShape,
+) {
+	t.Helper()
+
+	if want == nil {
+		if callbackValue, ok := symbol["callback"]; ok && callbackValue != nil {
+			t.Fatalf("catalog %q callback = %#v, want no callback metadata", path, callbackValue)
+		}
+		return
+	}
+	callbackValue, ok := symbol["callback"].(map[string]any)
+	if !ok {
+		t.Fatalf("catalog %q callback = %#v, want object", path, symbol["callback"])
+	}
+	if got, _ := callbackValue["role"].(string); got != want.Role {
+		t.Fatalf("catalog %q callback.role = %q, want %q", path, got, want.Role)
+	}
+	if want.Notes != "" {
+		if got, _ := callbackValue["notes"].(string); got != want.Notes {
+			t.Fatalf("catalog %q callback.notes = %q, want %q", path, got, want.Notes)
+		}
+	}
+	assertCatalogCallableParametersMatchBaseline(t, path+".callback", callbackValue, want.Parameters)
 }
 
 func assertCatalogNamespaceMatchesIdentityBaseline(

@@ -187,6 +187,55 @@
         ]
       }
     },
+    "javascript.schema.agent_run_spec": {
+      "id": "javascript.schema.agent_run_spec",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.schema.agent_run_spec",
+        "documentation": {
+          "title": {
+            "id": "javascript.schema.agent_run_spec.title",
+            "canonicalEnglish": "Agent run specification object"
+          },
+          "description": {
+            "id": "javascript.schema.agent_run_spec.description",
+            "canonicalEnglish": "Closed object shape for agent.run spec arguments."
+          }
+        },
+        "examples": [
+          "{ \"prompt\": \"Summarize findings\", \"label\": \"summarize\" }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "preset": {
+            "type": "string"
+          },
+          "modelProvider": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "reasoningEffort": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      }
+    },
     "javascript.schema.string_key_record": {
       "id": "javascript.schema.string_key_record",
       "documentation": {
@@ -352,6 +401,375 @@
       "lifecycle": {
         "formatVersion": "1.0.0",
         "itemId": "javascript.log",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "javascript.agent": {
+      "id": "javascript.agent",
+      "name": "agent",
+      "path": "agent",
+      "kind": "namespace",
+      "members": [
+        "run"
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.agent",
+        "documentation": {
+          "title": {
+            "id": "javascript.agent.title",
+            "canonicalEnglish": "Agent namespace"
+          },
+          "description": {
+            "id": "javascript.agent.description",
+            "canonicalEnglish": "Root agent namespace for the installed agent.run child-dispatch helper."
+          }
+        },
+        "examples": [
+          "agent.run({ prompt: \"Summarize findings\", label: \"summarize\" })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.agent",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
+    },
+    "javascript.agent.run": {
+      "id": "javascript.agent.run",
+      "name": "run",
+      "path": "agent.run",
+      "kind": "method",
+      "parent": "javascript.agent",
+      "async": true,
+      "parameters": [
+        {
+          "id": "javascript.agent.run.param.spec",
+          "name": "spec",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "$ref": "#/sharedSchemas/javascript.schema.agent_run_spec/schema"
+          }
+        }
+      ],
+      "return": {
+        "kind": "promise",
+        "type": "child-result-object"
+      },
+      "emittedRecords": [
+        "child_dispatch"
+      ],
+      "policyChecks": [
+        {
+          "kind": "maxAgents",
+          "message": "policy denied: requested fanout exceeds maxAgents"
+        },
+        {
+          "kind": "allowedModels",
+          "field": "model"
+        },
+        {
+          "kind": "allowedReasoningEfforts",
+          "field": "reasoningEffort"
+        },
+        {
+          "kind": "allowedCommands",
+          "field": "command"
+        },
+        {
+          "kind": "sandboxMode",
+          "field": "sandbox"
+        },
+        {
+          "kind": "writableRoots",
+          "field": "writableRoots"
+        },
+        {
+          "kind": "allowNetwork",
+          "field": "allowNetwork"
+        },
+        {
+          "kind": "concurrency",
+          "field": "concurrency"
+        }
+      ],
+      "errors": [
+        {
+          "condition": "missing-or-non-object-argument",
+          "type": "TypeError",
+          "message": "agent.run() requires an object argument"
+        },
+        {
+          "condition": "unsupported-field",
+          "type": "TypeError",
+          "message": "agent.run() does not support field"
+        },
+        {
+          "condition": "missing-prompt",
+          "type": "TypeError",
+          "message": "agent.run() requires a non-empty string \"prompt\" property"
+        },
+        {
+          "condition": "unknown-preset",
+          "type": "TypeError",
+          "message": "agent.run() references unknown operator worker preset"
+        },
+        {
+          "condition": "unsupported-model-provider",
+          "type": "TypeError",
+          "message": "agent.run() has unsupported effective modelProvider"
+        },
+        {
+          "condition": "unsupported-reasoning-effort",
+          "type": "TypeError",
+          "message": "agent.run() has unsupported effective reasoningEffort"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.agent.run",
+        "documentation": {
+          "title": {
+            "id": "javascript.agent.run.title",
+            "canonicalEnglish": "Agent child dispatch"
+          },
+          "description": {
+            "id": "javascript.agent.run.description",
+            "canonicalEnglish": "Dispatches one child agent run from a closed spec object with a required prompt and optional model or preset fields. Returns a promise that resolves to the child result object after policy checks and child_dispatch emission."
+          }
+        },
+        "examples": [
+          "await agent.run({ prompt: \"Summarize findings\", label: \"summarize\", preset: \"operator\" })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.agent.run",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "javascript.parallel": {
+      "id": "javascript.parallel",
+      "name": "parallel",
+      "path": "parallel",
+      "kind": "function",
+      "async": true,
+      "parameters": [
+        {
+          "id": "javascript.parallel.param.items",
+          "name": "items",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "array"
+        }
+      ],
+      "callback": {
+        "role": "item",
+        "parameters": [
+          {
+            "id": "javascript.parallel.callback.this",
+            "name": "this",
+            "position": 0,
+            "required": false,
+            "rest": false,
+            "type": "undefined",
+            "default": "undefined"
+          }
+        ],
+        "notes": "array items may be agent run specs (object with prompt) or functions invoked with undefined this"
+      },
+      "return": {
+        "kind": "promise",
+        "type": "array"
+      },
+      "emittedRecords": [
+        "child_dispatch"
+      ],
+      "policyChecks": [
+        {
+          "kind": "maxAgents",
+          "message": "policy denied: requested fanout exceeds maxAgents"
+        },
+        {
+          "kind": "childRequest",
+          "message": "policy denied"
+        }
+      ],
+      "determinism": "agent-spec completion order may differ from input order under concurrency",
+      "errors": [
+        {
+          "condition": "missing-or-non-array-argument",
+          "type": "TypeError",
+          "message": "parallel() requires an array argument"
+        },
+        {
+          "condition": "null-or-undefined-item",
+          "type": "TypeError",
+          "message": "parallel() items must not contain null or undefined entries"
+        },
+        {
+          "condition": "invalid-item-shape",
+          "type": "TypeError",
+          "message": "parallel() items must be agent run specs or functions"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.parallel",
+        "documentation": {
+          "title": {
+            "id": "javascript.parallel.title",
+            "canonicalEnglish": "Parallel child dispatch"
+          },
+          "description": {
+            "id": "javascript.parallel.description",
+            "canonicalEnglish": "Runs an array of agent run specs or item functions concurrently and returns a promise that resolves to an array of child results. Each function item is invoked with undefined this."
+          }
+        },
+        "examples": [
+          "await parallel([{ prompt: \"first\" }, { prompt: \"second\", label: \"two\" }])"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.parallel",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "javascript.pipeline": {
+      "id": "javascript.pipeline",
+      "name": "pipeline",
+      "path": "pipeline",
+      "kind": "function",
+      "async": true,
+      "parameters": [
+        {
+          "id": "javascript.pipeline.param.items",
+          "name": "items",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "array"
+        },
+        {
+          "id": "javascript.pipeline.param.worker",
+          "name": "worker",
+          "position": 1,
+          "required": true,
+          "rest": false,
+          "type": "function"
+        },
+        {
+          "id": "javascript.pipeline.param.next",
+          "name": "next",
+          "position": 2,
+          "required": false,
+          "rest": false,
+          "type": "function"
+        }
+      ],
+      "callback": {
+        "role": "worker",
+        "parameters": [
+          {
+            "id": "javascript.pipeline.callback.this",
+            "name": "this",
+            "position": 0,
+            "required": false,
+            "rest": false,
+            "type": "undefined",
+            "default": "undefined"
+          },
+          {
+            "id": "javascript.pipeline.callback.item",
+            "name": "item",
+            "position": 1,
+            "required": true,
+            "rest": false,
+            "type": "any"
+          },
+          {
+            "id": "javascript.pipeline.callback.index",
+            "name": "index",
+            "position": 2,
+            "required": true,
+            "rest": false,
+            "type": "number"
+          }
+        ],
+        "notes": "optional next stage receives (priorResult, item, index)"
+      },
+      "return": {
+        "kind": "promise",
+        "type": "pipeline-result-array"
+      },
+      "determinism": "stages run sequentially per item; worker and next may return values or Promises",
+      "errors": [
+        {
+          "condition": "missing-items-or-worker",
+          "type": "TypeError",
+          "message": "pipeline() requires items and worker arguments"
+        },
+        {
+          "condition": "missing-or-non-array-items",
+          "type": "TypeError",
+          "message": "pipeline() requires an array items argument"
+        },
+        {
+          "condition": "missing-worker-function",
+          "type": "TypeError",
+          "message": "pipeline() requires a worker function argument"
+        },
+        {
+          "condition": "invalid-next-function",
+          "type": "TypeError",
+          "message": "pipeline() next argument must be a function when provided"
+        },
+        {
+          "condition": "null-or-undefined-item",
+          "type": "TypeError",
+          "message": "pipeline() items must not contain null or undefined entries"
+        }
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.pipeline",
+        "documentation": {
+          "title": {
+            "id": "javascript.pipeline.title",
+            "canonicalEnglish": "Pipeline composition"
+          },
+          "description": {
+            "id": "javascript.pipeline.description",
+            "canonicalEnglish": "Maps each items entry through a required worker function and optional next stage callback, running stages sequentially per item. Returns a promise that resolves to a pipeline result array."
+          }
+        },
+        "examples": [
+          "await pipeline([1, 2], (item) => item * 2, (prior, item) => prior + item)"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.pipeline",
         "state": "active",
         "since": "1.0.0"
       }
