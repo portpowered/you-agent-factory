@@ -11,7 +11,70 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
+
+func TestReplayCompletionFromEvent_DecodesWorkerExecutionPayload(t *testing.T) {
+	dispatchID := "dispatch-domain"
+	event := interfaces.FactoryEvent{
+		Id:   "factory-event/dispatch-completed/dispatch-domain",
+		Type: interfaces.FactoryEventTypeDispatchResponse,
+		Context: interfaces.FactoryEventContext{
+			DispatchID: &dispatchID,
+			Tick:       3,
+		},
+		Payload: json.RawMessage(`{
+			"completionId":"completion-domain","transitionId":"process","outcome":"FAILED",
+			"output":"partial output","error":"provider timed out","feedback":"retry later",
+			"selectedClassificationLabel":"needs-review",
+			"providerFailure":{"family":"retryable","type":"timeout"},
+			"metrics":{"durationMillis":1250,"cost":0.42,"retryCount":2},
+			"outputWork":[{"name":"follow-up","workId":"work-output-1","workTypeName":"task","state":{"name":"ready"},"traceId":"trace-output","content":[{"type":"TEXT","text":"inspect me"}],"tags":{"kind":"follow-up"}}]
+		}`),
+	}
+
+	completion, err := replayCompletionFromEvent(event, replayInferenceAttempt{})
+	if err != nil {
+		t.Fatalf("replayCompletionFromEvent: %v", err)
+	}
+	want := replayCompletion{
+		eventID:      event.Id,
+		completionID: "completion-domain",
+		dispatchID:   dispatchID,
+		observedTick: 3,
+		result: workerexecution.WorkResult{
+			DispatchID:                  dispatchID,
+			TransitionID:                "process",
+			Outcome:                     workerexecution.OutcomeFailed,
+			Output:                      "partial output",
+			Error:                       "provider timed out",
+			Feedback:                    "retry later",
+			SelectedClassificationLabel: "needs-review",
+			RecordedOutputWork: []work.FactoryWorkItem{{
+				ID:                     "work-output-1",
+				WorkTypeID:             "task",
+				State:                  "ready",
+				DisplayName:            "follow-up",
+				CurrentChainingTraceID: "trace-output",
+				TraceID:                "trace-output",
+				Content:                []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "inspect me"}},
+				Tags:                   map[string]string{"kind": "follow-up"},
+			}},
+			FailureMetadata: &workerexecution.WorkFailureMetadata{Family: workerexecution.WorkFailureFamilyRetryable, Type: workerexecution.WorkFailureTypeTimeout},
+			Metrics:         workerexecution.WorkMetrics{Duration: 1250 * time.Millisecond, Cost: 0.42, RetryCount: 2},
+		},
+	}
+	if !reflect.DeepEqual(completion, want) {
+		t.Fatalf("completion = %#v, want %#v", completion, want)
+	}
+}
+
+func TestReplayCompletionFromEvent_RejectsMalformedWorkerExecutionPayload(t *testing.T) {
+	event := interfaces.FactoryEvent{Id: "event-bad", Type: interfaces.FactoryEventTypeDispatchResponse, Payload: json.RawMessage(`{"outcome":`)}
+	if _, err := replayCompletionFromEvent(event, replayInferenceAttempt{}); err == nil {
+		t.Fatal("replayCompletionFromEvent error = nil, want malformed payload error")
+	}
+}
 
 func TestReplaySubmissionsFromEventDecodesWorkOwnedPayload(t *testing.T) {
 	payload, err := json.Marshal(work.WorkRequestEventPayload{

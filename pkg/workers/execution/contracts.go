@@ -50,6 +50,35 @@ type InferenceResponseFailureDetail struct {
 	Message string          `json:"message"`
 }
 
+// DispatchResponseEventPayload is the worker-execution-owned completion
+// contract consumed by Factory event reducers. FactoryEvent context remains
+// authoritative for dispatch identity and ordering.
+type DispatchResponseEventPayload struct {
+	CompletionID                *string                     `json:"completionId,omitempty"`
+	CurrentChainingTraceID      *string                     `json:"currentChainingTraceId,omitempty"`
+	DurationMillis              *int64                      `json:"durationMillis,omitempty"`
+	Error                       *string                     `json:"error,omitempty"`
+	FailureDetail               *FailureDetail              `json:"failureDetail,omitempty"`
+	Feedback                    *string                     `json:"feedback,omitempty"`
+	Metadata                    map[string]string           `json:"metadata,omitempty"`
+	Metrics                     *WorkMetricsEventPayload    `json:"metrics,omitempty"`
+	Outcome                     WorkOutcome                 `json:"outcome"`
+	Output                      *string                     `json:"output,omitempty"`
+	OutputWork                  []work.WorkRequestEventWork `json:"outputWork,omitempty"`
+	PreviousChainingTraceIDs    *[]string                   `json:"previousChainingTraceIds,omitempty"`
+	ProviderFailure             *WorkFailureMetadata        `json:"providerFailure,omitempty"`
+	SelectedClassificationLabel *string                     `json:"selectedClassificationLabel,omitempty"`
+	TransitionID                string                      `json:"transitionId"`
+}
+
+// WorkMetricsEventPayload preserves the millisecond-based public event shape
+// until replay converts it to the duration-based execution result contract.
+type WorkMetricsEventPayload struct {
+	Cost           *float64 `json:"cost,omitempty"`
+	DurationMillis *int64   `json:"durationMillis,omitempty"`
+	RetryCount     *int     `json:"retryCount,omitempty"`
+}
+
 // WorkResult is returned by a worker after processing.
 // The Outcome determines which arc set is used to route the resulting tokens.
 type WorkResult struct {

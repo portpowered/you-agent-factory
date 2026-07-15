@@ -3,6 +3,7 @@ package replay
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
@@ -97,13 +98,9 @@ func reduceReplayEvent(
 	case interfaces.FactoryEventTypeInferenceResponse:
 		return applyReplayInferenceResponse(event, inferenceAttemptsByDispatchID)
 	}
-	generatedEvent, err := generatedEventFromDomain(event)
-	if err != nil {
-		return err
-	}
 	switch event.Type {
 	case interfaces.FactoryEventTypeDispatchResponse:
-		return applyReplayDispatchResponse(reduced, generatedEvent, inferenceAttemptsByDispatchID)
+		return applyReplayDispatchResponse(reduced, event, inferenceAttemptsByDispatchID)
 	default:
 		return nil
 	}
@@ -202,10 +199,10 @@ func applyReplayInferenceResponse(event interfaces.FactoryEvent, inferenceAttemp
 
 func applyReplayDispatchResponse(
 	reduced *replayEventLog,
-	event factoryapi.FactoryEvent,
+	event interfaces.FactoryEvent,
 	inferenceAttemptsByDispatchID map[string]replayInferenceAttempt,
 ) error {
-	completion, err := replayCompletionFromEvent(event, inferenceAttemptsByDispatchID[stringValue(event.Context.DispatchId)])
+	completion, err := replayCompletionFromEvent(event, inferenceAttemptsByDispatchID[stringValue(event.Context.DispatchID)])
 	if err != nil {
 		return err
 	}
@@ -457,42 +454,82 @@ func replayInferenceAttemptFromEvent(event interfaces.FactoryEvent) (string, rep
 	}, nil
 }
 
-func replayCompletionFromEvent(event factoryapi.FactoryEvent, inference replayInferenceAttempt) (replayCompletion, error) {
-	payload, err := event.Payload.AsDispatchResponseEventPayload()
-	if err != nil {
+func replayCompletionFromEvent(event interfaces.FactoryEvent, inference replayInferenceAttempt) (replayCompletion, error) {
+	var payload workerexecution.DispatchResponseEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return replayCompletion{}, fmt.Errorf("decode dispatch completed event %q: %w", event.Id, err)
 	}
 	diagnostics := workerexecution.CloneWorkDiagnostics(inference.diagnostics)
-	completionID := stringValue(payload.CompletionId)
+	completionID := stringValue(payload.CompletionID)
 	if completionID == "" {
 		completionID = event.Id
 	}
-	recordedOutputWork := make([]workdomain.FactoryWorkItem, 0, len(generatedWorksValue(payload.OutputWork)))
-	for _, work := range generatedWorksValue(payload.OutputWork) {
-		recordedOutputWork = append(recordedOutputWork, factoryWorkItemFromGeneratedWork(work))
+	recordedOutputWork := make([]workdomain.FactoryWorkItem, 0, len(payload.OutputWork))
+	for _, eventWork := range payload.OutputWork {
+		recordedOutputWork = append(recordedOutputWork, factoryWorkItemFromEventWork(eventWork))
 	}
-	failureMetadata := workerdiagnostics.WorkFailureMetadataFromGenerated(payload.ProviderFailure)
+	dispatchID := stringValue(event.Context.DispatchID)
 	return replayCompletion{
 		eventID:      event.Id,
 		completionID: completionID,
-		dispatchID:   stringValue(event.Context.DispatchId),
+		dispatchID:   dispatchID,
 		observedTick: event.Context.Tick,
 		result: workerexecution.WorkResult{
-			DispatchID:                  stringValue(event.Context.DispatchId),
-			TransitionID:                payload.TransitionId,
-			Outcome:                     workerexecution.WorkOutcome(payload.Outcome),
+			DispatchID:                  dispatchID,
+			TransitionID:                payload.TransitionID,
+			Outcome:                     payload.Outcome,
 			Output:                      stringValue(payload.Output),
 			Error:                       stringValue(payload.Error),
 			Feedback:                    stringValue(payload.Feedback),
 			SelectedClassificationLabel: stringValue(payload.SelectedClassificationLabel),
 			RecordedOutputWork:          recordedOutputWork,
-			FailureMetadata:             workerexecution.CloneWorkFailureMetadata(failureMetadata),
+			FailureMetadata:             workerexecution.CloneWorkFailureMetadata(payload.ProviderFailure),
 			ProviderSession:             workerexecution.CloneProviderSessionMetadata(inference.providerSession),
-			Metrics:                     replayWorkMetricsFromGenerated(payload.Metrics),
+			Metrics:                     replayWorkMetricsFromEvent(payload.Metrics),
 			Diagnostics:                 diagnostics,
 		},
 		diagnostics: diagnostics,
 	}, nil
+}
+
+func factoryWorkItemFromEventWork(eventWork work.WorkRequestEventWork) workdomain.FactoryWorkItem {
+	state := ""
+	if eventWork.State != nil {
+		state = eventWork.State.Name
+	}
+	if state == "" && eventWork.WorkTypeID == interfaces.SystemTimeWorkTypeID {
+		state = interfaces.SystemTimePendingState
+	}
+	currentChainingTraceID := eventWork.CurrentChainingTraceID
+	if currentChainingTraceID == "" {
+		currentChainingTraceID = eventWork.TraceID
+	}
+	content := work.CloneWorkContentParts(eventWork.Content)
+	for i := range content {
+		content[i].Type = content[i].Type.Normalized()
+	}
+	return workdomain.FactoryWorkItem{
+		ID:                       eventWork.WorkID,
+		WorkTypeID:               eventWork.WorkTypeID,
+		State:                    state,
+		DisplayName:              eventWork.Name,
+		CurrentChainingTraceID:   currentChainingTraceID,
+		PreviousChainingTraceIDs: append([]string(nil), eventWork.PreviousChainingTraceIDs...),
+		TraceID:                  eventWork.TraceID,
+		Content:                  content,
+		Tags:                     cloneStringMap(eventWork.Tags),
+	}
+}
+
+func replayWorkMetricsFromEvent(metrics *workerexecution.WorkMetricsEventPayload) workerexecution.WorkMetrics {
+	if metrics == nil {
+		return workerexecution.WorkMetrics{}
+	}
+	return workerexecution.WorkMetrics{
+		Duration:   time.Duration(int64Value(metrics.DurationMillis)) * time.Millisecond,
+		Cost:       float64Value(metrics.Cost),
+		RetryCount: intValue(metrics.RetryCount),
+	}
 }
 
 func replayInputTokensFromDispatchPayload(

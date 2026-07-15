@@ -8,13 +8,11 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
-	workdomain "github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
@@ -555,72 +553,6 @@ func restoreReplayResourceUsage(source factoryapi.Factory, target *interfaces.Fa
 	}
 }
 
-func workFromGeneratedWork(work factoryapi.Work, requestID string) workdomain.Work {
-	workTypeID := stringValue(work.WorkTypeName)
-	workState := generatedWorkStateName(work.State)
-	currentChainingTraceID := stringValue(work.CurrentChainingTraceId)
-	traceID := stringValue(work.TraceId)
-	if currentChainingTraceID == "" {
-		currentChainingTraceID = traceID
-	}
-	if workState == "" && workTypeID == interfaces.SystemTimeWorkTypeID {
-		workState = interfaces.SystemTimePendingState
-	}
-	return workdomain.Work{
-		RequestID:                requestID,
-		WorkID:                   stringValue(work.WorkId),
-		Name:                     work.Name,
-		WorkTypeID:               workTypeID,
-		State:                    workState,
-		CurrentChainingTraceID:   currentChainingTraceID,
-		PreviousChainingTraceIDs: stringSliceValue(work.PreviousChainingTraceIds),
-		TraceID:                  traceID,
-		Content:                  contentcontract.PartsFromGenerated(work.Content),
-		Payload:                  payloadBytesFromGenerated(work.Payload),
-		Tags:                     stringMapValue(work.Tags),
-	}
-}
-
-func factoryWorkItemFromGeneratedWork(work factoryapi.Work) workdomain.FactoryWorkItem {
-	item := workFromGeneratedWork(work, "")
-	return workdomain.FactoryWorkItem{
-		ID:                       item.WorkID,
-		WorkTypeID:               item.WorkTypeID,
-		State:                    item.State,
-		DisplayName:              item.Name,
-		CurrentChainingTraceID:   item.CurrentChainingTraceID,
-		PreviousChainingTraceIDs: append([]string(nil), item.PreviousChainingTraceIDs...),
-		TraceID:                  item.TraceID,
-		Content:                  append([]workdomain.WorkContentPart(nil), item.Content...),
-		Tags:                     cloneStringMap(item.Tags),
-	}
-}
-
-func payloadBytesFromGenerated(payload any) []byte {
-	if payload == nil {
-		return nil
-	}
-	switch typed := payload.(type) {
-	case []byte:
-		return append([]byte(nil), typed...)
-	case string:
-		return []byte(typed)
-	default:
-		data, err := json.Marshal(typed)
-		if err != nil {
-			return nil
-		}
-		return data
-	}
-}
-
-func generatedWorksValue(works *[]factoryapi.Work) []factoryapi.Work {
-	if works == nil {
-		return nil
-	}
-	return *works
-}
-
 func generatedDiagnostics(diagnostics interfaces.ReplayDiagnostics) *factoryapi.Diagnostics {
 	return &factoryapi.Diagnostics{
 		Notes:   slicePtr(diagnostics.Notes),
@@ -732,17 +664,6 @@ func generatedWorkMetrics(metrics workerexecution.WorkMetrics) *factoryapi.WorkM
 	}
 }
 
-func replayWorkMetricsFromGenerated(metrics *factoryapi.WorkMetrics) workerexecution.WorkMetrics {
-	if metrics == nil {
-		return workerexecution.WorkMetrics{}
-	}
-	return workerexecution.WorkMetrics{
-		Duration:   time.Duration(int64Value(metrics.DurationMillis)) * time.Millisecond,
-		Cost:       float64Value(metrics.Cost),
-		RetryCount: intValue(metrics.RetryCount),
-	}
-}
-
 func generatedStringMapPtr(values map[string]string) *factoryapi.StringMap {
 	if len(values) == 0 {
 		return nil
@@ -796,13 +717,6 @@ func stringValue[T ~string](value *T) string {
 		return ""
 	}
 	return string(*value)
-}
-
-func generatedWorkStateName(value *factoryapi.WorkState) string {
-	if value == nil {
-		return ""
-	}
-	return value.Name
 }
 
 func stringSliceValue(values *[]string) []string {
