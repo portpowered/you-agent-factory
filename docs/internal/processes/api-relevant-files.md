@@ -25,11 +25,14 @@ Use this map when changing the public REST contract.
   source-to-package projection map, the Factory JSON Schema projection from the
   canonical bundled OpenAPI `Factory` component graph, and the package contract
   manifest with artifact hashes. Factory schema staging calls
-  `contractopenapiconverter.ConvertFailClosedSchema` first; when the canonical
-  Factory graph is blocked by documented B16 gaps in
-  `docs/internal/contract/factory-schema-b16-gaps.json`, staging falls back to
-  the legacy ref-materialization projection without broadening the converter
-  profile. When removing OpenAPI-only keywords or generator hints from authored
+  `ConvertFailClosedSchema` first; when the canonical Factory graph converts
+  without blocking diagnostics, staging emits
+  `contracts/config/factory.schema.json` and copies the same bytes to
+  `packages/api/generated/schemas/factory.schema.json` through
+  `marshalFactorySchemaDocument` only. When the graph is still blocked by
+  documented B16 gaps in `docs/internal/contract/factory-schema-b16-gaps.json`,
+  staging falls back to the legacy ref-materialization projection without
+  broadening the converter profile. When removing OpenAPI-only keywords or generator hints from authored
   Factory fragments for converter endorsement, keep stable Go enum/type names via
   `api/codegen_config/factory-codegen-overlay.yaml` referenced from the oapi-codegen
   configs rather than leaving `x-enum-varnames` / `x-go-type` in authored schema
@@ -43,7 +46,10 @@ Use this map when changing the public REST contract.
 - Raw JSON/YAML projections in `policy.go#rawArtifacts` are byte-identical copies
   from their canonical owners (CLI/MCP baselines, `contracts/config/` schemas,
   JavaScript runtime inventory). Factory schema is the only reviewed raw export
-  derived from OpenAPI rather than copied. Prove repository parity in
+  derived from OpenAPI rather than copied; generation writes the converter-backed
+  authored root at `contracts/config/factory.schema.json` and the staged package
+  projection at `packages/api/generated/schemas/factory.schema.json` with
+  identical bytes. Prove repository parity in
   `internal/contractstaging/raw_artifacts_test.go`; later-phase export-map
   families such as `components/*` stay omitted until a truthful owner exists.
 - Authored JavaScript runtime symbol manifests live at

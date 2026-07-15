@@ -1,9 +1,11 @@
 package contractstaging_test
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractopenapiconverter"
@@ -11,6 +13,122 @@ import (
 	"github.com/portpowered/infinite-you/internal/testpath"
 	"gopkg.in/yaml.v3"
 )
+
+func TestFactorySchemaGenerationUsesConverterPath(t *testing.T) {
+	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
+	factory, components := loadFactoryGraph(t, repositoryRoot)
+
+	converted, diagnostics := contractopenapiconverter.ConvertFailClosedSchema(factory, components)
+	if len(diagnostics) != 0 {
+		t.Fatalf("ConvertFailClosedSchema() diagnostics = %#v, want none", diagnostics)
+	}
+	if converted == nil {
+		t.Fatal("ConvertFailClosedSchema() = nil, want converted schema")
+	}
+
+	artifacts, err := contractstaging.Artifacts(repositoryRoot)
+	if err != nil {
+		t.Fatalf("Artifacts() error = %v", err)
+	}
+	payload := artifacts[contractstaging.FactorySchemaAuthoredPath]
+	var document map[string]any
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatalf("decode authored factory schema: %v", err)
+	}
+	for _, key := range []string{"$schema", "$id", "title"} {
+		if document[key] == nil || document[key] == "" {
+			t.Fatalf("authored factory schema missing %s metadata", key)
+		}
+	}
+	if document["$schema"] != "https://json-schema.org/draft/2020-12/schema" {
+		t.Fatalf("$schema = %#v, want Draft 2020-12", document["$schema"])
+	}
+	if document["$id"] != "https://schemas.portpowered.com/you/config/factory.schema.json" {
+		t.Fatalf("$id = %#v, want factory config schema id", document["$id"])
+	}
+	if document["title"] != "You Factory configuration" {
+		t.Fatalf("title = %#v, want You Factory configuration", document["title"])
+	}
+	if containsNullableKeyword(document) {
+		t.Fatal("authored factory schema still contains legacy nullable keyword; want converter type unions")
+	}
+	if !containsTypeNullUnion(document) {
+		t.Fatal("authored factory schema missing converter-backed nullable type unions")
+	}
+	if !bytes.Equal(payload, artifacts["packages/api/generated/schemas/factory.schema.json"]) {
+		t.Fatal("authored and staged factory schema bytes differ")
+	}
+}
+
+func TestFactorySchemaPreservesOrchestratorTopology(t *testing.T) {
+	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
+	artifacts, err := contractstaging.Artifacts(repositoryRoot)
+	if err != nil {
+		t.Fatalf("Artifacts() error = %v", err)
+	}
+	payload := artifacts[contractstaging.FactorySchemaAuthoredPath]
+	text := string(payload)
+	for _, needle := range []string{
+		"FactoryOrchestratorJavaScriptConfig",
+		"argsSchema",
+		"FactoryOrchestratorJavaScriptInlineSource",
+		`"orchestrator"`,
+		"#/$defs/",
+	} {
+		if !strings.Contains(text, needle) {
+			t.Fatalf("authored factory schema missing topology marker %q", needle)
+		}
+	}
+}
+
+func containsNullableKeyword(value any) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		if _, ok := typed["nullable"]; ok {
+			return true
+		}
+		for _, child := range typed {
+			if containsNullableKeyword(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if containsNullableKeyword(child) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func containsTypeNullUnion(value any) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		if typeValue, ok := typed["type"]; ok {
+			switch array := typeValue.(type) {
+			case []any:
+				for _, item := range array {
+					if item == "null" {
+						return true
+					}
+				}
+			}
+		}
+		for _, child := range typed {
+			if containsTypeNullUnion(child) {
+				return true
+			}
+		}
+	case []any:
+		for _, child := range typed {
+			if containsTypeNullUnion(child) {
+				return true
+			}
+		}
+	}
+	return false
+}
 
 func TestFactorySchemaConverterHasNoUnsupportedReferenceDiagnostics(t *testing.T) {
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)

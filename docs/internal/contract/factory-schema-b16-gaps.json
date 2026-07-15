@@ -1,7 +1,7 @@
 {
   "profile": "fail-closed",
   "status": "blocks_full_endorsement",
-  "summary": "The canonical OpenAPI Factory component graph no longer emits $ref/description sibling diagnostics. Factory schema staging still records the legacy nullable semantic gap until B16 closes converter-backed generation without broadening the profile.",
+  "summary": "The canonical OpenAPI Factory component graph converts through ConvertFailClosedSchema. Authored contracts/config/factory.schema.json and the staged package projection are generated solely from that converter path; the gap record retains the legacy nullable semantic note until B16 closes fail-closed endorsement policy in a later story.",
   "blockingCategories": [],
   "legacyProjectionSemanticGaps": [
     {

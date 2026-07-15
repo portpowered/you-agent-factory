@@ -96,3 +96,26 @@ func TestRepositoryStagedFactorySchema_MatchesOpenAPIDerivedProjection(t *testin
 		t.Fatalf("staged factory schema diverges from OpenAPI-derived projection at %s", target)
 	}
 }
+
+func TestRepositoryAuthoredFactorySchema_MatchesStagedProjection(t *testing.T) {
+	t.Parallel()
+
+	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
+	authoredPath := filepath.Join(repositoryRoot, filepath.FromSlash(contractstaging.FactorySchemaAuthoredPath))
+	stagedPath := filepath.Join(repositoryRoot, filepath.FromSlash("packages/api/generated/schemas/factory.schema.json"))
+	authored, err := os.ReadFile(authoredPath)
+	if err != nil {
+		t.Fatalf("read authored factory schema: %v", err)
+	}
+	staged, err := os.ReadFile(stagedPath)
+	if err != nil {
+		t.Fatalf("read staged factory schema: %v", err)
+	}
+	if !bytes.Equal(authored, staged) {
+		t.Fatalf(
+			"authored factory schema %s diverges from staged projection %s; both must be generated from ConvertFailClosedSchema",
+			contractstaging.FactorySchemaAuthoredPath,
+			"packages/api/generated/schemas/factory.schema.json",
+		)
+	}
+}
