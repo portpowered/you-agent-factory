@@ -80,17 +80,21 @@ func TestGenerateIsDeterministicAcrossCleanRuns(t *testing.T) {
 	if err := discoverygen.Generate(root); err != nil {
 		t.Fatalf("first Generate() error = %v", err)
 	}
-	first := readGeneratedArtifact(t, root)
-	if err := os.Remove(filepath.Join(root, filepath.FromSlash(discoverygen.DiscoveryJSONPath))); err != nil {
-		t.Fatalf("remove first generated artifact: %v", err)
+	firstJSON := readGeneratedArtifact(t, root, discoverygen.DiscoveryJSONPath)
+	firstGo := readGeneratedArtifact(t, root, discoverygen.DiscoveryGoPath)
+	for _, path := range []string{discoverygen.DiscoveryJSONPath, discoverygen.DiscoveryGoPath} {
+		if err := os.Remove(filepath.Join(root, filepath.FromSlash(path))); err != nil {
+			t.Fatalf("remove first generated artifact %s: %v", path, err)
+		}
 	}
 	if err := discoverygen.Generate(root); err != nil {
 		t.Fatalf("second Generate() error = %v", err)
 	}
-	second := readGeneratedArtifact(t, root)
+	secondJSON := readGeneratedArtifact(t, root, discoverygen.DiscoveryJSONPath)
+	secondGo := readGeneratedArtifact(t, root, discoverygen.DiscoveryGoPath)
 
-	if !bytes.Equal(first, second) {
-		t.Fatal("generated discovery metadata changed across two clean runs")
+	if !bytes.Equal(firstJSON, secondJSON) || !bytes.Equal(firstGo, secondGo) {
+		t.Fatal("generated discovery artifacts changed across two clean runs")
 	}
 }
 
@@ -120,9 +124,9 @@ func copyCatalog(t *testing.T, sourceRoot, targetRoot string) {
 	}
 }
 
-func readGeneratedArtifact(t *testing.T, root string) []byte {
+func readGeneratedArtifact(t *testing.T, root, path string) []byte {
 	t.Helper()
-	payload, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(discoverygen.DiscoveryJSONPath)))
+	payload, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
 	if err != nil {
 		t.Fatalf("read generated discovery artifact: %v", err)
 	}

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 )
 
 func TestNewValidatesOptionsAndAppliesDefaults(t *testing.T) {
@@ -136,6 +137,52 @@ func TestHandleRequestInitializePingAndToolsList(t *testing.T) {
 	}
 	assertToolListed(t, tools, mcpfactorysession.ToolListSessions)
 	assertToolListed(t, tools, mcpfactorysession.ToolWorkflowRun)
+}
+
+func TestToolsListGeneratedCanonicalDiscoveryMatchesLegacySemantics(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer(t)
+	result, rpcErr, err := srv.handleToolsList(nil)
+	if err != nil {
+		t.Fatalf("handleToolsList() error = %v", err)
+	}
+	if rpcErr != nil {
+		t.Fatalf("handleToolsList() rpcErr = %#v, want nil", rpcErr)
+	}
+	listResult := result.(map[string]any)
+	listed := listResult["tools"].([]map[string]any)
+	listedByName := make(map[string]map[string]any, len(listed))
+	for _, tool := range listed {
+		listedByName[tool["name"].(string)] = tool
+	}
+
+	legacy := mcpfactorysession.DiscoverTools()
+	for _, want := range legacy {
+		got, ok := listedByName[want.Name]
+		if !ok {
+			t.Errorf("generated tools/list missing canonical tool %q", want.Name)
+			continue
+		}
+		if got["description"] != want.Description {
+			t.Errorf("tool %q description = %#v, want %q", want.Name, got["description"], want.Description)
+		}
+		gotNormalized, gotErr := mcpfactorycatalog.PrepareCatalogInputSchemaForParity(got["inputSchema"].(map[string]any))
+		wantNormalized, wantErr := mcpfactorycatalog.PrepareCatalogInputSchemaForParity(want.InputSchema)
+		if gotErr != nil || wantErr != nil {
+			t.Errorf("tool %q inputSchema normalization errors: generated=%v legacy=%v", want.Name, gotErr, wantErr)
+			continue
+		}
+		gotSchema, gotErr := json.Marshal(gotNormalized)
+		wantSchema, wantErr := json.Marshal(wantNormalized)
+		if gotErr != nil || wantErr != nil {
+			t.Errorf("tool %q inputSchema marshal errors: generated=%v legacy=%v", want.Name, gotErr, wantErr)
+			continue
+		}
+		if !bytes.Equal(gotSchema, wantSchema) {
+			t.Errorf("tool %q inputSchema differs from legacy discovery:\ngenerated=%#v\nlegacy=%#v", want.Name, got["inputSchema"], want.InputSchema)
+		}
+	}
 }
 
 func TestHandleToolsCallValidationResultsAndCompatibilityOnlyAlias(t *testing.T) {
