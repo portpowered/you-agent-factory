@@ -1,14 +1,7 @@
 {
   "profile": "fail-closed",
-  "status": "blocks_full_endorsement",
-  "summary": "The canonical OpenAPI Factory component graph converts through ConvertFailClosedSchema. Authored contracts/config/factory.schema.json and the staged package projection are generated solely from that converter path; the gap record retains the legacy nullable semantic note until B16 closes fail-closed endorsement policy in a later story.",
+  "status": "converter_endorsed",
+  "summary": "The canonical OpenAPI Factory component graph converts through ConvertFailClosedSchema with zero blocking diagnostics. Authored contracts/config/factory.schema.json and the staged package projection are generated solely from that converter path. Any new converter diagnostic fails staging closed and does not re-enter the legacy fallback path.",
   "blockingCategories": [],
-  "legacyProjectionSemanticGaps": [
-    {
-      "keyword": "nullable",
-      "legacyForm": "nullable: true",
-      "profileForm": "type: [\"<primitive>\", \"null\"]",
-      "why": "Legacy staging copied OpenAPI nullable keywords verbatim. The restricted profile converts supported primitive nullable forms into Draft 2020-12 type unions once the blocking categories above are closed."
-    }
-  ]
+  "approvedResidualExclusions": []
 }

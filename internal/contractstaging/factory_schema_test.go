@@ -154,6 +154,7 @@ func TestFactorySchemaB16GapRecordCoversCanonicalFactoryGraph(t *testing.T) {
 		t.Fatalf("read gap record: %v", err)
 	}
 	var record struct {
+		Status             string `json:"status"`
 		BlockingCategories []struct {
 			Code          string `json:"code"`
 			InstanceCount int    `json:"instanceCount"`
@@ -162,38 +163,33 @@ func TestFactorySchemaB16GapRecordCoversCanonicalFactoryGraph(t *testing.T) {
 	if err := json.Unmarshal(recordPayload, &record); err != nil {
 		t.Fatalf("decode gap record: %v", err)
 	}
-
-	counts := map[string]int{}
-	for _, diagnostic := range collected {
-		matches, err := contractstaging.FactorySchemaDiagnosticMatchesGapRecordForTest(repositoryRoot, diagnostic)
-		if err != nil {
-			t.Fatalf("FactorySchemaDiagnosticMatchesGapRecordForTest() error = %v", err)
-		}
-		if !matches {
-			t.Fatalf("diagnostic %#v is not covered by the B16 gap record", diagnostic)
-		}
-		counts[diagnostic.Code]++
+	if record.Status != "converter_endorsed" {
+		t.Fatalf("gap record status = %q, want converter_endorsed", record.Status)
 	}
-
-	for _, category := range record.BlockingCategories {
-		if counts[category.Code] != category.InstanceCount {
-			t.Fatalf("gap record %s instanceCount = %d, collected %d", category.Code, category.InstanceCount, counts[category.Code])
-		}
+	if len(record.BlockingCategories) != 0 {
+		t.Fatalf("gap record blockingCategories = %#v, want empty for converter endorsement", record.BlockingCategories)
 	}
-	if len(collected) == 0 {
-		return
+	if len(collected) != 0 {
+		t.Fatalf("canonical Factory graph still emits converter diagnostics = %#v, want none under converter_endorsed", collected)
 	}
+}
 
+func TestFactorySchemaGenerationFailsClosedOnUndocumentedDiagnostics(t *testing.T) {
+	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
+	factory, components := loadFactoryGraph(t, repositoryRoot)
 	factoryCopy := contractstaging.DeepCopyValueForTest(factory).(map[string]any)
 	componentsCopy := contractstaging.DeepCopyValueForTest(components).(map[string]any)
-	for _, diagnostic := range collected {
-		if !contractstaging.StripFactorySchemaConverterGapForTest(factoryCopy, componentsCopy, diagnostic) {
-			t.Fatalf("could not strip diagnostic %#v from copied Factory graph", diagnostic)
-		}
+	factoryCopy["deprecated"] = true
+
+	_, err := contractstaging.GenerateFactorySchemaFromGraphForTest(repositoryRoot, factoryCopy, componentsCopy)
+	if err == nil {
+		t.Fatal("GenerateFactorySchemaFromGraphForTest() = nil, want fail-closed error")
 	}
-	_, diagnostics := contractopenapiconverter.ConvertFailClosedSchema(factoryCopy, componentsCopy)
-	if len(diagnostics) != 0 {
-		t.Fatalf("ConvertFailClosedSchema() after stripping recorded gaps = %#v, want success", diagnostics)
+	if !strings.Contains(err.Error(), "undocumented diagnostics") {
+		t.Fatalf("error = %v, want undocumented diagnostics fail-closed message", err)
+	}
+	if !strings.Contains(err.Error(), "openapi.convert.unsupported_keyword") {
+		t.Fatalf("error = %v, want unsupported_keyword diagnostic payload", err)
 	}
 }
 

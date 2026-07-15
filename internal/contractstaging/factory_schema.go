@@ -20,23 +20,41 @@ func generateFactorySchema(repositoryRoot string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	return generateFactorySchemaFromGraph(repositoryRoot, factory, components)
+}
 
+func generateFactorySchemaFromGraph(
+	repositoryRoot string,
+	factory map[string]any,
+	components map[string]any,
+) ([]byte, error) {
 	converted, diagnostics := contractopenapiconverter.ConvertFailClosedSchema(factory, components)
 	if len(diagnostics) == 0 {
 		return marshalFactorySchemaDocument(converted)
+	}
+	record, err := loadFactorySchemaB16Gaps(repositoryRoot)
+	if err != nil {
+		return nil, err
+	}
+	if factorySchemaGapRecordEndorsesConverter(record) {
+		return nil, factorySchemaUndocumentedDiagnosticsError(diagnostics)
 	}
 	expected, err := factorySchemaConverterFailureExpected(repositoryRoot, diagnostics)
 	if err != nil {
 		return nil, err
 	}
 	if !expected {
-		payload, marshalErr := json.Marshal(diagnostics)
-		if marshalErr != nil {
-			return nil, fmt.Errorf("encode factory schema converter diagnostics: %w", marshalErr)
-		}
-		return nil, fmt.Errorf("factory schema conversion is blocked by undocumented diagnostics: %s", payload)
+		return nil, factorySchemaUndocumentedDiagnosticsError(diagnostics)
 	}
 	return legacyGenerateFactorySchema(factory, components)
+}
+
+func factorySchemaUndocumentedDiagnosticsError(diagnostics []contractvalidator.Diagnostic) error {
+	payload, err := json.Marshal(diagnostics)
+	if err != nil {
+		return fmt.Errorf("encode factory schema converter diagnostics: %w", err)
+	}
+	return fmt.Errorf("factory schema conversion is blocked by undocumented diagnostics: %s", payload)
 }
 
 func loadFactorySchemaGraph(repositoryRoot string) (map[string]any, map[string]any, error) {

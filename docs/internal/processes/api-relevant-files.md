@@ -29,10 +29,12 @@ Use this map when changing the public REST contract.
   without blocking diagnostics, staging emits
   `contracts/config/factory.schema.json` and copies the same bytes to
   `packages/api/generated/schemas/factory.schema.json` through
-  `marshalFactorySchemaDocument` only. When the graph is still blocked by
-  documented B16 gaps in `docs/internal/contract/factory-schema-b16-gaps.json`,
-  staging falls back to the legacy ref-materialization projection without
-  broadening the converter profile. When removing OpenAPI-only keywords or generator hints from authored
+  `marshalFactorySchemaDocument` only. When the B16 gap record status is
+  `converter_endorsed`, any converter diagnostic fails staging closed and does
+  not use the legacy ref-materialization fallback. When the record status is still
+  `blocks_full_endorsement`, staging may fall back only for diagnostics explicitly
+  covered by `blockingCategories` or `approvedResidualExclusions` in
+  `docs/internal/contract/factory-schema-b16-gaps.json`. When removing OpenAPI-only keywords or generator hints from authored
   Factory fragments for converter endorsement, keep stable Go enum/type names via
   `api/codegen_config/factory-codegen-overlay.yaml` referenced from the oapi-codegen
   configs rather than leaving `x-enum-varnames` / `x-go-type` in authored schema
