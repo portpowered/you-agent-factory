@@ -68,10 +68,12 @@ Use this map when changing the public REST contract.
   `internal/javascriptcontractsmoke` with CLI entrypoint
   `cmd/javascriptcontractsmoke` and `make javascript-contract-smoke`; reuse
   `symbolidentity.ProjectInstalledBindings`, `callbehavior.ProjectInstalledCallBehavior`,
-  `catalog.CatalogPathCompletenessIssues`, and `catalog.CatalogCallBehaviorParityIssues`
+  `catalog.CatalogPathCompletenessIssues`, `catalog.CatalogForbiddenSymbolIssues`, and
+  `catalog.CatalogCallBehaviorParityIssues`
   rather than inventing a second runtime descriptor. Prove missing/extra/duplicate
-  symbol-path failures with temp-dir catalog copies that keep authored and staged
-  bytes aligned in `internal/javascriptcontractsmoke/check_test.go` and
+  symbol-path failures and forbidden/comparison-project helper failures with
+  temp-dir catalog copies that keep authored and staged bytes aligned in
+  `internal/javascriptcontractsmoke/check_test.go` and
   `cmd/javascriptcontractsmoke/main_test.go`.
 - Staged OpenAPI byte policy lives in `internal/contractstaging/openapi.go`
   (`CanonicalOpenAPIPath`, `StagedOpenAPIPath`, `ReviewedOpenAPIBytePolicy`,

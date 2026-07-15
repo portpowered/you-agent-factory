@@ -125,6 +125,100 @@ func mutationFixtureRoot(t *testing.T) string {
 	return root
 }
 
+func TestCheck_FailsWhenCatalogContainsForbiddenRootGlobal(t *testing.T) {
+	root := mutationFixtureRoot(t)
+	mutateCatalogFixture(t, root, func(catalog map[string]any) {
+		symbols := catalog["symbols"].(map[string]any)
+		symbols["javascript.context"] = map[string]any{
+			"path": "context",
+			"kind": "value",
+		}
+	})
+
+	assertForbiddenSymbolFailure(t, root, forbiddenSymbolExpectation{
+		code: "javascript.path.forbidden",
+		path: "context",
+	})
+}
+
+func TestCheck_FailsWhenCatalogContainsOrchestratorGlobal(t *testing.T) {
+	root := mutationFixtureRoot(t)
+	mutateCatalogFixture(t, root, func(catalog map[string]any) {
+		symbols := catalog["symbols"].(map[string]any)
+		symbols["javascript.orchestrator"] = map[string]any{
+			"path": "orchestrator",
+			"kind": "namespace",
+		}
+	})
+
+	assertForbiddenSymbolFailure(t, root, forbiddenSymbolExpectation{
+		code: "javascript.path.forbidden",
+		path: "orchestrator",
+	})
+}
+
+func TestCheck_FailsWhenCatalogContainsComparisonProjectHelper(t *testing.T) {
+	root := mutationFixtureRoot(t)
+	mutateCatalogFixture(t, root, func(catalog map[string]any) {
+		symbols := catalog["symbols"].(map[string]any)
+		symbols["javascript.workflow.sleep"] = map[string]any{
+			"path": "workflow.sleep",
+			"kind": "method",
+		}
+	})
+
+	assertForbiddenSymbolFailure(t, root, forbiddenSymbolExpectation{
+		code: "javascript.path.unsupported_helper",
+		path: "workflow.sleep",
+	})
+}
+
+func TestCheck_ForbiddenSymbolFailuresAreDeterministic(t *testing.T) {
+	root := mutationFixtureRoot(t)
+	mutateCatalogFixture(t, root, func(catalog map[string]any) {
+		symbols := catalog["symbols"].(map[string]any)
+		symbols["javascript.context"] = map[string]any{
+			"path": "context",
+			"kind": "value",
+		}
+	})
+
+	first := runCheckDiagnostics(t, root)
+	second := runCheckDiagnostics(t, root)
+	if len(first) != len(second) {
+		t.Fatalf("diagnostic count drift: first=%d second=%d", len(first), len(second))
+	}
+	for i := range first {
+		if first[i] != second[i] {
+			t.Fatalf("diagnostic[%d] drift: first=%+v second=%+v", i, first[i], second[i])
+		}
+	}
+}
+
+type forbiddenSymbolExpectation struct {
+	code string
+	path string
+}
+
+func assertForbiddenSymbolFailure(t *testing.T, root string, want forbiddenSymbolExpectation) {
+	t.Helper()
+
+	diagnostics := runCheckDiagnostics(t, root)
+	if len(diagnostics) != 1 {
+		t.Fatalf("Check() diagnostics = %+v, want one forbidden-surface issue", diagnostics)
+	}
+	diagnostic := diagnostics[0]
+	if diagnostic.Code != want.code {
+		t.Fatalf("diagnostic code = %q, want %q (full=%+v)", diagnostic.Code, want.code, diagnostic)
+	}
+	if diagnostic.Path != want.path {
+		t.Fatalf("diagnostic path = %q, want repository-relative symbol path %q (full=%+v)", diagnostic.Path, want.path, diagnostic)
+	}
+	if !strings.Contains(diagnostic.Message, "remove the path from the contracted supported surface") {
+		t.Fatalf("diagnostic message = %q, want actionable remediation", diagnostic.Message)
+	}
+}
+
 func TestCheck_FailsWhenInstalledPathMissingFromCatalog(t *testing.T) {
 	root := mutationFixtureRoot(t)
 	mutateCatalogFixture(t, root, func(catalog map[string]any) {

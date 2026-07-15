@@ -77,6 +77,10 @@ func Check(root string) ([]Diagnostic, error) {
 	if err != nil {
 		return nil, fmt.Errorf("extract catalog symbol paths: %w", err)
 	}
+	symbols, _ := catalog["symbols"].(map[string]any)
+	for _, issue := range jscatalog.CatalogForbiddenSymbolIssues(catalogPaths, symbols) {
+		diagnostics = append(diagnostics, forbiddenSymbolDiagnostic(issue))
+	}
 	for _, issue := range jscatalog.CatalogPathCompletenessIssues(catalogPaths, identity, callInventory) {
 		diagnostics = append(diagnostics, pathCompletenessDiagnostic(issue))
 	}
@@ -103,6 +107,18 @@ func bindingDescriptorDiagnostic(err error) Diagnostic {
 		Code:    "javascript.binding.descriptor",
 		Path:    path,
 		Message: message + "; restore parity between the installed binding descriptor and authored catalog",
+	}
+}
+
+func forbiddenSymbolDiagnostic(issue jscatalog.PathCompletenessIssue) Diagnostic {
+	path := issue.Path
+	if path == "" || path == "/symbols" {
+		path = AuthoredCatalogRelativePath
+	}
+	return Diagnostic{
+		Code:    issue.Code,
+		Path:    path,
+		Message: issue.Message + "; remove the path from the contracted supported surface",
 	}
 }
 
