@@ -12,8 +12,8 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
+	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
 	factorypackages "github.com/portpowered/infinite-you/pkg/factory/packages"
@@ -800,5 +800,95 @@ func TestEnsurePackagedFactories_InvalidPayloadDoesNotCommitTarget(t *testing.T)
 	}
 	if len(installed) != 0 {
 		t.Fatalf("installed factories after failed install = %v, want none", installed)
+	}
+}
+
+func TestEnsurePackagedFactories_InvalidScriptManifestDoesNotCommitTarget(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name  string
+		files []any
+	}{
+		{
+			name: "absolute target",
+			files: []any{
+				packagedScriptEntry("/tmp/setup.sh", "echo unsafe\n"),
+			},
+		},
+		{
+			name: "traversal target",
+			files: []any{
+				packagedScriptEntry("factory/scripts/../../outside.sh", "echo unsafe\n"),
+			},
+		},
+		{
+			name: "duplicate target",
+			files: []any{
+				packagedScriptEntry("factory/scripts/setup.sh", "echo first\n"),
+				packagedScriptEntry("factory/scripts/setup.sh", "echo second\n"),
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			namedFactoriesRoot := t.TempDir()
+			definition := factorypackages.Definition{
+				Name: "@you/goal",
+				JSON: packagedGoalPayloadWithBundledFiles(t, tt.files),
+			}
+
+			_, err := ensurePackagedFactories(namedFactoriesRoot, []factorypackages.Definition{definition})
+			if err == nil {
+				t.Fatal("expected invalid packaged script manifest to fail")
+			}
+			for _, want := range []string{"install packaged factory", definition.Name, namedFactoriesRoot} {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("error = %q, want context %q", err, want)
+				}
+			}
+
+			targetDir, mapErr := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, definition.Name)
+			if mapErr != nil {
+				t.Fatalf("MapNamedFactoryDir(%q): %v", definition.Name, mapErr)
+			}
+			if _, statErr := os.Stat(targetDir); !os.IsNotExist(statErr) {
+				t.Fatalf("Stat(%q) error = %v, want target absent", targetDir, statErr)
+			}
+		})
+	}
+}
+
+func packagedGoalPayloadWithBundledFiles(t *testing.T, files []any) []byte {
+	t.Helper()
+	definition, ok := factorypackages.Lookup("@you/goal")
+	if !ok {
+		t.Fatal("lookup @you/goal packaged factory: not found")
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(definition.JSON, &payload); err != nil {
+		t.Fatalf("decode @you/goal packaged factory: %v", err)
+	}
+	supportingFiles, _ := payload["supportingFiles"].(map[string]any)
+	if supportingFiles == nil {
+		supportingFiles = map[string]any{}
+		payload["supportingFiles"] = supportingFiles
+	}
+	supportingFiles["bundledFiles"] = files
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("encode invalid packaged factory fixture: %v", err)
+	}
+	return encoded
+}
+
+func packagedScriptEntry(target, content string) map[string]any {
+	return map[string]any{
+		"id":         target,
+		"type":       interfaces.BundledFileTypeScript,
+		"targetPath": target,
+		"content": map[string]any{
+			"encoding": interfaces.BundledFileEncodingUTF8,
+			"inline":   content,
+		},
 	}
 }
