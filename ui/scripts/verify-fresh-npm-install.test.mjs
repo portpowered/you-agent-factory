@@ -29,6 +29,7 @@ async function createResolvedInstallFixture() {
   await symlink(
     path.join(installRoot, "packages", "components"),
     path.join(scopedDir, "components"),
+    process.platform === "win32" ? "junction" : "dir",
   );
 
   return installRoot;
@@ -62,10 +63,11 @@ describe("assertScopedComponentsResolved", () => {
       await symlink(
         wrongTarget,
         path.join(installRoot, "node_modules", "@you-agent-factory", "components"),
+        process.platform === "win32" ? "junction" : "dir",
       );
 
       await expect(assertScopedComponentsResolved(installRoot)).rejects.toThrow(
-        /Expected @you-agent-factory\/components to resolve from packages\/components/,
+        /Expected @you-agent-factory\/components to resolve from packages[\\/]components/,
       );
     } finally {
       await rm(installRoot, { force: true, recursive: true });
