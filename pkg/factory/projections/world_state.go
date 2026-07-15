@@ -3,7 +3,6 @@
 package projections
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -294,24 +293,12 @@ func (r *factoryWorldReducer) applyInitialStructure(payload interfaces.InitialSt
 }
 
 func (r *factoryWorldReducer) applyCanonicalFactory(factory factoryapi.Factory) error {
-	clone, err := cloneGeneratedFactory(factory)
+	snapshot, err := interfaces.NewFactorySnapshot(factory)
 	if err != nil {
 		return err
 	}
-	r.stateValue.Factory = &clone
+	r.stateValue.Factory = snapshot
 	return nil
-}
-
-func cloneGeneratedFactory(factory factoryapi.Factory) (factoryapi.Factory, error) {
-	encoded, err := json.Marshal(factory)
-	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("clone canonical factory graph: %w", err)
-	}
-	var clone factoryapi.Factory
-	if err := json.Unmarshal(encoded, &clone); err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("clone canonical factory graph: %w", err)
-	}
-	return clone, nil
 }
 
 func (r *factoryWorldReducer) applyWorkRequest(context factoryapi.FactoryEventContext, payload factoryapi.WorkRequestEventPayload) {

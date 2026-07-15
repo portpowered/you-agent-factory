@@ -64,8 +64,12 @@ func buildWorldViewProjectionState() (*factoryapi.Factory, interfaces.FactoryWor
 		TraceID:     "trace-queued",
 	})
 	factory := &factoryapi.Factory{Name: "factory-canonical"}
+	factorySnapshot, err := interfaces.NewFactorySnapshot(factory)
+	if err != nil {
+		panic(err)
+	}
 	return factory, interfaces.FactoryWorldState{
-		Factory:        factory,
+		Factory:        factorySnapshot,
 		Topology:       buildWorldViewProjectionTopology(),
 		PayloadLineage: lineage,
 		WorkItemsByID:  buildWorldViewWorkItems(),
@@ -305,8 +309,15 @@ func testWorldViewProjectionFiltersCustomerFacingRuntimeData(t *testing.T) {
 	fixture := newWorldViewProjectionFixture()
 	view := fixture.view
 
-	if view.Factory == nil || view.Factory == fixture.factory || view.Factory.Name != "factory-canonical" {
-		t.Fatalf("Factory = %#v, want cloned canonical factory", view.Factory)
+	if view.Factory == nil {
+		t.Fatal("Factory is nil, want cloned canonical factory")
+	}
+	var projectedFactory factoryapi.Factory
+	if err := view.Factory.Decode(&projectedFactory); err != nil {
+		t.Fatalf("decode Factory: %v", err)
+	}
+	if projectedFactory.Name != "factory-canonical" {
+		t.Fatalf("Factory name = %q, want factory-canonical", projectedFactory.Name)
 	}
 	if !reflect.DeepEqual(view.Runtime.ActiveDispatchIDs, []string{"dispatch-customer"}) {
 		t.Fatalf("ActiveDispatchIDs = %#v, want only customer dispatch", view.Runtime.ActiveDispatchIDs)

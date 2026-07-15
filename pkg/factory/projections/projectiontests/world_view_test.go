@@ -139,7 +139,7 @@ func TestBuildFactoryWorldView_ExposesCanonicalFactoryGraphFromStructureEvents(t
 	view := BuildFactoryWorldView(worldState)
 
 	assertCanonicalFactoryGraphPreserved(t, worldState, view, payload.Factory)
-	assertCanonicalFactoryWorkstationDetailsPreserved(t, *view.Factory, promptBody, maxRetries)
+	assertCanonicalFactoryWorkstationDetailsPreserved(t, decodeFactorySnapshot(t, view.Factory), promptBody, maxRetries)
 }
 
 func assertCanonicalFactoryGraphPreserved(
@@ -156,12 +156,21 @@ func assertCanonicalFactoryGraphPreserved(
 	if view.Factory == nil {
 		t.Fatal("world view factory = nil, want canonical factory graph")
 	}
-	if !reflect.DeepEqual(*worldState.Factory, want) {
-		t.Fatalf("world state factory = %#v, want canonical payload", *worldState.Factory)
+	if got := decodeFactorySnapshot(t, worldState.Factory); !reflect.DeepEqual(got, want) {
+		t.Fatalf("world state factory = %#v, want canonical payload", got)
 	}
-	if !reflect.DeepEqual(*view.Factory, want) {
-		t.Fatalf("world view factory = %#v, want canonical payload", *view.Factory)
+	if got := decodeFactorySnapshot(t, view.Factory); !reflect.DeepEqual(got, want) {
+		t.Fatalf("world view factory = %#v, want canonical payload", got)
 	}
+}
+
+func decodeFactorySnapshot(t *testing.T, snapshot *interfaces.FactorySnapshot) factoryapi.Factory {
+	t.Helper()
+	var factory factoryapi.Factory
+	if err := snapshot.Decode(&factory); err != nil {
+		t.Fatalf("decode factory snapshot: %v", err)
+	}
+	return factory
 }
 
 func assertCanonicalFactoryWorkstationDetailsPreserved(

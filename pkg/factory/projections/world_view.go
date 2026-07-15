@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
 
@@ -21,15 +20,8 @@ func BuildFactoryWorldView(state interfaces.FactoryWorldState) interfaces.Factor
 	}
 }
 
-func factoryWorldViewFactory(factory *factoryapi.Factory) *factoryapi.Factory {
-	if factory == nil {
-		return nil
-	}
-	clone, err := cloneGeneratedFactory(*factory)
-	if err != nil {
-		return nil
-	}
-	return &clone
+func factoryWorldViewFactory(factory *interfaces.FactorySnapshot) *interfaces.FactorySnapshot {
+	return factory.Clone()
 }
 
 func customerActiveDispatchIDs(state interfaces.FactoryWorldState) []string {

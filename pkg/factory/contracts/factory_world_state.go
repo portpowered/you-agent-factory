@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
@@ -15,7 +14,7 @@ import (
 type FactoryWorldState struct {
 	Tick                          int                                                `json:"tick"`
 	EventTime                     time.Time                                          `json:"event_time,omitempty"`
-	Factory                       *factoryapi.Factory                                `json:"factory,omitempty"`
+	Factory                       *FactorySnapshot                                   `json:"factory,omitempty"`
 	Topology                      InitialStructurePayload                            `json:"topology"`
 	PayloadLineage                work.WorkPayloadLineageProjection                  `json:"payload_lineage,omitempty"`
 	WorkRequestsByID              map[string]WorkRequestPayload                      `json:"work_requests_by_id,omitempty"`
