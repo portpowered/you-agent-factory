@@ -1,6 +1,7 @@
 package javascriptcontractsmoke_test
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -122,4 +123,140 @@ func mutationFixtureRoot(t *testing.T) string {
 		}
 	}
 	return root
+}
+
+func TestCheck_FailsWhenInstalledPathMissingFromCatalog(t *testing.T) {
+	root := mutationFixtureRoot(t)
+	mutateCatalogFixture(t, root, func(catalog map[string]any) {
+		symbols := catalog["symbols"].(map[string]any)
+		delete(symbols, "javascript.phase")
+	})
+
+	assertPathCompletenessFailure(t, root, pathCompletenessExpectation{
+		wantCount: 1,
+		code:      "javascript.path.missing",
+		path:      "phase",
+	})
+}
+
+func TestCheck_FailsWhenCatalogContainsExtraPath(t *testing.T) {
+	root := mutationFixtureRoot(t)
+	mutateCatalogFixture(t, root, func(catalog map[string]any) {
+		symbols := catalog["symbols"].(map[string]any)
+		symbols["javascript.workflow.extra"] = map[string]any{
+			"path": "workflow.extra",
+		}
+	})
+
+	assertPathCompletenessFailure(t, root, pathCompletenessExpectation{
+		wantCount: 1,
+		code:      "javascript.path.extra",
+		path:      "workflow.extra",
+	})
+}
+
+func TestCheck_FailsWhenCatalogPathDuplicated(t *testing.T) {
+	root := mutationFixtureRoot(t)
+	mutateCatalogFixture(t, root, func(catalog map[string]any) {
+		symbols := catalog["symbols"].(map[string]any)
+		symbols["javascript.duplicate-phase"] = map[string]any{
+			"path": "phase",
+		}
+	})
+
+	assertPathCompletenessFailure(t, root, pathCompletenessExpectation{
+		wantCount: 2,
+		code:      "javascript.path.duplicate",
+		path:      "phase",
+	})
+}
+
+func TestCheck_PathCompletenessFailuresAreDeterministic(t *testing.T) {
+	root := mutationFixtureRoot(t)
+	mutateCatalogFixture(t, root, func(catalog map[string]any) {
+		symbols := catalog["symbols"].(map[string]any)
+		delete(symbols, "javascript.phase")
+	})
+
+	first := runCheckDiagnostics(t, root)
+	second := runCheckDiagnostics(t, root)
+	if len(first) != len(second) {
+		t.Fatalf("diagnostic count drift: first=%d second=%d", len(first), len(second))
+	}
+	for i := range first {
+		if first[i] != second[i] {
+			t.Fatalf("diagnostic[%d] drift: first=%+v second=%+v", i, first[i], second[i])
+		}
+	}
+}
+
+type pathCompletenessExpectation struct {
+	wantCount int
+	code      string
+	path      string
+}
+
+func assertPathCompletenessFailure(t *testing.T, root string, want pathCompletenessExpectation) {
+	t.Helper()
+
+	diagnostics := runCheckDiagnostics(t, root)
+	if len(diagnostics) != want.wantCount {
+		t.Fatalf("Check() diagnostics = %+v, want %d issue(s)", diagnostics, want.wantCount)
+	}
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Code != want.code {
+			t.Fatalf("diagnostic code = %q, want %q (full=%+v)", diagnostic.Code, want.code, diagnostic)
+		}
+		if diagnostic.Path != want.path {
+			t.Fatalf("diagnostic path = %q, want repository-relative symbol path %q (full=%+v)", diagnostic.Path, want.path, diagnostic)
+		}
+		if !strings.Contains(diagnostic.Message, "restore authored catalog and staging parity") {
+			t.Fatalf("diagnostic message = %q, want actionable remediation", diagnostic.Message)
+		}
+	}
+}
+
+func runCheckDiagnostics(t *testing.T, root string) []javascriptcontractsmoke.Diagnostic {
+	t.Helper()
+
+	diagnostics, err := javascriptcontractsmoke.Check(root)
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if len(diagnostics) == 0 {
+		t.Fatal("Check() diagnostics = none, want path completeness failure")
+	}
+	return diagnostics
+}
+
+func mutateCatalogFixture(t *testing.T, root string, mutate func(map[string]any)) {
+	t.Helper()
+
+	authoredPath := filepath.Join(root, filepath.FromSlash(javascriptcontractsmoke.AuthoredCatalogRelativePath))
+	data, err := os.ReadFile(authoredPath)
+	if err != nil {
+		t.Fatalf("read authored catalog: %v", err)
+	}
+
+	var catalog map[string]any
+	if err := json.Unmarshal(data, &catalog); err != nil {
+		t.Fatalf("decode authored catalog: %v", err)
+	}
+	mutate(catalog)
+
+	updated, err := json.MarshalIndent(catalog, "", "  ")
+	if err != nil {
+		t.Fatalf("encode catalog fixture: %v", err)
+	}
+	updated = append(updated, '\n')
+
+	for _, rel := range []string{
+		javascriptcontractsmoke.AuthoredCatalogRelativePath,
+		javascriptcontractsmoke.StagedProjectionRelativePath,
+	} {
+		target := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.WriteFile(target, updated, 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
 }

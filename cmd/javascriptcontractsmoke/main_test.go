@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -63,6 +64,40 @@ func TestRunRepeatPassesAreDeterministicWithoutWriting(t *testing.T) {
 	if after := repositoryTree(t, root); !mapsEqual(after, before) {
 		t.Fatal("run() changed repository bytes across repeat passes")
 	}
+}
+
+func TestRunReportsMissingPathDeterministicallyWithoutWriting(t *testing.T) {
+	root := mutationFixtureRoot(t)
+	mutateCatalogFixture(t, root, func(catalog map[string]any) {
+		symbols := catalog["symbols"].(map[string]any)
+		delete(symbols, "javascript.phase")
+	})
+
+	assertRunPathFailureDeterministic(t, root, "phase", "javascript.path.missing")
+}
+
+func TestRunReportsExtraPathDeterministicallyWithoutWriting(t *testing.T) {
+	root := mutationFixtureRoot(t)
+	mutateCatalogFixture(t, root, func(catalog map[string]any) {
+		symbols := catalog["symbols"].(map[string]any)
+		symbols["javascript.workflow.extra"] = map[string]any{
+			"path": "workflow.extra",
+		}
+	})
+
+	assertRunPathFailureDeterministic(t, root, "workflow.extra", "javascript.path.extra")
+}
+
+func TestRunReportsDuplicatePathDeterministicallyWithoutWriting(t *testing.T) {
+	root := mutationFixtureRoot(t)
+	mutateCatalogFixture(t, root, func(catalog map[string]any) {
+		symbols := catalog["symbols"].(map[string]any)
+		symbols["javascript.duplicate-phase"] = map[string]any{
+			"path": "phase",
+		}
+	})
+
+	assertRunPathFailureDeterministic(t, root, "phase", "javascript.path.duplicate")
 }
 
 func TestRunReportsStaleProjectionDeterministicallyWithoutWriting(t *testing.T) {
@@ -147,4 +182,62 @@ func mapsEqual(left, right map[string][]byte) bool {
 		}
 	}
 	return true
+}
+
+func assertRunPathFailureDeterministic(t *testing.T, root, path, code string) {
+	t.Helper()
+
+	wantSuffix := "[agent-factory:javascript-contract-smoke] JavaScript contract parity failed; restore catalog, staging, binding descriptor, and call-behavior baseline alignment\n"
+
+	for runIndex := 0; runIndex < 2; runIndex++ {
+		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+		if status := run(root, stdout, stderr); status != 1 {
+			t.Fatalf("run %d status = %d, want 1", runIndex, status)
+		}
+		if stdout.Len() != 0 {
+			t.Fatalf("run %d stdout = %q, want empty", runIndex, stdout.String())
+		}
+		output := stderr.String()
+		if !strings.Contains(output, path+" ("+code+"):") {
+			t.Fatalf("run %d stderr = %q, want path %q and code %q", runIndex, output, path, code)
+		}
+		if !strings.Contains(output, "restore authored catalog and staging parity") {
+			t.Fatalf("run %d stderr = %q, want actionable remediation", runIndex, output)
+		}
+		if !strings.HasSuffix(output, wantSuffix) {
+			t.Fatalf("run %d stderr = %q, want parity failure suffix", runIndex, output)
+		}
+	}
+}
+
+func mutateCatalogFixture(t *testing.T, root string, mutate func(map[string]any)) {
+	t.Helper()
+
+	authoredPath := filepath.Join(root, filepath.FromSlash(javascriptcontractsmoke.AuthoredCatalogRelativePath))
+	data, err := os.ReadFile(authoredPath)
+	if err != nil {
+		t.Fatalf("read authored catalog: %v", err)
+	}
+
+	var catalog map[string]any
+	if err := json.Unmarshal(data, &catalog); err != nil {
+		t.Fatalf("decode authored catalog: %v", err)
+	}
+	mutate(catalog)
+
+	updated, err := json.MarshalIndent(catalog, "", "  ")
+	if err != nil {
+		t.Fatalf("encode catalog fixture: %v", err)
+	}
+	updated = append(updated, '\n')
+
+	for _, rel := range []string{
+		javascriptcontractsmoke.AuthoredCatalogRelativePath,
+		javascriptcontractsmoke.StagedProjectionRelativePath,
+	} {
+		target := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.WriteFile(target, updated, 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
 }
