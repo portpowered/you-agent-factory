@@ -86,8 +86,8 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 | `pkg/factory/contracts` | 3 | 2 | directive + coverage baseline |
 | `pkg/platform/cursors` | 10 | 5 | directive + coverage baseline |
 | `pkg/transports/mcp/factorysession` | 9 | 4 | directive + coverage baseline |
-| `pkg/platform/replay` | 2 | 2 | directive + coverage baseline |
-| `pkg/platform/replay/configtests` | 3 | 3 | directive only |
+| `pkg/factory/replay` | 2 | 2 | directive + coverage baseline |
+| `pkg/factory/replay/configtests` | 3 | 3 | directive only |
 | `pkg/runtimehost` | 5 | 3 | directive + coverage baseline |
 | `pkg/service` | 29 | 9 | directive + coverage baseline |
 | `pkg/service/runtimelogtests` | 2 | 1 | directive only |
@@ -488,24 +488,24 @@ Owner: `pkg/transports/mcp/factorysession` package maintainers. Status: **direct
 | `pkg/transports/mcp/factorysession/inspection_test.go:306` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_ReadEvents_EventReconnectFixtureReturnsOrderedCanonicalEvents` | T | T gate |
 | `pkg/transports/mcp/factorysession/inspection_test.go:363` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_Control_LifecycleFixtureReturnsAcceptedRejectedAndIsolatesSessions` | T | T gate |
 
-### `pkg/platform/replay`
+### `pkg/factory/replay`
 
-Owner: `pkg/platform/replay` package maintainers. Status: **directive + coverage baseline**.
-
-| Source | Directive rule | Target | Reason | Evidence |
-| --- | --- | --- | --- | --- |
-| `pkg/platform/replay/event_artifact_test.go:287` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertMergedGeneratedWorkstations` | T | T gate |
-| `pkg/platform/replay/event_log_test.go:459` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertReducedCompletionSafeDiagnostics` | T | T gate |
-
-### `pkg/platform/replay/configtests`
-
-Owner: `pkg/platform/replay/configtests` package maintainers. Status: **directive only**.
+Owner: `pkg/factory/replay` package maintainers. Status: **directive + coverage baseline**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/platform/replay/configtests/effective_config_generated_test.go:63` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertEmbeddedGeneratedFactory` | T | T gate |
-| `pkg/platform/replay/configtests/effective_config_test.go:335` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind` | T | T gate |
-| `pkg/platform/replay/configtests/generated_factory_test.go:19` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory` | T | T gate |
+| `pkg/factory/replay/event_artifact_test.go:287` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertMergedGeneratedWorkstations` | T | T gate |
+| `pkg/factory/replay/event_log_test.go:459` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertReducedCompletionSafeDiagnostics` | T | T gate |
+
+### `pkg/factory/replay/configtests`
+
+Owner: `pkg/factory/replay/configtests` package maintainers. Status: **directive only**.
+
+| Source | Directive rule | Target | Reason | Evidence |
+| --- | --- | --- | --- | --- |
+| `pkg/factory/replay/configtests/effective_config_generated_test.go:63` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertEmbeddedGeneratedFactory` | T | T gate |
+| `pkg/factory/replay/configtests/effective_config_test.go:335` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind` | T | T gate |
+| `pkg/factory/replay/configtests/generated_factory_test.go:19` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory` | T | T gate |
 
 ### `pkg/runtimehost`
 
@@ -627,7 +627,7 @@ as follows:
 | Batch 006 — `converge-model-worker-families` | Every detailed directive file under `pkg/workers/**`; the other named source families have no directive file in this snapshot. |
 | Batch 006 — `converge-work-family` | The named source roots (`pkg/invocations`, `pkg/materialize`, `pkg/timework`, `pkg/workcontent`, `pkg/workgraph`, and `pkg/workquery`) have no directive file in this snapshot. |
 | Batch 006 — `converge-factory-orchestrator-families` | Every detailed directive file under `pkg/factory/sessions/execution/**`; the other explicitly named moved roots have no directive file in this snapshot. Core event-first `pkg/factory/**` files are not reserved by this work item. |
-| Batch 006 — `converge-platform-and-interfaces` | Every detailed directive file under `pkg/factory/contracts/**`, `pkg/platform/cursors/**`, and `pkg/platform/replay/**`, matching the work item's interfaces, cursor-storage, and replay-infrastructure moves. |
+| Batch 006 — `converge-platform-and-interfaces` | Every detailed directive file under `pkg/factory/contracts/**`, `pkg/platform/cursors/**`, `pkg/factory/replay/**`, and `pkg/platform/replay/**`, matching the work item's interfaces, cursor-storage, Factory replay, and replay-infrastructure moves. |
 | Batch 007 — `move-session-state-to-factorysessions`, `split-runtime-build-ownership`, and `narrow-factory-service-facade` | Every detailed directive file under `pkg/factory/sessions/execution/**` and `pkg/service/**`. |
 | Batch 008 — `retire-legacy-composition-entrypoints` and `delete-host-composition-shims` | Every detailed directive file under `pkg/runtimehost/**` and `pkg/service/**`. Other Batch 008 deletion items have no additional directive file in this snapshot. |
 
@@ -645,7 +645,7 @@ every file in the named path set; the two file exceptions add the named PR colli
 | `pkg/factory/contracts/**` | 2 | 3 | **Externally owned:** Batch 006 platform/interfaces convergence |
 | `pkg/platform/cursors/**` | 5 | 10 | **Externally owned:** Batch 006 platform/interfaces convergence |
 | `pkg/transports/mcp/**` | 4 | 9 | **Externally owned:** Batch 006 transport-family convergence |
-| `pkg/platform/replay/**` | 5 | 5 | **Externally owned:** Batch 006 platform/interfaces convergence |
+| `pkg/factory/replay/**` | 5 | 5 | **Externally owned:** Batch 006 platform/interfaces convergence |
 | `pkg/runtimehost/**` | 3 | 5 | **Externally owned:** Batch 008 runtime-shim removal; `pkg/runtimehost/runtime_sessions.go` also collides with PR #1062 |
 | `pkg/service/**` | 10 | 31 | **Externally owned:** Batch 007 session/service convergence and Batch 008 runtime-shim removal |
 | `pkg/workers/**` | 5 | 9 | **Externally owned:** Batch 006 model/worker convergence; `pkg/workers/provider/recording_provider_test.go` also collides with PR #1001 |

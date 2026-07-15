@@ -640,7 +640,8 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `ReplayArtifact` config loading. Privacy-bounded JavaScript Factory Session
   recordings compose `recordingreplay.Service` as an inspection-only durable read
   owner and skip Petri/runtime/provider construction; legacy artifacts continue
-  through `pkg/platform/replay`. Production-path tests must exercise `FactoryService.Run`
+  through Factory-owned `pkg/factory/replay`, backed by policy-free artifact IO in
+  `pkg/platform/replay`. Production-path tests must exercise `FactoryService.Run`
   plus public session, event, artifact, and result reads with fail-on-use live
   dependencies.
 - `pkg/cli/run/factory_invocation_input.go` must pass raw positional/stdin

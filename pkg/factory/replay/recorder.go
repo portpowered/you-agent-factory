@@ -7,6 +7,7 @@ import (
 	"time"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -217,7 +218,7 @@ func (r *Recorder) snapshotLocked() ([]byte, int64, error) {
 }
 
 func (r *Recorder) writeSnapshot(data []byte, version int64, async bool) error {
-	if err := writeReplayArtifactFile(r.path, data); err != nil {
+	if err := platformreplay.WriteFile(r.path, data); err != nil {
 		err = fmt.Errorf("write replay artifact %q: %w", r.path, err)
 		r.recordFlushError(err)
 		if async {

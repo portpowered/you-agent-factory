@@ -65,6 +65,7 @@ github.com/portpowered/infinite-you/pkg/factory
 github.com/portpowered/infinite-you/pkg/factory/events
 github.com/portpowered/infinite-you/pkg/factory/metrics
 github.com/portpowered/infinite-you/pkg/factory/projections
+github.com/portpowered/infinite-you/pkg/factory/replay
 github.com/portpowered/infinite-you/pkg/factory/requests
 github.com/portpowered/infinite-you/pkg/factory/resource
 github.com/portpowered/infinite-you/pkg/factory/service

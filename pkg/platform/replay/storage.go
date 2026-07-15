@@ -1,5 +1,4 @@
-// Package replay owns policy-free recording, artifact persistence, and replay
-// delivery mechanics for canonical Factory events supplied by domain owners.
+// Package replay owns policy-free replay artifact persistence mechanics.
 package replay
 
 import (
@@ -11,50 +10,15 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 const (
-	// CurrentSchemaVersion is the only replay artifact schema version this
-	// package can currently load.
-	CurrentSchemaVersion = "agent-factory.replay.v1"
-
-	replayArtifactReplaceAttempts = 20
-	replayArtifactReplaceDelay    = 10 * time.Millisecond
+	artifactReplaceAttempts = 20
+	artifactReplaceDelay    = 10 * time.Millisecond
 )
 
-// Save validates and writes an artifact as indented JSON.
-func Save(path string, artifact *interfaces.ReplayArtifact) error {
-	data, err := MarshalArtifact(artifact)
-	if err != nil {
-		return err
-	}
-	if err := writeReplayArtifactFile(path, data); err != nil {
-		return fmt.Errorf("write replay artifact %q: %w", path, err)
-	}
-	return nil
-}
-
-// MarshalArtifact validates and serializes a replay artifact in the canonical
-// indented JSON format used by artifact files.
-func MarshalArtifact(artifact *interfaces.ReplayArtifact) ([]byte, error) {
-	storageArtifact, err := artifactForStorage(artifact)
-	if err != nil {
-		return nil, err
-	}
-	if err := Validate(storageArtifact); err != nil {
-		return nil, err
-	}
-
-	data, err := json.MarshalIndent(storageArtifact, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("marshal replay artifact: %w", err)
-	}
-	return append(data, '\n'), nil
-}
-
-func writeReplayArtifactFile(path string, data []byte) error {
+// WriteFile atomically replaces path with a completed artifact snapshot.
+func WriteFile(path string, data []byte) error {
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create replay artifact directory: %w", err)
@@ -91,11 +55,8 @@ func writeReplayArtifactFile(path string, data []byte) error {
 		return fmt.Errorf("replace replay artifact with temp file: %w; temp artifact left at %s", err, tmpPath)
 	}
 
-	// Windows readers can briefly block deletion while the recorder streams
-	// updates and consumers poll Load. Keep the completed temp file recoverable
-	// while retrying the replace.
 	var replaceErr error
-	for attempt := 0; attempt < replayArtifactReplaceAttempts; attempt++ {
+	for range artifactReplaceAttempts {
 		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 			replaceErr = fmt.Errorf("remove previous replay artifact before replace: %w", err)
 		} else if err := os.Rename(tmpPath, path); err != nil {
@@ -104,61 +65,29 @@ func writeReplayArtifactFile(path string, data []byte) error {
 			cleanupTemp = false
 			return nil
 		}
-		time.Sleep(replayArtifactReplaceDelay)
+		time.Sleep(artifactReplaceDelay)
 	}
 	return fmt.Errorf("%w; temp artifact left at %s", replaceErr, tmpPath)
 }
 
-// Load reads, decodes, and validates a replay artifact before returning it to
-// runtime replay code.
-func Load(path string) (*interfaces.ReplayArtifact, error) {
-	data, err := readReplayArtifactFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read replay artifact %q: %w", path, err)
-	}
-
-	artifact, err := unmarshalReplayArtifact(data)
-	if err != nil {
-		return nil, fmt.Errorf("parse replay artifact %q: %w", path, err)
-	}
-	if err := hydrateArtifactFromEvents(artifact); err != nil {
-		return nil, err
-	}
-	if err := Validate(artifact); err != nil {
-		return nil, err
-	}
-	return artifact, nil
-}
-
-func readReplayArtifactFile(path string) ([]byte, error) {
+// ReadFile reads one artifact snapshot, retrying transient Windows replacement
+// races without interpreting the artifact contents.
+func ReadFile(path string) ([]byte, error) {
 	data, err := os.ReadFile(path)
 	if err == nil || runtime.GOOS != "windows" {
 		return data, err
 	}
 
 	lastErr := err
-	for attempt := 0; attempt < replayArtifactReplaceAttempts; attempt++ {
-		time.Sleep(replayArtifactReplaceDelay)
+	for range artifactReplaceAttempts {
+		time.Sleep(artifactReplaceDelay)
 		data, err = os.ReadFile(path)
 		if err == nil {
 			return data, nil
 		}
 		lastErr = err
 	}
-
 	return nil, lastErr
-}
-
-func unmarshalReplayArtifact(data []byte) (*interfaces.ReplayArtifact, error) {
-	normalized, err := normalizeHistoricalFailureDetails(data)
-	if err != nil {
-		return nil, err
-	}
-	var artifact interfaces.ReplayArtifact
-	if err := json.Unmarshal(normalized, &artifact); err != nil {
-		return nil, err
-	}
-	return &artifact, nil
 }
 
 const unavailableHistoricalFailureMessage = "Failure details were not recorded in this historical event."
@@ -168,9 +97,9 @@ var canonicalFailureReasons = map[string]struct{}{
 	"internal_server_error": {}, "throttled": {}, "timeout": {}, "unknown": {},
 }
 
-// normalizeHistoricalFailureDetails translates compatibility fields before
-// generated canonical event types decode the replay input and discard them.
-func normalizeHistoricalFailureDetails(data []byte) ([]byte, error) {
+// NormalizeHistoricalFailureDetails translates legacy diagnostic fields before
+// the domain-owned artifact codec decodes its canonical events.
+func NormalizeHistoricalFailureDetails(data []byte) ([]byte, error) {
 	var root map[string]any
 	if err := json.Unmarshal(data, &root); err != nil {
 		return nil, err
@@ -248,15 +177,4 @@ func trimmedString(value any) (string, bool) {
 	text, ok := value.(string)
 	text = strings.TrimSpace(text)
 	return text, ok && text != ""
-}
-
-// Validate rejects artifacts that cannot be safely used as replay input.
-func Validate(artifact *interfaces.ReplayArtifact) error {
-	if err := validateReplayEventEnvelope(artifact); err != nil {
-		return err
-	}
-	if !generatedFactoryHasConfig(artifact.Factory) {
-		return errors.New("replay artifact factory is required")
-	}
-	return nil
 }
