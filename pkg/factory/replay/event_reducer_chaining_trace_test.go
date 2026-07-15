@@ -2,6 +2,7 @@ package replay
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
 
@@ -11,6 +12,85 @@ import (
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
+
+func TestReplaySubmissionsFromEventDecodesWorkOwnedPayload(t *testing.T) {
+	payload, err := json.Marshal(work.WorkRequestEventPayload{
+		Source: "api",
+		Type:   work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.WorkRequestEventWork{
+			{
+				Name:       "source",
+				WorkID:     "work-1",
+				WorkTypeID: "task",
+				State:      &work.WorkEventState{Name: "queued"},
+				Content:    []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}},
+				Payload:    json.RawMessage(`{"priority":2}`),
+				Tags:       map[string]string{"team": "runtime"},
+			},
+			{Name: "target", WorkID: "work-2", WorkTypeID: "task"},
+		},
+		Relations: []work.WorkRequestEventRelation{{
+			Type:           work.WorkRelationDependsOn,
+			SourceWorkName: "work-1",
+			TargetWorkID:   "work-2",
+			RequiredState:  "done",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal Work payload: %v", err)
+	}
+	requestID := "request-1"
+	workIDs := []string{"context-work-1", "context-work-2"}
+	traceIDs := []string{"trace-1", "trace-2"}
+	event := interfaces.FactoryEvent{
+		Id:            "event-1",
+		SchemaVersion: interfaces.FactoryEventSchemaVersionV1,
+		Type:          interfaces.FactoryEventTypeWorkRequest,
+		Context: interfaces.FactoryEventContext{
+			EventTime: time.Date(2026, time.July, 15, 18, 30, 0, 0, time.UTC),
+			RequestID: &requestID,
+			WorkIDs:   &workIDs,
+			TraceIDs:  &traceIDs,
+			Tick:      4,
+		},
+		Payload: payload,
+	}
+
+	submissions, err := replaySubmissionsFromEvent(event)
+	if err != nil {
+		t.Fatalf("replaySubmissionsFromEvent: %v", err)
+	}
+	if len(submissions) != 1 {
+		t.Fatalf("submissions = %d, want 1", len(submissions))
+	}
+	got := submissions[0]
+	if got.eventID != event.Id || got.observedTick != 4 || got.source != "api" {
+		t.Fatalf("submission metadata = %#v", got)
+	}
+	if got.request.RequestID != requestID || got.request.Type != work.WorkRequestTypeFactoryRequestBatch {
+		t.Fatalf("request identity = %#v", got.request)
+	}
+	if got.request.Works[0].TraceID != "trace-1" || got.request.Works[1].TraceID != "trace-2" {
+		t.Fatalf("context trace fallbacks = %#v", got.request.Works)
+	}
+	if string(got.request.Works[0].Payload.([]byte)) != `{"priority":2}` {
+		t.Fatalf("payload = %q", got.request.Works[0].Payload)
+	}
+	if !reflect.DeepEqual(got.request.Works[0].Content, []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "hello"}}) {
+		t.Fatalf("content = %#v", got.request.Works[0].Content)
+	}
+	wantRelations := []work.WorkRelation{{Type: work.WorkRelationDependsOn, SourceWorkName: "source", TargetWorkName: "target", RequiredState: "done"}}
+	if !reflect.DeepEqual(got.request.Relations, wantRelations) {
+		t.Fatalf("relations = %#v, want %#v", got.request.Relations, wantRelations)
+	}
+}
+
+func TestReplaySubmissionsFromEventRejectsMalformedWorkOwnedPayload(t *testing.T) {
+	event := interfaces.FactoryEvent{Id: "event-bad", Type: interfaces.FactoryEventTypeWorkRequest, Payload: json.RawMessage(`{"works":`)}
+	if _, err := replaySubmissionsFromEvent(event); err == nil {
+		t.Fatal("replaySubmissionsFromEvent error = nil, want malformed payload error")
+	}
+}
 
 func TestReplayWorkStateChangeFromEvent_DecodesDomainPayloadAndContextFallbacks(t *testing.T) {
 	requestID := "request-recover"

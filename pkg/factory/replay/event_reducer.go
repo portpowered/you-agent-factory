@@ -1,6 +1,7 @@
 package replay
 
 import (
+	"encoding/json"
 	"fmt"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
@@ -89,14 +90,14 @@ func reduceReplayEvent(
 		return applyReplayDispatchRequest(reduced, event, workByID)
 	case interfaces.FactoryEventTypeWorkStateChange:
 		return applyReplayWorkStateChange(reduced, event)
+	case interfaces.FactoryEventTypeWorkRequest:
+		return applyReplayWorkRequest(reduced, event, workByID)
 	}
 	generatedEvent, err := generatedEventFromDomain(event)
 	if err != nil {
 		return err
 	}
 	switch event.Type {
-	case interfaces.FactoryEventTypeWorkRequest:
-		return applyReplayWorkRequest(reduced, generatedEvent, workByID)
 	case interfaces.FactoryEventTypeInferenceResponse:
 		return applyReplayInferenceResponse(generatedEvent, inferenceAttemptsByDispatchID)
 	case interfaces.FactoryEventTypeDispatchResponse:
@@ -165,7 +166,7 @@ func applyReplayRunRequest(reduced *replayEventLog, event interfaces.FactoryEven
 	return nil
 }
 
-func applyReplayWorkRequest(reduced *replayEventLog, event factoryapi.FactoryEvent, workByID map[string]work.Work) error {
+func applyReplayWorkRequest(reduced *replayEventLog, event interfaces.FactoryEvent, workByID map[string]work.Work) error {
 	submissions, err := replaySubmissionsFromEvent(event)
 	if err != nil {
 		return err
@@ -273,33 +274,33 @@ func indexReplaySubmissionWork(workByID map[string]work.Work, submissions []repl
 	}
 }
 
-func replaySubmissionsFromEvent(event factoryapi.FactoryEvent) ([]replaySubmission, error) {
-	payload, err := event.Payload.AsWorkRequestEventPayload()
-	if err != nil {
+func replaySubmissionsFromEvent(event interfaces.FactoryEvent) ([]replaySubmission, error) {
+	var payload work.WorkRequestEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return nil, fmt.Errorf("decode work request event %q: %w", event.Id, err)
 	}
-	source := stringValue(payload.Source)
+	source := payload.Source
 	if source == "" {
 		source = stringValue(event.Context.Source)
 	}
 	if isWorkerOutputSource(source) {
 		return nil, nil
 	}
-	requestID := stringValue(event.Context.RequestId)
-	works := generatedWorksValue(payload.Works)
+	requestID := stringValue(event.Context.RequestID)
+	works := payload.Works
 	if len(works) == 0 {
 		return nil, nil
 	}
-	contextWorkIDs := stringSliceValue(event.Context.WorkIds)
-	contextTraceIDs := stringSliceValue(event.Context.TraceIds)
+	contextWorkIDs := stringSliceValue(event.Context.WorkIDs)
+	contextTraceIDs := stringSliceValue(event.Context.TraceIDs)
 	request := workdomain.WorkRequest{
 		RequestID: requestID,
 		Type:      work.WorkRequestType(payload.Type),
 		Works:     make([]work.Work, 0, len(works)),
-		Relations: workRelationsFromGenerated(works, payload.Relations),
+		Relations: replayWorkRequestRelations(works, payload.Relations),
 	}
-	for i, work := range works {
-		item := workFromGeneratedWork(work, requestID)
+	for i, eventWork := range works {
+		item := replayWorkRequestWork(eventWork, requestID)
 		if item.WorkID == "" && i < len(contextWorkIDs) {
 			item.WorkID = contextWorkIDs[i]
 		}
@@ -307,7 +308,7 @@ func replaySubmissionsFromEvent(event factoryapi.FactoryEvent) ([]replaySubmissi
 			if i < len(contextTraceIDs) {
 				item.TraceID = contextTraceIDs[i]
 			} else {
-				item.TraceID = firstString(event.Context.TraceIds)
+				item.TraceID = firstString(event.Context.TraceIDs)
 			}
 		}
 		request.Works = append(request.Works, item)
@@ -323,6 +324,73 @@ func replaySubmissionsFromEvent(event factoryapi.FactoryEvent) ([]replaySubmissi
 			source:       source,
 		},
 	}, nil
+}
+
+func replayWorkRequestWork(eventWork work.WorkRequestEventWork, requestID string) work.Work {
+	currentChainingTraceID := eventWork.CurrentChainingTraceID
+	if currentChainingTraceID == "" {
+		currentChainingTraceID = eventWork.TraceID
+	}
+	state := ""
+	if eventWork.State != nil {
+		state = eventWork.State.Name
+	}
+	if state == "" && eventWork.WorkTypeID == interfaces.SystemTimeWorkTypeID {
+		state = interfaces.SystemTimePendingState
+	}
+	return work.Work{
+		RequestID:                requestID,
+		WorkID:                   eventWork.WorkID,
+		Name:                     eventWork.Name,
+		WorkTypeID:               eventWork.WorkTypeID,
+		State:                    state,
+		ChainingTraceDepth:       eventWork.ChainingTraceDepth,
+		CurrentChainingTraceID:   currentChainingTraceID,
+		PreviousChainingTraceIDs: append([]string(nil), eventWork.PreviousChainingTraceIDs...),
+		TraceID:                  eventWork.TraceID,
+		Content:                  work.CloneWorkContentParts(eventWork.Content),
+		Payload:                  replayWorkRequestPayload(eventWork.Payload),
+		Tags:                     cloneStringMap(eventWork.Tags),
+	}
+}
+
+func replayWorkRequestPayload(payload []byte) any {
+	if len(payload) == 0 || string(payload) == "null" {
+		return nil
+	}
+	var text string
+	if json.Unmarshal(payload, &text) == nil {
+		return []byte(text)
+	}
+	return append([]byte(nil), payload...)
+}
+
+func replayWorkRequestRelations(works []work.WorkRequestEventWork, relations []work.WorkRequestEventRelation) []work.WorkRelation {
+	namesByID := make(map[string]string, len(works))
+	for _, eventWork := range works {
+		if eventWork.WorkID != "" && eventWork.Name != "" {
+			namesByID[eventWork.WorkID] = eventWork.Name
+		}
+	}
+	out := make([]work.WorkRelation, 0, len(relations))
+	for _, relation := range relations {
+		sourceName := relation.SourceWorkName
+		if mapped := namesByID[sourceName]; mapped != "" {
+			sourceName = mapped
+		}
+		targetName := relation.TargetWorkName
+		if targetName == "" {
+			targetName = namesByID[relation.TargetWorkID]
+		}
+		if targetName == "" {
+			targetName = relation.TargetWorkID
+		}
+		if sourceName == "" || targetName == "" {
+			continue
+		}
+		out = append(out, work.WorkRelation{Type: relation.Type, SourceWorkName: sourceName, TargetWorkName: targetName, RequiredState: relation.RequiredState})
+	}
+	return out
 }
 
 func replayDispatchFromEvent(factory factoryapi.Factory, event interfaces.FactoryEvent, workByID map[string]work.Work) (replayDispatch, error) {

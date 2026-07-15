@@ -303,43 +303,6 @@ func normalizeLegacyReplayTransitionRoutes(workstation map[string]any) {
 	delete(workstation, "promptTemplate")
 }
 
-func workRelationsFromGenerated(works []factoryapi.Work, relations *[]factoryapi.Relation) []work.WorkRelation {
-	if relations == nil {
-		return nil
-	}
-	namesByID := make(map[string]string, len(works))
-	for _, work := range works {
-		if workID := stringValue(work.WorkId); workID != "" && work.Name != "" {
-			namesByID[workID] = work.Name
-		}
-	}
-	out := make([]work.WorkRelation, 0, len(*relations))
-	for _, relation := range *relations {
-		sourceWorkName := relation.SourceWorkName
-		if mapped := namesByID[sourceWorkName]; mapped != "" {
-			sourceWorkName = mapped
-		}
-		targetWorkID := stringValue(relation.TargetWorkId)
-		targetWorkName := relation.TargetWorkName
-		if targetWorkName == "" {
-			targetWorkName = namesByID[targetWorkID]
-		}
-		if targetWorkName == "" {
-			targetWorkName = targetWorkID
-		}
-		if sourceWorkName == "" || targetWorkName == "" {
-			continue
-		}
-		out = append(out, work.WorkRelation{
-			Type:           work.WorkRelationType(relation.Type),
-			SourceWorkName: sourceWorkName,
-			TargetWorkName: targetWorkName,
-			RequiredState:  stringValue(relation.RequiredState),
-		})
-	}
-	return out
-}
-
 func mergeGeneratedWorkers(factory *factoryapi.Factory, runtimeWorkers map[string]workerconfig.Config, workstations []interfaces.FactoryWorkstationConfig) error {
 	if len(runtimeWorkers) == 0 {
 		return nil

@@ -41,6 +41,53 @@ type WorkRequest struct {
 	Relations              []WorkRelation  `json:"relations,omitempty"`
 }
 
+// WorkRequestEventPayload is the Work-owned payload recorded when a request
+// enters a Factory. FactoryEvent context remains authoritative for request,
+// trace, and work identity; these fields preserve the public event wire shape.
+type WorkRequestEventPayload struct {
+	ParentLineage []string                   `json:"parentLineage,omitempty"`
+	Relations     []WorkRequestEventRelation `json:"relations,omitempty"`
+	Source        string                     `json:"source,omitempty"`
+	Type          WorkRequestType            `json:"type"`
+	Works         []WorkRequestEventWork     `json:"works,omitempty"`
+}
+
+// WorkRequestEventWork preserves the event representation of submitted work
+// until Factory context fallbacks are applied by the consuming reducer.
+type WorkRequestEventWork struct {
+	Name                     string            `json:"name"`
+	WorkID                   string            `json:"workId,omitempty"`
+	RequestID                string            `json:"requestId,omitempty"`
+	WorkTypeID               string            `json:"workTypeName,omitempty"`
+	State                    *WorkEventState   `json:"state,omitempty"`
+	ChainingTraceDepth       int               `json:"chainingTraceDepth,omitempty"`
+	CurrentChainingTraceID   string            `json:"currentChainingTraceId,omitempty"`
+	PreviousChainingTraceIDs []string          `json:"previousChainingTraceIds,omitempty"`
+	TraceID                  string            `json:"traceId,omitempty"`
+	Content                  []WorkContentPart `json:"content,omitempty"`
+	Payload                  json.RawMessage   `json:"payload,omitempty"`
+	Tags                     map[string]string `json:"tags,omitempty"`
+}
+
+// WorkEventState is the state reference embedded in the public Work event
+// shape. Replay needs the authored name; the optional durable ID and category
+// remain available for compatible decoding.
+type WorkEventState struct {
+	ID   string `json:"id,omitempty"`
+	Name string `json:"name"`
+	Type string `json:"type,omitempty"`
+}
+
+// WorkRequestEventRelation preserves both name- and ID-based relationship
+// references accepted by historical Work request events.
+type WorkRequestEventRelation struct {
+	Type           WorkRelationType `json:"type"`
+	SourceWorkName string           `json:"sourceWorkName"`
+	TargetWorkID   string           `json:"targetWorkId,omitempty"`
+	TargetWorkName string           `json:"targetWorkName"`
+	RequiredState  string           `json:"requiredState,omitempty"`
+}
+
 // WorkRequestSubmittedWork identifies one accepted work item in a batch upsert.
 type WorkRequestSubmittedWork struct {
 	Name         string
