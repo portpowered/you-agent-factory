@@ -26,9 +26,11 @@ func TestPackageBoundary_DoesNotImportRootServiceOrStatefulFactorySessions(t *te
 		"github.com/portpowered/infinite-you/pkg/service",
 		"github.com/portpowered/infinite-you/pkg/factory/sessions",
 	}
-	// Provider adapters share the pure canonical response-event vocabulary.
-	// Session registries, stores, projections, and runtime state remain forbidden.
+	// Provider adapters share the pure canonical response-event vocabulary, and
+	// transport mapping shares the pure reconnect-cursor contract. Session
+	// registries, concrete stores, projections, and runtime state remain forbidden.
 	allowedFactorySessionLeaves := map[string]struct{}{
+		"github.com/portpowered/infinite-you/pkg/factory/sessions/cursors":        {},
 		"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents": {},
 	}
 	for _, dep := range strings.Fields(string(output)) {

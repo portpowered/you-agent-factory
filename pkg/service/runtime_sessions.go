@@ -32,6 +32,7 @@ import (
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/controlplane"
+	factorysessioncursors "github.com/portpowered/infinite-you/pkg/factory/sessions/cursors"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/logicaltarget"
@@ -2087,13 +2088,13 @@ func AttachSessionGatewayCollaborator(shell FactoryServiceShell, gateway session
 func (fs *FactoryService) recordSessionPersistenceInvalidationFromPreflight(
 	response factoryapi.FactorySessionSyncPreflightResponse,
 ) {
-	if diagnostic, ok := sessioncursor.InvalidationFromSyncPreflight(response); ok {
+	if diagnostic, ok := factorysessioncursors.InvalidationFromPreflight(apisurface.FactorySessionCursorPreflightResult(response)); ok {
 		fs.recordSessionPersistenceInvalidation(diagnostic)
 	}
 }
 
 func (fs *FactoryService) recordSessionPersistenceInvalidation(
-	diagnostic sessioncursor.InvalidationDiagnostic,
+	diagnostic factorysessioncursors.InvalidationDiagnostic,
 ) {
 	if fs == nil {
 		return
