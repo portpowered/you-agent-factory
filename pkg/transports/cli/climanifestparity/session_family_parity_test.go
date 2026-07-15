@@ -391,6 +391,156 @@ func TestGeneratedVsLegacySessionCreateListDeleteExecutionParity(t *testing.T) {
 	}
 }
 
+func TestGeneratedVsLegacySessionInspectionControlExecutionParity(t *testing.T) {
+	for _, tc := range sessionInspectionControlParityCases() {
+		t.Run(tc.name, func(t *testing.T) {
+			var requests []sessionHTTPExecutionRequest
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					t.Errorf("read request: %v", err)
+				}
+				requests = append(requests, sessionHTTPExecutionRequest{
+					method: r.Method, path: r.URL.EscapedPath(), query: r.URL.RawQuery, body: string(body),
+				})
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				_, _ = io.WriteString(w, tc.response)
+			}))
+			defer server.Close()
+
+			legacy, generated := executeSessionFamilyPair(t, cli.RootCommandOptions{}, tc.argv(server.URL))
+
+			assertSessionCommandResultParity(t, legacy, generated, tc.wantError)
+			assertSessionInspectionControlRequests(t, requests, tc)
+		})
+	}
+}
+
+func TestGeneratedVsLegacySessionInspectionControlUnreachableParity(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	serverURL := server.URL
+	server.Close()
+
+	for _, tc := range []struct {
+		name string
+		argv []string
+	}{
+		{name: "show", argv: []string{"--server", serverURL, "session", "show", "session-beta"}},
+		{name: "dispatches", argv: []string{"--server", serverURL, "session", "dispatches", "dur-sess-js-run-n-001"}},
+		{name: "pause", argv: []string{"--server", serverURL, "session", "pause", "session-beta"}},
+		{name: "resume", argv: []string{"--server", serverURL, "session", "resume", "dur-sess-js-run-n-001"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			legacy, generated := executeSessionFamilyPair(t, cli.RootCommandOptions{}, tc.argv)
+			assertSessionCommandResultParity(t, legacy, generated, true)
+		})
+	}
+}
+
+type sessionInspectionControlParityCase struct {
+	name       string
+	argv       func(string) []string
+	status     int
+	response   string
+	wantMethod string
+	wantPaths  []string
+	wantQuery  string
+	wantError  bool
+}
+
+func sessionInspectionControlParityCases() []sessionInspectionControlParityCase {
+	liveSession := `{"id":"session-beta","project":"beta","factoryDir":"/workspace/fleet/beta","folderPath":"/workspace/fleet","isDefault":false,"target":{"kind":"named","name":"beta"},"runtime":{"orchestratorKind":"PETRI_NET","status":"IDLE","lifecycle":{"startedAt":"2026-07-15T08:00:00Z","updatedAt":"2026-07-15T08:01:00Z"},"progress":{"factoryState":"RUNNING","categories":{},"inFlightCount":0,"totalTokens":1},"usage":{"resources":[]}}}`
+	durableSession := `{"sessionId":"dur-sess-js-run-n-001","status":"RUNNING","orchestratorKind":"JAVASCRIPT","resolvedSource":{"kind":"WORKFLOW_NAME","sourceRef":"workflow/release-train"},"phase":"verify","progress":{"totalDispatches":3,"completedDispatches":1,"inFlightDispatches":1},"usage":{"resources":[]}}`
+	dispatches := `{"sessionId":"dur-sess-js-run-n-001","dispatches":[{"id":"disp-js-002","status":"RUNNING","dispatchKind":"JAVASCRIPT_VERIFY","phase":"verify","label":"verify-release","runnerId":"runner-1","model":"model-1","providerSessionRefs":[{"id":"provider-session-1","kind":"SESSION_ID","provider":"CLAUDE"}],"attempt":1,"usage":{"durationMillis":1250},"outputArtifactIds":["artifact-1"]}]}`
+	return []sessionInspectionControlParityCase{
+		{
+			name: "show named live human preserves projection requests",
+			argv: func(server string) []string {
+				return []string{"--verbose", "--server", server, "session", "show", "session-beta"}
+			},
+			status: http.StatusOK, response: liveSession, wantMethod: http.MethodGet,
+			wantPaths: []string{"/factory-sessions/session-beta", "/factory-sessions/session-beta/partial-result", "/factory-sessions/session-beta/result"},
+		},
+		{
+			name: "show durable json preserves durable projection",
+			argv: func(server string) []string {
+				return []string{"--json", "--server", server, "session", "show", "dur-sess-js-run-n-001"}
+			},
+			status: http.StatusOK, response: durableSession, wantMethod: http.MethodGet,
+			wantPaths: []string{"/factory-sessions/dur-sess-js-run-n-001"},
+		},
+		{
+			name: "show omitted session preserves default route failure",
+			argv: func(server string) []string {
+				return []string{"--verbose", "--server", server, "session", "show"}
+			},
+			status: http.StatusNotFound, response: `{"code":"NOT_FOUND","message":"factory session not found"}`,
+			wantMethod: http.MethodGet, wantPaths: []string{"/factory-sessions/~default"}, wantError: true,
+		},
+		{
+			name: "dispatches human preserves filters provider sessions and artifacts",
+			argv: func(server string) []string {
+				return []string{"--verbose", "--server", server, "session", "dispatches", "dur-sess-js-run-n-001", "--phase", "verify", "--status", "RUNNING"}
+			},
+			status: http.StatusOK, response: dispatches, wantMethod: http.MethodGet,
+			wantPaths: []string{"/factory-sessions/dur-sess-js-run-n-001/dispatches"}, wantQuery: "phase=verify&status=RUNNING",
+		},
+		{
+			name: "dispatches json preserves API response",
+			argv: func(server string) []string {
+				return []string{"--json", "--server", server, "session", "dispatches", "dur-sess-js-run-n-001"}
+			},
+			status: http.StatusOK, response: dispatches, wantMethod: http.MethodGet,
+			wantPaths: []string{"/factory-sessions/dur-sess-js-run-n-001/dispatches"},
+		},
+		{
+			name: "dispatches not found preserves failure",
+			argv: func(server string) []string {
+				return []string{"--server", server, "session", "dispatches", "dur-sess-missing"}
+			},
+			status: http.StatusNotFound, response: `{"code":"NOT_FOUND","message":"factory session not found"}`,
+			wantMethod: http.MethodGet, wantPaths: []string{"/factory-sessions/dur-sess-missing/dispatches"}, wantError: true,
+		},
+		{
+			name: "pause omitted session preserves default accepted human outcome",
+			argv: func(server string) []string {
+				return []string{"--verbose", "--server", server, "session", "pause"}
+			},
+			status:     http.StatusAccepted,
+			response:   `{"sessionId":"~default","operation":"PAUSE","outcome":"ACCEPTED","status":"PAUSED"}`,
+			wantMethod: http.MethodPost, wantPaths: []string{"/factory-sessions/~default/pause"},
+		},
+		{
+			name: "pause durable json preserves no-op outcome",
+			argv: func(server string) []string {
+				return []string{"--json", "--server", server, "session", "pause", "dur-sess-js-run-n-001"}
+			},
+			status:     http.StatusOK,
+			response:   `{"sessionId":"dur-sess-js-run-n-001","operation":"PAUSE","outcome":"NO_OP","status":"PAUSED"}`,
+			wantMethod: http.MethodPost, wantPaths: []string{"/factory-sessions/dur-sess-js-run-n-001/pause"},
+		},
+		{
+			name: "resume named live json preserves accepted outcome",
+			argv: func(server string) []string {
+				return []string{"--json", "--server", server, "session", "resume", "session-beta"}
+			},
+			status:     http.StatusAccepted,
+			response:   `{"sessionId":"session-beta","operation":"RESUME","outcome":"ACCEPTED","status":"RUNNING"}`,
+			wantMethod: http.MethodPost, wantPaths: []string{"/factory-sessions/session-beta/resume"},
+		},
+		{
+			name: "resume durable rejection preserves typed response and failure",
+			argv: func(server string) []string {
+				return []string{"--verbose", "--server", server, "session", "resume", "dur-sess-js-run-n-001"}
+			},
+			status:     http.StatusConflict,
+			response:   `{"sessionId":"dur-sess-js-run-n-001","operation":"RESUME","outcome":"INVALID_STATE","status":"RUNNING","detail":"session is not paused"}`,
+			wantMethod: http.MethodPost, wantPaths: []string{"/factory-sessions/dur-sess-js-run-n-001/resume"}, wantError: true,
+		},
+	}
+}
+
 type sessionExecutionParityCase struct {
 	name             string
 	argv             func(int) []string
@@ -492,6 +642,7 @@ func sessionExecutionParityCases() []sessionExecutionParityCase {
 type sessionHTTPExecutionRequest struct {
 	method string
 	path   string
+	query  string
 	body   string
 }
 
@@ -571,6 +722,30 @@ func assertSessionHTTPRequests(t *testing.T, requests []sessionHTTPExecutionRequ
 		if !strings.Contains(requests[0].body, fragment) {
 			t.Fatalf("HTTP body missing %q: %s", fragment, requests[0].body)
 		}
+	}
+}
+
+func assertSessionInspectionControlRequests(
+	t *testing.T,
+	requests []sessionHTTPExecutionRequest,
+	tc sessionInspectionControlParityCase,
+) {
+	t.Helper()
+	wantCount := len(tc.wantPaths) * 2
+	if len(requests) != wantCount {
+		t.Fatalf("HTTP requests = %#v, want %d", requests, wantCount)
+	}
+	legacy, generated := requests[:len(tc.wantPaths)], requests[len(tc.wantPaths):]
+	for i := range legacy {
+		if legacy[i] != generated[i] {
+			t.Fatalf("HTTP request %d mismatch: legacy=%#v generated=%#v", i, legacy[i], generated[i])
+		}
+		if legacy[i].method != tc.wantMethod || legacy[i].path != tc.wantPaths[i] {
+			t.Fatalf("HTTP request %d = %s %s, want %s %s", i, legacy[i].method, legacy[i].path, tc.wantMethod, tc.wantPaths[i])
+		}
+	}
+	if legacy[0].query != tc.wantQuery {
+		t.Fatalf("HTTP query = %q, want %q", legacy[0].query, tc.wantQuery)
 	}
 }
 
