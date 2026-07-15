@@ -1,6 +1,7 @@
 package events
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -54,6 +55,22 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 			},
 		},
 	}, eventTime)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream, err := history.Subscribe(ctx, nil, interfaces.FactoryEventReconnectScope{})
+	if err != nil {
+		t.Fatalf("subscribe canonical events: %v", err)
+	}
+	if len(stream.History) != 1 {
+		t.Fatalf("canonical history count = %d, want 1", len(stream.History))
+	}
+	var canonicalPayload interfaces.DispatchRequestEventPayload
+	if err := stream.History[0].DecodePayload(&canonicalPayload); err != nil {
+		t.Fatalf("decode canonical dispatch request payload: %v", err)
+	}
+	if canonicalPayload.Metadata == nil || stringValueForEventHistoryTest(canonicalPayload.Metadata.ReplayKey) != "replay-1" {
+		t.Fatalf("canonical metadata = %#v, want replay-1", canonicalPayload.Metadata)
+	}
 
 	events := history.Events()
 	if len(events) != 1 {
@@ -193,6 +210,22 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailu
 	}
 
 	history.RecordWorkstationResponse(9, result, completed)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stream, err := history.Subscribe(ctx, nil, interfaces.FactoryEventReconnectScope{})
+	if err != nil {
+		t.Fatalf("subscribe canonical events: %v", err)
+	}
+	if len(stream.History) != 1 {
+		t.Fatalf("canonical history count = %d, want 1", len(stream.History))
+	}
+	var canonicalPayload workerexecution.DispatchResponseEventPayload
+	if err := stream.History[0].DecodePayload(&canonicalPayload); err != nil {
+		t.Fatalf("decode canonical dispatch response payload: %v", err)
+	}
+	if canonicalPayload.FailureDetail == nil || canonicalPayload.FailureDetail.Reason != workerexecution.WorkFailureTypeThrottled {
+		t.Fatalf("canonical failure detail = %#v, want throttled", canonicalPayload.FailureDetail)
+	}
 
 	events := history.Events()
 	if len(events) != 1 {

@@ -16,7 +16,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 )
@@ -372,26 +371,26 @@ func (h *FactoryEventHistory) RecordWorkstationRequest(tick int, record interfac
 	eventTime = interfaces.CanonicalEventTime(eventTime)
 	inputTokens := workers.WorkDispatchInputTokens(record.Dispatch)
 	runnerSelection := h.resolvedRunnerSelectionForDispatch(record.Dispatch)
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeDispatchRequest,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeDispatchRequest,
 		fmt.Sprintf("%s/%s", eventIDDispatchCreatedPrefix, dispatchID),
-		factoryapi.FactoryEventContext{
+		interfaces.FactoryEventContext{
 			Tick:                     tick,
 			EventTime:                eventTime,
-			DispatchId:               stringPtr(dispatchID),
-			RequestId:                stringPtrIfNotEmpty(record.Dispatch.Execution.RequestID),
-			TraceIds:                 stringSlicePtr(traceIDsFromTokens(inputTokens)),
-			WorkIds:                  stringSlicePtr(workIDsFromTokens(inputTokens)),
-			CurrentChainingTraceId:   stringPtrIfNotEmpty(record.Dispatch.CurrentChainingTraceID),
-			PreviousChainingTraceIds: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
+			DispatchID:               stringPtr(dispatchID),
+			RequestID:                stringPtrIfNotEmpty(record.Dispatch.Execution.RequestID),
+			TraceIDs:                 stringSlicePtr(traceIDsFromTokens(inputTokens)),
+			WorkIDs:                  stringSlicePtr(workIDsFromTokens(inputTokens)),
+			CurrentChainingTraceID:   stringPtrIfNotEmpty(record.Dispatch.CurrentChainingTraceID),
+			PreviousChainingTraceIDs: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
 		},
-		factoryapi.DispatchRequestEventPayload{
-			TransitionId:             record.Dispatch.TransitionID,
-			CurrentChainingTraceId:   stringPtrIfNotEmpty(record.Dispatch.CurrentChainingTraceID),
-			PreviousChainingTraceIds: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
-			Inputs:                   generatedDispatchConsumedWorkRefsFromTokens(inputTokens),
-			Resources:                h.generatedResourcesPtr(inputTokens),
-			Metadata:                 generatedDispatchRequestEventMetadataPtr(record.Dispatch.Execution.ReplayKey, runnerSelection),
+		interfaces.DispatchRequestEventPayload{
+			TransitionID:             record.Dispatch.TransitionID,
+			CurrentChainingTraceID:   stringPtrIfNotEmpty(record.Dispatch.CurrentChainingTraceID),
+			PreviousChainingTraceIDs: stringSlicePtr(record.Dispatch.PreviousChainingTraceIDs),
+			Inputs:                   dispatchConsumedWorkRefsFromTokens(inputTokens),
+			Resources:                h.dispatchResourcesPtr(inputTokens),
+			Metadata:                 dispatchRequestEventMetadataPtr(record.Dispatch.Execution.ReplayKey, runnerSelection),
 		},
 	))
 }
@@ -407,32 +406,32 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workere
 	}
 	eventTime = interfaces.CanonicalEventTime(eventTime)
 	failureReason, failureMessage := failureDetailsForResult(result)
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeDispatchResponse,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeDispatchResponse,
 		fmt.Sprintf("%s/%s", eventIDDispatchCompletedPrefix, result.DispatchID),
-		factoryapi.FactoryEventContext{
+		interfaces.FactoryEventContext{
 			Tick:                     tick,
 			EventTime:                eventTime,
-			DispatchId:               stringPtr(result.DispatchID),
-			TraceIds:                 stringSlicePtr(traceIDsFromTokens(completed.ConsumedTokens)),
-			WorkIds:                  stringSlicePtr(workIDsFromTokens(completed.ConsumedTokens)),
-			CurrentChainingTraceId:   stringPtrIfNotEmpty(factorytoken.CurrentChainingTraceID(completed.ConsumedTokens, interfaces.SystemTimeWorkTypeID)),
-			PreviousChainingTraceIds: stringSlicePtr(factorytoken.PreviousChainingTraceIDs(completed.ConsumedTokens)),
+			DispatchID:               stringPtr(result.DispatchID),
+			TraceIDs:                 stringSlicePtr(traceIDsFromTokens(completed.ConsumedTokens)),
+			WorkIDs:                  stringSlicePtr(workIDsFromTokens(completed.ConsumedTokens)),
+			CurrentChainingTraceID:   stringPtrIfNotEmpty(factorytoken.CurrentChainingTraceID(completed.ConsumedTokens, interfaces.SystemTimeWorkTypeID)),
+			PreviousChainingTraceIDs: stringSlicePtr(factorytoken.PreviousChainingTraceIDs(completed.ConsumedTokens)),
 		},
-		factoryapi.DispatchResponseEventPayload{
-			TransitionId:                result.TransitionID,
-			CurrentChainingTraceId:      stringPtrIfNotEmpty(factorytoken.CurrentChainingTraceID(completed.ConsumedTokens, interfaces.SystemTimeWorkTypeID)),
-			PreviousChainingTraceIds:    stringSlicePtr(factorytoken.PreviousChainingTraceIDs(completed.ConsumedTokens)),
-			Outcome:                     factoryapi.WorkOutcome(result.Outcome),
+		workerexecution.DispatchResponseEventPayload{
+			TransitionID:                result.TransitionID,
+			CurrentChainingTraceID:      stringPtrIfNotEmpty(factorytoken.CurrentChainingTraceID(completed.ConsumedTokens, interfaces.SystemTimeWorkTypeID)),
+			PreviousChainingTraceIDs:    stringSlicePtr(factorytoken.PreviousChainingTraceIDs(completed.ConsumedTokens)),
+			Outcome:                     result.Outcome,
 			Output:                      stringPtrIfNotEmpty(result.Output),
 			Error:                       stringPtrIfNotEmpty(result.Error),
 			Feedback:                    stringPtrIfNotEmpty(result.Feedback),
 			SelectedClassificationLabel: stringPtrIfNotEmpty(result.SelectedClassificationLabel),
 			FailureDetail:               failureDetail(failureReason, failureMessage),
 			DurationMillis:              int64Ptr(completed.Duration.Milliseconds()),
-			OutputWork:                  generatedWorksPtr(outputWorkItems(completed.OutputMutations, completed.ConsumedTokens)),
-			OutputResources:             h.generatedOutputResourcesPtr(completed.OutputMutations),
-			ProviderFailure:             workerdiagnostics.GeneratedWorkFailureMetadata(result.FailureMetadata),
+			OutputWork:                  eventWorksPtr(outputWorkItems(completed.OutputMutations, completed.ConsumedTokens)),
+			OutputResources:             h.dispatchOutputResourcesPtr(completed.OutputMutations),
+			ProviderFailure:             workerexecution.CloneWorkFailureMetadata(result.FailureMetadata),
 		},
 	))
 }
@@ -928,36 +927,36 @@ func cloneStringMap(input map[string]string) map[string]string {
 	return clone
 }
 
-func failureDetail(reason, message string) *factoryapi.FailureDetail {
+func failureDetail(reason, message string) *workerexecution.FailureDetail {
 	return failureDetailValue(reason, message)
 }
 
-func failureDetailValue(reason, message string) *factoryapi.FailureDetail {
+func failureDetailValue(reason, message string) *workerexecution.FailureDetail {
 	reason = strings.TrimSpace(reason)
 	message = strings.TrimSpace(message)
 	if reason == "" || message == "" {
 		return nil
 	}
-	return &factoryapi.FailureDetail{
+	return &workerexecution.FailureDetail{
 		Reason:  normalizedFailureReason(reason),
 		Message: message,
 	}
 }
 
-func normalizedFailureReason(reason string) factoryapi.WorkFailureType {
-	candidate := factoryapi.WorkFailureType(strings.TrimSpace(reason))
+func normalizedFailureReason(reason string) workerexecution.WorkFailureType {
+	candidate := workerexecution.WorkFailureType(strings.TrimSpace(reason))
 	switch candidate {
-	case factoryapi.WorkFailureTypeAuthFailure,
-		factoryapi.WorkFailureTypePermanentBadRequest,
-		factoryapi.WorkFailureTypeThrottled,
-		factoryapi.WorkFailureTypeInternalServerError,
-		factoryapi.WorkFailureTypeTimeout,
-		factoryapi.WorkFailureTypeMisconfigured,
-		factoryapi.WorkFailureTypeMissingExecutable,
-		factoryapi.WorkFailureTypeCommandLineTooLong:
+	case workerexecution.WorkFailureTypeAuthFailure,
+		workerexecution.WorkFailureTypePermanentBadRequest,
+		workerexecution.WorkFailureTypeThrottled,
+		workerexecution.WorkFailureTypeInternalServerError,
+		workerexecution.WorkFailureTypeTimeout,
+		workerexecution.WorkFailureTypeMisconfigured,
+		workerexecution.WorkFailureTypeMissingExecutable,
+		workerexecution.WorkFailureTypeCommandLineTooLong:
 		return candidate
 	default:
-		return factoryapi.WorkFailureTypeUnknown
+		return workerexecution.WorkFailureTypeUnknown
 	}
 }
 

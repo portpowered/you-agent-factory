@@ -467,8 +467,8 @@ func replayCompletionFromEvent(event interfaces.FactoryEvent, inference replayIn
 	if completionID == "" {
 		completionID = event.Id
 	}
-	recordedOutputWork := make([]workdomain.FactoryWorkItem, 0, len(payload.OutputWork))
-	for _, eventWork := range payload.OutputWork {
+	recordedOutputWork := make([]workdomain.FactoryWorkItem, 0, len(workRequestEventWorks(payload.OutputWork)))
+	for _, eventWork := range workRequestEventWorks(payload.OutputWork) {
 		recordedOutputWork = append(recordedOutputWork, factoryWorkItemFromEventWork(eventWork))
 	}
 	dispatchID := stringValue(event.Context.DispatchID)
@@ -493,6 +493,13 @@ func replayCompletionFromEvent(event interfaces.FactoryEvent, inference replayIn
 		},
 		diagnostics: diagnostics,
 	}, nil
+}
+
+func workRequestEventWorks(items *[]work.WorkRequestEventWork) []work.WorkRequestEventWork {
+	if items == nil {
+		return nil
+	}
+	return *items
 }
 
 func factoryWorkItemFromEventWork(eventWork work.WorkRequestEventWork) workdomain.FactoryWorkItem {

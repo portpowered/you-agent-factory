@@ -54,21 +54,29 @@ type InferenceResponseFailureDetail struct {
 // contract consumed by Factory event reducers. FactoryEvent context remains
 // authoritative for dispatch identity and ordering.
 type DispatchResponseEventPayload struct {
-	CompletionID                *string                     `json:"completionId,omitempty"`
-	CurrentChainingTraceID      *string                     `json:"currentChainingTraceId,omitempty"`
-	DurationMillis              *int64                      `json:"durationMillis,omitempty"`
-	Error                       *string                     `json:"error,omitempty"`
-	FailureDetail               *FailureDetail              `json:"failureDetail,omitempty"`
-	Feedback                    *string                     `json:"feedback,omitempty"`
-	Metadata                    map[string]string           `json:"metadata,omitempty"`
-	Metrics                     *WorkMetricsEventPayload    `json:"metrics,omitempty"`
-	Outcome                     WorkOutcome                 `json:"outcome"`
-	Output                      *string                     `json:"output,omitempty"`
-	OutputWork                  []work.WorkRequestEventWork `json:"outputWork,omitempty"`
-	PreviousChainingTraceIDs    *[]string                   `json:"previousChainingTraceIds,omitempty"`
-	ProviderFailure             *WorkFailureMetadata        `json:"providerFailure,omitempty"`
-	SelectedClassificationLabel *string                     `json:"selectedClassificationLabel,omitempty"`
-	TransitionID                string                      `json:"transitionId"`
+	CompletionID                *string                      `json:"completionId,omitempty"`
+	CurrentChainingTraceID      *string                      `json:"currentChainingTraceId,omitempty"`
+	DurationMillis              *int64                       `json:"durationMillis,omitempty"`
+	Error                       *string                      `json:"error,omitempty"`
+	FailureDetail               *FailureDetail               `json:"failureDetail,omitempty"`
+	Feedback                    *string                      `json:"feedback,omitempty"`
+	Metadata                    map[string]string            `json:"metadata,omitempty"`
+	Metrics                     *WorkMetricsEventPayload     `json:"metrics,omitempty"`
+	Outcome                     WorkOutcome                  `json:"outcome"`
+	Output                      *string                      `json:"output,omitempty"`
+	OutputResources             *[]DispatchResourceEventRef  `json:"outputResources,omitempty"`
+	OutputWork                  *[]work.WorkRequestEventWork `json:"outputWork,omitempty"`
+	PreviousChainingTraceIDs    *[]string                    `json:"previousChainingTraceIds,omitempty"`
+	ProviderFailure             *WorkFailureMetadata         `json:"providerFailure,omitempty"`
+	SelectedClassificationLabel *string                      `json:"selectedClassificationLabel,omitempty"`
+	TransitionID                string                       `json:"transitionId"`
+}
+
+// DispatchResourceEventRef preserves the public resource facts emitted with a
+// completed dispatch without coupling worker execution to a transport model.
+type DispatchResourceEventRef struct {
+	Capacity int    `json:"capacity"`
+	Name     string `json:"name"`
 }
 
 // WorkMetricsEventPayload preserves the millisecond-based public event shape
@@ -256,8 +264,8 @@ type WorkFailureDecision struct {
 // WorkFailureMetadata carries the normalized failure contract
 // across runtime boundaries after the original error has been rendered.
 type WorkFailureMetadata struct {
-	Family WorkFailureFamily `json:"family"`
-	Type   WorkFailureType   `json:"type"`
+	Family WorkFailureFamily `json:"family,omitempty"`
+	Type   WorkFailureType   `json:"type,omitempty"`
 }
 
 func CloneProviderSessionMetadata(session *ProviderSessionMetadata) *ProviderSessionMetadata {

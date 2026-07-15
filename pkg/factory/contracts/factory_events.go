@@ -575,14 +575,17 @@ type DispatchConsumedWorkRef struct {
 // DispatchRequestEventMetadata carries non-identity replay metadata retained
 // on a dispatch request event.
 type DispatchRequestEventMetadata struct {
-	ReplayKey *string `json:"replayKey,omitempty"`
+	ReplayKey             *string                                `json:"replayKey,omitempty"`
+	RunnerID              *string                                `json:"runnerId,omitempty"`
+	RunnerSelectionSource *workerexecution.RunnerSelectionSource `json:"runnerSelectionSource,omitempty"`
 }
 
-// DispatchResourceRef identifies a resource consumed by a dispatch. Replay
-// reconstruction needs only the canonical resource name from the public
-// resource snapshot.
+// DispatchResourceRef identifies a resource consumed by a dispatch. Capacity
+// remains on the event for public compatibility; replay reconstruction uses
+// the canonical resource name.
 type DispatchResourceRef struct {
-	Name string `json:"name"`
+	Capacity int    `json:"capacity"`
+	Name     string `json:"name"`
 }
 
 // DispatchRequestEventPayload describes a dispatch beginning execution.
