@@ -231,17 +231,16 @@ func loadAdjacentRuntimeConfig(factoryDir string) (*config.LoadedFactoryConfig, 
 }
 
 func generateAdjacentFactoryRuntimeConfig(loaded *config.LoadedFactoryConfig) (*interfaces.FactorySnapshot, bool) {
-	generated, err := GeneratedFactoryFromRuntimeConfig(
+	snapshot, err := FactorySnapshotFromRuntimeConfig(
 		loaded.FactoryDir(),
 		loaded.FactoryConfig(),
 		loaded,
-		WithGeneratedFactorySourceDirectory(loaded.FactoryDir()),
+		WithFactorySnapshotSourceDirectory(loaded.FactoryDir()),
 	)
 	if err != nil {
 		return nil, false
 	}
-	snapshot, err := interfaces.NewFactorySnapshot(generated)
-	return snapshot, err == nil
+	return snapshot, true
 }
 
 func normalizeLegacyCronFactorySnapshot(snapshot *interfaces.FactorySnapshot) error {

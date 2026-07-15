@@ -21,6 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
@@ -141,13 +142,21 @@ func editableEventFactorySnapshot(input BuildInput) (factoryapi.Factory, error) 
 	if err := factoryconfig.ApplySharedFactoryStarterWork(input.LoadedFactoryCfg.FactoryDir(), factoryCfg); err != nil {
 		return factoryapi.Factory{}, fmt.Errorf("inline shared factory starter work: %w", err)
 	}
-	return replay.GeneratedFactoryFromRuntimeConfig(
+	snapshot, err := replay.FactorySnapshotFromRuntimeConfig(
 		input.LoadedFactoryCfg.FactoryDir(),
 		factoryCfg,
 		input.LoadedFactoryCfg,
-		replay.WithGeneratedFactorySourceDirectory(input.LoadedFactoryCfg.FactoryDir()),
-		replay.WithGeneratedFactoryWorkflowID(input.WorkflowID),
+		replay.WithFactorySnapshotSourceDirectory(input.LoadedFactoryCfg.FactoryDir()),
+		replay.WithFactorySnapshotWorkflowID(input.WorkflowID),
 	)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	generated, err := factorysnapshot.ToAPI(snapshot)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	return *generated, nil
 }
 
 func assembleRuntimeBundle(
@@ -430,19 +439,15 @@ func newRecordingArtifact(
 		return nil, nil
 	}
 	now := factory.EnsureClock(clock).Now().UTC()
-	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
+	factorySnapshot, err := replay.FactorySnapshotFromRuntimeConfig(
 		factoryDir,
 		factoryCfg,
 		runtimeCfg,
-		replay.WithGeneratedFactorySourceDirectory(factoryDir),
-		replay.WithGeneratedFactoryWorkflowID(workflowID),
+		replay.WithFactorySnapshotSourceDirectory(factoryDir),
+		replay.WithFactorySnapshotWorkflowID(workflowID),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("build replay artifact config: %w", err)
-	}
-	factorySnapshot, err := interfaces.NewFactorySnapshot(generatedFactory)
-	if err != nil {
-		return nil, fmt.Errorf("capture replay artifact config: %w", err)
 	}
 	return replay.NewEventLogArtifact(now, factorySnapshot, &interfaces.ReplayWallClockMetadata{
 		StartedAt: now,

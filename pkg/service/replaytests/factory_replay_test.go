@@ -473,16 +473,12 @@ func saveReplayBehaviorArtifact(t *testing.T, sourceDir, artifactPath string, di
 func newReplayArtifactFromLoadedFactory(t *testing.T, recordedAt time.Time, loaded *config.LoadedFactoryConfig) *interfaces.ReplayArtifact {
 	t.Helper()
 
-	generatedFactory, err := replay.GeneratedFactoryFromLoadedConfig(
+	factorySnapshot, err := replay.FactorySnapshotFromLoadedConfig(
 		loaded,
-		replay.WithGeneratedFactorySourceDirectory(loaded.FactoryDir()),
+		replay.WithFactorySnapshotSourceDirectory(loaded.FactoryDir()),
 	)
 	if err != nil {
-		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
-	}
-	factorySnapshot, err := interfaces.NewFactorySnapshot(generatedFactory)
-	if err != nil {
-		t.Fatalf("NewFactorySnapshot: %v", err)
+		t.Fatalf("FactorySnapshotFromLoadedConfig: %v", err)
 	}
 	artifact, err := replay.NewEventLogArtifact(recordedAt, factorySnapshot, nil, interfaces.ReplayDiagnostics{})
 	if err != nil {

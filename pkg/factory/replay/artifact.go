@@ -91,9 +91,24 @@ func Validate(artifact *interfaces.ReplayArtifact) error {
 	if err := validateReplayEventEnvelope(artifact); err != nil {
 		return err
 	}
-	generatedFactory, err := generatedFactoryFromSnapshot(artifact.Factory)
-	if err != nil || !generatedFactoryHasConfig(generatedFactory) {
+	if !factorySnapshotHasConfig(artifact.Factory) {
 		return errors.New("replay artifact factory is required")
 	}
 	return nil
+}
+
+func factorySnapshotHasConfig(snapshot *interfaces.FactorySnapshot) bool {
+	if snapshot == nil {
+		return false
+	}
+	var object map[string]json.RawMessage
+	if err := json.Unmarshal(*snapshot, &object); err != nil {
+		return false
+	}
+	for _, field := range []string{"workTypes", "resources", "workers", "workstations", "inputTypes", "id", "factoryDirectory", "sourceDirectory", "metadata"} {
+		if _, ok := object[field]; ok {
+			return true
+		}
+	}
+	return false
 }

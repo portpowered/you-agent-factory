@@ -811,17 +811,13 @@ func warnReplayMetadataMismatches(cfg *FactoryServiceConfig, artifact *interface
 	if err != nil {
 		return
 	}
-	currentFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
+	currentSnapshot, err := replay.FactorySnapshotFromRuntimeConfig(
 		current.FactoryDir(),
 		current.FactoryConfig(),
 		current,
-		replay.WithGeneratedFactorySourceDirectory(current.FactoryDir()),
-		replay.WithGeneratedFactoryWorkflowID(cfg.WorkflowID),
+		replay.WithFactorySnapshotSourceDirectory(current.FactoryDir()),
+		replay.WithFactorySnapshotWorkflowID(cfg.WorkflowID),
 	)
-	if err != nil {
-		return
-	}
-	currentSnapshot, err := interfaces.NewFactorySnapshot(currentFactory)
 	if err != nil {
 		return
 	}

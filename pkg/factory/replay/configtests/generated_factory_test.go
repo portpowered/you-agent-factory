@@ -70,10 +70,10 @@ Fallback body.
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
-	generated, err := replay.GeneratedFactoryFromLoadedConfig(
+	generated, err := generatedFactoryFromLoadedConfig(
 		loaded,
-		replay.WithGeneratedFactoryWorkflowID("workflow-123"),
-		replay.WithGeneratedFactoryMetadata(map[string]string{"code_version": "test-sha"}),
+		replay.WithFactorySnapshotWorkflowID("workflow-123"),
+		replay.WithFactorySnapshotMetadata(map[string]string{"code_version": "test-sha"}),
 	)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
@@ -139,7 +139,7 @@ func TestGeneratedFactoryFromLoadedConfig_EmbedsInlineDefinitionsWithoutConfigOn
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
-	generated, err := replay.GeneratedFactoryFromLoadedConfig(loaded)
+	generated, err := generatedFactoryFromLoadedConfig(loaded)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}

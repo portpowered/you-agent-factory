@@ -123,7 +123,11 @@ func assertFactoryOnlyPayloadCoversRepresentativeConfig(t *testing.T, factory fa
 func assertFactoryOnlyPayloadProjectsInitialTopology(t *testing.T, factory factoryapi.Factory) {
 	t.Helper()
 
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(factory)
+	snapshot, err := interfaces.NewFactorySnapshot(factory)
+	if err != nil {
+		t.Fatalf("capture recorded Factory: %v", err)
+	}
+	runtimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(snapshot)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}

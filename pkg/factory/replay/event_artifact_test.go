@@ -3,10 +3,12 @@ package replay
 import (
 	"encoding/json"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
@@ -17,6 +19,101 @@ import (
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
+
+func generatedStringMapPtr(values map[string]string) *factoryapi.StringMap {
+	if len(values) == 0 {
+		return nil
+	}
+	converted := factoryapi.StringMap(cloneStringMap(values))
+	return &converted
+}
+
+func generatedFactoryFromSnapshot(snapshot *interfaces.FactorySnapshot) (factoryapi.Factory, error) {
+	var generated factoryapi.Factory
+	if snapshot == nil {
+		return generated, nil
+	}
+	err := snapshot.Decode(&generated)
+	return generated, err
+}
+
+func generatedFactoryHasConfig(generated factoryapi.Factory) bool {
+	snapshot, err := interfaces.NewFactorySnapshot(generated)
+	return err == nil && factorySnapshotHasConfig(snapshot)
+}
+
+func RuntimeConfigFromGeneratedFactory(generated factoryapi.Factory) (*EmbeddedRuntimeConfig, error) {
+	snapshot, err := interfaces.NewFactorySnapshot(generated)
+	if err != nil {
+		return nil, err
+	}
+	return RuntimeConfigFromFactorySnapshot(snapshot)
+}
+
+func mergeGeneratedWorkers(factory *factoryapi.Factory, runtimeWorkers map[string]workerconfig.Config, workstations []interfaces.FactoryWorkstationConfig) error {
+	if factory.Workers == nil {
+		empty := []factoryapi.Worker{}
+		factory.Workers = &empty
+	}
+	indexes := make(map[string]int, len(*factory.Workers))
+	for i, worker := range *factory.Workers {
+		indexes[worker.Name] = i
+	}
+	for _, name := range sortedWorkerNames(runtimeWorkers) {
+		generated := config.WorkerConfigToOpenAPIWithFactoryUsage(runtimeWorkers[name], workstations)
+		if generated.Name == "" {
+			generated.Name = name
+		}
+		if index, ok := indexes[generated.Name]; ok {
+			(*factory.Workers)[index] = generated
+		} else {
+			indexes[generated.Name] = len(*factory.Workers)
+			*factory.Workers = append(*factory.Workers, generated)
+		}
+	}
+	return nil
+}
+
+func mergeGeneratedWorkstations(factory *factoryapi.Factory, workstations map[string]interfaces.FactoryWorkstationConfig, workers map[string]workerconfig.Config) error {
+	if factory.Workstations == nil {
+		empty := []factoryapi.Workstation{}
+		factory.Workstations = &empty
+	}
+	indexes := make(map[string]int, len(*factory.Workstations))
+	for i, workstation := range *factory.Workstations {
+		indexes[workstation.Name] = i
+	}
+	names := make([]string, 0, len(workstations))
+	for name := range workstations {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		workstation := workstations[name]
+		workerType := ""
+		if worker, ok := workers[workstation.WorkerTypeName]; ok {
+			workerType = worker.Type
+		}
+		generated := config.WorkstationConfigToOpenAPIWithWorkerType(workstation, workerType)
+		if generated.Name == "" {
+			generated.Name = name
+		}
+		if generated.Inputs == nil {
+			generated.Inputs = []factoryapi.WorkstationIO{}
+		}
+		if generated.Outputs == nil {
+			empty := []factoryapi.WorkstationIO{}
+			generated.Outputs = &empty
+		}
+		if index, ok := indexes[generated.Name]; ok {
+			(*factory.Workstations)[index] = generated
+		} else {
+			indexes[generated.Name] = len(*factory.Workstations)
+			*factory.Workstations = append(*factory.Workstations, generated)
+		}
+	}
+	return nil
+}
 
 func TestRunStartedPayloadFromEvent_RejectsRetiredFactoryAliases(t *testing.T) {
 	rawEvent := map[string]any{

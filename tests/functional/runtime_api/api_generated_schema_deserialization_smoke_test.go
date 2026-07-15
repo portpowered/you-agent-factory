@@ -121,7 +121,11 @@ func generatedSchemaTransportSummaryFromHTTPBoundary(t *testing.T, dir string) g
 		t.Fatalf("decode initial-structure payload: %v", err)
 	}
 	assertGeneratedSmokeTransportBoundary(t, initialStructurePayload.Factory)
-	httpRuntime, err := replay.RuntimeConfigFromGeneratedFactory(initialStructurePayload.Factory)
+	httpSnapshot, err := interfaces.NewFactorySnapshot(initialStructurePayload.Factory)
+	if err != nil {
+		t.Fatalf("capture initial structure Factory: %v", err)
+	}
+	httpRuntime, err := replay.RuntimeConfigFromFactorySnapshot(httpSnapshot)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory(initial structure HTTP payload): %v", err)
 	}
@@ -157,7 +161,11 @@ func generatedSchemaTransportAndRuntimeSummaryFromRecordedReplay(
 	runStarted := requireGeneratedSchemaRunStartedPayload(t, testutil.GeneratedFactoryEvents(t, artifact.Events))
 	assertGeneratedSmokeTransportBoundary(t, runStarted.Factory)
 	assertGeneratedSmokeRuntimeDefinitions(t, runStarted.Factory)
-	replayRuntime, err := replay.RuntimeConfigFromGeneratedFactory(runStarted.Factory)
+	replaySnapshot, err := interfaces.NewFactorySnapshot(runStarted.Factory)
+	if err != nil {
+		t.Fatalf("capture run-started Factory: %v", err)
+	}
+	replayRuntime, err := replay.RuntimeConfigFromFactorySnapshot(replaySnapshot)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory(run started): %v", err)
 	}

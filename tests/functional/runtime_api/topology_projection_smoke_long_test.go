@@ -94,11 +94,11 @@ func projectReplayInitialStructureFromEmbeddedConfig(t *testing.T, dir string) i
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
-	generatedFactory, err := replay.GeneratedFactoryFromLoadedConfig(loaded, replay.WithGeneratedFactorySourceDirectory(loaded.FactoryDir()))
+	factorySnapshot, err := replay.FactorySnapshotFromLoadedConfig(loaded, replay.WithFactorySnapshotSourceDirectory(loaded.FactoryDir()))
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}
-	replayRuntimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generatedFactory)
+	replayRuntimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(factorySnapshot)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}

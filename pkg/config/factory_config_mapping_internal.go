@@ -637,12 +637,6 @@ func workstationInternalFromAPI(workstation factoryapi.Workstation, fieldPath st
 	return cfg, nil
 }
 
-// WorkstationConfigFromOpenAPI converts a generated OpenAPI workstation model
-// into the internal config representation.
-func WorkstationConfigFromOpenAPI(workstation factoryapi.Workstation) (interfaces.FactoryWorkstationConfig, error) {
-	return workstationInternalFromAPI(workstation, fmt.Sprintf("factory.workstations[%q]", workstation.Name))
-}
-
 func workstationLimitsInternalFromAPI(limits *factoryapi.WorkstationLimits) interfaces.WorkstationLimits {
 	if limits == nil {
 		return interfaces.WorkstationLimits{}

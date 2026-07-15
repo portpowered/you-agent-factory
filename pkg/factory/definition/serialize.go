@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 )
 
 func (s *Service) serializeNamedFactory(
@@ -37,18 +38,22 @@ func (s *Service) serializeNamedFactory(
 	if s != nil && s.host != nil {
 		workflowID = s.host.WorkflowID()
 	}
-	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
+	snapshot, err := replay.FactorySnapshotFromRuntimeConfig(
 		current.FactoryDir(),
 		factoryCfg,
 		current,
-		replay.WithGeneratedFactorySourceDirectory(current.FactoryDir()),
-		replay.WithGeneratedFactoryWorkflowID(workflowID),
+		replay.WithFactorySnapshotSourceDirectory(current.FactoryDir()),
+		replay.WithFactorySnapshotWorkflowID(workflowID),
 	)
 	if err != nil {
 		return factoryapi.Factory{}, fmt.Errorf("serialize current factory: %w", err)
 	}
+	generatedFactory, err := factorysnapshot.ToAPI(snapshot)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("map current factory snapshot: %w", err)
+	}
 	generatedFactory.Name = factoryapi.FactoryName(name)
-	return generatedFactory, nil
+	return *generatedFactory, nil
 }
 
 func (s *Service) currentFactoryDefinitionVersionAtRoot(rootDir string, name factoryapi.FactoryName) (factoryapi.HybridLogicalTimestamp, error) {
@@ -131,16 +136,20 @@ func (s *Service) SerializeNamedFactoryUpsertResponse(
 	if s.host != nil {
 		workflowID = s.host.WorkflowID()
 	}
-	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
+	snapshot, err := replay.FactorySnapshotFromRuntimeConfig(
 		current.FactoryDir(),
 		factoryCfg,
 		current,
-		replay.WithGeneratedFactorySourceDirectory(current.FactoryDir()),
-		replay.WithGeneratedFactoryWorkflowID(workflowID),
+		replay.WithFactorySnapshotSourceDirectory(current.FactoryDir()),
+		replay.WithFactorySnapshotWorkflowID(workflowID),
 	)
 	if err != nil {
 		return factoryapi.Factory{}, fmt.Errorf("serialize upsert factory: %w", err)
 	}
+	generatedFactory, err := factorysnapshot.ToAPI(snapshot)
+	if err != nil {
+		return factoryapi.Factory{}, fmt.Errorf("map upsert factory snapshot: %w", err)
+	}
 	generatedFactory.Name = factoryapi.FactoryName(name)
-	return generatedFactory, nil
+	return *generatedFactory, nil
 }

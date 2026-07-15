@@ -12,8 +12,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/factory/replay"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -117,7 +117,11 @@ func assertWorkerPublicContractInternalRuntime(
 func assertWorkerPublicContractPublicRuntime(t *testing.T, generated factoryapi.Factory, workerName string) {
 	t.Helper()
 
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generated)
+	snapshot, err := interfaces.NewFactorySnapshot(generated)
+	if err != nil {
+		t.Fatalf("capture recorded Factory: %v", err)
+	}
+	runtimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(snapshot)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}

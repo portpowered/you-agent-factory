@@ -46,18 +46,18 @@ func TestGeneratedFactoryFromLoadedConfig_EmbedsLoadedFactoryAndRuntimeConfig(t 
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
 
-	generated, err := replay.GeneratedFactoryFromLoadedConfig(
+	generated, err := generatedFactoryFromLoadedConfig(
 		loaded,
-		replay.WithGeneratedFactorySourceDirectory(factoryDir),
-		replay.WithGeneratedFactoryWorkflowID("workflow-123"),
-		replay.WithGeneratedFactoryMetadata(map[string]string{"code_version": "test-sha"}),
+		replay.WithFactorySnapshotSourceDirectory(factoryDir),
+		replay.WithFactorySnapshotWorkflowID("workflow-123"),
+		replay.WithFactorySnapshotMetadata(map[string]string{"code_version": "test-sha"}),
 	)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}
 
 	assertEmbeddedGeneratedFactory(t, generated, factoryDir)
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generated)
+	runtimeCfg, err := runtimeConfigFromGeneratedFactory(generated)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestRuntimeConfigFromGeneratedFactory_RebuildsWithoutOriginalFiles(t *testi
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
-	generated, err := replay.GeneratedFactoryFromLoadedConfig(loaded)
+	generated, err := generatedFactoryFromLoadedConfig(loaded)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}
@@ -137,11 +137,11 @@ Work from {{ .Context.WorkDir }}
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
-	generated, err := replay.GeneratedFactoryFromLoadedConfig(loaded)
+	generated, err := generatedFactoryFromLoadedConfig(loaded)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generated)
+	runtimeCfg, err := runtimeConfigFromGeneratedFactory(generated)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
@@ -281,7 +281,7 @@ func loadLiveReplayInitialProjection(t *testing.T, factoryDir string) (*config.L
 
 func loadReplayInitialProjectionFromArtifact(t *testing.T, factoryDir string, loaded *config.LoadedFactoryConfig) interfaces.InitialStructurePayload {
 	t.Helper()
-	generated, err := replay.GeneratedFactoryFromLoadedConfig(loaded)
+	generated, err := generatedFactoryFromLoadedConfig(loaded)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}
@@ -386,7 +386,7 @@ Retry the work.
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
-	generated, err := replay.GeneratedFactoryFromLoadedConfig(loaded)
+	generated, err := generatedFactoryFromLoadedConfig(loaded)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}
@@ -397,7 +397,7 @@ Retry the work.
 		t.Fatalf("generated workstation behavior = %#v, want REPEATER", (*generated.Workstations)[0].Behavior)
 	}
 
-	replayRuntimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generated)
+	replayRuntimeCfg, err := runtimeConfigFromGeneratedFactory(generated)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
@@ -434,7 +434,7 @@ func TestRuntimeConfigFromGeneratedFactory_PreservesPerInputGuardFanIn(t *testin
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
-	generated, err := replay.GeneratedFactoryFromLoadedConfig(loaded)
+	generated, err := generatedFactoryFromLoadedConfig(loaded)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}
@@ -448,7 +448,7 @@ func TestRuntimeConfigFromGeneratedFactory_PreservesPerInputGuardFanIn(t *testin
 		t.Fatalf("generated factory contains retired join field: %s", data)
 	}
 
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generated)
+	runtimeCfg, err := runtimeConfigFromGeneratedFactory(generated)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
@@ -544,7 +544,7 @@ func loadGeneratedFactoryWithoutRetiredExhaustionRules(t *testing.T, factoryDir 
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
-	generated, err := replay.GeneratedFactoryFromLoadedConfig(loaded)
+	generated, err := generatedFactoryFromLoadedConfig(loaded)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}

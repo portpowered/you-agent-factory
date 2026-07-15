@@ -38,6 +38,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
@@ -48,6 +49,26 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func generatedFactoryFromRuntimeConfigForTest(factoryDir string, factoryCfg *interfaces.FactoryConfig, runtimeCfg interfaces.RuntimeDefinitionLookup) (factoryapi.Factory, error) {
+	snapshot, err := replay.FactorySnapshotFromRuntimeConfig(factoryDir, factoryCfg, runtimeCfg)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	generated, err := factorysnapshot.ToAPI(snapshot)
+	if err != nil {
+		return factoryapi.Factory{}, err
+	}
+	return *generated, nil
+}
+
+func runtimeConfigFromGeneratedFactoryForTest(generated factoryapi.Factory) (*replay.EmbeddedRuntimeConfig, error) {
+	snapshot, err := interfaces.NewFactorySnapshot(generated)
+	if err != nil {
+		return nil, err
+	}
+	return replay.RuntimeConfigFromFactorySnapshot(snapshot)
+}
 
 // recordModeServiceRunTimeout allows full runtime startup under Windows CI load.
 const recordModeServiceRunTimeout = 5 * time.Second
@@ -1996,11 +2017,11 @@ func TestLoadWorkersFromConfig_ReplayEmbeddedRuntimeUsesCanonicalLookup(t *testi
 		},
 	)
 
-	generated, err := replay.GeneratedFactoryFromRuntimeConfig(loaded.FactoryDir(), loaded.FactoryConfig(), loaded)
+	generated, err := generatedFactoryFromRuntimeConfigForTest(loaded.FactoryDir(), loaded.FactoryConfig(), loaded)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromRuntimeConfig: %v", err)
 	}
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generated)
+	runtimeCfg, err := runtimeConfigFromGeneratedFactoryForTest(generated)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
@@ -2250,11 +2271,11 @@ func TestLoadWorkersFromConfig_ReplayRuntimeLookupDrivesScriptExecutionWorkingDi
 		},
 	)
 
-	generated, err := replay.GeneratedFactoryFromRuntimeConfig(loaded.FactoryDir(), loaded.FactoryConfig(), loaded)
+	generated, err := generatedFactoryFromRuntimeConfigForTest(loaded.FactoryDir(), loaded.FactoryConfig(), loaded)
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromRuntimeConfig: %v", err)
 	}
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generated)
+	runtimeCfg, err := runtimeConfigFromGeneratedFactoryForTest(generated)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
