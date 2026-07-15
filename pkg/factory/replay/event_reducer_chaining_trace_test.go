@@ -4,11 +4,21 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
+
+func replayDispatchFromGeneratedEvent(t testing.TB, factory factoryapi.Factory, event factoryapi.FactoryEvent, workByID map[string]work.Work) (replayDispatch, error) {
+	t.Helper()
+	domainEvent, err := interfaces.NewFactoryEvent(event)
+	if err != nil {
+		t.Fatalf("convert generated dispatch event: %v", err)
+	}
+	return replayDispatchFromEvent(factory, domainEvent, workByID)
+}
 
 func TestReplayDispatchFromEvent_PreservesConsumedInputChainingLineage(t *testing.T) {
 	payload := factoryapi.DispatchRequestEventPayload{
@@ -20,7 +30,7 @@ func TestReplayDispatchFromEvent_PreservesConsumedInputChainingLineage(t *testin
 		t.Fatalf("encode dispatch payload: %v", err)
 	}
 
-	replayed, err := replayDispatchFromEvent(factoryapi.Factory{}, factoryapi.FactoryEvent{
+	replayed, err := replayDispatchFromGeneratedEvent(t, factoryapi.Factory{}, factoryapi.FactoryEvent{
 		Id:            "factory-event/dispatch-created/dispatch-1",
 		SchemaVersion: factoryapi.AgentFactoryEventV1,
 		Type:          factoryapi.FactoryEventTypeDispatchRequest,
@@ -73,7 +83,7 @@ func TestReplayDispatchFromEvent_PrefersContextChainingLineageOverPayloadCompati
 		t.Fatalf("encode dispatch payload: %v", err)
 	}
 
-	replayed, err := replayDispatchFromEvent(factoryapi.Factory{}, factoryapi.FactoryEvent{
+	replayed, err := replayDispatchFromGeneratedEvent(t, factoryapi.Factory{}, factoryapi.FactoryEvent{
 		Id:            "factory-event/dispatch-created/dispatch-context-first",
 		SchemaVersion: factoryapi.AgentFactoryEventV1,
 		Type:          factoryapi.FactoryEventTypeDispatchRequest,
@@ -119,7 +129,7 @@ func TestReplayDispatchFromEvent_FallsBackToContextWorkIDsWhenConsumedRefsOmitWo
 		t.Fatalf("encode dispatch payload: %v", err)
 	}
 
-	replayed, err := replayDispatchFromEvent(factoryapi.Factory{}, factoryapi.FactoryEvent{
+	replayed, err := replayDispatchFromGeneratedEvent(t, factoryapi.Factory{}, factoryapi.FactoryEvent{
 		Id:            "factory-event/dispatch-created/dispatch-legacy",
 		SchemaVersion: factoryapi.AgentFactoryEventV1,
 		Type:          factoryapi.FactoryEventTypeDispatchRequest,
@@ -170,7 +180,7 @@ func TestReplayDispatchFromEvent_FallsBackToPayloadChainingLineageForLegacyEvent
 		t.Fatalf("encode dispatch payload: %v", err)
 	}
 
-	replayed, err := replayDispatchFromEvent(factoryapi.Factory{}, factoryapi.FactoryEvent{
+	replayed, err := replayDispatchFromGeneratedEvent(t, factoryapi.Factory{}, factoryapi.FactoryEvent{
 		Id:            "factory-event/dispatch-created/dispatch-payload-fallback",
 		SchemaVersion: factoryapi.AgentFactoryEventV1,
 		Type:          factoryapi.FactoryEventTypeDispatchRequest,
@@ -209,7 +219,7 @@ func TestReplayDispatchFromEvent_DerivesCanonicalPreviousLineageFromMixedInputs(
 		t.Fatalf("encode dispatch payload: %v", err)
 	}
 
-	replayed, err := replayDispatchFromEvent(factoryapi.Factory{}, factoryapi.FactoryEvent{
+	replayed, err := replayDispatchFromGeneratedEvent(t, factoryapi.Factory{}, factoryapi.FactoryEvent{
 		Id:            "factory-event/dispatch-created/dispatch-fan-in",
 		SchemaVersion: factoryapi.AgentFactoryEventV1,
 		Type:          factoryapi.FactoryEventTypeDispatchRequest,

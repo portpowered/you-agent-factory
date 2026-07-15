@@ -230,6 +230,38 @@ type WorkstationResponsePayload struct {
 	TerminalWork    *FactoryTerminalWork                     `json:"terminal_work,omitempty"`
 }
 
+// DispatchConsumedWorkRef identifies one work item consumed by a dispatch.
+// Work identity remains authoritative in FactoryEventContext; WorkID is kept
+// for compatibility with recordings that predate context-owned work IDs.
+type DispatchConsumedWorkRef struct {
+	WorkID string `json:"workId,omitempty"`
+}
+
+// DispatchRequestEventMetadata carries non-identity replay metadata retained
+// on a dispatch request event.
+type DispatchRequestEventMetadata struct {
+	ReplayKey *string `json:"replayKey,omitempty"`
+}
+
+// DispatchResourceRef identifies a resource consumed by a dispatch. Replay
+// reconstruction needs only the canonical resource name from the public
+// resource snapshot.
+type DispatchResourceRef struct {
+	Name string `json:"name"`
+}
+
+// DispatchRequestEventPayload describes a dispatch beginning execution.
+// Correlation identity belongs to FactoryEventContext; the deprecated chaining
+// fields remain readable for compatibility with historical recordings.
+type DispatchRequestEventPayload struct {
+	CurrentChainingTraceID   *string                       `json:"currentChainingTraceId,omitempty"`
+	Inputs                   []DispatchConsumedWorkRef     `json:"inputs"`
+	Metadata                 *DispatchRequestEventMetadata `json:"metadata,omitempty"`
+	PreviousChainingTraceIDs *[]string                     `json:"previousChainingTraceIds,omitempty"`
+	Resources                *[]DispatchResourceRef        `json:"resources,omitempty"`
+	TransitionID             string                        `json:"transitionId"`
+}
+
 // FactoryStateChangePayload describes a lifecycle state change.
 type FactoryStateChangePayload struct {
 	PreviousState string `json:"previous_state,omitempty"`

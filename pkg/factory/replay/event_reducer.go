@@ -82,17 +82,19 @@ func reduceReplayEvent(
 	workByID map[string]work.Work,
 	inferenceAttemptsByDispatchID map[string]replayInferenceAttempt,
 ) error {
+	switch event.Type {
+	case interfaces.FactoryEventTypeRunRequest:
+		return applyReplayRunRequest(reduced, event)
+	case interfaces.FactoryEventTypeDispatchRequest:
+		return applyReplayDispatchRequest(reduced, event, workByID)
+	}
 	generatedEvent, err := generatedEventFromDomain(event)
 	if err != nil {
 		return err
 	}
 	switch event.Type {
-	case interfaces.FactoryEventTypeRunRequest:
-		return applyReplayRunRequest(reduced, event)
 	case interfaces.FactoryEventTypeWorkRequest:
 		return applyReplayWorkRequest(reduced, generatedEvent, workByID)
-	case interfaces.FactoryEventTypeDispatchRequest:
-		return applyReplayDispatchRequest(reduced, generatedEvent, workByID)
 	case interfaces.FactoryEventTypeInferenceResponse:
 		return applyReplayInferenceResponse(generatedEvent, inferenceAttemptsByDispatchID)
 	case interfaces.FactoryEventTypeDispatchResponse:
@@ -173,7 +175,7 @@ func applyReplayWorkRequest(reduced *replayEventLog, event factoryapi.FactoryEve
 	return nil
 }
 
-func applyReplayDispatchRequest(reduced *replayEventLog, event factoryapi.FactoryEvent, workByID map[string]work.Work) error {
+func applyReplayDispatchRequest(reduced *replayEventLog, event interfaces.FactoryEvent, workByID map[string]work.Work) error {
 	dispatch, err := replayDispatchFromEvent(reduced.Factory, event, workByID)
 	if err != nil {
 		return err
@@ -323,44 +325,44 @@ func replaySubmissionsFromEvent(event factoryapi.FactoryEvent) ([]replaySubmissi
 	}, nil
 }
 
-func replayDispatchFromEvent(factory factoryapi.Factory, event factoryapi.FactoryEvent, workByID map[string]work.Work) (replayDispatch, error) {
-	payload, err := event.Payload.AsDispatchRequestEventPayload()
-	if err != nil {
+func replayDispatchFromEvent(factory factoryapi.Factory, event interfaces.FactoryEvent, workByID map[string]work.Work) (replayDispatch, error) {
+	var payload interfaces.DispatchRequestEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return replayDispatch{}, fmt.Errorf("decode dispatch created event %q: %w", event.Id, err)
 	}
-	dispatchID := stringValue(event.Context.DispatchId)
+	dispatchID := stringValue(event.Context.DispatchID)
 	if dispatchID == "" {
 		return replayDispatch{}, fmt.Errorf("dispatch created event %q context.dispatchId is required", event.Id)
 	}
-	workstation := generatedReplayWorkstation(factory, payload.TransitionId)
+	workstation := generatedReplayWorkstation(factory, payload.TransitionID)
 	dispatch := work.WorkDispatch{
 		DispatchID:      dispatchID,
-		TransitionID:    payload.TransitionId,
+		TransitionID:    payload.TransitionID,
 		WorkerType:      generatedReplayWorkerName(workstation),
-		WorkstationName: generatedReplayWorkstationName(workstation, payload.TransitionId),
+		WorkstationName: generatedReplayWorkstationName(workstation, payload.TransitionID),
 		InputTokens:     replayInputTokensFromDispatchPayload(event.Context, payload, workByID),
 		Execution: work.ExecutionMetadata{
-			RequestID:           stringValue(event.Context.RequestId),
-			TraceID:             firstString(event.Context.TraceIds),
-			WorkIDs:             stringSliceValue(event.Context.WorkIds),
+			RequestID:           stringValue(event.Context.RequestID),
+			TraceID:             firstString(event.Context.TraceIDs),
+			WorkIDs:             stringSliceValue(event.Context.WorkIDs),
 			DispatchCreatedTick: event.Context.Tick,
 		},
 	}
 	dispatch.Execution.ReplayKey = replayMetadataValue(payload.Metadata)
 	if len(dispatch.Execution.WorkIDs) == 0 {
-		dispatch.Execution.WorkIDs = workIDsFromDispatchRefs(payload.Inputs, stringSliceValue(event.Context.WorkIds))
+		dispatch.Execution.WorkIDs = workIDsFromDispatchRefs(payload.Inputs, stringSliceValue(event.Context.WorkIDs))
 	}
 	if dispatch.Execution.TraceID == "" {
-		dispatch.Execution.TraceID = firstTraceIDFromDispatchRefs(payload.Inputs, stringSliceValue(event.Context.WorkIds), workByID)
+		dispatch.Execution.TraceID = firstTraceIDFromDispatchRefs(payload.Inputs, stringSliceValue(event.Context.WorkIDs), workByID)
 	}
 	dispatch.CurrentChainingTraceID = replayDispatchCurrentChainingTraceID(
-		event.Context.CurrentChainingTraceId,
-		payload.CurrentChainingTraceId,
+		event.Context.CurrentChainingTraceID,
+		payload.CurrentChainingTraceID,
 		dispatch.Execution.TraceID,
 	)
 	dispatch.PreviousChainingTraceIDs = replayDispatchPreviousChainingTraceIDs(
-		event.Context.PreviousChainingTraceIds,
-		payload.PreviousChainingTraceIds,
+		event.Context.PreviousChainingTraceIDs,
+		payload.PreviousChainingTraceIDs,
 		workDispatchInputTokensForReplay(event.Context, payload, workByID),
 	)
 	return replayDispatch{
@@ -422,8 +424,8 @@ func replayCompletionFromEvent(event factoryapi.FactoryEvent, inference replayIn
 }
 
 func replayInputTokensFromDispatchPayload(
-	context factoryapi.FactoryEventContext,
-	payload factoryapi.DispatchRequestEventPayload,
+	context interfaces.FactoryEventContext,
+	payload interfaces.DispatchRequestEventPayload,
 	workByID map[string]work.Work,
 ) []any {
 	tokens := workDispatchInputTokensForReplay(context, payload, workByID)
@@ -431,18 +433,18 @@ func replayInputTokensFromDispatchPayload(
 }
 
 func workDispatchInputTokensForReplay(
-	context factoryapi.FactoryEventContext,
-	payload factoryapi.DispatchRequestEventPayload,
+	context interfaces.FactoryEventContext,
+	payload interfaces.DispatchRequestEventPayload,
 	workByID map[string]work.Work,
 ) []factorytoken.Token {
 	tokens := make([]factorytoken.Token, 0, len(payload.Inputs)+len(resourceValues(payload.Resources)))
-	contextWorkIDs := stringSliceValue(context.WorkIds)
+	contextWorkIDs := stringSliceValue(context.WorkIDs)
 	for i, ref := range payload.Inputs {
 		workID := dispatchConsumedWorkID(ref, i, contextWorkIDs)
 		work := workByID[workID]
 		traceID := work.TraceID
 		if traceID == "" {
-			traceID = firstString(context.TraceIds)
+			traceID = firstString(context.TraceIDs)
 		}
 		currentChainingTraceID := work.CurrentChainingTraceID
 		if currentChainingTraceID == "" {
@@ -477,7 +479,7 @@ func workDispatchInputTokensForReplay(
 	return tokens
 }
 
-func replayMetadataValue(metadata *factoryapi.DispatchRequestEventMetadata) string {
+func replayMetadataValue(metadata *interfaces.DispatchRequestEventMetadata) string {
 	if metadata == nil {
 		return ""
 	}
@@ -538,7 +540,7 @@ func generatedReplayWorkerName(workstation *factoryapi.Workstation) string {
 	return workstation.Worker
 }
 
-func workIDsFromDispatchRefs(refs []factoryapi.DispatchConsumedWorkRef, contextWorkIDs []string) []string {
+func workIDsFromDispatchRefs(refs []interfaces.DispatchConsumedWorkRef, contextWorkIDs []string) []string {
 	out := make([]string, 0, len(refs))
 	for i, ref := range refs {
 		if id := dispatchConsumedWorkID(ref, i, contextWorkIDs); id != "" {
@@ -548,7 +550,7 @@ func workIDsFromDispatchRefs(refs []factoryapi.DispatchConsumedWorkRef, contextW
 	return out
 }
 
-func firstTraceIDFromDispatchRefs(refs []factoryapi.DispatchConsumedWorkRef, contextWorkIDs []string, workByID map[string]work.Work) string {
+func firstTraceIDFromDispatchRefs(refs []interfaces.DispatchConsumedWorkRef, contextWorkIDs []string, workByID map[string]work.Work) string {
 	for i, ref := range refs {
 		if traceID := workByID[dispatchConsumedWorkID(ref, i, contextWorkIDs)].TraceID; traceID != "" {
 			return traceID
@@ -557,9 +559,9 @@ func firstTraceIDFromDispatchRefs(refs []factoryapi.DispatchConsumedWorkRef, con
 	return ""
 }
 
-func dispatchConsumedWorkID(ref factoryapi.DispatchConsumedWorkRef, index int, contextWorkIDs []string) string {
-	if ref.WorkId != "" {
-		return ref.WorkId
+func dispatchConsumedWorkID(ref interfaces.DispatchConsumedWorkRef, index int, contextWorkIDs []string) string {
+	if ref.WorkID != "" {
+		return ref.WorkID
 	}
 	if index >= 0 && index < len(contextWorkIDs) {
 		return contextWorkIDs[index]
@@ -567,7 +569,7 @@ func dispatchConsumedWorkID(ref factoryapi.DispatchConsumedWorkRef, index int, c
 	return ""
 }
 
-func resourceValues(resources *[]factoryapi.Resource) []factoryapi.Resource {
+func resourceValues(resources *[]interfaces.DispatchResourceRef) []interfaces.DispatchResourceRef {
 	if resources == nil {
 		return nil
 	}
