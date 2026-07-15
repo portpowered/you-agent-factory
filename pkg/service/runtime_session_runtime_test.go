@@ -2082,12 +2082,12 @@ func lifecycleJavaScriptRecordingHistory(t *testing.T, finalStatus factoryapi.Fa
 			CaptureMetadata: &factoryapi.FactoryArtifactCaptureMetadata{CapturedAt: &checkpointAt}}, CapturedAt: &checkpointAt,
 	}, checkpointAt)
 	history.RecordOrchestratorCheckpointWritten(factoryevents.OrchestratorCheckpointWrittenInput{
-		SessionID: defaultFactorySessionID, OrchestratorKind: factoryapi.JAVASCRIPT, OrchestratorDialect: "workflow-v1",
+		SessionID: defaultFactorySessionID, OrchestratorKind: interfaces.OrchestratorKindJavaScript, OrchestratorDialect: "workflow-v1",
 		CheckpointID: "checkpoint-public-1", Source: "runtime", Tick: 2, Label: "Approval", Timestamp: &checkpointAt,
 		SourceHash: "sha256:" + strings.Repeat("b", 64), RuntimeSnapshotDigest: "sha256:" + strings.Repeat("8", 64),
-		ArtifactRef: &factoryapi.FactoryArtifactRef{Id: "artifact-checkpoint", Kind: factoryapi.FactoryArtifactKindCHECKPOINT,
-			Visibility: factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT, ContentHash: &artifactHash, SizeBytes: &artifactSize},
-		ResumabilityStatus: factoryapi.RESUMABLE,
+		ArtifactRef: &interfaces.FactoryArtifactRef{ID: "artifact-checkpoint", Kind: interfaces.JavaScriptCheckpointArtifactKind,
+			Visibility: interfaces.JavaScriptCheckpointArtifactVisibility, ContentHash: &artifactHash, SizeBytes: &artifactSize},
+		ResumabilityStatus: interfaces.CheckpointResumabilityStatusResumable,
 	}, checkpointAt)
 	partialStatus := factoryapi.FactoryEventSessionResultStatusPartial
 	history.RecordSessionResultUpdated(factoryevents.SessionLifecycleResultInput{

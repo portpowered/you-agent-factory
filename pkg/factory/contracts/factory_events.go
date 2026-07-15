@@ -127,6 +127,66 @@ type FactoryEventContext struct {
 	WorkIDs                  *[]string `json:"workIds,omitempty"`
 }
 
+// OrchestratorPhaseStatus is the canonical lifecycle status for one
+// orchestrator phase recorded in Factory event history.
+type OrchestratorPhaseStatus string
+
+const (
+	OrchestratorPhaseStatusActive    OrchestratorPhaseStatus = "ACTIVE"
+	OrchestratorPhaseStatusCompleted OrchestratorPhaseStatus = "COMPLETED"
+	OrchestratorPhaseStatusSkipped   OrchestratorPhaseStatus = "SKIPPED"
+)
+
+// CheckpointResumabilityStatus describes whether an orchestrator checkpoint
+// can resume Factory Session execution.
+type CheckpointResumabilityStatus string
+
+const (
+	CheckpointResumabilityStatusResumable    CheckpointResumabilityStatus = "RESUMABLE"
+	CheckpointResumabilityStatusNotResumable CheckpointResumabilityStatus = "NOT_RESUMABLE"
+	CheckpointResumabilityStatusUnknown      CheckpointResumabilityStatus = "UNKNOWN"
+)
+
+// FactoryArtifactRef identifies one session-owned artifact from a canonical
+// Factory event without exposing its storage implementation.
+type FactoryArtifactRef struct {
+	ContentHash *string `json:"contentHash,omitempty"`
+	ID          string  `json:"id"`
+	Kind        string  `json:"kind"`
+	SizeBytes   *int64  `json:"sizeBytes,omitempty"`
+	Visibility  string  `json:"visibility"`
+}
+
+// FactoryDispatchWarning is one customer-visible warning retained by a
+// canonical Factory event.
+type FactoryDispatchWarning struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+// OrchestratorPhaseChangedEventPayload records a workflow phase transition.
+// Current phase identity remains authoritative in FactoryEventContext.
+type OrchestratorPhaseChangedEventPayload struct {
+	CompletedAt       *time.Time              `json:"completedAt,omitempty"`
+	PhaseStatus       OrchestratorPhaseStatus `json:"phaseStatus"`
+	PreviousPhaseID   *string                 `json:"previousPhaseId,omitempty"`
+	PreviousPhaseName *string                 `json:"previousPhaseName,omitempty"`
+	ProgressSummary   *string                 `json:"progressSummary,omitempty"`
+	StartedAt         *time.Time              `json:"startedAt,omitempty"`
+}
+
+// OrchestratorCheckpointWrittenEventPayload records a replay-safe checkpoint
+// reference while raw checkpoint bodies remain orchestrator-owned.
+type OrchestratorCheckpointWrittenEventPayload struct {
+	ArtifactRef           *FactoryArtifactRef          `json:"artifactRef,omitempty"`
+	Label                 string                       `json:"label"`
+	ResumabilityStatus    CheckpointResumabilityStatus `json:"resumabilityStatus"`
+	RuntimeSnapshotDigest *string                      `json:"runtimeSnapshotDigest,omitempty"`
+	SourceHash            *string                      `json:"sourceHash,omitempty"`
+	Timestamp             *time.Time                   `json:"timestamp,omitempty"`
+	Warnings              []FactoryDispatchWarning     `json:"warnings,omitempty"`
+}
+
 // Clone returns a detached event envelope so recorders and stream consumers
 // cannot mutate canonical history through payload or context slice aliases.
 func (e FactoryEvent) Clone() FactoryEvent {

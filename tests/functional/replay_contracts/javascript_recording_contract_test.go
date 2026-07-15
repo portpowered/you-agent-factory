@@ -35,7 +35,7 @@ func TestJavaScriptRecordingContract_RoundTripsCompletedAndFailedSessionFacts(t 
 			if testCase.factoryState == interfaces.FactoryStateCompleted {
 				history.RecordOrchestratorCheckpointWritten(factoryevents.OrchestratorCheckpointWrittenInput{
 					SessionID:             "session-recorded-js",
-					OrchestratorKind:      factoryapi.JAVASCRIPT,
+					OrchestratorKind:      interfaces.OrchestratorKindJavaScript,
 					OrchestratorDialect:   "workflow-v1",
 					CheckpointID:          "checkpoint-1",
 					Source:                "runtime",
@@ -43,12 +43,12 @@ func TestJavaScriptRecordingContract_RoundTripsCompletedAndFailedSessionFacts(t 
 					Label:                 "after-plan",
 					SourceHash:            "sha256:source",
 					RuntimeSnapshotDigest: "sha256:checkpoint-state",
-					ArtifactRef: &factoryapi.FactoryArtifactRef{
-						Id:         "artifact-checkpoint-1",
-						Kind:       factoryapi.FactoryArtifactKindCHECKPOINT,
-						Visibility: factoryapi.FactoryArtifactVisibilityINTERNALCHECKPOINT,
+					ArtifactRef: &interfaces.FactoryArtifactRef{
+						ID:         "artifact-checkpoint-1",
+						Kind:       interfaces.JavaScriptCheckpointArtifactKind,
+						Visibility: interfaces.JavaScriptCheckpointArtifactVisibility,
 					},
-					ResumabilityStatus: factoryapi.RESUMABLE,
+					ResumabilityStatus: interfaces.CheckpointResumabilityStatusResumable,
 				}, recordedAt.Add(time.Second))
 			}
 			history.RecordSessionLifecycleCompletion("session-recorded-js", config, 2, testCase.factoryState, testCase.failure, recordedAt.Add(2*time.Second))
