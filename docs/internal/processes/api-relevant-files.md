@@ -48,8 +48,11 @@ Use this map when changing the public REST contract.
   integrity, callable signatures, closed serializable values (including
   `sharedSchemas` entries keyed by `javascript.schema.*`), and supported
   surfaces live in `internal/contractvalidator/javascript_manifest.go` and
-  `javascript_surface.go`. Prove runtime dependency isolation and catalog
-  boundaries in `contracts/runtime_manifest_boundary_test.go` and
+  `javascript_surface.go`. Authored-catalog path completeness against the
+  identity baseline and installed binding descriptor lives in
+  `pkg/orchestrators/javascript/runtime/catalog/catalog_identity.go` and is
+  wired through `internal/contractvalidator/javascript_catalog_identity.go`.
+  Prove runtime dependency isolation and catalog boundaries in `contracts/runtime_manifest_boundary_test.go` and
   `contracts/javascript_runtime_api_test.go`; staged
   `packages/api/generated/javascript/runtime-api.json` remains inventory-sourced
   until the catalog lane retargets generation in story 008.

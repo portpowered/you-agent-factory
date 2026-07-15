@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractvalidator"
+	jscatalog "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/catalog"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/callbehavior"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/symbolidentity"
 )
@@ -163,6 +164,23 @@ func TestJavaScriptRuntimeAPICatalogWorkflowNamespaceAndMembers(t *testing.T) {
 			t.Fatalf("call-behavior baseline missing path %q", path)
 		}
 		assertCatalogMethodMatchesCallBehaviorBaseline(t, path, symbol, wantCallBehavior)
+	}
+}
+
+func TestJavaScriptRuntimeAPICatalogPathCompleteness(t *testing.T) {
+	t.Parallel()
+
+	catalog := loadAuthoredJavaScriptRuntimeCatalog(t)
+	paths, err := jscatalog.CatalogSymbolPathsFromDocument(catalog)
+	if err != nil {
+		t.Fatalf("CatalogSymbolPathsFromDocument() error = %v", err)
+	}
+	if err := jscatalog.VerifyCatalogPathCompleteness(
+		paths,
+		symbolidentity.ProjectInstalledBindings(),
+		callbehavior.ProjectInstalledCallBehavior(),
+	); err != nil {
+		t.Fatalf("VerifyCatalogPathCompleteness() error = %v", err)
 	}
 }
 

@@ -250,6 +250,7 @@ func validateEntry(repositoryRoot string, entry Entry) []Diagnostic {
 		}
 		if document.SchemaID == runtimeManifestSchemaID {
 			diagnostics = append(diagnostics, runtimeManifestDiagnostics(document.Path, value)...)
+			diagnostics = append(diagnostics, javascriptCatalogPathCompletenessDiagnostics(document.Path, value)...)
 		}
 		if document.SchemaID == toolCatalogSchemaID {
 			diagnostics = append(diagnostics, mcpToolCatalogIdentityDiagnostics(document.Path, value)...)

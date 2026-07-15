@@ -17,6 +17,7 @@ var javascriptRuntimePackages = []string{
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result",
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime",
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/callbehavior",
+	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/catalog",
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/symbolidentity",
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source",
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store",
