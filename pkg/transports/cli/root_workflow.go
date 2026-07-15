@@ -361,6 +361,18 @@ func newSessionCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpt
 	return sessionCmd
 }
 
+// NewLegacySessionFamilyCommand builds the isolated handwritten session tree
+// retained as the generated-family parity and rollback reference.
+func NewLegacySessionFamilyCommand(options RootCommandOptions) *cobra.Command {
+	options = normalizeRootCommandOptions(options)
+	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
+	diagnostics := &cliDiagnosticsOptions{}
+	operatorDefaults := &cliOperatorDefaultsOptions{}
+	root := newLegacyRootCommandShell(globals, diagnostics, operatorDefaults, options)
+	root.AddCommand(newSessionCommand(globals, diagnostics, options))
+	return root
+}
+
 // NewGeneratedSessionFamilyCommand builds an isolated root/session tree from
 // generated metadata with all execution paths bound to handwritten handlers.
 // Production continues to use the representative cutover until the dedicated
