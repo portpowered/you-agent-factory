@@ -130,7 +130,7 @@ func MCPRegistry() Registry {
 			{ID: toolCatalogID, Path: "contracts/mcp/tool-catalog.schema.json"},
 		},
 		Documents: []Document{
-			{Path: "contracts/testdata/mcp/valid-minimal.json", SchemaID: toolCatalogID},
+			{Path: "contracts/mcp/tools.json", SchemaID: toolCatalogID},
 			{Path: "contracts/testdata/mcp/valid-input-closed-nested.json", SchemaID: toolCatalogID},
 			{Path: "contracts/testdata/mcp/valid-text-success-result.json", SchemaID: toolCatalogID},
 			{Path: "contracts/testdata/mcp/valid-text-error-result.json", SchemaID: toolCatalogID},

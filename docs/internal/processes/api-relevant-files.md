@@ -128,13 +128,20 @@ Use this map when changing the public REST contract.
   `2024-11-05`, format version `1.0.0`). Tool records compose B04 documentation
   and lifecycle shapes via `$ref` to `contracts/common/documentation.schema.json`
   and `contracts/common/deprecations.schema.json`.
+- Authored MCP tool catalog document lives at `contracts/mcp/tools.json` with
+  `sharedSchemas` keyed by stable `mcp.schema.*` identifiers for reusable source,
+  wait, domain-error, transport, lifecycle, handler, and CallToolResult vocabulary.
+  Tool records may reference shared schemas through in-document `$ref` pointers
+  resolved by `internal/contractvalidator` before schema validation.
 - Valid MCP catalog fixtures live under `contracts/testdata/mcp/` and register
   through `internal/contractvalidator.MCPRegistry()` into
-  `make contracts-validate`. Invalid fixtures are asserted in focused
+  `make contracts-validate`. The authored `contracts/mcp/tools.json` registers in
+  `MCPRegistry()`; `valid-minimal.json` remains a focused schema fixture only.
+  Invalid fixtures are asserted in focused
   `internal/contractvalidator` tests with path-bearing diagnostics, not in the
   default valid-only registry pass. Consolidated fixture-matrix closure lives in
   `contracts/mcp_tool_catalog_fixture_matrix_test.go` (valid/invalid classes,
-  directory coverage, registry alignment, and no-production-cutover boundary).
+  directory coverage, registry alignment, and authored-catalog boundary).
 - Tool `input` combines a closed Draft `schema` (`#/$defs/closedDraftSchema`)
   with object-keyed `arguments` using `mcp.arg.*` stable IDs; `execution.mode`
   is pinned to `tools-call` and `transports` to `stdio-json-rpc` for the

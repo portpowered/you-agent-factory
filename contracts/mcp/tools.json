@@ -1,0 +1,422 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2024-11-05",
+  "sharedSchemas": {
+    "mcp.schema.you.factory_session.source": {
+      "id": "mcp.schema.you.factory_session.source",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.schema.you.factory_session.source",
+        "documentation": {
+          "title": {
+            "id": "mcp.schema.you.factory_session.source.title",
+            "canonicalEnglish": "Factory Session execution source"
+          },
+          "description": {
+            "id": "mcp.schema.you.factory_session.source.description",
+            "canonicalEnglish": "Closed nested durable execution source object shared by start_sync and start_async tools/call arguments."
+          }
+        },
+        "examples": [
+          {
+            "kind": "WORKFLOW_NAME",
+            "workflowName": "example.workflow"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "FACTORY_ID",
+              "FACTORY_INLINE",
+              "WORKFLOW_FILE",
+              "WORKFLOW_NAME",
+              "INLINE_WORKFLOW"
+            ]
+          },
+          "factoryId": {
+            "type": "string"
+          },
+          "workflowFile": {
+            "type": "string"
+          },
+          "workflowName": {
+            "type": "string"
+          },
+          "inlineWorkflow": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    "mcp.schema.you.factory_session.wait": {
+      "id": "mcp.schema.you.factory_session.wait",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.schema.you.factory_session.wait",
+        "documentation": {
+          "title": {
+            "id": "mcp.schema.you.factory_session.wait.title",
+            "canonicalEnglish": "Factory Session sync wait options"
+          },
+          "description": {
+            "id": "mcp.schema.you.factory_session.wait.description",
+            "canonicalEnglish": "Closed nested sync wait object shared by start_sync and start_async tools/call arguments."
+          }
+        },
+        "examples": [
+          {
+            "timeoutMillis": 60000,
+            "cancelOnTimeout": true
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "timeoutMillis": {
+            "type": "integer"
+          },
+          "cancelOnTimeout": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "mcp.schema.you.factory_session.domain_error_envelope": {
+      "id": "mcp.schema.you.factory_session.domain_error_envelope",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.schema.you.factory_session.domain_error_envelope",
+        "documentation": {
+          "title": {
+            "id": "mcp.schema.you.factory_session.domain_error_envelope.title",
+            "canonicalEnglish": "Factory Session domain error envelope"
+          },
+          "description": {
+            "id": "mcp.schema.you.factory_session.domain_error_envelope.description",
+            "canonicalEnglish": "Shared typed domain error envelope fields serialized into text-only CallToolResult content with isError true."
+          }
+        },
+        "examples": [
+          {
+            "code": "factory_session.not_found",
+            "message": "factory session not found",
+            "retryable": false,
+            "sessionId": "dur-sess-missing-999"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "sessionId": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "mcp.schema.you.factory_session.result_transport_serialized_json": {
+      "id": "mcp.schema.you.factory_session.result_transport_serialized_json",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.schema.you.factory_session.result_transport_serialized_json",
+        "documentation": {
+          "title": {
+            "id": "mcp.schema.you.factory_session.result_transport_serialized_json.title",
+            "canonicalEnglish": "Serialized JSON text transport policy"
+          },
+          "description": {
+            "id": "mcp.schema.you.factory_session.result_transport_serialized_json.description",
+            "canonicalEnglish": "Pinned text-only CallToolResult transport policy using serialized JSON domain payloads."
+          }
+        },
+        "examples": [
+          {
+            "contentTypes": [
+              "text"
+            ],
+            "textEncoding": "serialized-json",
+            "allowsStructuredContent": false,
+            "allowsOutputSchema": false
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "resultTransport": {
+        "contentTypes": [
+          "text"
+        ],
+        "textEncoding": "serialized-json",
+        "allowsStructuredContent": false,
+        "allowsOutputSchema": false
+      }
+    },
+    "mcp.schema.you.factory_session.call_tool_result_success": {
+      "id": "mcp.schema.you.factory_session.call_tool_result_success",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.schema.you.factory_session.call_tool_result_success",
+        "documentation": {
+          "title": {
+            "id": "mcp.schema.you.factory_session.call_tool_result_success.title",
+            "canonicalEnglish": "Text success CallToolResult example"
+          },
+          "description": {
+            "id": "mcp.schema.you.factory_session.call_tool_result_success.description",
+            "canonicalEnglish": "Representative pinned text-only success envelope with isError false."
+          }
+        },
+        "examples": [
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"result\":{\"sessionId\":\"dur-sess-001\",\"status\":\"SUCCEEDED\"}}"
+              }
+            ],
+            "isError": false
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "callToolResult": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"result\":{\"sessionId\":\"dur-sess-001\",\"status\":\"SUCCEEDED\"}}"
+          }
+        ],
+        "isError": false
+      }
+    },
+    "mcp.schema.you.factory_session.call_tool_result_error": {
+      "id": "mcp.schema.you.factory_session.call_tool_result_error",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.schema.you.factory_session.call_tool_result_error",
+        "documentation": {
+          "title": {
+            "id": "mcp.schema.you.factory_session.call_tool_result_error.title",
+            "canonicalEnglish": "Text error CallToolResult example"
+          },
+          "description": {
+            "id": "mcp.schema.you.factory_session.call_tool_result_error.description",
+            "canonicalEnglish": "Representative pinned text-only domain error envelope with isError true."
+          }
+        },
+        "examples": [
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"error\":{\"code\":\"factory_session.not_found\",\"message\":\"factory session not found\",\"retryable\":false,\"sessionId\":\"dur-sess-missing-999\"}}"
+              }
+            ],
+            "isError": true
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "callToolResult": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\"error\":{\"code\":\"factory_session.not_found\",\"message\":\"factory session not found\",\"retryable\":false,\"sessionId\":\"dur-sess-missing-999\"}}"
+          }
+        ],
+        "isError": true
+      }
+    },
+    "mcp.schema.you.factory_session.transports_stdio": {
+      "id": "mcp.schema.you.factory_session.transports_stdio",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.schema.you.factory_session.transports_stdio",
+        "documentation": {
+          "title": {
+            "id": "mcp.schema.you.factory_session.transports_stdio.title",
+            "canonicalEnglish": "Stdio JSON-RPC transport support"
+          },
+          "description": {
+            "id": "mcp.schema.you.factory_session.transports_stdio.description",
+            "canonicalEnglish": "Supported MCP transport surface for Factory Session tools: stdio JSON-RPC only. HTTP and SSE are not claimed."
+          }
+        },
+        "examples": [
+          [
+            "stdio-json-rpc"
+          ]
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "transports": [
+        "stdio-json-rpc"
+      ]
+    },
+    "mcp.schema.you.factory_session.lifecycle_active": {
+      "id": "mcp.schema.you.factory_session.lifecycle_active",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.schema.you.factory_session.lifecycle_active",
+        "documentation": {
+          "title": {
+            "id": "mcp.schema.you.factory_session.lifecycle_active.title",
+            "canonicalEnglish": "Active tool lifecycle metadata"
+          },
+          "description": {
+            "id": "mcp.schema.you.factory_session.lifecycle_active.description",
+            "canonicalEnglish": "Shared active lifecycle metadata vocabulary for canonical Factory Session MCP tools."
+          }
+        },
+        "examples": [
+          {
+            "formatVersion": "1.0.0",
+            "itemId": "mcp.tool.you.factory_session.example",
+            "state": "active",
+            "since": "1.0.0"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.schema.you.factory_session.lifecycle_active",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "mcp.schema.you.factory_session.handler_binding": {
+      "id": "mcp.schema.you.factory_session.handler_binding",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.schema.you.factory_session.handler_binding",
+        "documentation": {
+          "title": {
+            "id": "mcp.schema.you.factory_session.handler_binding.title",
+            "canonicalEnglish": "Handwritten handler ID shape"
+          },
+          "description": {
+            "id": "mcp.schema.you.factory_session.handler_binding.description",
+            "canonicalEnglish": "Shared handwritten handler binding shape using stable mcp.handler.* identifiers."
+          }
+        },
+        "examples": [
+          {
+            "id": "mcp.handler.you.factory_session.list"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "handler": {
+        "id": "mcp.handler.you.factory_session.example"
+      }
+    }
+  },
+  "protocolFailures": {
+    "examples": [
+      {
+        "name": "tools_call_missing_tool_name",
+        "description": "Representative invalid-params JSON-RPC error for tools/call with a missing tool name.",
+        "request": {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "method": "tools/call",
+          "params": {}
+        },
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "error": {
+            "code": -32602,
+            "message": "tool name is required"
+          }
+        }
+      }
+    ]
+  },
+  "tools": {
+    "mcp.tool.you.factory_session.list": {
+      "id": "mcp.tool.you.factory_session.list",
+      "name": "you.factory_session.list",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.list",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.list.title",
+            "canonicalEnglish": "List Factory Sessions"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.list.description",
+            "canonicalEnglish": "Lists Factory Sessions for one scope using durable Factory Session listing vocabulary."
+          }
+        },
+        "examples": [
+          {
+            "scope": "live"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.list",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "transports": {
+        "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.transports_stdio/transports"
+      },
+      "execution": {
+        "mode": "tools-call"
+      },
+      "handler": {
+        "id": "mcp.handler.you.factory_session.list"
+      }
+    }
+  }
+}

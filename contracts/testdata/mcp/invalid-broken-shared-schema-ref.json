@@ -1,0 +1,55 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2024-11-05",
+  "sharedSchemas": {
+    "mcp.schema.you.factory_session.transports_stdio": {
+      "id": "mcp.schema.you.factory_session.transports_stdio",
+      "transports": [
+        "stdio-json-rpc"
+      ]
+    }
+  },
+  "tools": {
+    "mcp.tool.you.factory_session.start_async": {
+      "id": "mcp.tool.you.factory_session.start_async",
+      "name": "you.factory_session.start_async",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.start_async",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.start_async.title",
+            "canonicalEnglish": "Start Factory Session Async"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.start_async.description",
+            "canonicalEnglish": "Starts one async Factory Session and returns an accepted or running summary for polling."
+          }
+        },
+        "examples": [
+          {
+            "requestId": "req-001",
+            "source": {
+              "kind": "WORKFLOW_NAME",
+              "workflowName": "example.workflow"
+            }
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.start_async",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "transports": {
+        "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.missing_transport/transports"
+      },
+      "execution": {
+        "mode": "tools-call"
+      }
+    }
+  }
+}
