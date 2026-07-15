@@ -46,6 +46,45 @@ func cloneFactoryEvents(events []interfaces.FactoryEvent) []interfaces.FactoryEv
 	return clones
 }
 
+// RecordInferenceEvent appends worker-owned provider facts to canonical
+// history while Factory owns the envelope, vocabulary, and ordering.
+func (h *FactoryEventHistory) RecordInferenceEvent(event workerexecution.InferenceEvent) {
+	if h == nil || strings.TrimSpace(event.ID) == "" || strings.TrimSpace(event.DispatchID) == "" {
+		return
+	}
+	eventType, payload := inferenceFactoryEventPayload(event)
+	if eventType == "" || payload == nil {
+		return
+	}
+	h.appendEvent(domainFactoryEvent(
+		eventType,
+		event.ID,
+		interfaces.FactoryEventContext{
+			Tick:       event.Tick,
+			EventTime:  interfaces.CanonicalEventTime(event.EventTime),
+			DispatchID: stringPtrIfNotEmpty(event.DispatchID),
+			RequestID:  stringPtrIfNotEmpty(event.RequestID),
+			TraceIDs:   stringSlicePtr(event.TraceIDs),
+			WorkIDs:    stringSlicePtr(event.WorkIDs),
+		},
+		payload,
+	))
+}
+
+func inferenceFactoryEventPayload(event workerexecution.InferenceEvent) (interfaces.FactoryEventType, any) {
+	switch event.Kind {
+	case workerexecution.InferenceEventKindRequest:
+		if event.Request != nil && event.Response == nil {
+			return interfaces.FactoryEventTypeInferenceRequest, *event.Request
+		}
+	case workerexecution.InferenceEventKindResponse:
+		if event.Response != nil && event.Request == nil {
+			return interfaces.FactoryEventTypeInferenceResponse, *event.Response
+		}
+	}
+	return "", nil
+}
+
 func generatedFactory(payload interfaces.InitialStructurePayload) factoryapi.Factory {
 	resources := generatedResources(payload.Resources)
 	workTypes := generatedWorkTypes(payload.WorkTypes)

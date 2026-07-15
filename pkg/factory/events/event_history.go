@@ -447,16 +447,6 @@ func (h *FactoryEventHistory) RecordWorkstationResponse(tick int, result workere
 	))
 }
 
-// RecordInferenceEvent appends a provider-boundary inference event to the same
-// canonical history used for dispatch and replay events.
-func (h *FactoryEventHistory) RecordInferenceEvent(event factoryapi.FactoryEvent) {
-	if h == nil || !isInferenceEventType(event.Type) {
-		return
-	}
-	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
-	h.appendGenerated(event)
-}
-
 // RecordModelEvent appends a model-execution boundary event to the same
 // canonical history used for dispatch and replay events.
 func (h *FactoryEventHistory) RecordModelEvent(event factoryapi.FactoryEvent) {
@@ -839,15 +829,6 @@ func slicePtr[T any](values []T) *[]T {
 	out := make([]T, len(values))
 	copy(out, values)
 	return &out
-}
-
-func isInferenceEventType(eventType factoryapi.FactoryEventType) bool {
-	switch eventType {
-	case factoryapi.FactoryEventTypeInferenceRequest, factoryapi.FactoryEventTypeInferenceResponse:
-		return true
-	default:
-		return false
-	}
 }
 
 func isModelEventType(eventType factoryapi.FactoryEventType) bool {

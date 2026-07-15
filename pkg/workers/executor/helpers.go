@@ -281,22 +281,6 @@ func workerEventExitCode(exitCode int, present bool, includeZero bool) *int {
 	return &exitCodeCopy
 }
 
-func stringPtrIfNotEmpty(value string) *string {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return nil
-	}
-	return &trimmed
-}
-
-func stringSlicePtr(values ...string) *[]string {
-	if len(values) == 0 {
-		return nil
-	}
-	cloned := append([]string(nil), values...)
-	return &cloned
-}
-
 func firstImageContentPart(rawTokens []any) (int, int, work.WorkContentPart, bool) {
 	for tokenIndex, token := range cloneInputTokens(rawTokens) {
 		for partIndex, part := range token.Color.Content {

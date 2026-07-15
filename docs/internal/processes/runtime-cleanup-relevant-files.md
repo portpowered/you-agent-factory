@@ -251,3 +251,10 @@ errors so an unrecorded completion cannot finish its tick.
 `make durable-runtime-construction-check` reports those bypasses with remediation
 to use the Factory Session recorder, while allowing package tests and explicitly
 typed JavaScript checkpoint or Petri internal records.
+
+Worker execution boundaries use the same fact-to-envelope placement rule.
+Provider, script, and agent-run executors emit worker-owned facts from
+`pkg/workers/execution`; `pkg/factory/events` assigns the canonical Factory
+event vocabulary, schema version, ordering, correlation context, and UTC time.
+Generated OpenAPI event unions are decoded only at transport-facing or explicit
+public-compatibility test boundaries, not passed back into worker execution.

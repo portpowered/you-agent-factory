@@ -860,22 +860,6 @@ func TestScriptExecutor_HelperProcess(t *testing.T) {
 	}
 }
 
-func stringValueForScriptTest(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func stringSliceValueForScriptTest(value *[]string) []string {
-	if value == nil {
-		return nil
-	}
-	out := make([]string, len(*value))
-	copy(out, *value)
-	return out
-}
-
 // pkgmaintcheck:ignore-cyclomatic-complexity this helper keeps the script request event contract together across prompt, execution, and dispatch metadata assertions.
 func assertScriptRequestEvent(t *testing.T, event workerexecution.ScriptEvent) {
 	t.Helper()

@@ -11,6 +11,81 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
+func TestFactoryEventHistory_RecordInferenceEvent_OwnsEnvelopeAndPreservesPublicPayload(t *testing.T) {
+	eventTime := time.Date(2026, 7, 15, 16, 30, 0, 123456789, time.FixedZone("offset", 3*60*60))
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+
+	history.RecordInferenceEvent(workerexecution.InferenceEvent{
+		ID:         "factory-event/inference-response/dispatch-inference/1",
+		Kind:       workerexecution.InferenceEventKindResponse,
+		EventTime:  eventTime,
+		Tick:       14,
+		DispatchID: "dispatch-inference",
+		RequestID:  "request-inference",
+		TraceIDs:   []string{"trace-inference"},
+		WorkIDs:    []string{"work-inference"},
+		Response: &workerexecution.InferenceResponseEventPayload{
+			Attempt:            1,
+			Diagnostics:        json.RawMessage(`{"provider":{"provider":"mock","model":"fixture-model"}}`),
+			DurationMillis:     125,
+			InferenceRequestID: "dispatch-inference/inference-request/1",
+			Outcome:            workerexecution.InferenceOutcomeSucceeded,
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
+				Provider: "mock", Kind: "session_id", ID: "provider-session-1",
+			},
+			Response: stringPtr("provider response"),
+		},
+	})
+	assertCanonicalInferenceResponseEvent(t, history.CanonicalEvents(), eventTime)
+	assertPublicInferenceResponseEvent(t, history.Events())
+}
+
+func assertCanonicalInferenceResponseEvent(t *testing.T, canonical []interfaces.FactoryEvent, eventTime time.Time) {
+	t.Helper()
+	if len(canonical) != 1 || canonical[0].Type != interfaces.FactoryEventTypeInferenceResponse {
+		t.Fatalf("canonical events = %#v, want one inference response", canonical)
+	}
+	if canonical[0].Context.EventTime.Location() != time.UTC || !canonical[0].Context.EventTime.Equal(eventTime) {
+		t.Fatalf("event time = %s (%s), want same instant normalized to UTC", canonical[0].Context.EventTime, canonical[0].Context.EventTime.Location())
+	}
+	if canonical[0].Context.DispatchID == nil || *canonical[0].Context.DispatchID != "dispatch-inference" ||
+		canonical[0].Context.RequestID == nil || *canonical[0].Context.RequestID != "request-inference" {
+		t.Fatalf("canonical context = %#v, want inference correlation", canonical[0].Context)
+	}
+}
+
+func assertPublicInferenceResponseEvent(t *testing.T, publicEvents []factoryapi.FactoryEvent) {
+	t.Helper()
+	payload, err := publicEvents[0].Payload.AsInferenceResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode public inference payload: %v", err)
+	}
+	if payload.InferenceRequestId != "dispatch-inference/inference-request/1" || payload.Attempt != 1 ||
+		payload.Outcome != factoryapi.InferenceOutcomeSucceeded || payload.DurationMillis != 125 ||
+		payload.Response == nil || *payload.Response != "provider response" {
+		t.Fatalf("public payload = %#v, want preserved inference result", payload)
+	}
+	if payload.Diagnostics == nil || payload.Diagnostics.Provider == nil || payload.ProviderSession == nil {
+		t.Fatalf("public diagnostics/session = %#v / %#v, want preserved safe metadata", payload.Diagnostics, payload.ProviderSession)
+	}
+}
+
+func TestFactoryEventHistory_RecordInferenceEvent_IgnoresMalformedFacts(t *testing.T) {
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+
+	history.RecordInferenceEvent(workerexecution.InferenceEvent{
+		ID:         "factory-event/inference-request/invalid",
+		Kind:       workerexecution.InferenceEventKindRequest,
+		EventTime:  time.Unix(0, 0).UTC(),
+		DispatchID: "dispatch-inference",
+		Response:   &workerexecution.InferenceResponseEventPayload{},
+	})
+
+	if events := history.Events(); len(events) != 0 {
+		t.Fatalf("event count = %d, want 0 for mismatched inference fact", len(events))
+	}
+}
+
 func TestFactoryEventHistory_RecordAgentRunEvent_OwnsEnvelopeAndPreservesPublicPayload(t *testing.T) {
 	eventTime := time.Date(2026, 7, 15, 22, 30, 0, 123456789, time.FixedZone("offset", -7*60*60))
 	diagnostics := json.RawMessage(`{"agentRun":{"executionBehavior":"agent_loop","transcript":[{"role":"assistant","summary":"done"}]}}`)

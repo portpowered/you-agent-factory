@@ -1415,8 +1415,8 @@ You are a helpful assistant.
 			Stderr: []byte(`{"event":"session.created","session_id":"sess_codex_123"}`),
 		},
 	}
-	recorded := make([]factoryapi.FactoryEvent, 0, 2)
-	recorder := func(event factoryapi.FactoryEvent) {
+	recorded := make([]workerexecution.InferenceEvent, 0, 2)
+	recorder := func(event workerexecution.InferenceEvent) {
 		recorded = append(recorded, event)
 	}
 
@@ -1550,15 +1550,15 @@ type modelWorkerProgressPublisherServiceTestOptions struct {
 func executeModelWorkerProgressPublisherServiceTest(
 	t *testing.T,
 	options modelWorkerProgressPublisherServiceTestOptions,
-) (workerexecution.WorkResult, error, []factoryapi.FactoryEvent) {
+) (workerexecution.WorkResult, error, []workerexecution.InferenceEvent) {
 	t.Helper()
 
 	runner := &providerCommandRunnerRecorder{
 		result: options.commandResult,
 		err:    options.commandErr,
 	}
-	recorded := make([]factoryapi.FactoryEvent, 0, 2)
-	recorder := func(event factoryapi.FactoryEvent) {
+	recorded := make([]workerexecution.InferenceEvent, 0, 2)
+	recorder := func(event workerexecution.InferenceEvent) {
 		recorded = append(recorded, event)
 	}
 
@@ -2473,17 +2473,17 @@ func assertCanonicalProviderCommandRequests(t *testing.T, requests []workers.Com
 	}
 }
 
-func assertRecordedInferenceEvents(t *testing.T, recorded []factoryapi.FactoryEvent) {
+func assertRecordedInferenceEvents(t *testing.T, recorded []workerexecution.InferenceEvent) {
 	t.Helper()
 
 	if len(recorded) != 2 {
 		t.Fatalf("recorded event count = %d, want 2", len(recorded))
 	}
-	if recorded[0].Type != factoryapi.FactoryEventTypeInferenceRequest {
-		t.Fatalf("first event type = %s, want %s", recorded[0].Type, factoryapi.FactoryEventTypeInferenceRequest)
+	if recorded[0].Kind != workerexecution.InferenceEventKindRequest || recorded[0].Request == nil || recorded[0].Response != nil {
+		t.Fatalf("first event = %#v, want inference request", recorded[0])
 	}
-	if recorded[1].Type != factoryapi.FactoryEventTypeInferenceResponse {
-		t.Fatalf("second event type = %s, want %s", recorded[1].Type, factoryapi.FactoryEventTypeInferenceResponse)
+	if recorded[1].Kind != workerexecution.InferenceEventKindResponse || recorded[1].Response == nil || recorded[1].Request != nil {
+		t.Fatalf("second event = %#v, want inference response", recorded[1])
 	}
 }
 

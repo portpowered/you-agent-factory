@@ -80,8 +80,8 @@ func TestRecordingProvider_Infer_SuccessEmitsRequestAndResponseEventsInOrder(t *
 	if response.DurationMillis != 5 {
 		t.Fatalf("durationMillis = %d, want 5", response.DurationMillis)
 	}
-	assertInferenceEventContext(t, events.items[0].Context)
-	assertInferenceEventContext(t, events.items[1].Context)
+	assertInferenceEventContext(t, events.items[0])
+	assertInferenceEventContext(t, events.items[1])
 }
 
 func TestRecordingProvider_Infer_NormalizesEventTimesToUTC(t *testing.T) {
@@ -544,10 +544,10 @@ func recordingProviderDispatch() workerexecution.ProviderInferenceRequest {
 }
 
 type recordingEvents struct {
-	items []factoryapi.FactoryEvent
+	items []workerexecution.InferenceEvent
 }
 
-func (r *recordingEvents) record(event factoryapi.FactoryEvent) {
+func (r *recordingEvents) record(event workerexecution.InferenceEvent) {
 	r.items = append(r.items, event)
 }
 
@@ -574,66 +574,64 @@ func sequenceClock(values ...any) func() time.Time {
 	}
 }
 
-func assertInferenceRequestEvent(t *testing.T, event factoryapi.FactoryEvent) factoryapi.InferenceRequestEventPayload {
+func assertInferenceRequestEvent(t *testing.T, event workerexecution.InferenceEvent) factoryapi.InferenceRequestEventPayload {
 	t.Helper()
-	if event.SchemaVersion != factoryapi.AgentFactoryEventV1 {
-		t.Fatalf("schemaVersion = %q, want %q", event.SchemaVersion, factoryapi.AgentFactoryEventV1)
+	if event.Kind != workerexecution.InferenceEventKindRequest || event.Request == nil || event.Response != nil {
+		t.Fatalf("event = %#v, want inference request", event)
 	}
-	if event.Type != factoryapi.FactoryEventTypeInferenceRequest {
-		t.Fatalf("event type = %s, want INFERENCE_REQUEST", event.Type)
-	}
-	payload, err := event.Payload.AsInferenceRequestEventPayload()
+	encoded, err := json.Marshal(event.Request)
 	if err != nil {
+		t.Fatalf("request payload encode: %v", err)
+	}
+	var payload factoryapi.InferenceRequestEventPayload
+	if err := json.Unmarshal(encoded, &payload); err != nil {
 		t.Fatalf("request payload decode: %v", err)
 	}
 	return payload
 }
 
-func assertInferenceResponseEvent(t *testing.T, event factoryapi.FactoryEvent) factoryapi.InferenceResponseEventPayload {
+func assertInferenceResponseEvent(t *testing.T, event workerexecution.InferenceEvent) factoryapi.InferenceResponseEventPayload {
 	t.Helper()
-	if event.SchemaVersion != factoryapi.AgentFactoryEventV1 {
-		t.Fatalf("schemaVersion = %q, want %q", event.SchemaVersion, factoryapi.AgentFactoryEventV1)
+	if event.Kind != workerexecution.InferenceEventKindResponse || event.Response == nil || event.Request != nil {
+		t.Fatalf("event = %#v, want inference response", event)
 	}
-	if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
-		t.Fatalf("event type = %s, want INFERENCE_RESPONSE", event.Type)
-	}
-	payload, err := event.Payload.AsInferenceResponseEventPayload()
+	encoded, err := json.Marshal(event.Response)
 	if err != nil {
+		t.Fatalf("response payload encode: %v", err)
+	}
+	var payload factoryapi.InferenceResponseEventPayload
+	if err := json.Unmarshal(encoded, &payload); err != nil {
 		t.Fatalf("response payload decode: %v", err)
 	}
 	return payload
 }
 
-func assertInferenceEventContext(t *testing.T, context factoryapi.FactoryEventContext) {
+func assertInferenceEventContext(t *testing.T, event workerexecution.InferenceEvent) {
 	t.Helper()
-	if context.Tick != 8 {
-		t.Fatalf("context tick = %d, want 8", context.Tick)
+	if event.Tick != 8 {
+		t.Fatalf("tick = %d, want 8", event.Tick)
 	}
-	if context.DispatchId == nil || *context.DispatchId != "dispatch-1" {
-		t.Fatalf("context dispatchId = %#v, want dispatch-1", context.DispatchId)
+	if event.DispatchID != "dispatch-1" {
+		t.Fatalf("dispatchId = %q, want dispatch-1", event.DispatchID)
 	}
-	if context.RequestId == nil || *context.RequestId != "request-1" {
-		t.Fatalf("context requestId = %#v, want request-1", context.RequestId)
+	if event.RequestID != "request-1" {
+		t.Fatalf("requestId = %q, want request-1", event.RequestID)
 	}
-	if context.TraceIds == nil || len(*context.TraceIds) != 1 || (*context.TraceIds)[0] != "trace-1" {
-		t.Fatalf("context traceIds = %#v, want trace-1", context.TraceIds)
+	if len(event.TraceIDs) != 1 || event.TraceIDs[0] != "trace-1" {
+		t.Fatalf("traceIds = %#v, want trace-1", event.TraceIDs)
 	}
-	if context.WorkIds == nil || len(*context.WorkIds) != 2 || (*context.WorkIds)[0] != "work-1" || (*context.WorkIds)[1] != "work-2" {
-		t.Fatalf("context workIds = %#v, want work-1/work-2", context.WorkIds)
+	if len(event.WorkIDs) != 2 || event.WorkIDs[0] != "work-1" || event.WorkIDs[1] != "work-2" {
+		t.Fatalf("workIds = %#v, want work-1/work-2", event.WorkIDs)
 	}
 }
 
-func assertProviderEventTimeJSON(t *testing.T, event factoryapi.FactoryEvent, want string) {
+func assertProviderEventTimeJSON(t *testing.T, event workerexecution.InferenceEvent, want string) {
 	t.Helper()
-	if event.Context.EventTime.Location() != time.UTC {
-		t.Fatalf("event time location = %v, want UTC", event.Context.EventTime.Location())
+	if event.EventTime.Location() != time.UTC {
+		t.Fatalf("event time location = %v, want UTC", event.EventTime.Location())
 	}
-	data, err := json.Marshal(event)
-	if err != nil {
-		t.Fatalf("marshal event: %v", err)
-	}
-	if !strings.Contains(string(data), `"eventTime":"`+want+`"`) {
-		t.Fatalf("event JSON = %s, want eventTime %q", data, want)
+	if got := event.EventTime.Format(time.RFC3339Nano); got != want {
+		t.Fatalf("event time = %q, want %q", got, want)
 	}
 }
 

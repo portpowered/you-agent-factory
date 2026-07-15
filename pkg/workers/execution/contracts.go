@@ -28,6 +28,47 @@ type InferenceResponse struct {
 	Diagnostics     *WorkDiagnostics         `json:"diagnostics,omitempty"`
 }
 
+// InferenceEventKind identifies which provider-boundary fact was observed.
+// Factory owns the corresponding canonical event vocabulary and envelope.
+type InferenceEventKind string
+
+const (
+	InferenceEventKindRequest  InferenceEventKind = "REQUEST"
+	InferenceEventKindResponse InferenceEventKind = "RESPONSE"
+)
+
+// InferenceEvent carries provider-owned attempt facts to Factory history
+// without coupling provider execution to a transport or Factory envelope.
+type InferenceEvent struct {
+	ID         string
+	Kind       InferenceEventKind
+	EventTime  time.Time
+	Tick       int
+	DispatchID string
+	RequestID  string
+	TraceIDs   []string
+	WorkIDs    []string
+	Request    *InferenceRequestEventPayload
+	Response   *InferenceResponseEventPayload
+}
+
+// InferenceRequestEventPayload records the concrete provider request boundary.
+type InferenceRequestEventPayload struct {
+	Attempt            int    `json:"attempt"`
+	InferenceRequestID string `json:"inferenceRequestId"`
+	Prompt             string `json:"prompt"`
+	WorkingDirectory   string `json:"workingDirectory"`
+	Worktree           string `json:"worktree"`
+}
+
+// InferenceOutcome is the stable provider-attempt result category.
+type InferenceOutcome string
+
+const (
+	InferenceOutcomeSucceeded InferenceOutcome = "SUCCEEDED"
+	InferenceOutcomeFailed    InferenceOutcome = "FAILED"
+)
+
 // InferenceResponseEventPayload is the worker-execution-owned response
 // contract consumed by Factory event reducers. Diagnostics retain their public
 // event JSON until the diagnostics owner projects them onto execution details.
@@ -38,7 +79,7 @@ type InferenceResponseEventPayload struct {
 	ExitCode           *int                            `json:"exitCode,omitempty"`
 	FailureDetail      *InferenceResponseFailureDetail `json:"failureDetail,omitempty"`
 	InferenceRequestID string                          `json:"inferenceRequestId"`
-	Outcome            string                          `json:"outcome"`
+	Outcome            InferenceOutcome                `json:"outcome"`
 	ProviderSession    *ProviderSessionMetadata        `json:"providerSession,omitempty"`
 	Response           *string                         `json:"response,omitempty"`
 }
