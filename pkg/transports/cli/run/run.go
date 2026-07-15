@@ -893,13 +893,21 @@ func openDashboardWhenServerReady(
 		defer timer.Stop()
 
 		url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
+		ready := false
 		select {
 		case <-dashboardReady:
-		case <-timer.C:
-			fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: dashboard server did not become ready\nOpen the dashboard at %s\n", url)
-			return
-		case <-ctx.Done():
-			return
+			ready = true
+		default:
+		}
+		if !ready {
+			select {
+			case <-dashboardReady:
+			case <-timer.C:
+				fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: dashboard server did not become ready\nOpen the dashboard at %s\n", url)
+				return
+			case <-ctx.Done():
+				return
+			}
 		}
 
 		if err := openDashboard(ctx, url); err != nil {

@@ -39,7 +39,8 @@ func newLegacyRootCommandWithOptions(options RootCommandOptions) *cobra.Command 
 	factoryConfigInit := productionFactoryConfigInitCommands(globals, diagnostics, options)
 	docsCmd := newDocsCommand(diagnostics)
 	modelsCmd := newModelsCommand(globals, diagnostics, operatorDefaults, options)
-	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, productionSessionCommand(globals, diagnostics, options), factoryConfigInit, docsCmd, modelsCmd)...)
+	mcpCmd, workflowCmd := newProductionWorkflowMCPCommands(globals, diagnostics, options)
+	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, productionSessionCommand(globals, diagnostics, options), factoryConfigInit, docsCmd, modelsCmd, mcpCmd, workflowCmd)...)
 	return root
 }
 
@@ -136,9 +137,10 @@ func newRootCommandWithGeneratedRepresentativeFamily(options RootCommandOptions)
 	if err != nil {
 		panic(fmt.Sprintf("build models/docs family command: %v", err))
 	}
+	mcpCmd, workflowCmd := newProductionWorkflowMCPCommands(globals, diagnostics, options)
 
 	root := components.Root
-	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, session, factoryConfigInit, docsCmd, modelsCmd)...)
+	root.AddCommand(productionRootSubcommands(globals, diagnostics, operatorDefaults, options, session, factoryConfigInit, docsCmd, modelsCmd, mcpCmd, workflowCmd)...)
 	return root
 }
 
@@ -170,19 +172,21 @@ func productionRootSubcommands(
 	factoryConfigInit factoryConfigInitProductionCommands,
 	docsCmd *cobra.Command,
 	modelsCmd *cobra.Command,
+	mcpCmd *cobra.Command,
+	workflowCmd *cobra.Command,
 ) []*cobra.Command {
 	return []*cobra.Command{
 		docsCmd,
 		factoryConfigInit.Config,
 		factoryConfigInit.Factory,
 		factoryConfigInit.Init,
-		newMCPCommand(options),
+		mcpCmd,
 		modelsCmd,
 		newRunCommand(globals, diagnostics, operatorDefaults, options),
 		newSubmitCommand(globals, diagnostics),
 		session,
 		productionWorkCommand(globals, diagnostics),
-		newWorkflowCommand(globals, diagnostics, options),
+		workflowCmd,
 	}
 }
 

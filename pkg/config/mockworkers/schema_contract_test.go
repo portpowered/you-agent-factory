@@ -164,8 +164,8 @@ func TestMockWorkersSchema_DoesNotAdvertiseUnsupportedCapabilities(t *testing.T)
 
 	schema := loadAuthoredMockWorkersSchema(t)
 	instanceSurface := map[string]any{
-		"properties": schema["properties"],
-		"$defs":      schema["$defs"],
+		"properties":  schema["properties"],
+		"$defs":       schema["$defs"],
 		"description": schema["description"],
 	}
 	encoded, err := json.Marshal(instanceSurface)

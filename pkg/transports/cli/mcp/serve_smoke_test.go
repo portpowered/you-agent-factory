@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -15,7 +16,9 @@ import (
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	cli "github.com/portpowered/infinite-you/pkg/transports/cli"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
+	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
@@ -65,13 +68,50 @@ func startRunServeSmokeServer(
 
 	serveErr := make(chan error, 1)
 	go func() {
-		serveErr <- mcpcli.RunServe(ctx, mcpcli.ServeConfig{
-			Service: service,
-			Stdin:   stdinRead,
-			Stdout:  stdoutWrite,
-		})
+		serveErr <- executeGeneratedMCPServe(ctx, service, stdinRead, stdoutWrite, false, "")
 	}()
 	return newStdioMCPClient(t, stdinWrite, stdoutRead), stdinWrite, serveErr
+}
+
+func executeGeneratedMCPServe(
+	ctx context.Context,
+	service factorysessionexecution.Service,
+	stdin io.Reader,
+	stdout io.Writer,
+	wantRuntime bool,
+	wantProjectRoot string,
+) error {
+	startup := func(ctx context.Context, request startupcli.Request) error {
+		if request.Kind != startupcli.KindMCPServe {
+			return fmt.Errorf("generated command startup kind = %q, want %q", request.Kind, startupcli.KindMCPServe)
+		}
+		if request.MCP.RuntimeBacked != wantRuntime || request.MCP.ProjectRoot != wantProjectRoot {
+			return fmt.Errorf(
+				"generated command MCP intent = %#v, want runtime=%t project-root=%q",
+				request.MCP,
+				wantRuntime,
+				wantProjectRoot,
+			)
+		}
+		return mcpcli.RunServe(ctx, mcpcli.ServeConfig{
+			Service: service,
+			Stdin:   request.MCP.Stdin,
+			Stdout:  request.MCP.Stdout,
+		})
+	}
+	root := cli.NewRootCommandWithOptions(cli.RootCommandOptions{Startup: startup})
+	root.SetIn(stdin)
+	root.SetOut(stdout)
+	root.SetErr(io.Discard)
+	args := []string{"mcp", "serve"}
+	if wantRuntime {
+		args = append(args, "--runtime")
+		if wantProjectRoot != "" {
+			args = append(args, "--project-root", wantProjectRoot)
+		}
+	}
+	root.SetArgs(args)
+	return root.ExecuteContext(ctx)
 }
 
 func assertInstallSmokeInitialize(t *testing.T, client *stdioMCPClient) {

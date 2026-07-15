@@ -201,6 +201,51 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `config init` subcommand; installer smoke coverage lives in
   `tests/release/install_script_test.go` and `scripts/release/smoke-install.sh`
   / `scripts/release/smoke-install.ps1`.
+- Canonical CLI metadata belongs in `contracts/cli/commands.json`. Separately
+  approved compatibility-only command metadata belongs in
+  `contracts/cli/deprecated-commands.json`, while its classification, successor,
+  approval, evidence, and removal gates remain in `contracts/cli/deprecated.json`.
+  Mark generation-ready records with `completeness: authoritative`; the CLI schema
+  then requires complete channels, outputs, exits, effects, runtime constraints,
+  and stable handler metadata for runnable records. Register every authored command
+  manifest in `internal/contractvalidator.CLIRegistry`, and keep relationship
+  participants on same-command flag or argument IDs so diagnostics name the exact
+  record path. Compatibility records must not be copied into the primary manifest
+  merely to make generation convenient.
+- Classification-aware workflow/MCP generation lives in
+  `pkg/transports/cli/climanifestgen`: canonical `you mcp` / `you mcp serve`
+  metadata is emitted from `commands.json` into `mcp_family.json`, while approved
+  `you workflow validate` / `you workflow preview` metadata is emitted separately
+  from `deprecated-commands.json` into `workflow_compatibility_family.json`.
+  Keep their generated stable-ID lists source-labeled and disjoint; `Check` must
+  report the affected stable IDs for drift, and generation must reject either
+  family when its IDs appear in the wrong classification source.
+- Workflow/MCP handwritten handler binding lives in
+  `pkg/transports/cli/commandregistry/workflowmcp`. Keep canonical MCP and
+  workflow-compatibility registries separate, verify each against its own
+  generated manifest, and report missing or classification-mismatched bindings
+  by stable command ID. The execution adapters remain with their transport
+  owners (`workflow.ValidateRunE`, `workflow.PreviewRunE`, and `mcp.ServeRunE`),
+  while `newWorkflowMCPHandlerRegistries` supplies root dependencies without
+  moving workflow resolution or MCP lifecycle logic into generated artifacts.
+- Workflow/MCP production construction lives in
+  `pkg/transports/cli/climanifestcobra/workflow_mcp_constructor.go` and
+  `pkg/transports/cli/root_workflow.go`. Build canonical MCP metadata and the
+  two approved workflow compatibility leaves from their separate generated
+  manifests, bind both metadata and handlers to the same local flag state, then
+  attach only the generated validate/preview leaves to the existing handwritten
+  workflow parent. Keep workflow run/start/status/result/dispatch/artifact/event
+  construction outside this family slice. Constructor parity in
+  `pkg/transports/cli/climanifestparity` must compare help, parsing, completion,
+  handler outcomes, stdout/stderr, and success/failure behavior before this
+  production cutover is changed.
+- MCP protocol and resume smokes in `pkg/transports/cli/mcp/serve_*_test.go`
+  should enter through `cli.NewRootCommandWithOptions` and the injected startup
+  boundary, then delegate to the existing `mcp.RunServe` implementation with the
+  exact parsed stdio streams. This keeps fixture/runtime selection, JSON-RPC,
+  EOF/cancellation, and durable resume assertions attached to the generated
+  production `you mcp serve` construction instead of proving only its detached
+  handwritten execution adapter.
 - Production CLI command manifest parity for the root + `session show` family lives in
   `pkg/transports/cli/climanifest` (`LoadProduction`, `ProductionManifestPath`) and
   `pkg/transports/cli/climanifestparity` (`CompareDeclaredHandler`,

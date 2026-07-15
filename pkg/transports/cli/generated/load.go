@@ -23,6 +23,12 @@ var factoryConfigInitFamilyJSON []byte
 //go:embed models_docs_family.json
 var modelsDocsFamilyJSON []byte
 
+//go:embed mcp_family.json
+var mcpFamilyJSON []byte
+
+//go:embed workflow_compatibility_family.json
+var workflowCompatibilityFamilyJSON []byte
+
 // RepresentativeFamilyManifest returns generated §4.3 metadata for the
 // representative root/session-show command family.
 func RepresentativeFamilyManifest() (climanifest.Manifest, error) {
@@ -51,6 +57,14 @@ func FactoryConfigInitFamilyManifest() (climanifest.Manifest, error) {
 // command family.
 func ModelsDocsFamilyManifest() (climanifest.Manifest, error) {
 	return parseFamilyManifest(modelsDocsFamilyJSON, "models/docs")
+}
+
+func MCPFamilyManifest() (climanifest.Manifest, error) {
+	return parseFamilyManifest(mcpFamilyJSON, "canonical MCP")
+}
+
+func WorkflowCompatibilityFamilyManifest() (climanifest.Manifest, error) {
+	return parseFamilyManifest(workflowCompatibilityFamilyJSON, "workflow compatibility")
 }
 
 func parseFamilyManifest(payload []byte, familyLabel string) (climanifest.Manifest, error) {

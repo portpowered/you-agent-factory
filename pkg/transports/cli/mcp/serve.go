@@ -26,6 +26,62 @@ type ServeConfig struct {
 	Stdout             io.Writer
 }
 
+// ServeBinding supplies the mutable flag state and lifecycle delegate used by
+// the handwritten MCP serve handler.
+type ServeBinding struct {
+	FixtureCatalogPath *string
+	RuntimeBacked      *bool
+	ProjectRoot        *string
+	Startup            startupcli.Handler
+	RunServe           func(context.Context, ServeConfig) error
+}
+
+// ServeRunE returns the handwritten MCP serve handler used by legacy and
+// generated metadata construction.
+func ServeRunE(binding ServeBinding) func(*cobra.Command, []string) error {
+	runServe := binding.RunServe
+	if runServe == nil {
+		runServe = RunServe
+	}
+	return func(cmd *cobra.Command, _ []string) error {
+		fixtureCatalogPath := ""
+		if binding.FixtureCatalogPath != nil {
+			fixtureCatalogPath = *binding.FixtureCatalogPath
+		}
+		runtimeBacked := false
+		if binding.RuntimeBacked != nil {
+			runtimeBacked = *binding.RuntimeBacked
+		}
+		if runtimeBacked && strings.TrimSpace(fixtureCatalogPath) != "" {
+			return fmt.Errorf("cannot combine --runtime with --fixture-catalog")
+		}
+		projectRoot := ""
+		if binding.ProjectRoot != nil {
+			projectRoot = *binding.ProjectRoot
+		}
+		cfg := ServeConfig{
+			FixtureCatalogPath: fixtureCatalogPath,
+			RuntimeBacked:      runtimeBacked,
+			ProjectRoot:        projectRoot,
+			Stdin:              cmd.InOrStdin(),
+			Stdout:             cmd.OutOrStdout(),
+		}
+		if binding.Startup == nil {
+			return runServe(cmd.Context(), cfg)
+		}
+		return binding.Startup(cmd.Context(), startupcli.Request{
+			Kind: startupcli.KindMCPServe,
+			MCP: startupcli.MCPIntent{
+				FixtureCatalogPath: cfg.FixtureCatalogPath,
+				RuntimeBacked:      cfg.RuntimeBacked,
+				ProjectRoot:        cfg.ProjectRoot,
+				Stdin:              cfg.Stdin,
+				Stdout:             cfg.Stdout,
+			},
+		})
+	}
+}
+
 // RunServe starts the Factory Session MCP stdio server until stdin closes or the
 // process receives SIGINT/SIGTERM.
 func RunServe(ctx context.Context, cfg ServeConfig) error {
@@ -104,31 +160,12 @@ func newServeCommand(startup startupcli.Handler) *cobra.Command {
 			"  you mcp serve --fixture-catalog ./pkg/transports/http/testdata/durable-session-contract-fixtures.json\n\n" +
 			"  # Runtime-backed serve against live durable JavaScript execution.\n" +
 			"  you mcp serve --runtime",
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			if runtimeBacked && strings.TrimSpace(fixtureCatalogPath) != "" {
-				return fmt.Errorf("cannot combine --runtime with --fixture-catalog")
-			}
-			cfg := ServeConfig{
-				FixtureCatalogPath: fixtureCatalogPath,
-				RuntimeBacked:      runtimeBacked,
-				ProjectRoot:        projectRoot,
-				Stdin:              cmd.InOrStdin(),
-				Stdout:             cmd.OutOrStdout(),
-			}
-			if startup == nil {
-				return RunServe(cmd.Context(), cfg)
-			}
-			return startup(cmd.Context(), startupcli.Request{
-				Kind: startupcli.KindMCPServe,
-				MCP: startupcli.MCPIntent{
-					FixtureCatalogPath: cfg.FixtureCatalogPath,
-					RuntimeBacked:      cfg.RuntimeBacked,
-					ProjectRoot:        cfg.ProjectRoot,
-					Stdin:              cfg.Stdin,
-					Stdout:             cfg.Stdout,
-				},
-			})
-		},
+		RunE: ServeRunE(ServeBinding{
+			FixtureCatalogPath: &fixtureCatalogPath,
+			RuntimeBacked:      &runtimeBacked,
+			ProjectRoot:        &projectRoot,
+			Startup:            startup,
+		}),
 	}
 	cmd.Flags().StringVar(
 		&fixtureCatalogPath,
