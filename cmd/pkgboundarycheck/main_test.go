@@ -224,7 +224,7 @@ func TestRunRejectsRetiredPackageRootsWithCanonicalOwners(t *testing.T) {
 		{packagePath: "pkg/workgraph", canonicalOwner: "pkg/work/graph"},
 		{packagePath: "pkg/workquery", canonicalOwner: "pkg/work/query"},
 		{packagePath: "pkg/interfaces", canonicalOwner: "the defining domain under pkg/factory, pkg/work, pkg/workers, or pkg/models"},
-		{packagePath: "pkg/replay", canonicalOwner: "pkg/platform/replay"},
+		{packagePath: "pkg/replay", canonicalOwner: "pkg/factory/replay for Factory-event replay policy and pkg/platform/replay for artifact filesystem mechanics"},
 		{packagePath: "pkg/testutil", canonicalOwner: "internal/testutil or package-local test helpers"},
 	} {
 		t.Run(tt.packagePath, func(t *testing.T) {
@@ -316,7 +316,7 @@ func TestRunRejectsRetiredPackageImportsWithCanonicalOwners(t *testing.T) {
 		{
 			importPath:     "github.com/portpowered/infinite-you/pkg/replay",
 			retiredRoot:    "pkg/replay",
-			canonicalOwner: "pkg/platform/replay",
+			canonicalOwner: "pkg/factory/replay for Factory-event replay policy and pkg/platform/replay for artifact filesystem mechanics",
 		},
 		{
 			importPath:     "github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures",

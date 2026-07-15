@@ -43,7 +43,7 @@ var retiredPackageRoots = append([]retiredPackageRoot{
 	{packagePath: "pkg/materialize", canonicalOwner: "pkg/work/materialize"},
 	{packagePath: "pkg/mcp", canonicalOwner: "pkg/transports/mcp"},
 	{packagePath: "pkg/modelhost", canonicalOwner: "pkg/models/host"},
-	{packagePath: "pkg/replay", canonicalOwner: "pkg/platform/replay"},
+	{packagePath: "pkg/replay", canonicalOwner: "pkg/factory/replay for Factory-event replay policy and pkg/platform/replay for artifact filesystem mechanics"},
 	{packagePath: "pkg/sessionpersistence", canonicalOwner: "pkg/platform/cursors"},
 	{packagePath: "pkg/testutil", canonicalOwner: "internal/testutil or package-local test helpers"},
 	{packagePath: "pkg/timework", canonicalOwner: "pkg/work/timework"},
