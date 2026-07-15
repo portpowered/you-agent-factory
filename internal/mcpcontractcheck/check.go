@@ -80,7 +80,7 @@ func Validate(inputs Inputs) []Diagnostic {
 		} else if binding.HandlerID != expected.HandlerID {
 			diagnostics = append(diagnostics, Diagnostic{
 				Code: "mcp.registry.handler_mismatch", ToolID: id, Surface: "registry",
-				Message: fmt.Sprintf("canonical tool %q binds handler %q; authored catalog expects %q", id, binding.HandlerID, expected.HandlerID),
+				Message: fmt.Sprintf("canonical tool %q binds handler %q; authored catalog expects %q; update the authored catalog handler ID if intent changed, otherwise repair the handwritten registry binding", id, binding.HandlerID, expected.HandlerID),
 			})
 		}
 	}
@@ -207,11 +207,12 @@ func indexBindings(bindings []HandlerBinding) (map[string]HandlerBinding, []Diag
 
 func metadataDiagnostics(expected, actual ToolRecord) []Diagnostic {
 	fields := []struct {
-		name  string
-		equal bool
+		name    string
+		equal   bool
+		details string
 	}{
-		{name: "name", equal: expected.Name == actual.Name},
-		{name: "description", equal: expected.Description == actual.Description},
+		{name: "name", equal: expected.Name == actual.Name, details: fmt.Sprintf("got %q, want %q", actual.Name, expected.Name)},
+		{name: "description", equal: expected.Description == actual.Description, details: fmt.Sprintf("got %q, want %q", actual.Description, expected.Description)},
 		{name: "inputSchema", equal: schemasEqual(expected.InputSchema, actual.InputSchema)},
 	}
 	var diagnostics []Diagnostic
@@ -221,10 +222,17 @@ func metadataDiagnostics(expected, actual ToolRecord) []Diagnostic {
 		}
 		diagnostics = append(diagnostics, Diagnostic{
 			Code: "mcp.discovery.metadata_mismatch", ToolID: expected.ID, Surface: "discovery",
-			Message: fmt.Sprintf("generated primary discovery for %q has stale %s metadata", expected.ID, field.name),
+			Message: fmt.Sprintf("generated primary discovery for %q has stale %s metadata%s; update the authored catalog if intent changed, otherwise regenerate discovery from the authored catalog", expected.ID, field.name, formatMismatchDetails(field.details)),
 		})
 	}
 	return diagnostics
+}
+
+func formatMismatchDetails(details string) string {
+	if details == "" {
+		return ""
+	}
+	return ": " + details
 }
 
 func schemasEqual(left, right any) bool {
