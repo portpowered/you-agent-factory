@@ -152,6 +152,19 @@ Use this map when changing the public REST contract.
   success plus nested valid/invalid argument validation in
   `contracts/mcp_tool_catalog_input_schema_test.go` and
   `pkg/transports/mcp/factorysession/catalog_input_schema_test.go`.
+- Authored catalog publication guards live in
+  `pkg/transports/mcp/factorysession/catalog_publication.go`
+  (`VerifyCatalogAliasExclusion`, `VerifyCatalogModalityPolicy`,
+  `VerifyAuthoredCatalogStagingBoundary`, `MarshalCatalogDocumentJSON`,
+  `VerifyCatalogByteStability`). Wire alias exclusion, text-only modality,
+  staging-boundary separation from `packages/api/generated/mcp/tools.json`, and
+  byte-stable canonical serialization into `make contracts-validate` for
+  `contracts/mcp/tools.json` via
+  `internal/contractvalidator/mcp_tool_catalog_publication.go`; prove success and
+  failure paths in `contracts/mcp_tool_catalog_publication_test.go` and
+  `pkg/transports/mcp/factorysession/catalog_publication_test.go`. Staged MCP
+  tools remain projected only from `contracts/testdata/baseline/mcp-tools.json`
+  through `internal/contractstaging/policy.go`, not from the authored catalog.
 - Valid MCP catalog fixtures live under `contracts/testdata/mcp/` and register
   through `internal/contractvalidator.MCPRegistry()` into
   `make contracts-validate`. The authored `contracts/mcp/tools.json` registers in
