@@ -839,7 +839,9 @@ func newSessionListCommand(globals *cliGlobalOptions, diagnostics *cliDiagnostic
 				}
 				cfg.DurableLister = service.ListSessions
 			}
-			cfg.Server = globals.server
+			if cmd.Root().PersistentFlags().Changed("server") {
+				cfg.Server = globals.server
+			}
 			cfg.Output = cmd.OutOrStdout()
 			cfg.Diagnostics = diagnostics.writer(cmd)
 			cfg.Verbose = diagnostics.verboseEnabled()

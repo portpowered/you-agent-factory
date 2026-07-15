@@ -220,7 +220,7 @@ func SessionListRunE(binding SessionListBinding) RunE {
 			return fmt.Errorf("session list config is required")
 		}
 		cfg := *binding.Config
-		if binding.Server != nil {
+		if binding.Server != nil && cmd.Root().PersistentFlags().Changed("server") {
 			cfg.Server = *binding.Server
 		}
 		if binding.Prepare != nil {
