@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractvalidator"
@@ -29,6 +30,105 @@ func javascriptManifestFixtureRegistry(fixture string) contractvalidator.Registr
 			SchemaID: runtimeManifestSchemaID,
 		}},
 	})
+}
+
+func TestJavaScriptRuntimeAPICatalogWorkflowNamespaceAndMembers(t *testing.T) {
+	t.Parallel()
+
+	catalog := loadAuthoredJavaScriptRuntimeCatalog(t)
+	symbolsByPath := catalogSymbolsByPath(t, catalog)
+
+	identity := symbolidentity.ProjectInstalledBindings()
+	identityByPath := symbolRecordsByPath(identity)
+	wantWorkflow, ok := identityByPath["workflow"]
+	if !ok {
+		t.Fatal("identity baseline missing workflow namespace")
+	}
+
+	workflowSymbol, ok := symbolsByPath["workflow"]
+	if !ok {
+		t.Fatal("catalog missing workflow namespace")
+	}
+	if got := countCatalogPaths(symbolsByPath, "workflow"); got != 1 {
+		t.Fatalf("catalog path workflow appears %d times, want exactly once", got)
+	}
+	assertCatalogNamespaceMatchesIdentityBaseline(t, "workflow", workflowSymbol, wantWorkflow)
+
+	callInventory := callbehavior.ProjectInstalledCallBehavior()
+	callByPath := callRecordsByPath(callInventory)
+	wantWorkflowCallBehavior, ok := callByPath["workflow"]
+	if !ok {
+		t.Fatal("call-behavior baseline missing workflow namespace")
+	}
+	assertCatalogNamespaceMatchesCallBehaviorBaseline(t, "workflow", workflowSymbol, wantWorkflowCallBehavior)
+
+	workflowMembers := []string{
+		"workflow.artifact",
+		"workflow.budget",
+		"workflow.checkpoint",
+		"workflow.final",
+		"workflow.log",
+		"workflow.resumeState",
+	}
+	for _, path := range workflowMembers {
+		symbol, ok := symbolsByPath[path]
+		if !ok {
+			t.Fatalf("catalog missing workflow member at path %q", path)
+		}
+		if got := countCatalogPaths(symbolsByPath, path); got != 1 {
+			t.Fatalf("catalog path %q appears %d times, want exactly once", path, got)
+		}
+
+		wantIdentity, ok := identityByPath[path]
+		if !ok {
+			t.Fatalf("identity baseline missing path %q", path)
+		}
+		assertCatalogMethodMatchesIdentityBaseline(t, path, symbol, wantIdentity)
+
+		wantCallBehavior, ok := callByPath[path]
+		if !ok {
+			t.Fatalf("call-behavior baseline missing path %q", path)
+		}
+		assertCatalogMethodMatchesCallBehaviorBaseline(t, path, symbol, wantCallBehavior)
+	}
+}
+
+func TestJavaScriptRuntimeAPICatalogBrokenWorkflowParentMember(t *testing.T) {
+	t.Parallel()
+
+	root, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatalf("repository root: %v", err)
+	}
+	const fixture = "contracts/testdata/javascript/invalid-broken-workflow-parent-member.json"
+	diagnostics := contractvalidator.Validate(root, javascriptManifestFixtureRegistry(fixture), "javascript", "1.0.0")
+	if len(diagnostics) == 0 {
+		t.Fatal("expected broken workflow parent/member diagnostics, got none")
+	}
+
+	wantChecks := []struct {
+		code string
+		path string
+	}{
+		{
+			code: "javascript.parent.unresolved",
+			path: "/symbols/javascript.workflow.checkpoint/parent",
+		},
+		{
+			code: "javascript.member.unresolved",
+			path: "/symbols/javascript.workflow/members/0",
+		},
+	}
+	for _, want := range wantChecks {
+		found := slices.ContainsFunc(diagnostics, func(diagnostic contractvalidator.Diagnostic) bool {
+			return diagnostic.Code == want.code &&
+				diagnostic.Path == want.path &&
+				diagnostic.Document == fixture
+		})
+		if !found {
+			t.Fatalf("diagnostics = %+v, want code=%q path=%q document=%q", diagnostics, want.code, want.path, fixture)
+		}
+	}
 }
 
 func TestJavaScriptRuntimeAPICatalogSyncRootHelpersLogAndPhase(t *testing.T) {
@@ -464,6 +564,190 @@ func assertCatalogCallableErrorsMatchBaseline(
 		if got, _ := errValue["message"].(string); got != wantErr.Message {
 			t.Fatalf("catalog %q errors[%d].message = %q, want %q", path, i, got, wantErr.Message)
 		}
+	}
+}
+
+func assertCatalogNamespaceMatchesIdentityBaseline(
+	t *testing.T,
+	path string,
+	symbol map[string]any,
+	want symbolidentity.SymbolRecord,
+) {
+	t.Helper()
+
+	if got, _ := symbol["id"].(string); got != "javascript."+path {
+		t.Fatalf("catalog %q id = %q, want %q", path, got, "javascript."+path)
+	}
+	if got, _ := symbol["name"].(string); got != want.Name {
+		t.Fatalf("catalog %q name = %q, want %q", path, got, want.Name)
+	}
+	if got, _ := symbol["path"].(string); got != want.Path {
+		t.Fatalf("catalog %q path = %q, want %q", path, got, want.Path)
+	}
+	if got, _ := symbol["kind"].(string); got != want.Kind {
+		t.Fatalf("catalog %q kind = %q, want %q", path, got, want.Kind)
+	}
+	if parent, ok := symbol["parent"].(string); ok && parent != "" {
+		t.Fatalf("catalog %q parent = %q, want no parent", path, parent)
+	}
+	membersValue, ok := symbol["members"].([]any)
+	if !ok {
+		t.Fatalf("catalog %q members = %#v, want array", path, symbol["members"])
+	}
+	gotMembers := make([]string, 0, len(membersValue))
+	for _, memberValue := range membersValue {
+		member, ok := memberValue.(string)
+		if !ok {
+			t.Fatalf("catalog %q members item = %#v, want string", path, memberValue)
+		}
+		gotMembers = append(gotMembers, member)
+	}
+	if len(gotMembers) != len(want.Members) {
+		t.Fatalf("catalog %q member count = %d, want %d", path, len(gotMembers), len(want.Members))
+	}
+	for i := range want.Members {
+		if gotMembers[i] != want.Members[i] {
+			t.Fatalf("catalog %q members[%d] = %q, want %q", path, i, gotMembers[i], want.Members[i])
+		}
+	}
+	assertCatalogValueHasDocumentationExample(t, path, symbol)
+}
+
+func assertCatalogNamespaceMatchesCallBehaviorBaseline(
+	t *testing.T,
+	path string,
+	symbol map[string]any,
+	want callbehavior.CallBehaviorRecord,
+) {
+	t.Helper()
+
+	if got, _ := symbol["mutability"].(string); got != want.Mutability {
+		t.Fatalf("catalog %q mutability = %q, want %q", path, got, want.Mutability)
+	}
+	if got, _ := symbol["nullability"].(string); got != want.Nullability {
+		t.Fatalf("catalog %q nullability = %q, want %q", path, got, want.Nullability)
+	}
+	if got, _ := symbol["bindingLifecycle"].(string); got != want.Lifecycle {
+		t.Fatalf("catalog %q bindingLifecycle = %q, want %q", path, got, want.Lifecycle)
+	}
+}
+
+func catalogExpectedSymbolID(path string) string {
+	if path == "workflow.resumeState" {
+		return "javascript.workflow.resume-state"
+	}
+	return "javascript." + path
+}
+
+func assertCatalogMethodMatchesIdentityBaseline(
+	t *testing.T,
+	path string,
+	symbol map[string]any,
+	want symbolidentity.SymbolRecord,
+) {
+	t.Helper()
+
+	wantID := catalogExpectedSymbolID(path)
+	if got, _ := symbol["id"].(string); got != wantID {
+		t.Fatalf("catalog %q id = %q, want %q", path, got, wantID)
+	}
+	if got, _ := symbol["name"].(string); got != want.Name {
+		t.Fatalf("catalog %q name = %q, want %q", path, got, want.Name)
+	}
+	if got, _ := symbol["path"].(string); got != want.Path {
+		t.Fatalf("catalog %q path = %q, want %q", path, got, want.Path)
+	}
+	if got, _ := symbol["kind"].(string); got != "method" {
+		t.Fatalf("catalog %q kind = %q, want method", path, got)
+	}
+	wantParent := "javascript." + want.Parent
+	if got, _ := symbol["parent"].(string); got != wantParent {
+		t.Fatalf("catalog %q parent = %q, want %q", path, got, wantParent)
+	}
+	if members, ok := symbol["members"].([]any); ok && len(members) > 0 {
+		t.Fatalf("catalog %q members = %#v, want no members", path, members)
+	}
+	assertCatalogValueHasDocumentationExample(t, path, symbol)
+}
+
+func assertCatalogMethodMatchesCallBehaviorBaseline(
+	t *testing.T,
+	path string,
+	symbol map[string]any,
+	want callbehavior.CallBehaviorRecord,
+) {
+	t.Helper()
+
+	if got, ok := symbol["async"].(bool); !ok || got != want.Async {
+		t.Fatalf("catalog %q async = %#v, want %v", path, symbol["async"], want.Async)
+	}
+	assertCatalogCallableParametersMatchBaseline(t, path, symbol, want.Parameters)
+	assertCatalogCallableReturnMatchesBaseline(t, path, symbol, want.Return)
+	assertCatalogCallableEmittedRecordsMatchBaseline(t, path, symbol, want.EmittedRecords)
+	assertCatalogCallableErrorsMatchBaseline(t, path, symbol, want.Errors)
+	assertCatalogPolicyChecksMatchBaseline(t, path, symbol, want.PolicyChecks)
+	assertCatalogDeterminismMatchesBaseline(t, path, symbol, want.Determinism)
+	assertCatalogResumeNotesMatchBaseline(t, path, symbol, want.ResumeNotes)
+}
+
+func assertCatalogPolicyChecksMatchBaseline(
+	t *testing.T,
+	path string,
+	symbol map[string]any,
+	want []callbehavior.PolicyCheck,
+) {
+	t.Helper()
+
+	if len(want) == 0 {
+		return
+	}
+	gotValue, ok := symbol["policyChecks"].([]any)
+	if !ok {
+		t.Fatalf("catalog %q policyChecks = %#v, want array", path, symbol["policyChecks"])
+	}
+	if len(gotValue) != len(want) {
+		t.Fatalf("catalog %q policyChecks count = %d, want %d", path, len(gotValue), len(want))
+	}
+	for i, wantCheck := range want {
+		checkValue, ok := gotValue[i].(map[string]any)
+		if !ok {
+			t.Fatalf("catalog %q policyChecks[%d] = %#v, want object", path, i, gotValue[i])
+		}
+		if got, _ := checkValue["kind"].(string); got != wantCheck.Kind {
+			t.Fatalf("catalog %q policyChecks[%d].kind = %q, want %q", path, i, got, wantCheck.Kind)
+		}
+		if wantCheck.Field != "" {
+			if got, _ := checkValue["field"].(string); got != wantCheck.Field {
+				t.Fatalf("catalog %q policyChecks[%d].field = %q, want %q", path, i, got, wantCheck.Field)
+			}
+		}
+		if wantCheck.Message != "" {
+			if got, _ := checkValue["message"].(string); got != wantCheck.Message {
+				t.Fatalf("catalog %q policyChecks[%d].message = %q, want %q", path, i, got, wantCheck.Message)
+			}
+		}
+	}
+}
+
+func assertCatalogDeterminismMatchesBaseline(t *testing.T, path string, symbol map[string]any, want string) {
+	t.Helper()
+
+	if want == "" {
+		return
+	}
+	if got, _ := symbol["determinism"].(string); got != want {
+		t.Fatalf("catalog %q determinism = %q, want %q", path, got, want)
+	}
+}
+
+func assertCatalogResumeNotesMatchBaseline(t *testing.T, path string, symbol map[string]any, want string) {
+	t.Helper()
+
+	if want == "" {
+		return
+	}
+	if got, _ := symbol["resumeNotes"].(string); got != want {
+		t.Fatalf("catalog %q resumeNotes = %q, want %q", path, got, want)
 	}
 }
 

@@ -1,0 +1,102 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "javascript.workflow": {
+      "id": "javascript.workflow",
+      "name": "workflow",
+      "path": "workflow",
+      "kind": "namespace",
+      "members": [
+        "artifact",
+        "checkpoint"
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow",
+        "documentation": {
+          "title": {
+            "id": "javascript.workflow.title",
+            "canonicalEnglish": "Workflow namespace"
+          },
+          "description": {
+            "id": "javascript.workflow.description",
+            "canonicalEnglish": "Fixture namespace with one unresolved member and one broken parent link."
+          }
+        },
+        "examples": [
+          "workflow.checkpoint"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
+    },
+    "javascript.workflow.checkpoint": {
+      "id": "javascript.workflow.checkpoint",
+      "name": "checkpoint",
+      "path": "workflow.checkpoint",
+      "kind": "method",
+      "parent": "javascript.missing.workflow",
+      "async": false,
+      "parameters": [
+        {
+          "id": "javascript.workflow.checkpoint.param.spec",
+          "name": "spec",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "label"
+            ]
+          }
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.checkpoint",
+        "documentation": {
+          "title": {
+            "id": "javascript.workflow.checkpoint.title",
+            "canonicalEnglish": "Workflow checkpoint"
+          },
+          "description": {
+            "id": "javascript.workflow.checkpoint.description",
+            "canonicalEnglish": "Fixture method with a parent reference that does not resolve."
+          }
+        },
+        "examples": [
+          "workflow.checkpoint({ label: \"draft\" })"
+        ],
+        "visibility": "public",
+        "sourceHash": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.checkpoint",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}
