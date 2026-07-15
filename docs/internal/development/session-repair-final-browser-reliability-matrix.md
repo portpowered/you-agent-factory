@@ -64,9 +64,12 @@ proofs and should not be copied into new variants.
 Results in this section must be refreshed after the last documentation or
 contract change; results from an earlier revision are not reusable.
 
-The following commands ran on 2026-07-15 UTC against the final story 003
-working tree containing this matrix revision and the hermetic contract-staging
-Git fixture repair.
+The following commands ran on 2026-07-15 UTC against immutable evidence
+revision `session-repair-persistence-evidence-closeout-20260715-r2`: the exact
+final deliverable tree containing this identifier, the consolidated preflight
+ownership map, and the hermetic contract-staging Git fixture repair. PR #1151's
+conversation maps this evidence revision to the exact pushed commit SHA after
+the commit exists.
 
 | Gate | Final-revision result |
 | --- | --- |
