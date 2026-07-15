@@ -22,6 +22,12 @@
           "you docs run"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.docs",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -62,6 +68,7 @@
             "batch-work",
             "templates"
           ],
+          "pattern": "",
           "doubleDash": "terminates-flags",
           "completion": "static",
           "channels": [
@@ -74,79 +81,139 @@
           "id": "you.docs.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.docs.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.docs.flag.default-worker-model": {
           "id": "you.docs.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.docs.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.docs.flag.default-worker-model-provider": {
           "id": "you.docs.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.docs.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.docs.flag.json": {
           "id": "you.docs.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.docs.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.docs.flag.server": {
           "id": "you.docs.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.docs.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.docs.flag.verbose": {
           "id": "you.docs.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.docs.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -235,6 +302,12 @@
           "you models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"hello\" --output ./speech.wav"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.models",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": false,
       "usage": {
@@ -246,79 +319,139 @@
           "id": "you.models.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.flag.default-worker-model": {
           "id": "you.models.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.flag.default-worker-model-provider": {
           "id": "you.models.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.flag.json": {
           "id": "you.models.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.flag.server": {
           "id": "you.models.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.flag.verbose": {
           "id": "you.models.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -352,6 +485,12 @@
           "you --json models inspect OMNIVOICE_Q4_K_M"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.models.inspect",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -369,6 +508,8 @@
           "minCardinality": 1,
           "maxCardinality": 1,
           "variadic": false,
+          "enum": [],
+          "pattern": "",
           "doubleDash": "terminates-flags",
           "completion": "none",
           "channels": [
@@ -381,92 +522,162 @@
           "id": "you.models.inspect.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.inspect.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.inspect.flag.default-worker-model": {
           "id": "you.models.inspect.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.inspect.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.inspect.flag.default-worker-model-provider": {
           "id": "you.models.inspect.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.inspect.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.inspect.flag.json": {
           "id": "you.models.inspect.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.inspect.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.inspect.flag.port": {
           "id": "you.models.inspect.flag.port",
           "long": "port",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "int",
           "required": false,
           "default": "0",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "hidden"
+          "binding": "",
+          "visibility": "hidden",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.inspect.flag.port",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.inspect.flag.server": {
           "id": "you.models.inspect.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.inspect.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.inspect.flag.verbose": {
           "id": "you.models.inspect.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.inspect.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -560,6 +771,12 @@
           "you --json models invoke OMNIVOICE_Q4_K_M --operation TTS --text \"Read the release summary.\""
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.models.invoke",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -577,6 +794,8 @@
           "minCardinality": 1,
           "maxCardinality": 1,
           "variadic": false,
+          "enum": [],
+          "pattern": "",
           "doubleDash": "terminates-flags",
           "completion": "none",
           "channels": [
@@ -589,131 +808,231 @@
           "id": "you.models.invoke.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.invoke.flag.default-worker-model": {
           "id": "you.models.invoke.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.invoke.flag.default-worker-model-provider": {
           "id": "you.models.invoke.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.invoke.flag.json": {
           "id": "you.models.invoke.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.invoke.flag.operation": {
           "id": "you.models.invoke.flag.operation",
           "long": "operation",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "TTS",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.operation",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.invoke.flag.output": {
           "id": "you.models.invoke.flag.output",
           "long": "output",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.output",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.invoke.flag.port": {
           "id": "you.models.invoke.flag.port",
           "long": "port",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "int",
           "required": false,
           "default": "0",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "hidden"
+          "binding": "",
+          "visibility": "hidden",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.port",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.invoke.flag.server": {
           "id": "you.models.invoke.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.invoke.flag.text": {
           "id": "you.models.invoke.flag.text",
           "long": "text",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.text",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.invoke.flag.verbose": {
           "id": "you.models.invoke.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.invoke.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -815,6 +1134,12 @@
           "you --json models list"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.models.list",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -826,92 +1151,162 @@
           "id": "you.models.list.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.list.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.list.flag.default-worker-model": {
           "id": "you.models.list.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.list.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.list.flag.default-worker-model-provider": {
           "id": "you.models.list.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.list.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.list.flag.json": {
           "id": "you.models.list.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.list.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.list.flag.port": {
           "id": "you.models.list.flag.port",
           "long": "port",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "int",
           "required": false,
           "default": "0",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "hidden"
+          "binding": "",
+          "visibility": "hidden",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.list.flag.port",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.list.flag.server": {
           "id": "you.models.list.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.list.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.list.flag.verbose": {
           "id": "you.models.list.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.list.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {
@@ -1005,6 +1400,12 @@
           "you --json models pull OMNIVOICE_Q4_K_M"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.models.pull",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -1022,6 +1423,8 @@
           "minCardinality": 1,
           "maxCardinality": 1,
           "variadic": false,
+          "enum": [],
+          "pattern": "",
           "doubleDash": "terminates-flags",
           "completion": "none",
           "channels": [
@@ -1034,92 +1437,162 @@
           "id": "you.models.pull.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.pull.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.pull.flag.default-worker-model": {
           "id": "you.models.pull.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.pull.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.pull.flag.default-worker-model-provider": {
           "id": "you.models.pull.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.pull.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.pull.flag.json": {
           "id": "you.models.pull.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.pull.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.pull.flag.port": {
           "id": "you.models.pull.flag.port",
           "long": "port",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "int",
           "required": false,
           "default": "0",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "hidden"
+          "binding": "",
+          "visibility": "hidden",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.pull.flag.port",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.pull.flag.server": {
           "id": "you.models.pull.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.pull.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.models.pull.flag.verbose": {
           "id": "you.models.pull.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.models.pull.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "precedence": {

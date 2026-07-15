@@ -7,6 +7,7 @@
       "name": "mcp",
       "path": "you mcp",
       "aliases": [],
+      "completeness": "authoritative",
       "documentation": {
         "documentation": {
           "title": {
@@ -19,6 +20,12 @@
         "examples": [
           "you mcp serve"
         ]
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.mcp",
+        "state": "active",
+        "since": "1.0.0"
       },
       "visibility": "visible",
       "runnable": false,
@@ -62,6 +69,7 @@
       "name": "serve",
       "path": "you mcp serve",
       "aliases": [],
+      "completeness": "authoritative",
       "documentation": {
         "documentation": {
           "title": {
@@ -77,6 +85,12 @@
           "you mcp serve --runtime"
         ]
       },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "you.mcp.serve",
+        "state": "active",
+        "since": "1.0.0"
+      },
       "visibility": "visible",
       "runnable": true,
       "usage": {
@@ -88,118 +102,208 @@
           "id": "you.mcp.serve.flag.debug",
           "long": "debug",
           "shorthand": "d",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.mcp.serve.flag.debug",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.mcp.serve.flag.default-worker-model": {
           "id": "you.mcp.serve.flag.default-worker-model",
           "long": "default-worker-model",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.mcp.serve.flag.default-worker-model",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.mcp.serve.flag.default-worker-model-provider": {
           "id": "you.mcp.serve.flag.default-worker-model-provider",
           "long": "default-worker-model-provider",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.mcp.serve.flag.default-worker-model-provider",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.mcp.serve.flag.fixture-catalog": {
           "id": "you.mcp.serve.flag.fixture-catalog",
           "long": "fixture-catalog",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.mcp.serve.flag.fixture-catalog",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.mcp.serve.flag.json": {
           "id": "you.mcp.serve.flag.json",
           "long": "json",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.mcp.serve.flag.json",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.mcp.serve.flag.project-root": {
           "id": "you.mcp.serve.flag.project-root",
           "long": "project-root",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "string",
           "required": false,
           "default": "",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "trim",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.mcp.serve.flag.project-root",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.mcp.serve.flag.runtime": {
           "id": "you.mcp.serve.flag.runtime",
           "long": "runtime",
           "shorthand": "",
+          "aliases": [],
           "scope": "local",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.mcp.serve.flag.runtime",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.mcp.serve.flag.server": {
           "id": "you.mcp.serve.flag.server",
           "long": "server",
           "shorthand": "",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "string",
           "required": false,
           "default": "http://localhost:7437",
           "changedDefault": false,
           "noOptionDefault": "",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.mcp.serve.flag.server",
+            "state": "active",
+            "since": "1.0.0"
+          }
         },
         "you.mcp.serve.flag.verbose": {
           "id": "you.mcp.serve.flag.verbose",
           "long": "verbose",
           "shorthand": "v",
+          "aliases": [],
           "scope": "inherited",
           "valueType": "bool",
           "required": false,
           "default": "false",
           "changedDefault": false,
           "noOptionDefault": "true",
+          "repeatable": false,
+          "normalization": "",
           "completion": "none",
-          "visibility": "visible"
+          "binding": "",
+          "visibility": "visible",
+          "lifecycle": {
+            "formatVersion": "1.0.0",
+            "itemId": "you.mcp.serve.flag.verbose",
+            "state": "active",
+            "since": "1.0.0"
+          }
         }
       },
       "relationships": {

@@ -271,6 +271,15 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   Keep their generated stable-ID lists source-labeled and disjoint; `Check` must
   report the affected stable IDs for drift, and generation must reject either
   family when its IDs appear in the wrong classification source.
+- Whole-production-tree CLI boundary validation lives in
+  `pkg/transports/cli/clicontract`. `CheckProduction` joins the read-only
+  `commandidentity.Walk` inventory with `contracts/cli/commands.json`, approved
+  callable entries from `contracts/cli/deprecated.json`, the separately authored
+  compatibility metadata in `contracts/cli/deprecated-commands.json`, and every
+  embedded generated family manifest. Keep this check free of command execution,
+  services, and network access; preserve full lifecycle and input/completion
+  fields in `climanifest` so generated freshness comparisons cannot silently
+  discard authored metadata before validation.
 - Workflow/MCP handwritten handler binding lives in
   `pkg/transports/cli/commandregistry/workflowmcp`. Keep canonical MCP and
   workflow-compatibility registries separate, verify each against its own
