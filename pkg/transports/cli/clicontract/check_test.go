@@ -34,6 +34,52 @@ func TestCheckProductionAcceptsCompleteApprovedTree(t *testing.T) {
 	}
 }
 
+func TestCheckProductionViolationUsesProductionDiagnosticsWithoutMutatingTree(t *testing.T) {
+	tests := []struct {
+		violation DeliberateViolation
+		kind      string
+		stableID  string
+		path      string
+		field     string
+	}{
+		{ViolationUncontractedCommand, KindUncontractedCommand, "you.experimental", "you experimental", ""},
+		{ViolationStaleMetadata, KindStaleMetadata, "you", "you", "name"},
+		{ViolationMissingHandler, KindMissingHandler, "you.run", "you run", "handler"},
+		{ViolationAliasAsCanonical, KindAliasAsCanonical, "you.workflow.preview", "you workflow preview", "classification"},
+	}
+
+	for _, tc := range tests {
+		t.Run(string(tc.violation), func(t *testing.T) {
+			root := cli.NewRootCommand()
+			before, err := commandidentity.Walk(root)
+			if err != nil {
+				t.Fatalf("Walk(before) error = %v", err)
+			}
+
+			findings, err := CheckProductionViolation(root, repositoryRoot(t), tc.violation)
+			if err != nil {
+				t.Fatalf("CheckProductionViolation() error = %v", err)
+			}
+			assertFinding(t, findings, tc.kind, tc.stableID, tc.path, tc.field)
+
+			after, err := commandidentity.Walk(root)
+			if err != nil {
+				t.Fatalf("Walk(after) error = %v", err)
+			}
+			if !reflect.DeepEqual(before, after) {
+				t.Fatal("CheckProductionViolation mutated the Cobra command tree")
+			}
+		})
+	}
+}
+
+func TestCheckProductionViolationRejectsUnknownFixture(t *testing.T) {
+	findings, err := CheckProductionViolation(cli.NewRootCommand(), repositoryRoot(t), DeliberateViolation("unknown"))
+	if err == nil || err.Error() != `unknown deliberate CLI contract violation "unknown"` {
+		t.Fatalf("CheckProductionViolation() findings = %#v, error = %v", findings, err)
+	}
+}
+
 func TestValidateRejectsMissingAndUncontractedProductionCommands(t *testing.T) {
 	input := productionInput(t)
 	commands := append([]commandidentity.CommandRecord(nil), input.Production.Commands...)
