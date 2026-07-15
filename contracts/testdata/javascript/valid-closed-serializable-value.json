@@ -1,0 +1,112 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.closed-serializable": {
+      "id": "example.closed-serializable",
+      "name": "checkpoint",
+      "path": "workflow.checkpoint",
+      "kind": "function",
+      "async": false,
+      "parameters": [
+        {
+          "id": "example.closed-serializable.param.spec",
+          "name": "spec",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "state": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            },
+            "required": [
+              "label"
+            ]
+          }
+        },
+        {
+          "id": "example.closed-serializable.param.payload",
+          "name": "payload",
+          "position": 1,
+          "required": false,
+          "rest": false,
+          "type": "json-compatible",
+          "serializableValue": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "array"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {}
+              }
+            ]
+          }
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "object",
+        "serializableValue": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "accepted": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "accepted"
+          ]
+        }
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.closed-serializable",
+        "documentation": {
+          "title": {
+            "id": "example.closed-serializable.title",
+            "canonicalEnglish": "Closed serializable checkpoint"
+          },
+          "description": {
+            "id": "example.closed-serializable.description",
+            "canonicalEnglish": "Demonstrates closed object and json-compatible serializable-value schemas."
+          }
+        },
+        "examples": [
+          "workflow.checkpoint({ label: \"draft\" }, { step: 1 })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.closed-serializable",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

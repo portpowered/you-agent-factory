@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.portpowered.com/you/contracts/javascript/runtime-manifest.schema.json",
   "title": "JavaScript runtime symbol manifest",
-  "description": "Authored installed-runtime symbol metadata for globals, nested namespaces, values, and callable signatures. Semantic integrity checks for duplicate paths, parent references, member resolution, and supported surfaces are validated by family-specific diagnostics after schema validation.",
+  "description": "Authored installed-runtime symbol metadata for globals, nested namespaces, values, and callable signatures. Semantic integrity checks for duplicate paths, parent references, member resolution, callable parameter ordering, closed serializable-value schemas, and supported surfaces are validated by family-specific diagnostics after schema validation.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -60,6 +60,11 @@
         "string",
         "undefined"
       ]
+    },
+    "serializableValue": {
+      "description": "Closed Draft 2020-12 JSON Schema fragment describing serializable argument or return values.",
+      "type": "object",
+      "minProperties": 1
     },
     "syncReturnType": {
       "description": "Descriptive synchronous return type label.",
@@ -127,6 +132,9 @@
         },
         "type": {
           "$ref": "#/$defs/parameterType"
+        },
+        "serializableValue": {
+          "$ref": "#/$defs/serializableValue"
         }
       },
       "allOf": [
@@ -172,6 +180,50 @@
               ]
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "object",
+                  "json-compatible"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "serializableValue"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "not": {
+                  "enum": [
+                    "object",
+                    "json-compatible"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "serializableValue"
+              ]
+            }
+          }
         }
       ]
     },
@@ -196,8 +248,57 @@
         },
         "type": {
           "$ref": "#/$defs/syncReturnType"
+        },
+        "serializableValue": {
+          "$ref": "#/$defs/serializableValue"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "object",
+                  "object-or-undefined"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "serializableValue"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "not": {
+                  "enum": [
+                    "object",
+                    "object-or-undefined"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "serializableValue"
+              ]
+            }
+          }
+        }
+      ]
     },
     "promiseReturn": {
       "description": "Promise return metadata for an asynchronous callable symbol.",

@@ -1,0 +1,59 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.bad.rest-not-last": {
+      "id": "example.bad.rest-not-last",
+      "name": "pipeline",
+      "path": "pipeline",
+      "kind": "function",
+      "async": true,
+      "parameters": [
+        {
+          "id": "example.bad.rest-not-last.param.rest",
+          "name": "rest",
+          "position": 0,
+          "required": false,
+          "rest": true,
+          "type": "any"
+        },
+        {
+          "id": "example.bad.rest-not-last.param.trailing",
+          "name": "trailing",
+          "position": 1,
+          "required": false,
+          "rest": false,
+          "type": "string"
+        }
+      ],
+      "return": {
+        "kind": "promise",
+        "type": "void"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.bad.rest-not-last",
+        "documentation": {
+          "title": {
+            "id": "example.bad.rest-not-last.title",
+            "canonicalEnglish": "Invalid rest placement"
+          },
+          "description": {
+            "id": "example.bad.rest-not-last.description",
+            "canonicalEnglish": "Fixture proving rest parameters must be last in the signature."
+          }
+        },
+        "examples": [
+          "await pipeline()"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.bad.rest-not-last",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

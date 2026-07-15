@@ -1,0 +1,59 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.bad.position-gap": {
+      "id": "example.bad.position-gap",
+      "name": "phase",
+      "path": "phase",
+      "kind": "function",
+      "async": false,
+      "parameters": [
+        {
+          "id": "example.bad.position-gap.param.first",
+          "name": "first",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "string"
+        },
+        {
+          "id": "example.bad.position-gap.param.second",
+          "name": "second",
+          "position": 2,
+          "required": true,
+          "rest": false,
+          "type": "string"
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.bad.position-gap",
+        "documentation": {
+          "title": {
+            "id": "example.bad.position-gap.title",
+            "canonicalEnglish": "Invalid position gap"
+          },
+          "description": {
+            "id": "example.bad.position-gap.description",
+            "canonicalEnglish": "Fixture proving callable parameter positions must be contiguous."
+          }
+        },
+        "examples": [
+          "phase(\"a\", \"b\")"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.bad.position-gap",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

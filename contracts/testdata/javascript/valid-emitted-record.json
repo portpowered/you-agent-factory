@@ -23,7 +23,12 @@
           "required": false,
           "rest": false,
           "type": "object",
-          "default": "{}"
+          "default": "{}",
+          "serializableValue": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          }
         }
       ],
       "return": {

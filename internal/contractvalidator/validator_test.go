@@ -69,6 +69,24 @@ func TestValidateJavaScriptInvalidManifestDiagnostics(t *testing.T) {
 			code:     "javascript.member.unresolved",
 			wantPath: "/symbols/example.workflow/members/2",
 		},
+		{
+			name:     "duplicate parameter positions",
+			fixture:  "contracts/testdata/javascript/invalid-signature-duplicate-position.json",
+			code:     "javascript.signature.duplicate_position",
+			wantPath: "/symbols/example.bad.duplicate-position/parameters/1/position",
+		},
+		{
+			name:     "rest parameter not last",
+			fixture:  "contracts/testdata/javascript/invalid-signature-rest-not-last.json",
+			code:     "javascript.signature.rest_not_last",
+			wantPath: "/symbols/example.bad.rest-not-last/parameters/0/rest",
+		},
+		{
+			name:     "open serializable value schema",
+			fixture:  "contracts/testdata/javascript/invalid-open-serializable-value.json",
+			code:     "javascript.serializable_value.open",
+			wantPath: "/symbols/example.bad.open-serializable/parameters/0/serializableValue",
+		},
 	}
 
 	for _, test := range tests {

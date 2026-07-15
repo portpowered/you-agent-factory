@@ -171,6 +171,67 @@ func TestRuntimeManifestSchemaSymbolIntegrityFixtures(t *testing.T) {
 	}
 }
 
+func TestRuntimeManifestSchemaSignatureAndSerializableFixtures(t *testing.T) {
+	schema := runtimeManifestSchema(t)
+
+	tests := []struct {
+		name     string
+		fixture  string
+		valid    bool
+		wantPath string
+	}{
+		{name: "closed serializable values", fixture: "valid-closed-serializable-value.json", valid: true},
+		{
+			name:     "duplicate parameter positions",
+			fixture:  "invalid-signature-duplicate-position.json",
+			wantPath: "/symbols/example.bad.duplicate-position/parameters/1/position",
+		},
+		{
+			name:     "rest parameter not last",
+			fixture:  "invalid-signature-rest-not-last.json",
+			wantPath: "/symbols/example.bad.rest-not-last/parameters/0/rest",
+		},
+		{
+			name:     "parameter position gap",
+			fixture:  "invalid-signature-position-gap.json",
+			wantPath: "/symbols/example.bad.position-gap/parameters/0/position",
+		},
+		{
+			name:     "open serializable value schema",
+			fixture:  "invalid-open-serializable-value.json",
+			wantPath: "/symbols/example.bad.open-serializable/parameters/0/serializableValue",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			instance := readJSON(t, filepath.Join("testdata", "javascript", test.fixture))
+			err := schema.Validate(instance)
+			if test.valid {
+				if err != nil {
+					t.Fatalf("validate valid fixture: %v", err)
+				}
+				diagnostics := contractvalidator.RuntimeManifestSemanticsDiagnostics(test.fixture, instance)
+				if len(diagnostics) != 0 {
+					t.Fatalf("semantic diagnostics = %#v, want none", diagnostics)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("schema validation should pass before semantics: %v", err)
+			}
+			diagnostics := contractvalidator.RuntimeManifestSemanticsDiagnostics(test.fixture, instance)
+			if len(diagnostics) == 0 {
+				t.Fatal("expected semantic validation to fail")
+			}
+			paths := semanticDiagnosticPaths(diagnostics)
+			if !slices.Contains(paths, test.wantPath) {
+				t.Fatalf("semantic paths = %v, want %q", paths, test.wantPath)
+			}
+		})
+	}
+}
+
 func TestRuntimeManifestSchemaObjectBindingFixtures(t *testing.T) {
 	schema := runtimeManifestSchema(t)
 

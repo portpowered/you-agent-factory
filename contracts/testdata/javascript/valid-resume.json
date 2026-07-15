@@ -53,7 +53,20 @@
           "position": 0,
           "required": true,
           "rest": false,
-          "type": "object"
+          "type": "object",
+          "serializableValue": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "state": {}
+            },
+            "required": [
+              "label"
+            ]
+          }
         }
       ],
       "return": {
@@ -100,7 +113,20 @@
       "parameters": [],
       "return": {
         "kind": "sync",
-        "type": "object-or-undefined"
+        "type": "object-or-undefined",
+        "serializableValue": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "state": {}
+          },
+          "required": [
+            "label"
+          ]
+        }
       },
       "resumeNotes": "Returns bound resume checkpoint state or undefined when absent.",
       "documentation": {

@@ -52,7 +52,34 @@
           "position": 0,
           "required": true,
           "rest": false,
-          "type": "object"
+          "type": "object",
+          "serializableValue": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "prompt": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "preset": {
+                "type": "string"
+              },
+              "modelProvider": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "reasoningEffort": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "prompt"
+            ]
+          }
         }
       ],
       "return": {
