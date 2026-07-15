@@ -1,8 +1,6 @@
 package mockworkers
 
 import (
-	"crypto/sha256"
-	"fmt"
 	"strings"
 	"unicode"
 )
@@ -30,11 +28,6 @@ func DocumentationItemID(inventoryID string) string {
 	trimmed := strings.TrimPrefix(inventoryID, "mockWorkers[].")
 	trimmed = strings.ReplaceAll(trimmed, "[]", "")
 	return DocumentationIDPrefix + "." + camelPathToKebab(trimmed)
-}
-
-// DocumentationSourceHash returns a deterministic SHA-256 digest for contract metadata.
-func DocumentationSourceHash(parts ...string) string {
-	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(parts, "\n"))))
 }
 
 func camelPathToKebab(path string) string {
