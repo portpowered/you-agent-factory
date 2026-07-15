@@ -239,6 +239,13 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `pkg/transports/cli/climanifestparity` must compare help, parsing, completion,
   handler outcomes, stdout/stderr, and success/failure behavior before this
   production cutover is changed.
+- MCP protocol and resume smokes in `pkg/transports/cli/mcp/serve_*_test.go`
+  should enter through `cli.NewRootCommandWithOptions` and the injected startup
+  boundary, then delegate to the existing `mcp.RunServe` implementation with the
+  exact parsed stdio streams. This keeps fixture/runtime selection, JSON-RPC,
+  EOF/cancellation, and durable resume assertions attached to the generated
+  production `you mcp serve` construction instead of proving only its detached
+  handwritten execution adapter.
 - Production CLI command manifest parity for the root + `session show` family lives in
   `pkg/transports/cli/climanifest` (`LoadProduction`, `ProductionManifestPath`) and
   `pkg/transports/cli/climanifestparity` (`CompareDeclaredHandler`,

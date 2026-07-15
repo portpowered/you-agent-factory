@@ -214,9 +214,14 @@ func startConPTYProcess(launch ProcessLaunch, conptyHandle windows.Handle) (*exe
 	}
 	defer attrList.Delete()
 
+	// PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE expects the HPCON value itself in
+	// lpValue, not the address of the handle. Reinterpret the handle-sized value
+	// without a uintptr-to-pointer conversion so go vet can distinguish this
+	// Win32 handle ABI from Go pointer arithmetic.
+	conptyAttribute := *(*unsafe.Pointer)(unsafe.Pointer(&conptyHandle))
 	if err := attrList.Update(
 		windows.PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
-		unsafe.Pointer(conptyHandle),
+		conptyAttribute,
 		unsafe.Sizeof(conptyHandle),
 	); err != nil {
 		return nil, 0, err
