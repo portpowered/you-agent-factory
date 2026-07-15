@@ -33,9 +33,103 @@
     "protocolFailures": {
       "description": "JSON-RPC protocol failure documentation distinct from tool domain failures.",
       "$ref": "#/$defs/protocolFailureDocumentation"
+    },
+    "sharedSchemas": {
+      "description": "Reusable named schemas keyed by stable mcp.schema.* identifiers for cross-tool argument, result, error, encoding, transport, lifecycle, and handler vocabulary.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/sharedSchemaId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/sharedNamedSchema"
+      }
     }
   },
   "$defs": {
+    "sharedSchemaId": {
+      "description": "Stable MCP shared schema identity with the mcp.schema prefix.",
+      "allOf": [
+        {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        {
+          "pattern": "^mcp[.]schema[.].+"
+        }
+      ]
+    },
+    "sharedNamedSchema": {
+      "description": "One reusable named schema entry referenced by canonical tool records.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/sharedSchemaId"
+        },
+        "documentation": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+        },
+        "schema": {
+          "$ref": "#/$defs/closedDraftSchema"
+        },
+        "resultTransport": {
+          "$ref": "#/$defs/toolResultTransport"
+        },
+        "callToolResult": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/mcp/protocol/call-tool-result.schema.json#/$defs/pinnedTextCallToolResult"
+        },
+        "transports": {
+          "description": "Supported MCP transports for discovery and tools/call invocation.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/transport"
+          }
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        },
+        "handler": {
+          "$ref": "#/$defs/handler"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "schema"
+          ]
+        },
+        {
+          "required": [
+            "resultTransport"
+          ]
+        },
+        {
+          "required": [
+            "callToolResult"
+          ]
+        },
+        {
+          "required": [
+            "transports"
+          ]
+        },
+        {
+          "required": [
+            "lifecycle"
+          ]
+        },
+        {
+          "required": [
+            "handler"
+          ]
+        }
+      ]
+    },
     "toolId": {
       "description": "Stable MCP tool identity with the mcp.tool prefix.",
       "allOf": [
@@ -208,7 +302,7 @@
       }
     },
     "closedSchemaNode": {
-      "description": "Recursive Draft schema node requiring closed objects and closed array items.",
+      "description": "Recursive Draft schema node requiring explicit object openness and closed array items.",
       "type": "object",
       "allOf": [
         {
@@ -228,30 +322,48 @@
             ],
             "properties": {
               "additionalProperties": {
-                "const": false
-              },
-              "properties": {
-                "type": "object",
-                "additionalProperties": {
-                  "$ref": "#/$defs/closedSchemaNode"
-                }
-              },
-              "patternProperties": {
-                "type": "object",
-                "additionalProperties": {
-                  "$ref": "#/$defs/closedSchemaNode"
-                }
-              },
-              "propertyNames": {
-                "$ref": "#/$defs/closedSchemaNode"
-              },
-              "$defs": {
-                "type": "object",
-                "additionalProperties": {
-                  "$ref": "#/$defs/closedSchemaNode"
+                "type": "boolean"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "additionalProperties": {
+                      "const": false
+                    }
+                  },
+                  "required": [
+                    "additionalProperties"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "properties": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/$defs/closedSchemaNode"
+                      }
+                    },
+                    "patternProperties": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/$defs/closedSchemaNode"
+                      }
+                    },
+                    "propertyNames": {
+                      "$ref": "#/$defs/closedSchemaNode"
+                    },
+                    "$defs": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/$defs/closedSchemaNode"
+                      }
+                    }
+                  }
                 }
               }
-            }
+            ]
           }
         },
         {

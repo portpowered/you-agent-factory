@@ -130,7 +130,7 @@ func MCPRegistry() Registry {
 			{ID: toolCatalogID, Path: "contracts/mcp/tool-catalog.schema.json"},
 		},
 		Documents: []Document{
-			{Path: "contracts/testdata/mcp/valid-minimal.json", SchemaID: toolCatalogID},
+			{Path: "contracts/mcp/tools.json", SchemaID: toolCatalogID},
 			{Path: "contracts/testdata/mcp/valid-input-closed-nested.json", SchemaID: toolCatalogID},
 			{Path: "contracts/testdata/mcp/valid-text-success-result.json", SchemaID: toolCatalogID},
 			{Path: "contracts/testdata/mcp/valid-text-error-result.json", SchemaID: toolCatalogID},
@@ -195,6 +195,8 @@ func ValidateAll(repositoryRoot string, registry Registry) []Diagnostic {
 	return diagnostics
 }
 
+const toolCatalogSchemaID = "https://schemas.portpowered.com/you/contracts/mcp/tool-catalog.schema.json"
+
 func validateEntry(repositoryRoot string, entry Entry) []Diagnostic {
 	compiler := jsonschema.NewCompiler()
 	compiler.DefaultDraft(jsonschema.Draft2020)
@@ -248,6 +250,11 @@ func validateEntry(repositoryRoot string, entry Entry) []Diagnostic {
 		}
 		if document.SchemaID == runtimeManifestSchemaID {
 			diagnostics = append(diagnostics, runtimeManifestDiagnostics(document.Path, value)...)
+		}
+		if document.SchemaID == toolCatalogSchemaID {
+			diagnostics = append(diagnostics, mcpToolCatalogIdentityDiagnostics(document.Path, value)...)
+			diagnostics = append(diagnostics, mcpToolCatalogInputSchemaDiagnostics(document.Path, value)...)
+			diagnostics = append(diagnostics, mcpToolCatalogPublicationDiagnostics(document.Path, value)...)
 		}
 		for _, source := range sourceDocuments {
 			loadedDocuments[source.path] = source

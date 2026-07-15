@@ -52,7 +52,7 @@ var mcpInvalidCatalogDiagnosticCases = []struct {
 		name:     "open nested input object",
 		fixture:  "contracts/testdata/mcp/invalid-open-nested-input.json",
 		code:     "schema.validation",
-		wantPath: "/tools/mcp.tool.you.factory_session.start_async/input/schema/properties/source/additionalProperties",
+		wantPath: "/tools/mcp.tool.you.factory_session.start_async/input/schema/properties/source",
 	},
 	{
 		name:     "unsupported task behavior",
@@ -106,7 +106,7 @@ var mcpInvalidCatalogDiagnosticCases = []struct {
 		name:     "broken handler ID",
 		fixture:  "contracts/testdata/mcp/invalid-handler-id.json",
 		code:     "schema.validation",
-		wantPath: "/tools/mcp.tool.you.factory_session.read_events/handler/id",
+		wantPath: "/tools/mcp.tool.you.factory_session.control/handler/id",
 	},
 	{
 		name:     "unknown protocol version",
@@ -118,7 +118,7 @@ var mcpInvalidCatalogDiagnosticCases = []struct {
 		name:     "malformed lifecycle record",
 		fixture:  "contracts/testdata/mcp/invalid-malformed-lifecycle.json",
 		code:     "schema.validation",
-		wantPath: "/tools/mcp.tool.you.factory_session.start_sync/lifecycle",
+		wantPath: "/tools/mcp.tool.you.factory_session.control/lifecycle",
 	},
 	{
 		name:     "malformed documentation record",

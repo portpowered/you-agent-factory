@@ -148,17 +148,73 @@ Use this map when changing the public REST contract.
   `2024-11-05`, format version `1.0.0`). Tool records compose B04 documentation
   and lifecycle shapes via `$ref` to `contracts/common/documentation.schema.json`
   and `contracts/common/deprecations.schema.json`.
+- Authored MCP tool catalog document lives at `contracts/mcp/tools.json` with
+  `sharedSchemas` keyed by stable `mcp.schema.*` identifiers for reusable source,
+  wait, domain-error, transport, lifecycle, handler, and CallToolResult vocabulary.
+  Tool records may reference shared schemas through in-document `$ref` pointers
+  resolved by `internal/contractvalidator` before schema validation.
+- Authored catalog identity completeness is proven by
+  `pkg/transports/mcp/factorysession/catalog/catalog_identity.go`
+  (`CatalogToolIdentitiesFromCatalogDocument`, `VerifyCatalogToolIdentityCompleteness`,
+  `CatalogToolIDForName`) against `DiscoverTools()` stable ID (`mcp.tool.<name>`)
+  and public name parity; compatibility alias names are rejected. Wire the check
+  into `make contracts-validate` for `contracts/mcp/tools.json` via
+  `internal/contractvalidator/mcp_tool_catalog_identity.go`, and prove success
+  plus missing/extra/duplicate/alias failures in
+  `contracts/mcp_tool_catalog_identity_test.go` and
+  `pkg/transports/mcp/factorysession/catalog/catalog_identity_test.go`.
+- Authored catalog input-schema parity is proven by
+  `pkg/transports/mcp/factorysession/catalog/catalog_input_schema.go`
+  (`CatalogInputSchemasFromCatalogDocument`, `PrepareCatalogInputSchemaForParity`,
+  `VerifyCatalogInputSchemaParity`) against resolved `input.schema` maps and
+  `DiscoverTools()` semantics; wire into `make contracts-validate` via
+  `internal/contractvalidator/mcp_tool_catalog_input_schema.go`, and prove
+  success plus nested valid/invalid argument validation in
+  `contracts/mcp_tool_catalog_input_schema_test.go` and
+  `pkg/transports/mcp/factorysession/catalog/catalog_input_schema_test.go`.
+- Authored catalog publication guards live in
+  `pkg/transports/mcp/factorysession/catalog/catalog_publication.go`
+  (`VerifyCatalogAliasExclusion`, `VerifyCatalogModalityPolicy`,
+  `VerifyAuthoredCatalogStagingBoundary`, `MarshalCatalogDocumentJSON`,
+  `VerifyCatalogByteStability`). Wire alias exclusion, text-only modality,
+  staging-boundary separation from `packages/api/generated/mcp/tools.json`, and
+  byte-stable canonical serialization into `make contracts-validate` for
+  `contracts/mcp/tools.json` via
+  `internal/contractvalidator/mcp_tool_catalog_publication.go`; prove success and
+  failure paths in `contracts/mcp_tool_catalog_publication_test.go` and
+  `pkg/transports/mcp/factorysession/catalog/catalog_publication_test.go`. Staged MCP
+  tools remain projected only from `contracts/testdata/baseline/mcp-tools.json`
+  through `internal/contractstaging/policy.go`, not from the authored catalog.
 - Valid MCP catalog fixtures live under `contracts/testdata/mcp/` and register
   through `internal/contractvalidator.MCPRegistry()` into
-  `make contracts-validate`. Invalid fixtures are asserted in focused
+  `make contracts-validate`. The authored `contracts/mcp/tools.json` registers in
+  `MCPRegistry()`; `valid-minimal.json` remains a focused schema fixture only.
+  Registry-valid fixtures must not reuse stable documentation IDs already claimed
+  by an authored `contracts/mcp/tools.json` tool record; retarget overlapping
+  fixtures to uncontracted tools with fixture-prefixed documentation IDs when
+  canonical tool title/description IDs would collide (for example
+  `valid-text-error-result.json` uses `control` with `mcp.fixture.*` IDs;
+  `valid-protocol-failures.json`, `valid-handler-binding.json`, and
+  `invalid-unknown-protocol-version.json` retarget to `list` or `read_events`
+  with fixture-prefixed documentation IDs once `validate_source` / `control` are
+  authored in `tools.json`).
+  Invalid fixtures are asserted in focused
   `internal/contractvalidator` tests with path-bearing diagnostics, not in the
   default valid-only registry pass. Consolidated fixture-matrix closure lives in
   `contracts/mcp_tool_catalog_fixture_matrix_test.go` (valid/invalid classes,
-  directory coverage, registry alignment, and no-production-cutover boundary).
+  directory coverage, registry alignment, and authored-catalog boundary).
 - Tool `input` combines a closed Draft `schema` (`#/$defs/closedDraftSchema`)
   with object-keyed `arguments` using `mcp.arg.*` stable IDs; `execution.mode`
   is pinned to `tools-call` and `transports` to `stdio-json-rpc` for the
-  supported protocol surface.
+  supported protocol surface. `closedSchemaNode` requires explicit
+  `additionalProperties` on object nodes and allows `additionalProperties: true`
+  for discovery-open maps such as `args` on `start_sync` / `start_async` and
+  `metadata` / `approvedPolicy` on `validate_source` / `control`; start tools
+  reuse shared `#/sharedSchemas/mcp.schema.you.factory_session.source` and
+  `wait` via `$ref` in tool input schemas. `validate_source` mirrors Factory
+  preview request/result shapes from `pkg/transports/mcp/factorysession/schemas.go`;
+  `control` mirrors lifecycle control request/response shapes with closed
+  `links` nested objects in catalog results.
 - Reusable MCP protocol components live under `contracts/mcp/protocol/`
   (`content.schema.json` documents broader MCP content kinds; `call-tool-result.schema.json`
   defines the `pinnedTextCallToolResult` envelope used by tool `result.examples`;

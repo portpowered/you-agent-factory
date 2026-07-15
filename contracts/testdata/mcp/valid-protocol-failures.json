@@ -41,25 +41,25 @@
     ]
   },
   "tools": {
-    "mcp.tool.you.factory_session.validate_source": {
-      "id": "mcp.tool.you.factory_session.validate_source",
-      "name": "you.factory_session.validate_source",
+    "mcp.tool.you.factory_session.list": {
+      "id": "mcp.tool.you.factory_session.list",
+      "name": "you.factory_session.list",
       "documentation": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.validate_source",
+        "itemId": "mcp.tool.you.factory_session.list",
         "documentation": {
           "title": {
-            "id": "mcp.tool.you.factory_session.validate_source.title",
-            "canonicalEnglish": "Validate Factory Session Source"
+            "id": "mcp.fixture.you.factory_session.protocol_failures.title",
+            "canonicalEnglish": "List Factory Sessions"
           },
           "description": {
-            "id": "mcp.tool.you.factory_session.validate_source.description",
-            "canonicalEnglish": "Validates one Factory Session source before execution."
+            "id": "mcp.fixture.you.factory_session.protocol_failures.description",
+            "canonicalEnglish": "Fixture-only tool record hosting catalog-level JSON-RPC protocol failure examples."
           }
         },
         "examples": [
           {
-            "sourcePath": "factory/session.json"
+            "scope": "live"
           }
         ],
         "visibility": "public",
@@ -67,7 +67,7 @@
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.validate_source",
+        "itemId": "mcp.tool.you.factory_session.list",
         "state": "active",
         "since": "1.0.0"
       }

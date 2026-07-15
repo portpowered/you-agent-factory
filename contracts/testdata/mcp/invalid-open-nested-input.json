@@ -64,7 +64,6 @@
             },
             "source": {
               "type": "object",
-              "additionalProperties": true,
               "required": [
                 "kind"
               ],

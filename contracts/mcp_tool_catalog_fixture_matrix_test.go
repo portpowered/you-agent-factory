@@ -12,7 +12,7 @@ import (
 )
 
 var mcpRegistryValidFixturePaths = []string{
-	"contracts/testdata/mcp/valid-minimal.json",
+	"contracts/mcp/tools.json",
 	"contracts/testdata/mcp/valid-input-closed-nested.json",
 	"contracts/testdata/mcp/valid-text-success-result.json",
 	"contracts/testdata/mcp/valid-text-error-result.json",
@@ -50,7 +50,7 @@ var mcpInvalidCatalogSchemaFixtures = []struct {
 	{
 		name:     "open nested input object",
 		fixture:  "invalid-open-nested-input.json",
-		wantPath: "/tools/mcp.tool.you.factory_session.start_async/input/schema/properties/source/additionalProperties",
+		wantPath: "/tools/mcp.tool.you.factory_session.start_async/input/schema/properties/source",
 	},
 	{
 		name:     "unsupported task behavior",
@@ -90,7 +90,7 @@ var mcpInvalidCatalogSchemaFixtures = []struct {
 	{
 		name:     "broken handler ID",
 		fixture:  "invalid-handler-id.json",
-		wantPath: "/tools/mcp.tool.you.factory_session.read_events/handler/id",
+		wantPath: "/tools/mcp.tool.you.factory_session.control/handler/id",
 	},
 	{
 		name:     "unknown protocol version",
@@ -100,12 +100,17 @@ var mcpInvalidCatalogSchemaFixtures = []struct {
 	{
 		name:     "malformed lifecycle record",
 		fixture:  "invalid-malformed-lifecycle.json",
-		wantPath: "/tools/mcp.tool.you.factory_session.start_sync/lifecycle",
+		wantPath: "/tools/mcp.tool.you.factory_session.control/lifecycle",
 	},
 	{
 		name:     "malformed documentation record",
 		fixture:  "invalid-malformed-documentation.json",
 		wantPath: "/tools/mcp.tool.you.factory_session.get/documentation/documentation/title/id",
+	},
+	{
+		name:     "broken shared schema reference",
+		fixture:  "invalid-broken-shared-schema-ref.json",
+		wantPath: "/tools/mcp.tool.you.factory_session.start_async/transports/$ref",
 	},
 }
 
@@ -143,6 +148,28 @@ func TestMCPToolCatalogSchemaInvalidFixtureMatrix(t *testing.T) {
 	for _, test := range mcpInvalidCatalogSchemaFixtures {
 		t.Run(test.name, func(t *testing.T) {
 			instance := readJSON(t, filepath.Join("testdata", "mcp", test.fixture))
+			if test.fixture == "invalid-broken-shared-schema-ref.json" {
+				root, err := filepath.Abs("..")
+				if err != nil {
+					t.Fatalf("repository root: %v", err)
+				}
+				diagnostics := contractvalidator.Validate(root, mcpCatalogFixtureRegistry(test.fixture), "mcp", "1.0.0")
+				if len(diagnostics) == 0 {
+					t.Fatal("expected broken shared-schema reference diagnostics, got none")
+				}
+				found := false
+				document := filepath.ToSlash(filepath.Join("contracts", "testdata", "mcp", test.fixture))
+				for _, diagnostic := range diagnostics {
+					if diagnostic.Code == "reference.fragment" && diagnostic.Path == test.wantPath && diagnostic.Document == document {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Fatalf("diagnostics = %+v, want code=reference.fragment path=%q document=%q", diagnostics, test.wantPath, document)
+				}
+				return
+			}
 			err := schema.Validate(instance)
 			if err == nil {
 				t.Fatal("expected fixture validation to fail")
@@ -230,12 +257,18 @@ func TestMCPToolCatalogFixtureDirectoryCoverage(t *testing.T) {
 func TestMCPToolCatalogRegistryMatchesValidFixtureMatrix(t *testing.T) {
 	want := make([]string, 0, len(mcpValidCatalogFixtures))
 	for _, fixture := range mcpValidCatalogFixtures {
+		if fixture.fixture == "valid-minimal.json" {
+			continue
+		}
 		want = append(want, fixture.fixture)
 	}
 	slices.Sort(want)
 
 	registered := make([]string, 0, len(mcpRegistryValidFixturePaths))
 	for _, path := range mcpRegistryValidFixturePaths {
+		if path == "contracts/mcp/tools.json" {
+			continue
+		}
 		registered = append(registered, filepath.Base(path))
 		if _, err := os.Stat(strings.TrimPrefix(path, "contracts/")); err != nil {
 			t.Fatalf("registered fixture %s missing on disk: %v", path, err)
@@ -246,14 +279,25 @@ func TestMCPToolCatalogRegistryMatchesValidFixtureMatrix(t *testing.T) {
 	if !slices.Equal(registered, want) {
 		t.Fatalf("registered valid fixtures = %v, want %v", registered, want)
 	}
+	if _, err := os.Stat(filepath.Join("mcp", "tools.json")); err != nil {
+		t.Fatalf("authored catalog contracts/mcp/tools.json must exist: %v", err)
+	}
 }
 
-func TestMCPToolCatalogBoundaryNoProductionCutover(t *testing.T) {
-	if _, err := os.Stat(filepath.Join("mcp", "tools.json")); err == nil {
-		t.Fatal("contracts/mcp/tools.json must not exist before B14 production catalog cutover")
+func TestMCPToolCatalogAuthoredCatalogBoundary(t *testing.T) {
+	if _, err := os.Stat(filepath.Join("mcp", "tools.json")); err != nil {
+		t.Fatalf("contracts/mcp/tools.json must exist as the authored MCP tool catalog: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join("mcp", "deprecated.json")); err != nil {
 		t.Fatalf("contracts/mcp/deprecated.json must remain the compatibility alias inventory: %v", err)
+	}
+	root, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatalf("repository root: %v", err)
+	}
+	diagnostics := contractvalidator.Validate(root, contractvalidator.MCPRegistry(), "mcp", "1.0.0")
+	if len(diagnostics) != 0 {
+		t.Fatalf("authored catalog validation diagnostics = %+v", diagnostics)
 	}
 }
 

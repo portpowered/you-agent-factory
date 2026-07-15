@@ -2,25 +2,26 @@
   "formatVersion": "1.0.0",
   "protocolVersion": "2024-11-05",
   "tools": {
-    "mcp.tool.you.factory_session.get_result": {
-      "id": "mcp.tool.you.factory_session.get_result",
-      "name": "you.factory_session.get_result",
+    "mcp.tool.you.factory_session.validate_source": {
+      "id": "mcp.tool.you.factory_session.validate_source",
+      "name": "you.factory_session.validate_source",
       "documentation": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.get_result",
+        "itemId": "mcp.tool.you.factory_session.validate_source",
         "documentation": {
           "title": {
-            "id": "mcp.tool.you.factory_session.get_result.title",
-            "canonicalEnglish": "Get Factory Session Result"
+            "id": "mcp.fixture.you.factory_session.text_success.title",
+            "canonicalEnglish": "Validate Factory Source"
           },
           "description": {
-            "id": "mcp.tool.you.factory_session.get_result.description",
-            "canonicalEnglish": "Reads the terminal or partial result for one durable Factory Session."
+            "id": "mcp.fixture.you.factory_session.text_success.description",
+            "canonicalEnglish": "Fixture-only tool record demonstrating serialized-json text success CallToolResult encoding with isError false."
           }
         },
         "examples": [
           {
-            "sessionId": "dur-sess-001"
+            "sourceKind": "WORKFLOW_NAME",
+            "sourceValue": "example.workflow"
           }
         ],
         "visibility": "public",
@@ -28,7 +29,7 @@
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.get_result",
+        "itemId": "mcp.tool.you.factory_session.validate_source",
         "state": "active",
         "since": "1.0.0"
       },
@@ -54,25 +55,18 @@
               "type": "object",
               "additionalProperties": false,
               "required": [
-                "sessionId",
-                "status"
+                "valid"
               ],
               "properties": {
-                "sessionId": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "status": {
-                  "type": "string",
-                  "minLength": 1
+                "valid": {
+                  "type": "boolean"
                 }
               }
             },
             "examples": [
               {
                 "result": {
-                  "sessionId": "dur-sess-001",
-                  "status": "SUCCEEDED"
+                  "valid": true
                 }
               }
             ]
@@ -83,7 +77,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "{\"result\":{\"sessionId\":\"dur-sess-001\",\"status\":\"SUCCEEDED\"}}"
+                "text": "{\"result\":{\"valid\":true}}"
               }
             ],
             "isError": false
