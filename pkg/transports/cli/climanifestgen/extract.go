@@ -12,6 +12,12 @@ func ExtractRepresentativeFamily(manifest climanifest.Manifest) (climanifest.Man
 	return extractFamily(manifest, "representative", RepresentativeFamilyCommandIDs)
 }
 
+// ExtractSessionFamily returns manifest metadata for the complete canonical
+// Factory Session parent and runnable leaves.
+func ExtractSessionFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
+	return extractFamily(manifest, "session", SessionFamilyCommandIDs)
+}
+
 // ExtractWorkFamily returns manifest metadata for exactly the work
 // inspection/control command IDs declared in commands.json.
 func ExtractWorkFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {

@@ -13,6 +13,33 @@ var RepresentativeFamilyCommandIDs = []string{
 	"you.session.show",
 }
 
+// SessionFamilyCommandIDs are the stable command IDs emitted for the complete
+// canonical Factory Session command family. The root command remains owned by
+// the representative family until the production cutover is widened.
+var SessionFamilyCommandIDs = []string{
+	"you.session",
+	"you.session.create",
+	"you.session.list",
+	"you.session.show",
+	"you.session.delete",
+	"you.session.pause",
+	"you.session.resume",
+	"you.session.dispatches",
+}
+
+// IsSessionFamilyCommandID reports whether id belongs to the canonical session family.
+func IsSessionFamilyCommandID(id string) bool {
+	return slices.Contains(SessionFamilyCommandIDs, id)
+}
+
+// AssertSessionFamilyCommandID rejects command IDs outside the canonical session family.
+func AssertSessionFamilyCommandID(id string) error {
+	if IsSessionFamilyCommandID(id) {
+		return nil
+	}
+	return fmt.Errorf("command id %q is outside the session family %v", id, SessionFamilyCommandIDs)
+}
+
 // IsRepresentativeFamilyCommandID reports whether id belongs to the representative family.
 func IsRepresentativeFamilyCommandID(id string) bool {
 	return slices.Contains(RepresentativeFamilyCommandIDs, id)

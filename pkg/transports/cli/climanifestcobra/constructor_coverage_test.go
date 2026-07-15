@@ -9,7 +9,69 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 )
+
+func TestNewSessionFamilyCommandBuildsCanonicalRunnableLeaves(t *testing.T) {
+	registry, err := commandregistry.NewSessionRegistry(commandregistry.SessionHandlers{
+		CreateRunE: noopRunE, ListRunE: noopRunE, ShowRunE: noopRunE,
+		DeleteRunE: noopRunE, PauseRunE: noopRunE, ResumeRunE: noopRunE, DispatchesRunE: noopRunE,
+	})
+	if err != nil {
+		t.Fatalf("NewSessionRegistry() error = %v", err)
+	}
+	session, err := climanifestcobra.NewSessionFamilyCommand(registry, testSessionBindings())
+	if err != nil {
+		t.Fatalf("NewSessionFamilyCommand() error = %v", err)
+	}
+	want := []string{"create", "delete", "dispatches", "list", "pause", "resume", "show"}
+	children := session.Commands()
+	if len(children) != len(want) {
+		t.Fatalf("session children = %d, want %d", len(children), len(want))
+	}
+	for i, name := range want {
+		if children[i].Name() != name || children[i].RunE == nil {
+			t.Fatalf("session child[%d] = %q runnable=%t, want %q runnable", i, children[i].Name(), children[i].RunE != nil, name)
+		}
+	}
+}
+
+func TestNewSessionFamilyCommandAppliesCreateFlagContracts(t *testing.T) {
+	registry, err := commandregistry.NewSessionRegistry(commandregistry.SessionHandlers{
+		CreateRunE: noopRunE, ListRunE: noopRunE, ShowRunE: noopRunE,
+		DeleteRunE: noopRunE, PauseRunE: noopRunE, ResumeRunE: noopRunE, DispatchesRunE: noopRunE,
+	})
+	if err != nil {
+		t.Fatalf("NewSessionRegistry() error = %v", err)
+	}
+	session, err := climanifestcobra.NewSessionFamilyCommand(registry, testSessionBindings())
+	if err != nil {
+		t.Fatalf("NewSessionFamilyCommand() error = %v", err)
+	}
+	create, _, err := session.Find([]string{"create"})
+	if err != nil {
+		t.Fatalf("Find(create) error = %v", err)
+	}
+	if err := create.ParseFlags([]string{"--init-new-factory", "--validate-only"}); err != nil {
+		t.Fatalf("ParseFlags() error = %v", err)
+	}
+	if err := create.ValidateRequiredFlags(); err == nil || !strings.Contains(err.Error(), "dir") {
+		t.Fatalf("ValidateRequiredFlags() error = %v, want required dir", err)
+	}
+	if err := create.Flags().Set("dir", "."); err != nil {
+		t.Fatalf("Set(dir) error = %v", err)
+	}
+	if err := create.ValidateFlagGroups(); err == nil || !strings.Contains(err.Error(), "none of the others") {
+		t.Fatalf("ValidateFlagGroups() error = %v, want mutex rejection", err)
+	}
+}
+
+func testSessionBindings() climanifestcobra.SessionFamilyBindings {
+	return climanifestcobra.SessionFamilyBindings{
+		Create: &sessioncli.CreateConfig{}, List: &sessioncli.ListConfig{}, Delete: &sessioncli.DeleteConfig{},
+		Dispatches: &sessioncli.DispatchesConfig{}, Pause: &sessioncli.LifecycleControlConfig{}, Resume: &sessioncli.LifecycleControlConfig{},
+	}
+}
 
 func TestNewRepresentativeFamilyComponentsReturnsDetachedCommands(t *testing.T) {
 	registry, err := commandregistry.NewRepresentativeRegistry(commandregistry.RepresentativeHandlers{
