@@ -100,6 +100,57 @@ func TestCheck_ReportsStaleProjectionWithoutWriting(t *testing.T) {
 	}
 }
 
+func TestCheck_ReportsStaleProjectionSymbolPathDeterministicallyWithoutWriting(t *testing.T) {
+	root := mutationFixtureRoot(t)
+	stagedPath := filepath.Join(root, filepath.FromSlash(javascriptcontractsmoke.StagedProjectionRelativePath))
+	original, err := os.ReadFile(stagedPath)
+	if err != nil {
+		t.Fatalf("read staged projection: %v", err)
+	}
+
+	var staged map[string]any
+	if err := json.Unmarshal(original, &staged); err != nil {
+		t.Fatalf("decode staged projection: %v", err)
+	}
+	symbols := staged["symbols"].(map[string]any)
+	phase := symbols["javascript.phase"].(map[string]any)
+	phase["kind"] = "method"
+	mutated, err := json.MarshalIndent(staged, "", "  ")
+	if err != nil {
+		t.Fatalf("encode staged projection: %v", err)
+	}
+	mutated = append(mutated, '\n')
+	if err := os.WriteFile(stagedPath, mutated, 0o644); err != nil {
+		t.Fatalf("write staged projection: %v", err)
+	}
+
+	first := runCheckDiagnostics(t, root)
+	second := runCheckDiagnostics(t, root)
+	if len(first) != 1 || len(second) != 1 || first[0] != second[0] {
+		t.Fatalf("stale diagnostics are not deterministic: first=%+v second=%+v", first, second)
+	}
+	diagnostic := first[0]
+	if diagnostic.Code != "javascript.projection.stale" {
+		t.Fatalf("diagnostic code = %q, want javascript.projection.stale", diagnostic.Code)
+	}
+	if diagnostic.Path != javascriptcontractsmoke.StagedProjectionRelativePath {
+		t.Fatalf("diagnostic path = %q, want %q", diagnostic.Path, javascriptcontractsmoke.StagedProjectionRelativePath)
+	}
+	if !strings.Contains(diagnostic.Message, "divergent symbol paths: phase") {
+		t.Fatalf("diagnostic message = %q, want divergent symbol path", diagnostic.Message)
+	}
+	if !strings.Contains(diagnostic.Message, "make contracts-generate") || !strings.Contains(diagnostic.Message, "make contracts-check") {
+		t.Fatalf("diagnostic message = %q, want generation/check remediation", diagnostic.Message)
+	}
+	after, err := os.ReadFile(stagedPath)
+	if err != nil {
+		t.Fatalf("read staged projection after checks: %v", err)
+	}
+	if string(after) != string(mutated) {
+		t.Fatal("Check() rewrote the stale staged projection")
+	}
+}
+
 func mutationFixtureRoot(t *testing.T) string {
 	t.Helper()
 

@@ -74,7 +74,11 @@ Use this map when changing the public REST contract.
   symbol-path failures and forbidden/comparison-project helper failures with
   temp-dir catalog copies that keep authored and staged bytes aligned in
   `internal/javascriptcontractsmoke/check_test.go` and
-  `cmd/javascriptcontractsmoke/main_test.go`.
+  `cmd/javascriptcontractsmoke/main_test.go`. Stale staged-projection diagnostics
+  report the generated repository-relative file path and, when valid JSON differs
+  inside symbol records, the affected public symbol paths; the check remains
+  read-only and directs maintainers to `make contracts-generate` followed by
+  `make contracts-check`.
 - Staged OpenAPI byte policy lives in `internal/contractstaging/openapi.go`
   (`CanonicalOpenAPIPath`, `StagedOpenAPIPath`, `ReviewedOpenAPIBytePolicy`,
   `ProjectStagedOpenAPI`, `VerifyStagedOpenAPIParity`). The reviewed policy is

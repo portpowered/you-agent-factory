@@ -10,11 +10,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 
-	jscatalog "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/catalog"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/callbehavior"
+	jscatalog "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/catalog"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/symbolidentity"
 )
 
@@ -53,11 +54,14 @@ func Check(root string) ([]Diagnostic, error) {
 
 	var diagnostics []Diagnostic
 	if !bytes.Equal(authoredBytes, stagedBytes) {
+		message := "staged JavaScript runtime projection diverges from the authored catalog"
+		if paths := staleProjectionSymbolPaths(authoredBytes, stagedBytes); len(paths) > 0 {
+			message += "; divergent symbol paths: " + strings.Join(paths, ", ")
+		}
 		diagnostics = append(diagnostics, Diagnostic{
-			Code: "javascript.projection.stale",
-			Path: StagedProjectionRelativePath,
-			Message: "staged JavaScript runtime projection diverges from the authored catalog; " +
-				"run `make contracts-generate` and `make contracts-check` to restore staging parity",
+			Code:    "javascript.projection.stale",
+			Path:    StagedProjectionRelativePath,
+			Message: message + "; run `make contracts-generate` and `make contracts-check` to restore staging parity",
 		})
 	}
 
@@ -95,6 +99,42 @@ func Check(root string) ([]Diagnostic, error) {
 
 	sortDiagnostics(diagnostics)
 	return diagnostics, nil
+}
+
+func staleProjectionSymbolPaths(authoredBytes, stagedBytes []byte) []string {
+	var authored, staged struct {
+		Symbols map[string]map[string]any `json:"symbols"`
+	}
+	if json.Unmarshal(authoredBytes, &authored) != nil || json.Unmarshal(stagedBytes, &staged) != nil {
+		return nil
+	}
+
+	keys := make(map[string]struct{}, len(authored.Symbols)+len(staged.Symbols))
+	for key := range authored.Symbols {
+		keys[key] = struct{}{}
+	}
+	for key := range staged.Symbols {
+		keys[key] = struct{}{}
+	}
+
+	paths := make(map[string]struct{})
+	for key := range keys {
+		if reflect.DeepEqual(authored.Symbols[key], staged.Symbols[key]) {
+			continue
+		}
+		for _, record := range []map[string]any{authored.Symbols[key], staged.Symbols[key]} {
+			if path, ok := record["path"].(string); ok && path != "" {
+				paths[path] = struct{}{}
+			}
+		}
+	}
+
+	out := make([]string, 0, len(paths))
+	for path := range paths {
+		out = append(out, path)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func bindingDescriptorDiagnostic(err error) Diagnostic {
