@@ -21,17 +21,18 @@ type Argument struct {
 
 // Flag is one flag input record from the production manifest.
 type Flag struct {
-	ID              string `json:"id"`
-	Long            string `json:"long"`
-	Shorthand       string `json:"shorthand"`
-	Scope           string `json:"scope"`
-	ValueType       string `json:"valueType"`
-	Required        bool   `json:"required"`
-	Default         string `json:"default"`
-	ChangedDefault  bool   `json:"changedDefault"`
-	NoOptionDefault string `json:"noOptionDefault"`
-	Completion      string `json:"completion"`
-	Visibility      string `json:"visibility"`
+	ID              string   `json:"id"`
+	Long            string   `json:"long"`
+	Shorthand       string   `json:"shorthand"`
+	Scope           string   `json:"scope"`
+	ValueType       string   `json:"valueType"`
+	Enum            []string `json:"enum,omitempty"`
+	Required        bool     `json:"required"`
+	Default         string   `json:"default"`
+	ChangedDefault  bool     `json:"changedDefault"`
+	NoOptionDefault string   `json:"noOptionDefault"`
+	Completion      string   `json:"completion"`
+	Visibility      string   `json:"visibility"`
 }
 
 // ArgumentAt returns the argument record for one position.

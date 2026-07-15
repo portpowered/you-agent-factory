@@ -201,6 +201,17 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `config init` subcommand; installer smoke coverage lives in
   `tests/release/install_script_test.go` and `scripts/release/smoke-install.sh`
   / `scripts/release/smoke-install.ps1`.
+- Canonical CLI metadata belongs in `contracts/cli/commands.json`. Separately
+  approved compatibility-only command metadata belongs in
+  `contracts/cli/deprecated-commands.json`, while its classification, successor,
+  approval, evidence, and removal gates remain in `contracts/cli/deprecated.json`.
+  Mark generation-ready records with `completeness: authoritative`; the CLI schema
+  then requires complete channels, outputs, exits, effects, runtime constraints,
+  and stable handler metadata for runnable records. Register every authored command
+  manifest in `internal/contractvalidator.CLIRegistry`, and keep relationship
+  participants on same-command flag or argument IDs so diagnostics name the exact
+  record path. Compatibility records must not be copied into the primary manifest
+  merely to make generation convenient.
 - Production CLI command manifest parity for the root + `session show` family lives in
   `pkg/transports/cli/climanifest` (`LoadProduction`, `ProductionManifestPath`) and
   `pkg/transports/cli/climanifestparity` (`CompareDeclaredHandler`,
