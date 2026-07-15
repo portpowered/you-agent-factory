@@ -258,6 +258,9 @@ func TestGenerateIsDeterministic(t *testing.T) {
 		climanifestgen.FactoryConfigInitFamilyCommandIDsPath,
 		climanifestgen.ModelsDocsFamilyJSONPath,
 		climanifestgen.ModelsDocsFamilyCommandIDsPath,
+		climanifestgen.MCPFamilyJSONPath,
+		climanifestgen.WorkflowCompatibilityFamilyJSONPath,
+		climanifestgen.WorkflowMCPFamilyCommandIDsPath,
 	})
 	if err := climanifestgen.Generate(root); err != nil {
 		t.Fatalf("second Generate() error = %v", err)
@@ -270,6 +273,9 @@ func TestGenerateIsDeterministic(t *testing.T) {
 		climanifestgen.FactoryConfigInitFamilyCommandIDsPath,
 		climanifestgen.ModelsDocsFamilyJSONPath,
 		climanifestgen.ModelsDocsFamilyCommandIDsPath,
+		climanifestgen.MCPFamilyJSONPath,
+		climanifestgen.WorkflowCompatibilityFamilyJSONPath,
+		climanifestgen.WorkflowMCPFamilyCommandIDsPath,
 	})
 	if !reflect.DeepEqual(first, second) {
 		t.Fatalf("repeated generation changed artifact digests:\nfirst=%v\nsecond=%v", first, second)
@@ -312,7 +318,17 @@ func copyFile(source, target string) error {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(target, payload, 0o644)
+	if err := os.WriteFile(target, payload, 0o644); err != nil {
+		return err
+	}
+	// Generator fixtures need both classification sources. Existing tests call
+	// this helper with commands.json, so keep that setup complete here.
+	if filepath.Base(source) == filepath.Base(climanifest.ProductionManifestPath) {
+		compatibilitySource := filepath.Join(filepath.Dir(source), filepath.Base(climanifest.CompatibilityManifestPath))
+		compatibilityTarget := filepath.Join(filepath.Dir(target), filepath.Base(climanifest.CompatibilityManifestPath))
+		return copyFile(compatibilitySource, compatibilityTarget)
+	}
+	return nil
 }
 
 func fileDigests(t *testing.T, root string, paths []string) map[string][sha256.Size]byte {

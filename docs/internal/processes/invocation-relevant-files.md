@@ -212,6 +212,14 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   participants on same-command flag or argument IDs so diagnostics name the exact
   record path. Compatibility records must not be copied into the primary manifest
   merely to make generation convenient.
+- Classification-aware workflow/MCP generation lives in
+  `pkg/transports/cli/climanifestgen`: canonical `you mcp` / `you mcp serve`
+  metadata is emitted from `commands.json` into `mcp_family.json`, while approved
+  `you workflow validate` / `you workflow preview` metadata is emitted separately
+  from `deprecated-commands.json` into `workflow_compatibility_family.json`.
+  Keep their generated stable-ID lists source-labeled and disjoint; `Check` must
+  report the affected stable IDs for drift, and generation must reject either
+  family when its IDs appear in the wrong classification source.
 - Production CLI command manifest parity for the root + `session show` family lives in
   `pkg/transports/cli/climanifest` (`LoadProduction`, `ProductionManifestPath`) and
   `pkg/transports/cli/climanifestparity` (`CompareDeclaredHandler`,
