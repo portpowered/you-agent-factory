@@ -117,6 +117,74 @@
     }
   },
   "symbols": {
+    "javascript.args": {
+      "id": "javascript.args",
+      "name": "args",
+      "path": "args",
+      "kind": "value",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.args",
+        "documentation": {
+          "title": {
+            "id": "javascript.args.title",
+            "canonicalEnglish": "Invocation arguments"
+          },
+          "description": {
+            "id": "javascript.args.description",
+            "canonicalEnglish": "Mutable invocation argument value bound from workflow request args JSON at script start. The binding is a non-null object snapshot; property reads and writes affect only the in-script view and do not change the original request payload."
+          }
+        },
+        "examples": [
+          "{ \"subject\": \"release\", \"count\": 2, \"prefix\": \"echo\" }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.args",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "mutable-object",
+      "nullability": "non-null",
+      "bindingLifecycle": "snapshot-at-bind"
+    },
+    "javascript.meta": {
+      "id": "javascript.meta",
+      "name": "meta",
+      "path": "meta",
+      "kind": "value",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.meta",
+        "documentation": {
+          "title": {
+            "id": "javascript.meta.title",
+            "canonicalEnglish": "Invocation metadata"
+          },
+          "description": {
+            "id": "javascript.meta.description",
+            "canonicalEnglish": "Mutable invocation metadata object bound from workflow request metadata at script start. The binding is a non-null object snapshot with string-valued entries; when name is absent the runtime supplies the default simple-final label."
+          }
+        },
+        "examples": [
+          "{ \"name\": \"simple-final\", \"description\": \"Example workflow metadata\" }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.meta",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "mutable-object",
+      "nullability": "non-null",
+      "bindingLifecycle": "snapshot-at-bind"
+    },
     "javascript.workflow": {
       "id": "javascript.workflow",
       "name": "workflow",
