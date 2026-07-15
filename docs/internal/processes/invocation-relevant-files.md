@@ -690,7 +690,11 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   thin UTF-8 bundled-file metadata to `factory.json`, and validates the staged
   runtime before publishing the named-factory directory. Existing valid package
   directories are loaded read-only and skipped as a whole, so later init runs
-  do not normalize permissions or replace operator-edited scripts.
+  do not normalize permissions or replace operator-edited scripts. At runtime,
+  `pkg/workers/executor.ScriptExecutor` resolves portable `scripts/**` commands
+  (and legacy `factory/scripts/**` references) against the active runtime
+  configuration's factory directory before using the generic subprocess path;
+  package assembly and config initialization do not own process execution.
   Worker prompt declarations become
   canonical inline bodies, while workstation declarations retain `promptFile`
   metadata for editable split-layout materialization.
