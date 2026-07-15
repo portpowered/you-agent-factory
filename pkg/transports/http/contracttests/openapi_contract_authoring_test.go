@@ -521,8 +521,8 @@ func generatedFactoryLoopBreakerPayload(t *testing.T) map[string]any {
 			Type:    &logicalMoveType,
 			Inputs:  []generated.WorkstationIO{{WorkType: "story", State: "in_review"}},
 			Outputs: &[]generated.WorkstationIO{{WorkType: "story", State: "failed"}},
-			Guards: &[]generated.Guard{{
-				Type:        generated.GuardTypeVisitCount,
+			Guards: &[]generated.WorkstationGuard{{
+				Type:        generated.WorkstationGuardTypeVISITCOUNT,
 				Workstation: &guardedWorkstation,
 				MaxVisits:   &maxVisits,
 			}},

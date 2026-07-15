@@ -126,7 +126,7 @@
         "type": {
           "allOf": [
             {
-              "$ref": "#/$defs/GuardType"
+              "$ref": "#/$defs/FactoryGuardType"
             }
           ],
           "description": "Factory-level guard condition to evaluate before dispatch-ready transitions can proceed."
@@ -138,6 +138,13 @@
         "refreshWindow"
       ],
       "type": "object"
+    },
+    "FactoryGuardType": {
+      "description": "Factory-level guard condition attached at the root factory definition.",
+      "enum": [
+        "INFERENCE_THROTTLE_GUARD"
+      ],
+      "type": "string"
     },
     "FactoryInvocationExample": {
       "additionalProperties": false,
@@ -773,53 +780,6 @@
       "description": "Petri-specific orchestrator configuration. Existing Petri factories may omit this block and rely on compatibility defaulting to orchestrator.kind = PETRI.",
       "type": "object"
     },
-    "Guard": {
-      "additionalProperties": false,
-      "description": "Shared guard attached either to a workstation as a whole or to one specific workstation input.",
-      "properties": {
-        "matchConfig": {
-          "allOf": [
-            {
-              "$ref": "#/$defs/GuardMatchConfig"
-            }
-          ],
-          "description": "For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs."
-        },
-        "matchInput": {
-          "description": "For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.",
-          "type": "string"
-        },
-        "maxVisits": {
-          "description": "For `VISIT_COUNT` guards, the visit threshold.",
-          "minimum": 1,
-          "type": "integer"
-        },
-        "parentInput": {
-          "description": "For parent-aware input guards, the parent workType name from another input in the same workstation.",
-          "type": "string"
-        },
-        "spawnedBy": {
-          "description": "For dynamic fanout input guards, the workstation that spawns the children for count tracking.",
-          "type": "string"
-        },
-        "type": {
-          "allOf": [
-            {
-              "$ref": "#/$defs/GuardType"
-            }
-          ],
-          "description": "Guard condition to evaluate for this workstation-level or input-level attachment."
-        },
-        "workstation": {
-          "description": "For `VISIT_COUNT` guards, the workstation whose visits are counted.",
-          "type": "string"
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "type": "object"
-    },
     "GuardMatchConfig": {
       "additionalProperties": false,
       "properties": {
@@ -833,19 +793,6 @@
         "inputKey"
       ],
       "type": "object"
-    },
-    "GuardType": {
-      "description": "Guard condition attached to a workstation or one of its specific inputs.",
-      "enum": [
-        "VISIT_COUNT",
-        "MATCHES_FIELDS",
-        "ALL_CHILDREN_COMPLETE",
-        "ANY_CHILD_FAILED",
-        "SAME_NAME",
-        "SAME_TRACE_ID",
-        "INFERENCE_THROTTLE_GUARD"
-      ],
-      "type": "string"
     },
     "HostedLinearWorkerClaim": {
       "additionalProperties": false,
@@ -952,6 +899,64 @@
         "physical"
       ],
       "type": "object"
+    },
+    "InputGuard": {
+      "additionalProperties": false,
+      "description": "Guard attached to one specific workstation input.",
+      "properties": {
+        "matchConfig": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/GuardMatchConfig"
+            }
+          ],
+          "description": "For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs."
+        },
+        "matchInput": {
+          "description": "For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.",
+          "type": "string"
+        },
+        "maxVisits": {
+          "description": "For `VISIT_COUNT` guards, the visit threshold.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "parentInput": {
+          "description": "For parent-aware input guards, the parent workType name from another input in the same workstation.",
+          "type": "string"
+        },
+        "spawnedBy": {
+          "description": "For dynamic fanout input guards, the workstation that spawns the children for count tracking.",
+          "type": "string"
+        },
+        "type": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/InputGuardType"
+            }
+          ],
+          "description": "Guard condition to evaluate for this input-level attachment."
+        },
+        "workstation": {
+          "description": "For `VISIT_COUNT` guards, the workstation whose visits are counted.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "InputGuardType": {
+      "description": "Guard condition attached to one specific workstation input.",
+      "enum": [
+        "VISIT_COUNT",
+        "ALL_CHILDREN_COMPLETE",
+        "ANY_CHILD_FAILED",
+        "SAME_NAME",
+        "SAME_TRACE_ID"
+      ],
+      "type": "string"
     },
     "InputKind": {
       "description": "Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.",
@@ -1235,7 +1240,6 @@
           "$ref": "#/$defs/WorkContentCommonFields"
         },
         {
-          "additionalProperties": false,
           "properties": {
             "file": {
               "$ref": "#/$defs/WorkContentDeprecatedFileProperty"
@@ -1269,7 +1273,6 @@
           "$ref": "#/$defs/WorkContentCommonFields"
         },
         {
-          "additionalProperties": false,
           "properties": {
             "file": {
               "$ref": "#/$defs/WorkContentDeprecatedFileProperty"
@@ -1385,7 +1388,6 @@
           "$ref": "#/$defs/WorkContentCommonFields"
         },
         {
-          "additionalProperties": false,
           "properties": {
             "file": {
               "$ref": "#/$defs/WorkContentDeprecatedFileProperty"
@@ -1420,7 +1422,6 @@
           "$ref": "#/$defs/WorkContentCommonFields"
         },
         {
-          "additionalProperties": false,
           "properties": {
             "json": {
               "description": "Arbitrary JSON value preserved in canonical part order."
@@ -1514,7 +1515,6 @@
           "$ref": "#/$defs/WorkContentCommonFields"
         },
         {
-          "additionalProperties": false,
           "properties": {
             "text": {
               "description": "Inline text content preserved in canonical part order.",
@@ -1799,7 +1799,7 @@
         "guards": {
           "description": "Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.",
           "items": {
-            "$ref": "#/$defs/Guard"
+            "$ref": "#/$defs/WorkstationGuard"
           },
           "type": "array"
         },
@@ -1974,6 +1974,61 @@
       ],
       "type": "object"
     },
+    "WorkstationGuard": {
+      "additionalProperties": false,
+      "description": "Guard attached to a workstation as a whole.",
+      "properties": {
+        "matchConfig": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/GuardMatchConfig"
+            }
+          ],
+          "description": "For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs."
+        },
+        "matchInput": {
+          "description": "For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.",
+          "type": "string"
+        },
+        "maxVisits": {
+          "description": "For `VISIT_COUNT` guards, the visit threshold.",
+          "minimum": 1,
+          "type": "integer"
+        },
+        "parentInput": {
+          "description": "For parent-aware input guards, the parent workType name from another input in the same workstation.",
+          "type": "string"
+        },
+        "spawnedBy": {
+          "description": "For dynamic fanout input guards, the workstation that spawns the children for count tracking.",
+          "type": "string"
+        },
+        "type": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/WorkstationGuardType"
+            }
+          ],
+          "description": "Guard condition to evaluate for this workstation-level attachment."
+        },
+        "workstation": {
+          "description": "For `VISIT_COUNT` guards, the workstation whose visits are counted.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "WorkstationGuardType": {
+      "description": "Guard condition attached to a workstation as a whole.",
+      "enum": [
+        "VISIT_COUNT",
+        "MATCHES_FIELDS"
+      ],
+      "type": "string"
+    },
     "WorkstationIO": {
       "additionalProperties": false,
       "description": "One authored work-state reference consumed or emitted by a workstation.",
@@ -1981,7 +2036,7 @@
         "guards": {
           "description": "Per-input guards that must pass before this specific input can be used.",
           "items": {
-            "$ref": "#/$defs/Guard"
+            "$ref": "#/$defs/InputGuard"
           },
           "type": "array"
         },

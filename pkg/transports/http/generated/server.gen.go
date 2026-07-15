@@ -183,6 +183,11 @@ const (
 	FactoryEventTypeWorkStateChange               FactoryEventType = "WORK_STATE_CHANGE"
 )
 
+// Defines values for FactoryGuardType.
+const (
+	FactoryGuardTypeInferenceThrottle FactoryGuardType = "INFERENCE_THROTTLE_GUARD"
+)
+
 // Defines values for FactoryInvocationOutputContractMode.
 const (
 	FactoryInvocationOutputContractModeFile   FactoryInvocationOutputContractMode = "FILE"
@@ -550,7 +555,6 @@ const (
 const (
 	GuardTypeAllChildrenComplete GuardType = "ALL_CHILDREN_COMPLETE"
 	GuardTypeAnyChildFailed      GuardType = "ANY_CHILD_FAILED"
-	GuardTypeInferenceThrottle   GuardType = "INFERENCE_THROTTLE_GUARD"
 	GuardTypeMatchesFields       GuardType = "MATCHES_FIELDS"
 	GuardTypeSameName            GuardType = "SAME_NAME"
 	GuardTypeSameTraceID         GuardType = "SAME_TRACE_ID"
@@ -566,6 +570,15 @@ const (
 const (
 	InferenceOutcomeFailed    InferenceOutcome = "FAILED"
 	InferenceOutcomeSucceeded InferenceOutcome = "SUCCEEDED"
+)
+
+// Defines values for InputGuardType.
+const (
+	InputGuardTypeALLCHILDRENCOMPLETE InputGuardType = "ALL_CHILDREN_COMPLETE"
+	InputGuardTypeANYCHILDFAILED      InputGuardType = "ANY_CHILD_FAILED"
+	InputGuardTypeSAMENAME            InputGuardType = "SAME_NAME"
+	InputGuardTypeSAMETRACEID         InputGuardType = "SAME_TRACE_ID"
+	InputGuardTypeVISITCOUNT          InputGuardType = "VISIT_COUNT"
 )
 
 // Defines values for InputKind.
@@ -885,6 +898,12 @@ const (
 	WorkerTypeModelWorker     WorkerType = "MODEL_WORKER"
 	WorkerTypePollerWorker    WorkerType = "POLLER_WORKER"
 	WorkerTypeScriptWorker    WorkerType = "SCRIPT_WORKER"
+)
+
+// Defines values for WorkstationGuardType.
+const (
+	WorkstationGuardTypeMATCHESFIELDS WorkstationGuardType = "MATCHES_FIELDS"
+	WorkstationGuardTypeVISITCOUNT    WorkstationGuardType = "VISIT_COUNT"
 )
 
 // Defines values for WorkstationKind.
@@ -1582,8 +1601,11 @@ type FactoryGuard struct {
 	RefreshWindow string `json:"refreshWindow"`
 
 	// Type Factory-level guard condition to evaluate before dispatch-ready transitions can proceed.
-	Type GuardType `json:"type"`
+	Type FactoryGuardType `json:"type"`
 }
+
+// FactoryGuardType Factory-level guard condition attached at the root factory definition.
+type FactoryGuardType string
 
 // FactoryInvocationExample One example invocation for docs, help, and packaged-factory inspection.
 type FactoryInvocationExample struct {
@@ -3933,6 +3955,33 @@ type InitialStructureRequestEventPayload struct {
 	SourceDirectory *string    `json:"sourceDirectory,omitempty"`
 }
 
+// InputGuard Guard attached to one specific workstation input.
+type InputGuard struct {
+	// MatchConfig For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
+	MatchConfig *GuardMatchConfig `json:"matchConfig,omitempty"`
+
+	// MatchInput For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
+	MatchInput *string `json:"matchInput,omitempty"`
+
+	// MaxVisits For `VISIT_COUNT` guards, the visit threshold.
+	MaxVisits *int `json:"maxVisits,omitempty"`
+
+	// ParentInput For parent-aware input guards, the parent workType name from another input in the same workstation.
+	ParentInput *string `json:"parentInput,omitempty"`
+
+	// SpawnedBy For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+	SpawnedBy *string `json:"spawnedBy,omitempty"`
+
+	// Type Guard condition to evaluate for this input-level attachment.
+	Type InputGuardType `json:"type"`
+
+	// Workstation For `VISIT_COUNT` guards, the workstation whose visits are counted.
+	Workstation *string `json:"workstation,omitempty"`
+}
+
+// InputGuardType Guard condition attached to one specific workstation input.
+type InputGuardType string
+
 // InputKind Kinds of input. `DEFAULT` passes opaque input through to workstations as-is.
 type InputKind string
 
@@ -6067,7 +6116,7 @@ type Workstation struct {
 	Env *StringMap `json:"env,omitempty"`
 
 	// Guards Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
-	Guards *[]Guard `json:"guards,omitempty"`
+	Guards *[]WorkstationGuard `json:"guards,omitempty"`
 
 	// Id Optional durable public identifier for this workstation. Graph and layout references should use this id instead of the mutable name.
 	Id *string `json:"id,omitempty"`
@@ -6151,10 +6200,37 @@ type WorkstationCron struct {
 	TriggerAtStart *bool `json:"triggerAtStart,omitempty"`
 }
 
+// WorkstationGuard Guard attached to a workstation as a whole.
+type WorkstationGuard struct {
+	// MatchConfig For `MATCHES_FIELDS` guards, the field-selector configuration used to compare candidate inputs.
+	MatchConfig *GuardMatchConfig `json:"matchConfig,omitempty"`
+
+	// MatchInput For `SAME_NAME` and `SAME_TRACE_ID` input guards, the peer input workType name from another input in the same workstation.
+	MatchInput *string `json:"matchInput,omitempty"`
+
+	// MaxVisits For `VISIT_COUNT` guards, the visit threshold.
+	MaxVisits *int `json:"maxVisits,omitempty"`
+
+	// ParentInput For parent-aware input guards, the parent workType name from another input in the same workstation.
+	ParentInput *string `json:"parentInput,omitempty"`
+
+	// SpawnedBy For dynamic fanout input guards, the workstation that spawns the children for count tracking.
+	SpawnedBy *string `json:"spawnedBy,omitempty"`
+
+	// Type Guard condition to evaluate for this workstation-level attachment.
+	Type WorkstationGuardType `json:"type"`
+
+	// Workstation For `VISIT_COUNT` guards, the workstation whose visits are counted.
+	Workstation *string `json:"workstation,omitempty"`
+}
+
+// WorkstationGuardType Guard condition attached to a workstation as a whole.
+type WorkstationGuardType string
+
 // WorkstationIO One authored work-state reference consumed or emitted by a workstation.
 type WorkstationIO struct {
 	// Guards Per-input guards that must pass before this specific input can be used.
-	Guards *[]Guard `json:"guards,omitempty"`
+	Guards *[]InputGuard `json:"guards,omitempty"`
 
 	// State Name of the work state consumed or emitted for the referenced work type.
 	State string `json:"state"`

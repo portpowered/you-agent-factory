@@ -1254,15 +1254,15 @@ func workstationIOAPIFromInternal(cfg interfaces.IOConfig) factoryapi.Workstatio
 		WorkType: cfg.WorkTypeName,
 	}
 	if cfg.Guard != nil {
-		guards := []factoryapi.Guard{inputGuardAPIFromInternal(*cfg.Guard)}
+		guards := []factoryapi.InputGuard{inputGuardAPIFromInternal(*cfg.Guard)}
 		apiIO.Guards = &guards
 	}
 	return apiIO
 }
 
-func inputGuardAPIFromInternal(guard interfaces.InputGuardConfig) factoryapi.Guard {
-	apiGuard := factoryapi.Guard{
-		Type: publicFactoryGuardTypeFromInternal(guard.Type),
+func inputGuardAPIFromInternal(guard interfaces.InputGuardConfig) factoryapi.InputGuard {
+	apiGuard := factoryapi.InputGuard{
+		Type: publicInputGuardTypeFromInternal(guard.Type),
 	}
 	if guard.MatchInput != "" {
 		apiGuard.MatchInput = stringPtr(guard.MatchInput)
@@ -1298,14 +1298,14 @@ func resourceTypePtrIfNotEmpty(value string) *factoryapi.ResourceType {
 	return &canonical
 }
 
-func workstationGuardsAPIFromInternal(guards []interfaces.GuardConfig) *[]factoryapi.Guard {
+func workstationGuardsAPIFromInternal(guards []interfaces.GuardConfig) *[]factoryapi.WorkstationGuard {
 	if len(guards) == 0 {
 		return nil
 	}
-	values := make([]factoryapi.Guard, len(guards))
+	values := make([]factoryapi.WorkstationGuard, len(guards))
 	for i, guard := range guards {
-		values[i] = factoryapi.Guard{
-			Type:        publicFactoryGuardTypeFromInternal(guard.Type),
+		values[i] = factoryapi.WorkstationGuard{
+			Type:        publicWorkstationGuardTypeFromInternal(guard.Type),
 			Workstation: stringPtrIfNotEmpty(guard.Workstation),
 			MaxVisits:   intPtrIfNonZero(guard.MaxVisits),
 			MatchConfig: guardMatchConfigAPIFromInternal(guard.MatchConfig),
@@ -1321,7 +1321,7 @@ func factoryGuardsAPIFromInternal(guards []interfaces.FactoryGuardConfig) *[]fac
 	values := make([]factoryapi.FactoryGuard, len(guards))
 	for i, guard := range guards {
 		values[i] = factoryapi.FactoryGuard{
-			Type:          publicFactoryGuardTypeFromInternal(guard.Type),
+			Type:          publicFactoryRootGuardTypeFromInternal(guard.Type),
 			ModelProvider: publicFactoryWorkerModelProviderFromInternal(guard.ModelProvider),
 			Model:         stringPtrIfNotEmpty(guard.Model),
 			RefreshWindow: guard.RefreshWindow,

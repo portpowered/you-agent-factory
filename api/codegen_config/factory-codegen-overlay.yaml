@@ -40,6 +40,10 @@ actions:
             - FactoryInvocationUnknownNamedArgumentPolicyReject
             - FactoryInvocationUnknownNamedArgumentPolicyAllow
             - FactoryInvocationUnknownNamedArgumentPolicyCollect
+    - target: $.components.schemas.FactoryGuardType
+      update:
+        x-enum-varnames:
+            - FactoryGuardTypeInferenceThrottle
     - target: $.components.schemas.GuardType
       update:
         x-enum-varnames:
@@ -49,7 +53,6 @@ actions:
             - GuardTypeAnyChildFailed
             - GuardTypeSameName
             - GuardTypeSameTraceID
-            - GuardTypeInferenceThrottle
     - target: $.components.schemas.HostedWorkerProvider
       update:
         x-enum-varnames:

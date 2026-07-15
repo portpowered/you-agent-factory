@@ -118,7 +118,7 @@ properties:
     type: array
     description: Guarded loop breakers should use `VISIT_COUNT` guards here with a `LOGICAL_MOVE` workstation instead of top-level exhaustion rules.
     items:
-      $ref: './Guard.yaml'
+      $ref: './WorkstationGuard.yaml'
   stopWords:
     type: array
     description: Stop words authored on the topology entry for model-oriented dispatches.
