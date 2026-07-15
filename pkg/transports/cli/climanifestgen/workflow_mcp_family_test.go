@@ -49,6 +49,37 @@ func TestWorkflowMCPFamiliesUseClassificationAppropriateSources(t *testing.T) {
 	}
 }
 
+func TestWorkflowMCPFamilyCommandIDAssertionsRespectClassification(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		assertID   func(string) error
+		acceptedID string
+		rejectedID string
+	}{
+		{
+			name:       "canonical MCP",
+			assertID:   climanifestgen.AssertMCPFamilyCommandID,
+			acceptedID: "you.mcp.serve",
+			rejectedID: "you.workflow.validate",
+		},
+		{
+			name:       "workflow compatibility",
+			assertID:   climanifestgen.AssertWorkflowCompatibilityFamilyCommandID,
+			acceptedID: "you.workflow.preview",
+			rejectedID: "you.mcp",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.assertID(tc.acceptedID); err != nil {
+				t.Fatalf("assert accepted ID %q: %v", tc.acceptedID, err)
+			}
+			if err := tc.assertID(tc.rejectedID); err == nil || !strings.Contains(err.Error(), tc.rejectedID) {
+				t.Fatalf("assert rejected ID %q error = %v, want stable-ID diagnostic", tc.rejectedID, err)
+			}
+		})
+	}
+}
+
 func TestWorkflowMCPArtifactsPreserveParserRelationships(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	for _, tc := range []struct {
