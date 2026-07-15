@@ -9,7 +9,6 @@ import (
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
 
@@ -77,14 +76,10 @@ func TestAgentRunResponseEvent_MapsDispatchAndOutcome(t *testing.T) {
 		nil,
 		time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 	)
-	if event.Type != factoryapi.FactoryEventTypeAgentRunResponse {
-		t.Fatalf("event type = %s", event.Type)
+	if event.ID != "factory-event/agent-run-response/dispatch-42" || event.DispatchID != "dispatch-42" {
+		t.Fatalf("event identity = %#v", event)
 	}
-	payload, err := event.Payload.AsAgentRunResponseEventPayload()
-	if err != nil {
-		t.Fatalf("AsAgentRunResponseEventPayload: %v", err)
-	}
-	if payload.DurationMillis != 1500 || payload.AgentRunId != "dispatch-42/agent-run/1" {
-		t.Fatalf("payload = %#v", payload)
+	if event.Payload.DurationMillis != 1500 || event.Payload.AgentRunID != "dispatch-42/agent-run/1" {
+		t.Fatalf("payload = %#v", event.Payload)
 	}
 }

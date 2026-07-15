@@ -66,6 +66,12 @@ the Factory-owned payload and append the canonical envelope directly. Runtime
 coordinators should read detached canonical history when deriving that payload,
 not round-trip the initial structure through the generated event union.
 
+Agent-run executors publish worker-execution-owned completion facts through
+`pkg/workers/execution`; Factory event history owns the `AGENT_RUN_RESPONSE`
+envelope, ordering, and canonical time normalization. Keep safe diagnostics in
+their camel-case event encoding and prove generated OpenAPI union compatibility
+at the test boundary instead of constructing generated events in the executor.
+
 Production command runners must remain blocking without taking lifecycle ownership
 back from `pkg/initializer`. The entrypoint should construct and start the graph
 through `pkg/root`, then let the returned application wait for its selected

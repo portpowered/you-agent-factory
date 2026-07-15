@@ -1,12 +1,56 @@
 package events
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
+
+func TestFactoryEventHistory_RecordAgentRunEvent_OwnsEnvelopeAndPreservesPublicPayload(t *testing.T) {
+	eventTime := time.Date(2026, 7, 15, 22, 30, 0, 123456789, time.FixedZone("offset", -7*60*60))
+	diagnostics := json.RawMessage(`{"agentRun":{"executionBehavior":"agent_loop","transcript":[{"role":"assistant","summary":"done"}]}}`)
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+
+	history.RecordAgentRunEvent(workerexecution.AgentRunResponseEvent{
+		ID:         "factory-event/agent-run-response/dispatch-agent",
+		DispatchID: "dispatch-agent",
+		EventTime:  eventTime,
+		Payload: workerexecution.AgentRunResponseEventPayload{
+			AgentRunID:     "dispatch-agent/agent-run/1",
+			Diagnostics:    diagnostics,
+			DurationMillis: 1250,
+			Outcome:        string(workerexecution.OutcomeAccepted),
+		},
+	})
+
+	canonical := history.CanonicalEvents()
+	if len(canonical) != 1 || canonical[0].Type != interfaces.FactoryEventTypeAgentRunResponse {
+		t.Fatalf("canonical events = %#v, want one agent-run response", canonical)
+	}
+	if canonical[0].Context.EventTime.Location() != time.UTC || !canonical[0].Context.EventTime.Equal(eventTime) {
+		t.Fatalf("event time = %s (%s), want same instant normalized to UTC", canonical[0].Context.EventTime, canonical[0].Context.EventTime.Location())
+	}
+	if canonical[0].Context.DispatchID == nil || *canonical[0].Context.DispatchID != "dispatch-agent" {
+		t.Fatalf("dispatch ID = %#v, want dispatch-agent", canonical[0].Context.DispatchID)
+	}
+
+	publicEvents := history.Events()
+	payload, err := publicEvents[0].Payload.AsAgentRunResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode public agent-run payload: %v", err)
+	}
+	if payload.AgentRunId != "dispatch-agent/agent-run/1" || payload.DurationMillis != 1250 || payload.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Fatalf("public payload = %#v, want preserved agent-run result", payload)
+	}
+	if payload.Diagnostics == nil || payload.Diagnostics.AgentRun == nil || len(*payload.Diagnostics.AgentRun.Transcript) != 1 {
+		t.Fatalf("public diagnostics = %#v, want bounded agent-run transcript", payload.Diagnostics)
+	}
+}
 
 func TestFactoryEventHistory_RecordScriptEvent_AppendsScriptBoundaryEvents(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 14, 5, 0, 0, time.UTC)

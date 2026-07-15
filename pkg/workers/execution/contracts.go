@@ -50,6 +50,25 @@ type InferenceResponseFailureDetail struct {
 	Message string          `json:"message"`
 }
 
+// AgentRunResponseEvent carries worker-owned agent-loop completion facts to a
+// Factory event recorder without coupling worker execution to a transport or
+// Factory event envelope.
+type AgentRunResponseEvent struct {
+	ID         string
+	DispatchID string
+	EventTime  time.Time
+	Payload    AgentRunResponseEventPayload
+}
+
+// AgentRunResponseEventPayload is the stable agent-run completion payload.
+// Diagnostics retain their public camel-case event shape as detached JSON.
+type AgentRunResponseEventPayload struct {
+	AgentRunID     string          `json:"agentRunId"`
+	Diagnostics    json.RawMessage `json:"diagnostics,omitempty"`
+	DurationMillis int64           `json:"durationMillis"`
+	Outcome        string          `json:"outcome"`
+}
+
 // DispatchResponseEventPayload is the worker-execution-owned completion
 // contract consumed by Factory event reducers. FactoryEvent context remains
 // authoritative for dispatch identity and ordering.

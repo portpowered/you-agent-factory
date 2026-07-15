@@ -11,6 +11,7 @@ import (
 
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
@@ -397,7 +398,7 @@ func TestWithAgentRunLogger_ConfiguresExecutor(t *testing.T) {
 func TestAgentRunExecutor_RecordsAgentRunResponseEvent(t *testing.T) {
 	t.Parallel()
 
-	var recorded []factoryapi.FactoryEvent
+	var recorded []workerexecution.AgentRunResponseEvent
 	executor := NewAgentRunExecutor(
 		staticRuntimeConfig{
 			Workers: map[string]*workerconfig.Config{
@@ -408,7 +409,7 @@ func TestAgentRunExecutor_RecordsAgentRunResponseEvent(t *testing.T) {
 		WithAgentRunHarness(&recordingHarnessAdapter{
 			result: HarnessResult{FinalText: "done"},
 		}),
-		WithAgentRunEventRecorder(func(event factoryapi.FactoryEvent) {
+		WithAgentRunEventRecorder(func(event workerexecution.AgentRunResponseEvent) {
 			recorded = append(recorded, event)
 		}),
 		WithAgentRunClock(func() time.Time {
@@ -426,14 +427,11 @@ func TestAgentRunExecutor_RecordsAgentRunResponseEvent(t *testing.T) {
 	if len(recorded) != 1 {
 		t.Fatalf("recorded events = %d, want 1", len(recorded))
 	}
-	if recorded[0].Type != factoryapi.FactoryEventTypeAgentRunResponse {
-		t.Fatalf("event type = %s, want %s", recorded[0].Type, factoryapi.FactoryEventTypeAgentRunResponse)
-	}
-	payload, err := recorded[0].Payload.AsAgentRunResponseEventPayload()
+	diagnostics, err := workerdiagnostics.SafeWorkDiagnosticsFromEventPayload(recorded[0].Payload.Diagnostics)
 	if err != nil {
-		t.Fatalf("AsAgentRunResponseEventPayload: %v", err)
+		t.Fatalf("decode diagnostics: %v", err)
 	}
-	if payload.Diagnostics == nil || payload.Diagnostics.AgentRun == nil {
-		t.Fatalf("payload diagnostics = %#v, want agentRun inspection", payload.Diagnostics)
+	if diagnostics == nil || diagnostics.AgentRun == nil {
+		t.Fatalf("payload diagnostics = %#v, want agentRun inspection", diagnostics)
 	}
 }

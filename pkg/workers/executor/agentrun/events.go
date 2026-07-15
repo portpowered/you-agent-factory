@@ -11,8 +11,6 @@ import (
 
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 
-	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
 
@@ -23,8 +21,8 @@ const (
 	agentRunTranscriptSummaryLen = 160
 )
 
-// AgentRunEventRecorder receives generated agent-run boundary events.
-type AgentRunEventRecorder func(factoryapi.FactoryEvent)
+// AgentRunEventRecorder receives worker-owned agent-run boundary facts.
+type AgentRunEventRecorder func(workerexecution.AgentRunResponseEvent)
 
 func agentRunID(dispatchID string) string {
 	dispatchID = strings.TrimSpace(dispatchID)
@@ -40,22 +38,23 @@ func agentRunResponseEvent(
 	duration time.Duration,
 	transcript []messages.Message,
 	eventTime time.Time,
-) factoryapi.FactoryEvent {
-	payload := factoryapi.AgentRunResponseEventPayload{
-		AgentRunId:     agentRunID(dispatch.DispatchID),
-		Outcome:        factoryapi.WorkOutcome(result.Outcome),
-		DurationMillis: duration.Milliseconds(),
-		Diagnostics:    workerdiagnostics.GeneratedSafeWorkDiagnostics(agentRunSafeDiagnostics(result.Diagnostics, transcript)),
+) workerexecution.AgentRunResponseEvent {
+	// SafeWorkDiagnostics contains only JSON-compatible typed fields and string
+	// maps, so encoding cannot fail for a value produced by this package.
+	diagnostics, _ := workerdiagnostics.SafeWorkDiagnosticsEventPayload(agentRunSafeDiagnostics(result.Diagnostics, transcript))
+	if string(diagnostics) == "null" {
+		diagnostics = nil
 	}
-	return factoryapi.FactoryEvent{
-		SchemaVersion: factoryapi.AgentFactoryEventV1,
-		Id:            fmt.Sprintf("%s/%s", agentRunResponseEventIDPrefix, dispatch.DispatchID),
-		Type:          factoryapi.FactoryEventTypeAgentRunResponse,
-		Context: factoryapi.FactoryEventContext{
-			EventTime:  interfaces.CanonicalEventTime(eventTime),
-			DispatchId: stringPtr(dispatch.DispatchID),
+	return workerexecution.AgentRunResponseEvent{
+		ID:         fmt.Sprintf("%s/%s", agentRunResponseEventIDPrefix, dispatch.DispatchID),
+		DispatchID: dispatch.DispatchID,
+		EventTime:  eventTime,
+		Payload: workerexecution.AgentRunResponseEventPayload{
+			AgentRunID:     agentRunID(dispatch.DispatchID),
+			Outcome:        string(result.Outcome),
+			DurationMillis: duration.Milliseconds(),
+			Diagnostics:    diagnostics,
 		},
-		Payload: agentRunResponseFactoryEventPayload(payload),
 	}
 }
 
@@ -109,17 +108,4 @@ func boundedAgentRunTranscript(history []messages.Message) []workerdiagnostics.A
 		return nil
 	}
 	return out
-}
-
-func agentRunResponseFactoryEventPayload(payload factoryapi.AgentRunResponseEventPayload) factoryapi.FactoryEvent_Payload {
-	var out factoryapi.FactoryEvent_Payload
-	_ = out.FromAgentRunResponseEventPayload(payload)
-	return out
-}
-
-func stringPtr(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
 }
