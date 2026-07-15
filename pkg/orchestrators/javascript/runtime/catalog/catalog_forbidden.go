@@ -4,16 +4,9 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/symbolidentity"
 )
-
-var comparisonProjectHelperPaths = map[string]struct{}{
-	"workflow.sleep": {},
-	"agent.verify":   {},
-	"agent.parallel": {},
-}
 
 // CatalogForbiddenSymbolIssues reports catalog symbol paths that document
 // forbidden host-only globals or comparison-project-only helpers.
@@ -21,7 +14,8 @@ func CatalogForbiddenSymbolIssues(catalog []CatalogSymbolPath, symbols map[strin
 	var issues []PathCompletenessIssue
 	for _, entry := range catalog {
 		path := entry.Path
-		if isForbiddenInstalledRootGlobalPath(path) {
+		switch symbolidentity.ClassifySurface(path, catalogSymbolKind(symbols, entry.SymbolKey)) {
+		case symbolidentity.SurfaceForbiddenHostGlobal:
 			issues = append(issues, PathCompletenessIssue{
 				Code:      "javascript.path.forbidden",
 				SymbolKey: entry.SymbolKey,
@@ -31,9 +25,7 @@ func CatalogForbiddenSymbolIssues(catalog []CatalogSymbolPath, symbols map[strin
 					strconv.Quote(path),
 				),
 			})
-			continue
-		}
-		if isComparisonProjectHelperPath(path) {
+		case symbolidentity.SurfaceComparisonProjectHelper:
 			issues = append(issues, PathCompletenessIssue{
 				Code:      "javascript.path.unsupported_helper",
 				SymbolKey: entry.SymbolKey,
@@ -43,9 +35,7 @@ func CatalogForbiddenSymbolIssues(catalog []CatalogSymbolPath, symbols map[strin
 					strconv.Quote(path),
 				),
 			})
-			continue
-		}
-		if path == "agent" && catalogSymbolKind(symbols, entry.SymbolKey) == "function" {
+		case symbolidentity.SurfaceCallableAgentGlobal:
 			issues = append(issues, PathCompletenessIssue{
 				Code:      "javascript.path.unsupported_helper",
 				SymbolKey: entry.SymbolKey,
@@ -71,22 +61,8 @@ func CatalogForbiddenSymbolIssues(catalog []CatalogSymbolPath, symbols map[strin
 	return issues
 }
 
-func isForbiddenInstalledRootGlobalPath(path string) bool {
-	for _, forbidden := range symbolidentity.ForbiddenRootGlobals {
-		if path == forbidden || strings.HasPrefix(path, forbidden+".") {
-			return true
-		}
-	}
-	return false
-}
-
-func isComparisonProjectHelperPath(path string) bool {
-	_, ok := comparisonProjectHelperPaths[path]
-	return ok
-}
-
 func isUnsupportedCatalogSurfacePath(path string) bool {
-	return isForbiddenInstalledRootGlobalPath(path) || isComparisonProjectHelperPath(path)
+	return symbolidentity.IsUnsupportedSurfacePath(path)
 }
 
 func catalogSymbolKind(symbols map[string]any, key string) string {

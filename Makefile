@@ -268,7 +268,7 @@ javascript-contract-smoke:
 	$(GO) run ./cmd/javascriptcontractsmoke -root .
 	$(GO) run ./cmd/javascriptcontractsmoke -root .
 	$(GO) test ./internal/javascriptcontractsmoke ./cmd/javascriptcontractsmoke -count=1 -timeout $(JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT)
-	$(GO) test ./contracts -run '^TestJavaScriptRuntimePackagesDoNot(ImportContractTooling|LoadContractManifests)$$' -count=1 -timeout $(JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT)
+	$(GO) test ./contracts -run '^TestJavaScriptRuntimeBehaviorDoesNotLoadContractManifests$$' -count=1 -timeout $(JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT)
 	$(GO) test ./pkg/orchestrators/javascript/runtime -run '$(JAVASCRIPT_RUNTIME_REGRESSION_TESTS)' -count=1 -timeout $(JAVASCRIPT_CONTRACT_SMOKE_TIMEOUT)
 
 response-stream-stress-smoke:

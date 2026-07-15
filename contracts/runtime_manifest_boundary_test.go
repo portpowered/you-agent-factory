@@ -1,153 +1,166 @@
 package contracts_test
 
 import (
+	"bytes"
 	"encoding/json"
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
-	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractstaging"
 	"github.com/portpowered/infinite-you/internal/testpath"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 )
-
-var forbiddenContractToolingImports = []string{
-	"github.com/portpowered/infinite-you/internal/contract",
-	"github.com/portpowered/infinite-you/internal/javascriptcontractsmoke",
-	"github.com/portpowered/infinite-you/contracts",
-}
 
 const (
-	repositoryImportPrefix          = "github.com/portpowered/infinite-you/"
-	javascriptRuntimePackagePattern = repositoryImportPrefix + "pkg/orchestrators/javascript/..."
+	runtimeWithoutManifestsHelper = "YOU_TEST_RUNTIME_WITHOUT_MANIFESTS"
+	runtimeBehaviorSnapshotPath   = "YOU_TEST_RUNTIME_BEHAVIOR_SNAPSHOT"
 )
 
-var forbiddenRuntimeManifestNames = []string{
-	"runtime-api.json",
-	"runtime-manifest.schema.json",
+type runtimeBehaviorSnapshot struct {
+	InvocationValue   string                          `json:"invocationValue"`
+	InvocationRecords []workflowruntime.RuntimeRecord `json:"invocationRecords"`
+	ResumeValue       string                          `json:"resumeValue"`
+	DeniedFailure     workflowruntime.Failure         `json:"deniedFailure"`
+	DeniedRecords     []workflowruntime.RuntimeRecord `json:"deniedRecords"`
 }
 
-type listedJavaScriptPackage struct {
-	Dir        string
-	ImportPath string
-	GoFiles    []string
-	CgoFiles   []string
-}
+func TestJavaScriptRuntimeBehaviorDoesNotLoadContractManifests(t *testing.T) {
+	if os.Getenv(runtimeWithoutManifestsHelper) == "1" {
+		writeRuntimeBehaviorSnapshot(t, captureRuntimeBehavior(t))
+		return
+	}
 
-func TestJavaScriptRuntimePackagesDoNotImportContractTooling(t *testing.T) {
-	t.Parallel()
+	baseline := marshalRuntimeBehaviorSnapshot(t, captureRuntimeBehavior(t))
+	root := t.TempDir()
+	for _, relativePath := range []string{
+		filepath.Join("contracts", "javascript", "runtime-api.json"),
+		filepath.Join("contracts", "javascript", "runtime-manifest.schema.json"),
+		filepath.Join("packages", "api", "generated", "javascript", "runtime-api.json"),
+	} {
+		writeUnusableManifest(t, root, relativePath)
+	}
 
-	cmd := exec.Command(
-		"go",
-		"list",
-		"-deps",
-		"-f",
-		"{{if not .Standard}}{{.ImportPath}}{{end}}",
-		javascriptRuntimePackagePattern,
+	cmd := exec.Command(os.Args[0], "-test.run=^TestJavaScriptRuntimeBehaviorDoesNotLoadContractManifests$")
+	cmd.Dir = root
+	snapshotPath := filepath.Join(root, "runtime-behavior.json")
+	cmd.Env = append(os.Environ(),
+		runtimeWithoutManifestsHelper+"=1",
+		runtimeBehaviorSnapshotPath+"="+snapshotPath,
 	)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("go list JavaScript runtime dependencies: %v\n%s", err, output)
+		t.Fatalf("execute JavaScript runtime with unusable contract manifests: %v\n%s", err, output)
 	}
-
-	for _, dependency := range strings.Fields(string(output)) {
-		for _, forbidden := range forbiddenContractToolingImports {
-			if dependency == forbidden || strings.HasPrefix(dependency, forbidden+"/") {
-				t.Fatalf(
-					"JavaScript runtime packages must not depend on contract tooling %s; found %s",
-					forbidden,
-					dependency,
-				)
-			}
-		}
+	withoutManifests, err := os.ReadFile(snapshotPath)
+	if err != nil {
+		t.Fatalf("read runtime behavior snapshot: %v", err)
+	}
+	if !bytes.Equal(withoutManifests, baseline) {
+		t.Fatalf("runtime behavior changed with unusable manifests:\nbaseline: %s\nunusable: %s", baseline, withoutManifests)
 	}
 }
 
-func TestJavaScriptRuntimePackagesDoNotLoadContractManifests(t *testing.T) {
-	t.Parallel()
-
-	for _, pkg := range listJavaScriptRuntimePackages(t) {
-		files := append(slices.Clone(pkg.GoFiles), pkg.CgoFiles...)
-		slices.Sort(files)
-		for _, file := range files {
-			path := filepath.Join(pkg.Dir, file)
-			repositoryPath := filepath.ToSlash(filepath.Join(strings.TrimPrefix(pkg.ImportPath, repositoryImportPrefix), file))
-			for _, reference := range runtimeManifestReferences(t, path) {
-				t.Errorf(
-					"JavaScript runtime package %s loads contract manifest %q in %s; remove the runtime dependency and keep contract comparison in structural tooling",
-					pkg.ImportPath,
-					reference,
-					repositoryPath,
-				)
-			}
-		}
+func writeUnusableManifest(t *testing.T, root, relativePath string) {
+	t.Helper()
+	path := filepath.Join(root, relativePath)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create unusable manifest directory: %v", err)
+	}
+	if err := os.WriteFile(path, []byte("{not-valid-json"), 0o600); err != nil {
+		t.Fatalf("write unusable manifest %s: %v", filepath.ToSlash(relativePath), err)
 	}
 }
 
-func listJavaScriptRuntimePackages(t *testing.T) []listedJavaScriptPackage {
+func captureRuntimeBehavior(t *testing.T) runtimeBehaviorSnapshot {
 	t.Helper()
 
-	cmd := exec.Command("go", "list", "-json", javascriptRuntimePackagePattern)
-	output, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("go list JavaScript runtime packages: %v", err)
+	invocation := runJavaScript(t, workflowruntime.Request{
+		Source: `
+workflow.checkpoint({ label: "manifest-independent", state: { step: 1 } });
+workflow.final({ status: "complete" });
+`,
+		SourceRef: "manifest-independent-invocation.js",
+		SessionID: "manifest-independent-invocation",
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+	})
+	if !invocation.OK || string(invocation.Value.JSON) != `{"status":"complete"}` {
+		t.Fatalf("invocation outcome = %#v, want successful manifest-independent final", invocation)
+	}
+	if len(invocation.Records) != 1 || invocation.Records[0].Kind != workflowruntime.RecordKindCheckpoint {
+		t.Fatalf("invocation records = %#v, want one checkpoint record", invocation.Records)
 	}
 
-	decoder := json.NewDecoder(strings.NewReader(string(output)))
-	var packages []listedJavaScriptPackage
-	for {
-		var pkg listedJavaScriptPackage
-		err := decoder.Decode(&pkg)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatalf("decode listed JavaScript runtime package: %v", err)
-		}
-		packages = append(packages, pkg)
-	}
-	slices.SortFunc(packages, func(left, right listedJavaScriptPackage) int {
-		return strings.Compare(left.ImportPath, right.ImportPath)
+	resume := runJavaScript(t, workflowruntime.Request{
+		Source:    `return { resumedStep: workflow.resumeState().step };`,
+		SourceRef: "manifest-independent-resume.js",
+		SessionID: "manifest-independent-resume",
+		Policy:    workflowpolicy.DefaultEffectivePolicy(),
+		Resume: &workflowruntime.ResumeContext{CheckpointState: map[string]any{
+			"step": float64(2),
+		}},
 	})
-	return packages
+	if !resume.OK || string(resume.Value.JSON) != `{"resumedStep":2}` {
+		t.Fatalf("resume outcome = %#v, want restored checkpoint state", resume)
+	}
+
+	maxArtifactBytes := int64(1)
+	deniedPolicy := workflowpolicy.DefaultEffectivePolicy()
+	deniedPolicy.MaxArtifactBytes = &maxArtifactBytes
+	denied := runJavaScript(t, workflowruntime.Request{
+		Source:    `workflow.artifact({ kind: "report", label: "oversized", content: { body: "too large" } }); return { ok: true };`,
+		SourceRef: "manifest-independent-policy.js",
+		SessionID: "manifest-independent-policy",
+		Policy:    deniedPolicy,
+	})
+	if denied.OK || denied.Failure.Code != workflowruntime.CodeScriptError || !strings.Contains(denied.Failure.Message, "policy denied") {
+		t.Fatalf("policy outcome = %#v, want stable policy denial", denied)
+	}
+	for _, record := range denied.Records {
+		if record.Kind == workflowruntime.RecordKindArtifact {
+			t.Fatalf("policy denial emitted artifact record: %#v", denied.Records)
+		}
+	}
+
+	return runtimeBehaviorSnapshot{
+		InvocationValue:   string(invocation.Value.JSON),
+		InvocationRecords: invocation.Records,
+		ResumeValue:       string(resume.Value.JSON),
+		DeniedFailure:     denied.Failure,
+		DeniedRecords:     denied.Records,
+	}
 }
 
-func runtimeManifestReferences(t *testing.T, path string) []string {
+func writeRuntimeBehaviorSnapshot(t *testing.T, snapshot runtimeBehaviorSnapshot) {
 	t.Helper()
-
-	parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-	if err != nil {
-		t.Fatalf("parse JavaScript runtime source %s: %v", filepath.ToSlash(path), err)
+	path := os.Getenv(runtimeBehaviorSnapshotPath)
+	if path == "" {
+		t.Fatal("runtime behavior snapshot path is required in helper process")
 	}
+	if err := os.WriteFile(path, marshalRuntimeBehaviorSnapshot(t, snapshot), 0o600); err != nil {
+		t.Fatalf("write runtime behavior snapshot: %v", err)
+	}
+}
 
-	var references []string
-	ast.Inspect(parsed, func(node ast.Node) bool {
-		literal, ok := node.(*ast.BasicLit)
-		if !ok || literal.Kind != token.STRING {
-			return true
-		}
-		value, err := strconv.Unquote(literal.Value)
-		if err != nil {
-			return true
-		}
-		normalized := strings.ReplaceAll(value, `\`, "/")
-		for _, forbiddenName := range forbiddenRuntimeManifestNames {
-			if normalized == forbiddenName || strings.HasSuffix(normalized, "/"+forbiddenName) {
-				references = append(references, value)
-				break
-			}
-		}
-		return true
-	})
-	slices.Sort(references)
-	return references
+func marshalRuntimeBehaviorSnapshot(t *testing.T, snapshot runtimeBehaviorSnapshot) []byte {
+	t.Helper()
+	raw, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("marshal runtime behavior snapshot: %v", err)
+	}
+	return raw
+}
+
+func runJavaScript(t *testing.T, request workflowruntime.Request) workflowruntime.Outcome {
+	t.Helper()
+	outcome, err := workflowruntime.Run(t.Context(), request, workflowruntime.Hooks{})
+	if err != nil {
+		t.Fatalf("run JavaScript workflow: %v", err)
+	}
+	return outcome
 }
 
 func TestJavaScriptAuthoredCatalogBoundary(t *testing.T) {

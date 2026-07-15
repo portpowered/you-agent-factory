@@ -59,7 +59,9 @@ Use this map when changing the public REST contract.
   `internal/contractvalidator/javascript_catalog_call_behavior_parity.go`.
   Focused runtime execution parity for the same representative symbols remains
   in `pkg/orchestrators/javascript/runtime/callbehavior_inventory_test.go`.
-  Prove runtime dependency isolation and catalog boundaries in `contracts/runtime_manifest_boundary_test.go` and
+  Prove runtime manifest independence behaviorally in `contracts/runtime_manifest_boundary_test.go` by
+  executing representative invocation, emitted-record, policy-denial, and resume behavior from a
+  subprocess whose authored and staged manifests are unusable. Catalog boundaries remain in
   `contracts/javascript_runtime_api_test.go`; staged
   `packages/api/generated/javascript/runtime-api.json` is a byte-identical copy
   of the authored catalog at `contracts/javascript/runtime-api.json` through
@@ -68,11 +70,11 @@ Use this map when changing the public REST contract.
   `internal/javascriptcontractsmoke` with CLI entrypoint
   `cmd/javascriptcontractsmoke` and `make javascript-contract-smoke`; the same
   target runs focused installed-runtime regressions for signature, async result,
-  emitted records, policy rejection, and resume, plus the production-package guards in
-  `contracts/runtime_manifest_boundary_test.go`, which discover every
-  `pkg/orchestrators/javascript/...` package and reject transitive contract-tooling
-  imports or production source literals that name the authored/staged runtime
-  manifest. Reuse
+  emitted records, policy rejection, and resume, plus the unusable-manifest behavioral
+  proof. Canonical forbidden host-global and comparison-project-helper classification
+  lives in `pkg/orchestrators/javascript/runtime/symbolidentity`; route both schema
+  validation and smoke/catalog checks through `symbolidentity.ClassifySurface` so the
+  supported-surface policy cannot drift. Reuse
   `symbolidentity.ProjectInstalledBindings`, `callbehavior.ProjectInstalledCallBehavior`,
   `catalog.CatalogPathCompletenessIssues`, `catalog.CatalogForbiddenSymbolIssues`, and
   `catalog.CatalogCallBehaviorParityIssues`
