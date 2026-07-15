@@ -218,6 +218,151 @@
         }
       ]
     },
+    "errorType": {
+      "description": "Descriptive installed-runtime error constructor label.",
+      "type": "string",
+      "enum": [
+        "GoError",
+        "TypeError"
+      ]
+    },
+    "callableError": {
+      "description": "One documented callable failure condition with a stable diagnostic label.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "condition",
+        "type",
+        "message"
+      ],
+      "properties": {
+        "condition": {
+          "description": "Stable machine-readable failure condition identifier.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "type": {
+          "$ref": "#/$defs/errorType"
+        },
+        "message": {
+          "description": "Canonical installed-runtime error message text.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "callableErrorList": {
+      "description": "Ordered callable failure conditions documented for one symbol.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/callableError"
+      }
+    },
+    "policyCheckKind": {
+      "description": "Descriptive installed-runtime policy gate identifier.",
+      "type": "string",
+      "enum": [
+        "allowNetwork",
+        "allowedCommands",
+        "allowedModels",
+        "allowedReasoningEfforts",
+        "childRequest",
+        "concurrency",
+        "maxAgents",
+        "maxArtifactBytes",
+        "sandboxMode",
+        "writableRoots"
+      ]
+    },
+    "policyCheck": {
+      "description": "One documented policy gate that may inspect callable inputs.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/policyCheckKind"
+        },
+        "field": {
+          "description": "Callable input field inspected by this policy gate when applicable.",
+          "type": "string",
+          "pattern": "^[a-z][a-zA-Z0-9]*$"
+        },
+        "message": {
+          "description": "Canonical policy-denied message text when the gate fails.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "policyCheckList": {
+      "description": "Policy gates documented for one callable symbol.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/policyCheck"
+      }
+    },
+    "emittedRecordType": {
+      "description": "Descriptive installed-runtime record/event type emitted by a callable symbol.",
+      "type": "string",
+      "enum": [
+        "artifact",
+        "budget",
+        "checkpoint",
+        "child_dispatch",
+        "log",
+        "phase"
+      ]
+    },
+    "emittedRecordList": {
+      "description": "Record or event types emitted when a callable symbol succeeds.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/emittedRecordType"
+      }
+    },
+    "callbackRole": {
+      "description": "Which callable parameter slot the callback signature documents.",
+      "type": "string",
+      "enum": [
+        "item",
+        "next",
+        "worker"
+      ]
+    },
+    "callbackSignature": {
+      "description": "Descriptive callback signature metadata for one callable parameter role.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "parameters"
+      ],
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/callbackRole"
+        },
+        "parameters": {
+          "$ref": "#/$defs/parameterList"
+        },
+        "notes": {
+          "description": "Free-form documentation for callback invocation semantics.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "descriptiveNote": {
+      "description": "Free-form descriptive documentation note that does not encode executable workflow logic.",
+      "type": "string",
+      "minLength": 1
+    },
     "asyncReturnConstraints": {
       "allOf": [
         {
@@ -319,6 +464,24 @@
         },
         "return": {
           "$ref": "#/$defs/returnShape"
+        },
+        "callback": {
+          "$ref": "#/$defs/callbackSignature"
+        },
+        "emittedRecords": {
+          "$ref": "#/$defs/emittedRecordList"
+        },
+        "errors": {
+          "$ref": "#/$defs/callableErrorList"
+        },
+        "policyChecks": {
+          "$ref": "#/$defs/policyCheckList"
+        },
+        "determinism": {
+          "$ref": "#/$defs/descriptiveNote"
+        },
+        "resumeNotes": {
+          "$ref": "#/$defs/descriptiveNote"
         }
       }
     },
@@ -338,7 +501,13 @@
             },
             "async": false,
             "parameters": false,
-            "return": false
+            "return": false,
+            "callback": false,
+            "emittedRecords": false,
+            "errors": false,
+            "policyChecks": false,
+            "determinism": false,
+            "resumeNotes": false
           },
           "not": {
             "required": [
@@ -365,7 +534,13 @@
             },
             "async": false,
             "parameters": false,
-            "return": false
+            "return": false,
+            "callback": false,
+            "emittedRecords": false,
+            "errors": false,
+            "policyChecks": false,
+            "determinism": false,
+            "resumeNotes": false
           }
         }
       ]
@@ -383,7 +558,13 @@
             },
             "async": false,
             "parameters": false,
-            "return": false
+            "return": false,
+            "callback": false,
+            "emittedRecords": false,
+            "errors": false,
+            "policyChecks": false,
+            "determinism": false,
+            "resumeNotes": false
           },
           "not": {
             "anyOf": [

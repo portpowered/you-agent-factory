@@ -21,6 +21,10 @@ func JavaScriptRegistry() Registry {
 			{Path: "contracts/testdata/javascript/valid-value.json", SchemaID: runtimeManifestSchemaID},
 			{Path: "contracts/testdata/javascript/valid-synchronous-function.json", SchemaID: runtimeManifestSchemaID},
 			{Path: "contracts/testdata/javascript/valid-asynchronous-function.json", SchemaID: runtimeManifestSchemaID},
+			{Path: "contracts/testdata/javascript/valid-callback.json", SchemaID: runtimeManifestSchemaID},
+			{Path: "contracts/testdata/javascript/valid-emitted-record.json", SchemaID: runtimeManifestSchemaID},
+			{Path: "contracts/testdata/javascript/valid-policy.json", SchemaID: runtimeManifestSchemaID},
+			{Path: "contracts/testdata/javascript/valid-resume.json", SchemaID: runtimeManifestSchemaID},
 		},
 	})
 }

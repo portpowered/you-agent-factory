@@ -90,3 +90,26 @@ func TestRuntimeManifestSchemaCallableFixtures(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeManifestSchemaCallableMetadataFixtures(t *testing.T) {
+	schema := runtimeManifestSchema(t)
+
+	tests := []struct {
+		name    string
+		fixture string
+	}{
+		{name: "callback signature", fixture: "valid-callback.json"},
+		{name: "emitted records and errors", fixture: "valid-emitted-record.json"},
+		{name: "policy checks", fixture: "valid-policy.json"},
+		{name: "resume and determinism notes", fixture: "valid-resume.json"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			instance := readJSON(t, filepath.Join("testdata", "javascript", test.fixture))
+			if err := schema.Validate(instance); err != nil {
+				t.Fatalf("validate valid fixture %s: %v", test.fixture, err)
+			}
+		})
+	}
+}

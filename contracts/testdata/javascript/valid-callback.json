@@ -1,0 +1,99 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.callback-pipeline": {
+      "id": "example.callback-pipeline",
+      "name": "pipeline",
+      "path": "pipeline",
+      "kind": "function",
+      "async": true,
+      "parameters": [
+        {
+          "id": "example.callback-pipeline.param.items",
+          "name": "items",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "array"
+        },
+        {
+          "id": "example.callback-pipeline.param.worker",
+          "name": "worker",
+          "position": 1,
+          "required": true,
+          "rest": false,
+          "type": "function"
+        },
+        {
+          "id": "example.callback-pipeline.param.next",
+          "name": "next",
+          "position": 2,
+          "required": false,
+          "rest": false,
+          "type": "function"
+        }
+      ],
+      "callback": {
+        "role": "worker",
+        "parameters": [
+          {
+            "id": "example.callback-pipeline.callback.this",
+            "name": "this",
+            "position": 0,
+            "required": false,
+            "rest": false,
+            "type": "undefined",
+            "default": "undefined"
+          },
+          {
+            "id": "example.callback-pipeline.callback.item",
+            "name": "item",
+            "position": 1,
+            "required": true,
+            "rest": false,
+            "type": "any"
+          },
+          {
+            "id": "example.callback-pipeline.callback.index",
+            "name": "index",
+            "position": 2,
+            "required": true,
+            "rest": false,
+            "type": "number"
+          }
+        ],
+        "notes": "Optional next stage receives (priorResult, item, index)."
+      },
+      "return": {
+        "kind": "promise",
+        "type": "pipeline-result-array"
+      },
+      "determinism": "Stages run sequentially per item; worker and next may return values or Promises.",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.callback-pipeline",
+        "documentation": {
+          "title": {
+            "id": "example.callback-pipeline.title",
+            "canonicalEnglish": "Pipeline helper"
+          },
+          "description": {
+            "id": "example.callback-pipeline.description",
+            "canonicalEnglish": "Runs staged asynchronous work over an item list with documented worker callback semantics."
+          }
+        },
+        "examples": [
+          "await pipeline(items, worker)"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.callback-pipeline",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}
