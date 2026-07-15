@@ -335,6 +335,53 @@ func TestCheck_PathCompletenessFailuresAreDeterministic(t *testing.T) {
 	}
 }
 
+func TestCheck_FailsWhenCatalogCallBehaviorIsIncomplete(t *testing.T) {
+	tests := []struct {
+		name      string
+		symbolKey string
+		path      string
+		field     string
+	}{
+		{name: "signature", symbolKey: "javascript.workflow.checkpoint", path: "workflow.checkpoint", field: "parameters"},
+		{name: "async", symbolKey: "javascript.agent.run", path: "agent.run", field: "async"},
+		{name: "result", symbolKey: "javascript.agent.run", path: "agent.run", field: "return"},
+		{name: "emitted record", symbolKey: "javascript.workflow.checkpoint", path: "workflow.checkpoint", field: "emittedRecords"},
+		{name: "policy", symbolKey: "javascript.agent.run", path: "agent.run", field: "policyChecks"},
+		{name: "resume", symbolKey: "javascript.workflow.checkpoint", path: "workflow.checkpoint", field: "resumeNotes"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := mutationFixtureRoot(t)
+			mutateCatalogFixture(t, root, func(catalog map[string]any) {
+				symbols := catalog["symbols"].(map[string]any)
+				symbol := symbols[test.symbolKey].(map[string]any)
+				delete(symbol, test.field)
+			})
+
+			first := runCheckDiagnostics(t, root)
+			second := runCheckDiagnostics(t, root)
+			if len(first) != 1 || len(second) != 1 || first[0] != second[0] {
+				t.Fatalf("call-behavior diagnostics are not deterministic: first=%+v second=%+v", first, second)
+			}
+			diagnostic := first[0]
+			if diagnostic.Code != "javascript.call_behavior.mismatch" {
+				t.Fatalf("diagnostic code = %q, want javascript.call_behavior.mismatch", diagnostic.Code)
+			}
+			if diagnostic.Path != test.path {
+				t.Fatalf("diagnostic path = %q, want repository-relative symbol path %q", diagnostic.Path, test.path)
+			}
+			wantFieldPath := "/symbols/" + test.symbolKey + "/" + test.field
+			if !strings.Contains(diagnostic.Message, wantFieldPath) {
+				t.Fatalf("diagnostic message = %q, want field path %q", diagnostic.Message, wantFieldPath)
+			}
+			if !strings.Contains(diagnostic.Message, "restore catalog call metadata parity with the installed call-behavior baseline") {
+				t.Fatalf("diagnostic message = %q, want actionable baseline remediation", diagnostic.Message)
+			}
+		})
+	}
+}
+
 type pathCompletenessExpectation struct {
 	wantCount int
 	code      string

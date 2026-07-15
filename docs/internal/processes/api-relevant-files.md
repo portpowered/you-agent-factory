@@ -78,7 +78,11 @@ Use this map when changing the public REST contract.
   report the generated repository-relative file path and, when valid JSON differs
   inside symbol records, the affected public symbol paths; the check remains
   read-only and directs maintainers to `make contracts-generate` followed by
-  `make contracts-check`.
+  `make contracts-check`. Behavior-incomplete fixtures should delete or contradict
+  call metadata in synchronized authored/staged temp catalogs, then assert the
+  public symbol path, `/symbols/<key>/<field>` location, and call-behavior baseline
+  remediation for signature, async/result, emitted-record, policy, and resume
+  fields; this proves the smoke boundary without making the catalog executable.
 - Staged OpenAPI byte policy lives in `internal/contractstaging/openapi.go`
   (`CanonicalOpenAPIPath`, `StagedOpenAPIPath`, `ReviewedOpenAPIBytePolicy`,
   `ProjectStagedOpenAPI`, `VerifyStagedOpenAPIParity`). The reviewed policy is

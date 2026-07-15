@@ -126,6 +126,43 @@ func TestRunReportsDuplicatePathDeterministicallyWithoutWriting(t *testing.T) {
 	assertRunPathFailureDeterministic(t, root, "phase", "javascript.path.duplicate")
 }
 
+func TestRunReportsIncompleteCallBehaviorDeterministicallyWithoutWriting(t *testing.T) {
+	root := mutationFixtureRoot(t)
+	mutateCatalogFixture(t, root, func(catalog map[string]any) {
+		symbols := catalog["symbols"].(map[string]any)
+		checkpoint := symbols["javascript.workflow.checkpoint"].(map[string]any)
+		delete(checkpoint, "emittedRecords")
+	})
+
+	before := repositoryTree(t, root)
+	wantSuffix := "[agent-factory:javascript-contract-smoke] JavaScript contract parity failed; restore catalog, staging, binding descriptor, and call-behavior baseline alignment\n"
+	for runIndex := 0; runIndex < 2; runIndex++ {
+		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+		if status := run(root, stdout, stderr); status != 1 {
+			t.Fatalf("run %d status = %d, want 1", runIndex, status)
+		}
+		if stdout.Len() != 0 {
+			t.Fatalf("run %d stdout = %q, want empty", runIndex, stdout.String())
+		}
+		output := stderr.String()
+		if !strings.Contains(output, "workflow.checkpoint (javascript.call_behavior.mismatch):") {
+			t.Fatalf("run %d stderr = %q, want symbol path and behavior code", runIndex, output)
+		}
+		if !strings.Contains(output, "/symbols/javascript.workflow.checkpoint/emittedRecords") {
+			t.Fatalf("run %d stderr = %q, want incomplete field path", runIndex, output)
+		}
+		if !strings.Contains(output, "restore catalog call metadata parity with the installed call-behavior baseline") {
+			t.Fatalf("run %d stderr = %q, want actionable baseline remediation", runIndex, output)
+		}
+		if !strings.HasSuffix(output, wantSuffix) {
+			t.Fatalf("run %d stderr = %q, want parity failure suffix", runIndex, output)
+		}
+	}
+	if after := repositoryTree(t, root); !mapsEqual(after, before) {
+		t.Fatal("run() changed incomplete call-behavior fixture bytes")
+	}
+}
+
 func TestRunReportsStaleProjectionDeterministicallyWithoutWriting(t *testing.T) {
 	root := mutationFixtureRoot(t)
 	stagedPath := filepath.Join(root, filepath.FromSlash(javascriptcontractsmoke.StagedProjectionRelativePath))
