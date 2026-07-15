@@ -188,30 +188,6 @@ func assertNamedFactorySegmentHelpersMatchConfig(t *testing.T) {
 	if facadeDir != configDir {
 		t.Fatalf("mapped dir = %q vs %q", facadeDir, configDir)
 	}
-
-	facadeSegment, err := persist.NamedFactoryNameToLayoutSegment("@you/tts")
-	if err != nil {
-		t.Fatalf("persist.NamedFactoryNameToLayoutSegment: %v", err)
-	}
-	configSegment, err := config.NamedFactoryNameToLayoutSegment("@you/tts")
-	if err != nil {
-		t.Fatalf("config.NamedFactoryNameToLayoutSegment: %v", err)
-	}
-	if facadeSegment != configSegment {
-		t.Fatalf("layout segment = %q vs %q", facadeSegment, configSegment)
-	}
-
-	facadeName, err := persist.NamedFactoryLayoutSegmentToName(facadeSegment)
-	if err != nil {
-		t.Fatalf("persist.NamedFactoryLayoutSegmentToName: %v", err)
-	}
-	configName, err := config.NamedFactoryLayoutSegmentToName(configSegment)
-	if err != nil {
-		t.Fatalf("config.NamedFactoryLayoutSegmentToName: %v", err)
-	}
-	if facadeName != configName {
-		t.Fatalf("canonical name = %q vs %q", facadeName, configName)
-	}
 }
 
 func assertNamedFactoryRootHelpersMatchConfig(t *testing.T) {

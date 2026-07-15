@@ -1,0 +1,961 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.portpowered.com/you/contracts/javascript/runtime-manifest.schema.json",
+  "title": "JavaScript runtime symbol manifest",
+  "description": "Authored installed-runtime symbol metadata for globals, nested namespaces, values, and callable signatures. Semantic integrity checks for duplicate paths, parent references, member resolution, callable parameter ordering, closed serializable-value schemas, and supported surfaces are validated by family-specific diagnostics after schema validation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "formatVersion",
+    "symbols"
+  ],
+  "properties": {
+    "formatVersion": {
+      "description": "The explicitly supported version of this runtime-manifest format.",
+      "const": "1.0.0"
+    },
+    "limits": {
+      "$ref": "#/$defs/runtimeLimits"
+    },
+    "capabilities": {
+      "$ref": "#/$defs/runtimeCapabilityList"
+    },
+    "versionAvailability": {
+      "$ref": "#/$defs/versionAvailability"
+    },
+    "symbols": {
+      "description": "Installed runtime symbols keyed by stable symbol identifiers. Object keys make duplicate symbol IDs structurally unrepresentable.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/symbol"
+      }
+    }
+  },
+  "$defs": {
+    "symbolPath": {
+      "description": "Dot-delimited installed symbol path from the runtime global scope.",
+      "type": "string",
+      "pattern": "^[a-z][a-zA-Z0-9]*(?:[.][a-z][a-zA-Z0-9]*)*$"
+    },
+    "memberName": {
+      "description": "Final segment name of one direct child symbol within a namespace.",
+      "type": "string",
+      "pattern": "^[a-z][a-zA-Z0-9]*$"
+    },
+    "parameterType": {
+      "description": "Descriptive installed-runtime parameter type label.",
+      "type": "string",
+      "enum": [
+        "any",
+        "array",
+        "boolean",
+        "function",
+        "json-compatible",
+        "number",
+        "object",
+        "string",
+        "undefined"
+      ]
+    },
+    "serializableValue": {
+      "description": "Closed Draft 2020-12 JSON Schema fragment describing serializable argument or return values.",
+      "type": "object",
+      "minProperties": 1
+    },
+    "syncReturnType": {
+      "description": "Descriptive synchronous return type label.",
+      "type": "string",
+      "enum": [
+        "any",
+        "array",
+        "boolean",
+        "number",
+        "object",
+        "object-or-undefined",
+        "string",
+        "undefined"
+      ]
+    },
+    "promiseReturnType": {
+      "description": "Descriptive promise resolution type label.",
+      "type": "string",
+      "enum": [
+        "any",
+        "array",
+        "child-result-object",
+        "pipeline-result-array",
+        "undefined",
+        "void"
+      ]
+    },
+    "parameter": {
+      "description": "One ordered callable parameter with required, optional, default, or rest behavior.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "position",
+        "required",
+        "rest",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "name": {
+          "description": "The parameter name exposed in installed-runtime documentation.",
+          "type": "string",
+          "pattern": "^[a-z][a-zA-Z0-9]*$"
+        },
+        "position": {
+          "description": "Zero-based position in the ordered callable parameter list.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "required": {
+          "description": "Whether callers must supply a value for this parameter.",
+          "type": "boolean"
+        },
+        "rest": {
+          "description": "Whether this parameter collects remaining arguments.",
+          "type": "boolean"
+        },
+        "default": {
+          "description": "Serialized default value when the parameter is optional.",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/$defs/parameterType"
+        },
+        "serializableValue": {
+          "$ref": "#/$defs/serializableValue"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "required": {
+                "const": true
+              }
+            },
+            "required": [
+              "required"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "default"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "rest": {
+                "const": true
+              }
+            },
+            "required": [
+              "rest"
+            ]
+          },
+          "then": {
+            "properties": {
+              "required": {
+                "const": false
+              }
+            },
+            "not": {
+              "required": [
+                "default"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "object",
+                  "json-compatible"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "serializableValue"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "not": {
+                  "enum": [
+                    "object",
+                    "json-compatible"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "serializableValue"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "parameterList": {
+      "description": "Ordered callable parameters from first to last position.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/parameter"
+      }
+    },
+    "syncReturn": {
+      "description": "Synchronous return metadata for a callable symbol.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "sync"
+        },
+        "type": {
+          "$ref": "#/$defs/syncReturnType"
+        },
+        "serializableValue": {
+          "$ref": "#/$defs/serializableValue"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "object",
+                  "object-or-undefined"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "required": [
+              "serializableValue"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "not": {
+                  "enum": [
+                    "object",
+                    "object-or-undefined"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "serializableValue"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "promiseReturn": {
+      "description": "Promise return metadata for an asynchronous callable symbol.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "type"
+      ],
+      "properties": {
+        "kind": {
+          "const": "promise"
+        },
+        "type": {
+          "$ref": "#/$defs/promiseReturnType"
+        }
+      }
+    },
+    "returnShape": {
+      "description": "Declared callable return shape.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/syncReturn"
+        },
+        {
+          "$ref": "#/$defs/promiseReturn"
+        }
+      ]
+    },
+    "errorType": {
+      "description": "Descriptive installed-runtime error constructor label.",
+      "type": "string",
+      "enum": [
+        "GoError",
+        "TypeError"
+      ]
+    },
+    "callableError": {
+      "description": "One documented callable failure condition with a stable diagnostic label.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "condition",
+        "type",
+        "message"
+      ],
+      "properties": {
+        "condition": {
+          "description": "Stable machine-readable failure condition identifier.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "type": {
+          "$ref": "#/$defs/errorType"
+        },
+        "message": {
+          "description": "Canonical installed-runtime error message text.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "callableErrorList": {
+      "description": "Ordered callable failure conditions documented for one symbol.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/callableError"
+      }
+    },
+    "policyCheckKind": {
+      "description": "Descriptive installed-runtime policy gate identifier.",
+      "type": "string",
+      "enum": [
+        "allowNetwork",
+        "allowedCommands",
+        "allowedModels",
+        "allowedReasoningEfforts",
+        "childRequest",
+        "concurrency",
+        "maxAgents",
+        "maxArtifactBytes",
+        "sandboxMode",
+        "writableRoots"
+      ]
+    },
+    "policyCheck": {
+      "description": "One documented policy gate that may inspect callable inputs.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/policyCheckKind"
+        },
+        "field": {
+          "description": "Callable input field inspected by this policy gate when applicable.",
+          "type": "string",
+          "pattern": "^[a-z][a-zA-Z0-9]*$"
+        },
+        "message": {
+          "description": "Canonical policy-denied message text when the gate fails.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "policyCheckList": {
+      "description": "Policy gates documented for one callable symbol.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/policyCheck"
+      }
+    },
+    "emittedRecordType": {
+      "description": "Descriptive installed-runtime record/event type emitted by a callable symbol.",
+      "type": "string",
+      "enum": [
+        "artifact",
+        "budget",
+        "checkpoint",
+        "child_dispatch",
+        "log",
+        "phase"
+      ]
+    },
+    "emittedRecordList": {
+      "description": "Record or event types emitted when a callable symbol succeeds.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/emittedRecordType"
+      }
+    },
+    "callbackRole": {
+      "description": "Which callable parameter slot the callback signature documents.",
+      "type": "string",
+      "enum": [
+        "item",
+        "next",
+        "worker"
+      ]
+    },
+    "callbackSignature": {
+      "description": "Descriptive callback signature metadata for one callable parameter role.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "role",
+        "parameters"
+      ],
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/callbackRole"
+        },
+        "parameters": {
+          "$ref": "#/$defs/parameterList"
+        },
+        "notes": {
+          "description": "Free-form documentation for callback invocation semantics.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "descriptiveNote": {
+      "description": "Free-form descriptive documentation note that does not encode executable workflow logic.",
+      "type": "string",
+      "minLength": 1
+    },
+    "mutability": {
+      "description": "Descriptive installed-runtime mutability of a namespace or value binding.",
+      "type": "string",
+      "enum": [
+        "fixed-binding",
+        "mutable-object"
+      ]
+    },
+    "nullability": {
+      "description": "Descriptive installed-runtime nullability of a namespace or value binding.",
+      "type": "string",
+      "enum": [
+        "non-null",
+        "nullable"
+      ]
+    },
+    "bindingLifecycle": {
+      "description": "Descriptive installed-runtime binding lifecycle for a namespace or value symbol.",
+      "type": "string",
+      "enum": [
+        "live-namespace",
+        "snapshot-at-bind"
+      ]
+    },
+    "runtimeLimits": {
+      "description": "Descriptive installed-runtime policy and resource limits documented for the manifest.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxAgents": {
+          "description": "Maximum concurrent child dispatches permitted by effective policy.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "concurrency": {
+          "description": "Maximum concurrent in-flight work permitted by effective policy.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxDepth": {
+          "description": "Maximum nested child depth permitted by effective policy.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxRetries": {
+          "description": "Maximum retry attempts permitted by effective policy.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxArtifactBytes": {
+          "description": "Maximum artifact payload size in bytes.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxRunDurationMs": {
+          "description": "Maximum workflow run duration in milliseconds.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxWorkerDurationMs": {
+          "description": "Maximum single worker duration in milliseconds.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxOutputBytesPerWorker": {
+          "description": "Maximum worker output size in bytes.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxTokens": {
+          "description": "Maximum token budget documented for the runtime surface.",
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "runtimeCapability": {
+      "description": "Descriptive host capability that effective policy may grant or deny.",
+      "type": "string",
+      "enum": [
+        "workspace-write",
+        "filesystem-write",
+        "shell-process",
+        "network",
+        "connectors",
+        "danger-full-access"
+      ]
+    },
+    "runtimeCapabilityList": {
+      "description": "Host capabilities documented for the installed runtime surface.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/runtimeCapability"
+      }
+    },
+    "versionAvailability": {
+      "description": "Manifest and installed-runtime version availability metadata.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifestFormat",
+        "runtimeVersions"
+      ],
+      "properties": {
+        "manifestFormat": {
+          "description": "Manifest format versions this document is written for.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json#/$defs/version"
+          }
+        },
+        "runtimeVersions": {
+          "description": "Installed runtime release versions this manifest documents.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json#/$defs/version"
+          }
+        }
+      }
+    },
+    "asyncReturnConstraints": {
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "async": {
+                "const": true
+              }
+            },
+            "required": [
+              "async"
+            ]
+          },
+          "then": {
+            "properties": {
+              "return": {
+                "$ref": "#/$defs/promiseReturn"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "async": {
+                "const": false
+              }
+            },
+            "required": [
+              "async"
+            ]
+          },
+          "then": {
+            "properties": {
+              "return": {
+                "$ref": "#/$defs/syncReturn"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "symbolBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "path",
+        "kind",
+        "documentation",
+        "lifecycle"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "name": {
+          "description": "The final segment name exposed on the installed runtime object.",
+          "type": "string",
+          "pattern": "^[a-z][a-zA-Z0-9]*$"
+        },
+        "path": {
+          "$ref": "#/$defs/symbolPath"
+        },
+        "kind": {
+          "description": "The installed symbol shape.",
+          "enum": [
+            "function",
+            "method",
+            "namespace",
+            "value"
+          ]
+        },
+        "parent": {
+          "description": "Stable identifier of the parent namespace symbol when this symbol is nested.",
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        "members": {
+          "description": "Ordered direct child member names declared by a namespace symbol.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/memberName"
+          },
+          "uniqueItems": true
+        },
+        "documentation": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+        },
+        "lifecycle": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/deprecations.schema.json"
+        },
+        "mutability": {
+          "$ref": "#/$defs/mutability"
+        },
+        "nullability": {
+          "$ref": "#/$defs/nullability"
+        },
+        "bindingLifecycle": {
+          "$ref": "#/$defs/bindingLifecycle"
+        },
+        "async": {
+          "description": "Whether the installed callable returns a Promise.",
+          "type": "boolean"
+        },
+        "parameters": {
+          "$ref": "#/$defs/parameterList"
+        },
+        "return": {
+          "$ref": "#/$defs/returnShape"
+        },
+        "callback": {
+          "$ref": "#/$defs/callbackSignature"
+        },
+        "emittedRecords": {
+          "$ref": "#/$defs/emittedRecordList"
+        },
+        "errors": {
+          "$ref": "#/$defs/callableErrorList"
+        },
+        "policyChecks": {
+          "$ref": "#/$defs/policyCheckList"
+        },
+        "determinism": {
+          "$ref": "#/$defs/descriptiveNote"
+        },
+        "resumeNotes": {
+          "$ref": "#/$defs/descriptiveNote"
+        }
+      }
+    },
+    "rootNamespaceSymbol": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/symbolBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "members",
+            "mutability",
+            "nullability",
+            "bindingLifecycle"
+          ],
+          "properties": {
+            "kind": {
+              "const": "namespace"
+            },
+            "mutability": {
+              "$ref": "#/$defs/mutability"
+            },
+            "nullability": {
+              "$ref": "#/$defs/nullability"
+            },
+            "bindingLifecycle": {
+              "$ref": "#/$defs/bindingLifecycle"
+            },
+            "async": false,
+            "parameters": false,
+            "return": false,
+            "callback": false,
+            "emittedRecords": false,
+            "errors": false,
+            "policyChecks": false,
+            "determinism": false,
+            "resumeNotes": false
+          },
+          "not": {
+            "required": [
+              "parent"
+            ]
+          }
+        }
+      ]
+    },
+    "nestedNamespaceSymbol": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/symbolBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "parent",
+            "members",
+            "mutability",
+            "nullability",
+            "bindingLifecycle"
+          ],
+          "properties": {
+            "kind": {
+              "const": "namespace"
+            },
+            "mutability": {
+              "$ref": "#/$defs/mutability"
+            },
+            "nullability": {
+              "$ref": "#/$defs/nullability"
+            },
+            "bindingLifecycle": {
+              "$ref": "#/$defs/bindingLifecycle"
+            },
+            "async": false,
+            "parameters": false,
+            "return": false,
+            "callback": false,
+            "emittedRecords": false,
+            "errors": false,
+            "policyChecks": false,
+            "determinism": false,
+            "resumeNotes": false
+          }
+        }
+      ]
+    },
+    "valueSymbol": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/symbolBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "mutability",
+            "nullability",
+            "bindingLifecycle"
+          ],
+          "properties": {
+            "kind": {
+              "const": "value"
+            },
+            "mutability": {
+              "$ref": "#/$defs/mutability"
+            },
+            "nullability": {
+              "$ref": "#/$defs/nullability"
+            },
+            "bindingLifecycle": {
+              "$ref": "#/$defs/bindingLifecycle"
+            },
+            "async": false,
+            "parameters": false,
+            "return": false,
+            "callback": false,
+            "emittedRecords": false,
+            "errors": false,
+            "policyChecks": false,
+            "determinism": false,
+            "resumeNotes": false
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "parent"
+                ]
+              },
+              {
+                "required": [
+                  "members"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "functionSymbol": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/symbolBase"
+        },
+        {
+          "$ref": "#/$defs/asyncReturnConstraints"
+        },
+        {
+          "type": "object",
+          "required": [
+            "async",
+            "parameters",
+            "return"
+          ],
+          "properties": {
+            "kind": {
+              "const": "function"
+            },
+            "mutability": false,
+            "nullability": false,
+            "bindingLifecycle": false
+          },
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "parent"
+                ]
+              },
+              {
+                "required": [
+                  "members"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "methodSymbol": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/symbolBase"
+        },
+        {
+          "$ref": "#/$defs/asyncReturnConstraints"
+        },
+        {
+          "type": "object",
+          "required": [
+            "parent",
+            "async",
+            "parameters",
+            "return"
+          ],
+          "properties": {
+            "kind": {
+              "const": "method"
+            },
+            "mutability": false,
+            "nullability": false,
+            "bindingLifecycle": false
+          },
+          "not": {
+            "required": [
+              "members"
+            ]
+          }
+        }
+      ]
+    },
+    "symbol": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/rootNamespaceSymbol"
+        },
+        {
+          "$ref": "#/$defs/nestedNamespaceSymbol"
+        },
+        {
+          "$ref": "#/$defs/valueSymbol"
+        },
+        {
+          "$ref": "#/$defs/functionSymbol"
+        },
+        {
+          "$ref": "#/$defs/methodSymbol"
+        }
+      ]
+    }
+  }
+}

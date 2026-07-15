@@ -12,6 +12,7 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
@@ -459,9 +460,9 @@ func assertFreshMaterializedPackagedFactory(
 func assertNoEncodedGoalFactoryDir(t *testing.T, namedFactoriesRoot string) {
 	t.Helper()
 
-	encodedSegment, err := factoryconfig.NamedFactoryNameToLayoutSegment("@you/goal")
+	encodedSegment, err := namedfactorypath.LegacyLayoutSegment("@you/goal")
 	if err != nil {
-		t.Fatalf("NamedFactoryNameToLayoutSegment(@you/goal): %v", err)
+		t.Fatalf("LegacyLayoutSegment(@you/goal): %v", err)
 	}
 	encodedDir := filepath.Join(namedFactoriesRoot, encodedSegment)
 	if _, err := os.Stat(encodedDir); err == nil {
@@ -636,9 +637,9 @@ func assertRecreatedFactoryLoadable(t *testing.T, factoryDir string) {
 func seedLegacyEncodedGoalFactory(t *testing.T, factoriesRoot string) string {
 	t.Helper()
 
-	encodedSegment, err := factoryconfig.NamedFactoryNameToLayoutSegment("@you/goal")
+	encodedSegment, err := namedfactorypath.LegacyLayoutSegment("@you/goal")
 	if err != nil {
-		t.Fatalf("NamedFactoryNameToLayoutSegment(@you/goal): %v", err)
+		t.Fatalf("LegacyLayoutSegment(@you/goal): %v", err)
 	}
 	encodedDir := filepath.Join(factoriesRoot, encodedSegment)
 	if err := os.MkdirAll(encodedDir, 0o755); err != nil {

@@ -1,0 +1,38 @@
+{
+  "formatVersion": "1.0.0",
+  "protocolVersion": "2024-11-05",
+  "tools": {
+    "mcp.tool.you.factory_session.start_sync": {
+      "id": "mcp.tool.you.factory_session.start_sync",
+      "name": "you.factory_session.start_sync",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.start_sync",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.start_sync.title",
+            "canonicalEnglish": "Start Factory Session Sync"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.start_sync.description",
+            "canonicalEnglish": "Starts one synchronous Factory Session."
+          }
+        },
+        "examples": [
+          {
+            "requestId": "req-sync-001"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.start_sync",
+        "state": "deprecated",
+        "since": "1.0.0",
+        "deprecated": "2.0.0"
+      }
+    }
+  }
+}

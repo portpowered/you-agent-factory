@@ -1,0 +1,91 @@
+{
+  "formatVersion": "1.0.0",
+  "limits": {
+    "maxAgents": 16,
+    "concurrency": 4,
+    "maxArtifactBytes": 1048576
+  },
+  "capabilities": [
+    "workspace-write",
+    "network"
+  ],
+  "versionAvailability": {
+    "manifestFormat": [
+      "1.0.0"
+    ],
+    "runtimeVersions": [
+      "1.0.0"
+    ]
+  },
+  "symbols": {
+    "example.lifecycle-constraints.workflow": {
+      "id": "example.lifecycle-constraints.workflow",
+      "name": "workflow",
+      "path": "workflow",
+      "kind": "namespace",
+      "members": [],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.lifecycle-constraints.workflow",
+        "documentation": {
+          "title": {
+            "id": "example.lifecycle-constraints.workflow.title",
+            "canonicalEnglish": "Workflow namespace"
+          },
+          "description": {
+            "id": "example.lifecycle-constraints.workflow.description",
+            "canonicalEnglish": "Root workflow namespace with documented binding constraints."
+          }
+        },
+        "examples": [
+          "workflow"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.lifecycle-constraints.workflow",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
+    },
+    "example.lifecycle-constraints.args": {
+      "id": "example.lifecycle-constraints.args",
+      "name": "args",
+      "path": "args",
+      "kind": "value",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.lifecycle-constraints.args",
+        "documentation": {
+          "title": {
+            "id": "example.lifecycle-constraints.args.title",
+            "canonicalEnglish": "Invocation arguments"
+          },
+          "description": {
+            "id": "example.lifecycle-constraints.args.description",
+            "canonicalEnglish": "Mutable invocation argument map with snapshot-at-bind semantics."
+          }
+        },
+        "examples": [
+          "{ \"topic\": \"release\" }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.lifecycle-constraints.args",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "mutable-object",
+      "nullability": "non-null",
+      "bindingLifecycle": "snapshot-at-bind"
+    }
+  }
+}

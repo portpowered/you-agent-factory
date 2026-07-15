@@ -1,0 +1,159 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.workflow-resume": {
+      "id": "example.workflow-resume",
+      "name": "workflow",
+      "path": "workflow",
+      "kind": "namespace",
+      "members": [
+        "checkpoint",
+        "resumeState"
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow-resume",
+        "documentation": {
+          "title": {
+            "id": "example.workflow-resume.title",
+            "canonicalEnglish": "Workflow namespace"
+          },
+          "description": {
+            "id": "example.workflow-resume.description",
+            "canonicalEnglish": "Root workflow namespace with checkpoint and resume helpers."
+          }
+        },
+        "examples": [
+          "workflow.checkpoint"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow-resume",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
+    },
+    "example.workflow-resume.checkpoint": {
+      "id": "example.workflow-resume.checkpoint",
+      "name": "checkpoint",
+      "path": "workflow.checkpoint",
+      "kind": "method",
+      "parent": "example.workflow-resume",
+      "async": false,
+      "parameters": [
+        {
+          "id": "example.workflow-resume.checkpoint.param.spec",
+          "name": "spec",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "state": {}
+            },
+            "required": [
+              "label"
+            ]
+          }
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "emittedRecords": [
+        "checkpoint"
+      ],
+      "resumeNotes": "Persists checkpoint state for workflow.resumeState() on resumed sessions.",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow-resume.checkpoint",
+        "documentation": {
+          "title": {
+            "id": "example.workflow-resume.checkpoint.title",
+            "canonicalEnglish": "Workflow checkpoint"
+          },
+          "description": {
+            "id": "example.workflow-resume.checkpoint.description",
+            "canonicalEnglish": "Persists labeled checkpoint state for later resume."
+          }
+        },
+        "examples": [
+          "workflow.checkpoint({ label: \"draft\" })"
+        ],
+        "visibility": "public",
+        "sourceHash": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow-resume.checkpoint",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    },
+    "example.workflow-resume.resume-state": {
+      "id": "example.workflow-resume.resume-state",
+      "name": "resumeState",
+      "path": "workflow.resumeState",
+      "kind": "method",
+      "parent": "example.workflow-resume",
+      "async": false,
+      "parameters": [],
+      "return": {
+        "kind": "sync",
+        "type": "object-or-undefined",
+        "serializableValue": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "type": "string"
+            },
+            "state": {}
+          },
+          "required": [
+            "label"
+          ]
+        }
+      },
+      "resumeNotes": "Returns bound resume checkpoint state or undefined when absent.",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow-resume.resume-state",
+        "documentation": {
+          "title": {
+            "id": "example.workflow-resume.resume-state.title",
+            "canonicalEnglish": "Workflow resume state"
+          },
+          "description": {
+            "id": "example.workflow-resume.resume-state.description",
+            "canonicalEnglish": "Reads checkpoint state restored for a resumed workflow session."
+          }
+        },
+        "examples": [
+          "workflow.resumeState()"
+        ],
+        "visibility": "public",
+        "sourceHash": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.workflow-resume.resume-state",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

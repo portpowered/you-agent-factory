@@ -67,21 +67,6 @@ func namedFactoryStagingPrefix(name string) string {
 	return "." + safe + ".staging-"
 }
 
-// NamedFactoryNameToLayoutSegment maps a canonical named-factory display name into the single on-disk directory segment used under a factory root.
-func NamedFactoryNameToLayoutSegment(name string) (string, error) {
-	trimmed := strings.TrimSpace(name)
-	segment, err := namedfactorypath.LegacyLayoutSegment(trimmed)
-	if err != nil {
-		return "", wrapInvalidNamedFactoryName(trimmed, err)
-	}
-	return segment, nil
-}
-
-// NamedFactoryLayoutSegmentToName maps an on-disk named-factory directory segment back to the canonical display name shown by list and API callers.
-func NamedFactoryLayoutSegmentToName(segment string) (string, error) {
-	return namedfactorypath.LegacyLayoutSegmentToName(segment)
-}
-
 // GlobalNamedFactoryRootForHome builds the customer-owned global named-factory
 // root for a resolved home directory.
 func GlobalNamedFactoryRootForHome(homeDir string) (string, error) {
@@ -196,7 +181,7 @@ func collectNamedFactoriesFromRootChild(rootDir string, child os.DirEntry, colle
 	}
 	factoryDir := filepath.Join(rootDir, name)
 	if err := requireFactoryConfig(factoryDir); err == nil {
-		displayName, err := NamedFactoryLayoutSegmentToName(name)
+		displayName, err := canonicalNamedFactoryName(name)
 		if err != nil {
 			return
 		}

@@ -68,19 +68,6 @@ func stringsContainsMaterializeBuiltIn(value string) bool {
 	return containsAll(value, "materialize built-in named factory")
 }
 
-func TestFailureBaseline_NamedPath_GoalLayoutSegmentEncodesSlash(t *testing.T) {
-	segment, err := NamedFactoryNameToLayoutSegment("@you/goal")
-	if err != nil {
-		t.Fatalf("NamedFactoryNameToLayoutSegment(@you/goal): %v", err)
-	}
-	if segment != "@you%2Fgoal" {
-		t.Fatalf("layout segment = %q, want @you%%2Fgoal", segment)
-	}
-	if strings.Contains(segment, "/") {
-		t.Fatalf("layout segment = %q, want slash encoded instead of path separator", segment)
-	}
-}
-
 func TestFailureBaseline_NamedPath_InstalledGoalUsesHierarchicalLayout(t *testing.T) {
 	projectRoot := t.TempDir()
 	globalRoot := t.TempDir()

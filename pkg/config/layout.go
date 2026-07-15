@@ -582,7 +582,7 @@ type FactoryLayoutReplaceOptions struct {
 	LayoutWrite FactorySplitLayoutWriteOptions
 }
 
-// DefaultFactoryLayoutReplaceOptions returns persist-from-save layout options for
+// DefaultFactoryLayoutReplaceOptions returns split-layout replace options for
 // an existing factory directory at targetDir.
 func DefaultFactoryLayoutReplaceOptions(targetDir string) FactoryLayoutReplaceOptions {
 	return FactoryLayoutReplaceOptions{

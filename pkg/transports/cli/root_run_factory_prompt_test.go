@@ -468,11 +468,7 @@ func setupNamedFactoryInvocationTest(t *testing.T) func() {
 	if err != nil {
 		t.Fatalf("DefaultGlobalNamedFactoryRoot: %v", err)
 	}
-	segment, err := factoryconfig.NamedFactoryNameToLayoutSegment("alpha")
-	if err != nil {
-		t.Fatalf("NamedFactoryNameToLayoutSegment(alpha): %v", err)
-	}
-	factoryDir := filepath.Join(globalRoot, segment)
+	factoryDir := filepath.Join(globalRoot, "alpha")
 	if err := os.MkdirAll(factoryDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q): %v", factoryDir, err)
 	}

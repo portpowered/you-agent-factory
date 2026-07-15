@@ -5,6 +5,7 @@
 ## Commands
 
 - Default non-long lane: `make test-functional`
+- Built-CLI S24 acceptance lane (also run by `make verify-pr`): `make test-built-cli-acceptance`
 - Opt-in long lane: `make test-functional-long`
 - Real local-inference lane: `make long-tests`
 
@@ -41,6 +42,7 @@ available without widening the default feedback loop.
 
 | Package | Purpose |
 | --- | --- |
+| `acceptance` | Hermetic built-CLI S24 cross-surface acceptance: install, provider posture, invalid goal, quiet, primary/stream output, local-model invoke, goal repeat, and subagent outcomes from the built you binary under isolated home/log directories. |
 | `smoke` | Small end-to-end confidence checks that prove the main system starts, accepts work, and completes representative flows quickly. |
 | `workflow` | Core multi-step workflow behavior such as routing, review loops, and ordinary progression across workstations. |
 | `guards_batch` | Guard evaluation, dependency gating, fan-in or batch semantics, and request-batch behavior that should fail in one narrow behavior area. |

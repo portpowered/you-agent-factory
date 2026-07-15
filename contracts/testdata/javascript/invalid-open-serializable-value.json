@@ -1,0 +1,59 @@
+{
+  "formatVersion": "1.0.0",
+  "symbols": {
+    "example.bad.open-serializable": {
+      "id": "example.bad.open-serializable",
+      "name": "checkpoint",
+      "path": "workflow.checkpoint",
+      "kind": "function",
+      "async": false,
+      "parameters": [
+        {
+          "id": "example.bad.open-serializable.param.spec",
+          "name": "spec",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.bad.open-serializable",
+        "documentation": {
+          "title": {
+            "id": "example.bad.open-serializable.title",
+            "canonicalEnglish": "Open serializable value"
+          },
+          "description": {
+            "id": "example.bad.open-serializable.description",
+            "canonicalEnglish": "Fixture proving open object serializable-value schemas fail semantic validation."
+          }
+        },
+        "examples": [
+          "workflow.checkpoint({ label: \"draft\", extra: true })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "example.bad.open-serializable",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}

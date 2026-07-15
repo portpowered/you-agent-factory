@@ -138,54 +138,6 @@ func TestMapNamedFactoryDir_HierarchicalScopedLayout(t *testing.T) {
 	}
 }
 
-func TestNamedFactoryNameLayoutSegment_RoundTrip(t *testing.T) {
-	tests := []struct {
-		name        string
-		wantSegment string
-	}{
-		{name: "alpha", wantSegment: "alpha"},
-		{name: "@you/tts", wantSegment: "@you%2Ftts"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			segment, err := NamedFactoryNameToLayoutSegment(tt.name)
-			if err != nil {
-				t.Fatalf("NamedFactoryNameToLayoutSegment: %v", err)
-			}
-			if segment != tt.wantSegment {
-				t.Fatalf("segment = %q, want %q", segment, tt.wantSegment)
-			}
-			if strings.ContainsAny(segment, `/\`) {
-				t.Fatalf("segment %q must not contain path separators", segment)
-			}
-			roundTrip, err := NamedFactoryLayoutSegmentToName(segment)
-			if err != nil {
-				t.Fatalf("NamedFactoryLayoutSegmentToName: %v", err)
-			}
-			if roundTrip != tt.name {
-				t.Fatalf("round trip = %q, want %q", roundTrip, tt.name)
-			}
-		})
-	}
-}
-
-func TestNamedFactoryNameLayoutSegment_RejectsInvalidNames(t *testing.T) {
-	tests := []string{
-		"../alpha",
-		"@you",
-		"@you/",
-		"@you/tts/extra",
-	}
-
-	for _, name := range tests {
-		t.Run(name, func(t *testing.T) {
-			if _, err := NamedFactoryNameToLayoutSegment(name); err == nil {
-				t.Fatal("expected invalid canonical factory name to fail")
-			}
-		})
-	}
-}
 
 func TestDefaultNamedFactoryRoots(t *testing.T) {
 	homeDir := filepath.Join("home", "customer")

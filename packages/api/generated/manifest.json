@@ -241,7 +241,7 @@
       "path": "generated/schemas/factory.schema.json"
     },
     "generated.schemas.mock-workers": {
-      "artifactHash": "e74a5d08ae36ae29d870bbf337764a94393e15b1a3aa6ab53d518b8b109489f4",
+      "artifactHash": "1aad74057b85a8c0d5c195e945832b373a0d37bbc7fc7efece5aa88085efd7d3",
       "documentation": {
         "documentation": {
           "description": {
@@ -258,7 +258,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.mock-workers",
-        "sourceHash": "e74a5d08ae36ae29d870bbf337764a94393e15b1a3aa6ab53d518b8b109489f4",
+        "sourceHash": "1aad74057b85a8c0d5c195e945832b373a0d37bbc7fc7efece5aa88085efd7d3",
         "visibility": "public"
       },
       "family": "config",
