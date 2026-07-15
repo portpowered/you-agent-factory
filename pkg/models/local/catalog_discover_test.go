@@ -6,6 +6,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -140,29 +145,29 @@ func TestInspectRuntimeCache_UsesLocalCacheWithoutUpstreamFetch(t *testing.T) {
 }
 
 func multiRuntimeCatalogFactoryConfig() *interfaces.FactoryConfig {
-	first := interfaces.WorkerConfig{
+	first := workerconfig.Config{
 		Name:          "voice-local",
-		Type:          interfaces.WorkerTypeModel,
+		Type:          workertaxonomy.WorkerTypeModel,
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelLocality: interfaces.ModelLocalityLocal,
-		Operations:    []interfaces.ModelOperation{{Name: "TTS"}},
-		Resources:     []interfaces.ResourceConfig{{Name: "omnivoice-cache", Capacity: 1}},
+		ModelLocality: workerconfig.ModelLocalityLocal,
+		Operations:    []workerconfig.ModelOperation{{Name: "TTS"}},
+		Resources:     []factoryresource.Config{{Name: "omnivoice-cache", Capacity: 1}},
 	}
-	second := interfaces.WorkerConfig{
+	second := workerconfig.Config{
 		Name:          "second-local",
-		Type:          interfaces.WorkerTypeModel,
+		Type:          workertaxonomy.WorkerTypeModel,
 		Model:         "SECOND_RUNTIME",
-		ModelLocality: interfaces.ModelLocalityLocal,
-		Operations:    []interfaces.ModelOperation{{Name: "EMBED"}},
-		Resources:     []interfaces.ResourceConfig{{Name: "second-cache", Capacity: 1}},
+		ModelLocality: workerconfig.ModelLocalityLocal,
+		Operations:    []workerconfig.ModelOperation{{Name: "EMBED"}},
+		Resources:     []factoryresource.Config{{Name: "second-cache", Capacity: 1}},
 	}
 	return &interfaces.FactoryConfig{
 		Name:    "factory",
-		Workers: []interfaces.WorkerConfig{first, second},
-		Resources: []interfaces.ResourceConfig{
+		Workers: []workerconfig.Config{first, second},
+		Resources: []factoryresource.Config{
 			{
 				Name:       "omnivoice-cache",
-				Type:       interfaces.ResourceTypeModel,
+				Type:       factoryresource.TypeModel,
 				Capacity:   1,
 				Model:      "OMNIVOICE_Q4_K_M",
 				Backend:    "GGUF",
@@ -170,7 +175,7 @@ func multiRuntimeCatalogFactoryConfig() *interfaces.FactoryConfig {
 			},
 			{
 				Name:       "second-cache",
-				Type:       interfaces.ResourceTypeModel,
+				Type:       factoryresource.TypeModel,
 				Capacity:   1,
 				Model:      "SECOND_RUNTIME",
 				Backend:    "GGUF",

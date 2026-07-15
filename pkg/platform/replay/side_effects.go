@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -173,7 +174,7 @@ func (s *SideEffects) Infer(ctx context.Context, req interfaces.ProviderInferenc
 	return interfaces.InferenceResponse{
 		Content:         result.Output,
 		ProviderSession: interfaces.CloneProviderSessionMetadata(result.ProviderSession),
-		Diagnostics:     interfaces.CloneWorkDiagnostics(record.completion.diagnostics),
+		Diagnostics:     workerexecution.CloneWorkDiagnostics(record.completion.diagnostics),
 	}, nil
 }
 

@@ -3,8 +3,9 @@
 package parityfixtures
 
 import (
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
 
@@ -33,7 +34,7 @@ type Fixture struct {
 	FidelityClass    FidelityClass
 	Provider         adapter.Identity
 	TranscriptFile   string
-	Request          interfaces.ProviderInferenceRequest
+	Request          workerexecution.ProviderInferenceRequest
 	WantContent      string
 	WantCapabilities adapter.Capabilities
 	ToolLifecycle    bool
@@ -46,9 +47,9 @@ func Catalog() []Fixture {
 		{
 			ID:             FixtureFullStreamClaude,
 			FidelityClass:  FidelityFullStream,
-			Provider:       adapter.Identity(interfaces.ModelProviderClaude),
+			Provider:       adapter.Identity(modelprovider.Claude),
 			TranscriptFile: "testdata/full_stream_claude.jsonl",
-			Request: interfaces.ProviderInferenceRequest{
+			Request: workerexecution.ProviderInferenceRequest{
 				Dispatch: work.WorkDispatch{DispatchID: "dispatch-parity-full-stream"},
 				Model:    "claude-sonnet-4", UserMessage: "parity fixture prompt",
 			},
@@ -61,9 +62,9 @@ func Catalog() []Fixture {
 		{
 			ID:             FixturePartialStreamCodex,
 			FidelityClass:  FidelityPartialStream,
-			Provider:       adapter.Identity(interfaces.ModelProviderCodex),
+			Provider:       adapter.Identity(modelprovider.Codex),
 			TranscriptFile: "testdata/partial_stream_codex.jsonl",
-			Request: interfaces.ProviderInferenceRequest{
+			Request: workerexecution.ProviderInferenceRequest{
 				Dispatch: work.WorkDispatch{DispatchID: "dispatch-parity-partial-stream"},
 				Model:    "gpt-test", UserMessage: "parity fixture prompt",
 			},
@@ -76,9 +77,9 @@ func Catalog() []Fixture {
 		{
 			ID:             FixtureSnapshotOnlyOpenCode,
 			FidelityClass:  FidelitySnapshotOnly,
-			Provider:       adapter.Identity(interfaces.ModelProviderOpenCode),
+			Provider:       adapter.Identity(modelprovider.OpenCode),
 			TranscriptFile: "testdata/snapshot_only_opencode.jsonl",
-			Request: interfaces.ProviderInferenceRequest{
+			Request: workerexecution.ProviderInferenceRequest{
 				Dispatch: work.WorkDispatch{DispatchID: "dispatch-parity-snapshot-only"},
 				Model:    "openai/gpt-5", UserMessage: "parity fixture prompt",
 			},
@@ -90,9 +91,9 @@ func Catalog() []Fixture {
 		{
 			ID:             FixtureFinalOnlyOpenCode,
 			FidelityClass:  FidelityFinalOnly,
-			Provider:       adapter.Identity(interfaces.ModelProviderOpenCode),
+			Provider:       adapter.Identity(modelprovider.OpenCode),
 			TranscriptFile: "testdata/final_only_opencode.txt",
-			Request: interfaces.ProviderInferenceRequest{
+			Request: workerexecution.ProviderInferenceRequest{
 				Dispatch: work.WorkDispatch{DispatchID: "dispatch-parity-final-only"},
 				Model:    "openai/gpt-5", UserMessage: "parity fixture prompt",
 			},
@@ -104,9 +105,9 @@ func Catalog() []Fixture {
 		{
 			ID:             FixtureToolLifecycleClaude,
 			FidelityClass:  FidelityFullStream,
-			Provider:       adapter.Identity(interfaces.ModelProviderClaude),
+			Provider:       adapter.Identity(modelprovider.Claude),
 			TranscriptFile: "testdata/tool_lifecycle_claude.jsonl",
-			Request: interfaces.ProviderInferenceRequest{
+			Request: workerexecution.ProviderInferenceRequest{
 				Dispatch: work.WorkDispatch{DispatchID: "dispatch-parity-tool-lifecycle"},
 				Model:    "claude-sonnet-4", UserMessage: "parity fixture prompt",
 			},
@@ -120,9 +121,9 @@ func Catalog() []Fixture {
 		{
 			ID:             FixtureAgyFinalOnly,
 			FidelityClass:  FidelityFinalOnly,
-			Provider:       adapter.Identity(interfaces.ModelProviderAgy),
+			Provider:       adapter.Identity(modelprovider.Agy),
 			TranscriptFile: "testdata/agy_final_only.txt",
-			Request: interfaces.ProviderInferenceRequest{
+			Request: workerexecution.ProviderInferenceRequest{
 				Dispatch: work.WorkDispatch{DispatchID: "dispatch-parity-agy-final-only"},
 				Model:    "gemini-pro", UserMessage: "parity fixture prompt",
 			},

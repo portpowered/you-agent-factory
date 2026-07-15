@@ -17,6 +17,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const replaySubmissionHookName = "replay-artifact-submissions"
@@ -539,7 +540,7 @@ func cloneReplayPlannedResult(result interfaces.WorkResult) interfaces.WorkResul
 	}
 	clone.FailureMetadata = interfaces.CloneWorkFailureMetadata(result.FailureMetadata)
 	clone.ProviderSession = interfaces.CloneProviderSessionMetadata(result.ProviderSession)
-	clone.Diagnostics = interfaces.CloneWorkDiagnostics(result.Diagnostics)
+	clone.Diagnostics = workerexecution.CloneWorkDiagnostics(result.Diagnostics)
 	return clone
 }
 

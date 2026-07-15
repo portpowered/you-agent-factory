@@ -5,10 +5,11 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 const (
@@ -29,7 +30,7 @@ const (
 	FailureClassToolRuntime    = "agent_run_tool_failure"
 )
 
-func agentRunDiagnostics(extra map[string]string) *interfaces.WorkDiagnostics {
+func agentRunDiagnostics(extra map[string]string) *workerexecution.WorkDiagnostics {
 	metadata := map[string]string{
 		DiagnosticExecutionBehavior: ExecutionBehaviorAgentRun,
 	}
@@ -39,7 +40,7 @@ func agentRunDiagnostics(extra map[string]string) *interfaces.WorkDiagnostics {
 		}
 		metadata[key] = value
 	}
-	return &interfaces.WorkDiagnostics{Metadata: metadata}
+	return &workerexecution.WorkDiagnostics{Metadata: metadata}
 }
 
 func failureClassForError(err error) string {
@@ -61,23 +62,23 @@ func failureClassForError(err error) string {
 	return FailureClassHarnessRuntime
 }
 
-func failureMetadataForError(err error) *interfaces.WorkFailureMetadata {
+func failureMetadataForError(err error) *workerexecution.WorkFailureMetadata {
 	if err == nil {
 		return nil
 	}
 	if metadata := modelhostFailureMetadata(err); metadata != nil {
 		return metadata
 	}
-	family := interfaces.WorkFailureFamilyTerminal
-	failureType := interfaces.WorkFailureTypeInternalServerError
+	family := workerexecution.WorkFailureFamilyTerminal
+	failureType := workerexecution.WorkFailureTypeInternalServerError
 	if errors.Is(err, context.Canceled) {
-		failureType = interfaces.WorkFailureTypeUnknown
+		failureType = workerexecution.WorkFailureTypeUnknown
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		family = interfaces.WorkFailureFamilyRetryable
-		failureType = interfaces.WorkFailureTypeTimeout
+		family = workerexecution.WorkFailureFamilyRetryable
+		failureType = workerexecution.WorkFailureTypeTimeout
 	}
-	return &interfaces.WorkFailureMetadata{
+	return &workerexecution.WorkFailureMetadata{
 		Family: family,
 		Type:   failureType,
 	}
@@ -240,26 +241,26 @@ func toolFailureClass(err error) (string, bool) {
 	return "", false
 }
 
-func modelhostFailureMetadata(err error) *interfaces.WorkFailureMetadata {
+func modelhostFailureMetadata(err error) *workerexecution.WorkFailureMetadata {
 	class, ok := modelhostFailureClass(err)
 	if !ok {
 		return nil
 	}
 	switch class {
 	case FailureClassLeaseDenied:
-		return &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyThrottle,
-			Type:   interfaces.WorkFailureTypeThrottled,
+		return &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyThrottle,
+			Type:   workerexecution.WorkFailureTypeThrottled,
 		}
 	case FailureClassModelNotReady:
-		return &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyRetryable,
-			Type:   interfaces.WorkFailureTypeTimeout,
+		return &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyRetryable,
+			Type:   workerexecution.WorkFailureTypeTimeout,
 		}
 	default:
-		return &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyTerminal,
-			Type:   interfaces.WorkFailureTypeInternalServerError,
+		return &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyTerminal,
+			Type:   workerexecution.WorkFailureTypeInternalServerError,
 		}
 	}
 }

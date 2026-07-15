@@ -3,6 +3,10 @@ package executor
 import (
 	"context"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
@@ -16,28 +20,28 @@ type WorkstationBehaviorRouter struct {
 
 var _ WorkstationRequestExecutor = (*WorkstationBehaviorRouter)(nil)
 
-func (router *WorkstationBehaviorRouter) Execute(ctx context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (router *WorkstationBehaviorRouter) Execute(ctx context.Context, request workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	if router != nil && router.shouldUseAgentRunExecutor(request) {
 		return router.AgentRunExecutor.Execute(ctx, request)
 	}
 	if router == nil || router.InferenceExecutor == nil {
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   request.Dispatch.DispatchID,
 			TransitionID: request.Dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeFailed,
+			Outcome:      workerexecution.OutcomeFailed,
 			Error:        "inference executor unavailable",
 		}, nil
 	}
 	return router.InferenceExecutor.Execute(ctx, request)
 }
 
-func (router *WorkstationBehaviorRouter) shouldUseAgentRunExecutor(request interfaces.WorkstationExecutionRequest) bool {
+func (router *WorkstationBehaviorRouter) shouldUseAgentRunExecutor(request workerexecution.WorkstationExecutionRequest) bool {
 	if router.AgentRunExecutor == nil || router.RuntimeConfig == nil {
 		return false
 	}
 
 	workstationDef, ok := router.RuntimeConfig.Workstation(request.Dispatch.WorkstationName)
-	if !ok || workstationDef == nil || !interfaces.IsAgentRunWorkstationType(workstationDef.Type) {
+	if !ok || workstationDef == nil || !workertaxonomy.IsAgentRunWorkstationType(workstationDef.Type) {
 		return false
 	}
 
@@ -49,5 +53,5 @@ func (router *WorkstationBehaviorRouter) shouldUseAgentRunExecutor(request inter
 	if !ok || workerDef == nil {
 		return false
 	}
-	return interfaces.IsAgentWorkerType(workerDef.Type)
+	return workertaxonomy.IsAgentWorkerType(workerDef.Type)
 }

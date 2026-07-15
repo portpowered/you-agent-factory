@@ -8,6 +8,10 @@ import (
 	"sync"
 	"time"
 
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
@@ -62,7 +66,7 @@ func NewRecordingProvider(inner Provider, recorder InferenceEventRecorder, opts 
 
 // Infer records a request event, delegates to the wrapped provider, then records
 // the matching response event with success or failure details.
-func (p *RecordingProvider) Infer(ctx context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *RecordingProvider) Infer(ctx context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	attempt := p.nextAttempt(req.Dispatch.DispatchID)
 	inferenceRequestID := inferenceRequestID(req.Dispatch.DispatchID, attempt)
 	started := p.now()
@@ -78,10 +82,10 @@ func (p *RecordingProvider) Infer(ctx context.Context, req interfaces.ProviderIn
 	return resp, err
 }
 
-func (p *RecordingProvider) inferInner(ctx context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *RecordingProvider) inferInner(ctx context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	if p.inner == nil {
-		return interfaces.InferenceResponse{}, NewProviderError(
-			interfaces.WorkFailureTypeMisconfigured,
+		return workerexecution.InferenceResponse{}, NewProviderError(
+			workerexecution.WorkFailureTypeMisconfigured,
 			"recording provider requires an inner provider",
 			nil,
 		)
@@ -116,7 +120,7 @@ func inferenceRequestID(dispatchID string, attempt int) string {
 	return fmt.Sprintf("%s/inference-request/%d", dispatchID, attempt)
 }
 
-func inferenceRequestEvent(req interfaces.ProviderInferenceRequest, attempt int, inferenceRequestID string, eventTime time.Time) factoryapi.FactoryEvent {
+func inferenceRequestEvent(req workerexecution.ProviderInferenceRequest, attempt int, inferenceRequestID string, eventTime time.Time) factoryapi.FactoryEvent {
 	payload := factoryapi.InferenceRequestEventPayload{
 		InferenceRequestId: inferenceRequestID,
 		Attempt:            attempt,
@@ -133,7 +137,7 @@ func inferenceRequestEvent(req interfaces.ProviderInferenceRequest, attempt int,
 	}
 }
 
-func inferenceResponseEvent(req interfaces.ProviderInferenceRequest, resp interfaces.InferenceResponse, err error, attempt int, inferenceRequestID string, duration time.Duration, eventTime time.Time) factoryapi.FactoryEvent {
+func inferenceResponseEvent(req workerexecution.ProviderInferenceRequest, resp workerexecution.InferenceResponse, err error, attempt int, inferenceRequestID string, duration time.Duration, eventTime time.Time) factoryapi.FactoryEvent {
 	payload := factoryapi.InferenceResponseEventPayload{
 		InferenceRequestId: inferenceRequestID,
 		Attempt:            attempt,
@@ -144,8 +148,8 @@ func inferenceResponseEvent(req interfaces.ProviderInferenceRequest, resp interf
 		payload.Outcome = factoryapi.InferenceOutcomeFailed
 		payload.FailureDetail = providerFailureDetail(err)
 		payload.ExitCode = providerErrorExitCode(err)
-		payload.ProviderSession = interfaces.GeneratedProviderSessionMetadata(providerSessionFromInferenceError(err))
-		payload.Diagnostics = interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(
+		payload.ProviderSession = workerdiagnostics.GeneratedProviderSessionMetadata(providerSessionFromInferenceError(err))
+		payload.Diagnostics = workerdiagnostics.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(
 			mergeWorkDiagnostics(
 				withInferenceErrorDiagnostics(baseDiagnostics, err, attempt-1),
 				diagnosticsFromInferenceError(err),
@@ -154,8 +158,8 @@ func inferenceResponseEvent(req interfaces.ProviderInferenceRequest, resp interf
 	} else {
 		payload.Outcome = factoryapi.InferenceOutcomeSucceeded
 		payload.Response = stringPtr(resp.Content)
-		payload.ProviderSession = interfaces.GeneratedProviderSessionMetadata(resp.ProviderSession)
-		payload.Diagnostics = interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(
+		payload.ProviderSession = workerdiagnostics.GeneratedProviderSessionMetadata(resp.ProviderSession)
+		payload.Diagnostics = workerdiagnostics.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(
 			withInferenceResponseDiagnostics(baseDiagnostics, resp, attempt-1),
 		)
 	}
@@ -183,7 +187,7 @@ func providerFailureDetail(err error) *factoryapi.FailureDetail {
 	}
 }
 
-func providerSessionFromInferenceError(err error) *interfaces.ProviderSessionMetadata {
+func providerSessionFromInferenceError(err error) *workerexecution.ProviderSessionMetadata {
 	var providerErr *ProviderError
 	if !errors.As(err, &providerErr) {
 		return nil
@@ -191,7 +195,7 @@ func providerSessionFromInferenceError(err error) *interfaces.ProviderSessionMet
 	return providerErr.ProviderSession
 }
 
-func diagnosticsFromInferenceError(err error) *interfaces.WorkDiagnostics {
+func diagnosticsFromInferenceError(err error) *workerexecution.WorkDiagnostics {
 	var providerErr *ProviderError
 	if !errors.As(err, &providerErr) {
 		return nil
@@ -199,7 +203,7 @@ func diagnosticsFromInferenceError(err error) *interfaces.WorkDiagnostics {
 	return providerErr.Diagnostics
 }
 
-func inferenceEventContext(req interfaces.ProviderInferenceRequest, eventTime time.Time) factoryapi.FactoryEventContext {
+func inferenceEventContext(req workerexecution.ProviderInferenceRequest, eventTime time.Time) factoryapi.FactoryEventContext {
 	return factoryapi.FactoryEventContext{
 		Tick:       inferenceEventTick(req.Dispatch.Execution),
 		EventTime:  interfaces.CanonicalEventTime(eventTime),
@@ -230,7 +234,7 @@ func providerErrorClass(err error) string {
 	if errors.As(err, &providerErr) && providerErr.Type != "" {
 		return string(providerErr.Type)
 	}
-	return string(interfaces.WorkFailureTypeUnknown)
+	return string(workerexecution.WorkFailureTypeUnknown)
 }
 
 func providerErrorExitCode(err error) *int {

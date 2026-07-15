@@ -3,7 +3,7 @@ package worktree
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 )
 
 func TestShouldPrepareFactoryWorktreeForCodex(t *testing.T) {
@@ -18,26 +18,26 @@ func TestShouldPrepareFactoryWorktreeForCodex(t *testing.T) {
 	}{
 		{
 			name:                   "CodexWithResolvedWorktree",
-			executionModelProvider: string(interfaces.ModelProviderCodex),
+			executionModelProvider: string(modelprovider.Codex),
 			resolvedWorktree:       "feature-a",
 			want:                   true,
 		},
 		{
 			name:                     "SkipsWhenWorkingDirectoryAuthored",
-			executionModelProvider:   string(interfaces.ModelProviderCodex),
+			executionModelProvider:   string(modelprovider.Codex),
 			authoredWorkingDirectory: `/repo/{{ .Branch }}`,
 			resolvedWorktree:         "feature-a",
 			want:                     false,
 		},
 		{
 			name:                   "SkipsWithoutResolvedWorktree",
-			executionModelProvider: string(interfaces.ModelProviderCodex),
+			executionModelProvider: string(modelprovider.Codex),
 			resolvedWorktree:       "",
 			want:                   false,
 		},
 		{
 			name:                   "SkipsForNonCodexExecutionProvider",
-			executionModelProvider: string(interfaces.ModelProviderClaude),
+			executionModelProvider: string(modelprovider.Claude),
 			resolvedWorktree:       "feature-a",
 			want:                   false,
 		},

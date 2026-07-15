@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestParseProviderFailure_ClassifiesTerminalResultRecords(t *testing.T) {
@@ -13,14 +13,14 @@ func TestParseProviderFailure_ClassifiesTerminalResultRecords(t *testing.T) {
 		name    string
 		subtype string
 		result  string
-		want    interfaces.WorkFailureType
+		want    workerexecution.WorkFailureType
 	}{
-		{name: "Authentication", subtype: "authentication_error", result: "Please sign in to Cursor", want: interfaces.WorkFailureTypeAuthFailure},
-		{name: "InvalidRequest", subtype: "invalid_request_error", result: "The selected model is unsupported", want: interfaces.WorkFailureTypePermanentBadRequest},
-		{name: "Capacity", subtype: "error", result: "Model capacity is temporarily exhausted", want: interfaces.WorkFailureTypeThrottled},
-		{name: "Timeout", subtype: "error", result: "Request timed out while waiting for Cursor", want: interfaces.WorkFailureTypeTimeout},
-		{name: "Server", subtype: "api_error", result: "Provider unavailable", want: interfaces.WorkFailureTypeInternalServerError},
-		{name: "Unknown", subtype: "canceled", result: "Cursor stopped the request", want: interfaces.WorkFailureTypeUnknown},
+		{name: "Authentication", subtype: "authentication_error", result: "Please sign in to Cursor", want: workerexecution.WorkFailureTypeAuthFailure},
+		{name: "InvalidRequest", subtype: "invalid_request_error", result: "The selected model is unsupported", want: workerexecution.WorkFailureTypePermanentBadRequest},
+		{name: "Capacity", subtype: "error", result: "Model capacity is temporarily exhausted", want: workerexecution.WorkFailureTypeThrottled},
+		{name: "Timeout", subtype: "error", result: "Request timed out while waiting for Cursor", want: workerexecution.WorkFailureTypeTimeout},
+		{name: "Server", subtype: "api_error", result: "Provider unavailable", want: workerexecution.WorkFailureTypeInternalServerError},
+		{name: "Unknown", subtype: "canceled", result: "Cursor stopped the request", want: workerexecution.WorkFailureTypeUnknown},
 	}
 
 	for _, tc := range testCases {
@@ -45,7 +45,7 @@ func TestParseProviderFailure_IsErrorTrueMakesSuccessSubtypeTerminalFailure(t *t
 		Stdout:   []byte(`{"type":"result","subtype":"success","is_error":true,"result":"Request timed out","session_id":"cursor-session"}`),
 		ExitCode: 1,
 	})
-	if got.Reason != interfaces.WorkFailureTypeTimeout || got.Message != "Request timed out" {
+	if got.Reason != workerexecution.WorkFailureTypeTimeout || got.Message != "Request timed out" {
 		t.Fatalf("failure = %#v, want timeout from is_error terminal record", got)
 	}
 }
@@ -65,7 +65,7 @@ func TestParseProviderFailure_SelectsLastTerminalResultAmidStreamNoise(t *testin
 		Stderr:   []byte("unrelated authentication failure"),
 		ExitCode: 1,
 	})
-	if got.Reason != interfaces.WorkFailureTypeThrottled || got.Message != "Cursor capacity is busy" {
+	if got.Reason != workerexecution.WorkFailureTypeThrottled || got.Message != "Cursor capacity is busy" {
 		t.Fatalf("failure = %#v, want final structured throttling result", got)
 	}
 	if got.ProviderSession == nil || got.ProviderSession.ID != "final-session" {
@@ -79,7 +79,7 @@ func TestParseProviderFailure_SuccessTerminalRecordDoesNotReuseEarlierFailure(t 
 			`{"type":"result","subtype":"success","is_error":false,"result":"done","session_id":"cursor-session"}`,
 	)
 	got := ParseProviderFailure(FailureInput{Stdout: stdout, ExitCode: 9})
-	if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != "cursor exited with code 9" {
+	if got.Reason != workerexecution.WorkFailureTypeUnknown || got.Message != "cursor exited with code 9" {
 		t.Fatalf("failure = %#v, want deterministic exit fallback", got)
 	}
 }
@@ -118,19 +118,19 @@ func TestParseProviderFailure_ClassifiesCursorStderrWithDeterministicPrecedence(
 	testCases := []struct {
 		name        string
 		stderr      string
-		wantReason  interfaces.WorkFailureType
+		wantReason  workerexecution.WorkFailureType
 		wantMessage string
 	}{
-		{name: "Authentication", stderr: "Cursor authentication failed; sign in again", wantReason: interfaces.WorkFailureTypeAuthFailure, wantMessage: "Cursor authentication failed; sign in again"},
-		{name: "InvalidConfiguration", stderr: "invalid configuration: unsupported model", wantReason: interfaces.WorkFailureTypePermanentBadRequest, wantMessage: "invalid configuration: unsupported model"},
-		{name: "Capacity", stderr: "Cursor model capacity is exhausted", wantReason: interfaces.WorkFailureTypeThrottled, wantMessage: "Cursor model capacity is exhausted"},
-		{name: "Timeout", stderr: "Cursor request timed out", wantReason: interfaces.WorkFailureTypeTimeout, wantMessage: "Cursor request timed out"},
-		{name: "Server", stderr: "Cursor provider unavailable with status 503", wantReason: interfaces.WorkFailureTypeInternalServerError, wantMessage: "Cursor provider unavailable with status 503"},
-		{name: "WindowsCommandLineTooLong", stderr: "The command line is too long.", wantReason: interfaces.WorkFailureTypeCommandLineTooLong, wantMessage: "The command line is too long."},
+		{name: "Authentication", stderr: "Cursor authentication failed; sign in again", wantReason: workerexecution.WorkFailureTypeAuthFailure, wantMessage: "Cursor authentication failed; sign in again"},
+		{name: "InvalidConfiguration", stderr: "invalid configuration: unsupported model", wantReason: workerexecution.WorkFailureTypePermanentBadRequest, wantMessage: "invalid configuration: unsupported model"},
+		{name: "Capacity", stderr: "Cursor model capacity is exhausted", wantReason: workerexecution.WorkFailureTypeThrottled, wantMessage: "Cursor model capacity is exhausted"},
+		{name: "Timeout", stderr: "Cursor request timed out", wantReason: workerexecution.WorkFailureTypeTimeout, wantMessage: "Cursor request timed out"},
+		{name: "Server", stderr: "Cursor provider unavailable with status 503", wantReason: workerexecution.WorkFailureTypeInternalServerError, wantMessage: "Cursor provider unavailable with status 503"},
+		{name: "WindowsCommandLineTooLong", stderr: "The command line is too long.", wantReason: workerexecution.WorkFailureTypeCommandLineTooLong, wantMessage: "The command line is too long."},
 		{
 			name:        "CategoryPrecedenceAndDuplicateNoise",
 			stderr:      "cleanup noise\nrate limit reached\nRATE LIMIT REACHED\nauthentication failed\nprocess already exited",
-			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantReason:  workerexecution.WorkFailureTypeAuthFailure,
 			wantMessage: "authentication failed",
 		},
 	}
@@ -152,7 +152,7 @@ func TestParseProviderFailure_UsesStderrBeforeStdoutAndSafeUnknownFallback(t *te
 			Stdout:   []byte("rate limit reached"),
 			ExitCode: 1,
 		})
-		if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != "Cursor rejected this request" {
+		if got.Reason != workerexecution.WorkFailureTypeUnknown || got.Message != "Cursor rejected this request" {
 			t.Fatalf("failure = %#v, want stderr-owned unknown result", got)
 		}
 	})
@@ -163,14 +163,14 @@ func TestParseProviderFailure_UsesStderrBeforeStdoutAndSafeUnknownFallback(t *te
 			Stderr:   []byte("cleanup noise\n" + unknown + "\n" + unknown),
 			ExitCode: 7,
 		})
-		if got.Reason != interfaces.WorkFailureTypeUnknown || len([]rune(strings.TrimSuffix(got.Message, "..."))) != FailureMessageLimit {
+		if got.Reason != workerexecution.WorkFailureTypeUnknown || len([]rune(strings.TrimSuffix(got.Message, "..."))) != FailureMessageLimit {
 			t.Fatalf("failure = %#v, want bounded unknown stderr excerpt", got)
 		}
 	})
 
 	t.Run("NoSafeExcerptUsesExitCode", func(t *testing.T) {
 		got := ParseProviderFailure(FailureInput{Stderr: []byte("Authorization: Bearer secret-token"), ExitCode: 7})
-		if got.Reason != interfaces.WorkFailureTypeAuthFailure || got.Message != cursorAuthFailureMessage {
+		if got.Reason != workerexecution.WorkFailureTypeAuthFailure || got.Message != cursorAuthFailureMessage {
 			t.Fatalf("failure = %#v, want safe auth guidance", got)
 		}
 	})
@@ -182,7 +182,7 @@ func TestParseProviderFailure_DoesNotSurfaceMalformedStructuredRecords(t *testin
 		Stdout:   []byte(`{"type":"assistant","message":{"content":[{"type":"text","text":"` + privatePrompt + `"}]}`),
 		ExitCode: 7,
 	})
-	if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != "cursor exited with code 7" {
+	if got.Reason != workerexecution.WorkFailureTypeUnknown || got.Message != "cursor exited with code 7" {
 		t.Fatalf("failure = %#v, want exit fallback for malformed structured output", got)
 	}
 	if strings.Contains(got.Message, privatePrompt) {
@@ -195,7 +195,7 @@ func TestParseProviderFailure_DoesNotBorrowCodexOnlyClassification(t *testing.T)
 		Stderr:   []byte("The gpt-5.6-sol model requires a newer version of Codex"),
 		ExitCode: 1,
 	})
-	if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != "The gpt-5.6-sol model requires a newer version of Codex" {
+	if got.Reason != workerexecution.WorkFailureTypeUnknown || got.Message != "The gpt-5.6-sol model requires a newer version of Codex" {
 		t.Fatalf("failure = %#v, want Cursor-owned unknown classification", got)
 	}
 }

@@ -11,7 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
@@ -50,7 +51,7 @@ type HealthChecker interface {
 }
 
 // ServerStartBuilder resolves one supervised process launch spec from installed assets.
-type ServerStartBuilder func(identity Identity, inspection CacheInspection, worker *interfaces.WorkerConfig) (ProcessStartSpec, error)
+type ServerStartBuilder func(identity Identity, inspection CacheInspection, worker *workerconfig.Config) (ProcessStartSpec, error)
 
 // SupervisorConfig configures supervised llama.cpp-backed runtime loading.
 type SupervisorConfig struct {
@@ -514,7 +515,7 @@ func (p *execManagedProcess) Stop(ctx context.Context) error {
 func defaultLlamaCppServerStartBuilder(
 	identity Identity,
 	inspection CacheInspection,
-	worker *interfaces.WorkerConfig,
+	worker *workerconfig.Config,
 ) (ProcessStartSpec, error) {
 	if worker == nil {
 		return ProcessStartSpec{}, fmt.Errorf("local model worker is required for supervised backend %q", identity.Backend)
@@ -558,7 +559,7 @@ func supervisedHealthEndpointAndArgs(workerArgs []string) (string, []string, err
 	return "", args, fmt.Errorf("supervised llama.cpp runtime requires worker arg %q", supervisedHealthEndpointFlag)
 }
 
-func workerDeclaresSupervisedHealthEndpoint(worker *interfaces.WorkerConfig) bool {
+func workerDeclaresSupervisedHealthEndpoint(worker *workerconfig.Config) bool {
 	if worker == nil {
 		return false
 	}

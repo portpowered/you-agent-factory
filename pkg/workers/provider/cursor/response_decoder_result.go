@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
 
@@ -15,7 +18,7 @@ const cursorDiagnosticInvalidResult = "cursor_invalid_result"
 func (d *ResponseEventDecoder) decodeResult(record cursorStreamRecord) (adapter.DecodeResult, error) {
 	providerRef := d.providerRef(record.SessionID)
 	if record.Subtype == ResultSubtypeSuccess && !record.IsError {
-		if canonicalProviderSession(string(interfaces.ModelProviderCursor), record.SessionID) == nil {
+		if canonicalProviderSession(string(modelprovider.Cursor), record.SessionID) == nil {
 			return cursorDiagnostic(cursorDiagnosticInvalidResult, "Cursor success result omitted a valid session identifier"), nil
 		}
 		closed, err := d.closeUnresolvedTools(cursorToolCloseOutcome{reason: cursorToolGapTerminal})
@@ -103,9 +106,9 @@ func cursorResultCanceled(subtype string) bool {
 	}
 }
 
-func cursorFailureRetryable(reason interfaces.WorkFailureType) bool {
+func cursorFailureRetryable(reason workerexecution.WorkFailureType) bool {
 	switch reason {
-	case interfaces.WorkFailureTypeThrottled, interfaces.WorkFailureTypeTimeout, interfaces.WorkFailureTypeInternalServerError:
+	case workerexecution.WorkFailureTypeThrottled, workerexecution.WorkFailureTypeTimeout, workerexecution.WorkFailureTypeInternalServerError:
 		return true
 	default:
 		return false

@@ -3,36 +3,29 @@ package interfaces
 import (
 	"strings"
 
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
 )
 
 // ModelProvider identifies the CLI command used for model inference dispatch.
-type ModelProvider string
+type ModelProvider = modelprovider.ID
 
 const (
-	ModelProviderClaude   ModelProvider = "claude"
-	ModelProviderCodex    ModelProvider = "codex"
-	ModelProviderGemini   ModelProvider = "gemini"
-	ModelProviderKiro     ModelProvider = "kiro-cli"
-	ModelProviderCursor   ModelProvider = "agent"
-	ModelProviderOpenCode ModelProvider = "opencode"
-	ModelProviderPi       ModelProvider = "pi"
-	ModelProviderAgy      ModelProvider = "agy"
+	ModelProviderClaude   = modelprovider.Claude
+	ModelProviderCodex    = modelprovider.Codex
+	ModelProviderGemini   = modelprovider.Gemini
+	ModelProviderKiro     = modelprovider.Kiro
+	ModelProviderCursor   = modelprovider.Cursor
+	ModelProviderOpenCode = modelprovider.OpenCode
+	ModelProviderPi       = modelprovider.Pi
+	ModelProviderAgy      = modelprovider.Agy
 )
 
 // SupportedModelProviders returns the canonical internal model provider commands
 // used for runtime dispatch and validation.
 func SupportedModelProviders() []ModelProvider {
-	return []ModelProvider{
-		ModelProviderClaude,
-		ModelProviderCodex,
-		ModelProviderGemini,
-		ModelProviderKiro,
-		ModelProviderCursor,
-		ModelProviderOpenCode,
-		ModelProviderPi,
-		ModelProviderAgy,
-	}
+	return modelprovider.Supported()
 }
 
 var internalModelProviderToPublicWorkerModelProvider = map[ModelProvider]factoryapi.WorkerModelProvider{
@@ -218,7 +211,7 @@ func IsAgentRunWorkstationType(workstationType string) bool {
 
 // IsScriptRunWorkstationType reports whether workstationType is an accepted script-run taxonomy value.
 func IsScriptRunWorkstationType(workstationType string) bool {
-	return StrictPublicFactoryWorkstationType(workstationType) == WorkstationTypeScript
+	return workertaxonomy.IsScriptRunWorkstationType(workstationType)
 }
 
 // IsPollerRunWorkstationType reports whether workstationType and workstation kind
@@ -561,15 +554,6 @@ func PublicWorkstationTypeFromInternalRuntime(workstationType, workerType string
 	default:
 		return PermissivePublicFactoryWorkstationType(workstationType)
 	}
-}
-
-// IsPollerRunPublicWorkstationType reports whether a public workstation type value
-// denotes poller-run behavior, including empty type on poller-kind workstations.
-func IsPollerRunPublicWorkstationType(value string, kind WorkstationKind) bool {
-	if PermissivePublicFactoryWorkstationType(value) == WorkstationTypePoller {
-		return true
-	}
-	return strings.TrimSpace(value) == "" && kind == WorkstationKindPoller
 }
 
 // PermissivePublicFactoryWorkstationType canonicalizes supported public workstation types and preserves unknown values.

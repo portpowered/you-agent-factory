@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"strings"
 
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
 
@@ -138,7 +141,7 @@ func (d *ResponseEventDecoder) decodeRecord(raw []byte) (adapter.DecodeResult, e
 }
 
 func (d *ResponseEventDecoder) decodeInitialization(record cursorStreamRecord) (adapter.DecodeResult, error) {
-	session := canonicalProviderSession(string(interfaces.ModelProviderCursor), record.SessionID)
+	session := canonicalProviderSession(string(modelprovider.Cursor), record.SessionID)
 	if session == nil {
 		return cursorDiagnostic(cursorDiagnosticInvalidSession, "Cursor initialization omitted a valid session identifier"), nil
 	}
@@ -194,7 +197,7 @@ func (d *ResponseEventDecoder) decodeAssistant(record cursorStreamRecord) (adapt
 }
 
 func (d *ResponseEventDecoder) providerRef(sessionID string) string {
-	if session := canonicalProviderSession(string(interfaces.ModelProviderCursor), sessionID); session != nil {
+	if session := canonicalProviderSession(string(modelprovider.Cursor), sessionID); session != nil {
 		d.providerSessionRef = session.ID
 	}
 	return d.providerSessionRef
@@ -223,7 +226,7 @@ func cursorAssistantText(content []cursorAssistantContent) string {
 
 func cursorResponseProvenance(nativeType, nativeSubtype string, representation responseevents.Representation, fidelity responseevents.Fidelity) responseevents.Provenance {
 	return responseevents.Provenance{
-		Provider: interfaces.CanonicalProviderSessionProvider(string(interfaces.ModelProviderCursor)), NativeEventType: nativeType,
+		Provider: workerexecution.CanonicalProviderSessionProvider(string(modelprovider.Cursor)), NativeEventType: nativeType,
 		NativeEventSubtype: nativeSubtype, Delivery: responseevents.DeliveryNativeStream,
 		Representation: representation, Fidelity: fidelity,
 	}

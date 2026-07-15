@@ -17,9 +17,11 @@ import (
 	"strings"
 	"time"
 
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 const (
@@ -171,12 +173,12 @@ func (p *Puller) PullModel(ctx context.Context, runtimeCfg *factoryconfig.Loaded
 	}, nil
 }
 
-func (p *Puller) EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) error {
+func (p *Puller) EnsureModelAvailable(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *workerconfig.Config) error {
 	_, err := p.resolveModelCacheLayout(ctx, runtimeCfg, worker)
 	return err
 }
 
-func (p *Puller) ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (CacheLayout, error) {
+func (p *Puller) ResolveModelCache(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *workerconfig.Config) (CacheLayout, error) {
 	return p.resolveModelCacheLayout(ctx, runtimeCfg, worker)
 }
 
@@ -232,8 +234,8 @@ func (p *Puller) InspectRuntimeCache(_ context.Context, runtimeCfg *factoryconfi
 	return result, nil
 }
 
-func (p *Puller) resolveModelCacheLayout(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *interfaces.WorkerConfig) (CacheLayout, error) {
-	if worker == nil || strings.TrimSpace(worker.ModelLocality) != interfaces.ModelLocalityLocal {
+func (p *Puller) resolveModelCacheLayout(ctx context.Context, runtimeCfg *factoryconfig.LoadedFactoryConfig, worker *workerconfig.Config) (CacheLayout, error) {
+	if worker == nil || strings.TrimSpace(worker.ModelLocality) != workerconfig.ModelLocalityLocal {
 		return CacheLayout{}, nil
 	}
 	spec, err := p.resolveSpec(runtimeCfg, worker.Model)
@@ -305,7 +307,7 @@ func (p *Puller) resolveSpec(runtimeCfg *factoryconfig.LoadedFactoryConfig, mode
 		return modelAssetSpec{}, fmt.Errorf("runtime config is not available")
 	}
 	for _, resource := range runtimeCfg.FactoryConfig().Resources {
-		if strings.TrimSpace(resource.Type) != interfaces.ResourceTypeModel {
+		if strings.TrimSpace(resource.Type) != factoryresource.TypeModel {
 			continue
 		}
 		if canonicalModelName(resource.Model) == key {
@@ -319,7 +321,7 @@ func builtInModelAssetSpecs() map[string]modelAssetSpec {
 	return map[string]modelAssetSpec{
 		canonicalModelName("OMNIVOICE_Q4_K_M"): {
 			ModelName:        "OMNIVOICE_Q4_K_M",
-			ProviderLocality: interfaces.ModelLocalityLocal,
+			ProviderLocality: workerconfig.ModelLocalityLocal,
 			Repository:       "Serveurperso/OmniVoice-GGUF",
 			RequiredFilenames: []string{
 				"omnivoice-base-Q4_K_M.gguf",

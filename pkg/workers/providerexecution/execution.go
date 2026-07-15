@@ -3,7 +3,10 @@ package providerexecution
 import (
 	"context"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -11,7 +14,7 @@ import (
 // Retry policy remains with the caller so every call to Execute maps to exactly
 // one provider call.
 type ExecutionInput struct {
-	Request interfaces.ProviderInferenceRequest
+	Request workerexecution.ProviderInferenceRequest
 	Attempt int
 }
 
@@ -19,13 +22,13 @@ type ExecutionInput struct {
 // execution callers. FailureDetail and Diagnostics are safe to persist or
 // expose through Factory Session projections.
 type ExecutionResult struct {
-	Response        interfaces.InferenceResponse
+	Response        workerexecution.InferenceResponse
 	Attempt         int
-	ProviderSession *interfaces.ProviderSessionMetadata
-	FailureMetadata *interfaces.WorkFailureMetadata
-	FailureDecision *interfaces.WorkFailureDecision
-	FailureDetail   *interfaces.FailureDetail
-	Diagnostics     *interfaces.SafeWorkDiagnostics
+	ProviderSession *workerexecution.ProviderSessionMetadata
+	FailureMetadata *workerexecution.WorkFailureMetadata
+	FailureDecision *workerexecution.WorkFailureDecision
+	FailureDetail   *workerexecution.FailureDetail
+	Diagnostics     *workerdiagnostics.SafeWorkDiagnostics
 }
 
 // Executor performs one provider execution attempt.
@@ -63,7 +66,7 @@ func (e *ProviderExecutor) Execute(ctx context.Context, input ExecutionInput) (E
 		return failedExecutionResult(attempt, err), err
 	}
 	if e == nil || e.provider == nil {
-		err := workerprovider.NewProviderError(interfaces.WorkFailureTypeMisconfigured, "provider execution requires a provider", nil)
+		err := workerprovider.NewProviderError(workerexecution.WorkFailureTypeMisconfigured, "provider execution requires a provider", nil)
 		return failedExecutionResult(attempt, err), err
 	}
 
@@ -72,11 +75,11 @@ func (e *ProviderExecutor) Execute(ctx context.Context, input ExecutionInput) (E
 		return failedExecutionResult(attempt, err), err
 	}
 	response.ProviderSession = canonicalProviderSession(response.ProviderSession)
-	diagnostics := interfaces.SafeWorkDiagnosticsFromWorkDiagnostics(response.Diagnostics)
+	diagnostics := workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(response.Diagnostics)
 	return ExecutionResult{
 		Response:        response,
 		Attempt:         attempt,
-		ProviderSession: interfaces.CloneProviderSessionMetadata(response.ProviderSession),
+		ProviderSession: workerexecution.CloneProviderSessionMetadata(response.ProviderSession),
 		Diagnostics:     diagnostics,
 	}, nil
 }
@@ -84,27 +87,27 @@ func (e *ProviderExecutor) Execute(ctx context.Context, input ExecutionInput) (E
 func failedExecutionResult(attempt int, err error) ExecutionResult {
 	providerErr := workerprovider.NormalizeProviderExecutionError(err)
 	if providerErr == nil {
-		providerErr = workerprovider.NewProviderError(interfaces.WorkFailureTypeUnknown, "Provider execution failed.", err)
+		providerErr = workerprovider.NewProviderError(workerexecution.WorkFailureTypeUnknown, "Provider execution failed.", err)
 	}
 	providerErr.ProviderSession = canonicalProviderSession(providerErr.ProviderSession)
 	failureDetail := workerprovider.SafeProviderFailureDetail(providerErr)
 	return ExecutionResult{
 		Attempt:         attempt,
-		ProviderSession: interfaces.CloneProviderSessionMetadata(providerErr.ProviderSession),
+		ProviderSession: workerexecution.CloneProviderSessionMetadata(providerErr.ProviderSession),
 		FailureMetadata: workerprovider.WorkFailureMetadataFromError(providerErr),
-		FailureDecision: func() *interfaces.WorkFailureDecision {
+		FailureDecision: func() *workerexecution.WorkFailureDecision {
 			decision := workerprovider.WorkFailureDecisionFromProviderError(providerErr)
 			return &decision
 		}(),
 		FailureDetail: failureDetail,
-		Diagnostics:   interfaces.SafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics),
+		Diagnostics:   workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(providerErr.Diagnostics),
 	}
 }
 
-func canonicalProviderSession(session *interfaces.ProviderSessionMetadata) *interfaces.ProviderSessionMetadata {
-	clone := interfaces.CloneProviderSessionMetadata(session)
+func canonicalProviderSession(session *workerexecution.ProviderSessionMetadata) *workerexecution.ProviderSessionMetadata {
+	clone := workerexecution.CloneProviderSessionMetadata(session)
 	if clone != nil {
-		clone.Provider = interfaces.CanonicalProviderSessionProvider(clone.Provider)
+		clone.Provider = workerexecution.CanonicalProviderSessionProvider(clone.Provider)
 	}
 	return clone
 }

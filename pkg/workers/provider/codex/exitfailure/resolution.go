@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const (
-	FlushReasonCanceled = "canceled"
+	FlushReasonCanceled   = "canceled"
 	codexJSONLRecordBytes = 1024 * 1024
 )
 
@@ -68,7 +68,7 @@ func collectFailureSignals(input ExitFailureInput, resolution ResolutionInput) [
 		signals = append(signals, competingSignal{
 			Tier: signalTierCancelTimeout,
 			Result: ExitFailureResult{
-				Reason:  interfaces.WorkFailureTypeUnknown,
+				Reason:  workerexecution.WorkFailureTypeUnknown,
 				Message: "Codex execution was canceled.",
 			},
 			InternalCause: internalCauseExecutionCanceled,
@@ -83,7 +83,7 @@ func collectFailureSignals(input ExitFailureInput, resolution ResolutionInput) [
 			Tier:       signalTierCancelTimeout,
 			Recognized: true,
 			Result: ExitFailureResult{
-				Reason:  interfaces.WorkFailureTypeTimeout,
+				Reason:  workerexecution.WorkFailureTypeTimeout,
 				Message: "Codex execution timed out.",
 			},
 			InternalCause: internalCause,
@@ -263,7 +263,7 @@ func structuredStreamFailureFromMessage(message string) (ExitFailureResult, bool
 	})
 	if !isRecognizedFailureType(parsed.Reason) {
 		return ExitFailureResult{
-			Reason:  interfaces.WorkFailureTypeUnknown,
+			Reason:  workerexecution.WorkFailureTypeUnknown,
 			Message: UnknownFailureMessage,
 		}, false
 	}
@@ -301,7 +301,7 @@ func recognizedNativeInternalCause(message string) string {
 		return ""
 	}
 	reason := classifyRecognizedCodexTextFailure(strings.ToLower(message), 1)
-	if reason == interfaces.WorkFailureTypeUnknown {
+	if reason == workerexecution.WorkFailureTypeUnknown {
 		return ""
 	}
 	return boundedInternalCause(message)
@@ -334,7 +334,7 @@ func structuredJSONInternalCause(payload string) string {
 	if !recognized {
 		return ""
 	}
-	if reason == interfaces.WorkFailureTypePermanentBadRequest && failure.Message == GPT56SolUpgradeMessage {
+	if reason == workerexecution.WorkFailureTypePermanentBadRequest && failure.Message == GPT56SolUpgradeMessage {
 		return boundedInternalCause(failure.Message)
 	}
 	parts := make([]string, 0, 3)
@@ -392,10 +392,10 @@ func processExitStderrInternalCause(input ExitFailureInput) string {
 
 // SanitizedFailureFixture is the safe public projection used by Codex alignment tests.
 type SanitizedFailureFixture struct {
-	Type          interfaces.WorkFailureType   `json:"type"`
-	Family        interfaces.WorkFailureFamily `json:"family"`
-	Message       string                       `json:"message"`
-	Retryable     bool                         `json:"retryable"`
-	Terminal      bool                         `json:"terminal"`
-	InternalCause string                       `json:"internal_cause,omitempty"`
+	Type          workerexecution.WorkFailureType   `json:"type"`
+	Family        workerexecution.WorkFailureFamily `json:"family"`
+	Message       string                            `json:"message"`
+	Retryable     bool                              `json:"retryable"`
+	Terminal      bool                              `json:"terminal"`
+	InternalCause string                            `json:"internal_cause,omitempty"`
 }

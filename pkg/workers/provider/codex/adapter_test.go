@@ -9,7 +9,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
@@ -236,7 +240,7 @@ func TestParseTerminalFailureUsesExactTypedRecordsAndRecognizedPrecedence(t *tes
 	if !ok {
 		t.Fatal("ParseTerminalFailure() did not find typed failure")
 	}
-	if failure.Type != interfaces.WorkFailureTypeThrottled || !failure.Retryable || failure.NativeEventType != "turn.failed" {
+	if failure.Type != workerexecution.WorkFailureTypeThrottled || !failure.Retryable || failure.NativeEventType != "turn.failed" {
 		t.Fatalf("failure = %#v", failure)
 	}
 	if failure.ProviderSession == nil || failure.ProviderSession.ID != "thread-failure-1" || failure.Message != "Codex is temporarily unavailable due to usage or capacity limits." {
@@ -248,14 +252,14 @@ func TestParseTerminalFailurePreservesCodexFailureCategoriesAndRetryPolicy(t *te
 	tests := []struct {
 		name      string
 		message   string
-		wantType  interfaces.WorkFailureType
+		wantType  workerexecution.WorkFailureType
 		retryable bool
 	}{
-		{name: "authentication", message: "unexpected status 401", wantType: interfaces.WorkFailureTypeAuthFailure},
-		{name: "bad request", message: "unexpected status 400", wantType: interfaces.WorkFailureTypePermanentBadRequest},
-		{name: "throttled", message: "You've hit your usage limit", wantType: interfaces.WorkFailureTypeThrottled, retryable: true},
-		{name: "server", message: "unexpected status 503", wantType: interfaces.WorkFailureTypeInternalServerError, retryable: true},
-		{name: "timeout", message: "command timed out", wantType: interfaces.WorkFailureTypeTimeout, retryable: true},
+		{name: "authentication", message: "unexpected status 401", wantType: workerexecution.WorkFailureTypeAuthFailure},
+		{name: "bad request", message: "unexpected status 400", wantType: workerexecution.WorkFailureTypePermanentBadRequest},
+		{name: "throttled", message: "You've hit your usage limit", wantType: workerexecution.WorkFailureTypeThrottled, retryable: true},
+		{name: "server", message: "unexpected status 503", wantType: workerexecution.WorkFailureTypeInternalServerError, retryable: true},
+		{name: "timeout", message: "command timed out", wantType: workerexecution.WorkFailureTypeTimeout, retryable: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -290,10 +294,10 @@ func TestResponseAdapterSnapshotStreamConformance(t *testing.T) {
 		`{"type":"item.completed","item":{"id":"message-1","type":"agent_message","text":"safe final"}}`,
 		`{"type":"turn.completed","usage":{"input_tokens":4,"output_tokens":2}}`,
 	)
-	session := interfaces.ProviderSessionMetadata{Provider: "codex", Kind: codex.ProviderSessionKindSessionID, ID: threadID}
+	session := workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: codex.ProviderSessionKindSessionID, ID: threadID}
 	runResponseAdapterConformance(t, responseAdapterFixture{
 		NewAdapter: func() adapter.Adapter { return codex.NewResponseAdapter() },
-		Request: interfaces.ProviderInferenceRequest{
+		Request: workerexecution.ProviderInferenceRequest{
 			Dispatch:      work.WorkDispatch{DispatchID: "dispatch-conformance"},
 			ModelProvider: "codex", Model: "gpt-test", UserMessage: prompt,
 		},
@@ -330,7 +334,7 @@ func TestResponseAdapterSnapshotStreamConformance(t *testing.T) {
 				{Kind: responseevents.KindTurn, Phase: responseevents.PhaseCompleted, ProviderRef: threadID},
 			},
 			ProviderSession: session, FinalContent: "safe final",
-			FailureFamily: interfaces.WorkFailureFamilyThrottle, FailureType: interfaces.WorkFailureTypeThrottled, FailureRetryable: true,
+			FailureFamily: workerexecution.WorkFailureFamilyThrottle, FailureType: workerexecution.WorkFailureTypeThrottled, FailureRetryable: true,
 		},
 		ForbiddenDiagnostic: []string{prompt, secret},
 	})
@@ -338,7 +342,7 @@ func TestResponseAdapterSnapshotStreamConformance(t *testing.T) {
 
 type responseAdapterFixture struct {
 	NewAdapter          func() adapter.Adapter
-	Request             interfaces.ProviderInferenceRequest
+	Request             workerexecution.ProviderInferenceRequest
 	Content             []adapter.Observation
 	TerminalFailure     []adapter.Observation
 	UnsafeAndRecovering []adapter.Observation
@@ -351,10 +355,10 @@ type responseAdapterFixture struct {
 type responseAdapterExpected struct {
 	Capabilities     adapter.Capabilities
 	Drafts           []draftExpectation
-	ProviderSession  interfaces.ProviderSessionMetadata
+	ProviderSession  workerexecution.ProviderSessionMetadata
 	FinalContent     string
-	FailureFamily    interfaces.WorkFailureFamily
-	FailureType      interfaces.WorkFailureType
+	FailureFamily    workerexecution.WorkFailureFamily
+	FailureType      workerexecution.WorkFailureType
 	FailureRetryable bool
 }
 
@@ -397,12 +401,12 @@ func TestResponseAdapterBuildCommandPreservesOrderedImagesAndExecutionControls(t
 			t.Fatal(err)
 		}
 	}
-	request := interfaces.ProviderInferenceRequest{
+	request := workerexecution.ProviderInferenceRequest{
 		Dispatch:      work.WorkDispatch{DispatchID: "dispatch-command"},
-		ModelProvider: string(interfaces.ModelProviderCodex), Model: "gpt-test",
+		ModelProvider: string(modelprovider.Codex), Model: "gpt-test",
 		UserMessage: "private prompt", WorkingDirectory: workspace,
 		EnvVars: map[string]string{"CUSTOM_CODEX_ENV": "set", "GIT_EDITOR": "vim"},
-		InputTokens: []any{interfaces.Token{ID: "token-images", Color: interfaces.TokenColor{Content: []work.WorkContentPart{
+		InputTokens: []any{factorytoken.Token{ID: "token-images", Color: factorytoken.Color{Content: []work.WorkContentPart{
 			{Type: work.WorkContentPartTypeImage, File: first},
 			{Type: work.WorkContentPartTypeImage, File: second},
 		}}}},

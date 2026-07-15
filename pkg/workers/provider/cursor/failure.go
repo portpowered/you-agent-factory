@@ -7,7 +7,9 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const FailureMessageLimit = 1024
@@ -30,16 +32,16 @@ type FailureInput struct {
 	Stdout          []byte
 	Stderr          []byte
 	ExitCode        int
-	FallbackReason  interfaces.WorkFailureType
+	FallbackReason  workerexecution.WorkFailureType
 	FallbackMessage string
 }
 
 // FailureResult is Cursor's canonical failure reason and customer-visible
 // message. Provider runtime policy is derived centrally from Reason.
 type FailureResult struct {
-	Reason          interfaces.WorkFailureType
+	Reason          workerexecution.WorkFailureType
 	Message         string
-	ProviderSession *interfaces.ProviderSessionMetadata
+	ProviderSession *workerexecution.ProviderSessionMetadata
 }
 
 // ParseProviderFailure returns one canonical Cursor-owned failure result.
@@ -57,7 +59,7 @@ func ParseProviderFailure(input FailureInput) FailureResult {
 	if message := normalizedSafeFailureText(input.FallbackMessage); message != "" {
 		return FailureResult{Reason: normalizedFallbackReason(input.FallbackReason), Message: message}
 	}
-	if reason := normalizedFallbackReason(input.FallbackReason); reason != interfaces.WorkFailureTypeUnknown {
+	if reason := normalizedFallbackReason(input.FallbackReason); reason != workerexecution.WorkFailureTypeUnknown {
 		return FailureResult{Reason: reason, Message: cursorFailureGuidance(reason)}
 	}
 	return FailureResult{
@@ -66,19 +68,19 @@ func ParseProviderFailure(input FailureInput) FailureResult {
 	}
 }
 
-func failureResultFromText(output []byte, fallbackReason interfaces.WorkFailureType) (FailureResult, bool) {
+func failureResultFromText(output []byte, fallbackReason workerexecution.WorkFailureType) (FailureResult, bool) {
 	candidates := cursorFailureTextCandidates(output)
 	if len(candidates) == 0 {
 		return FailureResult{}, false
 	}
 
-	for _, reason := range []interfaces.WorkFailureType{
-		interfaces.WorkFailureTypeCommandLineTooLong,
-		interfaces.WorkFailureTypeAuthFailure,
-		interfaces.WorkFailureTypePermanentBadRequest,
-		interfaces.WorkFailureTypeThrottled,
-		interfaces.WorkFailureTypeTimeout,
-		interfaces.WorkFailureTypeInternalServerError,
+	for _, reason := range []workerexecution.WorkFailureType{
+		workerexecution.WorkFailureTypeCommandLineTooLong,
+		workerexecution.WorkFailureTypeAuthFailure,
+		workerexecution.WorkFailureTypePermanentBadRequest,
+		workerexecution.WorkFailureTypeThrottled,
+		workerexecution.WorkFailureTypeTimeout,
+		workerexecution.WorkFailureTypeInternalServerError,
 	} {
 		for _, candidate := range candidates {
 			if classifyCursorFailureSignal(candidate.normalized) == reason {
@@ -147,9 +149,9 @@ func isCursorCleanupNoise(line string) bool {
 	)
 }
 
-func normalizedFallbackReason(reason interfaces.WorkFailureType) interfaces.WorkFailureType {
+func normalizedFallbackReason(reason workerexecution.WorkFailureType) workerexecution.WorkFailureType {
 	if reason == "" {
-		return interfaces.WorkFailureTypeUnknown
+		return workerexecution.WorkFailureTypeUnknown
 	}
 	return reason
 }
@@ -190,32 +192,32 @@ func failureResultFromPayload(payload resultPayload) FailureResult {
 	return FailureResult{
 		Reason:          reason,
 		Message:         message,
-		ProviderSession: canonicalProviderSession(string(interfaces.ModelProviderCursor), payload.SessionID),
+		ProviderSession: canonicalProviderSession(string(modelprovider.Cursor), payload.SessionID),
 	}
 }
 
-func classifyTerminalFailure(subtype, result string) interfaces.WorkFailureType {
+func classifyTerminalFailure(subtype, result string) workerexecution.WorkFailureType {
 	signal := strings.ToLower(strings.Join([]string{subtype, result}, " "))
 	return classifyCursorFailureSignal(signal)
 }
 
-func classifyCursorFailureSignal(signal string) interfaces.WorkFailureType {
+func classifyCursorFailureSignal(signal string) workerexecution.WorkFailureType {
 	signal = strings.ToLower(signal)
 	switch {
 	case containsCursorSignal(signal, "the command line is too long", "command line too long", "command-line limit"):
-		return interfaces.WorkFailureTypeCommandLineTooLong
+		return workerexecution.WorkFailureTypeCommandLineTooLong
 	case containsCursorSignal(signal, "authentication_error", "authentication failed", "authorization", "login required", "sign in", "unauthorized", "forbidden", "invalid api key", "401", "403"):
-		return interfaces.WorkFailureTypeAuthFailure
+		return workerexecution.WorkFailureTypeAuthFailure
 	case containsCursorSignal(signal, "invalid_request", "bad request", "invalid argument", "invalid configuration", "configuration error", "config error", "model not found", "unsupported model"):
-		return interfaces.WorkFailureTypePermanentBadRequest
+		return workerexecution.WorkFailureTypePermanentBadRequest
 	case containsCursorSignal(signal, "rate_limit", "rate limit", "throttl", "too many requests", "usage limit", "capacity", "resource exhausted", "quota", "429"):
-		return interfaces.WorkFailureTypeThrottled
+		return workerexecution.WorkFailureTypeThrottled
 	case containsCursorSignal(signal, "timeout", "timed out", "deadline exceeded"):
-		return interfaces.WorkFailureTypeTimeout
+		return workerexecution.WorkFailureTypeTimeout
 	case containsCursorSignal(signal, "api_error", "server_error", "internal server", "service unavailable", "provider unavailable", "upstream unavailable", "status 500", "status 502", "status 503", "status 504"):
-		return interfaces.WorkFailureTypeInternalServerError
+		return workerexecution.WorkFailureTypeInternalServerError
 	default:
-		return interfaces.WorkFailureTypeUnknown
+		return workerexecution.WorkFailureTypeUnknown
 	}
 }
 
@@ -251,19 +253,19 @@ func normalizedCursorFailureText(value string) string {
 	return normalized
 }
 
-func cursorFailureGuidance(reason interfaces.WorkFailureType) string {
+func cursorFailureGuidance(reason workerexecution.WorkFailureType) string {
 	switch reason {
-	case interfaces.WorkFailureTypeAuthFailure:
+	case workerexecution.WorkFailureTypeAuthFailure:
 		return cursorAuthFailureMessage
-	case interfaces.WorkFailureTypePermanentBadRequest, interfaces.WorkFailureTypeMisconfigured:
+	case workerexecution.WorkFailureTypePermanentBadRequest, workerexecution.WorkFailureTypeMisconfigured:
 		return cursorBadRequestFailureMessage
-	case interfaces.WorkFailureTypeThrottled:
+	case workerexecution.WorkFailureTypeThrottled:
 		return cursorThrottleFailureMessage
-	case interfaces.WorkFailureTypeTimeout:
+	case workerexecution.WorkFailureTypeTimeout:
 		return cursorTimeoutFailureMessage
-	case interfaces.WorkFailureTypeInternalServerError:
+	case workerexecution.WorkFailureTypeInternalServerError:
 		return cursorServerFailureMessage
-	case interfaces.WorkFailureTypeCommandLineTooLong:
+	case workerexecution.WorkFailureTypeCommandLineTooLong:
 		return cursorCommandLineTooLongMessage
 	default:
 		return cursorUnknownFailureMessage

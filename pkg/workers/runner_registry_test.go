@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestBuiltInRunnerCommand_MatchesInternalModelProviderCLI(t *testing.T) {
@@ -13,12 +15,12 @@ func TestBuiltInRunnerCommand_MatchesInternalModelProviderCLI(t *testing.T) {
 		runnerID string
 		command  string
 	}{
-		{interfaces.RunnerIDCodex, string(interfaces.ModelProviderCodex)},
-		{interfaces.RunnerIDGemini, string(interfaces.ModelProviderGemini)},
-		{interfaces.RunnerIDKiro, string(interfaces.ModelProviderKiro)},
-		{interfaces.RunnerIDCursorCLI, string(interfaces.ModelProviderCursor)},
-		{interfaces.RunnerIDOpenCode, string(interfaces.ModelProviderOpenCode)},
-		{interfaces.RunnerIDPi, string(interfaces.ModelProviderPi)},
+		{workerexecution.RunnerIDCodex, string(modelprovider.Codex)},
+		{workerexecution.RunnerIDGemini, string(modelprovider.Gemini)},
+		{workerexecution.RunnerIDKiro, string(modelprovider.Kiro)},
+		{workerexecution.RunnerIDCursorCLI, string(modelprovider.Cursor)},
+		{workerexecution.RunnerIDOpenCode, string(modelprovider.OpenCode)},
+		{workerexecution.RunnerIDPi, string(modelprovider.Pi)},
 	}
 
 	for _, tc := range cases {
@@ -43,12 +45,12 @@ func TestValidateBuiltInRunnerPrerequisites_UsesExpectedCommand(t *testing.T) {
 	}
 
 	for _, runnerID := range []string{
-		interfaces.RunnerIDCodex,
-		interfaces.RunnerIDGemini,
-		interfaces.RunnerIDKiro,
-		interfaces.RunnerIDCursorCLI,
-		interfaces.RunnerIDOpenCode,
-		interfaces.RunnerIDPi,
+		workerexecution.RunnerIDCodex,
+		workerexecution.RunnerIDGemini,
+		workerexecution.RunnerIDKiro,
+		workerexecution.RunnerIDCursorCLI,
+		workerexecution.RunnerIDOpenCode,
+		workerexecution.RunnerIDPi,
 	} {
 		if err := ValidateBuiltInRunnerPrerequisites(runnerID); err != nil {
 			t.Fatalf("ValidateBuiltInRunnerPrerequisites(%q): %v", runnerID, err)
@@ -56,12 +58,12 @@ func TestValidateBuiltInRunnerPrerequisites_UsesExpectedCommand(t *testing.T) {
 	}
 
 	want := []string{
-		string(interfaces.ModelProviderCodex),
-		string(interfaces.ModelProviderGemini),
-		string(interfaces.ModelProviderKiro),
-		string(interfaces.ModelProviderCursor),
-		string(interfaces.ModelProviderOpenCode),
-		string(interfaces.ModelProviderPi),
+		string(modelprovider.Codex),
+		string(modelprovider.Gemini),
+		string(modelprovider.Kiro),
+		string(modelprovider.Cursor),
+		string(modelprovider.OpenCode),
+		string(modelprovider.Pi),
 	}
 	if len(commands) != len(want) {
 		t.Fatalf("lookPath calls = %#v, want %#v", commands, want)
@@ -83,7 +85,7 @@ func TestValidateBuiltInRunnerPrerequisites_ReportsMissingBinary(t *testing.T) {
 		return "", errors.New("executable file not found in $PATH")
 	}
 
-	err := ValidateBuiltInRunnerPrerequisites(interfaces.RunnerIDCursorCLI)
+	err := ValidateBuiltInRunnerPrerequisites(workerexecution.RunnerIDCursorCLI)
 	if err == nil {
 		t.Fatal("expected missing binary validation error")
 	}

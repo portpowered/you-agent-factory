@@ -10,7 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
@@ -28,8 +31,8 @@ func TestAdapterBuildCommandRequestsStructuredPartialMessages(t *testing.T) {
 	t.Parallel()
 
 	built, err := claude.NewAdapter().BuildCommand(context.Background(), adapter.CommandContext{
-		Request: interfaces.ProviderInferenceRequest{
-			ModelProvider: string(interfaces.ModelProviderClaude), Model: "claude-sonnet-4",
+		Request: workerexecution.ProviderInferenceRequest{
+			ModelProvider: string(modelprovider.Claude), Model: "claude-sonnet-4",
 			SessionID: "session-1", UserMessage: "inspect the workspace",
 		},
 	})
@@ -47,7 +50,7 @@ func TestAdapterBuildCommandPreservesOptionalExecutionContext(t *testing.T) {
 
 	built, err := claude.NewAdapter().BuildCommand(context.Background(), adapter.CommandContext{
 		SkipPermissions: true,
-		Request: interfaces.ProviderInferenceRequest{
+		Request: workerexecution.ProviderInferenceRequest{
 			Dispatch:         work.WorkDispatch{DispatchID: "dispatch-options"},
 			WorkerType:       "agent-worker",
 			WorkstationType:  "review-work",
@@ -103,7 +106,7 @@ func TestAdapterReportsClaudeStreamingCapabilitiesAndFailureFacts(t *testing.T) 
 		t.Fatalf("successful failure classification = %#v", failure)
 	}
 	failure := providerAdapter.ClassifyFailure(context.Background(), adapter.FailureContext{CommandResult: workerprocess.CommandResult{ExitCode: 1}})
-	if failure.Failure == nil || failure.Failure.Type != interfaces.WorkFailureTypeUnknown ||
+	if failure.Failure == nil || failure.Failure.Type != workerexecution.WorkFailureTypeUnknown ||
 		failure.Failure.Message != "claude exited with code 1" || failure.Failure.Retry.Retryable {
 		t.Fatalf("failed classification = %#v", failure)
 	}
@@ -114,7 +117,7 @@ func TestAdapterFullStreamConformance(t *testing.T) {
 
 	testkit.RunFullStream(t, testkit.FullStreamFixture{
 		NewAdapter: func() adapter.Adapter { return claude.NewAdapter() },
-		Request: interfaces.ProviderInferenceRequest{
+		Request: workerexecution.ProviderInferenceRequest{
 			Dispatch: work.WorkDispatch{DispatchID: "dispatch-conformance"},
 			Model:    "claude-sonnet-4", UserMessage: privateConformancePrompt,
 		},
@@ -147,7 +150,7 @@ func TestAdapterFullStreamConformance(t *testing.T) {
 			`{"type":"result","subtype":"success","is_error":false,"result":"Hello world","session_id":"claude-session-conformance"}`,
 		)},
 		Expected: testkit.FullStreamExpected{
-			ProviderSession: interfaces.ProviderSessionMetadata{Provider: "claude", Kind: "session_id", ID: "claude-session-conformance"},
+			ProviderSession: workerexecution.ProviderSessionMetadata{Provider: "claude", Kind: "session_id", ID: "claude-session-conformance"},
 			ProviderRef:     "claude-session-conformance", MessageItemID: "msg_conformance",
 			ToolItemID: "msg_tool/content-block/0", ToolCallID: "toolu_conformance",
 			MessageDeltas: []string{"Hello ", "world"}, FinalContent: "Hello world",

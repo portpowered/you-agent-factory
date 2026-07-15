@@ -7,7 +7,10 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
@@ -20,7 +23,7 @@ import (
 // TerminalResult is the neutral terminal outcome produced by one parity fixture run.
 type TerminalResult struct {
 	Outcome      adapter.CommandOutcome
-	Response     interfaces.InferenceResponse
+	Response     workerexecution.InferenceResponse
 	Capabilities adapter.Capabilities
 	Drafts       []responseevents.Draft
 }
@@ -97,11 +100,11 @@ func runAgyTerminal(_ context.Context, fixture Fixture, transcript []byte) (Term
 
 func adapterForFixture(fixture Fixture) (adapter.Adapter, error) {
 	switch fixture.Provider {
-	case adapter.Identity(interfaces.ModelProviderClaude):
+	case adapter.Identity(modelprovider.Claude):
 		return claude.NewAdapter(), nil
-	case adapter.Identity(interfaces.ModelProviderCodex):
+	case adapter.Identity(modelprovider.Codex):
 		return codex.NewResponseAdapter(), nil
-	case adapter.Identity(interfaces.ModelProviderOpenCode):
+	case adapter.Identity(modelprovider.OpenCode):
 		return openCodeAdapterForFixture(fixture)
 	default:
 		return nil, fmt.Errorf("unsupported parity provider %q", fixture.Provider)

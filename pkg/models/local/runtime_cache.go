@@ -5,8 +5,9 @@ import (
 	"strconv"
 	"strings"
 
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // RuntimeCacheInspection reports local managed-cache state without contacting
@@ -64,7 +65,7 @@ type ManagedRuntimeSourceResolution struct {
 
 // ManagedRuntimeSourceResolver selects a backend source for one managed runtime.
 type ManagedRuntimeSourceResolver interface {
-	Resolve(modelName string, resource *interfaces.ResourceConfig) ManagedRuntimeSourceResolution
+	Resolve(modelName string, resource *factoryresource.Config) ManagedRuntimeSourceResolution
 }
 
 type defaultManagedRuntimeSourceResolver struct{}
@@ -74,7 +75,7 @@ func DefaultManagedRuntimeSourceResolver() ManagedRuntimeSourceResolver {
 	return defaultManagedRuntimeSourceResolver{}
 }
 
-func (defaultManagedRuntimeSourceResolver) Resolve(modelName string, resource *interfaces.ResourceConfig) ManagedRuntimeSourceResolution {
+func (defaultManagedRuntimeSourceResolver) Resolve(modelName string, resource *factoryresource.Config) ManagedRuntimeSourceResolution {
 	if resource != nil {
 		switch strings.ToUpper(strings.TrimSpace(resource.Provider)) {
 		case "MODELSCOPE", "MANAGED_MIRROR":

@@ -15,10 +15,13 @@ import (
 	"strings"
 	"time"
 
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	"go.uber.org/zap"
+
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/work"
-	"go.uber.org/zap"
 )
 
 const (
@@ -94,7 +97,7 @@ func RunPollCycle(
 	client Client,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	submitter Submitter,
 	checkpointPath string,
 	apiKey string,
@@ -137,7 +140,7 @@ func RunPollCycle(
 func collectHostedLinearIssues(
 	ctx context.Context,
 	client Client,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	checkpoint Checkpoint,
 	apiKey string,
 	logger *zap.Logger,
@@ -195,7 +198,7 @@ func advanceLinearCheckpoint(current Checkpoint, issues []linearIssue) Checkpoin
 func collectNewHostedLinearPageIssues(
 	issues []linearIssue,
 	checkpoint Checkpoint,
-	cfg *interfaces.HostedLinearWorkerConfig,
+	cfg *workerconfig.HostedLinearWorkerConfig,
 ) ([]linearIssue, bool) {
 	collected := make([]linearIssue, 0, len(issues))
 	for _, issue := range issues {
@@ -217,7 +220,7 @@ func shouldStopHostedLinearPaging(foundCheckpoint bool, page linearIssuePage) bo
 	return foundCheckpoint || !page.More || page.Next == ""
 }
 
-func hostedLinearIssueMatchesFilters(issue linearIssue, cfg *interfaces.HostedLinearWorkerConfig) bool {
+func hostedLinearIssueMatchesFilters(issue linearIssue, cfg *workerconfig.HostedLinearWorkerConfig) bool {
 	if cfg == nil {
 		return false
 	}
@@ -232,7 +235,7 @@ func hostedLinearIssueMatchesFilters(issue linearIssue, cfg *interfaces.HostedLi
 
 func hostedLinearSubmissions(
 	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	issues []linearIssue,
 ) ([]work.SubmitRequest, error) {
 	if len(issues) == 0 {
@@ -267,7 +270,7 @@ func hostedLinearSubmissions(
 	return submissions, nil
 }
 
-func hostedLinearIssuePayload(issue linearIssue, cfg *interfaces.HostedLinearWorkerConfig) ([]byte, error) {
+func hostedLinearIssuePayload(issue linearIssue, cfg *workerconfig.HostedLinearWorkerConfig) ([]byte, error) {
 	payload := map[string]any{
 		"source": "linear",
 		"issue": map[string]any{
@@ -327,7 +330,7 @@ func hostedLinearBatchRequestID(workstationName string, issues []linearIssue) st
 	return "linear-batch-" + hex.EncodeToString(h.Sum(nil)[:12])
 }
 
-func PollInterval(cfg *interfaces.HostedLinearWorkerConfig) (time.Duration, error) {
+func PollInterval(cfg *workerconfig.HostedLinearWorkerConfig) (time.Duration, error) {
 	if cfg == nil || strings.TrimSpace(cfg.PollInterval) == "" {
 		return DefaultPollInterval, nil
 	}
@@ -344,7 +347,7 @@ func PollInterval(cfg *interfaces.HostedLinearWorkerConfig) (time.Duration, erro
 func CheckpointPath(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 ) string {
 	baseDir := ""
 	if runtimeCfg != nil {
@@ -485,7 +488,7 @@ func containsString(values []string, want string) bool {
 	return false
 }
 
-func hostedLinearIssueFilterFromConfig(cfg *interfaces.HostedLinearWorkerConfig) linearIssueFilter {
+func hostedLinearIssueFilterFromConfig(cfg *workerconfig.HostedLinearWorkerConfig) linearIssueFilter {
 	if cfg == nil {
 		return linearIssueFilter{}
 	}

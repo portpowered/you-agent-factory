@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"strings"
 
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 type managedRuntimeProjection struct {
@@ -109,7 +111,7 @@ func managedRuntimeDiagnostics(
 	return result
 }
 
-func primaryModelScopedResource(aggregate catalogAggregate, factoryCfg *interfaces.FactoryConfig) *interfaces.ResourceConfig {
+func primaryModelScopedResource(aggregate catalogAggregate, factoryCfg *interfaces.FactoryConfig) *factoryresource.Config {
 	if factoryCfg == nil || !aggregate.hasModelScoped {
 		return nil
 	}
@@ -117,7 +119,7 @@ func primaryModelScopedResource(aggregate catalogAggregate, factoryCfg *interfac
 		if canonicalModelName(resource.Model) != canonicalModelName(aggregate.name) {
 			continue
 		}
-		if strings.TrimSpace(resource.Type) != interfaces.ResourceTypeModel {
+		if strings.TrimSpace(resource.Type) != factoryresource.TypeModel {
 			continue
 		}
 		copied := resource

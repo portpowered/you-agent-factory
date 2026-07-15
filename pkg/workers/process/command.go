@@ -7,7 +7,8 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
@@ -18,7 +19,7 @@ type CommandRunner interface {
 }
 
 // CommandRequest describes one worker-owned subprocess invocation.
-type CommandRequest = interfaces.SubprocessExecutionRequest
+type CommandRequest = workerexecution.SubprocessExecutionRequest
 
 // CommandResult captures the observable output and exit status from a command.
 type CommandResult struct {

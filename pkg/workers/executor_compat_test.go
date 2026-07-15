@@ -7,17 +7,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestRunnerFromProviderUsesProviderInference(t *testing.T) {
 	provider := &stubProvider{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: "runner-output",
 		},
 	}
-	request := interfaces.RunnerExecutionRequest{
+	request := workerexecution.RunnerExecutionRequest{
 		SystemPrompt: "system",
 		UserMessage:  "user",
 	}
@@ -37,10 +40,10 @@ func TestRunnerFromProviderUsesProviderInference(t *testing.T) {
 func TestRunnerFromProviderPreservesProviderFailureAndRequest(t *testing.T) {
 	providerErr := errors.New("canonical provider failure")
 	provider := &stubProvider{err: providerErr}
-	request := interfaces.RunnerExecutionRequest{
+	request := workerexecution.RunnerExecutionRequest{
 		SystemPrompt:     "system",
 		UserMessage:      "user",
-		ModelProvider:    string(interfaces.ModelProviderCursor),
+		ModelProvider:    string(modelprovider.Cursor),
 		Model:            "cursor-model",
 		WorkingDirectory: "/tmp/runtime-worktree",
 		SessionID:        "session-1",
@@ -56,17 +59,17 @@ func TestRunnerFromProviderPreservesProviderFailureAndRequest(t *testing.T) {
 	if !reflect.DeepEqual(provider.lastRequest, request) {
 		t.Fatalf("provider request = %#v, want %#v", provider.lastRequest, request)
 	}
-	if !reflect.DeepEqual(result, (interfaces.RunnerExecutionResult{})) {
+	if !reflect.DeepEqual(result, (workerexecution.RunnerExecutionResult{})) {
 		t.Fatalf("runner result = %#v, want zero result on provider failure", result)
 	}
 }
 
 func TestNewWorkerPoolDispatchesRegisteredExecutor(t *testing.T) {
 	pool := NewWorkerPool(nil)
-	result := interfaces.WorkResult{
+	result := workerexecution.WorkResult{
 		DispatchID:   "dispatch-1",
 		TransitionID: "transition-1",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}
 	pool.Register("worker-a", stubWorkerExecutor{result: result})
 	pool.Start()
@@ -101,8 +104,8 @@ func TestPanicAsFailedResultPreservesDispatchIdentity(t *testing.T) {
 	if result.DispatchID != "dispatch-1" || result.TransitionID != "transition-1" {
 		t.Fatalf("panic result lost dispatch identity: %+v", result)
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("panic result outcome = %q, want %q", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("panic result outcome = %q, want %q", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.Error != "executor panic: boom" {
 		t.Fatalf("panic result error = %q", result.Error)
@@ -146,27 +149,27 @@ func TestWorkLogFieldsAddsStableExecutionFields(t *testing.T) {
 
 func TestRootExecutionInterfaceAliasesAcceptImplementations(t *testing.T) {
 	worker := WorkerExecutor(stubWorkerExecutor{
-		result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	})
 	workerResult, err := worker.Execute(context.Background(), work.WorkDispatch{})
 	if err != nil {
 		t.Fatalf("worker executor returned error: %v", err)
 	}
-	if workerResult.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("worker result outcome = %q, want %q", workerResult.Outcome, interfaces.OutcomeAccepted)
+	if workerResult.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("worker result outcome = %q, want %q", workerResult.Outcome, workerexecution.OutcomeAccepted)
 	}
 
 	workstation := WorkstationRequestExecutor(stubWorkstationRequestExecutor{})
-	workstationResult, err := workstation.Execute(context.Background(), interfaces.WorkstationExecutionRequest{})
+	workstationResult, err := workstation.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{})
 	if err != nil {
 		t.Fatalf("workstation request executor returned error: %v", err)
 	}
-	if workstationResult.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("workstation result outcome = %q, want %q", workstationResult.Outcome, interfaces.OutcomeAccepted)
+	if workstationResult.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("workstation result outcome = %q, want %q", workstationResult.Outcome, workerexecution.OutcomeAccepted)
 	}
 
 	runner := Runner(stubRunner{})
-	runnerResult, err := runner.Execute(context.Background(), interfaces.RunnerExecutionRequest{})
+	runnerResult, err := runner.Execute(context.Background(), workerexecution.RunnerExecutionRequest{})
 	if err != nil {
 		t.Fatalf("runner returned error: %v", err)
 	}
@@ -180,34 +183,34 @@ var _ WorkstationRequestExecutor = stubWorkstationRequestExecutor{}
 var _ Runner = stubRunner{}
 
 type stubProvider struct {
-	lastRequest interfaces.ProviderInferenceRequest
-	response    interfaces.InferenceResponse
+	lastRequest workerexecution.ProviderInferenceRequest
+	response    workerexecution.InferenceResponse
 	err         error
 	calls       int
 }
 
-func (s *stubProvider) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (s *stubProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	s.calls++
 	s.lastRequest = req
 	return s.response, s.err
 }
 
 type stubWorkerExecutor struct {
-	result interfaces.WorkResult
+	result workerexecution.WorkResult
 }
 
-func (s stubWorkerExecutor) Execute(_ context.Context, _ work.WorkDispatch) (interfaces.WorkResult, error) {
+func (s stubWorkerExecutor) Execute(_ context.Context, _ work.WorkDispatch) (workerexecution.WorkResult, error) {
 	return s.result, nil
 }
 
 type stubWorkstationRequestExecutor struct{}
 
-func (stubWorkstationRequestExecutor) Execute(_ context.Context, _ interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}, nil
+func (stubWorkstationRequestExecutor) Execute(_ context.Context, _ workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}, nil
 }
 
 type stubRunner struct{}
 
-func (stubRunner) Execute(_ context.Context, _ interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
-	return interfaces.RunnerExecutionResult{Content: "ok"}, nil
+func (stubRunner) Execute(_ context.Context, _ workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+	return workerexecution.RunnerExecutionResult{Content: "ok"}, nil
 }

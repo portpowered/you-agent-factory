@@ -7,6 +7,7 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestWorkDiagnosticsFromSafeWorkDiagnostics_NilSafe(t *testing.T) {
@@ -379,7 +380,7 @@ func stringPtr(value string) *string {
 }
 
 func TestCloneWorkDiagnostics_Nil(t *testing.T) {
-	if got := CloneWorkDiagnostics(nil); got != nil {
+	if got := workerexecution.CloneWorkDiagnostics(nil); got != nil {
 		t.Fatalf("CloneWorkDiagnostics(nil) = %#v, want nil", got)
 	}
 }
@@ -392,7 +393,7 @@ func TestCloneWorkDiagnostics_PreservesAbsentNestedValues(t *testing.T) {
 		Panic:          &PanicDiagnostic{},
 	}
 
-	clone := CloneWorkDiagnostics(source)
+	clone := workerexecution.CloneWorkDiagnostics(source)
 
 	if clone == nil {
 		t.Fatalf("CloneWorkDiagnostics(source) = nil, want clone")
@@ -451,7 +452,7 @@ func TestCloneWorkDiagnostics_DetachesNestedMutableState(t *testing.T) {
 		},
 	}
 
-	clone := CloneWorkDiagnostics(source)
+	clone := workerexecution.CloneWorkDiagnostics(source)
 
 	source.RenderedPrompt.Variables["prompt_source"] = "mutated"
 	source.Provider.RequestMetadata["session_id"] = "mutated"

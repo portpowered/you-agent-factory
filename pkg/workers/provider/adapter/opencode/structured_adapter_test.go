@@ -9,7 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
@@ -24,10 +25,10 @@ const (
 )
 
 func TestStructuredAdapterSharedConformance(t *testing.T) {
-	session := interfaces.ProviderSessionMetadata{Provider: "opencode", Kind: "session_id", ID: "session-42"}
+	session := workerexecution.ProviderSessionMetadata{Provider: "opencode", Kind: "session_id", ID: "session-42"}
 	testkit.RunFullStream(t, testkit.FullStreamFixture{
 		NewAdapter: func() adapter.Adapter { return newStructuredAdapter(t) },
-		Request: interfaces.ProviderInferenceRequest{
+		Request: workerexecution.ProviderInferenceRequest{
 			Dispatch: work.WorkDispatch{DispatchID: "dispatch-conformance"},
 			Model:    "openai/gpt-5", UserMessage: privatePrompt,
 		},
@@ -76,7 +77,7 @@ func TestStructuredAdapterExecutesNegotiatedJSONModeAndEmitsCanonicalLifecycle(t
 		t.Fatalf("NewRegistry() error = %v", err)
 	}
 	runner := &fixtureStreamingRunner{stdout: fixture, chunks: splitFixtureChunks(fixture)}
-	request := interfaces.ProviderInferenceRequest{
+	request := workerexecution.ProviderInferenceRequest{
 		Dispatch: work.WorkDispatch{DispatchID: "dispatch-open-42", TransitionID: "transition-open-42"},
 		Model:    "openai/gpt-5", OpenCodeAgent: "implementer", SessionID: "ses_open_42",
 		WorkingDirectory: "/workspace", UserMessage: privatePrompt,
@@ -315,7 +316,7 @@ func assertAuthenticationFailure(t *testing.T, classified adapter.FailureResult)
 	if failure == nil {
 		t.Fatal("ClassifyFailure() returned no failure")
 	}
-	if failure.Type != interfaces.WorkFailureTypeAuthFailure || failure.Family != interfaces.WorkFailureFamilyTerminal || failure.Retry.Retryable {
+	if failure.Type != workerexecution.WorkFailureTypeAuthFailure || failure.Family != workerexecution.WorkFailureFamilyTerminal || failure.Retry.Retryable {
 		t.Fatalf("ClassifyFailure() = %#v", classified)
 	}
 	if failure.ProviderSession == nil || failure.ProviderSession.ID != "ses_error_42" {
@@ -332,7 +333,7 @@ func TestStructuredFinalRejectsMissingAuthoritativeResponse(t *testing.T) {
 		t.Fatalf("ParseFinal() error = %v, want bounded missing-response failure", err)
 	}
 	classified := newStructuredAdapter(t).ClassifyFailure(context.Background(), adapter.FailureContext{ParseError: err})
-	if classified.Failure == nil || classified.Failure.Type != interfaces.WorkFailureTypeUnknown {
+	if classified.Failure == nil || classified.Failure.Type != workerexecution.WorkFailureTypeUnknown {
 		t.Fatalf("ClassifyFailure() = %#v", classified)
 	}
 }
@@ -343,17 +344,17 @@ func TestOpenCodeTerminalClassificationCoversSupportedStatusAndNameSignals(t *te
 		name        string
 		nativeName  string
 		status      int
-		failureType interfaces.WorkFailureType
+		failureType workerexecution.WorkFailureType
 	}{
-		{name: "bad request status", nativeName: "APIError", status: 400, failureType: interfaces.WorkFailureTypePermanentBadRequest},
-		{name: "throttle status", nativeName: "APIError", status: 429, failureType: interfaces.WorkFailureTypeThrottled},
-		{name: "timeout status", nativeName: "APIError", status: 504, failureType: interfaces.WorkFailureTypeTimeout},
-		{name: "server status", nativeName: "APIError", status: 503, failureType: interfaces.WorkFailureTypeInternalServerError},
-		{name: "auth name", nativeName: "UnauthorizedError", failureType: interfaces.WorkFailureTypeAuthFailure},
-		{name: "invalid name", nativeName: "InvalidRequest", failureType: interfaces.WorkFailureTypePermanentBadRequest},
-		{name: "capacity name", nativeName: "CapacityError", failureType: interfaces.WorkFailureTypeThrottled},
-		{name: "deadline name", nativeName: "DeadlineExceeded", failureType: interfaces.WorkFailureTypeTimeout},
-		{name: "server name", nativeName: "ServerError", failureType: interfaces.WorkFailureTypeInternalServerError},
+		{name: "bad request status", nativeName: "APIError", status: 400, failureType: workerexecution.WorkFailureTypePermanentBadRequest},
+		{name: "throttle status", nativeName: "APIError", status: 429, failureType: workerexecution.WorkFailureTypeThrottled},
+		{name: "timeout status", nativeName: "APIError", status: 504, failureType: workerexecution.WorkFailureTypeTimeout},
+		{name: "server status", nativeName: "APIError", status: 503, failureType: workerexecution.WorkFailureTypeInternalServerError},
+		{name: "auth name", nativeName: "UnauthorizedError", failureType: workerexecution.WorkFailureTypeAuthFailure},
+		{name: "invalid name", nativeName: "InvalidRequest", failureType: workerexecution.WorkFailureTypePermanentBadRequest},
+		{name: "capacity name", nativeName: "CapacityError", failureType: workerexecution.WorkFailureTypeThrottled},
+		{name: "deadline name", nativeName: "DeadlineExceeded", failureType: workerexecution.WorkFailureTypeTimeout},
+		{name: "server name", nativeName: "ServerError", failureType: workerexecution.WorkFailureTypeInternalServerError},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

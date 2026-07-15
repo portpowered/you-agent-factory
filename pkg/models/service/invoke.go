@@ -5,10 +5,19 @@ import (
 	"fmt"
 	"strings"
 
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
+
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+
+	"go.uber.org/zap"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
@@ -17,7 +26,6 @@ import (
 	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
-	"go.uber.org/zap"
 )
 
 const directModelInvocationTransitionID = "direct-model-invocation"
@@ -67,9 +75,9 @@ func (s *Service) InvokeModel(
 	}
 
 	inputContent := contentcontract.PartsFromGenerated(request.Content)
-	inputTokens := []interfaces.Token{{
+	inputTokens := []factorytoken.Token{{
 		ID: "direct-model-invocation-input",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			Content: inputContent,
 		},
 	}}
@@ -95,7 +103,7 @@ func (s *Service) InvokeModel(
 		}
 		return apisurface.ModelInvocationResult{}, err
 	}
-	if result.Outcome == interfaces.OutcomeFailed {
+	if result.Outcome == workerexecution.OutcomeFailed {
 		if failure, ok := apisurface.ClassifyInferenceWorkResultFailure(result, failureContext); ok {
 			return apisurface.ModelInvocationResult{}, failure
 		}
@@ -117,7 +125,7 @@ func (s *Service) InvokeModel(
 		Operation:         strings.TrimSpace(request.Operation),
 		ProviderLocality:  workerDef.ModelLocality,
 		Content:           outputContent,
-		Bindings:          interfaces.CloneResolvedModelOperationBindings(resolvedBindings),
+		Bindings:          workerexecution.CloneResolvedModelOperationBindings(resolvedBindings),
 		StreamFile:        streamFile,
 		StreamContentType: streamContentType,
 	}, nil
@@ -147,15 +155,15 @@ func (s *Service) ensureInvocationReady(
 }
 
 func directModelInvocationWorkstationRequest(
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	request factoryapi.ModelInvocationRequest,
-	inputTokens []interfaces.Token,
-	resolvedBindings []interfaces.ResolvedModelOperationBinding,
+	inputTokens []factorytoken.Token,
+	resolvedBindings []workerexecution.ResolvedModelOperationBinding,
 	factoryRunnerID string,
-) interfaces.WorkstationExecutionRequest {
-	selection := interfaces.ResolveRunnerSelection("", factoryRunnerID, workerDef.ModelProvider)
+) workerexecution.WorkstationExecutionRequest {
+	selection := workerrunner.ResolveRunnerSelection("", factoryRunnerID, workerDef.ModelProvider)
 	inputContent := contentcontract.PartsFromGenerated(request.Content)
-	return interfaces.WorkstationExecutionRequest{
+	return workerexecution.WorkstationExecutionRequest{
 		Dispatch: work.WorkDispatch{
 			DispatchID:      directModelInvocationTransitionID,
 			TransitionID:    directModelInvocationTransitionID,

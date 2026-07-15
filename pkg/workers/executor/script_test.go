@@ -13,7 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
@@ -90,8 +93,8 @@ func (r fixedCommandRunner) Run(_ context.Context, _ CommandRequest) (CommandRes
 	return CommandResult{Stdout: r.stdout, Stderr: r.stderr, ExitCode: r.exitCode}, r.err
 }
 
-func testScriptRequest(dispatch work.WorkDispatch, opts ...func(*interfaces.WorkstationExecutionRequest)) interfaces.WorkstationExecutionRequest {
-	req := interfaces.WorkstationExecutionRequest{
+func testScriptRequest(dispatch work.WorkDispatch, opts ...func(*workerexecution.WorkstationExecutionRequest)) workerexecution.WorkstationExecutionRequest {
+	req := workerexecution.WorkstationExecutionRequest{
 		Dispatch:    work.CloneWorkDispatch(dispatch),
 		WorkerType:  dispatch.WorkerType,
 		ProjectID:   dispatch.ProjectID,
@@ -103,20 +106,20 @@ func testScriptRequest(dispatch work.WorkDispatch, opts ...func(*interfaces.Work
 	return req
 }
 
-func withScriptEnvVars(envVars map[string]string) func(*interfaces.WorkstationExecutionRequest) {
-	return func(req *interfaces.WorkstationExecutionRequest) {
+func withScriptEnvVars(envVars map[string]string) func(*workerexecution.WorkstationExecutionRequest) {
+	return func(req *workerexecution.WorkstationExecutionRequest) {
 		req.EnvVars = envVars
 	}
 }
 
-func withScriptWorktree(worktree string) func(*interfaces.WorkstationExecutionRequest) {
-	return func(req *interfaces.WorkstationExecutionRequest) {
+func withScriptWorktree(worktree string) func(*workerexecution.WorkstationExecutionRequest) {
+	return func(req *workerexecution.WorkstationExecutionRequest) {
 		req.Worktree = worktree
 	}
 }
 
-func withScriptWorkingDirectory(workingDirectory string) func(*interfaces.WorkstationExecutionRequest) {
-	return func(req *interfaces.WorkstationExecutionRequest) {
+func withScriptWorkingDirectory(workingDirectory string) func(*workerexecution.WorkstationExecutionRequest) {
+	return func(req *workerexecution.WorkstationExecutionRequest) {
 		req.WorkingDirectory = workingDirectory
 	}
 }
@@ -158,13 +161,13 @@ func TestScriptExecutor_CancellationReturnsFailedResult(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.Error != "execution timeout" {
 		t.Fatalf("Error = %q, want %q", result.Error, "execution timeout")
 	}
-	if result.FailureMetadata == nil || result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+	if result.FailureMetadata == nil || result.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("FailureMetadata = %#v, want timeout metadata", result.FailureMetadata)
 	}
 }
@@ -177,9 +180,9 @@ func TestScriptExecutor_TemplateSubstitutionAndEnvMerging(t *testing.T) {
 		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-4",
-			InputTokens: InputTokens(interfaces.Token{
+			InputTokens: InputTokens(factorytoken.Token{
 				ID:    "token-script-template",
-				Color: interfaces.TokenColor{WorkID: "work-script-template"},
+				Color: factorytoken.Color{WorkID: "work-script-template"},
 			}),
 		},
 		withScriptEnvVars(map[string]string{
@@ -190,8 +193,8 @@ func TestScriptExecutor_TemplateSubstitutionAndEnvMerging(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if !strings.Contains(result.Output, "work-script-template") {
 		t.Fatalf("Output = %q, want rendered work ID", result.Output)
@@ -210,9 +213,9 @@ func TestScriptExecutor_RejectsImageContentBeforeRunner(t *testing.T) {
 		work.WorkDispatch{
 			DispatchID:   "d-image-script",
 			TransitionID: "t-image-script",
-			InputTokens: InputTokens(interfaces.Token{
+			InputTokens: InputTokens(factorytoken.Token{
 				ID: "token-image",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkID: "work-image",
 					Content: []work.WorkContentPart{
 						{Type: work.WorkContentPartTypeImage, File: "fixtures/mockup.png"},
@@ -224,8 +227,8 @@ func TestScriptExecutor_RejectsImageContentBeforeRunner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if !strings.Contains(result.Error, `input_tokens[0].color.content[0].file`) ||
 		!strings.Contains(result.Error, `script executor`) ||
@@ -323,8 +326,8 @@ func TestScriptExecutor_SharedCommandRunnerReceivesResolvedDispatchRequest(t *te
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 
 	assertSharedRunnerRequest(t, runner, wantExecution)
@@ -357,8 +360,8 @@ func TestScriptExecutor_EmitsScriptRequestEventBeforeCommandRunner(t *testing.T)
 		return value
 	})(executor)
 	result := executeRecordedScript(t, executor)
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if strings.Join(order, ",") != "record,run,record" {
 		t.Fatalf("event order = %v, want request before command runner and response after", order)
@@ -415,7 +418,7 @@ type scriptResponseOutcomeCase struct {
 	wantExitCode  *int
 	wantStdout    string
 	wantStderr    string
-	wantResult    interfaces.WorkOutcome
+	wantResult    workerexecution.WorkOutcome
 	wantErrorText string
 }
 
@@ -432,7 +435,7 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			wantOutcome:  factoryapi.ScriptExecutionOutcomeSucceeded,
 			wantExitCode: intPtr(0),
 			wantStdout:   "script ok\n",
-			wantResult:   interfaces.OutcomeAccepted,
+			wantResult:   workerexecution.OutcomeAccepted,
 		},
 		{
 			name: "failed exit code",
@@ -445,7 +448,7 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			wantExitCode:  intPtr(17),
 			wantStdout:    "before failure\n",
 			wantStderr:    "boom\n",
-			wantResult:    interfaces.OutcomeFailed,
+			wantResult:    workerexecution.OutcomeFailed,
 			wantErrorText: "boom",
 		},
 		{
@@ -457,7 +460,7 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			wantFailure:   &timedOut,
 			wantStdout:    "partial stdout",
 			wantStderr:    "partial stderr",
-			wantResult:    interfaces.OutcomeFailed,
+			wantResult:    workerexecution.OutcomeFailed,
 			wantErrorText: "execution timeout",
 		},
 		{
@@ -468,7 +471,7 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			wantOutcome:   factoryapi.ScriptExecutionOutcomeProcessError,
 			wantFailure:   &processError,
 			wantStderr:    "exec failed",
-			wantResult:    interfaces.OutcomeFailed,
+			wantResult:    workerexecution.OutcomeFailed,
 			wantErrorText: "execution cancelled: exec: file not found",
 		},
 		{
@@ -479,24 +482,24 @@ func scriptResponseOutcomeCases() []scriptResponseOutcomeCase {
 			wantOutcome:   factoryapi.ScriptExecutionOutcomeProcessError,
 			wantFailure:   &processError,
 			wantStderr:    "exec failed",
-			wantResult:    interfaces.OutcomeFailed,
+			wantResult:    workerexecution.OutcomeFailed,
 			wantErrorText: "execution cancelled: exec: file not found",
 		},
 	}
 }
 
-func sharedRunnerDispatch(execution work.ExecutionMetadata) interfaces.WorkstationExecutionRequest {
+func sharedRunnerDispatch(execution work.ExecutionMetadata) workerexecution.WorkstationExecutionRequest {
 	dispatch := work.WorkDispatch{
 		DispatchID:   "dispatch-script",
 		TransitionID: "transition-script",
 		ProjectID:    "analytics-platform",
 		Execution:    execution,
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: InputTokens(factorytoken.Token{
 			ID: "token-script",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-script",
 				WorkTypeID: "task",
-				DataType:   interfaces.DataTypeWork,
+				DataType:   factorytoken.DataTypeWork,
 				Tags:       map[string]string{"priority": "high"},
 			},
 		}),
@@ -524,7 +527,7 @@ func newRecordedScriptExecutor(runner CommandRunner, recorder func(factoryapi.Fa
 	}
 }
 
-func executeRecordedScript(t *testing.T, executor *ScriptExecutor) interfaces.WorkResult {
+func executeRecordedScript(t *testing.T, executor *ScriptExecutor) workerexecution.WorkResult {
 	t.Helper()
 
 	result, err := executor.Execute(context.Background(), sharedRunnerDispatch(work.ExecutionMetadata{
@@ -606,8 +609,8 @@ func TestScriptExecutor_DirectCommandEnvironmentDoesNotAddProviderAutomationDefa
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 
 	observed := envSliceToMap(strings.Split(result.Output, "\n"))
@@ -644,8 +647,8 @@ func TestScriptExecutor_CommandEnvironmentUsesDispatchEnvOverrides(t *testing.T)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 
 	runner.mu.Lock()
@@ -672,12 +675,12 @@ func TestScriptExecutor_AttachesCommandDiagnosticsToWorkResult(t *testing.T) {
 		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
-			InputTokens: InputTokens(interfaces.Token{
+			InputTokens: InputTokens(factorytoken.Token{
 				ID: "token-1",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkID:     "work-1",
 					WorkTypeID: "task",
-					DataType:   interfaces.DataTypeWork,
+					DataType:   factorytoken.DataTypeWork,
 				},
 			}),
 		},
@@ -732,8 +735,8 @@ func TestScriptExecutor_CommandDiagnosticsRedactSensitiveEnvWithoutChangingExecu
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 
 	runner.mu.Lock()
@@ -821,13 +824,13 @@ func TestScriptExecutor_TimeoutStopsProcessBeforeItCanFinish(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.Error != "execution timeout" {
 		t.Fatalf("Error = %q, want %q", result.Error, "execution timeout")
 	}
-	if result.FailureMetadata == nil || result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+	if result.FailureMetadata == nil || result.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("FailureMetadata = %#v, want timeout metadata", result.FailureMetadata)
 	}
 

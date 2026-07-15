@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -343,7 +345,7 @@ func TestDefaultLlamaCppServerStartBuilder_RequiresHealthEndpointArg(t *testing.
 	_, err := defaultLlamaCppServerStartBuilder(
 		Identity{Name: "OMNIVOICE_Q4_K_M", Backend: "LLAMACPP"},
 		CacheInspection{CachePath: t.TempDir(), Installed: true},
-		&interfaces.WorkerConfig{Command: "fake-server"},
+		&workerconfig.Config{Command: "fake-server"},
 	)
 	if err == nil {
 		t.Fatal("expected missing health endpoint error")

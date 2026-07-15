@@ -5,7 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
@@ -43,7 +44,7 @@ type ExecuteInput struct {
 type ExecuteResult struct {
 	Outcome           CommandOutcome
 	Capabilities      Capabilities
-	Response          interfaces.InferenceResponse
+	Response          workerexecution.InferenceResponse
 	Drafts            []responseevents.Draft
 	Diagnostics       []Diagnostic
 	Failure           *FailureFacts

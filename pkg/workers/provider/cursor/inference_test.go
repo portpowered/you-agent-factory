@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestParseInferenceResult_Success(t *testing.T) {
@@ -26,7 +28,7 @@ func TestParseInferenceResult_Success(t *testing.T) {
 		}
 	}`)
 
-	parsed, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	parsed, err := ParseInferenceResult(string(modelprovider.Cursor), stdout)
 	if err != nil {
 		t.Fatalf("ParseInferenceResult returned error: %v", err)
 	}
@@ -64,7 +66,7 @@ func TestParseInferenceResult_StreamJSONSuccess(t *testing.T) {
 			"{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"duration_ms\":1234,\"duration_api_ms\":1100,\"result\":\"Plan done\",\"session_id\":\"cursor-stream-session\",\"request_id\":\"req-stream-123\",\"usage\":{\"inputTokens\":12,\"outputTokens\":34}}\n",
 	)
 
-	parsed, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	parsed, err := ParseInferenceResult(string(modelprovider.Cursor), stdout)
 	if err != nil {
 		t.Fatalf("ParseInferenceResult returned error: %v", err)
 	}
@@ -90,7 +92,7 @@ func TestParseInferenceResult_StreamJSONIgnoresMalformedAndUnknownLinesBeforeRes
 			"{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Plan done\",\"session_id\":\"cursor-stream-session\"}\n",
 	)
 
-	parsed, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	parsed, err := ParseInferenceResult(string(modelprovider.Cursor), stdout)
 	if err != nil {
 		t.Fatalf("ParseInferenceResult returned error: %v", err)
 	}
@@ -109,11 +111,11 @@ func TestParseInferenceResult_StreamJSONUsesLastTerminalResult(t *testing.T) {
 			"{\"type\":\"result\",\"subtype\":\"rate_limit_error\",\"is_error\":true,\"result\":\"Cursor capacity is busy\",\"session_id\":\"final-session\"}\n",
 	)
 
-	parsed, failure := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	parsed, failure := ParseInferenceResult(string(modelprovider.Cursor), stdout)
 	if parsed != nil {
 		t.Fatalf("parsed result = %#v, want no successful response", parsed)
 	}
-	if failure == nil || failure.Type != interfaces.WorkFailureTypeThrottled || failure.Message != "Cursor capacity is busy" {
+	if failure == nil || failure.Type != workerexecution.WorkFailureTypeThrottled || failure.Message != "Cursor capacity is busy" {
 		t.Fatalf("failure = %#v, want final throttling result", failure)
 	}
 	if failure.ProviderSession == nil || failure.ProviderSession.ID != "final-session" {
@@ -130,11 +132,11 @@ func TestParseInferenceResult_MissingSessionID(t *testing.T) {
 		"session_id": ""
 	}`)
 
-	_, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	_, err := ParseInferenceResult(string(modelprovider.Cursor), stdout)
 	if err == nil {
 		t.Fatal("expected parse error for missing session_id")
 	}
-	if err.Type != interfaces.WorkFailureTypeUnknown {
+	if err.Type != workerexecution.WorkFailureTypeUnknown {
 		t.Fatalf("error type = %q, want unknown", err.Type)
 	}
 }
@@ -148,11 +150,11 @@ func TestParseInferenceResult_InvalidSessionID(t *testing.T) {
 		"session_id": "../cursor-session"
 	}`)
 
-	_, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	_, err := ParseInferenceResult(string(modelprovider.Cursor), stdout)
 	if err == nil {
 		t.Fatal("expected parse error for invalid session_id")
 	}
-	if err.Type != interfaces.WorkFailureTypeUnknown {
+	if err.Type != workerexecution.WorkFailureTypeUnknown {
 		t.Fatalf("error type = %q, want unknown", err.Type)
 	}
 }
@@ -163,21 +165,21 @@ func TestParseInferenceResult_StreamJSONInvalidSessionID(t *testing.T) {
 			"{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,\"result\":\"Plan done\",\"session_id\":\"../cursor-stream-session\"}\n",
 	)
 
-	_, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	_, err := ParseInferenceResult(string(modelprovider.Cursor), stdout)
 	if err == nil {
 		t.Fatal("expected parse error for invalid stream session_id")
 	}
-	if err.Type != interfaces.WorkFailureTypeUnknown {
+	if err.Type != workerexecution.WorkFailureTypeUnknown {
 		t.Fatalf("error type = %q, want unknown", err.Type)
 	}
 }
 
 func TestParseInferenceResult_MalformedJSON(t *testing.T) {
-	_, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), []byte(`{not json`))
+	_, err := ParseInferenceResult(string(modelprovider.Cursor), []byte(`{not json`))
 	if err == nil {
 		t.Fatal("expected parse error for malformed JSON")
 	}
-	if err.Type != interfaces.WorkFailureTypeUnknown {
+	if err.Type != workerexecution.WorkFailureTypeUnknown {
 		t.Fatalf("error type = %q, want unknown", err.Type)
 	}
 }
@@ -185,11 +187,11 @@ func TestParseInferenceResult_MalformedJSON(t *testing.T) {
 func TestParseInferenceResult_UnexpectedType(t *testing.T) {
 	stdout := []byte(`{"type":"assistant","subtype":"success","result":"hi","session_id":"sess-1"}`)
 
-	_, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	_, err := ParseInferenceResult(string(modelprovider.Cursor), stdout)
 	if err == nil {
 		t.Fatal("expected parse error for unexpected type")
 	}
-	if err.Type != interfaces.WorkFailureTypeUnknown {
+	if err.Type != workerexecution.WorkFailureTypeUnknown {
 		t.Fatalf("error type = %q, want unknown", err.Type)
 	}
 }
@@ -204,11 +206,11 @@ func TestParseInferenceResult_ErrorSubtype(t *testing.T) {
 		"session_id": "sess-1"
 	}`)
 
-	_, err := ParseInferenceResult(string(interfaces.ModelProviderCursor), stdout)
+	_, err := ParseInferenceResult(string(modelprovider.Cursor), stdout)
 	if err == nil {
 		t.Fatal("expected parse error for error subtype")
 	}
-	if err.Type != interfaces.WorkFailureTypeUnknown {
+	if err.Type != workerexecution.WorkFailureTypeUnknown {
 		t.Fatalf("error type = %q, want unknown", err.Type)
 	}
 	if !strings.Contains(err.Message, "...") {

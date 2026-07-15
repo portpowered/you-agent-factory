@@ -9,7 +9,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // ProviderError is the shared normalized provider failure contract. Provider
@@ -17,11 +19,11 @@ import (
 // customer-messaging logic can make deterministic decisions without parsing raw
 // provider output at every call site.
 type ProviderError struct {
-	Family          interfaces.WorkFailureFamily
-	Type            interfaces.WorkFailureType
+	Family          workerexecution.WorkFailureFamily
+	Type            workerexecution.WorkFailureType
 	Message         string
-	ProviderSession *interfaces.ProviderSessionMetadata
-	Diagnostics     *interfaces.WorkDiagnostics
+	ProviderSession *workerexecution.ProviderSessionMetadata
+	Diagnostics     *workerexecution.WorkDiagnostics
 	Cause           error
 }
 
@@ -29,7 +31,7 @@ type ProviderError struct {
 // deliberately carries only the canonical reason and customer-visible message;
 // runtime policy is derived from Reason when the result crosses into execution.
 type ProviderFailureResult struct {
-	Reason  interfaces.WorkFailureType
+	Reason  workerexecution.WorkFailureType
 	Message string
 }
 
@@ -41,7 +43,7 @@ func ProviderFailureInternalCauseError(cause string) error {
 	return errors.New(cause)
 }
 
-func NewProviderError(errorType interfaces.WorkFailureType, message string, cause error) *ProviderError {
+func NewProviderError(errorType workerexecution.WorkFailureType, message string, cause error) *ProviderError {
 	return NewProviderErrorFromResult(ProviderFailureResult{
 		Reason:  errorType,
 		Message: message,
@@ -59,20 +61,20 @@ func NewProviderErrorFromResult(result ProviderFailureResult, cause error) *Prov
 	}
 }
 
-func newProviderErrorFromResultWithDiagnostics(result ProviderFailureResult, cause error, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
+func newProviderErrorFromResultWithDiagnostics(result ProviderFailureResult, cause error, session *workerexecution.ProviderSessionMetadata, diagnostics *workerexecution.WorkDiagnostics) *ProviderError {
 	err := NewProviderErrorFromResult(result, cause)
-	err.ProviderSession = interfaces.CloneProviderSessionMetadata(session)
-	err.Diagnostics = interfaces.CloneWorkDiagnostics(diagnostics)
+	err.ProviderSession = workerexecution.CloneProviderSessionMetadata(session)
+	err.Diagnostics = workerexecution.CloneWorkDiagnostics(diagnostics)
 	return err
 }
 
-func NewProviderErrorWithSession(errorType interfaces.WorkFailureType, message string, cause error, session *interfaces.ProviderSessionMetadata) *ProviderError {
+func NewProviderErrorWithSession(errorType workerexecution.WorkFailureType, message string, cause error, session *workerexecution.ProviderSessionMetadata) *ProviderError {
 	err := NewProviderError(errorType, message, cause)
-	err.ProviderSession = interfaces.CloneProviderSessionMetadata(session)
+	err.ProviderSession = workerexecution.CloneProviderSessionMetadata(session)
 	return err
 }
 
-func newProviderErrorWithDiagnostics(errorType interfaces.WorkFailureType, message string, cause error, session *interfaces.ProviderSessionMetadata, diagnostics *interfaces.WorkDiagnostics) *ProviderError {
+func newProviderErrorWithDiagnostics(errorType workerexecution.WorkFailureType, message string, cause error, session *workerexecution.ProviderSessionMetadata, diagnostics *workerexecution.WorkDiagnostics) *ProviderError {
 	return newProviderErrorFromResultWithDiagnostics(ProviderFailureResult{
 		Reason:  errorType,
 		Message: message,
@@ -90,20 +92,20 @@ func (e *ProviderError) Unwrap() error {
 	return e.Cause
 }
 
-func ClassifyProviderFailure(err *ProviderError) interfaces.WorkFailureDecision {
+func ClassifyProviderFailure(err *ProviderError) workerexecution.WorkFailureDecision {
 	if err == nil {
-		return interfaces.WorkFailureDecision{}
+		return workerexecution.WorkFailureDecision{}
 	}
 	return providerFailurePolicyForReason(err.Type).Decision
 }
 
 // WorkFailureMetadataFromError projects a provider-shaped execution error onto
 // the in-process failure contract carried on WorkResult.FailureMetadata.
-func WorkFailureMetadataFromError(err *ProviderError) *interfaces.WorkFailureMetadata {
+func WorkFailureMetadataFromError(err *ProviderError) *workerexecution.WorkFailureMetadata {
 	if err == nil {
 		return nil
 	}
-	return &interfaces.WorkFailureMetadata{
+	return &workerexecution.WorkFailureMetadata{
 		Family: providerFailurePolicyForReason(err.Type).Family,
 		Type:   err.Type,
 	}
@@ -121,7 +123,7 @@ func NormalizeProviderExecutionError(err error) *ProviderError {
 		return providerErr
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		return NewProviderError(interfaces.WorkFailureTypeTimeout, "execution timeout", err)
+		return NewProviderError(workerexecution.WorkFailureTypeTimeout, "execution timeout", err)
 	}
 	return nil
 }
@@ -129,22 +131,22 @@ func NormalizeProviderExecutionError(err error) *ProviderError {
 // ProviderErrorCorpusEntry is one shared raw provider-failure fixture used by
 // worker unit tests and functional smoke coverage.
 type ProviderErrorCorpusEntry struct {
-	Name                  string                       `json:"name"`
-	Provider              interfaces.ModelProvider     `json:"provider"`
-	RawProviderFamily     string                       `json:"raw_provider_family"`
-	Category              string                       `json:"category"`
-	UpstreamSourceCase    string                       `json:"upstream_source_case"`
-	ExitCode              int                          `json:"exit_code"`
-	Stdout                string                       `json:"stdout"`
-	Stderr                string                       `json:"stderr"`
-	ExpectedType          interfaces.WorkFailureType   `json:"expected_type"`
-	ExpectedFamily        interfaces.WorkFailureFamily `json:"expected_family"`
-	ExpectedMessage       string                       `json:"expected_message,omitempty"`
-	Retryable             bool                         `json:"retryable"`
-	TriggersThrottlePause bool                         `json:"triggers_throttle_pause"`
-	Supported             bool                         `json:"supported"`
-	RejectMessageContains []string                     `json:"reject_message_contains,omitempty"`
-	Notes                 string                       `json:"notes,omitempty"`
+	Name                  string                            `json:"name"`
+	Provider              modelprovider.ID                  `json:"provider"`
+	RawProviderFamily     string                            `json:"raw_provider_family"`
+	Category              string                            `json:"category"`
+	UpstreamSourceCase    string                            `json:"upstream_source_case"`
+	ExitCode              int                               `json:"exit_code"`
+	Stdout                string                            `json:"stdout"`
+	Stderr                string                            `json:"stderr"`
+	ExpectedType          workerexecution.WorkFailureType   `json:"expected_type"`
+	ExpectedFamily        workerexecution.WorkFailureFamily `json:"expected_family"`
+	ExpectedMessage       string                            `json:"expected_message,omitempty"`
+	Retryable             bool                              `json:"retryable"`
+	TriggersThrottlePause bool                              `json:"triggers_throttle_pause"`
+	Supported             bool                              `json:"supported"`
+	RejectMessageContains []string                          `json:"reject_message_contains,omitempty"`
+	Notes                 string                            `json:"notes,omitempty"`
 }
 
 // CommandResult renders the raw shared fixture into the provider subprocess
@@ -265,10 +267,10 @@ func validateProviderErrorCorpusEntry(entry ProviderErrorCorpusEntry) error {
 	if entry.ExpectedFamily == "" {
 		return fmt.Errorf("decode provider error corpus: entry %q missing expected family", entry.Name)
 	}
-	if entry.Provider == interfaces.ModelProviderClaude && entry.ExpectedMessage == "" {
+	if entry.Provider == modelprovider.Claude && entry.ExpectedMessage == "" {
 		return fmt.Errorf("decode provider error corpus: Claude entry %q missing expected message", entry.Name)
 	}
-	if entry.ExpectedFamily == interfaces.WorkFailureFamilyThrottle && !entry.TriggersThrottlePause {
+	if entry.ExpectedFamily == workerexecution.WorkFailureFamilyThrottle && !entry.TriggersThrottlePause {
 		return fmt.Errorf("decode provider error corpus: entry %q throttle family must trigger throttle pause", entry.Name)
 	}
 	if entry.TriggersThrottlePause && !entry.Retryable {

@@ -8,6 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/work"
 	workdomain "github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type replayEventLog struct {
@@ -381,7 +382,7 @@ func replayCompletionFromEvent(event factoryapi.FactoryEvent, inference replayIn
 	if err != nil {
 		return replayCompletion{}, fmt.Errorf("decode dispatch completed event %q: %w", event.Id, err)
 	}
-	diagnostics := interfaces.CloneWorkDiagnostics(inference.diagnostics)
+	diagnostics := workerexecution.CloneWorkDiagnostics(inference.diagnostics)
 	completionID := stringValue(payload.CompletionId)
 	if completionID == "" {
 		completionID = event.Id

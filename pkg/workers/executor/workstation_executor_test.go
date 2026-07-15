@@ -13,6 +13,13 @@ import (
 	"testing"
 	"time"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
@@ -20,28 +27,28 @@ import (
 )
 
 type wsMockExecutor struct {
-	dispatch interfaces.WorkstationExecutionRequest
+	dispatch workerexecution.WorkstationExecutionRequest
 	called   bool
-	result   interfaces.WorkResult
+	result   workerexecution.WorkResult
 	err      error
 }
 
 type dispatchCapturingExecutor struct {
-	dispatch    interfaces.WorkstationExecutionRequest
+	dispatch    workerexecution.WorkstationExecutionRequest
 	called      bool
 	deadline    time.Time
 	hasDeadline bool
-	result      interfaces.WorkResult
+	result      workerexecution.WorkResult
 	err         error
 }
 
-func (m *wsMockExecutor) Execute(_ context.Context, d interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (m *wsMockExecutor) Execute(_ context.Context, d workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	m.called = true
 	m.dispatch = d
 	return m.result, m.err
 }
 
-func (m *dispatchCapturingExecutor) Execute(ctx context.Context, d interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (m *dispatchCapturingExecutor) Execute(ctx context.Context, d workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	m.called = true
 	m.dispatch = d
 	m.deadline, m.hasDeadline = ctx.Deadline()
@@ -57,14 +64,14 @@ func newTestWorkstationExecutor(runtimeConfig interfaces.RuntimeConfigLookup, ex
 }
 
 func TestWorkstationExecutor_ModelWorkstation_RendersPromptAndDelegates(t *testing.T) {
-	mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "You are a helpful assistant."},
+			Workers: map[string]*workerconfig.Config{
+				"worker-a": {Type: workertaxonomy.WorkerTypeModel, Body: "You are a helpful assistant."},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"standard": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "Process work {{ (index .Inputs 0).WorkID }}"},
+				"standard": {Type: workertaxonomy.WorkstationTypeModel, PromptTemplate: "Process work {{ (index .Inputs 0).WorkID }}"},
 			},
 		},
 		mock,
@@ -75,9 +82,9 @@ func TestWorkstationExecutor_ModelWorkstation_RendersPromptAndDelegates(t *testi
 		TransitionID:    "t-1",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: InputTokens(factorytoken.Token{
 			ID:    "tok-1",
-			Color: interfaces.TokenColor{WorkID: "work-1", WorkTypeID: "code-changes"},
+			Color: factorytoken.Color{WorkID: "work-1", WorkTypeID: "code-changes"},
 		}),
 	})
 	if err != nil {
@@ -98,7 +105,7 @@ func TestWorkstationExecutor_ModelWorkstation_RendersPromptAndDelegates(t *testi
 }
 
 func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t *testing.T) {
-	mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
 			Factory: &interfaces.FactoryConfig{
@@ -111,16 +118,16 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 					},
 				},
 			},
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"worker-a": {
-					Type:  interfaces.WorkerTypeModel,
+					Type:  workertaxonomy.WorkerTypeModel,
 					Body:  "Provider ${provider}",
 					Model: "${model}",
 				},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
-					Type:             interfaces.WorkstationTypeModel,
+					Type:             workertaxonomy.WorkstationTypeModel,
 					PromptTemplate:   "Process ${input}",
 					WorkingDirectory: "workspace/${provider}",
 				},
@@ -134,9 +141,9 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 		TransitionID:    "t-interpolate",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: InputTokens(factorytoken.Token{
 			ID: "tok-1",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-1",
 				InvocationArguments: &work.InvocationArguments{
 					Arguments: map[string]work.InvocationArgument{
@@ -156,8 +163,8 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if mock.dispatch.SystemPrompt != "Provider cursor" {
 		t.Fatalf("system prompt = %q, want interpolated worker body", mock.dispatch.SystemPrompt)
@@ -188,7 +195,7 @@ func TestWorkstationExecutor_ModelWorkstation_InterpolatesInvocationArguments(t 
 func TestWorkstationExecutor_ModelWorkstationUsesCanonicalWorkstationRuntimeFields(t *testing.T) {
 	projectRoot := t.TempDir()
 
-	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	mock := &dispatchCapturingExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(canonicalWorkstationRuntimeConfig(projectRoot), mock)
 
 	start := time.Now()
@@ -196,8 +203,8 @@ func TestWorkstationExecutor_ModelWorkstationUsesCanonicalWorkstationRuntimeFiel
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if !mock.called {
 		t.Fatal("executor was not called")
@@ -237,10 +244,10 @@ func TestWorkstationExecutor_ModelWorkstationUsesCanonicalWorkstationRuntimeFiel
 
 func TestResolveModelOperationBindings_UsesInputThenConfigThenDefaultAndRecordsSource(t *testing.T) {
 	workstation := &interfaces.FactoryWorkstationConfig{
-		Type:      interfaces.WorkstationTypeInvoke,
+		Type:      workertaxonomy.WorkstationTypeInvoke,
 		Operation: "TTS",
 		OperationBindings: []interfaces.ModelOperationBinding{
-			{Slot: "text", Selector: &interfaces.ModelOperationBindingSelector{Label: "utterance", Type: interfaces.ModelOperationContentTypeText}},
+			{Slot: "text", Selector: &interfaces.ModelOperationBindingSelector{Label: "utterance", Type: workerconfig.ModelOperationContentTypeText}},
 			{
 				Slot:     "voice",
 				Selector: &interfaces.ModelOperationBindingSelector{Role: "voice"},
@@ -249,16 +256,16 @@ func TestResolveModelOperationBindings_UsesInputThenConfigThenDefaultAndRecordsS
 			{Slot: "style", DefaultContent: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "neutral", Slot: "style"}}},
 		},
 	}
-	worker := &interfaces.WorkerConfig{
+	worker := &workerconfig.Config{
 		Name: "tts-worker",
-		Operations: []interfaces.ModelOperation{{
+		Operations: []workerconfig.ModelOperation{{
 			Name:   "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{Name: "text", Required: true}, {Name: "voice"}, {Name: "style"}, {Name: "optional"}},
+			Inputs: []workerconfig.ModelOperationSlot{{Name: "text", Required: true}, {Name: "voice"}, {Name: "style"}, {Name: "optional"}},
 		}},
 	}
-	inputs := []interfaces.Token{{
+	inputs := []factorytoken.Token{{
 		ID: "tok-1",
-		Color: interfaces.TokenColor{Content: []work.WorkContentPart{
+		Color: factorytoken.Color{Content: []work.WorkContentPart{
 			{Type: work.WorkContentPartTypeText, Slot: "ignored", Label: "utterance", Text: "first"},
 			{Type: work.WorkContentPartTypeText, Slot: "text", Label: "utterance", Text: "second"},
 		}},
@@ -271,38 +278,38 @@ func TestResolveModelOperationBindings_UsesInputThenConfigThenDefaultAndRecordsS
 	if len(got) != 4 {
 		t.Fatalf("binding count = %d, want 4", len(got))
 	}
-	if got[0].Source != interfaces.ModelOperationBindingSourceInput || got[0].Content[0].Text != "first" {
+	if got[0].Source != workerexecution.ModelOperationBindingSourceInput || got[0].Content[0].Text != "first" {
 		t.Fatalf("text binding = %#v, want first input match", got[0])
 	}
-	if got[1].Source != interfaces.ModelOperationBindingSourceConfig || string(got[1].Content[0].JSON) != `{"name":"alloy"}` {
+	if got[1].Source != workerexecution.ModelOperationBindingSourceConfig || string(got[1].Content[0].JSON) != `{"name":"alloy"}` {
 		t.Fatalf("voice binding = %#v, want config fallback", got[1])
 	}
-	if got[2].Source != interfaces.ModelOperationBindingSourceDefault || got[2].Content[0].Text != "neutral" {
+	if got[2].Source != workerexecution.ModelOperationBindingSourceDefault || got[2].Content[0].Text != "neutral" {
 		t.Fatalf("style binding = %#v, want default fallback", got[2])
 	}
-	if got[3].Source != interfaces.ModelOperationBindingSourceOmitted || len(got[3].Content) != 0 {
+	if got[3].Source != workerexecution.ModelOperationBindingSourceOmitted || len(got[3].Content) != 0 {
 		t.Fatalf("optional binding = %#v, want omitted", got[3])
 	}
 }
 
 func TestResolveModelOperationBindings_ImplicitlyMatchesBySlotAndRejectsMissingRequiredInput(t *testing.T) {
-	workstation := &interfaces.FactoryWorkstationConfig{Type: interfaces.WorkstationTypeInvoke, Operation: "TTS"}
-	worker := &interfaces.WorkerConfig{
+	workstation := &interfaces.FactoryWorkstationConfig{Type: workertaxonomy.WorkstationTypeInvoke, Operation: "TTS"}
+	worker := &workerconfig.Config{
 		Name: "tts-worker",
-		Operations: []interfaces.ModelOperation{{
+		Operations: []workerconfig.ModelOperation{{
 			Name:   "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{Name: "text", Required: true}},
+			Inputs: []workerconfig.ModelOperationSlot{{Name: "text", Required: true}},
 		}},
 	}
 
-	got, err := resolveModelOperationBindings(workstation, worker, []interfaces.Token{{
+	got, err := resolveModelOperationBindings(workstation, worker, []factorytoken.Token{{
 		ID:    "tok-1",
-		Color: interfaces.TokenColor{Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Slot: "text", Text: "hello"}}},
+		Color: factorytoken.Color{Content: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Slot: "text", Text: "hello"}}},
 	}})
 	if err != nil {
 		t.Fatalf("resolveModelOperationBindings implicit slot: %v", err)
 	}
-	if len(got) != 1 || got[0].Source != interfaces.ModelOperationBindingSourceInput || got[0].Content[0].Text != "hello" {
+	if len(got) != 1 || got[0].Source != workerexecution.ModelOperationBindingSourceInput || got[0].Content[0].Text != "hello" {
 		t.Fatalf("implicit slot binding = %#v, want input text", got)
 	}
 
@@ -317,15 +324,15 @@ func TestInferenceRequestForExecutionRequest_AuthoredWorkingDirectoryRequiresRun
 		work.WorkDispatch{DispatchID: "d-authored-workdir", TransitionID: "t-authored-workdir", WorkerType: "worker-a", WorkstationName: "review"},
 		withAgentPrompts("System prompt", "Review"),
 		withAgentWorkingDirectory("/tmp/authored"),
-		func(req *interfaces.WorkstationExecutionRequest) {
+		func(req *workerexecution.WorkstationExecutionRequest) {
 			req.WorkingDirectoryAuthored = true
 		},
 	)
-	got := inferenceRequestForExecutionRequest(req, &interfaces.WorkerConfig{
-		Model: "gemini-1.5-pro", ModelProvider: interfaces.RunnerIDGemini,
+	got := inferenceRequestForExecutionRequest(req, &workerconfig.Config{
+		Model: "gemini-1.5-pro", ModelProvider: workerexecution.RunnerIDGemini,
 	}, nil)
 	for _, capability := range got.RequiredOptionalCapabilities {
-		if capability == interfaces.RunnerOptionalCapabilityWorkingDirectory {
+		if capability == workerexecution.RunnerOptionalCapabilityWorkingDirectory {
 			return
 		}
 	}
@@ -333,15 +340,15 @@ func TestInferenceRequestForExecutionRequest_AuthoredWorkingDirectoryRequiresRun
 }
 
 func TestWorkstationExecutor_ModelWorkstation_PreservesDistinctMultiInputCanonicalContent(t *testing.T) {
-	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	mock := &dispatchCapturingExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system"},
+			Workers: map[string]*workerconfig.Config{
+				"worker-a": {Type: workertaxonomy.WorkerTypeModel, Body: "system"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
-					Type: interfaces.WorkstationTypeModel,
+					Type: workertaxonomy.WorkstationTypeModel,
 					PromptTemplate: `{{ (index .Inputs 0).WorkID }}:{{ range (index .Inputs 0).Content }} [{{ .Type }}={{ .Text }}{{ .File }}]{{ end }}
 {{ (index .Inputs 1).WorkID }}:{{ range (index .Inputs 1).Content }} [{{ .Type }}={{ .Text }}{{ .File }}]{{ end }}`,
 				},
@@ -356,9 +363,9 @@ func TestWorkstationExecutor_ModelWorkstation_PreservesDistinctMultiInputCanonic
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
 		InputTokens: InputTokens(
-			interfaces.Token{
+			factorytoken.Token{
 				ID: "tok-text",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkID: "work-text",
 					Content: []work.WorkContentPart{
 						{Type: work.WorkContentPartTypeText, Text: "plan"},
@@ -366,9 +373,9 @@ func TestWorkstationExecutor_ModelWorkstation_PreservesDistinctMultiInputCanonic
 					Payload: []byte("plan"),
 				},
 			},
-			interfaces.Token{
+			factorytoken.Token{
 				ID: "tok-mixed",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkID: "work-mixed",
 					Content: []work.WorkContentPart{
 						{Type: work.WorkContentPartTypeText, Text: "caption"},
@@ -382,8 +389,8 @@ func TestWorkstationExecutor_ModelWorkstation_PreservesDistinctMultiInputCanonic
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if !mock.called {
 		t.Fatal("executor was not called")
@@ -446,16 +453,16 @@ func TestWorkstationExecutor_ResolvesRelativeWorkingDirectoryAgainstRuntimeConfi
 	wantDir := t.TempDir()
 	setTestWorkingDirectory(t, t.TempDir())
 
-	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	mock := &dispatchCapturingExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
 			FactoryPath: wantDir,
-			Workers: map[string]*interfaces.WorkerConfig{
-				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system"},
+			Workers: map[string]*workerconfig.Config{
+				"worker-a": {Type: workertaxonomy.WorkerTypeModel, Body: "system"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
-					Type:             interfaces.WorkstationTypeModel,
+					Type:             workertaxonomy.WorkstationTypeModel,
 					PromptTemplate:   "Work from {{ .Context.WorkDir }}",
 					WorkingDirectory: ".",
 				},
@@ -469,13 +476,13 @@ func TestWorkstationExecutor_ResolvesRelativeWorkingDirectoryAgainstRuntimeConfi
 		TransitionID:    "t-relative",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if mock.dispatch.WorkingDirectory != wantDir {
 		t.Fatalf("working directory = %q, want %q", mock.dispatch.WorkingDirectory, wantDir)
@@ -490,17 +497,17 @@ func TestWorkstationExecutor_ResolvesRelativeWorkingDirectoryAgainstRuntimeBaseD
 	wantDir := t.TempDir()
 	setTestWorkingDirectory(t, t.TempDir())
 
-	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	mock := &dispatchCapturingExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
 			FactoryPath:     factoryDir,
 			RuntimeBasePath: wantDir,
-			Workers: map[string]*interfaces.WorkerConfig{
-				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system"},
+			Workers: map[string]*workerconfig.Config{
+				"worker-a": {Type: workertaxonomy.WorkerTypeModel, Body: "system"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
-					Type:             interfaces.WorkstationTypeModel,
+					Type:             workertaxonomy.WorkstationTypeModel,
 					PromptTemplate:   "Work from {{ .Context.WorkDir }}",
 					WorkingDirectory: ".",
 				},
@@ -514,13 +521,13 @@ func TestWorkstationExecutor_ResolvesRelativeWorkingDirectoryAgainstRuntimeBaseD
 		TransitionID:    "t-relative-runtime-base",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if mock.dispatch.WorkingDirectory != wantDir {
 		t.Fatalf("working directory = %q, want %q", mock.dispatch.WorkingDirectory, wantDir)
@@ -534,16 +541,16 @@ func TestWorkstationExecutor_ResolvesPortableRootedWorkingDirectoryAgainstRuntim
 	wantDir := t.TempDir()
 	setTestWorkingDirectory(t, t.TempDir())
 
-	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	mock := &dispatchCapturingExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
 			RuntimeBasePath: wantDir,
-			Workers: map[string]*interfaces.WorkerConfig{
-				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system"},
+			Workers: map[string]*workerconfig.Config{
+				"worker-a": {Type: workertaxonomy.WorkerTypeModel, Body: "system"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
-					Type:             interfaces.WorkstationTypeModel,
+					Type:             workertaxonomy.WorkstationTypeModel,
 					PromptTemplate:   "Work from {{ .Context.WorkDir }}",
 					WorkingDirectory: "/worktrees/feature-abc",
 				},
@@ -557,13 +564,13 @@ func TestWorkstationExecutor_ResolvesPortableRootedWorkingDirectoryAgainstRuntim
 		TransitionID:    "t-portable-rooted",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	expectedDir := filepath.Join(wantDir, "worktrees", "feature-abc")
 	if mock.dispatch.WorkingDirectory != expectedDir {
@@ -581,16 +588,16 @@ func TestWorkstationExecutor_PreservesExistingUnixAbsoluteWorkingDirectory(t *te
 	absoluteDir := t.TempDir()
 	setTestWorkingDirectory(t, t.TempDir())
 
-	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	mock := &dispatchCapturingExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
 			RuntimeBasePath: t.TempDir(),
-			Workers: map[string]*interfaces.WorkerConfig{
-				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system"},
+			Workers: map[string]*workerconfig.Config{
+				"worker-a": {Type: workertaxonomy.WorkerTypeModel, Body: "system"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
-					Type:             interfaces.WorkstationTypeModel,
+					Type:             workertaxonomy.WorkstationTypeModel,
 					PromptTemplate:   "Work from {{ .Context.WorkDir }}",
 					WorkingDirectory: filepath.ToSlash(absoluteDir),
 				},
@@ -604,13 +611,13 @@ func TestWorkstationExecutor_PreservesExistingUnixAbsoluteWorkingDirectory(t *te
 		TransitionID:    "t-unix-absolute",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if mock.dispatch.WorkingDirectory != filepath.Clean(absoluteDir) {
 		t.Fatalf("working directory = %q, want %q", mock.dispatch.WorkingDirectory, filepath.Clean(absoluteDir))
@@ -632,7 +639,7 @@ func TestWorkstationExecutor_LoadedRuntimeConfigRuntimeBaseDirOverrideDrivesRela
 	}
 	runtimeCfg.SetRuntimeBaseDir(runtimeBaseDir)
 
-	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	mock := &dispatchCapturingExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
 	we := newTestWorkstationExecutor(runtimeCfg, mock)
 
 	result, err := we.Execute(context.Background(), work.WorkDispatch{
@@ -641,13 +648,13 @@ func TestWorkstationExecutor_LoadedRuntimeConfigRuntimeBaseDirOverrideDrivesRela
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
 		ProjectID:       "agent-factory",
-		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if mock.dispatch.WorkingDirectory != filepath.Join(runtimeBaseDir, "workspace") {
 		t.Fatalf("working directory = %q, want %q", mock.dispatch.WorkingDirectory, filepath.Join(runtimeBaseDir, "workspace"))
@@ -744,12 +751,12 @@ func writeRuntimeLookupAgentsMD(t *testing.T, dir string, content string) {
 func canonicalWorkstationRuntimeConfig(factoryDir string) staticRuntimeConfig {
 	return staticRuntimeConfig{
 		FactoryPath: factoryDir,
-		Workers: map[string]*interfaces.WorkerConfig{
-			"canonical-worker": {Type: interfaces.WorkerTypeModel, Body: "canonical system", Timeout: "1h"},
+		Workers: map[string]*workerconfig.Config{
+			"canonical-worker": {Type: workertaxonomy.WorkerTypeModel, Body: "canonical system", Timeout: "1h"},
 		},
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"review": {
-				Type:             interfaces.WorkstationTypeModel,
+				Type:             workertaxonomy.WorkstationTypeModel,
 				WorkerTypeName:   "canonical-worker",
 				PromptTemplate:   `Review {{ (index .Inputs 0).WorkID }} for {{ .Context.Project }}`,
 				OutputSchema:     `{"type":"object"}`,
@@ -773,9 +780,9 @@ func canonicalWorkstationDispatch() work.WorkDispatch {
 		WorkerType:      "stale-worker",
 		WorkstationName: "review",
 		ProjectID:       "agent-factory",
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: InputTokens(factorytoken.Token{
 			ID: "tok-1",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-1",
 				Tags:   map[string]string{"branch": "feature-runtime"},
 			},
@@ -788,7 +795,7 @@ func TestWorkstationExecutor_LogicalMove_DoesNotCallExecutor(t *testing.T) {
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"logical": {Type: interfaces.WorkstationTypeLogical},
+				"logical": {Type: workertaxonomy.WorkstationTypeLogical},
 			},
 		},
 		mock,
@@ -801,8 +808,8 @@ func TestWorkstationExecutor_LogicalMove_DoesNotCallExecutor(t *testing.T) {
 	if mock.called {
 		t.Fatal("executor should not be called")
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 }
 
@@ -810,11 +817,11 @@ func TestWorkstationExecutor_ExecutorError_ReturnsFailedResult(t *testing.T) {
 	mock := &wsMockExecutor{err: errors.New("connection timeout")}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"worker-a": {Body: "system"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"standard": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work"},
+				"standard": {Type: workertaxonomy.WorkstationTypeModel, PromptTemplate: "do work"},
 			},
 		},
 		mock,
@@ -825,13 +832,13 @@ func TestWorkstationExecutor_ExecutorError_ReturnsFailedResult(t *testing.T) {
 		TransitionID:    "t-1",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1"}),
+		InputTokens:     InputTokens(factorytoken.Token{ID: "tok-1"}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.Error != "executor failed: connection timeout" {
 		t.Fatalf("Error = %q", result.Error)
@@ -839,14 +846,14 @@ func TestWorkstationExecutor_ExecutorError_ReturnsFailedResult(t *testing.T) {
 }
 
 func TestWorkstationExecutor_ClassifierTrimsLabelAndIgnoresNonFailureOutcomeKinds(t *testing.T) {
-	mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeRejected, Output: "  approved \n"}}
+	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected, Output: "  approved \n"}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"worker-a": {Body: "system"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"classifier": {Type: interfaces.WorkstationTypeClassify, PromptTemplate: "classify"},
+				"classifier": {Type: workertaxonomy.WorkstationTypeClassify, PromptTemplate: "classify"},
 			},
 		},
 		mock,
@@ -857,13 +864,13 @@ func TestWorkstationExecutor_ClassifierTrimsLabelAndIgnoresNonFailureOutcomeKind
 		TransitionID:    "t-classifier-trim",
 		WorkerType:      "worker-a",
 		WorkstationName: "classifier",
-		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1"}),
+		InputTokens:     InputTokens(factorytoken.Token{ID: "tok-1"}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if result.Output != "approved" {
 		t.Fatalf("Output = %q, want approved", result.Output)
@@ -871,14 +878,14 @@ func TestWorkstationExecutor_ClassifierTrimsLabelAndIgnoresNonFailureOutcomeKind
 }
 
 func TestWorkstationExecutor_ClassifierRejectsJSONStringLabel(t *testing.T) {
-	mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "\"needs_review\""}}
+	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "\"needs_review\""}}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"worker-a": {Body: "system"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"classifier": {Type: interfaces.WorkstationTypeClassify, PromptTemplate: "classify"},
+				"classifier": {Type: workertaxonomy.WorkstationTypeClassify, PromptTemplate: "classify"},
 			},
 		},
 		mock,
@@ -889,13 +896,13 @@ func TestWorkstationExecutor_ClassifierRejectsJSONStringLabel(t *testing.T) {
 		TransitionID:    "t-classifier-json-string",
 		WorkerType:      "worker-a",
 		WorkstationName: "classifier",
-		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1"}),
+		InputTokens:     InputTokens(factorytoken.Token{ID: "tok-1"}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.Error != `classifier output invalid: expected plain string label (raw output: "\"needs_review\"")` {
 		t.Fatalf("Error = %q", result.Error)
@@ -914,14 +921,14 @@ func TestWorkstationExecutor_ClassifierRejectsEmptyOrNonStringOutput(t *testing.
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: tc.output}}
+			mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: tc.output}}
 			we := newTestWorkstationExecutor(
 				staticRuntimeConfig{
-					Workers: map[string]*interfaces.WorkerConfig{
+					Workers: map[string]*workerconfig.Config{
 						"worker-a": {Body: "system"},
 					},
 					Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-						"classifier": {Type: interfaces.WorkstationTypeClassify, PromptTemplate: "classify"},
+						"classifier": {Type: workertaxonomy.WorkstationTypeClassify, PromptTemplate: "classify"},
 					},
 				},
 				mock,
@@ -932,13 +939,13 @@ func TestWorkstationExecutor_ClassifierRejectsEmptyOrNonStringOutput(t *testing.
 				TransitionID:    "t-classifier-invalid",
 				WorkerType:      "worker-a",
 				WorkstationName: "classifier",
-				InputTokens:     InputTokens(interfaces.Token{ID: "tok-1"}),
+				InputTokens:     InputTokens(factorytoken.Token{ID: "tok-1"}),
 			})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if result.Outcome != interfaces.OutcomeFailed {
-				t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+			if result.Outcome != workerexecution.OutcomeFailed {
+				t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 			}
 			if !strings.HasPrefix(result.Error, "classifier output invalid:") {
 				t.Fatalf("Error = %q, want classifier output invalid prefix", result.Error)
@@ -954,11 +961,11 @@ func TestWorkstationExecutor_PromptRenderFailure_ReturnsFailedResult(t *testing.
 	mock := &wsMockExecutor{}
 	we := newTestWorkstationExecutor(
 		staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"worker-a": {Body: "system"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"broken": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "{{ .InvalidSyntax"},
+				"broken": {Type: workertaxonomy.WorkstationTypeModel, PromptTemplate: "{{ .InvalidSyntax"},
 			},
 		},
 		mock,
@@ -969,7 +976,7 @@ func TestWorkstationExecutor_PromptRenderFailure_ReturnsFailedResult(t *testing.
 		TransitionID:    "t-prompt-failure",
 		WorkerType:      "worker-a",
 		WorkstationName: "broken",
-		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -977,8 +984,8 @@ func TestWorkstationExecutor_PromptRenderFailure_ReturnsFailedResult(t *testing.
 	if mock.called {
 		t.Fatal("executor should not be called when prompt rendering fails")
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if !strings.HasPrefix(result.Error, "prompt render failed:") {
 		t.Fatalf("Error = %q, want prompt render failed prefix", result.Error)
@@ -986,16 +993,16 @@ func TestWorkstationExecutor_PromptRenderFailure_ReturnsFailedResult(t *testing.
 }
 
 func TestWorkstationExecutor_ResolvesWorkerAndWorkstationPerDispatch(t *testing.T) {
-	mock := &wsMockExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	mock := &wsMockExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
 	we := &WorkstationExecutor{
 		RuntimeConfig: staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"worker-a": {Body: "system-a"},
 				"worker-b": {Body: "system-b"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"review-a": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "Review {{ (index .Inputs 0).WorkID }}"},
-				"review-b": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "Inspect {{ (index .Inputs 0).WorkID }}"},
+				"review-a": {Type: workertaxonomy.WorkstationTypeModel, PromptTemplate: "Review {{ (index .Inputs 0).WorkID }}"},
+				"review-b": {Type: workertaxonomy.WorkstationTypeModel, PromptTemplate: "Inspect {{ (index .Inputs 0).WorkID }}"},
 			},
 		},
 		Executor: mock,
@@ -1007,13 +1014,13 @@ func TestWorkstationExecutor_ResolvesWorkerAndWorkstationPerDispatch(t *testing.
 		TransitionID:    "t-1",
 		WorkerType:      "worker-a",
 		WorkstationName: "review-a",
-		InputTokens:     InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("first execute error: %v", err)
 	}
-	if first.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("first outcome = %s, want %s", first.Outcome, interfaces.OutcomeAccepted)
+	if first.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("first outcome = %s, want %s", first.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if got := mock.dispatch.SystemPrompt; got != "system-a" {
 		t.Fatalf("first system prompt = %q", got)
@@ -1027,13 +1034,13 @@ func TestWorkstationExecutor_ResolvesWorkerAndWorkstationPerDispatch(t *testing.
 		TransitionID:    "t-2",
 		WorkerType:      "worker-b",
 		WorkstationName: "review-b",
-		InputTokens:     InputTokens(interfaces.Token{ID: "tok-2", Color: interfaces.TokenColor{WorkID: "work-2"}}),
+		InputTokens:     InputTokens(factorytoken.Token{ID: "tok-2", Color: factorytoken.Color{WorkID: "work-2"}}),
 	})
 	if err != nil {
 		t.Fatalf("second execute error: %v", err)
 	}
-	if second.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("second outcome = %s, want %s", second.Outcome, interfaces.OutcomeAccepted)
+	if second.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("second outcome = %s, want %s", second.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if got := mock.dispatch.SystemPrompt; got != "system-b" {
 		t.Fatalf("second system prompt = %q", got)

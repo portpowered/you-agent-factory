@@ -8,8 +8,9 @@ import (
 	"sort"
 	"strings"
 
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
 
@@ -155,7 +156,7 @@ func buildPromptValidationData(inputCount int, docPaths []string) PromptData {
 			History: PromptHistory{
 				LastError:    "last-error",
 				FailureCount: 1,
-				FailureLog: []interfaces.FailureRecord{{
+				FailureLog: []factorytoken.Failure{{
 					TransitionID: "transition",
 					Error:        "failure",
 					Attempt:      1,

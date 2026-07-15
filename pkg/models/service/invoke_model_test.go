@@ -9,6 +9,12 @@ import (
 	"testing"
 	"time"
 
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
@@ -18,9 +24,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestService_InvokeModel_ReturnsCanonicalContentAndBindings(t *testing.T) {
@@ -191,11 +194,11 @@ func TestService_InvokeModel_PropagatesCancellationAndDeadlines(t *testing.T) {
 				RuntimeConfig: func() *factoryconfig.LoadedFactoryConfig { return runtimeCfg },
 				ModelHost:     readyInvokeHost{},
 				ModelInvocationExecutor: func(*factoryconfig.LoadedFactoryConfig, *interfaces.FactoryConfig, string) (workers.WorkstationRequestExecutor, error) {
-					return invocationExecutorFunc(func(got context.Context, _ interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+					return invocationExecutorFunc(func(got context.Context, _ workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 						if got != ctx {
 							t.Fatal("executor received a different context")
 						}
-						return interfaces.WorkResult{}, got.Err()
+						return workerexecution.WorkResult{}, got.Err()
 					}), nil
 				},
 			})
@@ -218,26 +221,26 @@ func TestService_InvokeModel_ClassifiesExecutorAndFailedResultFailures(t *testin
 	}{
 		{
 			name: "provider timeout",
-			execute: func(context.Context, interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
-				return interfaces.WorkResult{}, workerprovider.NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timed out", context.DeadlineExceeded)
+			execute: func(context.Context, workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
+				return workerexecution.WorkResult{}, workerprovider.NewProviderError(workerexecution.WorkFailureTypeTimeout, "provider timed out", context.DeadlineExceeded)
 			},
 			wantClass: apisurface.InferenceFailureClassTimeout,
 		},
 		{
 			name: "provider failure",
-			execute: func(context.Context, interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
-				return interfaces.WorkResult{}, workerprovider.NewProviderError(interfaces.WorkFailureTypeUnknown, "provider failed", errors.New("provider failure"))
+			execute: func(context.Context, workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
+				return workerexecution.WorkResult{}, workerprovider.NewProviderError(workerexecution.WorkFailureTypeUnknown, "provider failed", errors.New("provider failure"))
 			},
 			wantClass: apisurface.InferenceFailureClassRuntimeFailure,
 		},
 		{
 			name: "failed work result",
-			execute: func(context.Context, interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
-				return interfaces.WorkResult{
-					Outcome: interfaces.OutcomeFailed,
+			execute: func(context.Context, workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
+				return workerexecution.WorkResult{
+					Outcome: workerexecution.OutcomeFailed,
 					Error:   "provider timed out",
-					FailureMetadata: &interfaces.WorkFailureMetadata{
-						Type: interfaces.WorkFailureTypeTimeout,
+					FailureMetadata: &workerexecution.WorkFailureMetadata{
+						Type: workerexecution.WorkFailureTypeTimeout,
 					},
 				}, nil
 			},
@@ -359,18 +362,18 @@ type stubInvocationExecutor struct {
 	output     string
 }
 
-type invocationExecutorFunc func(context.Context, interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error)
+type invocationExecutorFunc func(context.Context, workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error)
 
-func (f invocationExecutorFunc) Execute(ctx context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (f invocationExecutorFunc) Execute(ctx context.Context, request workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	return f(ctx, request)
 }
 
-func (s stubInvocationExecutor) Execute(_ context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (s stubInvocationExecutor) Execute(_ context.Context, request workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	if request.WorkerType != s.workerName {
-		return interfaces.WorkResult{}, errors.New("unexpected worker")
+		return workerexecution.WorkResult{}, errors.New("unexpected worker")
 	}
-	return interfaces.WorkResult{
-		Outcome: interfaces.OutcomeAccepted,
+	return workerexecution.WorkResult{
+		Outcome: workerexecution.OutcomeAccepted,
 		Output:  s.output,
 	}, nil
 }
@@ -381,13 +384,13 @@ type capturingInvocationExecutor struct {
 	output           string
 }
 
-func (s capturingInvocationExecutor) Execute(_ context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (s capturingInvocationExecutor) Execute(_ context.Context, request workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	if request.WorkerType != s.workerName {
-		return interfaces.WorkResult{}, errors.New("unexpected worker")
+		return workerexecution.WorkResult{}, errors.New("unexpected worker")
 	}
 	*s.capturedRunnerID = request.RunnerID
-	return interfaces.WorkResult{
-		Outcome: interfaces.OutcomeAccepted,
+	return workerexecution.WorkResult{
+		Outcome: workerexecution.OutcomeAccepted,
 		Output:  s.output,
 	}, nil
 }

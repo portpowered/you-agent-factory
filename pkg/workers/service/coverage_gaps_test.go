@@ -9,15 +9,20 @@ import (
 	"testing"
 	"time"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	"github.com/jonboulle/clockwork"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
+
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestWorkflowIdentityForFactoryDir_UsesConfiguredWorkflowID(t *testing.T) {
@@ -46,26 +51,26 @@ func TestStartPollersForRuntime_LogsDisabledPaths(t *testing.T) {
 
 	missingBinding := interfaces.FactoryWorkstationConfig{
 		Name: "missing-binding",
-		Kind: interfaces.WorkstationKindPoller,
+		Kind: workertaxonomy.WorkstationKindPoller,
 	}
 	missingWorker := interfaces.FactoryWorkstationConfig{
 		Name:           "missing-worker",
-		Kind:           interfaces.WorkstationKindPoller,
+		Kind:           workertaxonomy.WorkstationKindPoller,
 		WorkerTypeName: "unknown-worker",
 	}
 	unsupportedHosted := interfaces.FactoryWorkstationConfig{
 		Name:           "unsupported-hosted",
-		Kind:           interfaces.WorkstationKindPoller,
+		Kind:           workertaxonomy.WorkstationKindPoller,
 		WorkerTypeName: "github-poller",
 	}
-	githubWorker := &interfaces.WorkerConfig{
+	githubWorker := &workerconfig.Config{
 		Name:     "github-poller",
-		Type:     interfaces.WorkerTypeHosted,
+		Type:     workertaxonomy.WorkerTypeHosted,
 		Provider: "github",
 	}
 
 	factoryCfg := &interfaces.FactoryConfig{
-		Workers: []interfaces.WorkerConfig{{Name: githubWorker.Name}},
+		Workers: []workerconfig.Config{{Name: githubWorker.Name}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			missingBinding,
 			missingWorker,
@@ -73,7 +78,7 @@ func TestStartPollersForRuntime_LogsDisabledPaths(t *testing.T) {
 		},
 	}
 	runtimeCfg, err := config.NewLoadedFactoryConfig("", factoryCfg, runtimefixtures.RuntimeDefinitionLookupFixture{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			githubWorker.Name: githubWorker,
 		},
 	})

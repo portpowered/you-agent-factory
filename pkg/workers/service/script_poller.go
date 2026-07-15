@@ -11,6 +11,10 @@ import (
 	"sync"
 	"time"
 
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	"go.uber.org/zap"
+
 	"github.com/portpowered/infinite-you/pkg/config"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
@@ -18,7 +22,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
-	"go.uber.org/zap"
 )
 
 const (
@@ -33,7 +36,7 @@ func (s *Service) StartScriptPoller(
 	sidecars *sync.WaitGroup,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	submitter WorkRequestSubmitter,
 ) {
 	if sidecars == nil || submitter == nil {
@@ -50,7 +53,7 @@ func (s *Service) superviseScriptPoller(
 	ctx context.Context,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	submitter WorkRequestSubmitter,
 ) {
 	logger := s.pollerLogger(workstation.Name, workerDef.Name)
@@ -94,7 +97,7 @@ func (s *Service) RunScriptPoller(
 	runner workers.CommandRunner,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	submitter WorkRequestSubmitter,
 ) error {
 	commandReq, err := ScriptPollerCommandRequest(runtimeCfg, workstation, workerDef)
@@ -172,7 +175,7 @@ func scriptPollerStopReason(err error) string {
 func ScriptPollerCommandRequest(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 ) (workers.CommandRequest, error) {
 	if runtimeCfg == nil {
 		return workers.CommandRequest{}, fmt.Errorf("runtime config is required")
@@ -240,7 +243,7 @@ func pollerRuntimeWorkingDirectory(runtimeCfg interfaces.RuntimeConfigLookup) st
 	return filepath.Clean(baseDir)
 }
 
-func scriptPollerExecutionTimeout(workstation interfaces.FactoryWorkstationConfig, workerDef *interfaces.WorkerConfig) (time.Duration, error) {
+func scriptPollerExecutionTimeout(workstation interfaces.FactoryWorkstationConfig, workerDef *workerconfig.Config) (time.Duration, error) {
 	timeout, err := config.WorkstationExecutionTimeout(&workstation)
 	if err != nil {
 		return 0, err

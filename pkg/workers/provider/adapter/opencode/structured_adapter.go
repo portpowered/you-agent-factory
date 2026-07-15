@@ -6,7 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
@@ -55,7 +58,7 @@ func NewNegotiatedAdapter(decision Decision, resolver *Resolver) (*NegotiatedAda
 func NewNegotiatedAdapterForRequest(
 	decision Decision,
 	resolver *Resolver,
-	request interfaces.ProviderInferenceRequest,
+	request workerexecution.ProviderInferenceRequest,
 ) (*NegotiatedAdapter, error) {
 	return newNegotiatedAdapter(decision, resolver, requiresStructuredOutput(request))
 }
@@ -70,9 +73,9 @@ func newNegotiatedAdapter(decision Decision, resolver *Resolver, requireStructur
 	return &NegotiatedAdapter{decision: decision, resolver: resolver, requireStructured: requireStructured}, nil
 }
 
-func requiresStructuredOutput(request interfaces.ProviderInferenceRequest) bool {
+func requiresStructuredOutput(request workerexecution.ProviderInferenceRequest) bool {
 	for _, capability := range request.RequiredOptionalCapabilities {
-		if capability == interfaces.RunnerOptionalCapabilityStructuredOutput {
+		if capability == workerexecution.RunnerOptionalCapabilityStructuredOutput {
 			return true
 		}
 	}
@@ -80,7 +83,7 @@ func requiresStructuredOutput(request interfaces.ProviderInferenceRequest) bool 
 }
 
 func (*NegotiatedAdapter) Identity() adapter.Identity {
-	return adapter.Identity(interfaces.ModelProviderOpenCode)
+	return adapter.Identity(modelprovider.OpenCode)
 }
 
 func (a *NegotiatedAdapter) BuildCommand(_ context.Context, input adapter.CommandContext) (adapter.CommandBuildResult, error) {

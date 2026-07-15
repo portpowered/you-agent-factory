@@ -8,7 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
@@ -16,7 +17,7 @@ import (
 var errMissingFinalSnapshot = errors.New("OpenCode structured output did not contain an authoritative response")
 
 type structuredTerminalError struct {
-	failureType interfaces.WorkFailureType
+	failureType workerexecution.WorkFailureType
 	message     string
 	retryable   bool
 }
@@ -28,7 +29,7 @@ func (a *NegotiatedAdapter) ParseFinal(ctx context.Context, input adapter.FinalP
 		return parseFinalOnly(ctx, input)
 	}
 	if a.requireStructured && unsupportedStructuredProcessRejection(input.CommandResult, input.CommandError) {
-		return adapter.FinalParseResult{}, terminalErrorForType(interfaces.WorkFailureTypePermanentBadRequest)
+		return adapter.FinalParseResult{}, terminalErrorForType(workerexecution.WorkFailureTypePermanentBadRequest)
 	}
 	parsed, err := parseStructuredFinal(input.CommandResult.Stdout)
 	if err != nil {
@@ -37,7 +38,7 @@ func (a *NegotiatedAdapter) ParseFinal(ctx context.Context, input adapter.FinalP
 	if input.CommandError != nil || input.CommandResult.ExitCode != 0 {
 		return adapter.FinalParseResult{}, processTerminalError(input.CommandResult, input.CommandError)
 	}
-	return adapter.FinalParseResult{Response: interfaces.InferenceResponse{
+	return adapter.FinalParseResult{Response: workerexecution.InferenceResponse{
 		Content: parsed.content, ProviderSession: providerSession(parsed.sessionID),
 	}}, nil
 }
@@ -126,45 +127,45 @@ func splitNonEmptyStructuredLines(stdout []byte, maximumBytes int) [][]byte {
 
 func classifyStructuredError(name string, data json.RawMessage) *structuredTerminalError {
 	failureType := failureTypeFromStatus(structuredErrorStatus(data))
-	if failureType == interfaces.WorkFailureTypeUnknown {
+	if failureType == workerexecution.WorkFailureTypeUnknown {
 		failureType = failureTypeFromSignal(name)
 	}
 	return terminalErrorForType(failureType)
 }
 
-func failureTypeFromStatus(status int) interfaces.WorkFailureType {
+func failureTypeFromStatus(status int) workerexecution.WorkFailureType {
 	switch status {
 	case 401, 403:
-		return interfaces.WorkFailureTypeAuthFailure
+		return workerexecution.WorkFailureTypeAuthFailure
 	case 400, 422:
-		return interfaces.WorkFailureTypePermanentBadRequest
+		return workerexecution.WorkFailureTypePermanentBadRequest
 	case 429:
-		return interfaces.WorkFailureTypeThrottled
+		return workerexecution.WorkFailureTypeThrottled
 	case 408, 504:
-		return interfaces.WorkFailureTypeTimeout
+		return workerexecution.WorkFailureTypeTimeout
 	default:
 		if status >= 500 {
-			return interfaces.WorkFailureTypeInternalServerError
+			return workerexecution.WorkFailureTypeInternalServerError
 		}
-		return interfaces.WorkFailureTypeUnknown
+		return workerexecution.WorkFailureTypeUnknown
 	}
 }
 
-func failureTypeFromSignal(name string) interfaces.WorkFailureType {
+func failureTypeFromSignal(name string) workerexecution.WorkFailureType {
 	signal := strings.ToLower(strings.TrimSpace(name))
 	switch {
 	case containsSignal(signal, "auth", "unauthorized"):
-		return interfaces.WorkFailureTypeAuthFailure
+		return workerexecution.WorkFailureTypeAuthFailure
 	case containsSignal(signal, "invalid", "badrequest"):
-		return interfaces.WorkFailureTypePermanentBadRequest
+		return workerexecution.WorkFailureTypePermanentBadRequest
 	case containsSignal(signal, "rate", "throttl", "capacity"):
-		return interfaces.WorkFailureTypeThrottled
+		return workerexecution.WorkFailureTypeThrottled
 	case containsSignal(signal, "timeout", "deadline"):
-		return interfaces.WorkFailureTypeTimeout
+		return workerexecution.WorkFailureTypeTimeout
 	case containsSignal(signal, "server", "apierror"):
-		return interfaces.WorkFailureTypeInternalServerError
+		return workerexecution.WorkFailureTypeInternalServerError
 	default:
-		return interfaces.WorkFailureTypeUnknown
+		return workerexecution.WorkFailureTypeUnknown
 	}
 }
 
@@ -177,20 +178,20 @@ func containsSignal(signal string, candidates ...string) bool {
 	return false
 }
 
-func terminalErrorForType(failureType interfaces.WorkFailureType) *structuredTerminalError {
+func terminalErrorForType(failureType workerexecution.WorkFailureType) *structuredTerminalError {
 	switch failureType {
-	case interfaces.WorkFailureTypeAuthFailure:
-		return &structuredTerminalError{failureType: interfaces.WorkFailureTypeAuthFailure, message: "OpenCode authentication failed."}
-	case interfaces.WorkFailureTypePermanentBadRequest:
-		return &structuredTerminalError{failureType: interfaces.WorkFailureTypePermanentBadRequest, message: "OpenCode rejected the request as invalid."}
-	case interfaces.WorkFailureTypeThrottled:
-		return &structuredTerminalError{failureType: interfaces.WorkFailureTypeThrottled, message: "OpenCode is temporarily unavailable due to usage or capacity limits.", retryable: true}
-	case interfaces.WorkFailureTypeTimeout:
-		return &structuredTerminalError{failureType: interfaces.WorkFailureTypeTimeout, message: "OpenCode request timed out.", retryable: true}
-	case interfaces.WorkFailureTypeInternalServerError:
-		return &structuredTerminalError{failureType: interfaces.WorkFailureTypeInternalServerError, message: "OpenCode encountered a temporary server error.", retryable: true}
+	case workerexecution.WorkFailureTypeAuthFailure:
+		return &structuredTerminalError{failureType: workerexecution.WorkFailureTypeAuthFailure, message: "OpenCode authentication failed."}
+	case workerexecution.WorkFailureTypePermanentBadRequest:
+		return &structuredTerminalError{failureType: workerexecution.WorkFailureTypePermanentBadRequest, message: "OpenCode rejected the request as invalid."}
+	case workerexecution.WorkFailureTypeThrottled:
+		return &structuredTerminalError{failureType: workerexecution.WorkFailureTypeThrottled, message: "OpenCode is temporarily unavailable due to usage or capacity limits.", retryable: true}
+	case workerexecution.WorkFailureTypeTimeout:
+		return &structuredTerminalError{failureType: workerexecution.WorkFailureTypeTimeout, message: "OpenCode request timed out.", retryable: true}
+	case workerexecution.WorkFailureTypeInternalServerError:
+		return &structuredTerminalError{failureType: workerexecution.WorkFailureTypeInternalServerError, message: "OpenCode encountered a temporary server error.", retryable: true}
 	default:
-		return &structuredTerminalError{failureType: interfaces.WorkFailureTypeUnknown, message: "OpenCode reported a structured execution failure."}
+		return &structuredTerminalError{failureType: workerexecution.WorkFailureTypeUnknown, message: "OpenCode reported a structured execution failure."}
 	}
 }
 
@@ -213,20 +214,20 @@ func structuredErrorStatus(data json.RawMessage) int {
 
 func processTerminalError(result workerprocess.CommandResult, commandErr error) *structuredTerminalError {
 	if errors.Is(commandErr, context.Canceled) || errors.Is(commandErr, context.DeadlineExceeded) {
-		return &structuredTerminalError{failureType: interfaces.WorkFailureTypeTimeout, message: "OpenCode request was canceled or timed out.", retryable: true}
+		return &structuredTerminalError{failureType: workerexecution.WorkFailureTypeTimeout, message: "OpenCode request was canceled or timed out.", retryable: true}
 	}
-	if failureType := classifyProcessFailure(result); failureType != interfaces.WorkFailureTypeUnknown {
+	if failureType := classifyProcessFailure(result); failureType != workerexecution.WorkFailureTypeUnknown {
 		return terminalErrorForType(failureType)
 	}
 	return &structuredTerminalError{
-		failureType: interfaces.WorkFailureTypeUnknown,
+		failureType: workerexecution.WorkFailureTypeUnknown,
 		message:     fmt.Sprintf("OpenCode execution exited with code %d.", result.ExitCode),
 	}
 }
 
-func classifyProcessFailure(result workerprocess.CommandResult) interfaces.WorkFailureType {
+func classifyProcessFailure(result workerprocess.CommandResult) workerexecution.WorkFailureType {
 	if result.ExitCode == 124 {
-		return interfaces.WorkFailureTypeTimeout
+		return workerexecution.WorkFailureTypeTimeout
 	}
 	streams := [][]byte{boundedFailureTail(result.Stderr), boundedFailureTail(result.Stdout)}
 	for _, stream := range streams {
@@ -235,17 +236,17 @@ func classifyProcessFailure(result workerprocess.CommandResult) interfaces.WorkF
 			if err != nil || record.Type != "error" {
 				continue
 			}
-			if failureType := classifyStructuredError(record.Error.Name, record.Error.Data).failureType; failureType != interfaces.WorkFailureTypeUnknown {
+			if failureType := classifyStructuredError(record.Error.Name, record.Error.Data).failureType; failureType != workerexecution.WorkFailureTypeUnknown {
 				return failureType
 			}
 		}
 	}
 	for _, stream := range streams {
-		if failureType := classifyProcessTextFailure(string(stream)); failureType != interfaces.WorkFailureTypeUnknown {
+		if failureType := classifyProcessTextFailure(string(stream)); failureType != workerexecution.WorkFailureTypeUnknown {
 			return failureType
 		}
 	}
-	return interfaces.WorkFailureTypeUnknown
+	return workerexecution.WorkFailureTypeUnknown
 }
 
 func boundedFailureTail(output []byte) []byte {
@@ -256,52 +257,52 @@ func boundedFailureTail(output []byte) []byte {
 	return output[len(output)-maximumFailureScanBytes:]
 }
 
-func classifyProcessTextFailure(output string) interfaces.WorkFailureType {
+func classifyProcessTextFailure(output string) workerexecution.WorkFailureType {
 	for _, line := range strings.Split(output, "\n") {
 		trimmed := strings.TrimSpace(line)
 		normalized := strings.ToLower(trimmed)
 		if !strings.HasPrefix(normalized, "error:") && !strings.HasPrefix(normalized, "api error:") {
 			continue
 		}
-		if failureType := classifyRecognizedProcessText(normalized); failureType != interfaces.WorkFailureTypeUnknown {
+		if failureType := classifyRecognizedProcessText(normalized); failureType != workerexecution.WorkFailureTypeUnknown {
 			return failureType
 		}
 	}
 	trimmed := strings.TrimSpace(output)
 	if trimmed == "" || strings.Contains(trimmed, "\n") {
-		return interfaces.WorkFailureTypeUnknown
+		return workerexecution.WorkFailureTypeUnknown
 	}
 	return classifyRecognizedProcessText(strings.ToLower(strings.Join(strings.Fields(trimmed), " ")))
 }
 
-func classifyRecognizedProcessText(normalized string) interfaces.WorkFailureType {
+func classifyRecognizedProcessText(normalized string) workerexecution.WorkFailureType {
 	switch {
 	case containsSignal(normalized, "deadline exceeded", "request timed out", "timed out", "timeout"):
-		return interfaces.WorkFailureTypeTimeout
+		return workerexecution.WorkFailureTypeTimeout
 	case containsSignal(normalized, "authentication", "login required", "not authenticated", "unauthorized", "forbidden", "api key"):
-		return interfaces.WorkFailureTypeAuthFailure
+		return workerexecution.WorkFailureTypeAuthFailure
 	case containsSignal(normalized, "invalid request", "bad request", "invalid argument", "model not found"):
-		return interfaces.WorkFailureTypePermanentBadRequest
+		return workerexecution.WorkFailureTypePermanentBadRequest
 	case containsSignal(normalized, "rate limit", "too many requests", "usage limit", "at capacity", "status 429"):
-		return interfaces.WorkFailureTypeThrottled
+		return workerexecution.WorkFailureTypeThrottled
 	case containsSignal(normalized, "internal server error", "server error", "status 500", "status 502", "status 503", "status 504"):
-		return interfaces.WorkFailureTypeInternalServerError
+		return workerexecution.WorkFailureTypeInternalServerError
 	default:
-		return interfaces.WorkFailureTypeUnknown
+		return workerexecution.WorkFailureTypeUnknown
 	}
 }
 
-func providerSession(sessionID string) *interfaces.ProviderSessionMetadata {
+func providerSession(sessionID string) *workerexecution.ProviderSessionMetadata {
 	if !validCorrelation(sessionID) {
 		return nil
 	}
-	return &interfaces.ProviderSessionMetadata{Provider: "opencode", Kind: providerSessionKind, ID: sessionID}
+	return &workerexecution.ProviderSessionMetadata{Provider: "opencode", Kind: providerSessionKind, ID: sessionID}
 }
 
 func (a *NegotiatedAdapter) ClassifyFailure(_ context.Context, input adapter.FailureContext) adapter.FailureResult {
 	if input.FlushReason == adapter.FlushReasonCanceled {
 		return failureResult(&structuredTerminalError{
-			failureType: interfaces.WorkFailureTypeTimeout, message: "OpenCode request was canceled or timed out.", retryable: true,
+			failureType: workerexecution.WorkFailureTypeTimeout, message: "OpenCode request was canceled or timed out.", retryable: true,
 		}, nil)
 	}
 	for _, candidate := range []error{input.ParseError, input.DecodeError, input.FlushError, input.CommandError} {
@@ -313,7 +314,7 @@ func (a *NegotiatedAdapter) ClassifyFailure(_ context.Context, input adapter.Fai
 			return failureResult(terminal, providerSessionFromOutput(input.CommandResult.Stdout))
 		}
 		return failureResult(&structuredTerminalError{
-			failureType: interfaces.WorkFailureTypeUnknown, message: "OpenCode output could not be processed.",
+			failureType: workerexecution.WorkFailureTypeUnknown, message: "OpenCode output could not be processed.",
 		}, providerSessionFromOutput(input.CommandResult.Stdout))
 	}
 	if input.CommandResult.ExitCode != 0 {
@@ -322,13 +323,13 @@ func (a *NegotiatedAdapter) ClassifyFailure(_ context.Context, input adapter.Fai
 	return adapter.FailureResult{}
 }
 
-func failureResult(terminal *structuredTerminalError, session *interfaces.ProviderSessionMetadata) adapter.FailureResult {
-	family := interfaces.WorkFailureFamilyTerminal
+func failureResult(terminal *structuredTerminalError, session *workerexecution.ProviderSessionMetadata) adapter.FailureResult {
+	family := workerexecution.WorkFailureFamilyTerminal
 	if terminal.retryable {
-		family = interfaces.WorkFailureFamilyRetryable
+		family = workerexecution.WorkFailureFamilyRetryable
 	}
-	if terminal.failureType == interfaces.WorkFailureTypeThrottled {
-		family = interfaces.WorkFailureFamilyThrottle
+	if terminal.failureType == workerexecution.WorkFailureTypeThrottled {
+		family = workerexecution.WorkFailureFamilyThrottle
 	}
 	return adapter.FailureResult{Failure: &adapter.FailureFacts{
 		Family: family, Type: terminal.failureType, Message: terminal.message,
@@ -336,7 +337,7 @@ func failureResult(terminal *structuredTerminalError, session *interfaces.Provid
 	}}
 }
 
-func providerSessionFromOutput(stdout []byte) *interfaces.ProviderSessionMetadata {
+func providerSessionFromOutput(stdout []byte) *workerexecution.ProviderSessionMetadata {
 	var latest string
 	for _, raw := range splitStructuredLines(stdout) {
 		record, err := decodeStructuredRecord(raw)

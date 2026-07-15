@@ -7,6 +7,10 @@ import (
 	"sort"
 	"strings"
 
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
@@ -41,12 +45,12 @@ const (
 	MetadataOnlyCommandEnvValue = metadataOnlyCommandEnvValue
 )
 
-func cloneInputTokens(rawTokens []any) []interfaces.Token {
+func cloneInputTokens(rawTokens []any) []factorytoken.Token {
 	if len(rawTokens) == 0 {
 		return nil
 	}
 
-	out := make([]interfaces.Token, 0, len(rawTokens))
+	out := make([]factorytoken.Token, 0, len(rawTokens))
 	for _, raw := range rawTokens {
 		token, ok := decodeToken(raw)
 		if !ok {
@@ -57,7 +61,7 @@ func cloneInputTokens(rawTokens []any) []interfaces.Token {
 	return out
 }
 
-func clonePetriInputTokens(inputTokens []interfaces.Token) []any {
+func clonePetriInputTokens(inputTokens []factorytoken.Token) []any {
 	if len(inputTokens) == 0 {
 		return nil
 	}
@@ -76,45 +80,45 @@ func cloneRawInputTokens(inputTokens []any) []any {
 	return append([]any(nil), inputTokens...)
 }
 
-func decodeToken(raw any) (interfaces.Token, bool) {
-	if token, ok := raw.(interfaces.Token); ok {
+func decodeToken(raw any) (factorytoken.Token, bool) {
+	if token, ok := raw.(factorytoken.Token); ok {
 		return token, true
 	}
 
 	encoded, err := json.Marshal(raw)
 	if err != nil {
-		return interfaces.Token{}, false
+		return factorytoken.Token{}, false
 	}
-	var token interfaces.Token
+	var token factorytoken.Token
 	if err := json.Unmarshal(encoded, &token); err != nil {
-		return interfaces.Token{}, false
+		return factorytoken.Token{}, false
 	}
 	return token, true
 }
 
-func InputTokens(tokens ...interfaces.Token) []any {
+func InputTokens(tokens ...factorytoken.Token) []any {
 	return clonePetriInputTokens(tokens)
 }
 
-func WorkDispatchInputTokens(dispatch work.WorkDispatch) []interfaces.Token {
+func WorkDispatchInputTokens(dispatch work.WorkDispatch) []factorytoken.Token {
 	return cloneInputTokens(dispatch.InputTokens)
 }
 
-func CommandRequestInputTokens(request CommandRequest) []interfaces.Token {
+func CommandRequestInputTokens(request CommandRequest) []factorytoken.Token {
 	return cloneInputTokens(request.InputTokens)
 }
 
-func workDispatchNonResourceTokensForWorkstation(dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig) []interfaces.Token {
-	var tokens []interfaces.Token
+func workDispatchNonResourceTokensForWorkstation(dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig) []factorytoken.Token {
+	var tokens []factorytoken.Token
 	for _, token := range orderedWorkDispatchTokensForWorkstation(dispatch, workstationDef) {
-		if token.Color.DataType != interfaces.DataTypeResource {
+		if token.Color.DataType != factorytoken.DataTypeResource {
 			tokens = append(tokens, token)
 		}
 	}
 	return tokens
 }
 
-func orderedWorkDispatchTokensForWorkstation(dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig) []interfaces.Token {
+func orderedWorkDispatchTokensForWorkstation(dispatch work.WorkDispatch, workstationDef *interfaces.FactoryWorkstationConfig) []factorytoken.Token {
 	tokens := WorkDispatchInputTokens(dispatch)
 	if workstationDef == nil || len(tokens) < 2 {
 		return tokens
@@ -125,7 +129,7 @@ func orderedWorkDispatchTokensForWorkstation(dispatch work.WorkDispatch, worksta
 		byPlace[token.PlaceID] = append(byPlace[token.PlaceID], i)
 	}
 
-	ordered := make([]interfaces.Token, 0, len(tokens))
+	ordered := make([]factorytoken.Token, 0, len(tokens))
 	used := make([]bool, len(tokens))
 	appendPlaceTokens := func(placeID string) {
 		for _, index := range byPlace[placeID] {
@@ -361,11 +365,11 @@ type NoopExecutor struct{}
 
 // Execute implements WorkerExecutor. It propagates the first input token's
 // color and returns OutcomeAccepted immediately.
-func (n *NoopExecutor) Execute(_ context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{
+func (n *NoopExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{
 		DispatchID:   d.DispatchID,
 		TransitionID: d.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}, nil
 }
 

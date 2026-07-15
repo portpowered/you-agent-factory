@@ -6,13 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
-func testScriptRequest(dispatch work.WorkDispatch, opts ...func(*interfaces.WorkstationExecutionRequest)) interfaces.WorkstationExecutionRequest {
-	req := interfaces.WorkstationExecutionRequest{
+func testScriptRequest(dispatch work.WorkDispatch, opts ...func(*workerexecution.WorkstationExecutionRequest)) workerexecution.WorkstationExecutionRequest {
+	req := workerexecution.WorkstationExecutionRequest{
 		Dispatch:    work.CloneWorkDispatch(dispatch),
 		WorkerType:  dispatch.WorkerType,
 		ProjectID:   dispatch.ProjectID,
@@ -47,8 +48,8 @@ func TestScriptExecutor_SuccessfulEcho_PopulatesOutput(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if !strings.Contains(result.Output, "hello world") {
 		t.Fatalf("Output = %q", result.Output)
@@ -64,8 +65,8 @@ func TestScriptExecutor_FailingCommand_ReturnsFailedResult(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if !strings.Contains(result.Error, "something went wrong") {
 		t.Fatalf("Error = %q", result.Error)

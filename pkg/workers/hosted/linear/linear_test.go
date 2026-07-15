@@ -11,11 +11,16 @@ import (
 	"strings"
 	"testing"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	"go.uber.org/zap"
+
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/work"
-	"go.uber.org/zap"
 )
 
 func TestRunPollCycle_SubmitsFilteredIssuesAndPersistsCheckpoint(t *testing.T) {
@@ -69,11 +74,11 @@ func TestRunPollCycle_SubmitsFilteredIssuesAndPersistsCheckpoint(t *testing.T) {
 	defer server.Close()
 
 	worker := linearWorkerConfigForTest(
-		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
-		func(cfg *interfaces.HostedLinearWorkerConfig) {
+		workerconfig.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		func(cfg *workerconfig.HostedLinearWorkerConfig) {
 			cfg.TeamIDs = []string{"team-1"}
 			cfg.StateIDs = []string{"state-1"}
-			cfg.Claim = &interfaces.HostedLinearWorkerClaimConfig{AssigneeField: "ownerEmail"}
+			cfg.Claim = &workerconfig.HostedLinearWorkerClaimConfig{AssigneeField: "ownerEmail"}
 		},
 	)
 	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
@@ -153,7 +158,7 @@ func TestRunPollCycle_StopsAtCheckpointAndSkipsResubmission(t *testing.T) {
 	defer server.Close()
 
 	worker := linearWorkerConfigForTest(
-		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		workerconfig.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
 		nil,
 	)
 	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
@@ -250,8 +255,8 @@ func TestRunPollCycle_PushesFiltersIntoProviderQueryForBoundedResume(t *testing.
 	defer server.Close()
 
 	worker := linearWorkerConfigForTest(
-		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
-		func(cfg *interfaces.HostedLinearWorkerConfig) {
+		workerconfig.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		func(cfg *workerconfig.HostedLinearWorkerConfig) {
 			cfg.TeamIDs = []string{"team-match"}
 			cfg.StateIDs = []string{"state-match"}
 		},
@@ -340,14 +345,14 @@ func TestResolveSecretRef_PrefersEnvThenRuntimeFile(t *testing.T) {
 }
 
 func linearWorkerConfigForTest(
-	mapping interfaces.HostedLinearWorkerMappingConfig,
-	mutate func(*interfaces.HostedLinearWorkerConfig),
-) *interfaces.WorkerConfig {
-	worker := &interfaces.WorkerConfig{
+	mapping workerconfig.HostedLinearWorkerMappingConfig,
+	mutate func(*workerconfig.HostedLinearWorkerConfig),
+) *workerconfig.Config {
+	worker := &workerconfig.Config{
 		Name:     "linear-poller",
-		Type:     interfaces.WorkerTypeHosted,
-		Provider: interfaces.HostedWorkerProviderLinear,
-		Linear: &interfaces.HostedLinearWorkerConfig{
+		Type:     workertaxonomy.WorkerTypeHosted,
+		Provider: workertaxonomy.HostedWorkerProviderLinear,
+		Linear: &workerconfig.HostedLinearWorkerConfig{
 			Mapping: mapping,
 		},
 	}

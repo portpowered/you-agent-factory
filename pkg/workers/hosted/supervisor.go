@@ -8,10 +8,15 @@ import (
 	"sync"
 	"time"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	"github.com/jonboulle/clockwork"
+	"go.uber.org/zap"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/workers/hosted/linear"
-	"go.uber.org/zap"
 )
 
 const (
@@ -27,7 +32,7 @@ func StartLinearPoller(
 	cfg Config,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	submitter Submitter,
 ) {
 	if sidecars == nil || submitter == nil {
@@ -45,10 +50,10 @@ func superviseLinearPoller(
 	cfg Config,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	submitter Submitter,
 ) {
-	logger := pollerLogger(cfg, workstation, workerDef).With(zap.String("provider", interfaces.HostedWorkerProviderLinear))
+	logger := pollerLogger(cfg, workstation, workerDef).With(zap.String("provider", workertaxonomy.HostedWorkerProviderLinear))
 	backoffClock := cfg.supervisorClock()
 	attempt := 0
 	logger.Info("hosted linear poller started")
@@ -87,7 +92,7 @@ func runLinearPoller(
 	cfg Config,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	submitter Submitter,
 	logger *zap.Logger,
 	clock clockwork.Clock,
@@ -149,7 +154,7 @@ func runLinearPoller(
 	}
 }
 
-func pollerLogger(cfg Config, workstation interfaces.FactoryWorkstationConfig, workerDef *interfaces.WorkerConfig) *zap.Logger {
+func pollerLogger(cfg Config, workstation interfaces.FactoryWorkstationConfig, workerDef *workerconfig.Config) *zap.Logger {
 	return cfg.logger().With(
 		zap.String("workstation", workstation.Name),
 		zap.String("worker", workerDef.Name),

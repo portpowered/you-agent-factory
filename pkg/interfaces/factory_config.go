@@ -5,7 +5,10 @@ import (
 	"strings"
 	"time"
 
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // File directories
@@ -313,21 +316,12 @@ const (
 	StateTypeFailed     StateType = "FAILED"
 )
 
-type ResourceConfig struct {
-	ID         string `json:"id,omitempty" yaml:"id,omitempty"`
-	Name       string `json:"name"`
-	Type       string `json:"type,omitempty"`
-	Capacity   int    `json:"capacity"`
-	Model      string `json:"model,omitempty"`
-	Backend    string `json:"backend,omitempty"`
-	LoadPolicy string `json:"loadPolicy,omitempty"`
-	Provider   string `json:"provider,omitempty"`
-}
+type ResourceConfig = factoryresource.Config
 
 const (
-	ResourceTypeModel          = "MODEL"
-	ResourceTypeProviderQuota  = "PROVIDER_QUOTA"
-	ResourceTypeInvocationSlot = "INVOCATION_SLOT"
+	ResourceTypeModel          = factoryresource.TypeModel
+	ResourceTypeProviderQuota  = factoryresource.TypeProviderQuota
+	ResourceTypeInvocationSlot = factoryresource.TypeInvocationSlot
 )
 
 // PortableResourceManifestConfig declares portability-only resources that are
@@ -581,109 +575,35 @@ type ModelOperationBindingSelector struct {
 }
 
 // ModelOperationBindingSource records where one slot binding was resolved from.
-type ModelOperationBindingSource string
-
 const (
-	ModelOperationBindingSourceInput   ModelOperationBindingSource = "INPUT"
-	ModelOperationBindingSourceConfig  ModelOperationBindingSource = "CONFIG"
-	ModelOperationBindingSourceDefault ModelOperationBindingSource = "DEFAULT"
-	ModelOperationBindingSourceOmitted ModelOperationBindingSource = "OMITTED"
+	ModelOperationBindingSourceInput   = workerexecution.ModelOperationBindingSourceInput
+	ModelOperationBindingSourceConfig  = workerexecution.ModelOperationBindingSourceConfig
+	ModelOperationBindingSourceDefault = workerexecution.ModelOperationBindingSourceDefault
+	ModelOperationBindingSourceOmitted = workerexecution.ModelOperationBindingSourceOmitted
 )
 
 // ResolvedModelOperationBinding stores one resolved slot binding before model
 // execution begins.
-type ResolvedModelOperationBinding struct {
-	Slot    string                      `json:"slot"`
-	Source  ModelOperationBindingSource `json:"source"`
-	Content []WorkContentPart           `json:"content,omitempty"`
-}
+type ModelOperationBindingSource = workerexecution.ModelOperationBindingSource
+type ResolvedModelOperationBinding = workerexecution.ResolvedModelOperationBinding
 
-// WorkerConfig is the canonical worker configuration used by factory.json,
-// worker AGENTS.md frontmatter, and loaded runtime config.
-type WorkerConfig struct {
-	ID               string                    `json:"id,omitempty" yaml:"id,omitempty"`
-	Name             string                    `json:"name" yaml:"name,omitempty"`
-	Type             string                    `json:"type" yaml:"type"`
-	Provider         string                    `json:"provider,omitempty" yaml:"provider,omitempty"`
-	Model            string                    `json:"model,omitempty" yaml:"model,omitempty"`
-	ModelProvider    string                    `json:"modelProvider,omitempty" yaml:"modelProvider,omitempty"`
-	ModelLocality    string                    `json:"modelLocality,omitempty" yaml:"modelLocality,omitempty"`
-	ExecutorProvider string                    `json:"executorProvider,omitempty" yaml:"executorProvider,omitempty"`
-	Operations       []ModelOperation          `json:"operations,omitempty" yaml:"operations,omitempty"`
-	Command          string                    `json:"command,omitempty" yaml:"command,omitempty"`
-	Args             []string                  `json:"args,omitempty" yaml:"args,omitempty"`
-	Resources        []ResourceConfig          `json:"resources,omitempty" yaml:"resources,omitempty"`
-	Timeout          string                    `json:"timeout,omitempty" yaml:"timeout,omitempty"`
-	StopToken        string                    `json:"stopToken,omitempty" yaml:"stopToken,omitempty"`
-	SkipPermissions  bool                      `json:"skipPermissions,omitempty" yaml:"skipPermissions,omitempty"`
-	OpenCodeAgent    string                    `json:"openCodeAgent,omitempty" yaml:"openCodeAgent,omitempty"`
-	Auth             *HostedWorkerAuthConfig   `json:"auth,omitempty" yaml:"auth,omitempty"`
-	Linear           *HostedLinearWorkerConfig `json:"linear,omitempty" yaml:"linear,omitempty"`
-	AgentTools       *AgentWorkerToolsConfig   `json:"agentTools,omitempty" yaml:"agentTools,omitempty"`
-	Body             string                    `json:"body,omitempty" yaml:"-"`
-
-	// Internal-only runtime fields retained during contract cleanup.
-	SessionID   string `json:"-" yaml:"-"`
-	Concurrency int    `json:"-" yaml:"-"`
-}
-
-type HostedWorkerAuthConfig struct {
-	SecretRef string `json:"secretRef,omitempty" yaml:"secretRef,omitempty"`
-}
-
-type HostedLinearWorkerConfig struct {
-	PollInterval string                          `json:"pollInterval,omitempty" yaml:"pollInterval,omitempty"`
-	TeamIDs      []string                        `json:"teamIds,omitempty" yaml:"teamIds,omitempty"`
-	StateIDs     []string                        `json:"stateIds,omitempty" yaml:"stateIds,omitempty"`
-	Mapping      HostedLinearWorkerMappingConfig `json:"mapping,omitempty" yaml:"mapping,omitempty"`
-	Claim        *HostedLinearWorkerClaimConfig  `json:"claim,omitempty" yaml:"claim,omitempty"`
-}
-
-type HostedLinearWorkerMappingConfig struct {
-	WorkType string `json:"workType,omitempty" yaml:"workType,omitempty"`
-	State    string `json:"state,omitempty" yaml:"state,omitempty"`
-}
-
-type HostedLinearWorkerClaimConfig struct {
-	AssigneeField string `json:"assigneeField,omitempty" yaml:"assigneeField,omitempty"`
-}
-
-// TimeoutDuration parses Timeout as a time.Duration. It returns zero when the
-// value is empty or invalid.
-func (w *WorkerConfig) TimeoutDuration() time.Duration {
-	if w.Timeout == "" {
-		return 0
-	}
-	d, _ := time.ParseDuration(w.Timeout)
-	return d
-}
+type WorkerConfig = workerconfig.Config
+type HostedWorkerAuthConfig = workerconfig.HostedWorkerAuthConfig
+type HostedLinearWorkerConfig = workerconfig.HostedLinearWorkerConfig
+type HostedLinearWorkerMappingConfig = workerconfig.HostedLinearWorkerMappingConfig
+type HostedLinearWorkerClaimConfig = workerconfig.HostedLinearWorkerClaimConfig
+type ModelOperation = workerconfig.ModelOperation
+type ModelOperationSlot = workerconfig.ModelOperationSlot
 
 const (
-	ModelLocalityLocal = "LOCAL"
-	ModelLocalityCloud = "CLOUD"
+	ModelLocalityLocal              = workerconfig.ModelLocalityLocal
+	ModelLocalityCloud              = workerconfig.ModelLocalityCloud
+	ModelOperationContentTypeText   = workerconfig.ModelOperationContentTypeText
+	ModelOperationContentTypeImage  = workerconfig.ModelOperationContentTypeImage
+	ModelOperationContentTypeAudio  = workerconfig.ModelOperationContentTypeAudio
+	ModelOperationContentTypeJSON   = workerconfig.ModelOperationContentTypeJSON
+	ModelOperationContentTypeBinary = workerconfig.ModelOperationContentTypeBinary
 )
-
-const (
-	ModelOperationContentTypeText   = "TEXT"
-	ModelOperationContentTypeImage  = "IMAGE"
-	ModelOperationContentTypeAudio  = "AUDIO"
-	ModelOperationContentTypeJSON   = "JSON"
-	ModelOperationContentTypeBinary = "BINARY"
-)
-
-// ModelOperation declares one provider-agnostic capability exposed by a model worker.
-type ModelOperation struct {
-	Name    string               `json:"name" yaml:"name"`
-	Inputs  []ModelOperationSlot `json:"inputs,omitempty" yaml:"inputs,omitempty"`
-	Outputs []ModelOperationSlot `json:"outputs,omitempty" yaml:"outputs,omitempty"`
-}
-
-// ModelOperationSlot declares one named operation input or output slot.
-type ModelOperationSlot struct {
-	Name         string   `json:"name" yaml:"name"`
-	ContentTypes []string `json:"contentTypes,omitempty" yaml:"contentTypes,omitempty"`
-	Required     bool     `json:"required,omitempty" yaml:"required,omitempty"`
-}
 
 const (
 	OrchestratorKindPetri      = "PETRI"
@@ -764,54 +684,17 @@ func GeneratedPublicFactoryOrchestratorKind(kind string) factoryapi.FactoryOrche
 }
 
 const (
-	AgentWorkerToolPolicyDisabled = "DISABLED"
-	AgentWorkerToolPolicyReadOnly = "READ_ONLY"
-	AgentWorkerToolPolicyEnabled  = "ENABLED"
+	AgentWorkerToolPolicyDisabled = workerconfig.AgentToolPolicyDisabled
+	AgentWorkerToolPolicyReadOnly = workerconfig.AgentToolPolicyReadOnly
+	AgentWorkerToolPolicyEnabled  = workerconfig.AgentToolPolicyEnabled
 )
 
-// AgentWorkerToolsConfig carries explicit tool policy for AGENT_WORKER definitions.
-type AgentWorkerToolsConfig struct {
-	Policy string `json:"policy" yaml:"policy"`
-}
+type AgentWorkerToolsConfig = workerconfig.AgentToolsConfig
 
-// EffectiveAgentWorkerToolPolicy returns the configured policy or DISABLED when unset.
-func EffectiveAgentWorkerToolPolicy(cfg *AgentWorkerToolsConfig) string {
-	if cfg == nil || strings.TrimSpace(cfg.Policy) == "" {
-		return AgentWorkerToolPolicyDisabled
-	}
-	return strings.TrimSpace(cfg.Policy)
-}
-
-// NormalizeAgentWorkerToolPolicy maps public API values onto canonical runtime strings.
 func NormalizeAgentWorkerToolPolicy(policy string) string {
-	switch strings.TrimSpace(policy) {
-	case "", AgentWorkerToolPolicyDisabled:
-		return AgentWorkerToolPolicyDisabled
-	case AgentWorkerToolPolicyReadOnly:
-		return AgentWorkerToolPolicyReadOnly
-	case AgentWorkerToolPolicyEnabled:
-		return AgentWorkerToolPolicyEnabled
-	default:
-		return strings.TrimSpace(policy)
-	}
+	return workerconfig.NormalizeAgentToolPolicy(policy)
 }
 
-// IsKnownAgentWorkerToolPolicy reports whether policy is one of the supported modes.
 func IsKnownAgentWorkerToolPolicy(policy string) bool {
-	switch NormalizeAgentWorkerToolPolicy(policy) {
-	case AgentWorkerToolPolicyDisabled, AgentWorkerToolPolicyReadOnly, AgentWorkerToolPolicyEnabled:
-		return true
-	default:
-		return false
-	}
-}
-
-// AgentWorkerToolsAllowExecution reports whether the policy permits tool execution.
-func AgentWorkerToolsAllowExecution(policy string) bool {
-	switch NormalizeAgentWorkerToolPolicy(policy) {
-	case AgentWorkerToolPolicyReadOnly, AgentWorkerToolPolicyEnabled:
-		return true
-	default:
-		return false
-	}
+	return workerconfig.IsKnownAgentToolPolicy(policy)
 }

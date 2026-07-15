@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	codexexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/codex/exitfailure"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	provider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	codexexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/codex/exitfailure"
 )
 
 const unknownTerminalFailureMessage = "Codex reported a terminal error."
@@ -14,10 +15,10 @@ const unknownTerminalFailureMessage = "Codex reported a terminal error."
 // TerminalFailure is the bounded Codex-owned terminal fact used by provider
 // orchestration. Retry execution remains caller-owned policy.
 type TerminalFailure struct {
-	Type            interfaces.WorkFailureType
+	Type            workerexecution.WorkFailureType
 	Message         string
 	Retryable       bool
-	ProviderSession *interfaces.ProviderSessionMetadata
+	ProviderSession *workerexecution.ProviderSessionMetadata
 	NativeEventType string
 }
 
@@ -65,7 +66,7 @@ func classifyTerminalMessage(nativeType, message, threadID string) (TerminalFail
 		ExitCode: 1,
 		Stderr:   []byte("ERROR: " + strings.TrimSpace(message)),
 	})
-	recognized := parsed.Reason != interfaces.WorkFailureTypeUnknown
+	recognized := parsed.Reason != workerexecution.WorkFailureTypeUnknown
 	if !recognized {
 		parsed.Message = unknownTerminalFailureMessage
 	}
@@ -79,9 +80,9 @@ func classifyTerminalMessage(nativeType, message, threadID string) (TerminalFail
 	}, recognized
 }
 
-func providerSession(id string) *interfaces.ProviderSessionMetadata {
+func providerSession(id string) *workerexecution.ProviderSessionMetadata {
 	if strings.TrimSpace(id) == "" {
 		return nil
 	}
-	return &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: ProviderSessionKindSessionID, ID: id}
+	return &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: ProviderSessionKindSessionID, ID: id}
 }

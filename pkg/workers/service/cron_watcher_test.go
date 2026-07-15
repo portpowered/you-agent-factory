@@ -7,20 +7,25 @@ import (
 	"testing"
 	"time"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/jonboulle/clockwork"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
+
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 func cronWorkstationConfigForTest(name string) interfaces.FactoryWorkstationConfig {
 	return interfaces.FactoryWorkstationConfig{
 		Name: name,
-		Kind: interfaces.WorkstationKindCron,
+		Kind: workertaxonomy.WorkstationKindCron,
 		Cron: &interfaces.CronConfig{Schedule: "* * * * *"},
 		Outputs: []interfaces.IOConfig{
 			{WorkTypeName: "task", StateName: "init"},
@@ -103,7 +108,7 @@ func TestSubmitCronTick_TimeoutFailureIsClassifiedAndBounded(t *testing.T) {
 	}
 
 	failure := workersservice.ClassifyCronTriggerFailure(err)
-	if !failure.Retryable || failure.Family != interfaces.WorkFailureFamilyRetryable || failure.Type != interfaces.WorkFailureTypeTimeout {
+	if !failure.Retryable || failure.Family != workerexecution.WorkFailureFamilyRetryable || failure.Type != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("cron timeout classification = %#v, want retryable timeout", failure)
 	}
 }
@@ -188,7 +193,7 @@ func TestStartCronWatchersForRuntime_DisablesInvalidSchedulesWithoutAffectingVal
 	observedRequests := make(chan work.WorkRequest, 8)
 	validCron := interfaces.FactoryWorkstationConfig{
 		Name: "valid-cron",
-		Kind: interfaces.WorkstationKindCron,
+		Kind: workertaxonomy.WorkstationKindCron,
 		Cron: &interfaces.CronConfig{
 			Schedule:       "* * * * *",
 			TriggerAtStart: true,
@@ -200,7 +205,7 @@ func TestStartCronWatchersForRuntime_DisablesInvalidSchedulesWithoutAffectingVal
 	}
 	invalidCron := interfaces.FactoryWorkstationConfig{
 		Name: "invalid-cron",
-		Kind: interfaces.WorkstationKindCron,
+		Kind: workertaxonomy.WorkstationKindCron,
 		Cron: &interfaces.CronConfig{
 			Schedule:       "not-a-cron",
 			TriggerAtStart: true,

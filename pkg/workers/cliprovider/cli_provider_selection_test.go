@@ -4,34 +4,38 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type cliProviderExplicitPrecedenceCase struct {
-	name               string
-	input              CLIProviderSelectionInput
-	presentCommands    map[string]bool
-	wantSource         CLIProviderSelectionSource
-	wantIdentity       CLIProviderIdentity
-	wantFailure        bool
-	wantFailureCode    CLIProviderSelectionFailureCode
+	name            string
+	input           CLIProviderSelectionInput
+	presentCommands map[string]bool
+	wantSource      CLIProviderSelectionSource
+	wantIdentity    CLIProviderIdentity
+	wantFailure     bool
+	wantFailureCode CLIProviderSelectionFailureCode
 }
 
 func fakeCLIProviderExplicitPrecedenceCases() []cliProviderExplicitPrecedenceCase {
 	allPresent := map[string]bool{
-		string(interfaces.ModelProviderCodex):    true,
-		string(interfaces.ModelProviderClaude):   true,
-		string(interfaces.ModelProviderCursor):   true,
-		string(interfaces.ModelProviderOpenCode): true,
-		string(interfaces.ModelProviderGemini):   true,
-		string(interfaces.ModelProviderKiro):     true,
+		string(modelprovider.Codex):    true,
+		string(modelprovider.Claude):   true,
+		string(modelprovider.Cursor):   true,
+		string(modelprovider.OpenCode): true,
+		string(modelprovider.Gemini):   true,
+		string(modelprovider.Kiro):     true,
 	}
 	return []cliProviderExplicitPrecedenceCase{
 		{
 			name: "explicit beats factory default",
 			input: CLIProviderSelectionInput{
-				ExplicitInvocation: string(interfaces.ModelProviderClaude),
-				FactoryDefault:     string(interfaces.ModelProviderCodex),
+				ExplicitInvocation: string(modelprovider.Claude),
+				FactoryDefault:     string(modelprovider.Codex),
 			},
 			presentCommands: allPresent,
 			wantSource:      CLIProviderSelectionSourceExplicitInvocation,
@@ -40,8 +44,8 @@ func fakeCLIProviderExplicitPrecedenceCases() []cliProviderExplicitPrecedenceCas
 		{
 			name: "explicit beats system default",
 			input: CLIProviderSelectionInput{
-				ExplicitInvocation: string(interfaces.ModelProviderGemini),
-				SystemDefault:      string(interfaces.ModelProviderCodex),
+				ExplicitInvocation: string(modelprovider.Gemini),
+				SystemDefault:      string(modelprovider.Codex),
 			},
 			presentCommands: allPresent,
 			wantSource:      CLIProviderSelectionSourceExplicitInvocation,
@@ -50,12 +54,12 @@ func fakeCLIProviderExplicitPrecedenceCases() []cliProviderExplicitPrecedenceCas
 		{
 			name: "explicit beats discovery even when lower-ranked and absent on PATH",
 			input: CLIProviderSelectionInput{
-				ExplicitInvocation: string(interfaces.ModelProviderKiro),
-				FactoryDefault:     string(interfaces.ModelProviderCodex),
-				SystemDefault:      string(interfaces.ModelProviderClaude),
+				ExplicitInvocation: string(modelprovider.Kiro),
+				FactoryDefault:     string(modelprovider.Codex),
+				SystemDefault:      string(modelprovider.Claude),
 			},
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderCodex): true,
+				string(modelprovider.Codex): true,
 			},
 			wantSource:   CLIProviderSelectionSourceExplicitInvocation,
 			wantIdentity: CLIProviderIdentityKiro,
@@ -63,8 +67,8 @@ func fakeCLIProviderExplicitPrecedenceCases() []cliProviderExplicitPrecedenceCas
 		{
 			name: "unsupported explicit DEFAULT falls through to factory without deprecated model default injection",
 			input: CLIProviderSelectionInput{
-				ExplicitInvocation: interfaces.WorkerModelProviderDefault,
-				FactoryDefault:     string(interfaces.ModelProviderCursor),
+				ExplicitInvocation: workertaxonomy.ModelProviderDefault,
+				FactoryDefault:     string(modelprovider.Cursor),
 			},
 			presentCommands: allPresent,
 			wantSource:      CLIProviderSelectionSourceFactoryDefault,
@@ -74,7 +78,7 @@ func fakeCLIProviderExplicitPrecedenceCases() []cliProviderExplicitPrecedenceCas
 			name: "unsupported explicit deprecated openai alias falls through to system default",
 			input: CLIProviderSelectionInput{
 				ExplicitInvocation: "openai",
-				SystemDefault:      string(interfaces.ModelProviderGemini),
+				SystemDefault:      string(modelprovider.Gemini),
 			},
 			presentCommands: allPresent,
 			wantSource:      CLIProviderSelectionSourceSystemDefault,
@@ -86,7 +90,7 @@ func fakeCLIProviderExplicitPrecedenceCases() []cliProviderExplicitPrecedenceCas
 				ExplicitInvocation: "   ",
 			},
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderGemini): true,
+				string(modelprovider.Gemini): true,
 			},
 			wantSource:   CLIProviderSelectionSourceDiscovery,
 			wantIdentity: CLIProviderIdentityGemini,
@@ -97,7 +101,7 @@ func fakeCLIProviderExplicitPrecedenceCases() []cliProviderExplicitPrecedenceCas
 				ExplicitInvocation: "legacy-model-default",
 			},
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderOpenCode): true,
+				string(modelprovider.OpenCode): true,
 			},
 			wantSource:   CLIProviderSelectionSourceDiscovery,
 			wantIdentity: CLIProviderIdentityOpenCode,
@@ -150,19 +154,19 @@ type cliProviderConfiguredDefaultPrecedenceCase struct {
 
 func fakeCLIProviderConfiguredDefaultPrecedenceCases() []cliProviderConfiguredDefaultPrecedenceCase {
 	allPresent := map[string]bool{
-		string(interfaces.ModelProviderCodex):    true,
-		string(interfaces.ModelProviderClaude):   true,
-		string(interfaces.ModelProviderCursor):   true,
-		string(interfaces.ModelProviderOpenCode): true,
-		string(interfaces.ModelProviderGemini):   true,
-		string(interfaces.ModelProviderKiro):     true,
+		string(modelprovider.Codex):    true,
+		string(modelprovider.Claude):   true,
+		string(modelprovider.Cursor):   true,
+		string(modelprovider.OpenCode): true,
+		string(modelprovider.Gemini):   true,
+		string(modelprovider.Kiro):     true,
 	}
 	return []cliProviderConfiguredDefaultPrecedenceCase{
 		{
 			name: "factory default beats system default",
 			input: CLIProviderSelectionInput{
-				FactoryDefault: string(interfaces.ModelProviderCursor),
-				SystemDefault:  string(interfaces.ModelProviderCodex),
+				FactoryDefault: string(modelprovider.Cursor),
+				SystemDefault:  string(modelprovider.Codex),
 			},
 			presentCommands: allPresent,
 			wantSource:      CLIProviderSelectionSourceFactoryDefault,
@@ -171,11 +175,11 @@ func fakeCLIProviderConfiguredDefaultPrecedenceCases() []cliProviderConfiguredDe
 		{
 			name: "factory default beats discovery even when absent on PATH",
 			input: CLIProviderSelectionInput{
-				FactoryDefault: string(interfaces.ModelProviderKiro),
-				SystemDefault:  string(interfaces.ModelProviderClaude),
+				FactoryDefault: string(modelprovider.Kiro),
+				SystemDefault:  string(modelprovider.Claude),
 			},
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderCodex): true,
+				string(modelprovider.Codex): true,
 			},
 			wantSource:   CLIProviderSelectionSourceFactoryDefault,
 			wantIdentity: CLIProviderIdentityKiro,
@@ -183,10 +187,10 @@ func fakeCLIProviderConfiguredDefaultPrecedenceCases() []cliProviderConfiguredDe
 		{
 			name: "system default beats discovery",
 			input: CLIProviderSelectionInput{
-				SystemDefault: string(interfaces.ModelProviderGemini),
+				SystemDefault: string(modelprovider.Gemini),
 			},
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderCodex): true,
+				string(modelprovider.Codex): true,
 			},
 			wantSource:   CLIProviderSelectionSourceSystemDefault,
 			wantIdentity: CLIProviderIdentityGemini,
@@ -194,11 +198,11 @@ func fakeCLIProviderConfiguredDefaultPrecedenceCases() []cliProviderConfiguredDe
 		{
 			name: "system default beats discovery without consulting lower-ranked available providers",
 			input: CLIProviderSelectionInput{
-				SystemDefault: string(interfaces.ModelProviderOpenCode),
+				SystemDefault: string(modelprovider.OpenCode),
 			},
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderCodex):  true,
-				string(interfaces.ModelProviderGemini): true,
+				string(modelprovider.Codex):  true,
+				string(modelprovider.Gemini): true,
 			},
 			wantSource:   CLIProviderSelectionSourceSystemDefault,
 			wantIdentity: CLIProviderIdentityOpenCode,
@@ -207,10 +211,10 @@ func fakeCLIProviderConfiguredDefaultPrecedenceCases() []cliProviderConfiguredDe
 			name: "empty factory falls through to system default over discovery",
 			input: CLIProviderSelectionInput{
 				FactoryDefault: "   ",
-				SystemDefault:  string(interfaces.ModelProviderClaude),
+				SystemDefault:  string(modelprovider.Claude),
 			},
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderCodex): true,
+				string(modelprovider.Codex): true,
 			},
 			wantSource:   CLIProviderSelectionSourceSystemDefault,
 			wantIdentity: CLIProviderIdentityClaude,
@@ -244,21 +248,21 @@ func TestSelectCLIProvider_FactoryAndSystemDefaultPrecedenceTables(t *testing.T)
 }
 
 type cliProviderDiscoveryPrecedenceCase struct {
-	name              string
-	input             CLIProviderSelectionInput
-	presentCommands   map[string]bool
-	registrations     []CLIProviderRegistration
-	wantIdentity      CLIProviderIdentity
+	name            string
+	input           CLIProviderSelectionInput
+	presentCommands map[string]bool
+	registrations   []CLIProviderRegistration
+	wantIdentity    CLIProviderIdentity
 }
 
 func fakeCLIProviderDiscoveryPrecedenceCases() []cliProviderDiscoveryPrecedenceCase {
 	allPresent := map[string]bool{
-		string(interfaces.ModelProviderCodex):    true,
-		string(interfaces.ModelProviderClaude):   true,
-		string(interfaces.ModelProviderCursor):   true,
-		string(interfaces.ModelProviderOpenCode): true,
-		string(interfaces.ModelProviderGemini):   true,
-		string(interfaces.ModelProviderKiro):     true,
+		string(modelprovider.Codex):    true,
+		string(modelprovider.Claude):   true,
+		string(modelprovider.Cursor):   true,
+		string(modelprovider.OpenCode): true,
+		string(modelprovider.Gemini):   true,
+		string(modelprovider.Kiro):     true,
 	}
 	return []cliProviderDiscoveryPrecedenceCase{
 		{
@@ -269,36 +273,36 @@ func fakeCLIProviderDiscoveryPrecedenceCases() []cliProviderDiscoveryPrecedenceC
 		{
 			name: "codex absent falls through to claude",
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderClaude):   true,
-				string(interfaces.ModelProviderCursor):   true,
-				string(interfaces.ModelProviderOpenCode): true,
-				string(interfaces.ModelProviderGemini):   true,
-				string(interfaces.ModelProviderKiro):     true,
+				string(modelprovider.Claude):   true,
+				string(modelprovider.Cursor):   true,
+				string(modelprovider.OpenCode): true,
+				string(modelprovider.Gemini):   true,
+				string(modelprovider.Kiro):     true,
 			},
 			wantIdentity: CLIProviderIdentityClaude,
 		},
 		{
 			name: "subset available selects highest preference cursor over gemini and kiro",
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderCursor):   true,
-				string(interfaces.ModelProviderOpenCode): true,
-				string(interfaces.ModelProviderGemini):   true,
-				string(interfaces.ModelProviderKiro):     true,
+				string(modelprovider.Cursor):   true,
+				string(modelprovider.OpenCode): true,
+				string(modelprovider.Gemini):   true,
+				string(modelprovider.Kiro):     true,
 			},
 			wantIdentity: CLIProviderIdentityCursor,
 		},
 		{
 			name: "only lower ranked providers present selects gemini before kiro",
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderGemini): true,
-				string(interfaces.ModelProviderKiro):   true,
+				string(modelprovider.Gemini): true,
+				string(modelprovider.Kiro):   true,
 			},
 			wantIdentity: CLIProviderIdentityGemini,
 		},
 		{
 			name: "single available provider selects that provider",
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderOpenCode): true,
+				string(modelprovider.OpenCode): true,
 			},
 			wantIdentity: CLIProviderIdentityOpenCode,
 		},
@@ -355,7 +359,7 @@ func fakeCLIProviderNoAgentHarnessCases() []cliProviderNoAgentHarnessCase {
 		{
 			name: "unsupported explicit falls through to empty discovery without deprecated model default injection",
 			input: CLIProviderSelectionInput{
-				ExplicitInvocation: interfaces.WorkerModelProviderDefault,
+				ExplicitInvocation: workertaxonomy.ModelProviderDefault,
 			},
 			presentCommands: map[string]bool{},
 			wantGuidance: []string{
@@ -389,7 +393,7 @@ func fakeCLIProviderNoAgentHarnessCases() []cliProviderNoAgentHarnessCase {
 			name: "unsupported values at all layers with no providers available",
 			input: CLIProviderSelectionInput{
 				ExplicitInvocation: "openai",
-				FactoryDefault:     interfaces.WorkerModelProviderDefault,
+				FactoryDefault:     workertaxonomy.ModelProviderDefault,
 				SystemDefault:      "legacy-model-default",
 			},
 			presentCommands: map[string]bool{},
@@ -457,20 +461,20 @@ type cliProviderFullPrecedenceMatrixCase struct {
 
 func fakeCLIProviderFullPrecedenceMatrixCases() []cliProviderFullPrecedenceMatrixCase {
 	allPresent := map[string]bool{
-		string(interfaces.ModelProviderCodex):    true,
-		string(interfaces.ModelProviderClaude):   true,
-		string(interfaces.ModelProviderCursor):   true,
-		string(interfaces.ModelProviderOpenCode): true,
-		string(interfaces.ModelProviderGemini):   true,
-		string(interfaces.ModelProviderKiro):     true,
+		string(modelprovider.Codex):    true,
+		string(modelprovider.Claude):   true,
+		string(modelprovider.Cursor):   true,
+		string(modelprovider.OpenCode): true,
+		string(modelprovider.Gemini):   true,
+		string(modelprovider.Kiro):     true,
 	}
 	return []cliProviderFullPrecedenceMatrixCase{
 		{
 			name: "edge explicit invocation wins over factory system and discovery",
 			input: CLIProviderSelectionInput{
-				ExplicitInvocation: string(interfaces.ModelProviderClaude),
-				FactoryDefault:     string(interfaces.ModelProviderCodex),
-				SystemDefault:      string(interfaces.ModelProviderGemini),
+				ExplicitInvocation: string(modelprovider.Claude),
+				FactoryDefault:     string(modelprovider.Codex),
+				SystemDefault:      string(modelprovider.Gemini),
 			},
 			presentCommands: allPresent,
 			wantSource:      CLIProviderSelectionSourceExplicitInvocation,
@@ -479,8 +483,8 @@ func fakeCLIProviderFullPrecedenceMatrixCases() []cliProviderFullPrecedenceMatri
 		{
 			name: "edge factory default wins when explicit unset",
 			input: CLIProviderSelectionInput{
-				FactoryDefault: string(interfaces.ModelProviderCursor),
-				SystemDefault:  string(interfaces.ModelProviderCodex),
+				FactoryDefault: string(modelprovider.Cursor),
+				SystemDefault:  string(modelprovider.Codex),
 			},
 			presentCommands: allPresent,
 			wantSource:      CLIProviderSelectionSourceFactoryDefault,
@@ -489,10 +493,10 @@ func fakeCLIProviderFullPrecedenceMatrixCases() []cliProviderFullPrecedenceMatri
 		{
 			name: "edge system default wins when explicit and factory unset",
 			input: CLIProviderSelectionInput{
-				SystemDefault: string(interfaces.ModelProviderGemini),
+				SystemDefault: string(modelprovider.Gemini),
 			},
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderCodex): true,
+				string(modelprovider.Codex): true,
 			},
 			wantSource:   CLIProviderSelectionSourceSystemDefault,
 			wantIdentity: CLIProviderIdentityGemini,
@@ -500,9 +504,9 @@ func fakeCLIProviderFullPrecedenceMatrixCases() []cliProviderFullPrecedenceMatri
 		{
 			name: "edge discovery wins when all configured defaults unset",
 			presentCommands: map[string]bool{
-				string(interfaces.ModelProviderCursor):   true,
-				string(interfaces.ModelProviderOpenCode): true,
-				string(interfaces.ModelProviderGemini):   true,
+				string(modelprovider.Cursor):   true,
+				string(modelprovider.OpenCode): true,
+				string(modelprovider.Gemini):   true,
 			},
 			wantSource:              CLIProviderSelectionSourceDiscovery,
 			wantIdentity:            CLIProviderIdentityCursor,
@@ -517,7 +521,7 @@ func fakeCLIProviderFullPrecedenceMatrixCases() []cliProviderFullPrecedenceMatri
 		{
 			name: "forbidden deprecated DEFAULT openai and legacy values do not inject codex fallback",
 			input: CLIProviderSelectionInput{
-				ExplicitInvocation: interfaces.WorkerModelProviderDefault,
+				ExplicitInvocation: workertaxonomy.ModelProviderDefault,
 				FactoryDefault:     "openai",
 				SystemDefault:      "legacy-model-default",
 			},
@@ -630,9 +634,9 @@ func TestSelectCLIProvider_DiscoveryIgnoresRegistrationSliceOrder(t *testing.T) 
 	}
 
 	discovery := fakeCLIProviderDiscoveryView(map[string]bool{
-		string(interfaces.ModelProviderCodex):  true,
-		string(interfaces.ModelProviderGemini): true,
-		string(interfaces.ModelProviderKiro):   true,
+		string(modelprovider.Codex):  true,
+		string(modelprovider.Gemini): true,
+		string(modelprovider.Kiro):   true,
 	})
 	discovery.Registrations = reversed
 
@@ -651,7 +655,7 @@ func TestSelectCLIProvider_DiscoveryIgnoresRegistrationSliceOrder(t *testing.T) 
 
 func TestSelectCLIProvider_AcceptsLayeredPrecedenceInputs(t *testing.T) {
 	discovery := fakeCLIProviderDiscoveryView(map[string]bool{
-		string(interfaces.ModelProviderGemini): true,
+		string(modelprovider.Gemini): true,
 	})
 
 	result := SelectCLIProvider(CLIProviderSelectionInput{
@@ -675,7 +679,7 @@ func TestSelectCLIProvider_ReturnsStructuredSuccess(t *testing.T) {
 	discovery := fakeCLIProviderDiscoveryView(nil)
 
 	result := SelectCLIProvider(CLIProviderSelectionInput{
-		FactoryDefault: string(interfaces.ModelProviderCodex),
+		FactoryDefault: string(modelprovider.Codex),
 	}, discovery)
 
 	if result.Failure != nil {
@@ -719,7 +723,7 @@ func TestSelectCLIProvider_ReturnsStructuredFailure(t *testing.T) {
 
 func TestSelectCLIProvider_UsesInjectedDiscoveryProbeView(t *testing.T) {
 	discovery := fakeCLIProviderDiscoveryView(map[string]bool{
-		string(interfaces.ModelProviderCursor): true,
+		string(modelprovider.Cursor): true,
 	})
 
 	result := SelectCLIProvider(CLIProviderSelectionInput{}, discovery)
@@ -747,7 +751,7 @@ func TestDefaultCLIProviderDiscoveryView_UsesInjectedProbe(t *testing.T) {
 		return CLIProviderAvailability{
 			Registration:      registration,
 			Available:         false,
-			UnavailableReason: string(interfaces.WorkFailureTypeMissingExecutable),
+			UnavailableReason: string(workerexecution.WorkFailureTypeMissingExecutable),
 		}
 	})
 
@@ -799,7 +803,7 @@ func fakeCLIProviderDiscoveryView(presentCommands map[string]bool) CLIProviderDi
 			return CLIProviderAvailability{
 				Registration:      registration,
 				Available:         false,
-				UnavailableReason: string(interfaces.WorkFailureTypeMissingExecutable),
+				UnavailableReason: string(workerexecution.WorkFailureTypeMissingExecutable),
 			}
 		},
 	}

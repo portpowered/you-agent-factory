@@ -6,6 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
@@ -135,33 +140,33 @@ func mustLoadedCatalogConfig(t *testing.T, factoryCfg *interfaces.FactoryConfig)
 }
 
 func catalogFactoryConfig(includeResource bool) *interfaces.FactoryConfig {
-	worker := interfaces.WorkerConfig{
+	worker := workerconfig.Config{
 		Name:          "voice-local",
-		Type:          interfaces.WorkerTypeModel,
+		Type:          workertaxonomy.WorkerTypeModel,
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelLocality: interfaces.ModelLocalityLocal,
-		Operations: []interfaces.ModelOperation{{
+		ModelLocality: workerconfig.ModelLocalityLocal,
+		Operations: []workerconfig.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{
+			Inputs: []workerconfig.ModelOperationSlot{{
 				Name:         "text",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 				Required:     true,
 			}},
-			Outputs: []interfaces.ModelOperationSlot{{
+			Outputs: []workerconfig.ModelOperationSlot{{
 				Name:         "audio",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}
 	cfg := &interfaces.FactoryConfig{
 		Name:    "factory",
-		Workers: []interfaces.WorkerConfig{worker},
+		Workers: []workerconfig.Config{worker},
 	}
 	if includeResource {
-		worker.Resources = []interfaces.ResourceConfig{{Name: "omnivoice-cache", Capacity: 1}}
-		cfg.Resources = []interfaces.ResourceConfig{{
+		worker.Resources = []factoryresource.Config{{Name: "omnivoice-cache", Capacity: 1}}
+		cfg.Resources = []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "GGUF",

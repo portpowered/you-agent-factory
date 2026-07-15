@@ -7,7 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
@@ -46,7 +47,7 @@ func (e *Executor) Supports(provider string) bool {
 // while leaving terminal failure policy at the parent provider boundary.
 func (e *Executor) Execute(
 	ctx context.Context,
-	req interfaces.ProviderInferenceRequest,
+	req workerexecution.ProviderInferenceRequest,
 	skipPermissions bool,
 	materializeOptions *materialize.Options,
 	runner workerprovider.CommandRunner,

@@ -6,7 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
@@ -70,7 +71,7 @@ func TestAdapterExecuteTimeoutEmitsDeterministicTerminalOrdering(t *testing.T) {
 	}
 	result, executeErr := adapter.Execute(context.Background(), registry, runner, adapter.ExecuteInput{
 		Provider: providerAdapter.Identity(),
-		Command: adapter.CommandContext{Request: interfaces.ProviderInferenceRequest{
+		Command: adapter.CommandContext{Request: workerexecution.ProviderInferenceRequest{
 			Dispatch:         work.WorkDispatch{DispatchID: "dispatch-agy-timeout"},
 			WorkingDirectory: ".",
 			UserMessage:      "plan the goal",
@@ -81,7 +82,7 @@ func TestAdapterExecuteTimeoutEmitsDeterministicTerminalOrdering(t *testing.T) {
 		t.Fatal("Execute() error = nil, want timeout failure")
 	}
 	assertFailureFacts(t, adapter.FailureResult{Failure: result.Failure},
-		interfaces.WorkFailureTypeTimeout, "Agy request timed out.", true)
+		workerexecution.WorkFailureTypeTimeout, "Agy request timed out.", true)
 	assertTimeoutTerminalDrafts(t, result.Drafts, "partial answer before timeout", true)
 }
 
@@ -112,7 +113,7 @@ func TestAdapterParseFinalTimeoutClassifiedDistinctlyFromAuthFailure(t *testing.
 		CommandError: errors.New("exit code 1"),
 		ParseError:   err,
 	})
-	assertFailureFacts(t, failure, interfaces.WorkFailureTypeAuthFailure, "Agy authentication failed.", false)
+	assertFailureFacts(t, failure, workerexecution.WorkFailureTypeAuthFailure, "Agy authentication failed.", false)
 }
 
 func assertTimeoutTerminalDrafts(t *testing.T, drafts []responseevents.Draft, partialText string, wantPartial bool) {
@@ -151,8 +152,8 @@ func assertTimeoutErrorDraft(t *testing.T, errorDraft responseevents.Draft) {
 	if err := json.Unmarshal(errorDraft.Payload, &errorPayload); err != nil {
 		t.Fatalf("unmarshal timeout error payload: %v", err)
 	}
-	if errorPayload.Code != string(interfaces.WorkFailureTypeTimeout) {
-		t.Fatalf("timeout error code = %q, want %q", errorPayload.Code, interfaces.WorkFailureTypeTimeout)
+	if errorPayload.Code != string(workerexecution.WorkFailureTypeTimeout) {
+		t.Fatalf("timeout error code = %q, want %q", errorPayload.Code, workerexecution.WorkFailureTypeTimeout)
 	}
 	if errorPayload.Message != "Agy request timed out." {
 		t.Fatalf("timeout error message = %q, want actionable timeout text", errorPayload.Message)

@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
-func workDiagnosticsForInferenceRequest(req interfaces.ProviderInferenceRequest) *interfaces.WorkDiagnostics {
+func workDiagnosticsForInferenceRequest(req workerexecution.ProviderInferenceRequest) *workerexecution.WorkDiagnostics {
 	requestMetadata := map[string]string{
 		"worker_type":       firstNonEmpty(req.WorkerType, req.Dispatch.WorkerType),
 		"workstation_type":  req.WorkstationType,
@@ -21,12 +21,12 @@ func workDiagnosticsForInferenceRequest(req interfaces.ProviderInferenceRequest)
 	if req.OpenCodeAgent != "" {
 		requestMetadata["opencode_agent"] = req.OpenCodeAgent
 	}
-	return &interfaces.WorkDiagnostics{
-		RenderedPrompt: &interfaces.RenderedPromptDiagnostic{
+	return &workerexecution.WorkDiagnostics{
+		RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{
 			SystemPromptHash: hashText(req.SystemPrompt),
 			UserMessageHash:  hashText(req.UserMessage),
 		},
-		Provider: &interfaces.ProviderDiagnostic{
+		Provider: &workerexecution.ProviderDiagnostic{
 			Provider:        req.ModelProvider,
 			Model:           req.Model,
 			RequestMetadata: requestMetadata,
@@ -43,14 +43,14 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func withInferenceResponseDiagnostics(base *interfaces.WorkDiagnostics, resp interfaces.InferenceResponse, retryCount int) *interfaces.WorkDiagnostics {
-	diagnostics := interfaces.CloneWorkDiagnostics(base)
+func withInferenceResponseDiagnostics(base *workerexecution.WorkDiagnostics, resp workerexecution.InferenceResponse, retryCount int) *workerexecution.WorkDiagnostics {
+	diagnostics := workerexecution.CloneWorkDiagnostics(base)
 	diagnostics = mergeWorkDiagnostics(diagnostics, resp.Diagnostics)
 	if diagnostics == nil {
-		diagnostics = &interfaces.WorkDiagnostics{}
+		diagnostics = &workerexecution.WorkDiagnostics{}
 	}
 	if diagnostics.Provider == nil {
-		diagnostics.Provider = &interfaces.ProviderDiagnostic{}
+		diagnostics.Provider = &workerexecution.ProviderDiagnostic{}
 	}
 	if diagnostics.Provider.ResponseMetadata == nil {
 		diagnostics.Provider.ResponseMetadata = make(map[string]string)
@@ -58,20 +58,20 @@ func withInferenceResponseDiagnostics(base *interfaces.WorkDiagnostics, resp int
 	diagnostics.Provider.ResponseMetadata["content_bytes"] = fmt.Sprintf("%d", len(resp.Content))
 	diagnostics.Provider.ResponseMetadata["retry_count"] = fmt.Sprintf("%d", retryCount)
 	if resp.ProviderSession != nil {
-		diagnostics.Provider.ResponseMetadata["provider_session_provider"] = interfaces.CanonicalProviderSessionProvider(resp.ProviderSession.Provider)
+		diagnostics.Provider.ResponseMetadata["provider_session_provider"] = workerexecution.CanonicalProviderSessionProvider(resp.ProviderSession.Provider)
 		diagnostics.Provider.ResponseMetadata["provider_session_kind"] = resp.ProviderSession.Kind
 		diagnostics.Provider.ResponseMetadata["provider_session_id"] = resp.ProviderSession.ID
 	}
 	return diagnostics
 }
 
-func withInferenceErrorDiagnostics(base *interfaces.WorkDiagnostics, err error, retryCount int) *interfaces.WorkDiagnostics {
-	diagnostics := interfaces.CloneWorkDiagnostics(base)
+func withInferenceErrorDiagnostics(base *workerexecution.WorkDiagnostics, err error, retryCount int) *workerexecution.WorkDiagnostics {
+	diagnostics := workerexecution.CloneWorkDiagnostics(base)
 	if diagnostics == nil {
-		diagnostics = &interfaces.WorkDiagnostics{}
+		diagnostics = &workerexecution.WorkDiagnostics{}
 	}
 	if diagnostics.Provider == nil {
-		diagnostics.Provider = &interfaces.ProviderDiagnostic{}
+		diagnostics.Provider = &workerexecution.ProviderDiagnostic{}
 	}
 	if diagnostics.Provider.ResponseMetadata == nil {
 		diagnostics.Provider.ResponseMetadata = make(map[string]string)
@@ -81,10 +81,10 @@ func withInferenceErrorDiagnostics(base *interfaces.WorkDiagnostics, err error, 
 	return diagnostics
 }
 
-func commandDiagnostics(req CommandRequest, result CommandResult, duration time.Duration, timedOut bool) *interfaces.WorkDiagnostics {
+func commandDiagnostics(req CommandRequest, result CommandResult, duration time.Duration, timedOut bool) *workerexecution.WorkDiagnostics {
 	envProjection := projectCommandEnvForDiagnostics(req.Env)
-	return &interfaces.WorkDiagnostics{
-		Command: &interfaces.CommandDiagnostic{
+	return &workerexecution.WorkDiagnostics{
+		Command: &workerexecution.CommandDiagnostic{
 			Command:    req.Command,
 			Args:       append([]string(nil), req.Args...),
 			Stdin:      string(req.Stdin),
@@ -100,14 +100,14 @@ func commandDiagnostics(req CommandRequest, result CommandResult, duration time.
 	}
 }
 
-func mergeWorkDiagnostics(base, overlay *interfaces.WorkDiagnostics) *interfaces.WorkDiagnostics {
+func mergeWorkDiagnostics(base, overlay *workerexecution.WorkDiagnostics) *workerexecution.WorkDiagnostics {
 	if base == nil {
-		return interfaces.CloneWorkDiagnostics(overlay)
+		return workerexecution.CloneWorkDiagnostics(overlay)
 	}
 	if overlay == nil {
 		return base
 	}
-	overlay = interfaces.CloneWorkDiagnostics(overlay)
+	overlay = workerexecution.CloneWorkDiagnostics(overlay)
 	if overlay.RenderedPrompt != nil {
 		base.RenderedPrompt = overlay.RenderedPrompt
 	}
@@ -115,7 +115,7 @@ func mergeWorkDiagnostics(base, overlay *interfaces.WorkDiagnostics) *interfaces
 		base.Provider = mergeProviderDiagnostic(base.Provider, overlay.Provider)
 	}
 	if overlay.Invocation != nil {
-		base.Invocation = interfaces.CloneWorkDiagnostics(&interfaces.WorkDiagnostics{Invocation: overlay.Invocation}).Invocation
+		base.Invocation = workerexecution.CloneWorkDiagnostics(&workerexecution.WorkDiagnostics{Invocation: overlay.Invocation}).Invocation
 	}
 	if overlay.Command != nil {
 		base.Command = overlay.Command
@@ -134,7 +134,7 @@ func mergeWorkDiagnostics(base, overlay *interfaces.WorkDiagnostics) *interfaces
 	return base
 }
 
-func mergeProviderDiagnostic(base, overlay *interfaces.ProviderDiagnostic) *interfaces.ProviderDiagnostic {
+func mergeProviderDiagnostic(base, overlay *workerexecution.ProviderDiagnostic) *workerexecution.ProviderDiagnostic {
 	if base == nil {
 		return overlay
 	}

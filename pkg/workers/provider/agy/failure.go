@@ -7,7 +7,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
@@ -17,7 +18,7 @@ import (
 var ErrMissingExecutable = errors.New("agy: executable not found")
 
 type terminalError struct {
-	failureType interfaces.WorkFailureType
+	failureType workerexecution.WorkFailureType
 	message     string
 	retryable   bool
 }
@@ -26,7 +27,7 @@ func (e *terminalError) Error() string { return e.message }
 
 func timeoutTerminalError() *terminalError {
 	return &terminalError{
-		failureType: interfaces.WorkFailureTypeTimeout,
+		failureType: workerexecution.WorkFailureTypeTimeout,
 		message:     "Agy request timed out.",
 		retryable:   true,
 	}
@@ -35,7 +36,7 @@ func timeoutTerminalError() *terminalError {
 func processTerminalError(result workerprocess.CommandResult, commandErr error) *terminalError {
 	if errors.Is(commandErr, context.Canceled) || errors.Is(commandErr, context.DeadlineExceeded) {
 		return &terminalError{
-			failureType: interfaces.WorkFailureTypeTimeout,
+			failureType: workerexecution.WorkFailureTypeTimeout,
 			message:     "Agy request was canceled or timed out.",
 			retryable:   true,
 		}
@@ -46,17 +47,17 @@ func processTerminalError(result workerprocess.CommandResult, commandErr error) 
 	if setup := classifySetupCommandError(commandErr); setup != nil {
 		return setup
 	}
-	if failureType := classifyOutputFailure(result); failureType != interfaces.WorkFailureTypeUnknown {
+	if failureType := classifyOutputFailure(result); failureType != workerexecution.WorkFailureTypeUnknown {
 		return terminalErrorForType(failureType)
 	}
 	if errors.Is(commandErr, agypty.ErrNonzeroExit) || result.ExitCode != 0 {
 		return &terminalError{
-			failureType: interfaces.WorkFailureTypeUnknown,
+			failureType: workerexecution.WorkFailureTypeUnknown,
 			message:     fmt.Sprintf("Agy execution exited with code %d.", result.ExitCode),
 		}
 	}
 	return &terminalError{
-		failureType: interfaces.WorkFailureTypeUnknown,
+		failureType: workerexecution.WorkFailureTypeUnknown,
 		message:     "Agy output could not be processed.",
 	}
 }
@@ -68,17 +69,17 @@ func classifySetupCommandError(err error) *terminalError {
 	switch {
 	case errors.Is(err, ErrMissingExecutable), errors.Is(err, exec.ErrNotFound):
 		return &terminalError{
-			failureType: interfaces.WorkFailureTypeMissingExecutable,
+			failureType: workerexecution.WorkFailureTypeMissingExecutable,
 			message:     "Agy executable could not be found.",
 		}
 	case errors.Is(err, agypty.ErrPTYAllocationFailed):
 		return &terminalError{
-			failureType: interfaces.WorkFailureTypeMisconfigured,
+			failureType: workerexecution.WorkFailureTypeMisconfigured,
 			message:     "Agy PTY allocation failed.",
 		}
 	case errors.Is(err, agypty.ErrUnsupportedPlatform):
 		return &terminalError{
-			failureType: interfaces.WorkFailureTypeMisconfigured,
+			failureType: workerexecution.WorkFailureTypeMisconfigured,
 			message:     "Agy PTY allocation is not supported on this platform.",
 		}
 	default:
@@ -86,15 +87,15 @@ func classifySetupCommandError(err error) *terminalError {
 	}
 }
 
-func classifyOutputFailure(result workerprocess.CommandResult) interfaces.WorkFailureType {
+func classifyOutputFailure(result workerprocess.CommandResult) workerexecution.WorkFailureType {
 	normalized := strings.ToLower(strings.TrimSpace(string(result.Stdout)))
 	if normalized == "" {
-		return interfaces.WorkFailureTypeUnknown
+		return workerexecution.WorkFailureTypeUnknown
 	}
 	if containsAuthSignal(normalized) {
-		return interfaces.WorkFailureTypeAuthFailure
+		return workerexecution.WorkFailureTypeAuthFailure
 	}
-	return interfaces.WorkFailureTypeUnknown
+	return workerexecution.WorkFailureTypeUnknown
 }
 
 func containsAuthSignal(normalized string) bool {
@@ -109,18 +110,18 @@ func containsAuthSignal(normalized string) bool {
 	return false
 }
 
-func terminalErrorForType(failureType interfaces.WorkFailureType) *terminalError {
+func terminalErrorForType(failureType workerexecution.WorkFailureType) *terminalError {
 	switch failureType {
-	case interfaces.WorkFailureTypeAuthFailure:
+	case workerexecution.WorkFailureTypeAuthFailure:
 		return &terminalError{
-			failureType: interfaces.WorkFailureTypeAuthFailure,
+			failureType: workerexecution.WorkFailureTypeAuthFailure,
 			message:     "Agy authentication failed.",
 		}
-	case interfaces.WorkFailureTypeTimeout:
+	case workerexecution.WorkFailureTypeTimeout:
 		return timeoutTerminalError()
 	default:
 		return &terminalError{
-			failureType: interfaces.WorkFailureTypeUnknown,
+			failureType: workerexecution.WorkFailureTypeUnknown,
 			message:     "Agy reported an execution failure.",
 		}
 	}
@@ -139,7 +140,7 @@ func classifyFailure(_ context.Context, input adapter.FailureContext) adapter.Fa
 			return failureResult(terminal)
 		}
 		return failureResult(&terminalError{
-			failureType: interfaces.WorkFailureTypeUnknown,
+			failureType: workerexecution.WorkFailureTypeUnknown,
 			message:     "Agy output could not be processed.",
 		})
 	}
@@ -162,9 +163,9 @@ func ClassifyOrchestrationError(err error) adapter.FailureResult {
 }
 
 func failureResult(terminal *terminalError) adapter.FailureResult {
-	family := interfaces.WorkFailureFamilyTerminal
+	family := workerexecution.WorkFailureFamilyTerminal
 	if terminal.retryable {
-		family = interfaces.WorkFailureFamilyRetryable
+		family = workerexecution.WorkFailureFamilyRetryable
 	}
 	return adapter.FailureResult{Failure: &adapter.FailureFacts{
 		Family: family, Type: terminal.failureType, Message: terminal.message,

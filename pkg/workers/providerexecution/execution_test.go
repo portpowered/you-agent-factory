@@ -7,24 +7,27 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 func TestProviderExecutorExecuteMapsCanonicalSuccessMetadata(t *testing.T) {
-	provider := &executionTestProvider{response: interfaces.InferenceResponse{
+	provider := &executionTestProvider{response: workerexecution.InferenceResponse{
 		Content: "done",
-		ProviderSession: &interfaces.ProviderSessionMetadata{
-			Provider: string(interfaces.ModelProviderCursor), Kind: "session_id", ID: "sess-1",
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
+			Provider: string(modelprovider.Cursor), Kind: "session_id", ID: "sess-1",
 		},
-		Diagnostics: &interfaces.WorkDiagnostics{
-			Provider: &interfaces.ProviderDiagnostic{Provider: "cursor", ResponseMetadata: map[string]string{"content_bytes": "4"}},
-			Command:  &interfaces.CommandDiagnostic{Stdin: "secret prompt", Env: map[string]string{"API_KEY": "secret"}},
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			Provider: &workerexecution.ProviderDiagnostic{Provider: "cursor", ResponseMetadata: map[string]string{"content_bytes": "4"}},
+			Command:  &workerexecution.CommandDiagnostic{Stdin: "secret prompt", Env: map[string]string{"API_KEY": "secret"}},
 		},
 	}}
 
 	result, err := NewProviderExecutor(provider).Execute(context.Background(), ExecutionInput{
-		Request: interfaces.ProviderInferenceRequest{UserMessage: "hello"}, Attempt: 3,
+		Request: workerexecution.ProviderInferenceRequest{UserMessage: "hello"}, Attempt: 3,
 	})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -45,10 +48,10 @@ func TestProviderExecutorExecuteMapsCanonicalSuccessMetadata(t *testing.T) {
 
 func TestProviderExecutorExecuteMapsCanonicalProviderFailure(t *testing.T) {
 	providerErr := workerprovider.NewProviderErrorWithSession(
-		interfaces.WorkFailureTypeThrottled,
+		workerexecution.WorkFailureTypeThrottled,
 		"Provider capacity is temporarily unavailable.",
 		errors.New("exit status 1"),
-		&interfaces.ProviderSessionMetadata{Provider: string(interfaces.ModelProviderCursor), Kind: "session_id", ID: "sess-failed"},
+		&workerexecution.ProviderSessionMetadata{Provider: string(modelprovider.Cursor), Kind: "session_id", ID: "sess-failed"},
 	)
 	provider := &executionTestProvider{err: providerErr}
 
@@ -56,7 +59,7 @@ func TestProviderExecutorExecuteMapsCanonicalProviderFailure(t *testing.T) {
 	if !errors.Is(err, providerErr) || provider.calls != 1 {
 		t.Fatalf("err = %v, calls = %d", err, provider.calls)
 	}
-	if result.Attempt != 1 || result.FailureMetadata == nil || result.FailureMetadata.Type != interfaces.WorkFailureTypeThrottled {
+	if result.Attempt != 1 || result.FailureMetadata == nil || result.FailureMetadata.Type != workerexecution.WorkFailureTypeThrottled {
 		t.Fatalf("failure result = %#v", result)
 	}
 	if result.FailureDetail == nil || result.FailureDetail.Message != "Provider is temporarily unavailable due to usage or capacity limits." {
@@ -87,7 +90,7 @@ func TestProviderExecutorExecutePropagatesCancellationWithoutRetry(t *testing.T)
 	if !errors.Is(completed.err, context.Canceled) || provider.callCount() != 1 {
 		t.Fatalf("err = %v, calls = %d", completed.err, provider.callCount())
 	}
-	if completed.result.FailureDetail == nil || completed.result.FailureDetail.Reason != interfaces.WorkFailureTypeUnknown {
+	if completed.result.FailureDetail == nil || completed.result.FailureDetail.Reason != workerexecution.WorkFailureTypeUnknown {
 		t.Fatalf("failure detail = %#v", completed.result.FailureDetail)
 	}
 }
@@ -98,7 +101,7 @@ func TestProviderExecutorExecuteClassifiesDeadline(t *testing.T) {
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("err = %v", err)
 	}
-	if result.FailureDetail == nil || result.FailureDetail.Reason != interfaces.WorkFailureTypeTimeout || result.FailureDetail.Message != "Provider request timed out." {
+	if result.FailureDetail == nil || result.FailureDetail.Reason != workerexecution.WorkFailureTypeTimeout || result.FailureDetail.Message != "Provider request timed out." {
 		t.Fatalf("failure detail = %#v", result.FailureDetail)
 	}
 }
@@ -106,14 +109,14 @@ func TestProviderExecutorExecuteClassifiesDeadline(t *testing.T) {
 func TestProviderExecutorExecuteBoundsAndRedactsFailureDiagnostics(t *testing.T) {
 	secret := "token=super-secret " + strings.Repeat("x", 2048)
 	providerErr := workerprovider.NewProviderErrorWithSession(
-		interfaces.WorkFailureTypePermanentBadRequest,
+		workerexecution.WorkFailureTypePermanentBadRequest,
 		secret,
 		errors.New(secret),
 		nil,
 	)
-	providerErr.Diagnostics = &interfaces.WorkDiagnostics{
-		Provider: &interfaces.ProviderDiagnostic{ResponseMetadata: map[string]string{"content_bytes": "20"}},
-		Command:  &interfaces.CommandDiagnostic{Stdout: secret, Stderr: secret},
+	providerErr.Diagnostics = &workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{ResponseMetadata: map[string]string{"content_bytes": "20"}},
+		Command:  &workerexecution.CommandDiagnostic{Stdout: secret, Stderr: secret},
 	}
 	result, _ := NewProviderExecutor(&executionTestProvider{err: providerErr}).Execute(context.Background(), ExecutionInput{})
 	if result.FailureDetail == nil || result.FailureDetail.Message != "Provider rejected the request as invalid." {
@@ -127,16 +130,16 @@ func TestProviderExecutorExecuteBoundsAndRedactsFailureDiagnostics(t *testing.T)
 func TestProviderExecutorExecuteUsesReasonAllowlistForAllPersistedFailures(t *testing.T) {
 	sensitive := "API key sk-secret secret=hidden raw prompt and provider output"
 	tests := []struct {
-		reason  interfaces.WorkFailureType
+		reason  workerexecution.WorkFailureType
 		message string
 	}{
-		{interfaces.WorkFailureTypeAuthFailure, "Provider authentication failed."},
-		{interfaces.WorkFailureTypePermanentBadRequest, "Provider rejected the request as invalid."},
-		{interfaces.WorkFailureTypeThrottled, "Provider is temporarily unavailable due to usage or capacity limits."},
-		{interfaces.WorkFailureTypeInternalServerError, "Provider encountered a temporary server error."},
-		{interfaces.WorkFailureTypeTimeout, "Provider request timed out."},
-		{interfaces.WorkFailureTypeMisconfigured, "Provider command could not be started."},
-		{interfaces.WorkFailureTypeUnknown, "Provider execution failed."},
+		{workerexecution.WorkFailureTypeAuthFailure, "Provider authentication failed."},
+		{workerexecution.WorkFailureTypePermanentBadRequest, "Provider rejected the request as invalid."},
+		{workerexecution.WorkFailureTypeThrottled, "Provider is temporarily unavailable due to usage or capacity limits."},
+		{workerexecution.WorkFailureTypeInternalServerError, "Provider encountered a temporary server error."},
+		{workerexecution.WorkFailureTypeTimeout, "Provider request timed out."},
+		{workerexecution.WorkFailureTypeMisconfigured, "Provider command could not be started."},
+		{workerexecution.WorkFailureTypeUnknown, "Provider execution failed."},
 	}
 	for _, tc := range tests {
 		t.Run(string(tc.reason), func(t *testing.T) {
@@ -153,12 +156,12 @@ func TestProviderExecutorExecuteUsesReasonAllowlistForAllPersistedFailures(t *te
 }
 
 type executionTestProvider struct {
-	response interfaces.InferenceResponse
+	response workerexecution.InferenceResponse
 	err      error
 	calls    int
 }
 
-func (p *executionTestProvider) Infer(context.Context, interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *executionTestProvider) Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.calls++
 	return p.response, p.err
 }
@@ -173,7 +176,7 @@ func newBlockingExecutionTestProvider() *blockingExecutionTestProvider {
 	return &blockingExecutionTestProvider{started: make(chan struct{})}
 }
 
-func (p *blockingExecutionTestProvider) Infer(ctx context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *blockingExecutionTestProvider) Infer(ctx context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	p.calls++
 	if p.calls == 1 {
@@ -181,7 +184,7 @@ func (p *blockingExecutionTestProvider) Infer(ctx context.Context, _ interfaces.
 	}
 	p.mu.Unlock()
 	<-ctx.Done()
-	return interfaces.InferenceResponse{}, ctx.Err()
+	return workerexecution.InferenceResponse{}, ctx.Err()
 }
 
 func (p *blockingExecutionTestProvider) callCount() int {

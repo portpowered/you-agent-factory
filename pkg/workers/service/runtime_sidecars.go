@@ -10,10 +10,10 @@ import (
 // RuntimeSidecarsInput carries explicit runtime-host collaborators for worker-side
 // poller and cron supervision.
 type RuntimeSidecarsInput struct {
-	FactoryDir  string
-	FactoryCfg  *interfaces.FactoryConfig
-	RuntimeCfg  interfaces.RuntimeConfigLookup
-	Submitter   WorkRequestSubmitter
+	FactoryDir string
+	FactoryCfg *interfaces.FactoryConfig
+	RuntimeCfg interfaces.RuntimeConfigLookup
+	Submitter  WorkRequestSubmitter
 }
 
 // StartSchedulerSidecarsForRuntime supervises configured poller and cron workstations

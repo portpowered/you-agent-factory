@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type FailureInput struct {
@@ -18,7 +18,7 @@ type FailureInput struct {
 }
 
 type FailureResult struct {
-	Reason  interfaces.WorkFailureType
+	Reason  workerexecution.WorkFailureType
 	Message string
 }
 
@@ -89,12 +89,12 @@ func parseProviderFailure(input FailureInput) FailureResult {
 	}
 	if result.ExitCode == 124 {
 		return FailureResult{
-			Reason:  interfaces.WorkFailureTypeTimeout,
+			Reason:  workerexecution.WorkFailureTypeTimeout,
 			Message: claudeTimeoutFailureMessage,
 		}
 	}
 	return FailureResult{
-		Reason:  interfaces.WorkFailureTypeUnknown,
+		Reason:  workerexecution.WorkFailureTypeUnknown,
 		Message: claudeUnknownFailureMessage(streams, result.ExitCode),
 	}
 }
@@ -175,34 +175,34 @@ func decodeClaudeAPIError(line string) (claudeStructuredFailure, bool) {
 	return failure, true
 }
 
-func classifyClaudeStructuredFailure(errorType string, status int) (interfaces.WorkFailureType, bool) {
+func classifyClaudeStructuredFailure(errorType string, status int) (workerexecution.WorkFailureType, bool) {
 	switch strings.ToLower(strings.TrimSpace(errorType)) {
 	case "authentication_error", "permission_error":
-		return interfaces.WorkFailureTypeAuthFailure, true
+		return workerexecution.WorkFailureTypeAuthFailure, true
 	case "invalid_request_error":
-		return interfaces.WorkFailureTypePermanentBadRequest, true
+		return workerexecution.WorkFailureTypePermanentBadRequest, true
 	case "rate_limit_error", "overloaded_error":
-		return interfaces.WorkFailureTypeThrottled, true
+		return workerexecution.WorkFailureTypeThrottled, true
 	case "api_error", "server_error":
-		return interfaces.WorkFailureTypeInternalServerError, true
+		return workerexecution.WorkFailureTypeInternalServerError, true
 	}
 
 	switch {
 	case status == 401 || status == 403:
-		return interfaces.WorkFailureTypeAuthFailure, true
+		return workerexecution.WorkFailureTypeAuthFailure, true
 	case status == 400 || status == 413 || status == 422:
-		return interfaces.WorkFailureTypePermanentBadRequest, true
+		return workerexecution.WorkFailureTypePermanentBadRequest, true
 	case status == 429 || status == 529:
-		return interfaces.WorkFailureTypeThrottled, true
+		return workerexecution.WorkFailureTypeThrottled, true
 	case status >= 500 && status <= 599:
-		return interfaces.WorkFailureTypeInternalServerError, true
+		return workerexecution.WorkFailureTypeInternalServerError, true
 	default:
-		return interfaces.WorkFailureTypeUnknown, false
+		return workerexecution.WorkFailureTypeUnknown, false
 	}
 }
 
-func claudeStructuredFailureMessage(message string, reason interfaces.WorkFailureType) string {
-	if reason == interfaces.WorkFailureTypeAuthFailure || reason == interfaces.WorkFailureTypePermanentBadRequest {
+func claudeStructuredFailureMessage(message string, reason workerexecution.WorkFailureType) string {
+	if reason == workerexecution.WorkFailureTypeAuthFailure || reason == workerexecution.WorkFailureTypePermanentBadRequest {
 		if normalized, ok := safeClaudeActionableMessage(message); ok {
 			return normalized
 		}
@@ -393,34 +393,34 @@ func containsClaudeTranscriptMarker(message string) bool {
 	return containsAny(message, "user:", "human:", "assistant:", "system:", "prompt:")
 }
 
-func claudeTextFailureReason(message string) (interfaces.WorkFailureType, bool) {
+func claudeTextFailureReason(message string) (workerexecution.WorkFailureType, bool) {
 	if strings.HasPrefix(message, "cleanup ") ||
 		strings.HasPrefix(message, "cleaning up ") ||
 		strings.HasPrefix(message, "teardown ") {
-		return interfaces.WorkFailureTypeUnknown, false
+		return workerexecution.WorkFailureTypeUnknown, false
 	}
 	switch {
 	case containsAny(message, "configuration error", "configuration is invalid", "invalid configuration", "config file not found", "anthropic_api_key is not set", "model is not configured"):
-		return interfaces.WorkFailureTypeMisconfigured, true
+		return workerexecution.WorkFailureTypeMisconfigured, true
 	case containsAny(message, `"type":"authentication_error"`, `"type":"permission_error"`, "api key", "authentication error", "permission error", "not logged in", "login required", "unauthorized", "forbidden"):
-		return interfaces.WorkFailureTypeAuthFailure, true
+		return workerexecution.WorkFailureTypeAuthFailure, true
 	case containsAny(message, `"type":"invalid_request_error"`, "invalid_request_error", "bad request", "invalid request", "request_too_large"):
-		return interfaces.WorkFailureTypePermanentBadRequest, true
+		return workerexecution.WorkFailureTypePermanentBadRequest, true
 	case containsAny(message, `"type":"rate_limit_error"`, `"type":"overloaded_error"`, "rate limit", "too many requests", "overloaded", "529"):
-		return interfaces.WorkFailureTypeThrottled, true
+		return workerexecution.WorkFailureTypeThrottled, true
 	case containsAny(message, `"type":"api_error"`, "internal server error", "unexpected status 500", "unexpected status 502", "unexpected status 503", "unexpected status 504"):
-		return interfaces.WorkFailureTypeInternalServerError, true
+		return workerexecution.WorkFailureTypeInternalServerError, true
 	case containsAny(message, "deadline exceeded", "timed out", "timeout"):
-		return interfaces.WorkFailureTypeTimeout, true
+		return workerexecution.WorkFailureTypeTimeout, true
 	default:
-		return interfaces.WorkFailureTypeUnknown, false
+		return workerexecution.WorkFailureTypeUnknown, false
 	}
 }
 
-func claudeTextFailureMessage(message string, reason interfaces.WorkFailureType) string {
-	if reason == interfaces.WorkFailureTypeAuthFailure ||
-		reason == interfaces.WorkFailureTypePermanentBadRequest ||
-		reason == interfaces.WorkFailureTypeMisconfigured {
+func claudeTextFailureMessage(message string, reason workerexecution.WorkFailureType) string {
+	if reason == workerexecution.WorkFailureTypeAuthFailure ||
+		reason == workerexecution.WorkFailureTypePermanentBadRequest ||
+		reason == workerexecution.WorkFailureTypeMisconfigured {
 		if actionable, ok := safeClaudeActionableMessage(message); ok {
 			return actionable
 		}
@@ -428,19 +428,19 @@ func claudeTextFailureMessage(message string, reason interfaces.WorkFailureType)
 	return claudeFallbackFailureMessage(reason, 0)
 }
 
-func claudeFallbackFailureMessage(reason interfaces.WorkFailureType, exitCode int) string {
+func claudeFallbackFailureMessage(reason workerexecution.WorkFailureType, exitCode int) string {
 	switch reason {
-	case interfaces.WorkFailureTypeAuthFailure:
+	case workerexecution.WorkFailureTypeAuthFailure:
 		return claudeAuthFailureMessage
-	case interfaces.WorkFailureTypePermanentBadRequest:
+	case workerexecution.WorkFailureTypePermanentBadRequest:
 		return claudeBadRequestFailureMessage
-	case interfaces.WorkFailureTypeMisconfigured:
+	case workerexecution.WorkFailureTypeMisconfigured:
 		return claudeConfigFailureMessage
-	case interfaces.WorkFailureTypeThrottled:
+	case workerexecution.WorkFailureTypeThrottled:
 		return claudeThrottleFailureMessage
-	case interfaces.WorkFailureTypeInternalServerError:
+	case workerexecution.WorkFailureTypeInternalServerError:
 		return claudeServerFailureMessage
-	case interfaces.WorkFailureTypeTimeout:
+	case workerexecution.WorkFailureTypeTimeout:
 		return claudeTimeoutFailureMessage
 	default:
 		return fmt.Sprintf("claude exited with code %d", exitCode)
@@ -515,4 +515,3 @@ func containsAny(haystack string, needles ...string) bool {
 	}
 	return false
 }
-

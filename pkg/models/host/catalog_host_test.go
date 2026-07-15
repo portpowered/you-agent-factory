@@ -5,10 +5,15 @@ import (
 	"errors"
 	"testing"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestClassifyReadiness_CoversReadyMissingLoadingFailedUnsupported(t *testing.T) {
@@ -231,26 +236,26 @@ func mustLoadedCatalogConfig(t *testing.T, factoryCfg *interfaces.FactoryConfig)
 }
 
 func catalogFactoryConfig(includeResource bool) *interfaces.FactoryConfig {
-	worker := interfaces.WorkerConfig{
+	worker := workerconfig.Config{
 		Name:          "voice-local",
-		Type:          interfaces.WorkerTypeModel,
+		Type:          workertaxonomy.WorkerTypeModel,
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelLocality: interfaces.ModelLocalityLocal,
-		Operations: []interfaces.ModelOperation{{
+		ModelLocality: workerconfig.ModelLocalityLocal,
+		Operations: []workerconfig.ModelOperation{{
 			Name: "TTS",
 		}},
 	}
 	if includeResource {
-		worker.Resources = []interfaces.ResourceConfig{{Name: "omnivoice-cache", Capacity: 1}}
+		worker.Resources = []factoryresource.Config{{Name: "omnivoice-cache", Capacity: 1}}
 	}
 	cfg := &interfaces.FactoryConfig{
 		Name:    "factory",
-		Workers: []interfaces.WorkerConfig{worker},
+		Workers: []workerconfig.Config{worker},
 	}
 	if includeResource {
-		cfg.Resources = []interfaces.ResourceConfig{{
+		cfg.Resources = []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "GGUF",

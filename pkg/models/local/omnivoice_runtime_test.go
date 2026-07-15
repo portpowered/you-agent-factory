@@ -11,6 +11,13 @@ import (
 	"strings"
 	"testing"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -30,7 +37,7 @@ func TestOmniVoiceLocalRuntime_LoadAndInvoke_ReturnsAudioContentFromOutputFile(t
 
 	var got workers.CommandRequest
 	runtime := NewOmniVoiceRuntime(localModelCommandRunnerFunc(func(_ context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
-		got = workers.CommandRequest(interfaces.CloneSubprocessExecutionRequest(req))
+		got = workers.CommandRequest(workerexecution.CloneSubprocessExecutionRequest(req))
 		outputPath := commandArgValue(t, req.Args, "--output")
 		if err := os.WriteFile(outputPath, []byte("RIFF"), 0o644); err != nil {
 			t.Fatalf("write output audio: %v", err)
@@ -52,7 +59,7 @@ func TestOmniVoiceLocalRuntime_LoadAndInvoke_ReturnsAudioContentFromOutputFile(t
 
 	workdir := t.TempDir()
 	response, err := handle.Invoke(context.Background(), InvocationRequest{
-		Request: interfaces.RunnerExecutionRequest{
+		Request: workerexecution.RunnerExecutionRequest{
 			Dispatch: work.WorkDispatch{
 				DispatchID:      "dispatch-1",
 				TransitionID:    "transition-1",
@@ -61,9 +68,9 @@ func TestOmniVoiceLocalRuntime_LoadAndInvoke_ReturnsAudioContentFromOutputFile(t
 			},
 			ModelOperation:   "TTS",
 			WorkingDirectory: workdir,
-			ModelBindings: []interfaces.ResolvedModelOperationBinding{{
+			ModelBindings: []workerexecution.ResolvedModelOperationBinding{{
 				Slot:   "text",
-				Source: interfaces.ModelOperationBindingSourceInput,
+				Source: workerexecution.ModelOperationBindingSourceInput,
 				Content: []work.WorkContentPart{{
 					Type: work.WorkContentPartTypeText,
 					Text: "hello local runtime",
@@ -99,7 +106,7 @@ func TestOmniVoiceLocalRuntime_Invoke_RequiresResolvedTextSlot(t *testing.T) {
 	}
 
 	_, err = handle.Invoke(context.Background(), InvocationRequest{
-		Request: interfaces.RunnerExecutionRequest{
+		Request: workerexecution.RunnerExecutionRequest{
 			ModelOperation: "TTS",
 		},
 	})
@@ -135,11 +142,11 @@ func TestOmniVoiceLocalRuntime_Invoke_PropagatesRuntimeExitFailure(t *testing.T)
 	}
 
 	_, err = handle.Invoke(context.Background(), InvocationRequest{
-		Request: interfaces.RunnerExecutionRequest{
+		Request: workerexecution.RunnerExecutionRequest{
 			ModelOperation: "TTS",
-			ModelBindings: []interfaces.ResolvedModelOperationBinding{{
+			ModelBindings: []workerexecution.ResolvedModelOperationBinding{{
 				Slot:   "text",
-				Source: interfaces.ModelOperationBindingSourceInput,
+				Source: workerexecution.ModelOperationBindingSourceInput,
 				Content: []work.WorkContentPart{{
 					Type: work.WorkContentPartTypeText,
 					Text: "fail me",
@@ -189,11 +196,11 @@ func TestOmniVoiceLocalRuntime_Invoke_PropagatesRunnerError(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 	_, err = handle.Invoke(context.Background(), InvocationRequest{
-		Request: interfaces.RunnerExecutionRequest{
+		Request: workerexecution.RunnerExecutionRequest{
 			ModelOperation: "TTS",
-			ModelBindings: []interfaces.ResolvedModelOperationBinding{{
+			ModelBindings: []workerexecution.ResolvedModelOperationBinding{{
 				Slot:   "text",
-				Source: interfaces.ModelOperationBindingSourceInput,
+				Source: workerexecution.ModelOperationBindingSourceInput,
 				Content: []work.WorkContentPart{{
 					Type: work.WorkContentPartTypeText,
 					Text: "hello",
@@ -270,18 +277,18 @@ func writeOmniVoiceCacheFiles(t *testing.T) (string, []string) {
 	return cachePath, files
 }
 
-func cloneLocalModelRuntimeWorker() *interfaces.WorkerConfig {
+func cloneLocalModelRuntimeWorker() *workerconfig.Config {
 	worker := localModelRuntimeWorker()
-	worker.Resources = append([]interfaces.ResourceConfig(nil), worker.Resources...)
-	worker.Operations = append([]interfaces.ModelOperation(nil), worker.Operations...)
+	worker.Resources = append([]factoryresource.Config(nil), worker.Resources...)
+	worker.Operations = append([]workerconfig.ModelOperation(nil), worker.Operations...)
 	return &worker
 }
 
 func localModelFactoryConfig() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "LLAMACPP",
@@ -290,27 +297,27 @@ func localModelFactoryConfig() *interfaces.FactoryConfig {
 	}
 }
 
-func localModelRuntimeWorker() interfaces.WorkerConfig {
-	return interfaces.WorkerConfig{
+func localModelRuntimeWorker() workerconfig.Config {
+	return workerconfig.Config{
 		Name:          "tts-worker",
-		Type:          interfaces.WorkerTypeModel,
+		Type:          workertaxonomy.WorkerTypeModel,
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelProvider: interfaces.RunnerIDCodex,
-		ModelLocality: interfaces.ModelLocalityLocal,
-		Resources: []interfaces.ResourceConfig{{
+		ModelProvider: workerexecution.RunnerIDCodex,
+		ModelLocality: workerconfig.ModelLocalityLocal,
+		Resources: []factoryresource.Config{{
 			Name:     "omnivoice-cache",
 			Capacity: 1,
 		}},
-		Operations: []interfaces.ModelOperation{{
+		Operations: []workerconfig.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{
+			Inputs: []workerconfig.ModelOperationSlot{{
 				Name:         "text",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 				Required:     true,
 			}},
-			Outputs: []interfaces.ModelOperationSlot{{
+			Outputs: []workerconfig.ModelOperationSlot{{
 				Name:         "audio",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}
@@ -373,11 +380,11 @@ func TestOmniVoiceLocalRuntime_LoadAndInvoke_UsesSupervisedServingEndpoint(t *te
 	}
 
 	response, err := handle.Invoke(context.Background(), InvocationRequest{
-		Request: interfaces.RunnerExecutionRequest{
+		Request: workerexecution.RunnerExecutionRequest{
 			ModelOperation: "TTS",
-			ModelBindings: []interfaces.ResolvedModelOperationBinding{{
+			ModelBindings: []workerexecution.ResolvedModelOperationBinding{{
 				Slot:   "text",
-				Source: interfaces.ModelOperationBindingSourceInput,
+				Source: workerexecution.ModelOperationBindingSourceInput,
 				Content: []work.WorkContentPart{{
 					Type: work.WorkContentPartTypeText,
 					Text: "hello supervised runtime",

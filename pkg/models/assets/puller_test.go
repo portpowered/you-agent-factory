@@ -15,9 +15,12 @@ import (
 	"sync"
 	"testing"
 
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestPullModel_DownloadsManagedCacheAssets(t *testing.T) {
@@ -43,9 +46,9 @@ func TestPullModel_DownloadsManagedCacheAssets(t *testing.T) {
 	puller.SetEndpointsForTest(server.URL, server.URL+"/api", server.Client())
 
 	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "LLAMACPP",
@@ -68,9 +71,9 @@ func TestPullModel_DownloadsManagedCacheAssets(t *testing.T) {
 			t.Fatalf("expected cached file %q: %v", path, err)
 		}
 	}
-	if err := puller.EnsureModelAvailable(context.Background(), runtimeCfg, &interfaces.WorkerConfig{
+	if err := puller.EnsureModelAvailable(context.Background(), runtimeCfg, &workerconfig.Config{
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelLocality: interfaces.ModelLocalityLocal,
+		ModelLocality: workerconfig.ModelLocalityLocal,
 	}); err != nil {
 		t.Fatalf("EnsureModelAvailable: %v", err)
 	}
@@ -101,18 +104,18 @@ func TestPullModel_ResolveModelCacheUsesPersistedMetadataOffline(t *testing.T) {
 	puller.SetEndpointsForTest(server.URL, server.URL+"/api", server.Client())
 
 	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "LLAMACPP",
 			LoadPolicy: "ON_DEMAND",
 		}},
 	})
-	worker := &interfaces.WorkerConfig{
+	worker := &workerconfig.Config{
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelLocality: interfaces.ModelLocalityLocal,
+		ModelLocality: workerconfig.ModelLocalityLocal,
 	}
 
 	result, err := puller.PullModel(context.Background(), runtimeCfg, "OMNIVOICE_Q4_K_M")
@@ -163,9 +166,9 @@ func TestPullModel_RetriesManifestLookupAfterDNSError(t *testing.T) {
 	})
 
 	runtimeCfg := mustLoadedFactoryConfigForModelPullTest(t, &interfaces.FactoryConfig{
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "LLAMACPP",

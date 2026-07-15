@@ -10,15 +10,20 @@ import (
 	"testing"
 	"time"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	"github.com/jonboulle/clockwork"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
+
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 const (
@@ -383,15 +388,15 @@ func TestStartScriptPoller_RestartsOnMalformedOutputWithBackoff(t *testing.T) {
 func newCanonicalScriptPollerWorkstation() interfaces.FactoryWorkstationConfig {
 	return interfaces.FactoryWorkstationConfig{
 		Name:           canonicalScriptPollerWorkstationName,
-		Kind:           interfaces.WorkstationKindPoller,
+		Kind:           workertaxonomy.WorkstationKindPoller,
 		WorkerTypeName: canonicalScriptPollerWorkerName,
 	}
 }
 
-func newCanonicalScriptPollerWorker(args ...string) *interfaces.WorkerConfig {
-	return &interfaces.WorkerConfig{
+func newCanonicalScriptPollerWorker(args ...string) *workerconfig.Config {
+	return &workerconfig.Config{
 		Name:    canonicalScriptPollerWorkerName,
-		Type:    interfaces.WorkerTypeScript,
+		Type:    workertaxonomy.WorkerTypeScript,
 		Command: canonicalScriptPollerCommand,
 		Args:    args,
 	}
@@ -399,7 +404,7 @@ func newCanonicalScriptPollerWorker(args ...string) *interfaces.WorkerConfig {
 
 type scriptPollerRuntimeConfigOptions struct {
 	poller       interfaces.FactoryWorkstationConfig
-	pollerWorker *interfaces.WorkerConfig
+	pollerWorker *workerconfig.Config
 }
 
 func newScriptPollerLoadedRuntimeConfig(
@@ -419,10 +424,10 @@ func newScriptPollerLoadedRuntimeConfig(
 	}
 
 	factoryCfg := &interfaces.FactoryConfig{
-		Workers:      []interfaces.WorkerConfig{{Name: pollerWorker.Name}},
+		Workers:      []workerconfig.Config{{Name: pollerWorker.Name}},
 		Workstations: []interfaces.FactoryWorkstationConfig{poller},
 	}
-	workerConfigs := map[string]*interfaces.WorkerConfig{
+	workerConfigs := map[string]*workerconfig.Config{
 		pollerWorker.Name: pollerWorker,
 	}
 	workstationConfigs := map[string]*interfaces.FactoryWorkstationConfig{

@@ -4,11 +4,12 @@ import (
 	"context"
 	"strings"
 
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 type localAssetGateway struct {
@@ -132,7 +133,7 @@ func DefaultManagedRuntimeSourceResolverAdapter() SourceResolver {
 }
 
 func (a localSourceResolverAdapter) Resolve(modelName, backend, loadPolicy, provider string) SourceResolution {
-	resource := interfaces.ResourceConfig{
+	resource := factoryresource.Config{
 		Backend:    backend,
 		LoadPolicy: loadPolicy,
 		Provider:   provider,

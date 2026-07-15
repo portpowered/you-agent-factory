@@ -6,7 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
@@ -19,13 +20,13 @@ type WorkerRunner struct {
 	executor   WorkerExecutor
 	logger     logging.Logger
 	dispatchCh chan work.WorkDispatch
-	resultCh   chan<- interfaces.WorkResult
+	resultCh   chan<- workerexecution.WorkResult
 	stopOnce   sync.Once
 }
 
 // NewWorkerRunner creates a runner for the given worker type. The runner reads
 // dispatches from its own channel and sends results to the shared resultCh.
-func NewWorkerRunner(workerType string, executor WorkerExecutor, resultCh chan<- interfaces.WorkResult, logger logging.Logger) *WorkerRunner {
+func NewWorkerRunner(workerType string, executor WorkerExecutor, resultCh chan<- workerexecution.WorkResult, logger logging.Logger) *WorkerRunner {
 	return &WorkerRunner{
 		workerType: workerType,
 		executor:   executor,
@@ -74,7 +75,7 @@ func (r *WorkerRunner) run() {
 
 // executeWithTimeout executes a single dispatch. Workstation-specific timeout
 // handling is resolved inside WorkstationExecutor from runtime config.
-func (r *WorkerRunner) executeWithTimeout(dispatch work.WorkDispatch) (result interfaces.WorkResult) {
+func (r *WorkerRunner) executeWithTimeout(dispatch work.WorkDispatch) (result workerexecution.WorkResult) {
 	ctx := context.Background()
 	start := time.Now()
 	defer func() {
@@ -109,12 +110,12 @@ func (r *WorkerRunner) executeWithTimeout(dispatch work.WorkDispatch) (result in
 					"transition_id", dispatch.TransitionID,
 					"dispatch_id", dispatch.DispatchID,
 					"elapsed_ms", elapsed.Milliseconds())...)
-			return interfaces.WorkResult{
+			return workerexecution.WorkResult{
 				DispatchID:   dispatch.DispatchID,
 				TransitionID: dispatch.TransitionID,
-				Outcome:      interfaces.OutcomeFailed,
+				Outcome:      workerexecution.OutcomeFailed,
 				Error:        "execution timeout",
-				Metrics:      interfaces.WorkMetrics{Duration: elapsed},
+				Metrics:      workerexecution.WorkMetrics{Duration: elapsed},
 			}
 		}
 		// Other executor errors are system failures.
@@ -124,12 +125,12 @@ func (r *WorkerRunner) executeWithTimeout(dispatch work.WorkDispatch) (result in
 				"transition_id", dispatch.TransitionID,
 				"dispatch_id", dispatch.DispatchID,
 				"error", err)...)
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeFailed,
+			Outcome:      workerexecution.OutcomeFailed,
 			Error:        err.Error(),
-			Metrics:      interfaces.WorkMetrics{Duration: elapsed},
+			Metrics:      workerexecution.WorkMetrics{Duration: elapsed},
 		}
 	}
 
@@ -149,12 +150,12 @@ func (r *WorkerRunner) executeWithTimeout(dispatch work.WorkDispatch) (result in
 	return result
 }
 
-func PanicAsFailedResult(dispatch work.WorkDispatch, recovered any, duration time.Duration) interfaces.WorkResult {
-	return interfaces.WorkResult{
+func PanicAsFailedResult(dispatch work.WorkDispatch, recovered any, duration time.Duration) workerexecution.WorkResult {
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        fmt.Sprintf("executor panic: %v", recovered),
-		Metrics:      interfaces.WorkMetrics{Duration: duration},
+		Metrics:      workerexecution.WorkMetrics{Duration: duration},
 	}
 }

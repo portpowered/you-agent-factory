@@ -6,7 +6,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	claudepkg "github.com/portpowered/infinite-you/pkg/workers/provider/claude/exitfailure"
 )
 
@@ -38,49 +39,49 @@ func TestParseProviderFailure_StructuredTypesAndStatusesAreCanonical(t *testing.
 	testCases := []struct {
 		name        string
 		stderr      string
-		wantReason  interfaces.WorkFailureType
+		wantReason  workerexecution.WorkFailureType
 		wantMessage string
 	}{
 		{
 			name:        "AuthenticationTypePreservesActionableMessage",
 			stderr:      `API Error: 500 {"type":"error","error":{"type":"authentication_error","message":"  Sign in again\nwith Claude Code.  "}}`,
-			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantReason:  workerexecution.WorkFailureTypeAuthFailure,
 			wantMessage: "Sign in again with Claude Code.",
 		},
 		{
 			name:        "PermissionStatusFallbackPreservesActionableMessage",
 			stderr:      `API Error: 403 {"type":"error","error":{"message":"Ask an organization owner to grant access."}}`,
-			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantReason:  workerexecution.WorkFailureTypeAuthFailure,
 			wantMessage: "Ask an organization owner to grant access.",
 		},
 		{
 			name:        "InvalidRequestPreservesCorrection",
 			stderr:      `API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"Reduce the request size below 20 MB."}}`,
-			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantReason:  workerexecution.WorkFailureTypePermanentBadRequest,
 			wantMessage: "Reduce the request size below 20 MB.",
 		},
 		{
 			name:        "RequestSizeStatusFallback",
 			stderr:      `API Error: 413 {"type":"error","error":{"message":"The request is too large; remove an attachment."}}`,
-			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantReason:  workerexecution.WorkFailureTypePermanentBadRequest,
 			wantMessage: "The request is too large; remove an attachment.",
 		},
 		{
 			name:        "RateLimitUsesStableGuidance",
 			stderr:      `API Error: 429 {"type":"error","error":{"type":"rate_limit_error","message":"rate limit exceeded"}}`,
-			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantReason:  workerexecution.WorkFailureTypeThrottled,
 			wantMessage: throttleFailureMessage,
 		},
 		{
 			name:        "OverloadTypeWinsOverConflictingStatus",
 			stderr:      `API Error: 401 {"type":"error","error":{"type":"overloaded_error","message":"overloaded"}}`,
-			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantReason:  workerexecution.WorkFailureTypeThrottled,
 			wantMessage: throttleFailureMessage,
 		},
 		{
 			name:        "ServerStatusFallback",
 			stderr:      `API Error: 502 {"type":"error","error":{"message":"gateway included internal diagnostics"}}`,
-			wantReason:  interfaces.WorkFailureTypeInternalServerError,
+			wantReason:  workerexecution.WorkFailureTypeInternalServerError,
 			wantMessage: serverFailureMessage,
 		},
 	}
@@ -103,7 +104,7 @@ func TestParseProviderFailure_StructuredRecordPrecedesSurroundingText(t *testing
 	}, "\n"))
 
 	got := parseFailure(nil, stderr, 1)
-	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != "Choose a model available to this project." {
+	if got.Reason != workerexecution.WorkFailureTypePermanentBadRequest || got.Message != "Choose a model available to this project." {
 		t.Fatalf("ParseProviderFailure() = %#v, want structured invalid-request result", got)
 	}
 }
@@ -151,7 +152,7 @@ type fallbackTestCase struct {
 	name        string
 	stderr      []byte
 	exitCode    int
-	wantReason  interfaces.WorkFailureType
+	wantReason  workerexecution.WorkFailureType
 	wantMessage string
 }
 
@@ -161,21 +162,21 @@ func fallbackTestCases() []fallbackTestCase {
 			name:        "TextConfigurationPreservesCorrection",
 			stderr:      []byte("Configuration error: set ANTHROPIC_BASE_URL to a valid URL."),
 			exitCode:    1,
-			wantReason:  interfaces.WorkFailureTypeMisconfigured,
+			wantReason:  workerexecution.WorkFailureTypeMisconfigured,
 			wantMessage: "Configuration error: set ANTHROPIC_BASE_URL to a valid URL.",
 		},
 		{
 			name:        "TextAuthenticationPreservesCorrection",
 			stderr:      []byte("Not logged in. Run /login to continue."),
 			exitCode:    1,
-			wantReason:  interfaces.WorkFailureTypeAuthFailure,
+			wantReason:  workerexecution.WorkFailureTypeAuthFailure,
 			wantMessage: "Not logged in. Run /login to continue.",
 		},
 		{
 			name:        "MalformedEnvelopeFallsThroughToTextSignal",
 			stderr:      []byte(`API Error: 429 {"type":"error","error":{"type":"rate_limit_error"`),
 			exitCode:    1,
-			wantReason:  interfaces.WorkFailureTypeThrottled,
+			wantReason:  workerexecution.WorkFailureTypeThrottled,
 			wantMessage: throttleFailureMessage,
 		},
 		{
@@ -186,34 +187,34 @@ func fallbackTestCases() []fallbackTestCase {
 				"cleanup finished after timeout directory removal",
 			}, "\n")),
 			exitCode:    1,
-			wantReason:  interfaces.WorkFailureTypePermanentBadRequest,
+			wantReason:  workerexecution.WorkFailureTypePermanentBadRequest,
 			wantMessage: "Invalid request: select a supported Claude model.",
 		},
 		{
 			name:        "TimeoutExitUsesStableGuidance",
 			exitCode:    124,
-			wantReason:  interfaces.WorkFailureTypeTimeout,
+			wantReason:  workerexecution.WorkFailureTypeTimeout,
 			wantMessage: timeoutFailureMessage,
 		},
 		{
 			name:        "SingleSafeUnknownUsesBoundedExcerpt",
 			stderr:      []byte("some brand new claude failure"),
 			exitCode:    9,
-			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantReason:  workerexecution.WorkFailureTypeUnknown,
 			wantMessage: "Claude failed: some brand new claude failure",
 		},
 		{
 			name:        "NoisyUnknownUsesExitCodeFallback",
 			stderr:      []byte("User: private prompt\ncleanup complete"),
 			exitCode:    7,
-			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantReason:  workerexecution.WorkFailureTypeUnknown,
 			wantMessage: "claude exited with code 7",
 		},
 		{
 			name:        "CredentialUnknownUsesExitCodeFallback",
 			stderr:      []byte("Authorization: Bearer sk-ant-private"),
 			exitCode:    2,
-			wantReason:  interfaces.WorkFailureTypeUnknown,
+			wantReason:  workerexecution.WorkFailureTypeUnknown,
 			wantMessage: "claude exited with code 2",
 		},
 	}

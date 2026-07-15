@@ -3,14 +3,14 @@ package local
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 )
 
 func TestDefaultManagedRuntimeSourceResolver_ClassifiesConfiguredSources(t *testing.T) {
 	resolver := DefaultManagedRuntimeSourceResolver()
 
-	upstream := resolver.Resolve("OMNIVOICE_Q4_K_M", &interfaces.ResourceConfig{
-		Type:  interfaces.ResourceTypeModel,
+	upstream := resolver.Resolve("OMNIVOICE_Q4_K_M", &factoryresource.Config{
+		Type:  factoryresource.TypeModel,
 		Model: "OMNIVOICE_Q4_K_M",
 	})
 	if upstream.SourceKind != ManagedRuntimeSourceKindUpstreamRepository {
@@ -20,8 +20,8 @@ func TestDefaultManagedRuntimeSourceResolver_ClassifiesConfiguredSources(t *test
 		t.Fatalf("upstream source id = %q, want upstream-repository identity", upstream.SourceID)
 	}
 
-	mirror := resolver.Resolve("OMNIVOICE_Q4_K_M", &interfaces.ResourceConfig{
-		Type:     interfaces.ResourceTypeModel,
+	mirror := resolver.Resolve("OMNIVOICE_Q4_K_M", &factoryresource.Config{
+		Type:     factoryresource.TypeModel,
 		Model:    "OMNIVOICE_Q4_K_M",
 		Provider: "MODELSCOPE",
 	})

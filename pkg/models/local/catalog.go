@@ -8,10 +8,15 @@ import (
 	"strconv"
 	"strings"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // CatalogEntry holds API summary and detail for one discovered model.
@@ -55,7 +60,7 @@ func BuildCatalogWithOptions(runtimeCfg *factoryconfig.LoadedFactoryConfig, opts
 	}
 
 	factoryCfg := runtimeCfg.FactoryConfig()
-	resourceByName := make(map[string]interfaces.ResourceConfig, len(factoryCfg.Resources))
+	resourceByName := make(map[string]factoryresource.Config, len(factoryCfg.Resources))
 	for _, resource := range factoryCfg.Resources {
 		resourceByName[resource.Name] = resource
 	}
@@ -89,9 +94,9 @@ func BuildCatalogWithOptions(runtimeCfg *factoryconfig.LoadedFactoryConfig, opts
 				aggregate.locality = locality
 			}
 			switch locality {
-			case interfaces.ModelLocalityLocal:
+			case workerconfig.ModelLocalityLocal:
 				aggregate.localCount++
-			case interfaces.ModelLocalityCloud:
+			case workerconfig.ModelLocalityCloud:
 				aggregate.cloudCount++
 			}
 		}
@@ -134,16 +139,16 @@ func BuildCatalogWithOptions(runtimeCfg *factoryconfig.LoadedFactoryConfig, opts
 	return catalog
 }
 
-func catalogWorkerIncludesModel(worker interfaces.WorkerConfig) bool {
-	if interfaces.IsInferenceWorkerType(worker.Type) {
+func catalogWorkerIncludesModel(worker workerconfig.Config) bool {
+	if workertaxonomy.IsInferenceWorkerType(worker.Type) {
 		return true
 	}
-	return interfaces.IsAgentWorkerType(worker.Type) &&
-		strings.TrimSpace(worker.ModelLocality) == interfaces.ModelLocalityLocal &&
+	return workertaxonomy.IsAgentWorkerType(worker.Type) &&
+		strings.TrimSpace(worker.ModelLocality) == workerconfig.ModelLocalityLocal &&
 		strings.TrimSpace(worker.Model) != ""
 }
 
-func capabilityFromWorker(worker interfaces.WorkerConfig) factoryapi.ModelCapability {
+func capabilityFromWorker(worker workerconfig.Config) factoryapi.ModelCapability {
 	operations := make([]factoryapi.ModelOperation, 0, len(worker.Operations))
 	for _, operation := range worker.Operations {
 		operations = append(operations, generatedModelOperation(operation))
@@ -172,7 +177,7 @@ func capabilityFromWorker(worker interfaces.WorkerConfig) factoryapi.ModelCapabi
 	return capability
 }
 
-func mergeAggregateOperation(aggregate *catalogAggregate, operation interfaces.ModelOperation) {
+func mergeAggregateOperation(aggregate *catalogAggregate, operation workerconfig.ModelOperation) {
 	if aggregate == nil {
 		return
 	}
@@ -267,9 +272,9 @@ func mergeGeneratedOperationSlot(left, right factoryapi.ModelOperationSlot) fact
 
 func collectAggregateResources(
 	aggregate *catalogAggregate,
-	worker interfaces.WorkerConfig,
-	resourceByName map[string]interfaces.ResourceConfig,
-	allResources []interfaces.ResourceConfig,
+	worker workerconfig.Config,
+	resourceByName map[string]factoryresource.Config,
+	allResources []factoryresource.Config,
 ) {
 	if aggregate == nil {
 		return
@@ -339,7 +344,7 @@ func modelStatus(aggregate catalogAggregate) factoryapi.ModelStatus {
 }
 
 func modelLoadState(aggregate catalogAggregate) factoryapi.ModelLoadState {
-	if primaryModelLocality(aggregate) == interfaces.ModelLocalityLocal {
+	if primaryModelLocality(aggregate) == workerconfig.ModelLocalityLocal {
 		return factoryapi.UNLOADED
 	}
 	return factoryapi.NOTAPPLICABLE
@@ -350,11 +355,11 @@ func primaryModelLocality(aggregate catalogAggregate) string {
 	case aggregate.locality != "":
 		return aggregate.locality
 	case aggregate.localCount > 0:
-		return interfaces.ModelLocalityLocal
+		return workerconfig.ModelLocalityLocal
 	case aggregate.cloudCount > 0:
-		return interfaces.ModelLocalityCloud
+		return workerconfig.ModelLocalityCloud
 	default:
-		return interfaces.ModelLocalityCloud
+		return workerconfig.ModelLocalityCloud
 	}
 }
 
@@ -375,7 +380,7 @@ func modelDiagnostics(aggregate catalogAggregate, summary factoryapi.ModelSummar
 	return diagnostics
 }
 
-func generatedModelOperation(operation interfaces.ModelOperation) factoryapi.ModelOperation {
+func generatedModelOperation(operation workerconfig.ModelOperation) factoryapi.ModelOperation {
 	generated := factoryapi.ModelOperation{
 		Name: strings.TrimSpace(operation.Name),
 	}
@@ -402,7 +407,7 @@ func generatedModelOperation(operation interfaces.ModelOperation) factoryapi.Mod
 	return generated
 }
 
-func generatedModelOperationSlot(slot interfaces.ModelOperationSlot) factoryapi.ModelOperationSlot {
+func generatedModelOperationSlot(slot workerconfig.ModelOperationSlot) factoryapi.ModelOperationSlot {
 	contentTypes := make([]factoryapi.ModelOperationContentType, 0, len(slot.ContentTypes))
 	for _, contentType := range slot.ContentTypes {
 		if normalized := strings.TrimSpace(contentType); normalized != "" {
@@ -424,11 +429,11 @@ func generatedModelOperationSlot(slot interfaces.ModelOperationSlot) factoryapi.
 }
 
 // ResourceSummary maps a factory resource config to the API model-resource summary shape.
-func ResourceSummary(resource interfaces.ResourceConfig) factoryapi.ModelResourceSummary {
+func ResourceSummary(resource factoryresource.Config) factoryapi.ModelResourceSummary {
 	return generatedModelResourceSummary(resource)
 }
 
-func generatedModelResourceSummary(resource interfaces.ResourceConfig) factoryapi.ModelResourceSummary {
+func generatedModelResourceSummary(resource factoryresource.Config) factoryapi.ModelResourceSummary {
 	summary := factoryapi.ModelResourceSummary{
 		Name:     resource.Name,
 		Type:     factoryapi.ResourceType(strings.TrimSpace(resource.Type)),
@@ -624,13 +629,13 @@ func PullModelWithOptions(
 	return EnrichPullResult(result, inspection, resolution), nil
 }
 
-func modelScopedResource(factoryCfg *interfaces.FactoryConfig, modelName string) *interfaces.ResourceConfig {
+func modelScopedResource(factoryCfg *interfaces.FactoryConfig, modelName string) *factoryresource.Config {
 	if factoryCfg == nil {
 		return nil
 	}
 	key := canonicalModelName(modelName)
 	for _, resource := range factoryCfg.Resources {
-		if strings.TrimSpace(resource.Type) != interfaces.ResourceTypeModel {
+		if strings.TrimSpace(resource.Type) != factoryresource.TypeModel {
 			continue
 		}
 		if canonicalModelName(resource.Model) != key {
@@ -646,24 +651,24 @@ func modelScopedResource(factoryCfg *interfaces.FactoryConfig, modelName string)
 func SelectInvocationWorker(
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,
 	modelName, operationName string,
-) (*interfaces.WorkerConfig, interfaces.ModelOperation, error) {
+) (*workerconfig.Config, workerconfig.ModelOperation, error) {
 	if runtimeCfg == nil || runtimeCfg.FactoryConfig() == nil {
-		return nil, interfaces.ModelOperation{}, fmt.Errorf("runtime config is not available")
+		return nil, workerconfig.ModelOperation{}, fmt.Errorf("runtime config is not available")
 	}
 	modelKey := CanonicalModelName(modelName)
 	operationName = strings.TrimSpace(operationName)
 	if modelKey == "" {
-		return nil, interfaces.ModelOperation{}, fmt.Errorf("%w: empty model name", apisurface.ErrModelNotFound)
+		return nil, workerconfig.ModelOperation{}, fmt.Errorf("%w: empty model name", apisurface.ErrModelNotFound)
 	}
 	if operationName == "" {
-		return nil, interfaces.ModelOperation{}, fmt.Errorf("operation is required")
+		return nil, workerconfig.ModelOperation{}, fmt.Errorf("operation is required")
 	}
 
 	var modelMatched bool
 	var matchedWorkerName string
 	for _, worker := range runtimeCfg.FactoryConfig().Workers {
 		workerDef, ok := runtimeCfg.Worker(worker.Name)
-		if !ok || workerDef == nil || !interfaces.IsInferenceWorkerType(workerDef.Type) {
+		if !ok || workerDef == nil || !workertaxonomy.IsInferenceWorkerType(workerDef.Type) {
 			continue
 		}
 		if CanonicalModelName(workerDef.Model) != modelKey {
@@ -678,9 +683,9 @@ func SelectInvocationWorker(
 		}
 	}
 	if modelMatched {
-		return nil, interfaces.ModelOperation{}, fmt.Errorf("%w: worker %q for model %q does not support operation %q", apisurface.ErrModelInvocationUnsupportedOperation, matchedWorkerName, modelName, operationName)
+		return nil, workerconfig.ModelOperation{}, fmt.Errorf("%w: worker %q for model %q does not support operation %q", apisurface.ErrModelInvocationUnsupportedOperation, matchedWorkerName, modelName, operationName)
 	}
-	return nil, interfaces.ModelOperation{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotFound, modelName)
+	return nil, workerconfig.ModelOperation{}, fmt.Errorf("%w: %s", apisurface.ErrModelNotFound, modelName)
 }
 
 const (

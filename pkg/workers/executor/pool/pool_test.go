@@ -6,17 +6,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
 // mockExecutor implements WorkerExecutor for testing.
 type mockExecutor struct {
-	fn func(ctx context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error)
+	fn func(ctx context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error)
 }
 
-func (m *mockExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (interfaces.WorkResult, error) {
+func (m *mockExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	return m.fn(ctx, dispatch)
 }
 
@@ -24,10 +25,10 @@ func TestWorkerPool_DispatchAndResult(t *testing.T) {
 	pool := executor.NewWorkerPool(nil)
 
 	executor := &mockExecutor{
-		fn: func(ctx context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
-			return interfaces.WorkResult{
+		fn: func(ctx context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
+			return workerexecution.WorkResult{
 				TransitionID: d.TransitionID,
-				Outcome:      interfaces.OutcomeAccepted,
+				Outcome:      workerexecution.OutcomeAccepted,
 			}, nil
 		},
 	}
@@ -49,7 +50,7 @@ func TestWorkerPool_DispatchAndResult(t *testing.T) {
 		if result.TransitionID != "tr-1" {
 			t.Errorf("expected transition ID tr-1, got %s", result.TransitionID)
 		}
-		if result.Outcome != interfaces.OutcomeAccepted {
+		if result.Outcome != workerexecution.OutcomeAccepted {
 			t.Errorf("expected ACCEPTED, got %s", result.Outcome)
 		}
 	case <-time.After(2 * time.Second):
@@ -62,12 +63,12 @@ func TestWorkerPool_DispatchPreservesExecutionMetadataForExecutor(t *testing.T) 
 	seen := make(chan work.ExecutionMetadata, 1)
 
 	executor := &mockExecutor{
-		fn: func(ctx context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
+		fn: func(ctx context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 			seen <- d.Execution
-			return interfaces.WorkResult{
+			return workerexecution.WorkResult{
 				DispatchID:   d.DispatchID,
 				TransitionID: d.TransitionID,
-				Outcome:      interfaces.OutcomeAccepted,
+				Outcome:      workerexecution.OutcomeAccepted,
 			}, nil
 		},
 	}
@@ -118,8 +119,8 @@ func TestWorkerRunner_ExecutorError(t *testing.T) {
 	pool := executor.NewWorkerPool(nil)
 
 	executor := &mockExecutor{
-		fn: func(ctx context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
-			return interfaces.WorkResult{}, fmt.Errorf("connection refused")
+		fn: func(ctx context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
+			return workerexecution.WorkResult{}, fmt.Errorf("connection refused")
 		},
 	}
 
@@ -133,7 +134,7 @@ func TestWorkerRunner_ExecutorError(t *testing.T) {
 
 	select {
 	case result := <-pool.ResultCh():
-		if result.Outcome != interfaces.OutcomeFailed {
+		if result.Outcome != workerexecution.OutcomeFailed {
 			t.Errorf("expected FAILED, got %s", result.Outcome)
 		}
 		if result.Error != "connection refused" {
@@ -148,7 +149,7 @@ func TestWorkerRunner_ExecutorPanic(t *testing.T) {
 	pool := executor.NewWorkerPool(nil)
 
 	executor := &mockExecutor{
-		fn: func(ctx context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
+		fn: func(ctx context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 			panic("simulated panic")
 		},
 	}
@@ -164,7 +165,7 @@ func TestWorkerRunner_ExecutorPanic(t *testing.T) {
 
 	select {
 	case result := <-pool.ResultCh():
-		if result.Outcome != interfaces.OutcomeFailed {
+		if result.Outcome != workerexecution.OutcomeFailed {
 			t.Errorf("expected FAILED, got %s", result.Outcome)
 		}
 		if result.DispatchID != "d-panic" {
@@ -201,10 +202,10 @@ func TestWorkerPool_MultipleWorkerTypes(t *testing.T) {
 
 	makeExecutor := func(suffix string) *mockExecutor {
 		return &mockExecutor{
-			fn: func(ctx context.Context, d work.WorkDispatch) (interfaces.WorkResult, error) {
-				return interfaces.WorkResult{
+			fn: func(ctx context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
+				return workerexecution.WorkResult{
 					TransitionID: d.TransitionID,
-					Outcome:      interfaces.OutcomeAccepted,
+					Outcome:      workerexecution.OutcomeAccepted,
 					Feedback:     suffix,
 				}, nil
 			},

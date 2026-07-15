@@ -6,7 +6,10 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/commandenv"
@@ -20,7 +23,7 @@ type Adapter struct{}
 // NewAdapter constructs the stateless Pi adapter.
 func NewAdapter() *Adapter { return &Adapter{} }
 
-func (*Adapter) Identity() adapter.Identity { return adapter.Identity(interfaces.ModelProviderPi) }
+func (*Adapter) Identity() adapter.Identity { return adapter.Identity(modelprovider.Pi) }
 
 func (*Adapter) BuildCommand(_ context.Context, input adapter.CommandContext) (adapter.CommandBuildResult, error) {
 	req := input.Request
@@ -37,7 +40,7 @@ func (*Adapter) BuildCommand(_ context.Context, input adapter.CommandContext) (a
 	args = append(args, req.UserMessage)
 
 	command := workerprocess.SubprocessRequestBase(req.Dispatch)
-	command.Command = string(interfaces.ModelProviderPi)
+	command.Command = string(modelprovider.Pi)
 	command.Args = args
 	command.Env = commandenv.Build(req.EnvVars)
 	command.WorkDir = req.WorkingDirectory
@@ -72,7 +75,7 @@ func (*Adapter) ParseFinal(_ context.Context, input adapter.FinalParseContext) (
 	if err != nil {
 		return adapter.FinalParseResult{}, err
 	}
-	return adapter.FinalParseResult{Response: interfaces.InferenceResponse{
+	return adapter.FinalParseResult{Response: workerexecution.InferenceResponse{
 		Content:         parsed.Content,
 		ProviderSession: parsed.ProviderSession,
 	}}, nil
@@ -89,13 +92,13 @@ func (*Adapter) ClassifyFailure(_ context.Context, input adapter.FailureContext)
 	return classifyPiFailure(input)
 }
 
-func providerSession(sessionID string) *interfaces.ProviderSessionMetadata {
+func providerSession(sessionID string) *workerexecution.ProviderSessionMetadata {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil
 	}
-	return &interfaces.ProviderSessionMetadata{
-		Provider: string(interfaces.ModelProviderPi), Kind: providerSessionKind, ID: sessionID,
+	return &workerexecution.ProviderSessionMetadata{
+		Provider: string(modelprovider.Pi), Kind: providerSessionKind, ID: sessionID,
 	}
 }
 

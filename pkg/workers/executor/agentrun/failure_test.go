@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestFailureClassForError_ModelhostLeaseDenied(t *testing.T) {
@@ -93,7 +94,7 @@ func TestFailureMetadataForError_ModelhostLeaseDeniedIsThrottle(t *testing.T) {
 	if metadata == nil {
 		t.Fatal("expected failure metadata")
 	}
-	if metadata.Family != interfaces.WorkFailureFamilyThrottle || metadata.Type != interfaces.WorkFailureTypeThrottled {
+	if metadata.Family != workerexecution.WorkFailureFamilyThrottle || metadata.Type != workerexecution.WorkFailureTypeThrottled {
 		t.Fatalf("metadata = %#v, want throttle family", metadata)
 	}
 }

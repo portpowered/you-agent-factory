@@ -5,6 +5,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
@@ -13,12 +20,12 @@ import (
 )
 
 type runtimePathCapturingExecutor struct {
-	dispatch interfaces.WorkstationExecutionRequest
+	dispatch workerexecution.WorkstationExecutionRequest
 }
 
-func (m *runtimePathCapturingExecutor) Execute(_ context.Context, d interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (m *runtimePathCapturingExecutor) Execute(_ context.Context, d workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	m.dispatch = d
-	return interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}, nil
+	return workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}, nil
 }
 
 func TestWorkstationExecutor_DefaultsEmptyExecutionPathToRuntimeBaseDirectoryAcrossModelWorkstationKinds(t *testing.T) {
@@ -29,22 +36,22 @@ func TestWorkstationExecutor_DefaultsEmptyExecutionPathToRuntimeBaseDirectoryAcr
 		workstationName  string
 		workstationType  string
 		operation        string
-		workerOperations []interfaces.ModelOperation
+		workerOperations []workerconfig.ModelOperation
 		wantModelOp      string
 	}{
 		{
 			name:            "model workstation",
 			workstationName: "review",
-			workstationType: interfaces.WorkstationTypeModel,
+			workstationType: workertaxonomy.WorkstationTypeModel,
 		},
 		{
 			name:            "invoke workstation",
 			workstationName: "speak",
-			workstationType: interfaces.WorkstationTypeInvoke,
+			workstationType: workertaxonomy.WorkstationTypeInvoke,
 			operation:       "TTS",
-			workerOperations: []interfaces.ModelOperation{{
+			workerOperations: []workerconfig.ModelOperation{{
 				Name: "TTS",
-				Inputs: []interfaces.ModelOperationSlot{
+				Inputs: []workerconfig.ModelOperationSlot{
 					{Name: "text", Required: true},
 				},
 			}},
@@ -59,8 +66,8 @@ func TestWorkstationExecutor_DefaultsEmptyExecutionPathToRuntimeBaseDirectoryAcr
 			we := &executor.WorkstationExecutor{
 				RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
 					RuntimeBasePath: runtimeBaseDir,
-					Workers: map[string]*interfaces.WorkerConfig{
-						"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system", Operations: tc.workerOperations},
+					Workers: map[string]*workerconfig.Config{
+						"worker-a": {Type: workertaxonomy.WorkerTypeModel, Body: "system", Operations: tc.workerOperations},
 					},
 					Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 						tc.workstationName: {
@@ -70,7 +77,7 @@ func TestWorkstationExecutor_DefaultsEmptyExecutionPathToRuntimeBaseDirectoryAcr
 							OperationBindings: []interfaces.ModelOperationBinding{{
 								Slot: "text",
 								Selector: &interfaces.ModelOperationBindingSelector{
-									Type: interfaces.ModelOperationContentTypeText,
+									Type: workerconfig.ModelOperationContentTypeText,
 								},
 							}},
 						},
@@ -85,9 +92,9 @@ func TestWorkstationExecutor_DefaultsEmptyExecutionPathToRuntimeBaseDirectoryAcr
 				TransitionID:    "t-default-runtime-dir",
 				WorkerType:      "worker-a",
 				WorkstationName: tc.workstationName,
-				InputTokens: executor.InputTokens(interfaces.Token{
+				InputTokens: executor.InputTokens(factorytoken.Token{
 					ID: "tok-1",
-					Color: interfaces.TokenColor{
+					Color: factorytoken.Color{
 						WorkID: "work-1",
 						Content: []work.WorkContentPart{{
 							Type: work.WorkContentPartTypeText,
@@ -125,12 +132,12 @@ func TestWorkstationExecutor_ResolvesTemplatedWorkingDirectoryFromSessionContext
 	we := &executor.WorkstationExecutor{
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
 			RuntimeBasePath: sessionRoot,
-			Workers: map[string]*interfaces.WorkerConfig{
-				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system"},
+			Workers: map[string]*workerconfig.Config{
+				"worker-a": {Type: workertaxonomy.WorkerTypeModel, Body: "system"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"standard": {
-					Type:             interfaces.WorkstationTypeModel,
+					Type:             workertaxonomy.WorkstationTypeModel,
 					PromptTemplate:   "Work from {{ .Context.WorkDir }}",
 					WorkingDirectory: `workspace/{{ .Context.SessionID }}`,
 					Env: map[string]string{
@@ -149,7 +156,7 @@ func TestWorkstationExecutor_ResolvesTemplatedWorkingDirectoryFromSessionContext
 		TransitionID:    "t-session-template",
 		WorkerType:      "worker-a",
 		WorkstationName: "standard",
-		InputTokens:     executor.InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     executor.InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

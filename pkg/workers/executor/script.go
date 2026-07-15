@@ -11,6 +11,10 @@ import (
 	"text/template"
 	"time"
 
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -84,7 +88,7 @@ func (se *ScriptExecutor) commandRunner() CommandRunner {
 }
 
 // NewScriptExecutor creates a ScriptExecutor from a WorkerConfig.
-func NewScriptExecutor(def *interfaces.WorkerConfig, logger logging.Logger, opts ...ScriptExecutorOption) *ScriptExecutor {
+func NewScriptExecutor(def *workerconfig.Config, logger logging.Logger, opts ...ScriptExecutorOption) *ScriptExecutor {
 	args := make([]string, len(def.Args))
 	copy(args, def.Args)
 	executor := &ScriptExecutor{
@@ -99,7 +103,7 @@ func NewScriptExecutor(def *interfaces.WorkerConfig, logger logging.Logger, opts
 }
 
 // NewScriptExecutorWithRunner creates a ScriptExecutor with a custom CommandRunner.
-func NewScriptExecutorWithRunner(def *interfaces.WorkerConfig, runner CommandRunner, logger logging.Logger, opts ...ScriptExecutorOption) *ScriptExecutor {
+func NewScriptExecutorWithRunner(def *workerconfig.Config, runner CommandRunner, logger logging.Logger, opts ...ScriptExecutorOption) *ScriptExecutor {
 	se := NewScriptExecutor(def, logger, opts...)
 	se.CommandRunner = runner
 	return se
@@ -108,7 +112,7 @@ func NewScriptExecutorWithRunner(def *interfaces.WorkerConfig, runner CommandRun
 // Execute runs the configured command with template-substituted args.
 // Exit code 0 produces ACCEPTED with stdout in Output.
 // Non-zero exit code produces FAILED with stderr as Error.
-func (se *ScriptExecutor) Execute(ctx context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (se *ScriptExecutor) Execute(ctx context.Context, request workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	start := se.clockNow()
 	logger := logging.EnsureLogger(se.Logger)
 
@@ -156,7 +160,7 @@ func (se *ScriptExecutor) clockNow() time.Time {
 	return time.Now()
 }
 
-func (se *ScriptExecutor) commandRequest(request interfaces.WorkstationExecutionRequest) (CommandRequest, error) {
+func (se *ScriptExecutor) commandRequest(request workerexecution.WorkstationExecutionRequest) (CommandRequest, error) {
 	if err := unsupportedImageContentError(request.InputTokens, "script executor"); err != nil {
 		return CommandRequest{}, err
 	}
@@ -214,7 +218,7 @@ func scriptRequestEvent(req CommandRequest, attempt int, requestID string, event
 	}
 }
 
-func scriptResponseEvent(req CommandRequest, result interfaces.WorkResult, attempt int, requestID string, eventTime time.Time) factoryapi.FactoryEvent {
+func scriptResponseEvent(req CommandRequest, result workerexecution.WorkResult, attempt int, requestID string, eventTime time.Time) factoryapi.FactoryEvent {
 	outcome, failureType := scriptResponseOutcome(result)
 	payload := factoryapi.ScriptResponseEventPayload{
 		ScriptRequestId: requestID,
@@ -280,12 +284,12 @@ func scriptResponseEventID(dispatchID string, attempt int) string {
 	return fmt.Sprintf("%s/%s/%d", scriptResponseEventIDPrefix, dispatchID, attempt)
 }
 
-func scriptResponseOutcome(result interfaces.WorkResult) (factoryapi.ScriptExecutionOutcome, *factoryapi.ScriptFailureType) {
+func scriptResponseOutcome(result workerexecution.WorkResult) (factoryapi.ScriptExecutionOutcome, *factoryapi.ScriptFailureType) {
 	if scriptCommandTimedOut(result) {
 		failureType := factoryapi.ScriptFailureTypeTimeout
 		return factoryapi.ScriptExecutionOutcomeTimedOut, &failureType
 	}
-	if result.Outcome == interfaces.OutcomeFailed {
+	if result.Outcome == workerexecution.OutcomeFailed {
 		if command, ok := scriptCommandDiagnostic(result); ok && command.ExitCode != 0 {
 			return factoryapi.ScriptExecutionOutcomeFailedExitCode, nil
 		}
@@ -295,7 +299,7 @@ func scriptResponseOutcome(result interfaces.WorkResult) (factoryapi.ScriptExecu
 	return factoryapi.ScriptExecutionOutcomeSucceeded, nil
 }
 
-func scriptResponseExitCode(result interfaces.WorkResult, outcome factoryapi.ScriptExecutionOutcome) *int {
+func scriptResponseExitCode(result workerexecution.WorkResult, outcome factoryapi.ScriptExecutionOutcome) *int {
 	command, ok := scriptCommandDiagnostic(result)
 	if !ok {
 		return nil
@@ -307,7 +311,7 @@ func scriptResponseExitCode(result interfaces.WorkResult, outcome factoryapi.Scr
 	)
 }
 
-func scriptResponseStdout(result interfaces.WorkResult) string {
+func scriptResponseStdout(result workerexecution.WorkResult) string {
 	command, ok := scriptCommandDiagnostic(result)
 	if !ok {
 		return ""
@@ -315,7 +319,7 @@ func scriptResponseStdout(result interfaces.WorkResult) string {
 	return command.Stdout
 }
 
-func scriptResponseStderr(result interfaces.WorkResult) string {
+func scriptResponseStderr(result workerexecution.WorkResult) string {
 	command, ok := scriptCommandDiagnostic(result)
 	if !ok {
 		return ""
@@ -323,29 +327,29 @@ func scriptResponseStderr(result interfaces.WorkResult) string {
 	return command.Stderr
 }
 
-func scriptCommandTimedOut(result interfaces.WorkResult) bool {
+func scriptCommandTimedOut(result workerexecution.WorkResult) bool {
 	failureMetadata := result.FailureMetadata
-	if failureMetadata != nil && failureMetadata.Type == interfaces.WorkFailureTypeTimeout {
+	if failureMetadata != nil && failureMetadata.Type == workerexecution.WorkFailureTypeTimeout {
 		return true
 	}
 	command, ok := scriptCommandDiagnostic(result)
 	return ok && command.TimedOut
 }
 
-func scriptCommandDiagnostic(result interfaces.WorkResult) (*interfaces.CommandDiagnostic, bool) {
+func scriptCommandDiagnostic(result workerexecution.WorkResult) (*workerexecution.CommandDiagnostic, bool) {
 	if result.Diagnostics == nil || result.Diagnostics.Command == nil {
 		return nil, false
 	}
 	return result.Diagnostics.Command, true
 }
 
-func argTemplateErrorResult(dispatch work.WorkDispatch, duration time.Duration, err error) interfaces.WorkResult {
-	return interfaces.WorkResult{
+func argTemplateErrorResult(dispatch work.WorkDispatch, duration time.Duration, err error) workerexecution.WorkResult {
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        "arg template error: " + err.Error(),
-		Metrics:      interfaces.WorkMetrics{Duration: duration},
+		Metrics:      workerexecution.WorkMetrics{Duration: duration},
 	}
 }
 
@@ -354,16 +358,16 @@ func scriptRunErrorResult(
 	logger logging.Logger,
 	dispatch work.WorkDispatch,
 	commandResult CommandResult,
-	diagnostics *interfaces.WorkDiagnostics,
+	diagnostics *workerexecution.WorkDiagnostics,
 	duration time.Duration,
 	runErr error,
-) interfaces.WorkResult {
+) workerexecution.WorkResult {
 	if errors.Is(runErr, context.DeadlineExceeded) || ctx.Err() == context.DeadlineExceeded {
 		logger.Warn("script: execution timed out",
 			WorkLogFields(dispatch.Execution,
 				"transition_id", dispatch.TransitionID,
 				"dispatch_id", dispatch.DispatchID,
-				"outcome", string(interfaces.OutcomeFailed),
+				"outcome", string(workerexecution.OutcomeFailed),
 				"duration_ms", duration.Milliseconds())...)
 		result := timeoutWorkResult(dispatch, duration)
 		if diagnostics.Command != nil {
@@ -376,16 +380,16 @@ func scriptRunErrorResult(
 		WorkLogFields(dispatch.Execution,
 			"transition_id", dispatch.TransitionID,
 			"dispatch_id", dispatch.DispatchID,
-			"outcome", string(interfaces.OutcomeFailed),
+			"outcome", string(workerexecution.OutcomeFailed),
 			"stderr_preview", truncate(string(commandResult.Stderr), 200),
 			"duration_ms", duration.Milliseconds())...)
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        "execution cancelled: " + runErr.Error(),
 		Diagnostics:  diagnostics,
-		Metrics:      interfaces.WorkMetrics{Duration: duration},
+		Metrics:      workerexecution.WorkMetrics{Duration: duration},
 	}
 }
 
@@ -393,23 +397,23 @@ func scriptExitFailureResult(
 	logger logging.Logger,
 	dispatch work.WorkDispatch,
 	commandResult CommandResult,
-	diagnostics *interfaces.WorkDiagnostics,
+	diagnostics *workerexecution.WorkDiagnostics,
 	duration time.Duration,
-) interfaces.WorkResult {
+) workerexecution.WorkResult {
 	logger.Warn("script: execution failed",
 		WorkLogFields(dispatch.Execution,
 			"transition_id", dispatch.TransitionID,
 			"dispatch_id", dispatch.DispatchID,
-			"outcome", string(interfaces.OutcomeFailed),
+			"outcome", string(workerexecution.OutcomeFailed),
 			"stderr_preview", truncate(strings.TrimSpace(string(commandResult.Stderr)), 200),
 			"duration_ms", duration.Milliseconds())...)
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        strings.TrimSpace(string(commandResult.Stderr)),
 		Diagnostics:  diagnostics,
-		Metrics:      interfaces.WorkMetrics{Duration: duration},
+		Metrics:      workerexecution.WorkMetrics{Duration: duration},
 	}
 }
 
@@ -417,25 +421,25 @@ func scriptAcceptedResult(
 	logger logging.Logger,
 	dispatch work.WorkDispatch,
 	commandResult CommandResult,
-	diagnostics *interfaces.WorkDiagnostics,
+	diagnostics *workerexecution.WorkDiagnostics,
 	duration time.Duration,
-) interfaces.WorkResult {
+) workerexecution.WorkResult {
 	output := strings.TrimSpace(string(commandResult.Stdout))
 	logger.Info("script execution completed",
 		WorkLogFields(dispatch.Execution,
 			"transition_id", dispatch.TransitionID,
 			"dispatch_id", dispatch.DispatchID,
-			"outcome", string(interfaces.OutcomeAccepted),
+			"outcome", string(workerexecution.OutcomeAccepted),
 			"output_length", len(output),
 			"duration_ms", duration.Milliseconds())...)
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       output,
 		Diagnostics:  diagnostics,
-		Metrics:      interfaces.WorkMetrics{Duration: duration},
+		Metrics:      workerexecution.WorkMetrics{Duration: duration},
 	}
 }
 
@@ -472,11 +476,11 @@ func resolveArgs(args []string, data any) ([]string, error) {
 }
 
 // buildEnv merges dispatch env vars into the current process environment.
-func buildEnv(request interfaces.WorkstationExecutionRequest) []string {
+func buildEnv(request workerexecution.WorkstationExecutionRequest) []string {
 	return workerprocess.MergeCommandEnv(os.Environ(), workerprocess.CommandEnvEntriesFromMap(request.EnvVars))
 }
 
-func executionWorkDir(request interfaces.WorkstationExecutionRequest) string {
+func executionWorkDir(request workerexecution.WorkstationExecutionRequest) string {
 	if request.WorkingDirectory != "" {
 		return request.WorkingDirectory
 	}

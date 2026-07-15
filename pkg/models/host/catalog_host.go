@@ -8,11 +8,13 @@ import (
 	"sync"
 	"time"
 
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 // CatalogHost is the catalog-backed model host implementation for process-level wiring.
@@ -497,7 +499,7 @@ func (h *CatalogHost) runtimeSlotKey(runtimeCfg *factoryconfig.LoadedFactoryConf
 func (h *CatalogHost) localWorkerForModel(
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,
 	modelName string,
-) (*interfaces.WorkerConfig, error) {
+) (*workerconfig.Config, error) {
 	if runtimeCfg == nil || runtimeCfg.FactoryConfig() == nil {
 		return nil, fmt.Errorf("runtime config is not available")
 	}
@@ -506,7 +508,7 @@ func (h *CatalogHost) localWorkerForModel(
 		if canonicalModelKey(worker.Model) != target {
 			continue
 		}
-		if strings.TrimSpace(worker.ModelLocality) != interfaces.ModelLocalityLocal {
+		if strings.TrimSpace(worker.ModelLocality) != workerconfig.ModelLocalityLocal {
 			continue
 		}
 		copied := worker
@@ -558,7 +560,7 @@ func (h *CatalogHost) identityFromCatalog(
 	return identity
 }
 
-func modelScopedResource(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) *interfaces.ResourceConfig {
+func modelScopedResource(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelName string) *factoryresource.Config {
 	if runtimeCfg == nil || runtimeCfg.FactoryConfig() == nil {
 		return nil
 	}
@@ -568,7 +570,7 @@ func modelScopedResource(runtimeCfg *factoryconfig.LoadedFactoryConfig, modelNam
 		if canonicalModelKey(resource.Model) != key {
 			continue
 		}
-		if strings.TrimSpace(resource.Type) != interfaces.ResourceTypeModel {
+		if strings.TrimSpace(resource.Type) != factoryresource.TypeModel {
 			continue
 		}
 		copied := resource

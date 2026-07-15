@@ -5,7 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
@@ -83,7 +84,7 @@ func TestAdapterExecuteTimeoutPartialDoesNotPopulateSuccessfulInferenceResponse(
 	}
 	result, executeErr := adapter.Execute(context.Background(), registry, runner, adapter.ExecuteInput{
 		Provider: providerAdapter.Identity(),
-		Command: adapter.CommandContext{Request: interfaces.ProviderInferenceRequest{
+		Command: adapter.CommandContext{Request: workerexecution.ProviderInferenceRequest{
 			Dispatch:         work.WorkDispatch{DispatchID: "dispatch-agy-timeout"},
 			WorkingDirectory: ".",
 			UserMessage:      "plan the goal",
@@ -96,7 +97,7 @@ func TestAdapterExecuteTimeoutPartialDoesNotPopulateSuccessfulInferenceResponse(
 	if result.Response.Content != "" {
 		t.Fatalf("response content = %q, want empty so partial capture cannot become primary result", result.Response.Content)
 	}
-	if result.Failure == nil || result.Failure.Type != interfaces.WorkFailureTypeTimeout {
+	if result.Failure == nil || result.Failure.Type != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("failure = %#v, want classified timeout failure", result.Failure)
 	}
 	assertTimeoutDraftsExcludeCompletedRun(t, result.Drafts)

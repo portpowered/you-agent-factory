@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const (
 	errorLineScanBytes       = 64 * 1024
 	failureMessageBytes      = 512
 	ThrottleFailureMessage   = "OpenCode is temporarily unavailable due to usage or capacity limits."
-	TimeoutFailureMessage     = "OpenCode request timed out."
-	BadRequestFailureMessage  = "OpenCode rejected the request as invalid."
+	TimeoutFailureMessage    = "OpenCode request timed out."
+	BadRequestFailureMessage = "OpenCode rejected the request as invalid."
 )
 
 const (
@@ -21,7 +21,7 @@ const (
 	badRequestFailureMessage = "OpenCode rejected the request as invalid."
 	serverFailureMessage     = "OpenCode encountered a temporary server error."
 	throttleFailureMessage   = "OpenCode is temporarily unavailable due to usage or capacity limits."
-	timeoutFailureMessage     = "OpenCode request timed out."
+	timeoutFailureMessage    = "OpenCode request timed out."
 )
 
 type FailureInput struct {
@@ -31,7 +31,7 @@ type FailureInput struct {
 }
 
 type FailureResult struct {
-	Reason  interfaces.WorkFailureType
+	Reason  workerexecution.WorkFailureType
 	Message string
 }
 
@@ -88,12 +88,12 @@ func parseProviderFailure(input FailureInput) FailureResult {
 	}
 	if excerpt, ok := lastSafeUnknownExcerpt(streams); ok {
 		return FailureResult{
-			Reason:  interfaces.WorkFailureTypeUnknown,
+			Reason:  workerexecution.WorkFailureTypeUnknown,
 			Message: excerpt,
 		}
 	}
 	return FailureResult{
-		Reason:  interfaces.WorkFailureTypeUnknown,
+		Reason:  workerexecution.WorkFailureTypeUnknown,
 		Message: fmt.Sprintf("opencode exited with code %d", input.ExitCode),
 	}
 }
@@ -198,33 +198,33 @@ func decodeStructuredFailure(line string) (structuredFailure, bool) {
 	return failure, true
 }
 
-func classifyStructuredFailure(failure structuredFailure) (interfaces.WorkFailureType, bool) {
+func classifyStructuredFailure(failure structuredFailure) (workerexecution.WorkFailureType, bool) {
 	signal := strings.ToLower(strings.Join([]string{failure.Name, failure.Type, failure.Code}, " "))
 	switch {
 	case containsAny(signal, "providerautherror", "authentication_error", "permission_error", "unauthorized", "forbidden"):
-		return interfaces.WorkFailureTypeAuthFailure, true
+		return workerexecution.WorkFailureTypeAuthFailure, true
 	case containsAny(signal, "invalid_request_error", "badrequesterror", "invalidrequesterror"):
-		return interfaces.WorkFailureTypePermanentBadRequest, true
+		return workerexecution.WorkFailureTypePermanentBadRequest, true
 	case containsAny(signal, "ratelimiterror", "rate_limit_error", "overloaded_error", "quotaexceeded"):
-		return interfaces.WorkFailureTypeThrottled, true
+		return workerexecution.WorkFailureTypeThrottled, true
 	case containsAny(signal, "timeouterror", "timeout_error", "etimedout"):
-		return interfaces.WorkFailureTypeTimeout, true
+		return workerexecution.WorkFailureTypeTimeout, true
 	case containsAny(signal, "server_error", "internalservererror"):
-		return interfaces.WorkFailureTypeInternalServerError, true
+		return workerexecution.WorkFailureTypeInternalServerError, true
 	}
 	switch {
 	case failure.StatusCode == 401 || failure.StatusCode == 403:
-		return interfaces.WorkFailureTypeAuthFailure, true
+		return workerexecution.WorkFailureTypeAuthFailure, true
 	case failure.StatusCode == 400 || failure.StatusCode == 422:
-		return interfaces.WorkFailureTypePermanentBadRequest, true
+		return workerexecution.WorkFailureTypePermanentBadRequest, true
 	case failure.StatusCode == 408:
-		return interfaces.WorkFailureTypeTimeout, true
+		return workerexecution.WorkFailureTypeTimeout, true
 	case failure.StatusCode == 429:
-		return interfaces.WorkFailureTypeThrottled, true
+		return workerexecution.WorkFailureTypeThrottled, true
 	case failure.StatusCode >= 500 && failure.StatusCode <= 599:
-		return interfaces.WorkFailureTypeInternalServerError, true
+		return workerexecution.WorkFailureTypeInternalServerError, true
 	default:
-		return interfaces.WorkFailureTypeUnknown, false
+		return workerexecution.WorkFailureTypeUnknown, false
 	}
 }
 
@@ -264,40 +264,40 @@ func errorTextLine(line string) bool {
 
 func recognizedTextFailure(message string, exitCode int) (FailureResult, bool) {
 	normalized := strings.ToLower(strings.TrimSpace(message))
-	var reason interfaces.WorkFailureType
+	var reason workerexecution.WorkFailureType
 	switch {
 	case exitCode == 124 || containsAny(normalized, "deadline exceeded", "request timed out", "timed out", "timeout"):
-		reason = interfaces.WorkFailureTypeTimeout
+		reason = workerexecution.WorkFailureTypeTimeout
 	case containsAny(normalized, "authentication", "login required", "not authenticated", "unauthorized", "forbidden", "api key"):
-		reason = interfaces.WorkFailureTypeAuthFailure
+		reason = workerexecution.WorkFailureTypeAuthFailure
 	case containsAny(normalized, "invalid request", "bad request", "invalid argument", "model not found"):
-		reason = interfaces.WorkFailureTypePermanentBadRequest
+		reason = workerexecution.WorkFailureTypePermanentBadRequest
 	case containsAny(normalized, "rate limit", "too many requests", "usage limit", "at capacity", "status 429"):
-		reason = interfaces.WorkFailureTypeThrottled
+		reason = workerexecution.WorkFailureTypeThrottled
 	case containsAny(normalized, "internal server error", "server error", "status 500", "status 502", "status 503", "status 504"):
-		reason = interfaces.WorkFailureTypeInternalServerError
+		reason = workerexecution.WorkFailureTypeInternalServerError
 	default:
 		return FailureResult{}, false
 	}
 	return FailureResult{Reason: reason, Message: failureMessage(reason, message)}, true
 }
 
-func failureMessage(reason interfaces.WorkFailureType, detail string) string {
-	if reason == interfaces.WorkFailureTypeAuthFailure || reason == interfaces.WorkFailureTypePermanentBadRequest {
+func failureMessage(reason workerexecution.WorkFailureType, detail string) string {
+	if reason == workerexecution.WorkFailureTypeAuthFailure || reason == workerexecution.WorkFailureTypePermanentBadRequest {
 		if sanitized, ok := safeFailureDetail(detail); ok {
 			return sanitized
 		}
 	}
 	switch reason {
-	case interfaces.WorkFailureTypeAuthFailure:
+	case workerexecution.WorkFailureTypeAuthFailure:
 		return authFailureMessage
-	case interfaces.WorkFailureTypePermanentBadRequest:
+	case workerexecution.WorkFailureTypePermanentBadRequest:
 		return badRequestFailureMessage
-	case interfaces.WorkFailureTypeThrottled:
+	case workerexecution.WorkFailureTypeThrottled:
 		return throttleFailureMessage
-	case interfaces.WorkFailureTypeTimeout:
+	case workerexecution.WorkFailureTypeTimeout:
 		return timeoutFailureMessage
-	case interfaces.WorkFailureTypeInternalServerError:
+	case workerexecution.WorkFailureTypeInternalServerError:
 		return serverFailureMessage
 	default:
 		return ""
@@ -321,7 +321,6 @@ func safeFailureDetail(detail string) (string, bool) {
 	}
 	return detail[:end], true
 }
-
 
 func containsAny(haystack string, needles ...string) bool {
 	for _, needle := range needles {

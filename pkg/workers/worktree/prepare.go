@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // PrepareFactoryGitWorktreeResult describes a successful worktree preparation.
@@ -89,17 +89,17 @@ func FailedWorkResultFromPreparation(
 	transitionID string,
 	start time.Time,
 	err error,
-) interfaces.WorkResult {
+) workerexecution.WorkResult {
 	message := "worktree preparation failed"
 	if err != nil {
 		message += ": " + err.Error()
 	}
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        message,
-		Metrics:      interfaces.WorkMetrics{Duration: time.Since(start)},
+		Metrics:      workerexecution.WorkMetrics{Duration: time.Since(start)},
 	}
 }
 

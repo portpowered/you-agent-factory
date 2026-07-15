@@ -1,5 +1,10 @@
 package interfaces
 
+import (
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+)
+
 // CloneToken returns a detached copy of the canonical runtime token shape.
 func CloneToken(token Token) Token {
 	return Token{
@@ -94,44 +99,24 @@ func CloneTokenHistory(history TokenHistory) TokenHistory {
 // CloneProviderSessionMetadata returns a detached copy of canonical provider
 // session metadata.
 func CloneProviderSessionMetadata(session *ProviderSessionMetadata) *ProviderSessionMetadata {
-	if session == nil {
-		return nil
-	}
-	clone := *session
-	return &clone
+	return workerexecution.CloneProviderSessionMetadata(session)
 }
 
 // CloneWorkFailureMetadata returns a detached copy of canonical work failure
 // metadata.
 func CloneWorkFailureMetadata(failure *WorkFailureMetadata) *WorkFailureMetadata {
-	if failure == nil {
-		return nil
-	}
-	clone := *failure
-	return &clone
+	return workerexecution.CloneWorkFailureMetadata(failure)
 }
 
 // CloneFailureDetail returns a detached copy of a canonical failure detail.
 func CloneFailureDetail(detail *FailureDetail) *FailureDetail {
-	if detail == nil {
-		return nil
-	}
-	cloned := *detail
-	return &cloned
+	return workerexecution.CloneFailureDetail(detail)
 }
 
 // CloneSafeWorkDiagnostics returns a detached copy of the canonical safe
 // diagnostics boundary.
 func CloneSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *SafeWorkDiagnostics {
-	if diagnostics == nil {
-		return nil
-	}
-	return &SafeWorkDiagnostics{
-		RenderedPrompt: cloneSafeRenderedPromptDiagnostic(diagnostics.RenderedPrompt),
-		Provider:       cloneSafeProviderDiagnostic(diagnostics.Provider),
-		AgentRun:       cloneSafeAgentRunDiagnostic(diagnostics.AgentRun),
-		Invocation:     cloneInvocationDiagnostic(diagnostics.Invocation),
-	}
+	return workerdiagnostics.CloneSafeWorkDiagnostics(diagnostics)
 }
 
 // CloneFactoryWorldDispatchCompletion returns a detached copy of one canonical
@@ -193,29 +178,6 @@ func CloneFactoryWorldInferenceAttemptsByDispatchID(
 // inputs for selected-tick runtime projections.
 func CloneWorkstationInputs(inputs []WorkstationInput) []WorkstationInput {
 	return cloneWorkstationInputs(inputs)
-}
-
-func cloneSafeRenderedPromptDiagnostic(diagnostic *SafeRenderedPromptDiagnostic) *SafeRenderedPromptDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	return &SafeRenderedPromptDiagnostic{
-		SystemPromptHash: diagnostic.SystemPromptHash,
-		UserMessageHash:  diagnostic.UserMessageHash,
-		Variables:        cloneStringMap(diagnostic.Variables),
-	}
-}
-
-func cloneSafeProviderDiagnostic(diagnostic *SafeProviderDiagnostic) *SafeProviderDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	return &SafeProviderDiagnostic{
-		Provider:         diagnostic.Provider,
-		Model:            diagnostic.Model,
-		RequestMetadata:  cloneStringMap(diagnostic.RequestMetadata),
-		ResponseMetadata: cloneStringMap(diagnostic.ResponseMetadata),
-	}
 }
 
 func cloneFactoryWorldInferenceAttempt(attempt FactoryWorldInferenceAttempt) FactoryWorldInferenceAttempt {

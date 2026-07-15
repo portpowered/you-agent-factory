@@ -6,7 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/work"
@@ -291,7 +292,7 @@ func TestRunTerminal_UnsupportedProvider(t *testing.T) {
 		ID:             "unsupported-provider",
 		TranscriptFile: "testdata/full_stream_claude.jsonl",
 		Provider:       "unsupported-provider",
-		Request: interfaces.ProviderInferenceRequest{
+		Request: workerexecution.ProviderInferenceRequest{
 			Dispatch: work.WorkDispatch{DispatchID: "dispatch-unsupported"},
 		},
 	})

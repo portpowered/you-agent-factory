@@ -5,11 +5,12 @@ import (
 	"testing"
 	"time"
 
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
+
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
-
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 func TestAgentRunID_DefaultsWhenDispatchMissing(t *testing.T) {
@@ -65,8 +66,8 @@ func TestAgentRunResponseEvent_MapsDispatchAndOutcome(t *testing.T) {
 	t.Parallel()
 
 	dispatch := work.WorkDispatch{DispatchID: "dispatch-42"}
-	result := interfaces.WorkResult{
-		Outcome: interfaces.OutcomeAccepted,
+	result := workerexecution.WorkResult{
+		Outcome: workerexecution.OutcomeAccepted,
 		Output:  "done",
 	}
 	event := agentRunResponseEvent(

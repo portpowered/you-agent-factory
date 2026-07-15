@@ -4,6 +4,13 @@ import (
 	"encoding/json"
 	"testing"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
@@ -13,8 +20,8 @@ func TestResolveInferenceOperationBindings_InferenceAndLegacyWorkstationTypesAli
 	worker := inferenceBindingWorkerFixture()
 	inputTokens := inferenceBindingInputTokensFixture()
 
-	inferenceBindings := mustResolveInferenceBindings(t, interfaces.WorkstationTypeInference, worker, inputTokens)
-	legacyBindings := mustResolveInferenceBindings(t, interfaces.WorkstationTypeInvoke, worker, inputTokens)
+	inferenceBindings := mustResolveInferenceBindings(t, workertaxonomy.WorkstationTypeInference, worker, inputTokens)
+	legacyBindings := mustResolveInferenceBindings(t, workertaxonomy.WorkstationTypeInvoke, worker, inputTokens)
 
 	assertInferenceBindingFixtureBindings(t, inferenceBindings)
 	assertInferenceBindingFixtureBindings(t, legacyBindings)
@@ -24,11 +31,11 @@ func TestResolveInferenceOperationBindings_InferenceAndLegacyWorkstationTypesAli
 func TestWorkContentFromInferenceOutput_OrdersAudioBeforeExtraParts(t *testing.T) {
 	t.Parallel()
 
-	operation := interfaces.ModelOperation{
+	operation := workerconfig.ModelOperation{
 		Name: "TTS",
-		Outputs: []interfaces.ModelOperationSlot{
-			{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}},
-			{Name: "meta", ContentTypes: []string{interfaces.ModelOperationContentTypeJSON}},
+		Outputs: []workerconfig.ModelOperationSlot{
+			{Name: "audio", ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio}},
+			{Name: "meta", ContentTypes: []string{workerconfig.ModelOperationContentTypeJSON}},
 		},
 	}
 	raw, err := json.Marshal([]work.WorkContentPart{
@@ -54,9 +61,9 @@ func TestWorkContentFromInferenceOutput_OrdersAudioBeforeExtraParts(t *testing.T
 func TestWorkContentFromInferenceOutput_PreservesTextFallbackForTextOnlyOperations(t *testing.T) {
 	t.Parallel()
 
-	got, err := WorkContentFromInferenceOutput("plain answer", interfaces.ModelOperation{
+	got, err := WorkContentFromInferenceOutput("plain answer", workerconfig.ModelOperation{
 		Name:    "GENERATE",
-		Outputs: []interfaces.ModelOperationSlot{{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}}},
+		Outputs: []workerconfig.ModelOperationSlot{{Name: "text", ContentTypes: []string{workerconfig.ModelOperationContentTypeText}}},
 	})
 	if err != nil {
 		t.Fatalf("WorkContentFromInferenceOutput: %v", err)
@@ -79,11 +86,11 @@ func TestDirectAndSessionInferenceOutputShapingStayAligned(t *testing.T) {
 		t.Fatalf("marshal provider output: %v", err)
 	}
 
-	operation := interfaces.ModelOperation{
+	operation := workerconfig.ModelOperation{
 		Name: "TTS",
-		Outputs: []interfaces.ModelOperationSlot{{
+		Outputs: []workerconfig.ModelOperationSlot{{
 			Name:         "audio",
-			ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+			ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 		}},
 	}
 
@@ -119,10 +126,10 @@ func TestOperationBindingsFromGenerated_MapsSelectorFields(t *testing.T) {
 	}
 }
 
-func inferenceBindingInputTokensFixture() []interfaces.Token {
-	return []interfaces.Token{{
+func inferenceBindingInputTokensFixture() []factorytoken.Token {
+	return []factorytoken.Token{{
 		ID: "token-tts",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			Content: []work.WorkContentPart{{
 				Type:  work.WorkContentPartTypeText,
 				Label: "utterance",
@@ -135,9 +142,9 @@ func inferenceBindingInputTokensFixture() []interfaces.Token {
 func mustResolveInferenceBindings(
 	t *testing.T,
 	workstationType string,
-	worker *interfaces.WorkerConfig,
-	inputTokens []interfaces.Token,
-) []interfaces.ResolvedModelOperationBinding {
+	worker *workerconfig.Config,
+	inputTokens []factorytoken.Token,
+) []workerexecution.ResolvedModelOperationBinding {
 	t.Helper()
 	bindings, err := ResolveInferenceOperationBindings(
 		inferenceBindingWorkstationFixture(workstationType),
@@ -150,7 +157,7 @@ func mustResolveInferenceBindings(
 	return bindings
 }
 
-func assertInferenceBindingFixtureBindings(t *testing.T, bindings []interfaces.ResolvedModelOperationBinding) {
+func assertInferenceBindingFixtureBindings(t *testing.T, bindings []workerexecution.ResolvedModelOperationBinding) {
 	t.Helper()
 	if len(bindings) != 2 {
 		t.Fatalf("bindings = %#v, want 2 resolved slots", bindings)
@@ -159,21 +166,21 @@ func assertInferenceBindingFixtureBindings(t *testing.T, bindings []interfaces.R
 	assertInferenceBindingVoiceSlot(t, bindings[1])
 }
 
-func assertInferenceBindingTextSlot(t *testing.T, binding interfaces.ResolvedModelOperationBinding) {
+func assertInferenceBindingTextSlot(t *testing.T, binding workerexecution.ResolvedModelOperationBinding) {
 	t.Helper()
-	if binding.Slot != "text" || binding.Source != interfaces.ModelOperationBindingSourceInput || binding.Content[0].Text != "hello world" {
+	if binding.Slot != "text" || binding.Source != workerexecution.ModelOperationBindingSourceInput || binding.Content[0].Text != "hello world" {
 		t.Fatalf("text binding = %#v, want input text binding", binding)
 	}
 }
 
-func assertInferenceBindingVoiceSlot(t *testing.T, binding interfaces.ResolvedModelOperationBinding) {
+func assertInferenceBindingVoiceSlot(t *testing.T, binding workerexecution.ResolvedModelOperationBinding) {
 	t.Helper()
-	if binding.Slot != "voice" || binding.Source != interfaces.ModelOperationBindingSourceConfig || string(binding.Content[0].JSON) != `{"name":"alloy"}` {
+	if binding.Slot != "voice" || binding.Source != workerexecution.ModelOperationBindingSourceConfig || string(binding.Content[0].JSON) != `{"name":"alloy"}` {
 		t.Fatalf("voice binding = %#v, want config voice binding", binding)
 	}
 }
 
-func assertInferenceBindingsAligned(t *testing.T, inference, legacy []interfaces.ResolvedModelOperationBinding) {
+func assertInferenceBindingsAligned(t *testing.T, inference, legacy []workerexecution.ResolvedModelOperationBinding) {
 	t.Helper()
 	if len(legacy) != len(inference) {
 		t.Fatalf("legacy vs inference binding count = %d vs %d", len(legacy), len(inference))
@@ -188,19 +195,19 @@ func assertInferenceBindingsAligned(t *testing.T, inference, legacy []interfaces
 	}
 }
 
-func inferenceBindingWorkerFixture() *interfaces.WorkerConfig {
-	return &interfaces.WorkerConfig{
+func inferenceBindingWorkerFixture() *workerconfig.Config {
+	return &workerconfig.Config{
 		Name: "tts-worker",
-		Type: interfaces.WorkerTypeInference,
-		Operations: []interfaces.ModelOperation{{
+		Type: workertaxonomy.WorkerTypeInference,
+		Operations: []workerconfig.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{
-				{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}, Required: true},
-				{Name: "voice", ContentTypes: []string{interfaces.ModelOperationContentTypeJSON}},
+			Inputs: []workerconfig.ModelOperationSlot{
+				{Name: "text", ContentTypes: []string{workerconfig.ModelOperationContentTypeText}, Required: true},
+				{Name: "voice", ContentTypes: []string{workerconfig.ModelOperationContentTypeJSON}},
 			},
-			Outputs: []interfaces.ModelOperationSlot{{
+			Outputs: []workerconfig.ModelOperationSlot{{
 				Name:         "audio",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}
@@ -215,7 +222,7 @@ func inferenceBindingWorkstationFixture(workstationType string) *interfaces.Fact
 				Slot: "text",
 				Selector: &interfaces.ModelOperationBindingSelector{
 					Label: "utterance",
-					Type:  interfaces.ModelOperationContentTypeText,
+					Type:  workerconfig.ModelOperationContentTypeText,
 				},
 			},
 			{

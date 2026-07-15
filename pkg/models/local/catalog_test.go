@@ -5,10 +5,15 @@ import (
 	"errors"
 	"testing"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestCanonicalModelName_NormalizesCaseAndWhitespace(t *testing.T) {
@@ -115,14 +120,14 @@ func TestSelectInvocationWorker_ResolvesModelWorkerAndOperation(t *testing.T) {
 
 func TestSelectInvocationWorker_ResolvesInferenceWorkerTaxonomyAlias(t *testing.T) {
 	factoryCfg := catalogFactoryConfig(true)
-	factoryCfg.Workers[0].Type = interfaces.WorkerTypeInference
+	factoryCfg.Workers[0].Type = workertaxonomy.WorkerTypeInference
 	loaded := mustLoadedCatalogConfig(t, factoryCfg)
 
 	worker, operation, err := SelectInvocationWorker(loaded, "OMNIVOICE_Q4_K_M", "TTS")
 	if err != nil {
 		t.Fatalf("SelectInvocationWorker: %v", err)
 	}
-	if worker.Type != interfaces.WorkerTypeInference || operation.Name != "TTS" {
+	if worker.Type != workertaxonomy.WorkerTypeInference || operation.Name != "TTS" {
 		t.Fatalf("worker/operation = (%#v, %q), want inference worker with TTS", worker, operation.Name)
 	}
 }
@@ -138,11 +143,11 @@ func (p *recordingCatalogAssetPuller) PullModel(_ context.Context, _ *factorycon
 	return apisurface.ModelPullResult{ModelName: modelName}, nil
 }
 
-func (p *recordingCatalogAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+func (p *recordingCatalogAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) error {
 	return nil
 }
 
-func (p *recordingCatalogAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (CacheLayout, error) {
+func (p *recordingCatalogAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) (CacheLayout, error) {
 	return CacheLayout{}, nil
 }
 
@@ -160,33 +165,33 @@ func mustLoadedCatalogConfig(t *testing.T, factoryCfg *interfaces.FactoryConfig)
 }
 
 func catalogFactoryConfig(includeResource bool) *interfaces.FactoryConfig {
-	worker := interfaces.WorkerConfig{
+	worker := workerconfig.Config{
 		Name:          "voice-local",
-		Type:          interfaces.WorkerTypeModel,
+		Type:          workertaxonomy.WorkerTypeModel,
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelLocality: interfaces.ModelLocalityLocal,
-		Operations: []interfaces.ModelOperation{{
+		ModelLocality: workerconfig.ModelLocalityLocal,
+		Operations: []workerconfig.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{
+			Inputs: []workerconfig.ModelOperationSlot{{
 				Name:         "text",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 				Required:     true,
 			}},
-			Outputs: []interfaces.ModelOperationSlot{{
+			Outputs: []workerconfig.ModelOperationSlot{{
 				Name:         "audio",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}
 	cfg := &interfaces.FactoryConfig{
 		Name:    "factory",
-		Workers: []interfaces.WorkerConfig{worker},
+		Workers: []workerconfig.Config{worker},
 	}
 	if includeResource {
-		worker.Resources = []interfaces.ResourceConfig{{Name: "omnivoice-cache", Capacity: 1}}
-		cfg.Resources = []interfaces.ResourceConfig{{
+		worker.Resources = []factoryresource.Config{{Name: "omnivoice-cache", Capacity: 1}}
+		cfg.Resources = []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "GGUF",

@@ -5,9 +5,16 @@ import (
 	"sync"
 	"testing"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 type staticCatalogAssetPuller struct {
@@ -18,11 +25,11 @@ func (s staticCatalogAssetPuller) PullModel(context.Context, *factoryconfig.Load
 	return apisurface.ModelPullResult{}, nil
 }
 
-func (s staticCatalogAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+func (s staticCatalogAssetPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) error {
 	return nil
 }
 
-func (s staticCatalogAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (CacheLayout, error) {
+func (s staticCatalogAssetPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) (CacheLayout, error) {
 	return s.cache, nil
 }
 
@@ -35,7 +42,7 @@ type countingLocalRuntime struct {
 	loads int
 }
 
-func (r *countingLocalRuntime) Supports(resource interfaces.ResourceConfig, worker *interfaces.WorkerConfig) bool {
+func (r *countingLocalRuntime) Supports(resource factoryresource.Config, worker *workerconfig.Config) bool {
 	return CanonicalBackendName(resource.Backend) == "LLAMACPP" && CanonicalModelName(worker.Model) == CanonicalModelName("OMNIVOICE_Q4_K_M")
 }
 
@@ -54,8 +61,8 @@ func (r *countingLocalRuntime) loadCount() int {
 
 type stubHandle struct{}
 
-func (stubHandle) Invoke(context.Context, InvocationRequest) (interfaces.InferenceResponse, error) {
-	return interfaces.InferenceResponse{Content: "ok"}, nil
+func (stubHandle) Invoke(context.Context, InvocationRequest) (workerexecution.InferenceResponse, error) {
+	return workerexecution.InferenceResponse{Content: "ok"}, nil
 }
 
 func TestManager_ReusesLoadedHandleForRepeatExecution(t *testing.T) {
@@ -77,7 +84,7 @@ func TestManager_ReusesLoadedHandleForRepeatExecution(t *testing.T) {
 	}
 
 	runner := manager.WrapRunner(stubRunner{}, loaded, factoryCfg, worker)
-	request := interfaces.RunnerExecutionRequest{
+	request := workerexecution.RunnerExecutionRequest{
 		ModelOperation: "TTS",
 	}
 
@@ -103,7 +110,7 @@ func TestManager_WrapRunner_AcceptsInferenceWorkerTaxonomyAlias(t *testing.T) {
 	}
 
 	factoryCfg := managerTestFactoryConfig()
-	factoryCfg.Workers[0].Type = interfaces.WorkerTypeInference
+	factoryCfg.Workers[0].Type = workertaxonomy.WorkerTypeInference
 	loaded, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), factoryCfg, nil)
 	if err != nil {
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
@@ -114,7 +121,7 @@ func TestManager_WrapRunner_AcceptsInferenceWorkerTaxonomyAlias(t *testing.T) {
 	}
 
 	runner := manager.WrapRunner(stubRunner{}, loaded, factoryCfg, worker)
-	if _, err := runner.Execute(context.Background(), interfaces.RunnerExecutionRequest{ModelOperation: "TTS"}); err != nil {
+	if _, err := runner.Execute(context.Background(), workerexecution.RunnerExecutionRequest{ModelOperation: "TTS"}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if got := runtime.loadCount(); got != 1 {
@@ -133,7 +140,7 @@ func TestManager_WrapRunner_AcceptsAgentWorkerLocalModel(t *testing.T) {
 	}
 
 	factoryCfg := managerTestFactoryConfig()
-	factoryCfg.Workers[0].Type = interfaces.WorkerTypeAgent
+	factoryCfg.Workers[0].Type = workertaxonomy.WorkerTypeAgent
 	loaded, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), factoryCfg, nil)
 	if err != nil {
 		t.Fatalf("NewLoadedFactoryConfig: %v", err)
@@ -144,7 +151,7 @@ func TestManager_WrapRunner_AcceptsAgentWorkerLocalModel(t *testing.T) {
 	}
 
 	runner := manager.WrapRunner(stubRunner{}, loaded, factoryCfg, worker)
-	if _, err := runner.Execute(context.Background(), interfaces.RunnerExecutionRequest{ModelOperation: "TTS"}); err != nil {
+	if _, err := runner.Execute(context.Background(), workerexecution.RunnerExecutionRequest{ModelOperation: "TTS"}); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if got := runtime.loadCount(); got != 1 {
@@ -154,34 +161,34 @@ func TestManager_WrapRunner_AcceptsAgentWorkerLocalModel(t *testing.T) {
 
 type stubRunner struct{}
 
-func (stubRunner) Execute(context.Context, interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
-	return interfaces.RunnerExecutionResult{}, nil
+func (stubRunner) Execute(context.Context, workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
+	return workerexecution.RunnerExecutionResult{}, nil
 }
 
 func managerTestFactoryConfig() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
-		Resources: []interfaces.ResourceConfig{{
+		Resources: []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "LLAMACPP",
 			LoadPolicy: "ON_DEMAND",
 		}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:          "tts-worker",
-			Type:          interfaces.WorkerTypeModel,
+			Type:          workertaxonomy.WorkerTypeModel,
 			Model:         "OMNIVOICE_Q4_K_M",
-			ModelLocality: interfaces.ModelLocalityLocal,
-			Resources: []interfaces.ResourceConfig{{
+			ModelLocality: workerconfig.ModelLocalityLocal,
+			Resources: []factoryresource.Config{{
 				Name:     "omnivoice-cache",
 				Capacity: 1,
 			}},
-			Operations: []interfaces.ModelOperation{{
+			Operations: []workerconfig.ModelOperation{{
 				Name: "TTS",
-				Inputs: []interfaces.ModelOperationSlot{{
+				Inputs: []workerconfig.ModelOperationSlot{{
 					Name:         "text",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+					ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 					Required:     true,
 				}},
 			}},
