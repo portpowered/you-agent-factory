@@ -78,6 +78,19 @@ func refWithSiblingKeywords(path string) contractvalidator.Diagnostic {
 	}
 }
 
+func ambiguousNullable(path, reason string) contractvalidator.Diagnostic {
+	instancePath := path
+	if instancePath == "" {
+		instancePath = "/"
+	}
+	return contractvalidator.Diagnostic{
+		Code:     codeAmbiguousNullable,
+		Path:     instancePath,
+		Message:  reason,
+		Document: documentRoot,
+	}
+}
+
 func invalidSchemaValue(path string) contractvalidator.Diagnostic {
 	instancePath := path
 	if instancePath == "" {

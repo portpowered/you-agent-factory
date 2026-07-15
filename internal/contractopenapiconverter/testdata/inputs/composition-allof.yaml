@@ -1,0 +1,15 @@
+root:
+  type: object
+  properties:
+    modelProvider:
+      allOf:
+        - $ref: '#/components/schemas/WorkerModelProvider'
+      description: Provider whose inference-throttle history controls this factory-level guard.
+  required:
+    - modelProvider
+components:
+  WorkerModelProvider:
+    type: string
+    enum:
+      - openai
+      - anthropic

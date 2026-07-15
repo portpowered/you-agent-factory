@@ -107,6 +107,62 @@ The following remain out of profile for this stage:
 - every keyword listed as non-goal for `core-shapes` except the supported
   internal component `$ref` form above
 
+## Stage: `composition-nullable`
+
+`ConvertCompositionNullableSchema` accepts the same root schema and
+`components.schemas` inputs as `ConvertRefsSchema` and extends the refs profile
+with supported composition keywords and OpenAPI 3.0.3 `nullable` handling.
+
+### Supported composition keywords
+
+| Keyword | Draft 2020-12 mapping |
+| --- | --- |
+| `allOf` | Array of schema objects; each element is converted recursively with paths under `/allOf/<index>`. The keyword and element order are preserved. |
+| `oneOf` | Same recursive conversion contract under `/oneOf/<index>`. |
+| `anyOf` | Same recursive conversion contract under `/anyOf/<index>`. |
+
+Composition keywords may appear together with core-shape keywords and internal
+component `$ref` values on the same schema object. Sibling keywords such as
+`description`, `properties`, and `enum` are preserved verbatim when also
+supported by earlier profile stages.
+
+### Supported nullable mapping
+
+| OpenAPI 3.0.3 input | Draft 2020-12 outcome |
+| --- | --- |
+| `nullable: false` | The `nullable` keyword is omitted from converted output. |
+| `nullable: true` with supported primitive `type: T` | `type: [T, "null"]`; the OpenAPI `nullable` keyword is not emitted. |
+
+Rules:
+
+- `nullable` must be a boolean.
+- Supported nullability requires a single supported primitive `type` keyword on
+  the same schema object.
+- Converted output must not retain a standalone OpenAPI `nullable: true` keyword.
+
+### Nullable and composition rejection for `composition-nullable`
+
+The following combinations are rejected with diagnostic code
+`openapi.convert.ambiguous_nullable` and must not be silently rewritten:
+
+| Case | Diagnostic code |
+| --- | --- |
+| `nullable: true` without a supported primitive `type` on the same schema object | `openapi.convert.ambiguous_nullable` |
+| `nullable: true` combined with `allOf`, `oneOf`, or `anyOf` on the same schema object | `openapi.convert.ambiguous_nullable` |
+
+Story `interfaces-b15-factory-converter-004` expands the fail-closed rejection
+suite for additional ambiguous nullable, default, and discriminator cases.
+
+### Explicit non-goals for `composition-nullable`
+
+The following remain out of profile for this stage:
+
+- `not`, `if`, `then`, `else`
+- `discriminator`
+- `nullable: true` on schemas that carry `$ref` or composition siblings
+- every keyword listed as non-goal for earlier stages except the supported forms
+  above
+
 ### Canonical output
 
 Converted schema objects are serialized with

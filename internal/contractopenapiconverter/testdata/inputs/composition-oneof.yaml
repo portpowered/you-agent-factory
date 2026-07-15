@@ -1,0 +1,23 @@
+root:
+  oneOf:
+    - $ref: '#/components/schemas/WorkTextContentPart'
+    - $ref: '#/components/schemas/WorkImageContentPart'
+components:
+  WorkTextContentPart:
+    type: object
+    properties:
+      type:
+        enum:
+          - text
+        type: string
+    required:
+      - type
+  WorkImageContentPart:
+    type: object
+    properties:
+      type:
+        enum:
+          - image
+        type: string
+    required:
+      - type

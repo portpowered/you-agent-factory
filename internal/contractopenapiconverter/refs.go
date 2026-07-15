@@ -15,10 +15,22 @@ const openAPIComponentSchemaPrefix = "#/components/schemas/"
 // root is the schema object to convert; components is the OpenAPI
 // components.schemas map that supplies referenced component bodies.
 func ConvertRefsSchema(root map[string]any, components map[string]any) (map[string]any, []contractvalidator.Diagnostic) {
+	return convertSchemaGraph(root, components, profileStageRefs)
+}
+
+// ConvertCompositionNullableSchema converts one OpenAPI 3.0.3 schema graph using
+// the composition-nullable profile documented in
+// docs/internal/contract/openapi-to-draft-2020-12-converter-profile.md.
+func ConvertCompositionNullableSchema(root map[string]any, components map[string]any) (map[string]any, []contractvalidator.Diagnostic) {
+	return convertSchemaGraph(root, components, profileStageCompositionNullable)
+}
+
+func convertSchemaGraph(root map[string]any, components map[string]any, stage string) (map[string]any, []contractvalidator.Diagnostic) {
 	if components == nil {
 		components = map[string]any{}
 	}
-	ctx := &refsContext{
+	ctx := &convertContext{
+		stage:      stage,
 		components: components,
 		defs:       make(map[string]any),
 		visiting:   make(map[string]bool),
@@ -40,13 +52,14 @@ func ConvertRefsSchema(root map[string]any, components map[string]any) (map[stri
 	return result, nil
 }
 
-type refsContext struct {
+type convertContext struct {
+	stage      string
 	components map[string]any
 	defs       map[string]any
 	visiting   map[string]bool
 }
 
-func (ctx *refsContext) convertNode(value any, path string) (any, []contractvalidator.Diagnostic) {
+func (ctx *convertContext) convertNode(value any, path string) (any, []contractvalidator.Diagnostic) {
 	switch typed := value.(type) {
 	case map[string]any:
 		return ctx.convertSchemaObject(typed, path)
@@ -66,7 +79,7 @@ func (ctx *refsContext) convertNode(value any, path string) (any, []contractvali
 	}
 }
 
-func (ctx *refsContext) convertSchemaObject(schema map[string]any, path string) (any, []contractvalidator.Diagnostic) {
+func (ctx *convertContext) convertSchemaObject(schema map[string]any, path string) (any, []contractvalidator.Diagnostic) {
 	if ref, hasRef := schema["$ref"]; hasRef {
 		if len(schema) != 1 {
 			return nil, []contractvalidator.Diagnostic{refWithSiblingKeywords(path)}
@@ -74,14 +87,21 @@ func (ctx *refsContext) convertSchemaObject(schema map[string]any, path string) 
 		return ctx.convertComponentRef(ref, path)
 	}
 
+	if diagnostics := ctx.validateNullableComposition(schema, path); len(diagnostics) != 0 {
+		return nil, diagnostics
+	}
+
 	for key := range schema {
-		if !isCoreShapeKeyword(key) {
-			return nil, []contractvalidator.Diagnostic{unsupportedKeyword(key, joinPath(path, key), profileStageRefs)}
+		if !isKeywordAllowed(ctx.stage, key) {
+			return nil, []contractvalidator.Diagnostic{unsupportedKeyword(key, joinPath(path, key), ctx.stage)}
 		}
 	}
 
 	result := make(map[string]any, len(schema))
 	for key, value := range schema {
+		if key == "nullable" {
+			continue
+		}
 		childPath := joinPath(path, key)
 		switch key {
 		case "properties":
@@ -129,13 +149,31 @@ func (ctx *refsContext) convertSchemaObject(schema map[string]any, path string) 
 			default:
 				return nil, []contractvalidator.Diagnostic{invalidSchemaValue(childPath)}
 			}
+		case "allOf", "oneOf", "anyOf":
+			schemas, ok := value.([]any)
+			if !ok {
+				return nil, []contractvalidator.Diagnostic{invalidSchemaValue(childPath)}
+			}
+			converted := make([]any, len(schemas))
+			for index, child := range schemas {
+				childValue, diagnostics := ctx.convertNode(child, joinPath(childPath, fmt.Sprintf("%d", index)))
+				if len(diagnostics) != 0 {
+					return nil, diagnostics
+				}
+				childSchema, ok := childValue.(map[string]any)
+				if !ok {
+					return nil, []contractvalidator.Diagnostic{invalidSchemaValue(joinPath(childPath, fmt.Sprintf("%d", index)))}
+				}
+				converted[index] = childSchema
+			}
+			result[key] = converted
 		case "type":
 			typeValue, ok := value.(string)
 			if !ok {
 				return nil, []contractvalidator.Diagnostic{invalidSchemaValue(childPath)}
 			}
 			if _, supported := supportedPrimitiveTypes[typeValue]; !supported {
-				return nil, []contractvalidator.Diagnostic{unsupportedKeyword("type:"+typeValue, childPath, profileStageRefs)}
+				return nil, []contractvalidator.Diagnostic{unsupportedKeyword("type:"+typeValue, childPath, ctx.stage)}
 			}
 			result[key] = typeValue
 		case "required", "enum", "description", "title", "format", "default",
@@ -143,13 +181,61 @@ func (ctx *refsContext) convertSchemaObject(schema map[string]any, path string) 
 			"minLength", "maxLength", "pattern", "minItems", "maxItems", "uniqueItems":
 			result[key] = value
 		default:
-			return nil, []contractvalidator.Diagnostic{unsupportedKeyword(key, childPath, profileStageRefs)}
+			return nil, []contractvalidator.Diagnostic{unsupportedKeyword(key, childPath, ctx.stage)}
 		}
+	}
+	if diagnostics := ctx.applyNullable(schema, result, path); len(diagnostics) != 0 {
+		return nil, diagnostics
 	}
 	return result, nil
 }
 
-func (ctx *refsContext) convertComponentRef(value any, path string) (map[string]any, []contractvalidator.Diagnostic) {
+func (ctx *convertContext) applyNullable(schema, result map[string]any, path string) []contractvalidator.Diagnostic {
+	if ctx.stage != profileStageCompositionNullable {
+		return nil
+	}
+	nullableValue, hasNullable := schema["nullable"]
+	if !hasNullable {
+		return nil
+	}
+	nullable, ok := nullableValue.(bool)
+	if !ok {
+		return []contractvalidator.Diagnostic{invalidSchemaValue(joinPath(path, "nullable"))}
+	}
+	if !nullable {
+		return nil
+	}
+	typeValue, ok := result["type"].(string)
+	if !ok {
+		return []contractvalidator.Diagnostic{ambiguousNullable(
+			joinPath(path, "nullable"),
+			"nullable: true requires a supported primitive type keyword",
+		)}
+	}
+	result["type"] = []any{typeValue, "null"}
+	return nil
+}
+
+func (ctx *convertContext) validateNullableComposition(schema map[string]any, path string) []contractvalidator.Diagnostic {
+	if ctx.stage != profileStageCompositionNullable {
+		return nil
+	}
+	nullable, hasNullable := schema["nullable"].(bool)
+	if !hasNullable || !nullable {
+		return nil
+	}
+	for key := range compositionKeywords {
+		if _, ok := schema[key]; ok {
+			return []contractvalidator.Diagnostic{ambiguousNullable(
+				joinPath(path, "nullable"),
+				fmt.Sprintf("nullable: true cannot appear with %q in the %s converter profile", key, ctx.stage),
+			)}
+		}
+	}
+	return nil
+}
+
+func (ctx *convertContext) convertComponentRef(value any, path string) (map[string]any, []contractvalidator.Diagnostic) {
 	reference, ok := value.(string)
 	if !ok || reference == "" {
 		return nil, []contractvalidator.Diagnostic{invalidReference(path)}
@@ -167,7 +253,7 @@ func (ctx *refsContext) convertComponentRef(value any, path string) (map[string]
 	return map[string]any{"$ref": "#/$defs/" + name}, nil
 }
 
-func (ctx *refsContext) materializeDefinition(name string) []contractvalidator.Diagnostic {
+func (ctx *convertContext) materializeDefinition(name string) []contractvalidator.Diagnostic {
 	if _, exists := ctx.defs[name]; exists {
 		return nil
 	}

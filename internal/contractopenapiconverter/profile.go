@@ -1,13 +1,15 @@
 package contractopenapiconverter
 
 const (
-	profileStageCoreShapes = "core-shapes"
-	profileStageRefs       = "refs"
-	codeUnsupportedKeyword = "openapi.convert.unsupported_keyword"
-	codeUnsupportedRef     = "openapi.convert.unsupported_reference"
-	codeMissingComponent   = "openapi.convert.missing_component"
-	codeReferenceCycle     = "openapi.convert.reference_cycle"
-	codeInvalidReference   = "openapi.convert.invalid_reference"
+	profileStageCoreShapes          = "core-shapes"
+	profileStageRefs                = "refs"
+	profileStageCompositionNullable = "composition-nullable"
+	codeUnsupportedKeyword          = "openapi.convert.unsupported_keyword"
+	codeUnsupportedRef              = "openapi.convert.unsupported_reference"
+	codeMissingComponent            = "openapi.convert.missing_component"
+	codeReferenceCycle              = "openapi.convert.reference_cycle"
+	codeInvalidReference            = "openapi.convert.invalid_reference"
+	codeAmbiguousNullable           = "openapi.convert.ambiguous_nullable"
 )
 
 var (
@@ -44,10 +46,31 @@ var (
 	}
 )
 
+var compositionKeywords = map[string]struct{}{
+	"allOf": {},
+	"oneOf": {},
+	"anyOf": {},
+}
+
 func isCoreShapeKeyword(key string) bool {
 	if len(key) > 2 && key[0] == 'x' && key[1] == '-' {
 		return false
 	}
 	_, ok := coreShapeKeywords[key]
 	return ok
+}
+
+func isKeywordAllowed(stage, key string) bool {
+	if isCoreShapeKeyword(key) {
+		return true
+	}
+	if stage == profileStageCompositionNullable {
+		if key == "nullable" {
+			return true
+		}
+		if _, ok := compositionKeywords[key]; ok {
+			return true
+		}
+	}
+	return false
 }

@@ -1,0 +1,40 @@
+{
+  "$defs": {
+    "WorkImageContentPart": {
+      "properties": {
+        "type": {
+          "enum": [
+            "image"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    },
+    "WorkTextContentPart": {
+      "properties": {
+        "type": {
+          "enum": [
+            "text"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "type": "object"
+    }
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/WorkTextContentPart"
+    },
+    {
+      "$ref": "#/$defs/WorkImageContentPart"
+    }
+  ]
+}
