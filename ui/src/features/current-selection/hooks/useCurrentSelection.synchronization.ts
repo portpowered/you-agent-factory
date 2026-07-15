@@ -13,25 +13,26 @@ import type {
 export function useSelectionSynchronization({
   pendingFactoryDefinition,
   projectedWorkstationRequestsByDispatchID,
-  replacePresent,
+  reconcilePresent,
   resetSelectionHistory,
-  selection,
   snapshot,
-  terminalWorkDetail,
   topologyFactory,
 }: {
   pendingFactoryDefinition?: DashboardSnapshot["factory"];
   projectedWorkstationRequestsByDispatchID:
     | Record<string, DashboardWorkstationRequest>
     | undefined;
-  replacePresent: (state: {
-    selection: DashboardSelection | null;
-    terminalWorkDetail: TerminalWorkDetail | null;
-  }) => void;
+  reconcilePresent: (
+    reconcile: (state: {
+      selection: DashboardSelection | null;
+      terminalWorkDetail: TerminalWorkDetail | null;
+    }) => {
+      selection: DashboardSelection | null;
+      terminalWorkDetail: TerminalWorkDetail | null;
+    },
+  ) => void;
   resetSelectionHistory: () => void;
-  selection: DashboardSelection | null;
   snapshot: DashboardSnapshot | null | undefined;
-  terminalWorkDetail: TerminalWorkDetail | null;
   topologyFactory?: DashboardSnapshot["factory"];
 }) {
   useEffect(() => {
@@ -40,25 +41,23 @@ export function useSelectionSynchronization({
       return;
     }
 
-    replacePresent({
+    reconcilePresent((present) => ({
       selection: resolveDashboardSelection({
         pendingFactoryDefinition,
-        selection,
+        selection: present.selection,
         snapshot,
         topologyFactory,
         workstationRequestsByDispatchID:
           projectedWorkstationRequestsByDispatchID,
       }),
-      terminalWorkDetail,
-    });
+      terminalWorkDetail: present.terminalWorkDetail,
+    }));
   }, [
     pendingFactoryDefinition,
     projectedWorkstationRequestsByDispatchID,
-    replacePresent,
+    reconcilePresent,
     resetSelectionHistory,
-    selection,
     snapshot,
-    terminalWorkDetail,
     topologyFactory,
   ]);
 }
