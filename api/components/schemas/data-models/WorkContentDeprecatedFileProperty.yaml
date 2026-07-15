@@ -1,5 +1,3 @@
 type: string
-deprecated: true
 description: >-
-  Deprecated host-local file path. Use url instead. Legacy values may be
-  normalized to url at ingest during migration.
+    Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.

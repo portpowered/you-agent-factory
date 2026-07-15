@@ -5547,7 +5547,6 @@ type WorkAudioContentPart struct {
 	ContentType *string `json:"contentType,omitempty"`
 
 	// File Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	File *WorkContentDeprecatedFileProperty `json:"file,omitempty"`
 
 	// Label Optional caller-defined label for slot binding or diagnostics.
@@ -5576,7 +5575,6 @@ type WorkBinaryContentPart struct {
 	ContentType *string `json:"contentType,omitempty"`
 
 	// File Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	File *WorkContentDeprecatedFileProperty `json:"file,omitempty"`
 
 	// Label Optional caller-defined label for slot binding or diagnostics.
@@ -5662,7 +5660,6 @@ type WorkImageContentPart struct {
 	ContentType *string `json:"contentType,omitempty"`
 
 	// File Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.
-	// Deprecated: this property has been marked as deprecated upstream, but no `x-deprecated-reason` was set
 	File *WorkContentDeprecatedFileProperty `json:"file,omitempty"`
 
 	// Label Optional caller-defined label for slot binding or diagnostics.

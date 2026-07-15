@@ -20,8 +20,8 @@ func TestFactorySchemaConverterIsBlockedByDocumentedB16Gaps(t *testing.T) {
 	if len(diagnostics) == 0 {
 		t.Fatal("ConvertFailClosedSchema() succeeded, want documented B16-blocking diagnostics")
 	}
-	if diagnostics[0].Code != "openapi.convert.unsupported_keyword" || diagnostics[0].Path != "/example" {
-		t.Fatalf("first diagnostic = %#v, want unsupported_keyword on /example", diagnostics[0])
+	if diagnostics[0].Code != "openapi.convert.unsupported_reference" {
+		t.Fatalf("first diagnostic = %#v, want unsupported_reference while B16 $ref siblings remain", diagnostics[0])
 	}
 
 	artifacts, err := contractstaging.Artifacts(repositoryRoot)

@@ -1,21 +1,8 @@
 {
   "profile": "fail-closed",
   "status": "blocks_full_endorsement",
-  "summary": "The canonical OpenAPI Factory component graph still contains OpenAPI-only keywords and $ref/description sibling combinations that the restricted fail-closed converter profile rejects. Factory schema staging therefore records these concrete B16 gaps and continues emitting the legacy ref-materialization projection until B16 closes parity without broadening the profile.",
+  "summary": "The canonical OpenAPI Factory component graph still contains $ref/description sibling combinations that the restricted fail-closed converter profile rejects. Factory schema staging therefore records these concrete B16 gaps and continues emitting the legacy ref-materialization projection until B16 closes parity without broadening the profile.",
   "blockingCategories": [
-    {
-      "code": "openapi.convert.unsupported_keyword",
-      "keywords": [
-        "deprecated",
-        "example",
-        "x-enum-descriptions",
-        "x-enum-varnames",
-        "x-go-type",
-        "x-go-type-import"
-      ],
-      "why": "The fail-closed profile only accepts the documented core, composition/nullable, and internal reference keyword surface. OpenAPI documentation extensions, generator hints, and example payloads are intentionally rejected rather than copied into Draft 2020-12 output.",
-      "instanceCount": 53
-    },
     {
       "code": "openapi.convert.unsupported_reference",
       "pattern": "$ref with sibling keywords such as description",

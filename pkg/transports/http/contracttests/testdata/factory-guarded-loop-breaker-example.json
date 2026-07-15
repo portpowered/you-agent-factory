@@ -1,0 +1,117 @@
+{
+  "name": "customer-support-triage",
+  "inputTypes": [
+    {
+      "name": "brief",
+      "type": "DEFAULT"
+    }
+  ],
+  "guards": [
+    {
+      "type": "INFERENCE_THROTTLE_GUARD",
+      "modelProvider": "CLAUDE",
+      "model": "claude-sonnet-4-20250514",
+      "refreshWindow": "15m"
+    }
+  ],
+  "workTypes": [
+    {
+      "name": "story",
+      "states": [
+        { "name": "init", "type": "INITIAL" },
+        { "name": "inReview", "type": "PROCESSING" },
+        { "name": "failed", "type": "FAILED" },
+        { "name": "complete", "type": "TERMINAL" }
+      ]
+    }
+  ],
+  "invocationReturn": {
+    "policy": "SUBMITTED_WORK_TERMINAL"
+  },
+  "supportingFiles": {
+    "requiredTools": [
+      {
+        "name": "python",
+        "command": "python3",
+        "purpose": "Runs bundled translation scripts",
+        "versionArgs": ["--version"]
+      }
+    ],
+    "bundledFiles": [
+      {
+        "type": "ROOT_HELPER",
+        "targetPath": "Makefile",
+        "content": {
+          "encoding": "utf-8",
+          "inline": "test:\n\tgo test ./...\n"
+        }
+      },
+      {
+        "type": "SCRIPT",
+        "targetPath": "factory/scripts/setup-workspace.py",
+        "content": {
+          "encoding": "utf-8",
+          "inline": "print(\"portable\")\n"
+        }
+      },
+      {
+        "type": "DOC",
+        "targetPath": "factory/docs/usage.md",
+        "content": {
+          "encoding": "utf-8",
+          "inline": "# Usage\n"
+        }
+      },
+      {
+        "type": "INPUT",
+        "targetPath": "factory/inputs/story/default/seed.md",
+        "content": {
+          "encoding": "utf-8",
+          "inline": "Shared starter work\n"
+        }
+      }
+    ]
+  },
+  "workers": [
+    {
+      "name": "reviewer",
+      "type": "MODEL_WORKER",
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "CLAUDE",
+      "model": "claude-sonnet-4-20250514"
+    },
+    {
+      "name": "review-loop-breaker",
+      "type": "MODEL_WORKER",
+      "executorProvider": "SCRIPT_WRAP",
+      "modelProvider": "CLAUDE",
+      "model": "claude-sonnet-4-20250514"
+    }
+  ],
+  "workstations": [
+    {
+      "name": "review-story",
+      "behavior": "REPEATER",
+      "type": "MODEL_WORKSTATION",
+      "worker": "reviewer",
+      "inputs": [{ "workType": "story", "state": "init" }],
+      "outputs": [{ "workType": "story", "state": "inReview" }],
+      "onRejection": [{ "workType": "story", "state": "init" }],
+      "onFailure": [{ "workType": "story", "state": "failed" }]
+    },
+    {
+      "name": "review-loop-breaker",
+      "worker": "review-loop-breaker",
+      "type": "LOGICAL_MOVE",
+      "guards": [
+        {
+          "type": "VISIT_COUNT",
+          "workstation": "review-story",
+          "maxVisits": 3
+        }
+      ],
+      "inputs": [{ "workType": "story", "state": "init" }],
+      "outputs": [{ "workType": "story", "state": "failed" }]
+    }
+  ]
+}

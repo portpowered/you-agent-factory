@@ -1,0 +1,174 @@
+actions:
+    - target: $.components.schemas.AgentWorkerToolPolicy
+      update:
+        x-enum-varnames:
+            - AgentWorkerToolPolicyDISABLED
+            - AgentWorkerToolPolicyREADONLY
+            - AgentWorkerToolPolicyENABLED
+    - target: $.components.schemas.FactoryInvocationOutputContractMode
+      update:
+        x-enum-varnames:
+            - FactoryInvocationOutputContractModeInline
+            - FactoryInvocationOutputContractModeFile
+            - FactoryInvocationOutputContractModeJson
+    - target: $.components.schemas.FactoryInvocationParameterBindingKind
+      update:
+        x-enum-varnames:
+            - FactoryInvocationParameterBindingKindPositional
+            - FactoryInvocationParameterBindingKindNamed
+            - FactoryInvocationParameterBindingKindStdin
+            - FactoryInvocationParameterBindingKindNamedRest
+    - target: $.components.schemas.FactoryInvocationParameterTypeHint
+      update:
+        x-enum-varnames:
+            - FactoryInvocationParameterTypeHintString
+            - FactoryInvocationParameterTypeHintPath
+            - FactoryInvocationParameterTypeHintFilePath
+            - FactoryInvocationParameterTypeHintDirectoryPath
+            - FactoryInvocationParameterTypeHintNumberString
+            - FactoryInvocationParameterTypeHintBooleanString
+    - target: $.components.schemas.FactoryInvocationParameterValueMode
+      update:
+        x-enum-varnames:
+            - FactoryInvocationParameterValueModeExact
+            - FactoryInvocationParameterValueModeRepeated
+            - FactoryInvocationParameterValueModeVariadic
+            - FactoryInvocationParameterValueModeFileContents
+    - target: $.components.schemas.FactoryInvocationUnknownNamedArgumentPolicy
+      update:
+        x-enum-varnames:
+            - FactoryInvocationUnknownNamedArgumentPolicyReject
+            - FactoryInvocationUnknownNamedArgumentPolicyAllow
+            - FactoryInvocationUnknownNamedArgumentPolicyCollect
+    - target: $.components.schemas.GuardType
+      update:
+        x-enum-varnames:
+            - GuardTypeVisitCount
+            - GuardTypeMatchesFields
+            - GuardTypeAllChildrenComplete
+            - GuardTypeAnyChildFailed
+            - GuardTypeSameName
+            - GuardTypeSameTraceID
+            - GuardTypeInferenceThrottle
+    - target: $.components.schemas.HostedWorkerProvider
+      update:
+        x-enum-varnames:
+            - HostedWorkerProviderLinear
+    - target: $.components.schemas.InputKind
+      update:
+        x-enum-varnames:
+            - InputKindDefault
+    - target: $.components.schemas.InvocationReturnPolicy
+      update:
+        x-enum-varnames:
+            - InvocationReturnPolicySubmittedWorkTerminal
+            - InvocationReturnPolicyExplicit
+    - target: $.components.schemas.ModelOperationContentType
+      update:
+        x-enum-varnames:
+            - ModelOperationContentTypeText
+            - ModelOperationContentTypeImage
+            - ModelOperationContentTypeAudio
+            - ModelOperationContentTypeJSON
+            - ModelOperationContentTypeBinary
+    - target: $.components.schemas.ResourceType
+      update:
+        x-enum-varnames:
+            - ResourceTypeModel
+            - ResourceTypeProviderQuota
+            - ResourceTypeInvocationSlot
+    - target: $.components.schemas.RunnerID
+      update:
+        x-enum-varnames:
+            - RunnerIDCodex
+            - RunnerIDGemini
+            - RunnerIDKiro
+            - RunnerIDCursorCLI
+            - RunnerIDOpenCode
+            - RunnerIDPi
+    - target: $.components.schemas.WorkContentPartType
+      update:
+        x-enum-varnames:
+            - WorkContentPartTypeText
+            - WorkContentPartTypeImage
+            - WorkContentPartTypeTextUpper
+            - WorkContentPartTypeImageUpper
+            - WorkContentPartTypeAudio
+            - WorkContentPartTypeJSON
+            - WorkContentPartTypeBinary
+    - target: $.components.schemas.WorkPropagationMode
+      update:
+        x-enum-varnames:
+            - WorkPropagationModeOutputAsPayload
+            - WorkPropagationModePreserveInput
+    - target: $.components.schemas.WorkStateType
+      update:
+        x-enum-varnames:
+            - WorkStateTypeINITIAL
+            - WorkStateTypePROCESSING
+            - WorkStateTypeTERMINAL
+            - WorkStateTypeFAILED
+    - target: $.components.schemas.WorkTypeHandlingBehavior
+      update:
+        x-enum-varnames:
+            - WorkTypeHandlingBehaviorDefault
+    - target: $.components.schemas.WorkerModelLocality
+      update:
+        x-enum-varnames:
+            - WorkerModelLocalityLocal
+            - WorkerModelLocalityCloud
+    - target: $.components.schemas.WorkerModelProvider
+      update:
+        x-enum-varnames:
+            - WorkerModelProviderClaude
+            - WorkerModelProviderCodex
+            - WorkerModelProviderCursor
+            - WorkerModelProviderGemini
+            - WorkerModelProviderKiro
+            - WorkerModelProviderOpenCode
+            - WorkerModelProviderPi
+            - WorkerModelProviderAgy
+    - target: $.components.schemas.WorkerProvider
+      update:
+        x-enum-varnames:
+            - WorkerProviderScriptWrap
+    - target: $.components.schemas.WorkerType
+      update:
+        x-enum-varnames:
+            - WorkerTypeInferenceWorker
+            - WorkerTypeAgentWorker
+            - WorkerTypeScriptWorker
+            - WorkerTypePollerWorker
+            - WorkerTypeModelWorker
+            - WorkerTypeHostedWorker
+    - target: $.components.schemas.WorkstationKind
+      update:
+        x-enum-varnames:
+            - WorkstationKindStandard
+            - WorkstationKindRepeater
+            - WorkstationKindCron
+            - WorkstationKindPoller
+    - target: $.components.schemas.WorkstationOutcomeFormat
+      update:
+        x-enum-varnames:
+            - WorkstationOutcomeFormatDecisionEnvelope
+    - target: $.components.schemas.WorkstationType
+      update:
+        x-enum-varnames:
+            - WorkstationTypeInferenceRun
+            - WorkstationTypeAgentRun
+            - WorkstationTypeScriptRun
+            - WorkstationTypePollerRun
+            - WorkstationTypeModelWorkstation
+            - WorkstationTypeModelInvoke
+            - WorkstationTypeLogicalMove
+            - WorkstationTypeClassifierWorkstation
+    - target: $.components.schemas.HybridLogicalTimestamp.properties.logical
+      update:
+        x-go-type: apitypes.Int64String
+        x-go-type-import:
+            path: github.com/portpowered/infinite-you/pkg/transports/http/apitypes
+info:
+    title: Factory config enum codegen overlay
+    version: 1.0.0
+overlay: 1.0.0

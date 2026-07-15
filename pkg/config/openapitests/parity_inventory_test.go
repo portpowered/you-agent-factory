@@ -299,15 +299,15 @@ var productionBoundarySources = []struct {
 	},
 	{
 		relativePath: "api/components/schemas/data-models/Factory.yaml",
-		sha256Hex:    "af7cbb1c6d33c3bd2f8af6d99105683ffa072038aa3c7e5671d7aa3e8a2e31b3",
+		sha256Hex:    "7a150f3c80a75e823940cec9b7660dc48ff20046b6a0000111674e3c8f0f2767",
 	},
 	{
 		relativePath: "api/components/schemas/data-models/WorkerType.yaml",
-		sha256Hex:    "9d50ae595e3274ca543265b7765a1135c3ae6f6be918a72875b2f5ab7dadb477",
+		sha256Hex:    "8f559a3646c66ac4e08eabd72edb7dea7eeec81f1a165169abc1879c3b46fe57",
 	},
 	{
 		relativePath: "api/components/schemas/data-models/WorkstationType.yaml",
-		sha256Hex:    "415584f86f33599b6d1676f97f3d442ae91cd8010f48c5496f079da9954b14ea",
+		sha256Hex:    "9eb93d0f1f16f1baf00a1441d111bfa7d57e76f4d80795cae35376fe8632ddde",
 	},
 	{
 		relativePath: "api/components/schemas/data-models/FactoryGuard.yaml",

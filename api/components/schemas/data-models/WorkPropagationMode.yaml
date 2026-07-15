@@ -1,15 +1,6 @@
 type: string
 description: >-
-  Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the
-  workstation output as the downstream work payload. PRESERVE_INPUT keeps the
-  consumed input payload for downstream work instead of replacing it with the
-  workstation output.
+    Work payload propagation mode for a workstation. OUTPUT_AS_PAYLOAD uses the workstation output as the downstream work payload. PRESERVE_INPUT keeps the consumed input payload for downstream work instead of replacing it with the workstation output.
 enum:
-  - OUTPUT_AS_PAYLOAD
-  - PRESERVE_INPUT
-x-enum-varnames:
-  - WorkPropagationModeOutputAsPayload
-  - WorkPropagationModePreserveInput
-x-enum-descriptions:
-  - Downstream work receives the workstation output payload.
-  - Downstream work keeps the consumed input payload instead of the workstation output.
+    - OUTPUT_AS_PAYLOAD
+    - PRESERVE_INPUT

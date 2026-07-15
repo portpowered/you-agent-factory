@@ -298,20 +298,17 @@ func TestOpenAPIAuthoring_DataModelSchemasUseDedicatedFragments(t *testing.T) {
 func TestOpenAPIContract_FactoryExampleUsesGuardedLoopBreaker(t *testing.T) {
 	doc := loadValidatedOpenAPIContract(t)
 	factorySchema := doc.Components.Schemas["Factory"].Value
-	example, ok := factorySchema.Example.(map[string]any)
-	if !ok {
-		t.Fatalf("Factory.example must be an object, got %T", factorySchema.Example)
-	}
+	example := loadFactoryGuardedLoopBreakerExampleFixture(t)
 	if _, ok := example["exhaustion_rules"]; ok {
-		t.Fatalf("Factory.example must not advertise exhaustion_rules")
+		t.Fatalf("factory guarded-loop-breaker example must not advertise exhaustion_rules")
 	}
 	if err := factorySchema.VisitJSON(example); err != nil {
-		t.Fatalf("Factory.example should validate: %v", err)
+		t.Fatalf("factory guarded-loop-breaker example should validate: %v", err)
 	}
 
 	workstations, ok := example["workstations"].([]any)
 	if !ok {
-		t.Fatalf("Factory.example.workstations must be an array")
+		t.Fatalf("factory guarded-loop-breaker example.workstations must be an array")
 	}
 	foundGuardedLoopBreaker := false
 	for _, item := range workstations {
@@ -330,8 +327,21 @@ func TestOpenAPIContract_FactoryExampleUsesGuardedLoopBreaker(t *testing.T) {
 		}
 	}
 	if !foundGuardedLoopBreaker {
-		t.Fatal("Factory.example must include a guarded LOGICAL_MOVE workstation using a VISIT_COUNT guard")
+		t.Fatal("factory guarded-loop-breaker example must include a guarded LOGICAL_MOVE workstation using a VISIT_COUNT guard")
 	}
+}
+
+func loadFactoryGuardedLoopBreakerExampleFixture(t *testing.T) map[string]any {
+	t.Helper()
+	payload, err := os.ReadFile("testdata/factory-guarded-loop-breaker-example.json")
+	if err != nil {
+		t.Fatalf("read factory guarded-loop-breaker example fixture: %v", err)
+	}
+	var example map[string]any
+	if err := json.Unmarshal(payload, &example); err != nil {
+		t.Fatalf("decode factory guarded-loop-breaker example fixture: %v", err)
+	}
+	return example
 }
 
 func TestOpenAPIContract_GeneratedFactoryModelRetiresExhaustionRules(t *testing.T) {

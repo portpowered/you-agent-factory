@@ -29,7 +29,11 @@ Use this map when changing the public REST contract.
   Factory graph is blocked by documented B16 gaps in
   `docs/internal/contract/factory-schema-b16-gaps.json`, staging falls back to
   the legacy ref-materialization projection without broadening the converter
-  profile. Authored configuration schemas live under
+  profile. When removing OpenAPI-only keywords or generator hints from authored
+  Factory fragments for converter endorsement, keep stable Go enum/type names via
+  `api/codegen_config/factory-codegen-overlay.yaml` referenced from the oapi-codegen
+  configs rather than leaving `x-enum-varnames` / `x-go-type` in authored schema
+  bodies. Authored configuration schemas live under
   `contracts/config/`; do not substitute topology or parity inventories for
   those schemas. `make contracts-check` reports stale, missing, and unexpected
   staged paths across the complete projection.

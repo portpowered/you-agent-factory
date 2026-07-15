@@ -7,12 +7,7 @@
         "READ_ONLY",
         "ENABLED"
       ],
-      "type": "string",
-      "x-enum-varnames": [
-        "AgentWorkerToolPolicyDISABLED",
-        "AgentWorkerToolPolicyREADONLY",
-        "AgentWorkerToolPolicyENABLED"
-      ]
+      "type": "string"
     },
     "AgentWorkerToolsConfig": {
       "additionalProperties": false,
@@ -203,17 +198,7 @@
         "FILE",
         "JSON"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "The primary result is expected inline in the invocation response.",
-        "The primary result is expected to be written to a caller-supplied file path.",
-        "The primary result is expected to be structured JSON-like content."
-      ],
-      "x-enum-varnames": [
-        "FactoryInvocationOutputContractModeInline",
-        "FactoryInvocationOutputContractModeFile",
-        "FactoryInvocationOutputContractModeJson"
-      ]
+      "type": "string"
     },
     "FactoryInvocationParameter": {
       "additionalProperties": false,
@@ -312,19 +297,7 @@
         "STDIN",
         "NAMED_REST"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Consume a positional CLI-style argument at a declared 1-based slot.",
-        "Consume one named argument key matched through the parameter's externalName or aliases.",
-        "Consume invocation stdin routed into one declared parameter.",
-        "Collect otherwise-unbound named arguments into one rest-style parameter."
-      ],
-      "x-enum-varnames": [
-        "FactoryInvocationParameterBindingKindPositional",
-        "FactoryInvocationParameterBindingKindNamed",
-        "FactoryInvocationParameterBindingKindStdin",
-        "FactoryInvocationParameterBindingKindNamedRest"
-      ]
+      "type": "string"
     },
     "FactoryInvocationParameterTypeHint": {
       "description": "String-first parsing and UI hint for one factory invocation parameter.",
@@ -336,23 +309,7 @@
         "NUMBER_STRING",
         "BOOLEAN_STRING"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Generic free-form string input.",
-        "Path-like string input with no stronger file or directory guarantee.",
-        "File path string input.",
-        "Directory path string input.",
-        "Numeric value encoded as a string for transport parity.",
-        "Boolean value encoded as a string with CLI-friendly flag behavior."
-      ],
-      "x-enum-varnames": [
-        "FactoryInvocationParameterTypeHintString",
-        "FactoryInvocationParameterTypeHintPath",
-        "FactoryInvocationParameterTypeHintFilePath",
-        "FactoryInvocationParameterTypeHintDirectoryPath",
-        "FactoryInvocationParameterTypeHintNumberString",
-        "FactoryInvocationParameterTypeHintBooleanString"
-      ]
+      "type": "string"
     },
     "FactoryInvocationParameterValueMode": {
       "description": "Declares how one invocation parameter consumes one or more string values.",
@@ -362,19 +319,7 @@
         "VARIADIC",
         "FILE_CONTENTS"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Consume exactly one effective string value.",
-        "Consume zero or more repeated effective string values.",
-        "Consume positional overflow values as one variadic parameter.",
-        "Resolve supplied path values to file contents before interpolation."
-      ],
-      "x-enum-varnames": [
-        "FactoryInvocationParameterValueModeExact",
-        "FactoryInvocationParameterValueModeRepeated",
-        "FactoryInvocationParameterValueModeVariadic",
-        "FactoryInvocationParameterValueModeFileContents"
-      ]
+      "type": "string"
     },
     "FactoryInvocationSignature": {
       "additionalProperties": false,
@@ -412,17 +357,7 @@
         "ALLOW",
         "COLLECT"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Reject unknown named arguments during normalization.",
-        "Preserve unknown named arguments for compatibility handling.",
-        "Route unknown named arguments into one declared NAMED_REST parameter."
-      ],
-      "x-enum-varnames": [
-        "FactoryInvocationUnknownNamedArgumentPolicyReject",
-        "FactoryInvocationUnknownNamedArgumentPolicyAllow",
-        "FactoryInvocationUnknownNamedArgumentPolicyCollect"
-      ]
+      "type": "string"
     },
     "FactoryLayout": {
       "additionalProperties": false,
@@ -669,7 +604,6 @@
     },
     "FactoryName": {
       "description": "Customer-facing identifier for one stored named factory. `GET /factory-sessions/~default/factory` may also return the reserved `UNDEFINED` identifier when the active runtime is still the default root factory and no durable current-factory pointer exists. Semantic validation failures return `INVALID_FACTORY_NAME`, including attempts to activate a named factory with the reserved identifier.",
-      "example": "customer-support-triage",
       "minLength": 1,
       "pattern": "^(UNDEFINED|[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)$",
       "type": "string"
@@ -786,11 +720,7 @@
         "PETRI",
         "JAVASCRIPT"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Petri-net orchestration backed by work types, workers, and workstations.",
-        "JavaScript workflow orchestration backed by authored source identity and policy."
-      ]
+      "type": "string"
     },
     "FactoryOrchestratorPetriConfig": {
       "additionalProperties": false,
@@ -869,25 +799,7 @@
         "SAME_TRACE_ID",
         "INFERENCE_THROTTLE_GUARD"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Allows or blocks work based on how many times a workstation has already handled it.",
-        "Requires all candidate workstation inputs to resolve the same configured field value.",
-        "This input is available only after all matching child work completes.",
-        "This input is available when any matching child work fails.",
-        "This input is available only when its token name exactly matches the bound token name from another input.",
-        "This input is available only when its token trace identity exactly matches the bound token trace identity from another input.",
-        "Blocks factory dispatch when provider or model throttle history still falls inside the authored refresh window."
-      ],
-      "x-enum-varnames": [
-        "GuardTypeVisitCount",
-        "GuardTypeMatchesFields",
-        "GuardTypeAllChildrenComplete",
-        "GuardTypeAnyChildFailed",
-        "GuardTypeSameName",
-        "GuardTypeSameTraceID",
-        "GuardTypeInferenceThrottle"
-      ]
+      "type": "string"
     },
     "HostedLinearWorkerClaim": {
       "additionalProperties": false,
@@ -964,13 +876,7 @@
       "enum": [
         "LINEAR"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Built-in hosted poller integration for the Linear GraphQL API."
-      ],
-      "x-enum-varnames": [
-        "HostedWorkerProviderLinear"
-      ]
+      "type": "string"
     },
     "HybridLogicalTimestamp": {
       "additionalProperties": false,
@@ -979,11 +885,7 @@
           "description": "Monotonic Lamport-style logical component derived from the persisted factory definition version. Serialized as a decimal string so JavaScript clients can round-trip the 64-bit value without precision loss.",
           "format": "int64",
           "pattern": "^[0-9]+$",
-          "type": "string",
-          "x-go-type": "apitypes.Int64String",
-          "x-go-type-import": {
-            "path": "github.com/portpowered/infinite-you/pkg/transports/http/apitypes"
-          }
+          "type": "string"
         },
         "physical": {
           "description": "UTC physical timestamp component for the persisted factory definition version.",
@@ -1002,13 +904,7 @@
       "enum": [
         "DEFAULT"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Opaque input accepted by the factory without a specialized input schema."
-      ],
-      "x-enum-varnames": [
-        "InputKindDefault"
-      ]
+      "type": "string"
     },
     "InputType": {
       "additionalProperties": false,
@@ -1060,15 +956,7 @@
         "SUBMITTED_WORK_TERMINAL",
         "EXPLICIT"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Use the invocation-submitted work item terminal content as the primary result.",
-        "Use the configured work type, terminal state, and optional work name as the primary result."
-      ],
-      "x-enum-varnames": [
-        "InvocationReturnPolicySubmittedWorkTerminal",
-        "InvocationReturnPolicyExplicit"
-      ]
+      "type": "string"
     },
     "ModelOperation": {
       "additionalProperties": false,
@@ -1106,21 +994,7 @@
         "JSON",
         "BINARY"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Textual content.",
-        "Image content.",
-        "Audio content.",
-        "Structured JSON content.",
-        "Opaque binary content."
-      ],
-      "x-enum-varnames": [
-        "ModelOperationContentTypeText",
-        "ModelOperationContentTypeImage",
-        "ModelOperationContentTypeAudio",
-        "ModelOperationContentTypeJSON",
-        "ModelOperationContentTypeBinary"
-      ]
+      "type": "string"
     },
     "ModelOperationName": {
       "description": "Uppercase public operation identifier such as `TTS`, `ASR`, or `EMBED`.",
@@ -1273,17 +1147,7 @@
         "PROVIDER_QUOTA",
         "INVOCATION_SLOT"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Local or embedded model capacity resource.",
-        "Cloud-provider quota resource for one provider or model lane.",
-        "Generic invocation concurrency slot resource."
-      ],
-      "x-enum-varnames": [
-        "ResourceTypeModel",
-        "ResourceTypeProviderQuota",
-        "ResourceTypeInvocationSlot"
-      ]
+      "type": "string"
     },
     "RunnerID": {
       "description": "Stable built-in runner identifiers supported by factory and workstation runner selection.",
@@ -1295,23 +1159,7 @@
         "opencode",
         "pi"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Codex runner selected through the shared runner contract.",
-        "Gemini runner selected through the shared runner contract.",
-        "Kiro runner selected through the shared runner contract.",
-        "Cursor CLI runner selected through the shared runner contract.",
-        "OpenCode runner selected through the shared runner contract.",
-        "Pi runner selected through the shared runner contract."
-      ],
-      "x-enum-varnames": [
-        "RunnerIDCodex",
-        "RunnerIDGemini",
-        "RunnerIDKiro",
-        "RunnerIDCursorCLI",
-        "RunnerIDOpenCode",
-        "RunnerIDPi"
-      ]
+      "type": "string"
     },
     "StringMap": {
       "additionalProperties": {
@@ -1423,7 +1271,6 @@
       "type": "object"
     },
     "WorkContentDeprecatedFileProperty": {
-      "deprecated": true,
       "description": "Deprecated host-local file path. Use url instead. Legacy values may be normalized to url at ingest during migration.",
       "type": "string"
     },
@@ -1463,25 +1310,7 @@
         "JSON",
         "BINARY"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Legacy inline text content.",
-        "Legacy image content referenced by file path.",
-        "Canonical uppercase inline text content.",
-        "Canonical uppercase image content referenced by file path.",
-        "Audio content referenced by file path or artifact.",
-        "JSON content preserved in canonical part order.",
-        "Binary content referenced by file path or artifact."
-      ],
-      "x-enum-varnames": [
-        "WorkContentPartTypeText",
-        "WorkContentPartTypeImage",
-        "WorkContentPartTypeTextUpper",
-        "WorkContentPartTypeImageUpper",
-        "WorkContentPartTypeAudio",
-        "WorkContentPartTypeJSON",
-        "WorkContentPartTypeBinary"
-      ]
+      "type": "string"
     },
     "WorkContentURLProperty": {
       "description": "Canonical content reference for file-backed parts. Supported schemes are file://, http://, https://, data:, and you-artifact:// for session-scoped factory artifact refs.",
@@ -1574,15 +1403,7 @@
         "OUTPUT_AS_PAYLOAD",
         "PRESERVE_INPUT"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Downstream work receives the workstation output payload.",
-        "Downstream work keeps the consumed input payload instead of the workstation output."
-      ],
-      "x-enum-varnames": [
-        "WorkPropagationModeOutputAsPayload",
-        "WorkPropagationModePreserveInput"
-      ]
+      "type": "string"
     },
     "WorkState": {
       "additionalProperties": false,
@@ -1615,19 +1436,7 @@
         "TERMINAL",
         "FAILED"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Work is newly submitted and waiting for its first processing step.",
-        "Work is in progress and can continue through additional workstation steps.",
-        "Work completed successfully and should not be scheduled for more processing.",
-        "Work reached a failed terminal state."
-      ],
-      "x-enum-varnames": [
-        "WorkStateTypeINITIAL",
-        "WorkStateTypePROCESSING",
-        "WorkStateTypeTERMINAL",
-        "WorkStateTypeFAILED"
-      ]
+      "type": "string"
     },
     "WorkTextContentPart": {
       "allOf": [
@@ -1700,13 +1509,7 @@
       "enum": [
         "DEFAULT"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Receives simplified CLI prompt submissions when exactly one work type in the factory declares this behavior."
-      ],
-      "x-enum-varnames": [
-        "WorkTypeHandlingBehaviorDefault"
-      ]
+      "type": "string"
     },
     "Worker": {
       "additionalProperties": false,
@@ -1813,15 +1616,7 @@
         "LOCAL",
         "CLOUD"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "The model runs through local embedded or host-managed inference resources.",
-        "The model runs through a remote cloud-backed provider."
-      ],
-      "x-enum-varnames": [
-        "WorkerModelLocalityLocal",
-        "WorkerModelLocalityCloud"
-      ]
+      "type": "string"
     },
     "WorkerModelProvider": {
       "description": "Canonical model-provider identifiers supported by model workers in factory config.",
@@ -1835,40 +1630,14 @@
         "PI",
         "AGY"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Claude model execution routed through the `claude` provider command.",
-        "Codex model execution routed through the `codex` provider command.",
-        "Cursor model execution routed through the `agent` provider command.",
-        "Gemini model execution routed through the `gemini` provider command.",
-        "Kiro model execution routed through the `kiro-cli` provider command.",
-        "OpenCode model execution routed through the `opencode` provider command.",
-        "Pi model execution routed through the `pi` provider command.",
-        "Agy model execution routed through the `agy` provider command."
-      ],
-      "x-enum-varnames": [
-        "WorkerModelProviderClaude",
-        "WorkerModelProviderCodex",
-        "WorkerModelProviderCursor",
-        "WorkerModelProviderGemini",
-        "WorkerModelProviderKiro",
-        "WorkerModelProviderOpenCode",
-        "WorkerModelProviderPi",
-        "WorkerModelProviderAgy"
-      ]
+      "type": "string"
     },
     "WorkerProvider": {
       "description": "Concrete worker-provider wrappers supported by the public factory-config contract.",
       "enum": [
         "SCRIPT_WRAP"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Public worker executor adapter that shells out through the configured worker command path."
-      ],
-      "x-enum-varnames": [
-        "WorkerProviderScriptWrap"
-      ]
+      "type": "string"
     },
     "WorkerType": {
       "description": "Worker implementation families supported by the public factory-config contract.",
@@ -1880,23 +1649,7 @@
         "MODEL_WORKER",
         "HOSTED_WORKER"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Inference worker that performs one bounded model operation through the configured provider or managed runtime.",
-        "Agent worker that executes prompt-rendered agent loops through AGENT_RUN workstations. Model capability declarations belong on INFERENCE_WORKER, not AGENT_WORKER.",
-        "Script-backed worker that executes a configured command instead of calling a model provider.",
-        "Poller worker that watches an external source and emits work through repository-owned hosted runtime code.",
-        "Legacy alias for inference-worker behavior during the migration window.",
-        "Legacy alias for poller-worker behavior during the migration window."
-      ],
-      "x-enum-varnames": [
-        "WorkerTypeInferenceWorker",
-        "WorkerTypeAgentWorker",
-        "WorkerTypeScriptWorker",
-        "WorkerTypePollerWorker",
-        "WorkerTypeModelWorker",
-        "WorkerTypeHostedWorker"
-      ]
+      "type": "string"
     },
     "Workstation": {
       "additionalProperties": false,
@@ -2118,19 +1871,7 @@
         "CRON",
         "POLLER"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Schedules when its inputs are ready and emits configured outputs.",
-        "Re-runs when observed inputs change and can loop rejected work back to an earlier state.",
-        "Produces internal time work from a cron schedule and dispatches through the normal worker path when inputs are ready.",
-        "Binds a poller-capable worker that emits canonical ingress work under service supervision."
-      ],
-      "x-enum-varnames": [
-        "WorkstationKindStandard",
-        "WorkstationKindRepeater",
-        "WorkstationKindCron",
-        "WorkstationKindPoller"
-      ]
+      "type": "string"
     },
     "WorkstationLimits": {
       "additionalProperties": false,
@@ -2201,13 +1942,7 @@
       "enum": [
         "decision-envelope"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "Parse agent output as a reviewer/checker decision envelope instead of stop-token routing."
-      ],
-      "x-enum-varnames": [
-        "WorkstationOutcomeFormatDecisionEnvelope"
-      ]
+      "type": "string"
     },
     "WorkstationType": {
       "description": "Runtime workstation implementation types supported by the public factory-config contract.",
@@ -2221,194 +1956,13 @@
         "LOGICAL_MOVE",
         "CLASSIFIER_WORKSTATION"
       ],
-      "type": "string",
-      "x-enum-descriptions": [
-        "One-shot inference workstation that resolves operation bindings and dispatches through an inference worker.",
-        "Agent-run workstation that renders prompts and dispatches through an agent worker for iterative agent-loop execution.",
-        "Script-run workstation that executes deterministic command or script behavior through a script worker.",
-        "Poller-run workstation that supervises ingress polling through a poller worker.",
-        "Legacy alias for agent-run behavior during the migration window.",
-        "Legacy alias for inference-run behavior during the migration window.",
-        "Logical pass-through workstation used for routing and guarded loop-breaker transitions without model execution.",
-        "Label-based classifier workstation that returns one plain string label and routes through classificationRoutes."
-      ],
-      "x-enum-varnames": [
-        "WorkstationTypeInferenceRun",
-        "WorkstationTypeAgentRun",
-        "WorkstationTypeScriptRun",
-        "WorkstationTypePollerRun",
-        "WorkstationTypeModelWorkstation",
-        "WorkstationTypeModelInvoke",
-        "WorkstationTypeLogicalMove",
-        "WorkstationTypeClassifierWorkstation"
-      ]
+      "type": "string"
     }
   },
   "$id": "https://schemas.portpowered.com/you/config/factory.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "description": "Top-level factory.json contract. Declare the work types, resources, portability resources, workers, and workstations that make up one authored factory here. Guarded loop breakers should be authored as guarded LOGICAL_MOVE workstations using VISIT_COUNT guards instead of a top-level exhaustion-rules field.",
-  "example": {
-    "guards": [
-      {
-        "model": "claude-sonnet-4-20250514",
-        "modelProvider": "CLAUDE",
-        "refreshWindow": "15m",
-        "type": "INFERENCE_THROTTLE_GUARD"
-      }
-    ],
-    "inputTypes": [
-      {
-        "name": "brief",
-        "type": "DEFAULT"
-      }
-    ],
-    "invocationReturn": {
-      "policy": "SUBMITTED_WORK_TERMINAL"
-    },
-    "name": "customer-support-triage",
-    "supportingFiles": {
-      "bundledFiles": [
-        {
-          "content": {
-            "encoding": "utf-8",
-            "inline": "test:\n\tgo test ./...\n"
-          },
-          "targetPath": "Makefile",
-          "type": "ROOT_HELPER"
-        },
-        {
-          "content": {
-            "encoding": "utf-8",
-            "inline": "print(\"portable\")\n"
-          },
-          "targetPath": "factory/scripts/setup-workspace.py",
-          "type": "SCRIPT"
-        },
-        {
-          "content": {
-            "encoding": "utf-8",
-            "inline": "# Usage\n"
-          },
-          "targetPath": "factory/docs/usage.md",
-          "type": "DOC"
-        },
-        {
-          "content": {
-            "encoding": "utf-8",
-            "inline": "Shared starter work\n"
-          },
-          "targetPath": "factory/inputs/story/default/seed.md",
-          "type": "INPUT"
-        }
-      ],
-      "requiredTools": [
-        {
-          "command": "python3",
-          "name": "python",
-          "purpose": "Runs bundled translation scripts",
-          "versionArgs": [
-            "--version"
-          ]
-        }
-      ]
-    },
-    "workTypes": [
-      {
-        "name": "story",
-        "states": [
-          {
-            "name": "init",
-            "type": "INITIAL"
-          },
-          {
-            "name": "inReview",
-            "type": "PROCESSING"
-          },
-          {
-            "name": "failed",
-            "type": "FAILED"
-          },
-          {
-            "name": "complete",
-            "type": "TERMINAL"
-          }
-        ]
-      }
-    ],
-    "workers": [
-      {
-        "executorProvider": "SCRIPT_WRAP",
-        "model": "claude-sonnet-4-20250514",
-        "modelProvider": "CLAUDE",
-        "name": "reviewer",
-        "type": "MODEL_WORKER"
-      },
-      {
-        "executorProvider": "SCRIPT_WRAP",
-        "model": "claude-sonnet-4-20250514",
-        "modelProvider": "CLAUDE",
-        "name": "review-loop-breaker",
-        "type": "MODEL_WORKER"
-      }
-    ],
-    "workstations": [
-      {
-        "behavior": "REPEATER",
-        "inputs": [
-          {
-            "state": "init",
-            "workType": "story"
-          }
-        ],
-        "name": "review-story",
-        "onFailure": [
-          {
-            "state": "failed",
-            "workType": "story"
-          }
-        ],
-        "onRejection": [
-          {
-            "state": "init",
-            "workType": "story"
-          }
-        ],
-        "outputs": [
-          {
-            "state": "inReview",
-            "workType": "story"
-          }
-        ],
-        "type": "MODEL_WORKSTATION",
-        "worker": "reviewer"
-      },
-      {
-        "guards": [
-          {
-            "maxVisits": 3,
-            "type": "VISIT_COUNT",
-            "workstation": "review-story"
-          }
-        ],
-        "inputs": [
-          {
-            "state": "init",
-            "workType": "story"
-          }
-        ],
-        "name": "review-loop-breaker",
-        "outputs": [
-          {
-            "state": "failed",
-            "workType": "story"
-          }
-        ],
-        "type": "LOGICAL_MOVE",
-        "worker": "review-loop-breaker"
-      }
-    ]
-  },
   "properties": {
     "factoryDirectory": {
       "description": "Directory that contained the factory.json used for this serialized runtime config.",
