@@ -863,7 +863,7 @@ func (fs *FactoryService) publishFactoryChangeEvent(
 		return
 	}
 
-	payload, ok := replacementFactoryChangePayload(replacement.EventHistory.Events())
+	payload, ok := replacementFactoryChangePayload(replacement.EventHistory.CanonicalEvents())
 	if !ok {
 		return
 	}

@@ -61,6 +61,11 @@ hand the editable snapshot to event history without decoding it through a
 generated transport model; generated Factory event unions remain an outward
 compatibility boundary only.
 
+Factory-change producers likewise carry the replacement `FactorySnapshot` in
+the Factory-owned payload and append the canonical envelope directly. Runtime
+coordinators should read detached canonical history when deriving that payload,
+not round-trip the initial structure through the generated event union.
+
 Production command runners must remain blocking without taking lifecycle ownership
 back from `pkg/initializer`. The entrypoint should construct and start the graph
 through `pkg/root`, then let the returned application wait for its selected

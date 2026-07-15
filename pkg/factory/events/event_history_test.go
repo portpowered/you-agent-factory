@@ -99,6 +99,71 @@ func TestFactoryEventHistory_InitialStructureAndRunRequestUseFactoryOwnedPayload
 	}
 }
 
+func TestFactoryEventHistory_FactoryChangeUsesFactoryOwnedPayloadAndRetainsPublicWireShape(t *testing.T) {
+	eventTime := time.Date(2026, 7, 15, 23, 15, 0, 0, time.FixedZone("Factory/Local", 2*60*60))
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	snapshot, err := interfaces.NewFactorySnapshot(map[string]any{
+		"name":         "replacement-factory",
+		"unknownField": "preserved",
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot: %v", err)
+	}
+	metadata := map[string]string{"source": "activation"}
+	sourceDirectory := "/tmp/replacement"
+
+	history.RecordFactoryChange(4, interfaces.FactoryChangeEventPayload{
+		Factory:         snapshot,
+		Metadata:        &metadata,
+		SourceDirectory: &sourceDirectory,
+	}, eventTime)
+
+	assertCanonicalFactoryChangeEvent(t, history.CanonicalEvents(), sourceDirectory)
+	assertPublicFactoryChangeEvent(t, history.Events())
+}
+
+func assertCanonicalFactoryChangeEvent(t *testing.T, canonical []interfaces.FactoryEvent, sourceDirectory string) {
+	t.Helper()
+	if len(canonical) != 1 {
+		t.Fatalf("canonical event count = %d, want 1", len(canonical))
+	}
+	event := canonical[0]
+	if event.Type != interfaces.FactoryEventTypeFactoryChange || event.Context.Tick != 4 {
+		t.Fatalf("canonical event = %#v, want FACTORY_CHANGE at tick 4", event)
+	}
+	var payload interfaces.FactoryChangeEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
+		t.Fatalf("decode canonical Factory change payload: %v", err)
+	}
+	var factory map[string]any
+	if err := payload.Factory.Decode(&factory); err != nil {
+		t.Fatalf("decode replacement Factory snapshot: %v", err)
+	}
+	if factory["name"] != "replacement-factory" || factory["unknownField"] != "preserved" {
+		t.Fatalf("replacement Factory snapshot = %#v, want preserved owner fields", factory)
+	}
+	if payload.Metadata == nil || (*payload.Metadata)["source"] != "activation" || payload.SourceDirectory == nil || *payload.SourceDirectory != sourceDirectory {
+		t.Fatalf("canonical Factory change payload = %#v, want metadata and source directory", payload)
+	}
+	if event.Context.EventTime.Location() != time.UTC {
+		t.Fatalf("canonical event time location = %s, want UTC", event.Context.EventTime.Location())
+	}
+}
+
+func assertPublicFactoryChangeEvent(t *testing.T, publicEvents []factoryapi.FactoryEvent) {
+	t.Helper()
+	if len(publicEvents) != 1 {
+		t.Fatalf("public event count = %d, want 1", len(publicEvents))
+	}
+	publicPayload, err := publicEvents[0].Payload.AsFactoryChangeEventPayload()
+	if err != nil {
+		t.Fatalf("decode generated Factory change payload: %v", err)
+	}
+	if publicPayload.Factory.Name != "replacement-factory" || publicPayload.Metadata == nil || (*publicPayload.Metadata)["source"] != "activation" {
+		t.Fatalf("public Factory change payload = %#v, want compatible generated shape", publicPayload)
+	}
+}
+
 func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(t *testing.T) {
 	runtimeConfig := eventHistoryRuntimeConfig{
 		Workers: map[string]*workerconfig.Config{

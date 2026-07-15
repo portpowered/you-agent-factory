@@ -131,6 +131,17 @@ func (h *FactoryEventHistory) Events() []factoryapi.FactoryEvent {
 	return generatedFactoryEvents(h.events)
 }
 
+// CanonicalEvents returns detached Factory-owned events in append order.
+func (h *FactoryEventHistory) CanonicalEvents() []interfaces.FactoryEvent {
+	if h == nil {
+		return nil
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	return cloneFactoryEvents(h.events)
+}
+
 // Subscribe returns a replay snapshot followed by live canonical events.
 func (h *FactoryEventHistory) Subscribe(
 	ctx context.Context,
@@ -255,15 +266,15 @@ func (h *FactoryEventHistory) RecordInitialStructure() {
 
 // RecordFactoryChange records a canonical topology replacement event after a
 // live running factory definition change becomes active.
-func (h *FactoryEventHistory) RecordFactoryChange(tick int, payload factoryapi.FactoryChangeEventPayload, eventTime time.Time) {
+func (h *FactoryEventHistory) RecordFactoryChange(tick int, payload interfaces.FactoryChangeEventPayload, eventTime time.Time) {
 	if h == nil {
 		return
 	}
 	eventTime = interfaces.CanonicalEventTime(eventTime)
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeFactoryChange,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeFactoryChange,
 		fmt.Sprintf("%s/%d", eventIDFactoryChangePrefix, tick),
-		factoryapi.FactoryEventContext{Tick: tick, EventTime: eventTime},
+		interfaces.FactoryEventContext{Tick: tick, EventTime: eventTime},
 		payload,
 	))
 }
@@ -647,8 +658,6 @@ func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 		err = out.FromRunRequestEventPayload(typed)
 	case factoryapi.InitialStructureRequestEventPayload:
 		err = out.FromInitialStructureRequestEventPayload(typed)
-	case factoryapi.FactoryChangeEventPayload:
-		err = out.FromFactoryChangeEventPayload(typed)
 	case factoryapi.DispatchRequestEventPayload:
 		err = out.FromDispatchRequestEventPayload(typed)
 	case factoryapi.DispatchResponseEventPayload:

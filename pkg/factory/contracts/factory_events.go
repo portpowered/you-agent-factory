@@ -523,6 +523,14 @@ type InitialStructureRequestEventPayload struct {
 	SourceDirectory *string            `json:"sourceDirectory,omitempty"`
 }
 
+// FactoryChangeEventPayload carries the replacement Factory snapshot after a
+// live definition change becomes active.
+type FactoryChangeEventPayload struct {
+	Factory         *FactorySnapshot   `json:"factory"`
+	Metadata        *map[string]string `json:"metadata,omitempty"`
+	SourceDirectory *string            `json:"sourceDirectory,omitempty"`
+}
+
 // WorkInputPayload describes a work item submitted to the factory.
 type WorkInputPayload struct {
 	TokenID   string                 `json:"token_id"`

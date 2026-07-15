@@ -289,22 +289,22 @@ func snapshotHasActiveWork(snapshot *interfaces.EngineStateSnapshot[petri.Markin
 	return false
 }
 
-func replacementFactoryChangePayload(events []factoryapi.FactoryEvent) (factoryapi.FactoryChangeEventPayload, bool) {
+func replacementFactoryChangePayload(events []interfaces.FactoryEvent) (interfaces.FactoryChangeEventPayload, bool) {
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInitialStructureRequest {
+		if event.Type != interfaces.FactoryEventTypeInitialStructureRequest {
 			continue
 		}
-		payload, err := event.Payload.AsInitialStructureRequestEventPayload()
-		if err != nil {
-			return factoryapi.FactoryChangeEventPayload{}, false
+		var payload interfaces.InitialStructureRequestEventPayload
+		if err := event.DecodePayload(&payload); err != nil {
+			return interfaces.FactoryChangeEventPayload{}, false
 		}
-		return factoryapi.FactoryChangeEventPayload{
+		return interfaces.FactoryChangeEventPayload{
 			Factory:         payload.Factory,
 			Metadata:        payload.Metadata,
 			SourceDirectory: payload.SourceDirectory,
 		}, true
 	}
-	return factoryapi.FactoryChangeEventPayload{}, false
+	return interfaces.FactoryChangeEventPayload{}, false
 }
 
 func workersExecutionTick(metadata work.ExecutionMetadata) int {
