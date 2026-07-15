@@ -59,7 +59,11 @@ func writeDrift(stderr io.Writer, drift climanifestgen.Drift) {
 		sort.Strings(paths)
 		fmt.Fprintf(stderr, "  %s:\n", category.label)
 		for _, path := range paths {
-			fmt.Fprintf(stderr, "    - %s\n", path)
+			fmt.Fprintf(stderr, "    - %s", path)
+			if ids := drift.CommandIDs[path]; len(ids) > 0 {
+				fmt.Fprintf(stderr, " (command IDs: %v)", ids)
+			}
+			fmt.Fprintln(stderr)
 		}
 	}
 	fmt.Fprintln(stderr, "  remediation: go run ./cmd/climanifestgen -root .")

@@ -468,10 +468,14 @@ func (application *Application) Run(ctx context.Context) error {
 		)
 	}
 
-	shouldOpenDashboard := emitStartupMessages(application.cfg, runtimeLogDiagnosticsForRunner(application.runner))
+	shouldOpenDashboard := emitStartupMessages(
+		application.cfg, runtimeLogDiagnosticsForRunner(application.runner), interactiveOutput,
+	)
 	waitForDashboardOpen := func() {}
 	if shouldOpenDashboard {
-		waitForDashboardOpen = openDashboardWhenServerReady(ctx, application.cfg, application.dashboardReady)
+		waitForDashboardOpen = openDashboardWhenServerReady(
+			ctx, application.cfg, application.dashboardReady, dashboardOpener,
+		)
 	}
 	defer waitForDashboardOpen()
 
@@ -830,7 +834,11 @@ func DashboardURL(host string, port int) string {
 	return "http://" + authority + "/dashboard/ui"
 }
 
-func emitStartupMessages(cfg RunConfig, runtimeLog service.RuntimeLogDiagnostics) bool {
+func emitStartupMessages(
+	cfg RunConfig,
+	runtimeLog service.RuntimeLogDiagnostics,
+	isInteractive func(io.Writer) bool,
+) bool {
 	if cfg.StartupOutput == nil {
 		return false
 	}
@@ -857,7 +865,7 @@ func emitStartupMessages(cfg RunConfig, runtimeLog service.RuntimeLogDiagnostics
 
 	url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
 	fmt.Fprintf(cfg.StartupOutput, "Dashboard URL: %s\n", url)
-	if !cfg.OpenDashboard || !interactiveOutput(cfg.StartupOutput) {
+	if !cfg.OpenDashboard || !isInteractive(cfg.StartupOutput) {
 		fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open disabled; open %s\n", url)
 		return false
 	}
@@ -871,7 +879,12 @@ func reportRecordingPathOnShutdown(output io.Writer, recordPath resolvedRunRecor
 	fmt.Fprintf(output, "Recording saved: %s\n", recordPath.reportedPath)
 }
 
-func openDashboardWhenServerReady(ctx context.Context, cfg RunConfig, dashboardReady <-chan struct{}) func() {
+func openDashboardWhenServerReady(
+	ctx context.Context,
+	cfg RunConfig,
+	dashboardReady <-chan struct{},
+	openDashboard func(context.Context, string) error,
+) func() {
 	ctx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() {
@@ -880,16 +893,24 @@ func openDashboardWhenServerReady(ctx context.Context, cfg RunConfig, dashboardR
 		defer timer.Stop()
 
 		url := DashboardURL(bindDashboardHost(cfg), cfg.Port)
+		ready := false
 		select {
 		case <-dashboardReady:
-		case <-timer.C:
-			fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: dashboard server did not become ready\nOpen the dashboard at %s\n", url)
-			return
-		case <-ctx.Done():
-			return
+			ready = true
+		default:
+		}
+		if !ready {
+			select {
+			case <-dashboardReady:
+			case <-timer.C:
+				fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: dashboard server did not become ready\nOpen the dashboard at %s\n", url)
+				return
+			case <-ctx.Done():
+				return
+			}
 		}
 
-		if err := dashboardOpener(ctx, url); err != nil {
+		if err := openDashboard(ctx, url); err != nil {
 			fmt.Fprintf(cfg.StartupOutput, "Dashboard auto-open unavailable: %v\nOpen the dashboard at %s\n", err, url)
 			return
 		}

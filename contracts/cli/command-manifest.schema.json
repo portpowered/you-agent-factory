@@ -91,6 +91,12 @@
           "description": "Whether the command exposes a runnable handler.",
           "type": "boolean"
         },
+        "completeness": {
+          "description": "Marks records whose parsing and execution metadata is complete enough to serve as an authoritative generation source.",
+          "enum": [
+            "authoritative"
+          ]
+        },
         "suggestion": {
           "$ref": "#/$defs/suggestion"
         },
@@ -169,7 +175,66 @@
         "handler": {
           "$ref": "#/$defs/handler"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "completeness": {
+                "const": "authoritative"
+              }
+            },
+            "required": [
+              "completeness"
+            ]
+          },
+          "then": {
+            "required": [
+              "precedence",
+              "channels",
+              "constraints"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "completeness": {
+                "const": "authoritative"
+              },
+              "runnable": {
+                "const": true
+              }
+            },
+            "required": [
+              "completeness",
+              "runnable"
+            ]
+          },
+          "then": {
+            "required": [
+              "precedence",
+              "channels",
+              "outputs",
+              "exits",
+              "sideEffects",
+              "constraints",
+              "handler"
+            ],
+            "properties": {
+              "outputs": {
+                "minProperties": 1
+              },
+              "exits": {
+                "minProperties": 1
+              },
+              "sideEffects": {
+                "minProperties": 1
+              }
+            }
+          }
+        }
+      ]
     },
     "argument": {
       "type": "object",
@@ -403,6 +468,16 @@
             "int64",
             "stringArray"
           ]
+        },
+        "enum": {
+          "description": "Closed set of accepted serialized values when the flag is restricted to enumerated choices.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
         },
         "required": {
           "description": "Whether the flag must be supplied before invocation proceeds.",

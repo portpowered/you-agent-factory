@@ -581,3 +581,20 @@ func TestCommandManifestSchemaExecutionMetadataFixtures(t *testing.T) {
 		})
 	}
 }
+
+func TestCommandManifestSchemaRejectsIncompleteAuthoritativeRecord(t *testing.T) {
+	schema := commandManifestSchema(t)
+	instance := readJSON(t, filepath.Join("testdata", "cli", "valid-handler-binding.json"))
+	commands := instance.(map[string]any)["commands"].(map[string]any)
+	command := commands["example.factory.invoke"].(map[string]any)
+	command["completeness"] = "authoritative"
+
+	err := schema.Validate(instance)
+	if err == nil {
+		t.Fatal("expected incomplete authoritative command to fail validation")
+	}
+	wantPath := "/commands/example.factory.invoke"
+	if paths := validationPaths(t, err); !slices.Contains(paths, wantPath) {
+		t.Fatalf("validation paths = %v, want %q", paths, wantPath)
+	}
+}

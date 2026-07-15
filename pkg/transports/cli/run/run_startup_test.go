@@ -30,60 +30,25 @@ import (
 )
 
 func TestRun_StartupOutputFallsBackWhenDashboardOpenFails(t *testing.T) {
-	originalBuilder := buildFactoryService
-	originalOpener := dashboardOpener
-	originalInteractive := interactiveOutput
-	originalStartAPIServer := startAPIServer
-	defer func() {
-		buildFactoryService = originalBuilder
-		dashboardOpener = originalOpener
-		interactiveOutput = originalInteractive
-		startAPIServer = originalStartAPIServer
-	}()
-
-	buildFactoryService = func(_ context.Context, cfg *service.FactoryServiceConfig) (factoryServiceRunner, error) {
-		return stubFactoryService{
-			run: func(ctx context.Context) error {
-				return cfg.APIServerStarter(ctx, nil, cfg.Port, zap.NewNop())
-			},
-		}, nil
-	}
-	openAttempted := make(chan struct{})
-	dashboardOpener = func(_ context.Context, _ string) error {
-		close(openAttempted)
-		return errors.New("browser unavailable")
-	}
-	interactiveOutput = func(io.Writer) bool {
-		return true
-	}
-	startAPIServer = func(
-		ctx context.Context,
-		_ apisurface.APISurface,
-		_ int,
-		_ *zap.Logger,
-		markReady func(),
-	) error {
-		markReady()
-		select {
-		case <-openAttempted:
-		case <-ctx.Done():
-			t.Fatal("context canceled before dashboard open fallback")
-		case <-time.After(time.Second):
-			t.Fatal("timed out waiting for dashboard open fallback")
-		}
-		return nil
-	}
-
 	var out bytes.Buffer
-	err := Run(context.Background(), RunConfig{
-		Dir:           "factory",
-		Port:          7437,
-		OpenDashboard: true,
-		StartupOutput: &out,
-	})
-	if err != nil {
-		t.Fatalf("Run: %v", err)
+	dashboardReady := make(chan struct{})
+	close(dashboardReady)
+	openAttempted := make(chan struct{})
+	wait := openDashboardWhenServerReady(
+		context.Background(),
+		RunConfig{Port: 7437, StartupOutput: &out},
+		dashboardReady,
+		func(_ context.Context, _ string) error {
+			close(openAttempted)
+			return errors.New("browser unavailable")
+		},
+	)
+	select {
+	case <-openAttempted:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for dashboard open fallback")
 	}
+	wait()
 
 	output := out.String()
 	if !strings.Contains(output, "Dashboard auto-open unavailable: browser unavailable") {

@@ -47,18 +47,45 @@ func TestRunCheckFailsOnStaleArtifact(t *testing.T) {
 	}
 }
 
+func TestRunCheckNamesAffectedStableCommandIDs(t *testing.T) {
+	root := t.TempDir()
+	writeProductionManifestFixture(t, root)
+	if err := climanifestgen.Generate(root); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(root, filepath.FromSlash(climanifestgen.WorkflowCompatibilityFamilyJSONPath))
+	if err := os.WriteFile(target, []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+	if status := run(root, true, stdout, stderr); status == 0 {
+		t.Fatal("run(check) = 0, want stale-artifact failure")
+	}
+	for _, id := range climanifestgen.WorkflowCompatibilityFamilyCommandIDs {
+		if !bytes.Contains(stderr.Bytes(), []byte(id)) {
+			t.Errorf("stderr = %q, want affected stable ID %q", stderr.String(), id)
+		}
+	}
+}
+
 func writeProductionManifestFixture(t *testing.T, root string) {
 	t.Helper()
 	repositoryRoot := testutil.MustRepoPath(t, ".")
-	manifest, err := os.ReadFile(filepath.Join(repositoryRoot, filepath.FromSlash(climanifestgen.ProductionManifestPath)))
-	if err != nil {
-		t.Fatalf("read production manifest fixture: %v", err)
-	}
-	manifestPath := filepath.Join(root, filepath.FromSlash(climanifestgen.ProductionManifestPath))
-	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
-		t.Fatalf("create manifest directory: %v", err)
-	}
-	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
-		t.Fatalf("write manifest: %v", err)
+	for _, relativePath := range []string{
+		climanifestgen.ProductionManifestPath,
+		climanifestgen.CompatibilityManifestPath,
+	} {
+		manifest, err := os.ReadFile(filepath.Join(repositoryRoot, filepath.FromSlash(relativePath)))
+		if err != nil {
+			t.Fatalf("read %s fixture: %v", relativePath, err)
+		}
+		manifestPath := filepath.Join(root, filepath.FromSlash(relativePath))
+		if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+			t.Fatalf("create manifest directory: %v", err)
+		}
+		if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
+			t.Fatalf("write %s: %v", relativePath, err)
+		}
 	}
 }

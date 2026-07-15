@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/spf13/cobra"
 )
 
 // ValidateConfig holds parameters for workflow source validation output.
@@ -15,6 +16,18 @@ type ValidateConfig struct {
 	SourceConfig
 	JSON   bool
 	Output io.Writer
+}
+
+// ValidateRunE returns the handwritten workflow validation handler used by
+// compatibility and generated command metadata wiring.
+func ValidateRunE(cfg *ValidateConfig, jsonOutput *bool) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, _ []string) error {
+		if jsonOutput != nil {
+			cfg.JSON = *jsonOutput
+		}
+		cfg.Output = cmd.OutOrStdout()
+		return Validate(*cfg)
+	}
 }
 
 // Validate resolves and validates workflow source using the shared validation contract.
