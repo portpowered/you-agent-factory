@@ -2,12 +2,93 @@ package catalog_test
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	jscatalog "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/catalog"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/callbehavior"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/symbolidentity"
 )
+
+func TestCatalogSymbolPathsFromDocument_RejectsInvalidDocument(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		document any
+		wantErr  string
+	}{
+		{
+			name:     "non-object document",
+			document: []any{},
+			wantErr:  "catalog document is not an object",
+		},
+		{
+			name: "missing symbols",
+			document: map[string]any{
+				"sharedSchemas": map[string]any{},
+			},
+			wantErr: "catalog document missing symbols",
+		},
+		{
+			name: "symbols not object",
+			document: map[string]any{
+				"symbols": []any{},
+			},
+			wantErr: "catalog symbols is not an object",
+		},
+		{
+			name: "symbol not object",
+			document: map[string]any{
+				"symbols": map[string]any{
+					"javascript.log": "not-an-object",
+				},
+			},
+			wantErr: `catalog symbol "javascript.log" is not an object`,
+		},
+		{
+			name: "empty path",
+			document: map[string]any{
+				"symbols": map[string]any{
+					"javascript.log": map[string]any{
+						"path": "",
+					},
+				},
+			},
+			wantErr: `catalog symbol "javascript.log" has empty path`,
+		},
+	}
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := jscatalog.CatalogSymbolPathsFromDocument(tc.document)
+			if err == nil {
+				t.Fatal("CatalogSymbolPathsFromDocument() error = nil, want error")
+			}
+			if err.Error() != tc.wantErr {
+				t.Fatalf("CatalogSymbolPathsFromDocument() error = %q, want %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestVerifyCatalogPathCompleteness_ReturnsFormattedError(t *testing.T) {
+	catalog := installedCatalogSymbolPaths(t)
+	catalog = removeCatalogPath(catalog, "phase")
+
+	err := jscatalog.VerifyCatalogPathCompleteness(
+		catalog,
+		symbolidentity.ProjectInstalledBindings(),
+		callbehavior.ProjectInstalledCallBehavior(),
+	)
+	if err == nil {
+		t.Fatal("VerifyCatalogPathCompleteness() error = nil, want formatted completeness failure")
+	}
+	if !strings.Contains(err.Error(), "catalog path completeness failed:") {
+		t.Fatalf("VerifyCatalogPathCompleteness() error = %q, want completeness prefix", err)
+	}
+}
 
 func TestCatalogSymbolPathsFromDocument_ExtractsSortedPaths(t *testing.T) {
 	document := map[string]any{
