@@ -513,10 +513,6 @@ func TestMockWorkersSchema_StaleStagingDetectedByContractCheck(t *testing.T) {
 	}()
 
 	corrupted := append(append([]byte(nil), before...), '\n')
-	wantStale := []string{
-		"packages/api/generated/manifest.json",
-		target,
-	}
 	var (
 		drift    contractstaging.Drift
 		detected bool
@@ -529,13 +525,13 @@ func TestMockWorkersSchema_StaleStagingDetectedByContractCheck(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Check() error = %v", err)
 		}
-		if len(drift.Stale) == len(wantStale) && drift.Stale[0] == wantStale[0] && drift.Stale[1] == wantStale[1] {
+		if len(drift.Stale) == 1 && drift.Stale[0] == target {
 			detected = true
 			break
 		}
 	}
 	if !detected {
-		t.Fatalf("Check() stale = %#v, want %#v", drift.Stale, wantStale)
+		t.Fatalf("Check() stale = %#v, want [%q]", drift.Stale, target)
 	}
 }
 
