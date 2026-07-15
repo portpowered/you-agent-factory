@@ -5,17 +5,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/retiredsurfaceguard"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 )
 
-// settledRetiredDocsTopics are hard-retired packaged docs topics from S15/B08 closeout.
-// Keep aligned with repository guards in story 005.
-var settledRetiredDocsTopics = []string{
-	"packaged-fusion",
-	"packaged-goal",
-	"packaged-tts",
-	"mcp-hosts",
-}
+var settledRetiredDocsTopics = retiredsurfaceguard.SettledRetiredDocsTopics()
 
 var canonicalDocsTopicSamples = []string{
 	"agents",

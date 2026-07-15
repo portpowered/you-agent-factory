@@ -8,18 +8,13 @@ import (
 	"testing"
 
 	. "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/internal/retiredsurfaceguard"
 	"github.com/portpowered/infinite-you/pkg/config/configinit"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
 )
 
-// settledScopedNamedFactoryPaths are canonical scoped names whose production
-// resolve, persist, and materialize must use hierarchical on-disk layout only.
-// Keep aligned with repository guards in story 005.
-var settledScopedNamedFactoryPaths = []string{
-	"@you/goal",
-	"@you/tts",
-}
+var settledScopedNamedFactoryPaths = retiredsurfaceguard.SettledScopedNamedFactoryPaths()
 
 func TestRetiredEncodedPathResolution_ProductionMappingUsesHierarchicalLayout(t *testing.T) {
 	rootDir := t.TempDir()

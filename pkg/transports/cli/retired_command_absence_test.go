@@ -5,20 +5,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/retiredsurfaceguard"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandidentity"
 	configcli "github.com/portpowered/infinite-you/pkg/transports/cli/config"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 )
 
-// settledRetiredCLIPaths are hard-retired CLI surfaces from S11/S12/B08 closeout.
-// Keep aligned with docs/reference/config.md and repository guards in story 005.
-var settledRetiredCLIPaths = []string{
-	"you config validate",
-	"you config flatten",
-	"you config expand",
-	"you factory save",
-	"you factory validate",
-}
+var settledRetiredCLIPaths = retiredsurfaceguard.SettledRetiredCLIPaths()
 
 var settledRetiredCLIInvocations = []struct {
 	name string
