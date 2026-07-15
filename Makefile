@@ -182,7 +182,7 @@ test-functional-long:
 
 test-built-cli-acceptance:
 	$(MAKE) build
-	$(GO) test -short $(BUILT_CLI_ACCEPTANCE_PACKAGES) -count=1 -timeout $(BUILT_CLI_ACCEPTANCE_TIMEOUT)
+	$(GO) test $(BUILT_CLI_ACCEPTANCE_PACKAGES) -count=1 -timeout $(BUILT_CLI_ACCEPTANCE_TIMEOUT)
 
 verify-fast:
 	@printf '%s\n' "Running fast verification tier: typecheck + short UI/unit suite + short Go suite"

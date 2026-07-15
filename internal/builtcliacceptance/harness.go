@@ -11,7 +11,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 )
 
 const (
@@ -241,14 +240,6 @@ func (s *Session) RequireSuccess(t testing.TB, scenario string, result RunResult
 	}
 	t.Fatalf("scenario %s: %v\nstdout:\n%s\nstderr:\n%s", scenario, err, result.Stdout, result.Stderr)
 	return result
-}
-
-// RunWithTimeout is a convenience wrapper around Run with a bounded context.
-func (s *Session) RunWithTimeout(t testing.TB, timeout time.Duration, args ...string) (RunResult, error) {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	return s.Run(ctx, args...)
 }
 
 func (s *Session) failure(phase string, err error, result RunResult) *ScenarioFailure {
