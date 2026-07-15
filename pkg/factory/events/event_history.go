@@ -311,24 +311,24 @@ func (h *FactoryEventHistory) RecordWorkRequest(tick int, record work.WorkReques
 		return
 	}
 	eventTime = interfaces.CanonicalEventTime(eventTime)
-	context := factoryapi.FactoryEventContext{
+	context := interfaces.FactoryEventContext{
 		Tick:      tick,
 		EventTime: eventTime,
-		RequestId: stringPtr(record.RequestID),
-		TraceIds:  stringSlicePtr(work.CanonicalChainingTraceIDs([]string{record.TraceID})),
-		WorkIds:   stringSlicePtr(workItemIDs(record.WorkItems)),
+		RequestID: stringPtr(record.RequestID),
+		TraceIDs:  stringSlicePtr(work.CanonicalChainingTraceIDs([]string{record.TraceID})),
+		WorkIDs:   stringSlicePtr(workItemIDs(record.WorkItems)),
 		Source:    stringPtrIfNotEmpty(record.Source),
 	}
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeWorkRequest,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeWorkRequest,
 		fmt.Sprintf("%s/%s", eventIDWorkRequestPrefix, record.RequestID),
 		context,
-		factoryapi.WorkRequestEventPayload{
-			Type:          factoryapi.WorkRequestType(record.Type),
-			Works:         generatedWorksPtr(record.WorkItems),
-			Relations:     generatedFactoryRelationsPtr(record.Relations),
-			Source:        stringPtrIfNotEmpty(record.Source),
-			ParentLineage: stringSlicePtr(record.ParentLineage),
+		work.WorkRequestEventPayload{
+			Type:          record.Type,
+			Works:         requestEventWorks(record.WorkItems),
+			Relations:     eventRelations(record.Relations),
+			Source:        record.Source,
+			ParentLineage: append([]string(nil), record.ParentLineage...),
 		},
 	))
 	for i, relation := range record.Relations {
@@ -348,17 +348,17 @@ func (h *FactoryEventHistory) RecordRelationshipChange(tick int, requestID strin
 	if relation.TraceID == "" {
 		relation.TraceID = traceID
 	}
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeRelationshipChangeRequest,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeRelationshipChangeRequest,
 		fmt.Sprintf("%s/%s/%d", eventIDRelationshipPrefix, requestID, index),
-		factoryapi.FactoryEventContext{
+		interfaces.FactoryEventContext{
 			Tick:      tick,
 			EventTime: eventTime,
-			RequestId: stringPtrIfNotEmpty(requestID),
-			TraceIds:  stringSlicePtr(work.CanonicalChainingTraceIDs([]string{traceID, relation.TraceID})),
-			WorkIds:   stringSlicePtr(uniqueStrings([]string{relation.SourceWorkID, relation.TargetWorkID})),
+			RequestID: stringPtrIfNotEmpty(requestID),
+			TraceIDs:  stringSlicePtr(work.CanonicalChainingTraceIDs([]string{traceID, relation.TraceID})),
+			WorkIDs:   stringSlicePtr(uniqueStrings([]string{relation.SourceWorkID, relation.TargetWorkID})),
 		},
-		factoryapi.RelationshipChangeRequestEventPayload{Relation: generatedFactoryRelation(relation)},
+		work.RelationshipChangeRequestEventPayload{Relation: eventRelation(relation)},
 	))
 }
 
@@ -649,10 +649,6 @@ func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 		err = out.FromInitialStructureRequestEventPayload(typed)
 	case factoryapi.FactoryChangeEventPayload:
 		err = out.FromFactoryChangeEventPayload(typed)
-	case factoryapi.WorkRequestEventPayload:
-		err = out.FromWorkRequestEventPayload(typed)
-	case factoryapi.RelationshipChangeRequestEventPayload:
-		err = out.FromRelationshipChangeRequestEventPayload(typed)
 	case factoryapi.DispatchRequestEventPayload:
 		err = out.FromDispatchRequestEventPayload(typed)
 	case factoryapi.DispatchResponseEventPayload:
@@ -764,14 +760,6 @@ func workItemIDs(items []work.FactoryWorkItem) []string {
 	return uniqueStrings(values)
 }
 
-func generatedStringMapPtr(values map[string]string) *factoryapi.StringMap {
-	if len(values) == 0 {
-		return nil
-	}
-	converted := factoryapi.StringMap(cloneStringMap(values))
-	return &converted
-}
-
 func stringPtr(value string) *string {
 	return &value
 }
@@ -784,13 +772,6 @@ func stringPtrIfNotEmpty(value string) *string {
 }
 
 func int64Ptr(value int64) *int64 {
-	return &value
-}
-
-func intPtrIfPositive(value int) *int {
-	if value <= 0 {
-		return nil
-	}
 	return &value
 }
 

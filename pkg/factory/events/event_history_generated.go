@@ -1,6 +1,7 @@
 package events
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -12,7 +13,6 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
@@ -306,13 +306,6 @@ func generatedWorkStateType(category string) factoryapi.WorkStateType {
 	}
 }
 
-func generatedWorkStatePtr(name string) *factoryapi.WorkState {
-	if name == "" {
-		return nil
-	}
-	return &factoryapi.WorkState{Name: name, Type: inferredGeneratedWorkStateType(name)}
-}
-
 func inferredGeneratedWorkStateType(name string) factoryapi.WorkStateType {
 	switch name {
 	case "init":
@@ -403,42 +396,6 @@ func splitPlaceID(placeID string) (string, string) {
 	return before, after
 }
 
-func generatedWorksPtr(items []work.FactoryWorkItem) *[]factoryapi.Work {
-	works := generatedWorks(items)
-	return slicePtr(works)
-}
-
-func generatedWorks(items []work.FactoryWorkItem) []factoryapi.Work {
-	out := make([]factoryapi.Work, 0, len(items))
-	for _, item := range items {
-		out = append(out, generatedWork(item))
-	}
-	return out
-}
-
-func generatedWork(item work.FactoryWorkItem) factoryapi.Work {
-	name := item.DisplayName
-	if name == "" {
-		name = item.ID
-	}
-	currentChainingTraceID := item.CurrentChainingTraceID
-	if currentChainingTraceID == "" {
-		currentChainingTraceID = item.TraceID
-	}
-	return factoryapi.Work{
-		Name:                     name,
-		WorkId:                   stringPtrIfNotEmpty(item.ID),
-		WorkTypeName:             stringPtrIfNotEmpty(item.WorkTypeID),
-		State:                    generatedWorkStatePtr(item.State),
-		ChainingTraceDepth:       intPtrIfPositive(item.ChainingTraceDepth),
-		CurrentChainingTraceId:   stringPtrIfNotEmpty(currentChainingTraceID),
-		PreviousChainingTraceIds: stringSlicePtr(item.PreviousChainingTraceIDs),
-		TraceId:                  stringPtrIfNotEmpty(item.TraceID),
-		Content:                  contentcontract.GeneratedPtrFromParts(item.Content),
-		Tags:                     generatedStringMapPtr(item.Tags),
-	}
-}
-
 func dispatchConsumedWorkRefsFromTokens(tokens []factorytoken.Token) []interfaces.DispatchConsumedWorkRef {
 	out := make([]interfaces.DispatchConsumedWorkRef, 0, len(tokens))
 	for _, token := range tokens {
@@ -474,25 +431,25 @@ func dispatchRequestEventMetadataPtr(replayKey string, selection workerexecution
 	}
 }
 
-func generatedFactoryRelationsPtr(relations []work.FactoryRelation) *[]factoryapi.Relation {
-	out := make([]factoryapi.Relation, 0, len(relations))
+func eventRelations(relations []work.FactoryRelation) []work.WorkRequestEventRelation {
+	out := make([]work.WorkRequestEventRelation, 0, len(relations))
 	for _, relation := range relations {
-		out = append(out, generatedFactoryRelation(relation))
+		out = append(out, eventRelation(relation))
 	}
-	return slicePtr(out)
+	return out
 }
 
-func generatedFactoryRelation(relation work.FactoryRelation) factoryapi.Relation {
+func eventRelation(relation work.FactoryRelation) work.WorkRequestEventRelation {
 	targetName := relation.TargetWorkName
 	if targetName == "" {
 		targetName = relation.TargetWorkID
 	}
-	return factoryapi.Relation{
-		Type:           factoryapi.RelationType(relation.Type),
+	return work.WorkRequestEventRelation{
+		Type:           work.WorkRelationType(relation.Type),
 		SourceWorkName: relation.SourceWorkName,
 		TargetWorkName: targetName,
-		TargetWorkId:   stringPtrIfNotEmpty(relation.TargetWorkID),
-		RequiredState:  stringPtrIfNotEmpty(relation.RequiredState),
+		TargetWorkID:   relation.TargetWorkID,
+		RequiredState:  relation.RequiredState,
 	}
 }
 
@@ -533,7 +490,7 @@ func (h *FactoryEventHistory) dispatchResource(resourceID string) interfaces.Dis
 	return resource
 }
 
-func eventWorksPtr(items []work.FactoryWorkItem) *[]work.WorkRequestEventWork {
+func eventWorks(items []work.FactoryWorkItem) []work.WorkRequestEventWork {
 	out := make([]work.WorkRequestEventWork, 0, len(items))
 	for _, item := range items {
 		name := item.DisplayName
@@ -561,5 +518,34 @@ func eventWorksPtr(items []work.FactoryWorkItem) *[]work.WorkRequestEventWork {
 			Tags:                     cloneStringMap(item.Tags),
 		})
 	}
+	return out
+}
+
+func requestEventWorks(items []work.FactoryWorkItem) []work.WorkRequestEventWork {
+	out := eventWorks(items)
+	for index := range out {
+		out[index].Content = requestEventContent(out[index].Content)
+	}
+	return out
+}
+
+func requestEventContent(parts []work.WorkContentPart) []work.WorkContentPart {
+	out := make([]work.WorkContentPart, 0, len(parts))
+	for _, part := range parts {
+		switch part.Type.Normalized() {
+		case work.WorkContentPartTypeText, work.WorkContentPartTypeImage,
+			work.WorkContentPartTypeAudio, work.WorkContentPartTypeBinary:
+			out = append(out, part)
+		case work.WorkContentPartTypeJSON:
+			if len(part.JSON) == 0 || json.Valid(part.JSON) {
+				out = append(out, part)
+			}
+		}
+	}
+	return work.CloneWorkContentParts(out)
+}
+
+func eventWorksPtr(items []work.FactoryWorkItem) *[]work.WorkRequestEventWork {
+	out := eventWorks(items)
 	return &out
 }

@@ -59,6 +59,65 @@ func TestFactoryEventHistory_RecordWorkRequest_PreservesGeneratedWorkChainingTra
 	})
 }
 
+func TestFactoryEventHistory_RecordWorkRequest_AppendsWorkOwnedCanonicalPayloads(t *testing.T) {
+	eventTime := time.Date(2026, 7, 15, 22, 45, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	var recorded []interfaces.FactoryEvent
+	history.AddEventRecorder(func(event interfaces.FactoryEvent) {
+		recorded = append(recorded, event)
+	})
+
+	history.RecordWorkRequest(7, work.WorkRequestRecord{
+		RequestID:     "request-domain-owned",
+		Type:          work.WorkRequestTypeFactoryRequestBatch,
+		TraceID:       "trace-domain-owned",
+		Source:        "api",
+		ParentLineage: []string{"trace-parent"},
+		WorkItems: []work.FactoryWorkItem{{
+			ID:          "work-domain-owned",
+			WorkTypeID:  "task",
+			DisplayName: "domain-owned",
+			State:       "queued",
+			TraceID:     "trace-domain-owned",
+		}},
+		Relations: []work.FactoryRelation{{
+			Type:           string(work.WorkRelationDependsOn),
+			SourceWorkName: "domain-owned",
+			TargetWorkID:   "work-parent",
+			RequiredState:  "done",
+		}},
+	}, eventTime)
+
+	if len(recorded) != 2 {
+		t.Fatalf("canonical event count = %d, want request plus relationship", len(recorded))
+	}
+	var requestPayload work.WorkRequestEventPayload
+	if err := recorded[0].DecodePayload(&requestPayload); err != nil {
+		t.Fatalf("decode canonical work request payload: %v", err)
+	}
+	if requestPayload.Source != "api" || len(requestPayload.Works) != 1 || requestPayload.Works[0].WorkID != "work-domain-owned" {
+		t.Fatalf("canonical work request payload = %#v, want Work-owned request fields", requestPayload)
+	}
+	if len(requestPayload.Relations) != 1 || requestPayload.Relations[0].TargetWorkID != "work-parent" {
+		t.Fatalf("canonical request relations = %#v, want target work-parent", requestPayload.Relations)
+	}
+	var relationshipPayload work.RelationshipChangeRequestEventPayload
+	if err := recorded[1].DecodePayload(&relationshipPayload); err != nil {
+		t.Fatalf("decode canonical relationship payload: %v", err)
+	}
+	if relationshipPayload.Relation.TargetWorkID != "work-parent" || relationshipPayload.Relation.RequiredState != "done" {
+		t.Fatalf("canonical relationship payload = %#v, want Work-owned relationship", relationshipPayload)
+	}
+
+	generated := history.Events()
+	if _, err := generated[0].Payload.AsWorkRequestEventPayload(); err != nil {
+		t.Fatalf("decode generated work request boundary: %v", err)
+	}
+	if _, err := generated[1].Payload.AsRelationshipChangeRequestEventPayload(); err != nil {
+		t.Fatalf("decode generated relationship boundary: %v", err)
+	}
+}
+
 func TestFactoryEventHistory_RecordWorkRequest_UsesCanonicalGeneratedWorkContentTranslation(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 18, 1, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })

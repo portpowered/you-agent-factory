@@ -88,6 +88,12 @@ type WorkRequestEventRelation struct {
 	RequiredState  string           `json:"requiredState,omitempty"`
 }
 
+// RelationshipChangeRequestEventPayload records one Work-owned relationship
+// in canonical Factory history.
+type RelationshipChangeRequestEventPayload struct {
+	Relation WorkRequestEventRelation `json:"relation"`
+}
+
 // WorkRequestSubmittedWork identifies one accepted work item in a batch upsert.
 type WorkRequestSubmittedWork struct {
 	Name         string

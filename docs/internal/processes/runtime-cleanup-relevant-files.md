@@ -48,6 +48,13 @@ Preserve the public camel-case JSON shape on those owner-defined payloads so
 generated OpenAPI union decoding remains a boundary compatibility check rather
 than a production event-construction dependency.
 
+Work request and relationship-change producers use Work-owned payload, Work,
+relation, content, and lineage contracts while the Factory owner supplies the
+canonical event envelope and correlation context. Preserve accepted public
+content filtering and relationship name/ID fallbacks before marshaling the
+owner payload; generated union decoding belongs in boundary compatibility
+tests, not canonical history construction.
+
 Production command runners must remain blocking without taking lifecycle ownership
 back from `pkg/initializer`. The entrypoint should construct and start the graph
 through `pkg/root`, then let the returned application wait for its selected
