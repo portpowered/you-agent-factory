@@ -99,7 +99,7 @@
                 "text": "{\"error\":{\"code\":\"factory_session.start.validation_failed\",\"message\":\"factory session source validation failed\",\"retryable\":false,\"sessionId\":\"dur-sess-pending-001\"}}"
               }
             ],
-            "isError": false
+            "isError": true
           }
         ]
       }
