@@ -42,6 +42,12 @@ and payload contracts and append the canonical domain envelope directly.
 Generated dispatch lifecycle payloads are decoded only by public compatibility
 tests and transport-facing projection adapters.
 
+Work-state changes, terminal run responses, and Factory lifecycle changes use
+Factory-owned payloads and state values when they enter canonical history.
+Preserve the public camel-case JSON shape on those owner-defined payloads so
+generated OpenAPI union decoding remains a boundary compatibility check rather
+than a production event-construction dependency.
+
 Production command runners must remain blocking without taking lifecycle ownership
 back from `pkg/initializer`. The entrypoint should construct and start the graph
 through `pkg/root`, then let the returned application wait for its selected

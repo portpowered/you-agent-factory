@@ -638,6 +638,15 @@ type RunEventWallClock struct {
 	StartedAt  *time.Time `json:"startedAt,omitempty"`
 }
 
+// FactoryStateResponseEventPayload describes one canonical Factory lifecycle
+// transition. The generated public event union maps this owner-defined payload
+// at the transport boundary.
+type FactoryStateResponseEventPayload struct {
+	PreviousState *FactoryState `json:"previousState,omitempty"`
+	Reason        *string       `json:"reason,omitempty"`
+	State         FactoryState  `json:"state"`
+}
+
 // FactoryStateChangePayload describes a lifecycle state change.
 type FactoryStateChangePayload struct {
 	PreviousState string `json:"previous_state,omitempty"`

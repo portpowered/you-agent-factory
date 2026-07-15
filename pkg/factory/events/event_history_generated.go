@@ -563,11 +563,3 @@ func eventWorksPtr(items []work.FactoryWorkItem) *[]work.WorkRequestEventWork {
 	}
 	return &out
 }
-
-func generatedFactoryStatePtr(stateValue interfaces.FactoryState) *factoryapi.FactoryState {
-	if stateValue == "" {
-		return nil
-	}
-	converted := factoryapi.FactoryState(stateValue)
-	return &converted
-}

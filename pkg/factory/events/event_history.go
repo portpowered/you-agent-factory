@@ -507,15 +507,15 @@ func (h *FactoryEventHistory) RecordRunResponse(tick int, state interfaces.Facto
 	h.hasRunResponse = true
 	h.mu.Unlock()
 
-	stateValue := factoryapi.FactoryState(state)
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeRunResponse,
+	stateValue := state
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeRunResponse,
 		eventIDRunResponse,
-		factoryapi.FactoryEventContext{Tick: tick, EventTime: eventTime},
-		factoryapi.RunResponseEventPayload{
+		interfaces.FactoryEventContext{Tick: tick, EventTime: eventTime},
+		interfaces.RunResponseEventPayload{
 			State:  &stateValue,
 			Reason: stringPtrIfNotEmpty(reason),
-			WallClock: &factoryapi.WallClock{
+			WallClock: &interfaces.RunEventWallClock{
 				StartedAt:  timePtrIfNotZero(recordedAt),
 				FinishedAt: timePtrIfNotZero(eventTime),
 			},
@@ -534,24 +534,24 @@ func (h *FactoryEventHistory) RecordWorkStateChange(tick int, record work.WorkSt
 	if workTypeName == "" {
 		workTypeName = record.WorkTypeID
 	}
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeWorkStateChange,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeWorkStateChange,
 		fmt.Sprintf("%s/%s/%d", eventIDWorkStateChangePrefix, record.WorkID, tick),
-		factoryapi.FactoryEventContext{
+		interfaces.FactoryEventContext{
 			Tick:      tick,
 			EventTime: eventTime,
-			RequestId: stringPtrIfNotEmpty(record.RequestID),
-			WorkIds:   stringSlicePtr([]string{record.WorkID}),
+			RequestID: stringPtrIfNotEmpty(record.RequestID),
+			WorkIDs:   stringSlicePtr([]string{record.WorkID}),
 		},
-		factoryapi.WorkStateChangeEventPayload{
-			WorkId:        record.WorkID,
+		interfaces.WorkStateChangeEventPayload{
+			WorkID:        record.WorkID,
 			WorkTypeName:  workTypeName,
 			FromState:     record.FromState,
 			ToState:       record.ToState,
-			FromPlaceId:   record.FromPlaceID,
-			ToPlaceId:     record.ToPlaceID,
-			Source:        factoryapi.WorkStateChangeSource(record.Source),
-			TriggerWorkId: stringPtrIfNotEmpty(record.TriggerWorkID),
+			FromPlaceID:   record.FromPlaceID,
+			ToPlaceID:     record.ToPlaceID,
+			Source:        record.Source,
+			TriggerWorkID: stringPtrIfNotEmpty(record.TriggerWorkID),
 			Reason:        stringPtrIfNotEmpty(record.Reason),
 		},
 	))
@@ -563,13 +563,14 @@ func (h *FactoryEventHistory) RecordFactoryStateChange(tick int, previous interf
 		return
 	}
 	eventTime = interfaces.CanonicalEventTime(eventTime)
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeFactoryStateResponse,
+	nextState := next
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeFactoryStateResponse,
 		fmt.Sprintf("%s/%d/%s", eventIDStateChangePrefix, tick, next),
-		factoryapi.FactoryEventContext{Tick: tick, EventTime: eventTime},
-		factoryapi.FactoryStateResponseEventPayload{
-			PreviousState: generatedFactoryStatePtr(previous),
-			State:         factoryapi.FactoryState(next),
+		interfaces.FactoryEventContext{Tick: tick, EventTime: eventTime},
+		interfaces.FactoryStateResponseEventPayload{
+			PreviousState: &previous,
+			State:         nextState,
 			Reason:        stringPtrIfNotEmpty(reason),
 		},
 	))
@@ -656,12 +657,6 @@ func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
 		err = out.FromDispatchRequestEventPayload(typed)
 	case factoryapi.DispatchResponseEventPayload:
 		err = out.FromDispatchResponseEventPayload(typed)
-	case factoryapi.FactoryStateResponseEventPayload:
-		err = out.FromFactoryStateResponseEventPayload(typed)
-	case factoryapi.RunResponseEventPayload:
-		err = out.FromRunResponseEventPayload(typed)
-	case factoryapi.WorkStateChangeEventPayload:
-		err = out.FromWorkStateChangeEventPayload(typed)
 	case factoryapi.SessionStartedEventPayload:
 		err = out.FromSessionStartedEventPayload(typed)
 	case factoryapi.SessionResultUpdatedEventPayload:
