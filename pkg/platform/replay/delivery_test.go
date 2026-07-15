@@ -618,3 +618,53 @@ func resourceReplayToken(id string) interfaces.Token {
 		},
 	}
 }
+
+func TestSubmissionHook_CancellationDoesNotConsumeDueSubmission(t *testing.T) {
+	hook, err := NewSubmissionHook(testReplayArtifact(t, replayWorkRequestEvent(t, "request-canceled", 1, "api", []factoryapi.Work{{
+		Name:         "work-canceled",
+		WorkId:       stringPtrIfNotEmpty("work-canceled"),
+		RequestId:    stringPtrIfNotEmpty("request-canceled"),
+		WorkTypeName: stringPtrIfNotEmpty("task"),
+	}}, nil)))
+	if err != nil {
+		t.Fatalf("NewSubmissionHook: %v", err)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := hook.OnTick(canceled, replaySubmissionHookContext(1)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("OnTick canceled error = %v, want context.Canceled", err)
+	}
+
+	got, err := hook.OnTick(context.Background(), replaySubmissionHookContext(1))
+	if err != nil {
+		t.Fatalf("OnTick after cancellation: %v", err)
+	}
+	assertSubmissionHookDueTickBatchCount(t, got, 1)
+	assertSubmissionHookReplayedRequestID(t, got.GeneratedBatches[0], "request-canceled")
+}
+
+func TestWorkStateChangeHook_CancellationDoesNotConsumeDueMove(t *testing.T) {
+	hook, err := NewWorkStateChangeHook(testReplayArtifact(
+		t,
+		replayWorkStateChangeEvent(t, "work-canceled", "failed", "init", "task:failed", "task:init", factoryapi.WorkStateChangeSourceAPI, 1),
+	))
+	if err != nil {
+		t.Fatalf("NewWorkStateChangeHook: %v", err)
+	}
+	input := replaySubmissionHookContextWithWorkToken(1, "work-canceled", "token-work-canceled", "task:failed")
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := hook.OnTick(canceled, input); !errors.Is(err, context.Canceled) {
+		t.Fatalf("OnTick canceled error = %v, want context.Canceled", err)
+	}
+
+	got, err := hook.OnTick(context.Background(), input)
+	if err != nil {
+		t.Fatalf("OnTick after cancellation: %v", err)
+	}
+	if len(got.MarkingMutations) != 1 || got.MarkingMutations[0].TokenID != "token-work-canceled" {
+		t.Fatalf("marking mutations after cancellation = %#v, want retained move", got.MarkingMutations)
+	}
+}

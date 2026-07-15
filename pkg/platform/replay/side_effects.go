@@ -149,7 +149,7 @@ func NewSideEffects(artifact *interfaces.ReplayArtifact) (*SideEffects, error) {
 // Infer implements workers.Provider by returning the recorded provider response
 // for the matching dispatch.
 func (s *SideEffects) Infer(ctx context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
-	record, err := s.claim("provider", func(candidate sideEffectRecord) bool {
+	record, err := s.claim(ctx, "provider", func(candidate sideEffectRecord) bool {
 		return providerRequestMatches(candidate, req)
 	})
 	if err != nil {
@@ -179,7 +179,7 @@ func (s *SideEffects) Infer(ctx context.Context, req interfaces.ProviderInferenc
 // Run implements workers.CommandRunner by returning the recorded script command
 // outcome for the matching dispatch.
 func (s *SideEffects) Run(ctx context.Context, req workers.CommandRequest) (workers.CommandResult, error) {
-	record, err := s.claim("command", func(candidate sideEffectRecord) bool {
+	record, err := s.claim(ctx, "command", func(candidate sideEffectRecord) bool {
 		return commandRequestMatches(candidate, req)
 	})
 	if err != nil {
@@ -215,13 +215,19 @@ func missingCompletionError(dispatch replayDispatch) error {
 	return fmt.Errorf("recorded dispatch %q for transition %q has no completion", dispatch.dispatchID, dispatch.dispatch.TransitionID)
 }
 
-func (s *SideEffects) claim(kind string, matches func(sideEffectRecord) bool) (sideEffectRecord, error) {
+func (s *SideEffects) claim(ctx context.Context, kind string, matches func(sideEffectRecord) bool) (sideEffectRecord, error) {
 	if s == nil {
 		return sideEffectRecord{}, fmt.Errorf("replay side effects are required")
+	}
+	if err := ctx.Err(); err != nil {
+		return sideEffectRecord{}, err
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return sideEffectRecord{}, err
+	}
 
 	for i := range s.records {
 		if s.records[i].usedBy != "" {

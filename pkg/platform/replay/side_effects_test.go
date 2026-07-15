@@ -2,6 +2,7 @@ package replay
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -425,4 +426,70 @@ func replaySideEffectArtifactWithDiagnostics(t *testing.T) (*interfaces.ReplayAr
 			Diagnostics:  commandDiagnostics,
 		}, 5),
 	), providerDiagnostics, commandDiagnostics
+}
+
+func TestSideEffects_CancellationDoesNotConsumeRecordedProviderResponse(t *testing.T) {
+	sideEffects, err := NewSideEffects(replaySideEffectArtifact(t))
+	if err != nil {
+		t.Fatalf("NewSideEffects: %v", err)
+	}
+	request := interfaces.ProviderInferenceRequest{
+		Dispatch: interfaces.WorkDispatch{
+			WorkerType: "worker-a",
+			Execution: interfaces.ExecutionMetadata{
+				ReplayKey: "process/trace-1/work-1",
+				TraceID:   "trace-1",
+				WorkIDs:   []string{"work-1"},
+			},
+		},
+		WorkstationType: "process",
+		Model:           "claude-3-5-haiku-20241022",
+		ModelProvider:   "claude",
+		SystemPrompt:    "system prompt",
+		UserMessage:     "user prompt",
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := sideEffects.Infer(canceled, request); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Infer canceled error = %v, want context.Canceled", err)
+	}
+
+	response, err := sideEffects.Infer(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Infer after cancellation: %v", err)
+	}
+	if response.Content != "recorded provider output" {
+		t.Fatalf("content after cancellation = %q, want retained recorded response", response.Content)
+	}
+}
+
+func TestSideEffects_CancellationDoesNotConsumeRecordedCommandResult(t *testing.T) {
+	sideEffects, err := NewSideEffects(replaySideEffectArtifact(t))
+	if err != nil {
+		t.Fatalf("NewSideEffects: %v", err)
+	}
+	request := workers.CommandRequest{
+		Command: "echo",
+		Args:    []string{"ok"},
+		Execution: interfaces.ExecutionMetadata{
+			ReplayKey: "process/trace-2/work-2",
+			TraceID:   "trace-2",
+			WorkIDs:   []string{"work-2"},
+		},
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := sideEffects.Run(canceled, request); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run canceled error = %v, want context.Canceled", err)
+	}
+
+	result, err := sideEffects.Run(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Run after cancellation: %v", err)
+	}
+	if string(result.Stdout) != "recorded script output\n" {
+		t.Fatalf("stdout after cancellation = %q, want retained recorded result", result.Stdout)
+	}
 }

@@ -236,9 +236,15 @@ func (h *SubmissionHook) Priority() int {
 	return -100
 }
 
-func (h *SubmissionHook) OnTick(_ context.Context, input interfaces.SubmissionHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]) (interfaces.SubmissionHookResult, error) {
+func (h *SubmissionHook) OnTick(ctx context.Context, input interfaces.SubmissionHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]) (interfaces.SubmissionHookResult, error) {
+	if err := ctx.Err(); err != nil {
+		return interfaces.SubmissionHookResult{}, err
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return interfaces.SubmissionHookResult{}, err
+	}
 
 	var due []replaySubmission
 	for h.next < len(h.submissions) && h.submissions[h.next].observedTick <= input.Snapshot.TickCount {
@@ -301,9 +307,15 @@ func (h *WorkStateChangeHook) Priority() int {
 	return -90
 }
 
-func (h *WorkStateChangeHook) OnTick(_ context.Context, input interfaces.SubmissionHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]) (interfaces.SubmissionHookResult, error) {
+func (h *WorkStateChangeHook) OnTick(ctx context.Context, input interfaces.SubmissionHookContext[interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]]) (interfaces.SubmissionHookResult, error) {
+	if err := ctx.Err(); err != nil {
+		return interfaces.SubmissionHookResult{}, err
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return interfaces.SubmissionHookResult{}, err
+	}
 
 	var mutations []interfaces.MarkingMutation
 	for h.next < len(h.changes) && h.changes[h.next].observedTick <= input.Snapshot.TickCount {
