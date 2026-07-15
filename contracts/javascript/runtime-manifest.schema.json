@@ -23,6 +23,17 @@
     "versionAvailability": {
       "$ref": "#/$defs/versionAvailability"
     },
+    "sharedSchemas": {
+      "description": "Reusable named schemas keyed by stable javascript.schema.* identifiers for serializable argument and return shapes referenced by catalog symbols.",
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/sharedSchemaId"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/sharedNamedSchema"
+      }
+    },
     "symbols": {
       "description": "Installed runtime symbols keyed by stable symbol identifiers. Object keys make duplicate symbol IDs structurally unrepresentable.",
       "type": "object",
@@ -36,6 +47,45 @@
     }
   },
   "$defs": {
+    "sharedSchemaId": {
+      "description": "Stable JavaScript shared schema identity with the javascript.schema prefix.",
+      "allOf": [
+        {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json#/$defs/itemId"
+        },
+        {
+          "pattern": "^javascript[.]schema[.].+"
+        }
+      ]
+    },
+    "sharedNamedSchema": {
+      "description": "One reusable named serializable-value schema entry referenced by catalog symbols.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "schema"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/sharedSchemaId"
+        },
+        "documentation": {
+          "$ref": "https://schemas.portpowered.com/you/contracts/common/documentation.schema.json"
+        },
+        "schema": {
+          "$ref": "#/$defs/closedSerializableSchema"
+        }
+      }
+    },
+    "closedSerializableSchema": {
+      "description": "Closed Draft 2020-12 JSON Schema fragment for one serializable argument or return shape.",
+      "allOf": [
+        {
+          "$ref": "#/$defs/serializableValue"
+        }
+      ]
+    },
     "symbolPath": {
       "description": "Dot-delimited installed symbol path from the runtime global scope.",
       "type": "string",

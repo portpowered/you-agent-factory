@@ -40,16 +40,19 @@ Use this map when changing the public REST contract.
   `internal/contractstaging/raw_artifacts_test.go`; later-phase export-map
   families such as `components/*` stay omitted until a truthful owner exists.
 - Authored JavaScript runtime symbol manifests live at
-  `contracts/javascript/runtime-manifest.schema.json` with fixtures under
-  `contracts/testdata/javascript/` and registration in
+  `contracts/javascript/runtime-manifest.schema.json` with the authored product
+  catalog at `contracts/javascript/runtime-api.json`, fixtures under
+  `contracts/testdata/javascript/`, and registration in
   `internal/contractvalidator/javascript_registry.go` (`JavaScriptRegistry`,
   merged into `DefaultRegistry()`). Post-schema semantics for path/parent/member
-  integrity, callable signatures, closed serializable values, and supported
+  integrity, callable signatures, closed serializable values (including
+  `sharedSchemas` entries keyed by `javascript.schema.*`), and supported
   surfaces live in `internal/contractvalidator/javascript_manifest.go` and
   `javascript_surface.go`. Prove runtime dependency isolation and catalog
-  boundaries in `contracts/runtime_manifest_boundary_test.go`; do not promote
-  B06 staged `packages/api/generated/javascript/runtime-api.json` or author
-  `contracts/javascript/runtime-api.json` as the product catalog in this lane.
+  boundaries in `contracts/runtime_manifest_boundary_test.go` and
+  `contracts/javascript_runtime_api_test.go`; staged
+  `packages/api/generated/javascript/runtime-api.json` remains inventory-sourced
+  until the catalog lane retargets generation in story 008.
 - Staged OpenAPI byte policy lives in `internal/contractstaging/openapi.go`
   (`CanonicalOpenAPIPath`, `StagedOpenAPIPath`, `ReviewedOpenAPIBytePolicy`,
   `ProjectStagedOpenAPI`, `VerifyStagedOpenAPIParity`). The reviewed policy is

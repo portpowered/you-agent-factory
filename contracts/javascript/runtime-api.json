@@ -1,0 +1,219 @@
+{
+  "formatVersion": "1.0.0",
+  "sharedSchemas": {
+    "javascript.schema.checkpoint_spec": {
+      "id": "javascript.schema.checkpoint_spec",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.schema.checkpoint_spec",
+        "documentation": {
+          "title": {
+            "id": "javascript.schema.checkpoint_spec.title",
+            "canonicalEnglish": "Checkpoint specification object"
+          },
+          "description": {
+            "id": "javascript.schema.checkpoint_spec.description",
+            "canonicalEnglish": "Closed object shape for workflow.checkpoint spec arguments."
+          }
+        },
+        "examples": [
+          "{ \"label\": \"draft\", \"state\": {} }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "state": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          }
+        },
+        "required": [
+          "label"
+        ]
+      }
+    },
+    "javascript.schema.json_compatible": {
+      "id": "javascript.schema.json_compatible",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.schema.json_compatible",
+        "documentation": {
+          "title": {
+            "id": "javascript.schema.json_compatible.title",
+            "canonicalEnglish": "JSON-compatible serializable value"
+          },
+          "description": {
+            "id": "javascript.schema.json_compatible.description",
+            "canonicalEnglish": "Closed union of JSON-compatible serializable values accepted by installed runtime helpers."
+          }
+        },
+        "examples": [
+          "{ \"step\": 1 }",
+          "\"note\"",
+          "null"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "schema": {
+        "oneOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "array"
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {}
+          }
+        ]
+      }
+    },
+    "javascript.schema.string_key_record": {
+      "id": "javascript.schema.string_key_record",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.schema.string_key_record",
+        "documentation": {
+          "title": {
+            "id": "javascript.schema.string_key_record.title",
+            "canonicalEnglish": "String-keyed invocation record"
+          },
+          "description": {
+            "id": "javascript.schema.string_key_record.description",
+            "canonicalEnglish": "Closed top-level object for args and meta value bindings exposed at workflow bind time."
+          }
+        },
+        "examples": [
+          "{ \"topic\": \"release\" }"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      }
+    }
+  },
+  "symbols": {
+    "javascript.workflow": {
+      "id": "javascript.workflow",
+      "name": "workflow",
+      "path": "workflow",
+      "kind": "namespace",
+      "members": [
+        "checkpoint"
+      ],
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow",
+        "documentation": {
+          "title": {
+            "id": "javascript.workflow.title",
+            "canonicalEnglish": "Workflow namespace"
+          },
+          "description": {
+            "id": "javascript.workflow.description",
+            "canonicalEnglish": "Root workflow namespace for installed checkpoint, artifact, budget, final, log, and resumeState helpers."
+          }
+        },
+        "examples": [
+          "workflow.checkpoint({ label: \"draft\" })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "mutability": "fixed-binding",
+      "nullability": "non-null",
+      "bindingLifecycle": "live-namespace"
+    },
+    "javascript.workflow.checkpoint": {
+      "id": "javascript.workflow.checkpoint",
+      "name": "checkpoint",
+      "path": "workflow.checkpoint",
+      "kind": "method",
+      "parent": "javascript.workflow",
+      "async": false,
+      "parameters": [
+        {
+          "id": "javascript.workflow.checkpoint.param.spec",
+          "name": "spec",
+          "position": 0,
+          "required": true,
+          "rest": false,
+          "type": "object",
+          "serializableValue": {
+            "$ref": "#/sharedSchemas/javascript.schema.checkpoint_spec/schema"
+          }
+        },
+        {
+          "id": "javascript.workflow.checkpoint.param.payload",
+          "name": "payload",
+          "position": 1,
+          "required": false,
+          "rest": false,
+          "type": "json-compatible",
+          "serializableValue": {
+            "$ref": "#/sharedSchemas/javascript.schema.json_compatible/schema"
+          }
+        }
+      ],
+      "return": {
+        "kind": "sync",
+        "type": "undefined"
+      },
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.checkpoint",
+        "documentation": {
+          "title": {
+            "id": "javascript.workflow.checkpoint.title",
+            "canonicalEnglish": "Workflow checkpoint"
+          },
+          "description": {
+            "id": "javascript.workflow.checkpoint.description",
+            "canonicalEnglish": "Records one workflow checkpoint using shared serializable-value schemas for spec and payload arguments."
+          }
+        },
+        "examples": [
+          "workflow.checkpoint({ label: \"draft\" }, { step: 1 })"
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "javascript.workflow.checkpoint",
+        "state": "active",
+        "since": "1.0.0"
+      }
+    }
+  }
+}
