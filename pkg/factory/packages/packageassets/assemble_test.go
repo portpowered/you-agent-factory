@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io/fs"
 	"reflect"
+	"strings"
 	"testing"
 	"testing/fstest"
 )
@@ -62,6 +63,16 @@ func TestAssemble_AbsentOrEmptyScriptsContributeNoEntries(t *testing.T) {
 	}
 }
 
+func TestAssemble_RejectsMissingAssetFilesystemWithoutPanic(t *testing.T) {
+	definition := Definition{
+		Package:     "@you/example",
+		FactoryJSON: []byte(`{"name":"@you/example"}`),
+	}
+
+	_, err := Assemble(definition)
+	assertAssetError(t, err, definition.Package, "scripts")
+}
+
 func TestAssemble_ScriptsAreRepeatableAndDoNotMutateDefinition(t *testing.T) {
 	original := []byte(`{"name":"@you/example","supportingFiles":{"requiredTools":[]}}`)
 	definition := Definition{
@@ -88,6 +99,185 @@ func TestAssemble_ScriptsAreRepeatableAndDoNotMutateDefinition(t *testing.T) {
 	}
 	if string(definition.FactoryJSON) != string(original) {
 		t.Fatal("assembly mutated the authored factory definition")
+	}
+}
+
+func TestAssemble_RejectsUnsafeAuthoredBundledTargets(t *testing.T) {
+	for _, target := range []string{
+		"/tmp/setup.sh",
+		"C:/temp/setup.sh",
+		"factory/scripts/../../outside.sh",
+		"factory/scripts/../outside.sh",
+	} {
+		t.Run(strings.ReplaceAll(target, "/", "_"), func(t *testing.T) {
+			definition := Definition{
+				Package: "@you/example",
+				FactoryJSON: []byte(`{"name":"@you/example","supportingFiles":{"bundledFiles":[{` +
+					`"id":"unsafe","type":"SCRIPT","targetPath":` + quotedJSON(t, target) + `,` +
+					`"content":{"encoding":"utf-8","inline":"echo unsafe"}}]}}`),
+				Assets: fstest.MapFS{},
+			}
+
+			_, err := Assemble(definition)
+			assertAssetError(t, err, definition.Package, target)
+		})
+	}
+}
+
+func TestAssemble_RejectsScriptTargetOutsideCanonicalScriptRoot(t *testing.T) {
+	definition := Definition{
+		Package: "@you/example",
+		FactoryJSON: []byte(`{"name":"@you/example","supportingFiles":{"bundledFiles":[{` +
+			`"id":"outside","type":"SCRIPT","targetPath":"factory/docs/setup.sh",` +
+			`"content":{"encoding":"utf-8","inline":"echo unsafe"}}]}}`),
+		Assets: fstest.MapFS{},
+	}
+
+	_, err := Assemble(definition)
+	assertAssetError(t, err, definition.Package, "factory/docs/setup.sh")
+}
+
+func TestAssemble_RejectsDuplicateDiscoveredAndAuthoredTarget(t *testing.T) {
+	const target = "factory/scripts/setup.sh"
+	definition := Definition{
+		Package: "@you/example",
+		FactoryJSON: []byte(`{"name":"@you/example","supportingFiles":{"bundledFiles":[{` +
+			`"id":"authored","type":"SCRIPT","targetPath":"` + target + `",` +
+			`"content":{"encoding":"utf-8","inline":"echo authored"}}]}}`),
+		Assets: fstest.MapFS{
+			"scripts/setup.sh": {Data: []byte("echo discovered\n")},
+		},
+	}
+
+	_, err := Assemble(definition)
+	assertAssetError(t, err, definition.Package, target)
+	if !strings.Contains(err.Error(), "duplicate canonical target") {
+		t.Fatalf("error = %q, want duplicate target detail", err)
+	}
+}
+
+func TestAssemble_RejectsUnsupportedScriptAssetKinds(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		mode fs.FileMode
+	}{
+		{name: "symlink", mode: fs.ModeSymlink | 0o777},
+		{name: "named pipe", mode: fs.ModeNamedPipe | 0o644},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			const assetPath = "scripts/setup.sh"
+			definition := Definition{
+				Package:     "@you/example",
+				FactoryJSON: []byte(`{"name":"@you/example"}`),
+				Assets: fstest.MapFS{
+					assetPath: {Mode: tt.mode},
+				},
+			}
+
+			_, err := Assemble(definition)
+			assertAssetError(t, err, definition.Package, assetPath)
+			if !strings.Contains(err.Error(), "unsupported non-regular") {
+				t.Fatalf("error = %q, want unsupported file-kind detail", err)
+			}
+		})
+	}
+}
+
+func TestAssemble_RejectsScriptsRootThatIsAFile(t *testing.T) {
+	definition := Definition{
+		Package:     "@you/example",
+		FactoryJSON: []byte(`{"name":"@you/example"}`),
+		Assets: fstest.MapFS{
+			"scripts": {Data: []byte("not a directory\n")},
+		},
+	}
+
+	_, err := Assemble(definition)
+	assertAssetError(t, err, definition.Package, "scripts")
+	if !strings.Contains(err.Error(), "must be a directory") {
+		t.Fatalf("error = %q, want scripts-root file rejection", err)
+	}
+}
+
+func TestAssemble_RejectsUnreadableAndInvalidUTF8Scripts(t *testing.T) {
+	const assetPath = "scripts/setup.sh"
+	base := fstest.MapFS{assetPath: {Data: []byte("echo ok\n")}}
+	tests := []struct {
+		name   string
+		assets fs.FS
+		want   string
+	}{
+		{
+			name:   "unreadable",
+			assets: openErrorFS{FS: base, path: assetPath, err: fs.ErrPermission},
+			want:   "permission denied",
+		},
+		{
+			name:   "invalid UTF-8",
+			assets: fstest.MapFS{assetPath: {Data: []byte{0xff, 0xfe}}},
+			want:   "not valid UTF-8",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			definition := Definition{
+				Package:     "@you/example",
+				FactoryJSON: []byte(`{"name":"@you/example"}`),
+				Assets:      tt.assets,
+			}
+
+			_, err := Assemble(definition)
+			assertAssetError(t, err, definition.Package, assetPath)
+			if !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %q, want detail %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestAssemble_RejectsPackageRootEscape(t *testing.T) {
+	definition := Definition{
+		Package:     "@you/example",
+		FactoryJSON: []byte(`{"name":"@you/example"}`),
+		Assets:      fstest.MapFS{},
+		AssetRoot:   "../outside",
+	}
+
+	_, err := Assemble(definition)
+	assertAssetError(t, err, definition.Package, definition.AssetRoot)
+}
+
+type openErrorFS struct {
+	fs.FS
+	path string
+	err  error
+}
+
+func (f openErrorFS) Open(name string) (fs.File, error) {
+	if name == f.path {
+		return nil, f.err
+	}
+	return f.FS.Open(name)
+}
+
+func quotedJSON(t *testing.T, value string) string {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal JSON string: %v", err)
+	}
+	return string(encoded)
+}
+
+func assertAssetError(t *testing.T, err error, packageName, assetOrTarget string) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("Assemble succeeded, want error")
+	}
+	for _, want := range []string{packageName, assetOrTarget} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error = %q, want context %q", err, want)
+		}
 	}
 }
 

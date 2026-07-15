@@ -680,8 +680,11 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   their payload enters the catalog. It delegates prompt declarations to
   `pkg/factory/packages/promptassets` and discovers regular UTF-8 `scripts/**`
   assets as deterministic `SCRIPT` bundled files at matching
-  `factory/scripts/**` targets. The assembler attaches exact asset bytes but
-  does not install or persist anything. Worker prompt declarations become
+  `factory/scripts/**` targets. Discovery rejects non-regular, unreadable, or
+  invalid UTF-8 assets, and assembly rejects unsafe or duplicate canonical
+  bundled targets before the payload can reach config initialization. The
+  assembler attaches exact asset bytes but does not install or persist anything.
+  Worker prompt declarations become
   canonical inline bodies, while workstation declarations retain `promptFile`
   metadata for editable split-layout materialization.
   Packaged `@you/goal`
