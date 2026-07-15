@@ -684,6 +684,13 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   invalid UTF-8 assets, and assembly rejects unsafe or duplicate canonical
   bundled targets before the payload can reach config initialization. The
   assembler attaches exact asset bytes but does not install or persist anything.
+  `pkg/config/configinit` passes each missing assembled catalog payload through
+  the transactional `factoryconfig.PersistNamedFactory` boundary. That shared
+  persistence path materializes `SCRIPT` entries at mode `0755`, writes only
+  thin UTF-8 bundled-file metadata to `factory.json`, and validates the staged
+  runtime before publishing the named-factory directory. Existing valid package
+  directories are loaded read-only and skipped as a whole, so later init runs
+  do not normalize permissions or replace operator-edited scripts.
   Worker prompt declarations become
   canonical inline bodies, while workstation declarations retain `promptFile`
   metadata for editable split-layout materialization.
