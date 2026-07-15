@@ -15,11 +15,11 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -209,9 +209,15 @@ func assembleRuntimeBundle(
 	}
 	if input.RecordPath != "" {
 		opts = append(opts, factory.WithFactoryEventRecorder(func(event factoryapi.FactoryEvent) {
-			if recording != nil {
-				recording.RecordEvent(event)
+			if recording == nil {
+				return
 			}
+			domainEvent, err := interfaces.NewFactoryEvent(event)
+			if err != nil {
+				recording.RecordError(fmt.Errorf("convert replay event %q: %w", event.Id, err))
+				return
+			}
+			recording.RecordEvent(domainEvent)
 		}))
 	}
 	opts = append(opts, input.AdditionalFactoryOpts...)

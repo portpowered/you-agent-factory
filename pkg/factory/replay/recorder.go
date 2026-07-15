@@ -8,7 +8,6 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	platformreplay "github.com/portpowered/infinite-you/pkg/platform/replay"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const (
@@ -113,26 +112,31 @@ func (r *Recorder) Stop() {
 	}
 }
 
-// RecordEvent converts a temporary generated producer value into the canonical
-// Factory-owned envelope, appends it, and marks the artifact for streaming.
-func (r *Recorder) RecordEvent(event factoryapi.FactoryEvent) {
+// RecordEvent appends a canonical Factory-owned event and marks the artifact
+// for streaming. Producer-specific conversion belongs at the caller boundary.
+func (r *Recorder) RecordEvent(event interfaces.FactoryEvent) {
 	if r == nil {
-		return
-	}
-	domainEvent, err := interfaces.NewFactoryEvent(event)
-	if err != nil {
-		r.recordFlushError(fmt.Errorf("convert replay event %q: %w", event.Id, err))
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if replayEventIndexByID(r.artifact.Events, domainEvent.Id) >= 0 {
+	if replayEventIndexByID(r.artifact.Events, event.Id) >= 0 {
 		return
 	}
-	domainEvent.SchemaVersion = interfaces.FactoryEventSchemaVersionV1
-	domainEvent.Context.Sequence = len(r.artifact.Events)
-	r.artifact.Events = append(r.artifact.Events, domainEvent)
+	event.Payload = append([]byte(nil), event.Payload...)
+	event.SchemaVersion = interfaces.FactoryEventSchemaVersionV1
+	event.Context.Sequence = len(r.artifact.Events)
+	r.artifact.Events = append(r.artifact.Events, event)
 	r.version++
+}
+
+// RecordError retains an event-producer boundary failure for Err and Flush
+// diagnostics without mutating the canonical replay event history.
+func (r *Recorder) RecordError(err error) {
+	if r == nil || err == nil {
+		return
+	}
+	r.recordFlushError(err)
 }
 
 // Finish records final wall-clock metadata before the caller performs its final

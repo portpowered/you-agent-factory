@@ -3,6 +3,7 @@ package replay
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -830,7 +831,11 @@ func TestRecorder_PersistsWorkStateChangeEvents(t *testing.T) {
 		factoryapi.WorkStateChangeSourceCLI,
 		3,
 	)
-	recorder.RecordEvent(moveEvent)
+	domainEvent, err := interfaces.NewFactoryEvent(moveEvent)
+	if err != nil {
+		t.Fatalf("NewFactoryEvent: %v", err)
+	}
+	recorder.RecordEvent(domainEvent)
 	if err := recorder.Flush(); err != nil {
 		t.Fatalf("Flush: %v", err)
 	}
@@ -847,6 +852,40 @@ func TestRecorder_PersistsWorkStateChangeEvents(t *testing.T) {
 	}
 	if payload.WorkId != "work-recover" || payload.Source != factoryapi.WorkStateChangeSourceCLI {
 		t.Fatalf("payload = %#v, want work-recover cli source", payload)
+	}
+}
+
+func TestRecorder_RecordEventDetachesCanonicalPayload(t *testing.T) {
+	artifact := testReplayArtifact(t)
+	recorder, err := NewRecorder(filepath.Join(t.TempDir(), "detached.replay.json"), artifact)
+	if err != nil {
+		t.Fatalf("NewRecorder: %v", err)
+	}
+
+	event := interfaces.FactoryEvent{
+		Id:      "event-detached",
+		Type:    interfaces.FactoryEventTypeWorkStateChange,
+		Payload: []byte(`{"workId":"work-original"}`),
+		Context: interfaces.FactoryEventContext{EventTime: time.Now().UTC()},
+	}
+	recorder.RecordEvent(event)
+	copy(event.Payload, []byte(`{"workId":"work-mutated!"}`))
+
+	if got := string(artifact.Events[len(artifact.Events)-1].Payload); got != `{"workId":"work-original"}` {
+		t.Fatalf("recorded payload = %s, want detached original", got)
+	}
+}
+
+func TestRecorder_RecordErrorRetainsProducerBoundaryFailure(t *testing.T) {
+	recorder, err := NewRecorder(filepath.Join(t.TempDir(), "producer-error.replay.json"), testReplayArtifact(t))
+	if err != nil {
+		t.Fatalf("NewRecorder: %v", err)
+	}
+
+	want := errors.New("convert generated event")
+	recorder.RecordError(want)
+	if !errors.Is(recorder.Err(), want) {
+		t.Fatalf("Err() = %v, want %v", recorder.Err(), want)
 	}
 }
 
