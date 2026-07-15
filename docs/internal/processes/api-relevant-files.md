@@ -63,7 +63,13 @@ Use this map when changing the public REST contract.
   `contracts/javascript_runtime_api_test.go`; staged
   `packages/api/generated/javascript/runtime-api.json` is a byte-identical copy
   of the authored catalog at `contracts/javascript/runtime-api.json` through
-  `internal/contractstaging/policy.go#rawArtifacts`.
+  `internal/contractstaging/policy.go#rawArtifacts`. Maintainer-facing
+  catalog/projection/binding/behavior parity closeout lives in
+  `internal/javascriptcontractsmoke` with CLI entrypoint
+  `cmd/javascriptcontractsmoke` and `make javascript-contract-smoke`; reuse
+  `symbolidentity.ProjectInstalledBindings`, `callbehavior.ProjectInstalledCallBehavior`,
+  `catalog.CatalogPathCompletenessIssues`, and `catalog.CatalogCallBehaviorParityIssues`
+  rather than inventing a second runtime descriptor.
 - Staged OpenAPI byte policy lives in `internal/contractstaging/openapi.go`
   (`CanonicalOpenAPIPath`, `StagedOpenAPIPath`, `ReviewedOpenAPIBytePolicy`,
   `ProjectStagedOpenAPI`, `VerifyStagedOpenAPIParity`). The reviewed policy is
