@@ -1,7 +1,3 @@
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
-import { parseArgs } from "node:util";
-
 export const DEVELOPMENT_PACKAGE_ACTIONS = Object.freeze({
 	DRY_RUN: "dry-run",
 	PREPARE_MAIN: "prepare-main",
@@ -75,74 +71,4 @@ export function assertDevelopmentPackageAction(context, expectedAction) {
 		);
 	}
 	return plan;
-}
-
-export async function executeDevelopmentPackagePolicy(input, dependencies) {
-	const prerequisiteResult = await dependencies.runPrerequisites();
-	const plan = planDevelopmentPackage({ ...input, prerequisiteResult });
-	if (
-		plan.outcome === DEVELOPMENT_PACKAGE_OUTCOMES.BLOCKED ||
-		plan.outcome === DEVELOPMENT_PACKAGE_OUTCOMES.INELIGIBLE
-	) {
-		return plan;
-	}
-
-	if (plan.outcome === DEVELOPMENT_PACKAGE_OUTCOMES.PR_DRY_RUN) {
-		return dependencies.validatePullRequestCandidate({
-			eventName: input.eventName,
-			outputDirectory: input.outputDirectory,
-			packageDirectory: input.packageDirectory,
-			runId: input.runId,
-			sourceCommit: plan.sourceCommit,
-			workspaceDirectory: input.workspaceDirectory,
-		});
-	}
-
-	const candidate = await dependencies.prepareCandidate({
-		outputDirectory: input.outputDirectory,
-		packageDirectory: input.packageDirectory,
-		runId: input.runId,
-		sourceCommit: plan.sourceCommit,
-	});
-	return dependencies.publishAndVerifyCandidate({
-		...candidate,
-		workspaceDirectory: input.workspaceDirectory,
-	});
-}
-
-async function main() {
-	const { values } = parseArgs({
-		options: {
-			"event-name": { type: "string" },
-			"expected-action": { type: "string" },
-			"prerequisite-result": { type: "string" },
-			"pull-request-head-sha": { type: "string" },
-			ref: { type: "string" },
-			repository: { type: "string" },
-			"source-commit": { type: "string" },
-		},
-		strict: true,
-	});
-	const plan = assertDevelopmentPackageAction(
-		{
-			eventName: values["event-name"],
-			prerequisiteResult: values["prerequisite-result"],
-			pullRequestHeadSha: values["pull-request-head-sha"],
-			ref: values.ref,
-			repository: values.repository,
-			sourceCommit: values["source-commit"],
-		},
-		values["expected-action"],
-	);
-	process.stdout.write(`${JSON.stringify(plan)}\n`);
-}
-
-if (
-	process.argv[1] &&
-	import.meta.url === pathToFileURL(resolve(process.argv[1])).href
-) {
-	main().catch((error) => {
-		process.stderr.write(`${error.message}\n`);
-		process.exitCode = 1;
-	});
 }

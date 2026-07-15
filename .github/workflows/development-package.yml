@@ -89,26 +89,20 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Authorize the read-only pull request path
-        run: >-
-          node scripts/api-package-development-policy.mjs
-          --event-name "${{ github.event_name }}"
-          --expected-action dry-run
-          --prerequisite-result "${{ needs.validate.result }}"
-          --pull-request-head-sha "${{ github.event.pull_request.head.sha }}"
-          --ref "${{ github.ref }}"
-          --repository "${{ github.repository }}"
-          --source-commit "${{ github.event.pull_request.head.sha }}"
-
-      - name: Prepare and smoke the exact candidate without publishing
+      - name: Authorize, prepare, and smoke the exact candidate without publishing
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .artifacts/api-development-candidate
-          node scripts/api-package-pr-dry-run.mjs \
+          node scripts/api-package-development-command.mjs \
+            --action dry-run \
             --event-name "${{ github.event_name }}" \
-            --package-directory packages/api \
             --output-directory .artifacts/api-development-candidate/package \
+            --package-directory packages/api \
+            --prerequisite-result "${{ needs.validate.result }}" \
+            --pull-request-head-sha "${{ github.event.pull_request.head.sha }}" \
+            --ref "${{ github.ref }}" \
+            --repository "${{ github.repository }}" \
             --run-id "${{ github.run_id }}" \
             --source-commit "${{ github.event.pull_request.head.sha }}" \
             --workspace-directory "${{ github.workspace }}" \
@@ -145,21 +139,16 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Authorize protected-main candidate preparation
+      - name: Authorize and prepare the exact protected-main candidate
         run: >-
-          node scripts/api-package-development-policy.mjs
+          node scripts/api-package-development-command.mjs
+          --action prepare-main
           --event-name "${{ github.event_name }}"
-          --expected-action prepare-main
+          --output-directory .artifacts/api-development-candidate
+          --package-directory packages/api
           --prerequisite-result "${{ needs.validate.result }}"
           --ref "${{ github.ref }}"
           --repository "${{ github.repository }}"
-          --source-commit "${{ github.sha }}"
-
-      - name: Prepare the exact protected-main candidate
-        run: >-
-          node scripts/api-package-candidate.mjs
-          --package-directory packages/api
-          --output-directory .artifacts/api-development-candidate
           --run-id "${{ github.run_id }}"
           --source-commit "${{ github.sha }}"
 
@@ -207,18 +196,14 @@ jobs:
           name: api-development-main-candidate-${{ github.run_id }}
           path: .artifacts/api-development-candidate
 
-      - name: Authorize protected-main publication
+      - name: Authorize, reconcile, publish once when absent, and verify exact consumption
         run: >-
-          node scripts/api-package-development-policy.mjs
+          node scripts/api-package-development-command.mjs
+          --action publish-main
+          --candidate-directory .artifacts/api-development-candidate
           --event-name "${{ github.event_name }}"
-          --expected-action publish-main
           --prerequisite-result "${{ needs.validate.result }}"
           --ref "${{ github.ref }}"
           --repository "${{ github.repository }}"
           --source-commit "${{ github.sha }}"
-
-      - name: Reconcile, publish once when absent, and verify exact consumption
-        run: >-
-          node scripts/api-package-publish.mjs
-          --candidate-directory .artifacts/api-development-candidate
           --workspace-directory "${{ github.workspace }}"

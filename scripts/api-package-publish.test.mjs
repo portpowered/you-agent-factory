@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { access } from "node:fs/promises";
 import test from "node:test";
 
 import {
@@ -6,6 +7,7 @@ import {
 	PUBLICATION_OUTCOMES,
 	PackagePublicationError,
 	publishAndVerifyCandidate,
+	publishCandidateDirectory,
 } from "./api-package-publish.mjs";
 import { RECONCILIATION_OUTCOMES } from "./api-package-registry.mjs";
 
@@ -206,4 +208,34 @@ test("success diagnostics contain only approved evidence and outcome", async () 
 		"distTag",
 		"outcome",
 	]);
+});
+
+test("publish directory loads the preserved candidate and cleans its external consumer", async () => {
+	const registryClient = {};
+	let consumerDirectory;
+	const result = await publishCandidateDirectory(
+		{
+			candidateDirectory: "/preserved",
+			workspaceDirectory: "/workspace",
+		},
+		{
+			async candidateFiles(candidateDirectory) {
+				assert.equal(candidateDirectory, "/preserved");
+				return { evidence, tarballPath: "/preserved/candidate.tgz" };
+			},
+			async publishAndVerifyCandidate(input) {
+				consumerDirectory = input.consumerDirectory;
+				await access(consumerDirectory);
+				assert.equal(input.evidence, evidence);
+				assert.equal(input.registryClient, registryClient);
+				assert.equal(input.tarballPath, "/preserved/candidate.tgz");
+				assert.equal(input.workspaceDirectory, "/workspace");
+				return { outcome: PUBLICATION_OUTCOMES.VERIFIED_EXISTING };
+			},
+			registryClient,
+		},
+	);
+
+	assert.equal(result.outcome, PUBLICATION_OUTCOMES.VERIFIED_EXISTING);
+	await assert.rejects(access(consumerDirectory));
 });

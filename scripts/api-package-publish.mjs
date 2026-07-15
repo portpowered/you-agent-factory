@@ -230,6 +230,29 @@ async function candidateFiles(candidateDirectory) {
 	return { evidence, tarballPath: join(directory, tarballs[0]) };
 }
 
+export async function publishCandidateDirectory(
+	{ candidateDirectory, workspaceDirectory },
+	dependencies = {},
+) {
+	const loadCandidate = dependencies.candidateFiles ?? candidateFiles;
+	const publishAndVerify =
+		dependencies.publishAndVerifyCandidate ?? publishAndVerifyCandidate;
+	const registryClient =
+		dependencies.registryClient ?? createNpmRegistryClient();
+	const candidate = await loadCandidate(candidateDirectory);
+	const consumerDirectory = await mkdtemp(join(tmpdir(), "you-api-registry-consumer-"));
+	try {
+		return await publishAndVerify({
+			...candidate,
+			consumerDirectory,
+			registryClient,
+			workspaceDirectory,
+		});
+	} finally {
+		await rm(consumerDirectory, { recursive: true, force: true });
+	}
+}
+
 async function main() {
 	const { values } = parseArgs({
 		options: {
@@ -238,19 +261,11 @@ async function main() {
 		},
 		strict: true,
 	});
-	const candidate = await candidateFiles(values["candidate-directory"]);
-	const consumerDirectory = await mkdtemp(join(tmpdir(), "you-api-registry-consumer-"));
-	try {
-		const result = await publishAndVerifyCandidate({
-			...candidate,
-			consumerDirectory,
-			registryClient: createNpmRegistryClient(),
-			workspaceDirectory: values["workspace-directory"],
-		});
-		process.stdout.write(`${JSON.stringify(result)}\n`);
-	} finally {
-		await rm(consumerDirectory, { recursive: true, force: true });
-	}
+	const result = await publishCandidateDirectory({
+		candidateDirectory: values["candidate-directory"],
+		workspaceDirectory: values["workspace-directory"],
+	});
+	process.stdout.write(`${JSON.stringify(result)}\n`);
 }
 
 if (
