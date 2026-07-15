@@ -1,8 +1,16 @@
 package contracts_test
 
 import (
+	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -10,61 +18,136 @@ import (
 	"github.com/portpowered/infinite-you/internal/testpath"
 )
 
-var javascriptRuntimePackages = []string{
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/childcontract",
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy",
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/preview",
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result",
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime",
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/callbehavior",
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/catalog",
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime/symbolidentity",
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source",
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/store",
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/validation",
+var forbiddenContractToolingImports = []string{
+	"github.com/portpowered/infinite-you/internal/contract",
+	"github.com/portpowered/infinite-you/internal/javascriptcontractsmoke",
+	"github.com/portpowered/infinite-you/contracts",
 }
 
-var forbiddenContractToolingImports = []string{
-	"github.com/portpowered/infinite-you/internal/contractvalidator",
-	"github.com/portpowered/infinite-you/internal/contractstaging",
-	"github.com/portpowered/infinite-you/contracts",
+const (
+	repositoryImportPrefix          = "github.com/portpowered/infinite-you/"
+	javascriptRuntimePackagePattern = repositoryImportPrefix + "pkg/orchestrators/javascript/..."
+)
+
+var forbiddenRuntimeManifestNames = []string{
+	"runtime-api.json",
+	"runtime-manifest.schema.json",
+}
+
+type listedJavaScriptPackage struct {
+	Dir        string
+	ImportPath string
+	GoFiles    []string
+	CgoFiles   []string
 }
 
 func TestJavaScriptRuntimePackagesDoNotImportContractTooling(t *testing.T) {
 	t.Parallel()
 
-	for _, pkg := range javascriptRuntimePackages {
-		pkg := pkg
-		t.Run(pkg, func(t *testing.T) {
-			t.Parallel()
-
-			cmd := exec.Command(
-				"go",
-				"list",
-				"-deps",
-				"-f",
-				"{{if not .Standard}}{{.ImportPath}}{{end}}",
-				pkg,
-			)
-			output, err := cmd.CombinedOutput()
-			if err != nil {
-				t.Fatalf("go list dependencies: %v\n%s", err, output)
-			}
-
-			for _, dependency := range strings.Fields(string(output)) {
-				for _, forbidden := range forbiddenContractToolingImports {
-					if dependency == forbidden || strings.HasPrefix(dependency, forbidden+"/") {
-						t.Fatalf(
-							"runtime package %s must not depend on contract tooling %s; found %s",
-							pkg,
-							forbidden,
-							dependency,
-						)
-					}
-				}
-			}
-		})
+	cmd := exec.Command(
+		"go",
+		"list",
+		"-deps",
+		"-f",
+		"{{if not .Standard}}{{.ImportPath}}{{end}}",
+		javascriptRuntimePackagePattern,
+	)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go list JavaScript runtime dependencies: %v\n%s", err, output)
 	}
+
+	for _, dependency := range strings.Fields(string(output)) {
+		for _, forbidden := range forbiddenContractToolingImports {
+			if dependency == forbidden || strings.HasPrefix(dependency, forbidden+"/") {
+				t.Fatalf(
+					"JavaScript runtime packages must not depend on contract tooling %s; found %s",
+					forbidden,
+					dependency,
+				)
+			}
+		}
+	}
+}
+
+func TestJavaScriptRuntimePackagesDoNotLoadContractManifests(t *testing.T) {
+	t.Parallel()
+
+	for _, pkg := range listJavaScriptRuntimePackages(t) {
+		files := append(slices.Clone(pkg.GoFiles), pkg.CgoFiles...)
+		slices.Sort(files)
+		for _, file := range files {
+			path := filepath.Join(pkg.Dir, file)
+			repositoryPath := filepath.ToSlash(filepath.Join(strings.TrimPrefix(pkg.ImportPath, repositoryImportPrefix), file))
+			for _, reference := range runtimeManifestReferences(t, path) {
+				t.Errorf(
+					"JavaScript runtime package %s loads contract manifest %q in %s; remove the runtime dependency and keep contract comparison in structural tooling",
+					pkg.ImportPath,
+					reference,
+					repositoryPath,
+				)
+			}
+		}
+	}
+}
+
+func listJavaScriptRuntimePackages(t *testing.T) []listedJavaScriptPackage {
+	t.Helper()
+
+	cmd := exec.Command("go", "list", "-json", javascriptRuntimePackagePattern)
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("go list JavaScript runtime packages: %v", err)
+	}
+
+	decoder := json.NewDecoder(strings.NewReader(string(output)))
+	var packages []listedJavaScriptPackage
+	for {
+		var pkg listedJavaScriptPackage
+		err := decoder.Decode(&pkg)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("decode listed JavaScript runtime package: %v", err)
+		}
+		packages = append(packages, pkg)
+	}
+	slices.SortFunc(packages, func(left, right listedJavaScriptPackage) int {
+		return strings.Compare(left.ImportPath, right.ImportPath)
+	})
+	return packages
+}
+
+func runtimeManifestReferences(t *testing.T, path string) []string {
+	t.Helper()
+
+	parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+	if err != nil {
+		t.Fatalf("parse JavaScript runtime source %s: %v", filepath.ToSlash(path), err)
+	}
+
+	var references []string
+	ast.Inspect(parsed, func(node ast.Node) bool {
+		literal, ok := node.(*ast.BasicLit)
+		if !ok || literal.Kind != token.STRING {
+			return true
+		}
+		value, err := strconv.Unquote(literal.Value)
+		if err != nil {
+			return true
+		}
+		normalized := strings.ReplaceAll(value, `\`, "/")
+		for _, forbiddenName := range forbiddenRuntimeManifestNames {
+			if normalized == forbiddenName || strings.HasSuffix(normalized, "/"+forbiddenName) {
+				references = append(references, value)
+				break
+			}
+		}
+		return true
+	})
+	slices.Sort(references)
+	return references
 }
 
 func TestJavaScriptAuthoredCatalogBoundary(t *testing.T) {

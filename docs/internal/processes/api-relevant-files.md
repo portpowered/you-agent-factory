@@ -66,7 +66,12 @@ Use this map when changing the public REST contract.
   `internal/contractstaging/policy.go#rawArtifacts`. Maintainer-facing
   catalog/projection/binding/behavior parity closeout lives in
   `internal/javascriptcontractsmoke` with CLI entrypoint
-  `cmd/javascriptcontractsmoke` and `make javascript-contract-smoke`; reuse
+  `cmd/javascriptcontractsmoke` and `make javascript-contract-smoke`; the same
+  target runs the production-package guards in
+  `contracts/runtime_manifest_boundary_test.go`, which discover every
+  `pkg/orchestrators/javascript/...` package and reject transitive contract-tooling
+  imports or production source literals that name the authored/staged runtime
+  manifest. Reuse
   `symbolidentity.ProjectInstalledBindings`, `callbehavior.ProjectInstalledCallBehavior`,
   `catalog.CatalogPathCompletenessIssues`, `catalog.CatalogForbiddenSymbolIssues`, and
   `catalog.CatalogCallBehaviorParityIssues`
