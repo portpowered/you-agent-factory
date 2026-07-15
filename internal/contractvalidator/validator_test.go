@@ -106,7 +106,7 @@ var mcpInvalidCatalogDiagnosticCases = []struct {
 		name:     "broken handler ID",
 		fixture:  "contracts/testdata/mcp/invalid-handler-id.json",
 		code:     "schema.validation",
-		wantPath: "/tools/mcp.tool.you.factory_session.read_events/handler/id",
+		wantPath: "/tools/mcp.tool.you.factory_session.start_async/handler/id",
 	},
 	{
 		name:     "unknown protocol version",

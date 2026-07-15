@@ -90,7 +90,7 @@ var mcpInvalidCatalogSchemaFixtures = []struct {
 	{
 		name:     "broken handler ID",
 		fixture:  "invalid-handler-id.json",
-		wantPath: "/tools/mcp.tool.you.factory_session.read_events/handler/id",
+		wantPath: "/tools/mcp.tool.you.factory_session.start_async/handler/id",
 	},
 	{
 		name:     "unknown protocol version",

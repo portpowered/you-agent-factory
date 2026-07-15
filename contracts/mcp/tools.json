@@ -602,6 +602,343 @@
         "id": "mcp.handler.you.factory_session.get"
       }
     },
+    "mcp.tool.you.factory_session.get_result": {
+      "id": "mcp.tool.you.factory_session.get_result",
+      "name": "you.factory_session.get_result",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.get_result",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.get_result.title",
+            "canonicalEnglish": "Get Factory Session Result"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.get_result.description",
+            "canonicalEnglish": "Retrieve one durable Factory Session result in final or partial mode with optional artifact metadata. Maps to GET /factory-sessions/{session_id}/results."
+          }
+        },
+        "examples": [
+          {
+            "sessionId": "dur-sess-001",
+            "mode": "final",
+            "includeArtifacts": true
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.get_result",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "transports": {
+        "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.transports_stdio/transports"
+      },
+      "execution": {
+        "mode": "tools-call"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "input": {
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sessionId"
+          ],
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "description": "Stable durable Factory Session identifier."
+            },
+            "mode": {
+              "type": "string",
+              "description": "Result retrieval mode. Defaults to final when omitted.",
+              "enum": [
+                "final",
+                "partial"
+              ]
+            },
+            "includeArtifacts": {
+              "type": "boolean",
+              "description": "When true, include FactoryArtifact metadata refs in the response."
+            }
+          }
+        },
+        "arguments": {
+          "mcp.arg.you.factory_session.get_result.session_id": {
+            "id": "mcp.arg.you.factory_session.get_result.session_id",
+            "name": "sessionId",
+            "required": true,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.get_result.session_id",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.get_result.session_id.title",
+                  "canonicalEnglish": "Session ID"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.get_result.session_id.description",
+                  "canonicalEnglish": "Stable durable Factory Session identifier."
+                }
+              },
+              "examples": [
+                "dur-sess-001"
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "public",
+            "examples": [
+              "dur-sess-001"
+            ],
+            "constraints": {
+              "minLength": 1
+            }
+          },
+          "mcp.arg.you.factory_session.get_result.mode": {
+            "id": "mcp.arg.you.factory_session.get_result.mode",
+            "name": "mode",
+            "required": false,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.get_result.mode",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.get_result.mode.title",
+                  "canonicalEnglish": "Result mode"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.get_result.mode.description",
+                  "canonicalEnglish": "Result retrieval mode. Defaults to final when omitted."
+                }
+              },
+              "examples": [
+                "final"
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "public",
+            "examples": [
+              "final"
+            ],
+            "constraints": {
+              "enum": [
+                "final",
+                "partial"
+              ]
+            }
+          },
+          "mcp.arg.you.factory_session.get_result.include_artifacts": {
+            "id": "mcp.arg.you.factory_session.get_result.include_artifacts",
+            "name": "includeArtifacts",
+            "required": false,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.get_result.include_artifacts",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.get_result.include_artifacts.title",
+                  "canonicalEnglish": "Include artifacts"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.get_result.include_artifacts.description",
+                  "canonicalEnglish": "When true, include FactoryArtifact metadata refs in the response."
+                }
+              },
+              "examples": [
+                true
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "public",
+            "examples": [
+              true
+            ]
+          }
+        }
+      },
+      "result": {
+        "transport": {
+          "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.result_transport_serialized_json/resultTransport"
+        },
+        "domain": {
+          "success": {
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sessionId",
+                "resultStatus"
+              ],
+              "properties": {
+                "sessionId": {
+                  "type": "string"
+                },
+                "resultStatus": {
+                  "type": "string",
+                  "enum": [
+                    "NOT_READY",
+                    "UNAVAILABLE",
+                    "PARTIAL",
+                    "FINAL",
+                    "FAILED_WITH_PARTIAL"
+                  ]
+                },
+                "sessionStatus": {
+                  "type": "string",
+                  "enum": [
+                    "QUEUED",
+                    "AWAITING_APPROVAL",
+                    "RUNNING",
+                    "PAUSED",
+                    "RESUMING",
+                    "SUCCEEDED",
+                    "FAILED",
+                    "CANCELING",
+                    "CANCELED",
+                    "TIMED_OUT",
+                    "INTERRUPTED"
+                  ]
+                },
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "final",
+                    "partial"
+                  ]
+                },
+                "includeArtifacts": {
+                  "type": "boolean"
+                },
+                "primaryResult": {
+                  "type": "array"
+                },
+                "artifactIds": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "availability": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "reason": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "retryable": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "failureDetail": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "reason": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "examples": [
+              {
+                "result": {
+                  "sessionId": "dur-sess-001",
+                  "resultStatus": "FINAL",
+                  "sessionStatus": "SUCCEEDED",
+                  "mode": "final",
+                  "includeArtifacts": true,
+                  "primaryResult": [
+                    "completed"
+                  ],
+                  "artifactIds": [
+                    "art-001"
+                  ]
+                }
+              }
+            ]
+          },
+          "failures": {
+            "mcp.failure.you.factory_session.get_result.session_not_found": {
+              "id": "mcp.failure.you.factory_session.get_result.session_not_found",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.session.not_found",
+                    "message": "factory session not found",
+                    "retryable": false,
+                    "sessionId": "dur-sess-missing-999"
+                  }
+                }
+              ]
+            },
+            "mcp.failure.you.factory_session.get_result.result_not_ready": {
+              "id": "mcp.failure.you.factory_session.get_result.result_not_ready",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.result.not_ready",
+                    "message": "factory session result is not ready",
+                    "retryable": true,
+                    "sessionId": "dur-sess-001"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "examples": [
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"result\":{\"sessionId\":\"dur-sess-001\",\"resultStatus\":\"FINAL\",\"sessionStatus\":\"SUCCEEDED\",\"mode\":\"final\",\"includeArtifacts\":true,\"primaryResult\":[\"completed\"],\"artifactIds\":[\"art-001\"]}}"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"error\":{\"code\":\"factory_session.result.not_ready\",\"message\":\"factory session result is not ready\",\"retryable\":true,\"sessionId\":\"dur-sess-001\"}}"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "handler": {
+        "id": "mcp.handler.you.factory_session.get_result"
+      }
+    },
     "mcp.tool.you.factory_session.list": {
       "id": "mcp.tool.you.factory_session.list",
       "name": "you.factory_session.list",
@@ -1005,6 +1342,606 @@
       },
       "handler": {
         "id": "mcp.handler.you.factory_session.list_artifacts"
+      }
+    },
+    "mcp.tool.you.factory_session.list_dispatches": {
+      "id": "mcp.tool.you.factory_session.list_dispatches",
+      "name": "you.factory_session.list_dispatches",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.list_dispatches",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.list_dispatches.title",
+            "canonicalEnglish": "List Factory Session Dispatches"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.list_dispatches.description",
+            "canonicalEnglish": "List dispatch summaries for one Factory Session, including dispatch id, status, kind, phase, and provider-session correlation metadata when available. Maps to GET /factory-sessions/{session_id}/dispatches."
+          }
+        },
+        "examples": [
+          {
+            "sessionId": "dur-sess-001",
+            "status": "RUNNING",
+            "phase": "execute"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.list_dispatches",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "transports": {
+        "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.transports_stdio/transports"
+      },
+      "execution": {
+        "mode": "tools-call"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "input": {
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sessionId"
+          ],
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "description": "Stable durable Factory Session identifier."
+            },
+            "phase": {
+              "type": "string",
+              "description": "Exact canonical phase identifier."
+            },
+            "status": {
+              "type": "string",
+              "description": "Canonical Dispatch lifecycle status."
+            }
+          }
+        },
+        "arguments": {
+          "mcp.arg.you.factory_session.list_dispatches.session_id": {
+            "id": "mcp.arg.you.factory_session.list_dispatches.session_id",
+            "name": "sessionId",
+            "required": true,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.list_dispatches.session_id",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.list_dispatches.session_id.title",
+                  "canonicalEnglish": "Session ID"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.list_dispatches.session_id.description",
+                  "canonicalEnglish": "Stable durable Factory Session identifier."
+                }
+              },
+              "examples": [
+                "dur-sess-001"
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "public",
+            "examples": [
+              "dur-sess-001"
+            ],
+            "constraints": {
+              "minLength": 1
+            }
+          },
+          "mcp.arg.you.factory_session.list_dispatches.phase": {
+            "id": "mcp.arg.you.factory_session.list_dispatches.phase",
+            "name": "phase",
+            "required": false,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.list_dispatches.phase",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.list_dispatches.phase.title",
+                  "canonicalEnglish": "Phase filter"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.list_dispatches.phase.description",
+                  "canonicalEnglish": "Exact canonical phase identifier."
+                }
+              },
+              "examples": [
+                "execute"
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "public",
+            "examples": [
+              "execute"
+            ]
+          },
+          "mcp.arg.you.factory_session.list_dispatches.status": {
+            "id": "mcp.arg.you.factory_session.list_dispatches.status",
+            "name": "status",
+            "required": false,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.list_dispatches.status",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.list_dispatches.status.title",
+                  "canonicalEnglish": "Status filter"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.list_dispatches.status.description",
+                  "canonicalEnglish": "Canonical Dispatch lifecycle status."
+                }
+              },
+              "examples": [
+                "RUNNING"
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "public",
+            "examples": [
+              "RUNNING"
+            ]
+          }
+        }
+      },
+      "result": {
+        "transport": {
+          "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.result_transport_serialized_json/resultTransport"
+        },
+        "domain": {
+          "success": {
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sessionId",
+                "dispatches"
+              ],
+              "properties": {
+                "sessionId": {
+                  "type": "string"
+                },
+                "dispatches": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "dispatchKind",
+                      "status"
+                    ],
+                    "properties": {
+                      "attempt": {
+                        "type": "integer"
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "dispatchKind": {
+                        "type": "string"
+                      },
+                      "status": {
+                        "type": "string"
+                      },
+                      "phase": {
+                        "type": "string"
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "runnerId": {
+                        "type": "string"
+                      },
+                      "model": {
+                        "type": "string"
+                      },
+                      "provider": {
+                        "type": "string"
+                      },
+                      "providerSessionRefs": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false
+                        }
+                      },
+                      "outputArtifactIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "failureClassification": {
+                        "type": "string"
+                      },
+                      "failureDetail": {
+                        "type": "object",
+                        "additionalProperties": false
+                      },
+                      "retryable": {
+                        "type": "boolean"
+                      },
+                      "usage": {
+                        "type": "object",
+                        "additionalProperties": false
+                      },
+                      "warnings": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false
+                        }
+                      },
+                      "javascript": {
+                        "type": "object",
+                        "additionalProperties": false
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "examples": [
+              {
+                "result": {
+                  "sessionId": "dur-sess-001",
+                  "dispatches": []
+                }
+              }
+            ]
+          },
+          "failures": {
+            "mcp.failure.you.factory_session.list_dispatches.session_not_found": {
+              "id": "mcp.failure.you.factory_session.list_dispatches.session_not_found",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.session.not_found",
+                    "message": "factory session not found",
+                    "retryable": false,
+                    "sessionId": "dur-sess-missing-999"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "examples": [
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"result\":{\"sessionId\":\"dur-sess-001\",\"dispatches\":[]}}"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"error\":{\"code\":\"factory_session.session.not_found\",\"message\":\"factory session not found\",\"retryable\":false,\"sessionId\":\"dur-sess-missing-999\"}}"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "handler": {
+        "id": "mcp.handler.you.factory_session.list_dispatches"
+      }
+    },
+    "mcp.tool.you.factory_session.read_events": {
+      "id": "mcp.tool.you.factory_session.read_events",
+      "name": "you.factory_session.read_events",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.read_events",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.read_events.title",
+            "canonicalEnglish": "Read Factory Session Events"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.read_events.description",
+            "canonicalEnglish": "Read ordered Factory Session event facts for reconnect and inspection without exposing internal Petri-net terminology as the primary public vocabulary. Maps to GET /factory-sessions/{session_id}/events."
+          }
+        },
+        "examples": [
+          {
+            "sessionId": "dur-sess-001",
+            "afterEventId": "evt-0001"
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.read_events",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "transports": {
+        "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.transports_stdio/transports"
+      },
+      "execution": {
+        "mode": "tools-call"
+      },
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
+      "input": {
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sessionId"
+          ],
+          "properties": {
+            "sessionId": {
+              "type": "string",
+              "description": "Stable durable Factory Session identifier."
+            },
+            "afterEventId": {
+              "type": "string",
+              "description": "Reconnect cursor: return events after this FactoryEvent identifier."
+            },
+            "afterSequence": {
+              "type": "integer",
+              "description": "Reconnect cursor: return events after this sessionSequence value."
+            }
+          }
+        },
+        "arguments": {
+          "mcp.arg.you.factory_session.read_events.session_id": {
+            "id": "mcp.arg.you.factory_session.read_events.session_id",
+            "name": "sessionId",
+            "required": true,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.read_events.session_id",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.read_events.session_id.title",
+                  "canonicalEnglish": "Session ID"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.read_events.session_id.description",
+                  "canonicalEnglish": "Stable durable Factory Session identifier."
+                }
+              },
+              "examples": [
+                "dur-sess-001"
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "public",
+            "examples": [
+              "dur-sess-001"
+            ],
+            "constraints": {
+              "minLength": 1
+            }
+          },
+          "mcp.arg.you.factory_session.read_events.after_event_id": {
+            "id": "mcp.arg.you.factory_session.read_events.after_event_id",
+            "name": "afterEventId",
+            "required": false,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.read_events.after_event_id",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.read_events.after_event_id.title",
+                  "canonicalEnglish": "After event ID"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.read_events.after_event_id.description",
+                  "canonicalEnglish": "Reconnect cursor: return events after this FactoryEvent identifier."
+                }
+              },
+              "examples": [
+                "evt-0001"
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "public",
+            "examples": [
+              "evt-0001"
+            ]
+          },
+          "mcp.arg.you.factory_session.read_events.after_sequence": {
+            "id": "mcp.arg.you.factory_session.read_events.after_sequence",
+            "name": "afterSequence",
+            "required": false,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.read_events.after_sequence",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.read_events.after_sequence.title",
+                  "canonicalEnglish": "After sequence"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.read_events.after_sequence.description",
+                  "canonicalEnglish": "Reconnect cursor: return events after this sessionSequence value."
+                }
+              },
+              "examples": [
+                42
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "public",
+            "examples": [
+              42
+            ]
+          }
+        }
+      },
+      "result": {
+        "transport": {
+          "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.result_transport_serialized_json/resultTransport"
+        },
+        "domain": {
+          "success": {
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sessionId",
+                "events"
+              ],
+              "properties": {
+                "sessionId": {
+                  "type": "string"
+                },
+                "events": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "id",
+                      "type",
+                      "schemaVersion",
+                      "context"
+                    ],
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string"
+                      },
+                      "schemaVersion": {
+                        "type": "string"
+                      },
+                      "context": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "eventTime": {
+                            "type": "string"
+                          },
+                          "sequence": {
+                            "type": "integer"
+                          },
+                          "sessionId": {
+                            "type": "string"
+                          },
+                          "sessionSequence": {
+                            "type": "integer"
+                          }
+                        }
+                      },
+                      "payload": {
+                        "type": "object",
+                        "additionalProperties": false
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "examples": [
+              {
+                "result": {
+                  "sessionId": "dur-sess-001",
+                  "events": []
+                }
+              }
+            ]
+          },
+          "failures": {
+            "mcp.failure.you.factory_session.read_events.session_not_found": {
+              "id": "mcp.failure.you.factory_session.read_events.session_not_found",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.session.not_found",
+                    "message": "factory session not found",
+                    "retryable": false,
+                    "sessionId": "dur-sess-missing-999"
+                  }
+                }
+              ]
+            },
+            "mcp.failure.you.factory_session.read_events.reconnect_cursor_not_found": {
+              "id": "mcp.failure.you.factory_session.read_events.reconnect_cursor_not_found",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.events.reconnect_cursor_not_found",
+                    "message": "event reconnect cursor not found in session history",
+                    "retryable": false,
+                    "sessionId": "dur-sess-001"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "examples": [
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"result\":{\"sessionId\":\"dur-sess-001\",\"events\":[]}}"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"error\":{\"code\":\"factory_session.events.reconnect_cursor_not_found\",\"message\":\"event reconnect cursor not found in session history\",\"retryable\":false,\"sessionId\":\"dur-sess-001\"}}"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "handler": {
+        "id": "mcp.handler.you.factory_session.read_events"
       }
     }
   }

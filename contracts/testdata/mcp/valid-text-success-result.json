@@ -2,25 +2,29 @@
   "formatVersion": "1.0.0",
   "protocolVersion": "2024-11-05",
   "tools": {
-    "mcp.tool.you.factory_session.get_result": {
-      "id": "mcp.tool.you.factory_session.get_result",
-      "name": "you.factory_session.get_result",
+    "mcp.tool.you.factory_session.start_sync": {
+      "id": "mcp.tool.you.factory_session.start_sync",
+      "name": "you.factory_session.start_sync",
       "documentation": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.get_result",
+        "itemId": "mcp.tool.you.factory_session.start_sync",
         "documentation": {
           "title": {
-            "id": "mcp.tool.you.factory_session.get_result.title",
-            "canonicalEnglish": "Get Factory Session Result"
+            "id": "mcp.fixture.you.factory_session.text_success.title",
+            "canonicalEnglish": "Start Factory Session Sync"
           },
           "description": {
-            "id": "mcp.tool.you.factory_session.get_result.description",
-            "canonicalEnglish": "Reads the terminal or partial result for one durable Factory Session."
+            "id": "mcp.fixture.you.factory_session.text_success.description",
+            "canonicalEnglish": "Fixture-only tool record demonstrating serialized-json text success CallToolResult encoding with isError false."
           }
         },
         "examples": [
           {
-            "sessionId": "dur-sess-001"
+            "requestId": "req-sync-fixture-001",
+            "source": {
+              "kind": "WORKFLOW_NAME",
+              "workflowName": "example.workflow"
+            }
           }
         ],
         "visibility": "public",
@@ -28,7 +32,7 @@
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.get_result",
+        "itemId": "mcp.tool.you.factory_session.start_sync",
         "state": "active",
         "since": "1.0.0"
       },
