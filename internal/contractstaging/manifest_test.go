@@ -169,7 +169,7 @@ func TestMergeCommitTipResolvesSourceCommitWithoutFalseShallowFailure(t *testing
 	runGit(t, origin, "add", "-A")
 	runGit(t, origin, "commit", "-m", "side branch")
 
-	runGit(t, origin, "checkout", "master")
+	runGit(t, origin, "checkout", checkFixtureDefaultBranch)
 	writeCheckFixture(t, origin, "main-only.txt", "main")
 	runGit(t, origin, "add", "-A")
 	runGit(t, origin, "commit", "-m", "main branch")
@@ -211,7 +211,7 @@ func TestMergeCommitInRevListWithoutPathChangesResolvesSourceCommit(t *testing.T
 	runGit(t, origin, "add", "-A")
 	runGit(t, origin, "commit", "-m", "feature source identity change")
 
-	runGit(t, origin, "checkout", "master")
+	runGit(t, origin, "checkout", checkFixtureDefaultBranch)
 	writeCheckFixture(t, origin, "internal/contractstaging/policy.go", "// main branch policy marker\n")
 	runGit(t, origin, "add", "-A")
 	runGit(t, origin, "commit", "-m", "main source identity change")
