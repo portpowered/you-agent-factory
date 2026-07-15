@@ -2,6 +2,7 @@ package diagnostics
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
@@ -54,5 +55,45 @@ func TestWorkDiagnosticsFromSafeEventPayloadRejectsMalformedJSON(t *testing.T) {
 	t.Parallel()
 	if _, err := WorkDiagnosticsFromSafeEventPayload(json.RawMessage(`{"provider":`)); err == nil {
 		t.Fatal("WorkDiagnosticsFromSafeEventPayload error = nil, want malformed JSON error")
+	}
+}
+
+func TestSafeWorkDiagnosticsEventPayloadPreservesPublicFieldNamesAndMetadataKeys(t *testing.T) {
+	diagnostics := &SafeWorkDiagnostics{
+		RenderedPrompt: &SafeRenderedPromptDiagnostic{
+			SystemPromptHash: "system-hash",
+			Variables:        map[string]string{"caller_key": "value"},
+		},
+		Provider: &SafeProviderDiagnostic{
+			RequestMetadata: map[string]string{"provider_key": "value"},
+		},
+	}
+
+	payload, err := SafeWorkDiagnosticsEventPayload(diagnostics)
+	if err != nil {
+		t.Fatalf("SafeWorkDiagnosticsEventPayload: %v", err)
+	}
+	var fields map[string]any
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		t.Fatalf("decode event payload: %v", err)
+	}
+	rendered := fields["renderedPrompt"].(map[string]any)
+	if rendered["systemPromptHash"] != "system-hash" {
+		t.Fatalf("renderedPrompt.systemPromptHash = %#v", rendered["systemPromptHash"])
+	}
+	if rendered["variables"].(map[string]any)["caller_key"] != "value" {
+		t.Fatalf("variables = %#v, want caller-owned key", rendered["variables"])
+	}
+	provider := fields["provider"].(map[string]any)
+	if provider["requestMetadata"].(map[string]any)["provider_key"] != "value" {
+		t.Fatalf("requestMetadata = %#v, want caller-owned key", provider["requestMetadata"])
+	}
+
+	decoded, err := SafeWorkDiagnosticsFromEventPayload(payload)
+	if err != nil {
+		t.Fatalf("SafeWorkDiagnosticsFromEventPayload: %v", err)
+	}
+	if !reflect.DeepEqual(decoded, diagnostics) {
+		t.Fatalf("round trip = %#v, want %#v", decoded, diagnostics)
 	}
 }

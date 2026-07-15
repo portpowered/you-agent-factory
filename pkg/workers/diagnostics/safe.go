@@ -114,6 +114,29 @@ func SafeWorkDiagnosticsFromEventPayload(payload json.RawMessage) (*SafeWorkDiag
 	return &safe, nil
 }
 
+// SafeWorkDiagnosticsEventPayload encodes canonical safe diagnostics with the
+// camel-case field names retained by Factory event and public API payloads.
+// Metadata map keys are caller-owned and are not rewritten.
+func SafeWorkDiagnosticsEventPayload(diagnostics *SafeWorkDiagnostics) (json.RawMessage, error) {
+	if diagnostics == nil {
+		return json.RawMessage("null"), nil
+	}
+	encoded, err := json.Marshal(diagnostics)
+	if err != nil {
+		return nil, fmt.Errorf("encode safe inference diagnostics: %w", err)
+	}
+	var eventFields any
+	if err := json.Unmarshal(encoded, &eventFields); err != nil {
+		return nil, fmt.Errorf("decode encoded safe inference diagnostics: %w", err)
+	}
+	normalizeSafeCanonicalFieldNames(eventFields)
+	encoded, err = json.Marshal(eventFields)
+	if err != nil {
+		return nil, fmt.Errorf("encode safe inference event diagnostics: %w", err)
+	}
+	return encoded, nil
+}
+
 func normalizeSafeEventFieldNames(value any) {
 	switch typed := value.(type) {
 	case []any:
@@ -136,8 +159,46 @@ func normalizeSafeEventFieldNames(value any) {
 	}
 }
 
+func normalizeSafeCanonicalFieldNames(value any) {
+	switch typed := value.(type) {
+	case []any:
+		for _, item := range typed {
+			normalizeSafeCanonicalFieldNames(item)
+		}
+	case map[string]any:
+		for key, item := range typed {
+			eventName := key
+			if target := eventSafeFieldName(key); target != key {
+				delete(typed, key)
+				typed[target] = item
+				eventName = target
+			}
+			if eventName == "variables" || eventName == "requestMetadata" || eventName == "responseMetadata" {
+				continue
+			}
+			normalizeSafeCanonicalFieldNames(item)
+		}
+	}
+}
+
+func eventSafeFieldName(field string) string {
+	for eventName, canonicalName := range safeEventFieldNames() {
+		if canonicalName == field {
+			return eventName
+		}
+	}
+	return field
+}
+
 func canonicalSafeEventFieldName(field string) string {
-	names := map[string]string{
+	if canonical, ok := safeEventFieldNames()[field]; ok {
+		return canonical
+	}
+	return field
+}
+
+func safeEventFieldNames() map[string]string {
+	return map[string]string{
 		"agentRun":          "agent_run",
 		"executionBehavior": "execution_behavior",
 		"failureClass":      "failure_class",
@@ -155,10 +216,6 @@ func canonicalSafeEventFieldName(field string) string {
 		"userMessageHash":   "user_message_hash",
 		"valueCount":        "value_count",
 	}
-	if canonical, ok := names[field]; ok {
-		return canonical
-	}
-	return field
 }
 
 // SafeWorkDiagnosticsFromGenerated converts the generated safe diagnostics

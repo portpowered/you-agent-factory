@@ -9,8 +9,13 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	"github.com/portpowered/infinite-you/pkg/workers"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestRunStartedPayloadFromEvent_RejectsRetiredFactoryAliases(t *testing.T) {
@@ -85,6 +90,65 @@ func TestRunStartedPayloadFromEvent_RejectsRetiredFactoryAliases(t *testing.T) {
 	if want := "workers[0].model_provider is not supported; use modelProvider"; !strings.Contains(err.Error(), want) {
 		t.Fatalf("expected model_provider retirement guidance, got %v", err)
 	}
+}
+
+func generatedDispatchConsumedWorkRefsFromReplayDispatch(dispatch work.WorkDispatch) []factoryapi.DispatchConsumedWorkRef {
+	tokens := workers.WorkDispatchInputTokens(dispatch)
+	out := make([]factoryapi.DispatchConsumedWorkRef, 0, len(tokens))
+	for _, token := range tokens {
+		if token.Color.DataType == factorytoken.DataTypeResource {
+			continue
+		}
+		workID := token.Color.WorkID
+		if workID == "" {
+			workID = token.ID
+		}
+		if workID != "" {
+			out = append(out, factoryapi.DispatchConsumedWorkRef{WorkId: workID})
+		}
+	}
+	if len(out) == 0 {
+		for _, workID := range dispatch.Execution.WorkIDs {
+			if workID != "" {
+				out = append(out, factoryapi.DispatchConsumedWorkRef{WorkId: workID})
+			}
+		}
+	}
+	return out
+}
+
+func generatedResourcesFromReplayDispatch(dispatch work.WorkDispatch) *[]factoryapi.Resource {
+	tokens := workers.WorkDispatchInputTokens(dispatch)
+	resources := make([]factoryapi.Resource, 0, len(tokens))
+	for _, token := range tokens {
+		if token.Color.DataType != factorytoken.DataTypeResource {
+			continue
+		}
+		name := token.Color.WorkTypeID
+		if name == "" {
+			name = token.Color.Name
+		}
+		resources = append(resources, factoryapi.Resource{Name: name})
+	}
+	return slicePtr(resources)
+}
+
+func generatedWorkMetrics(metrics workerexecution.WorkMetrics) *factoryapi.WorkMetrics {
+	if metrics.Duration == 0 && metrics.Cost == 0 && metrics.RetryCount == 0 {
+		return nil
+	}
+	return &factoryapi.WorkMetrics{
+		DurationMillis: int64PtrIfNonZero(metrics.Duration.Milliseconds()),
+		Cost:           float64PtrIfNonZero(metrics.Cost),
+		RetryCount:     intPtrIfNonZero(metrics.RetryCount),
+	}
+}
+
+func generatedDispatchRequestMetadata(values map[string]string) *factoryapi.DispatchRequestEventMetadata {
+	if len(values) == 0 {
+		return nil
+	}
+	return &factoryapi.DispatchRequestEventMetadata{ReplayKey: stringPtrIfNotEmpty(values[replayMetadataReplayKey])}
 }
 
 func TestRunStartedPayloadFromEvent_AllowsLegacyOnFailureObjectWhileNormalizingFactoryBoundary(t *testing.T) {
@@ -212,6 +276,44 @@ func TestApplyReplayRunRequest_DecodesFactoryOwnedPayloadAndSafeDiagnostics(t *t
 	event.Payload = json.RawMessage(`{"factory":`)
 	if err := applyReplayRunRequest(reduced, event); err == nil || !strings.Contains(err.Error(), "decode run started event") {
 		t.Fatalf("malformed payload error = %v, want run-started decode context", err)
+	}
+}
+
+func TestRunStartedEventFromSnapshot_PreservesGeneratedWireDiagnostics(t *testing.T) {
+	recordedAt := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
+	diagnostics := interfaces.ReplayDiagnostics{
+		Notes: []string{"safe"},
+		Workers: map[string]workerdiagnostics.SafeWorkDiagnostics{
+			"executor": {
+				RenderedPrompt: &workerdiagnostics.SafeRenderedPromptDiagnostic{
+					SystemPromptHash: "sha256:prompt",
+					Variables:        map[string]string{"caller_key": "value"},
+				},
+			},
+		},
+	}
+	event, err := runStartedEventFromSnapshot(recordedAt, mustFactorySnapshot(t, testGeneratedFactory()), nil, diagnostics)
+	if err != nil {
+		t.Fatalf("runStartedEventFromSnapshot: %v", err)
+	}
+
+	var generated factoryapi.FactoryEvent
+	if err := event.Decode(&generated); err != nil {
+		t.Fatalf("decode generated Factory event: %v", err)
+	}
+	payload, err := generated.Payload.AsRunRequestEventPayload()
+	if err != nil {
+		t.Fatalf("AsRunRequestEventPayload: %v", err)
+	}
+	if payload.Diagnostics == nil || payload.Diagnostics.Workers == nil {
+		t.Fatalf("generated diagnostics = %#v, want worker diagnostics", payload.Diagnostics)
+	}
+	worker := (*payload.Diagnostics.Workers)["executor"]
+	if worker.RenderedPrompt == nil || worker.RenderedPrompt.SystemPromptHash == nil || *worker.RenderedPrompt.SystemPromptHash != "sha256:prompt" {
+		t.Fatalf("generated rendered prompt = %#v, want public camel-case payload", worker.RenderedPrompt)
+	}
+	if worker.RenderedPrompt.Variables == nil || (*worker.RenderedPrompt.Variables)["caller_key"] != "value" {
+		t.Fatalf("generated variables = %#v, want caller-owned key", worker.RenderedPrompt.Variables)
 	}
 }
 
