@@ -296,10 +296,6 @@ export async function selectWorkstationRequest(
   );
 }
 
-export function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 export async function selectWorkstationRequestByDispatchID(
   canvasElement: HTMLElement,
   dispatchID: string,
@@ -334,7 +330,7 @@ export async function selectWorkstationRequestByDispatchID(
     }
 
     const historyRequestButton = requestHistoryScope.queryByRole("button", {
-      name: new RegExp(`\\(${escapeRegExp(dispatchID)}\\)$`),
+      name: requestButtonLabel,
     });
     if (historyRequestButton) {
       await userEvent.click(historyRequestButton);

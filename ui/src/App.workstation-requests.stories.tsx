@@ -100,32 +100,34 @@ export const WorkstationRequestSelection = {
       formattedAttempt.getByRole("button", { name: "Expand attempt 2" }),
     ).toBeVisible();
     expect(
-      formattedAttempt.queryByRole("region", { name: "Request body" }),
+      formattedAttempt.queryByRole("heading", { name: "Review checklist" }),
     ).toBeNull();
     expect(
-      formattedAttempt.queryByRole("region", { name: "Response body" }),
+      formattedAttempt.queryByRole("heading", { name: "Reviewer response" }),
     ).toBeNull();
 
     await userEvent.click(
       formattedAttempt.getByRole("button", { name: "Expand attempt 2" }),
     );
 
-    await expect(
-      formattedAttempt.getByRole("button", { name: "Expand request body" }),
-    ).toBeVisible();
-    await expect(
-      formattedAttempt.getByRole("button", { name: "Expand response body" }),
-    ).toBeVisible();
+    const requestBodyToggle = formattedAttempt.getByRole("button", {
+      name: "Expand request body",
+    });
+    const responseBodyToggle = formattedAttempt.getByRole("button", {
+      name: "Expand response body",
+    });
+    await expect(requestBodyToggle).toBeVisible();
+    await expect(responseBodyToggle).toBeVisible();
+    expect(requestBodyToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(responseBodyToggle.getAttribute("aria-expanded")).toBe("false");
     expect(
-      formattedAttempt.queryByRole("region", { name: "Request body" }),
+      formattedAttempt.queryByRole("heading", { name: "Review checklist" }),
     ).toBeNull();
     expect(
-      formattedAttempt.queryByRole("region", { name: "Response body" }),
+      formattedAttempt.queryByRole("heading", { name: "Reviewer response" }),
     ).toBeNull();
 
-    await userEvent.click(
-      formattedAttempt.getByRole("button", { name: "Expand request body" }),
-    );
+    await userEvent.click(requestBodyToggle);
     const requestBody = within(
       formattedAttempt.getByRole("region", { name: "Request body" }),
     );
@@ -137,9 +139,7 @@ export const WorkstationRequestSelection = {
     expect(requestBody.queryByText("## Review checklist")).toBeNull();
     expect(requestBody.queryByText("```text")).toBeNull();
 
-    await userEvent.click(
-      formattedAttempt.getByRole("button", { name: "Expand response body" }),
-    );
+    await userEvent.click(responseBodyToggle);
     const responseBody = within(
       formattedAttempt.getByRole("region", { name: "Response body" }),
     );
