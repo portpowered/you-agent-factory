@@ -46,6 +46,7 @@ func TestExportMapRawTargetsAreStagedByContractStaging(t *testing.T) {
 
 func TestRepositoryStagedRawArtifacts_MatchCanonicalSources(t *testing.T) {
 	t.Parallel()
+	defer contractstaging.LockRepositoryStagingForTest()()
 
 	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
 	for _, artifact := range contractstaging.RawArtifacts() {

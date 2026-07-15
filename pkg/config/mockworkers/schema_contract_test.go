@@ -508,9 +508,9 @@ func TestMockWorkersSchema_StaleStagingDetectedByContractCheck(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read staged schema: %v", err)
 	}
-	t.Cleanup(func() {
+	defer func() {
 		_ = os.WriteFile(stagedPath, before, 0o644)
-	})
+	}()
 
 	corrupted := append(append([]byte(nil), before...), '\n')
 	var (
