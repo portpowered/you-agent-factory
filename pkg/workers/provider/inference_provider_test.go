@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )
 

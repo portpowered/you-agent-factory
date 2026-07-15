@@ -2,7 +2,7 @@
 package defaultcmd
 
 import (
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 )
 

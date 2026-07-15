@@ -181,7 +181,7 @@ root.
 | Migration-only roots | Target owner | Active work item and deletion gate |
 | --- | --- | --- |
 | `pkg/api`, `pkg/apisurface`, `pkg/cli`, `pkg/mcp` | `pkg/transports` | **Batch 006 — Transport family move.** Remove each exception when its HTTP, CLI, MCP, generated-contract/client, and boundary-mapping behavior and callers have moved to `pkg/transports`. |
-| `pkg/logging`, `pkg/replay`, `pkg/sessionpersistence` | `pkg/platform` | **Batch 006 — Platform family move.** Remove each exception when its logging, replay/artifact, metrics, cursor persistence, or non-domain clock infrastructure and callers have moved to `pkg/platform`. |
+| `pkg/replay`, `pkg/sessionpersistence` | `pkg/platform` | **Batch 006 — Platform family move.** Logging is canonical under `pkg/platform/logging`; remove each remaining exception when its replay/artifact, cursor persistence, or non-domain clock infrastructure and callers have moved to `pkg/platform`. |
 | `pkg/service` | `pkg/wire` after domain behavior converges on its narrow owners | **Batch 007 — Service and Factory Session ownership convergence**, followed by **Batch 008 — Legacy composition-root deletion.** Remove the exception when domain/session behavior has moved to its narrow owner and the remaining construction shell has moved to `pkg/wire`. |
 | `pkg/runtimehost`, `pkg/composebridge` | `pkg/wire` | **Batch 008 — Legacy composition-root deletion.** Remove each exception when transports and `pkg/initializer` consume the explicit graph and no caller needs the runtime-host facade or composition bridge. |
 

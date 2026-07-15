@@ -9,7 +9,7 @@ import (
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/replay"

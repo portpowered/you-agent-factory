@@ -10,7 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 

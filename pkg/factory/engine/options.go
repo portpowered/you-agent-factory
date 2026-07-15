@@ -5,7 +5,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 // Option configures a FactoryEngine.

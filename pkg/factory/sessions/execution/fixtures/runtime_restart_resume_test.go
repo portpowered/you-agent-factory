@@ -21,7 +21,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 )

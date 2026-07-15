@@ -24,7 +24,7 @@ import (
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"

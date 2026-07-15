@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 

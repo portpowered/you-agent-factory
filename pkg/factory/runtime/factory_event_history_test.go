@@ -16,7 +16,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )

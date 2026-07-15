@@ -35,7 +35,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"

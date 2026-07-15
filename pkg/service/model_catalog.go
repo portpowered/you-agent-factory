@@ -10,7 +10,7 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"

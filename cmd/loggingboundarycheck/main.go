@@ -16,12 +16,12 @@ import (
 	"github.com/portpowered/infinite-you/internal/contractguard"
 )
 
-const loggingPackagePath = "github.com/portpowered/infinite-you/pkg/logging"
+const loggingPackagePath = "github.com/portpowered/infinite-you/pkg/platform/logging"
 
 var approvedFiles = map[string]struct{}{
 	"pkg/transports/cli/root.go":                  {},
 	"pkg/transports/cli/terminalpolicy/policy.go": {},
-	"pkg/logging/logger.go":            {},
+	"pkg/platform/logging/logger.go":              {},
 }
 
 var prohibitedCalls = map[string]map[string]string{

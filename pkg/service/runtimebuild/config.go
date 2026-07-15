@@ -7,7 +7,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )

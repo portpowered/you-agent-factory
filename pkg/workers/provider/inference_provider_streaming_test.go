@@ -14,7 +14,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"

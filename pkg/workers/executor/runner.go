@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 // WorkerRunner is an active goroutine that processes work for a specific worker type.

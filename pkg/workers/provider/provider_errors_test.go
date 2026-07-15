@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	claudeexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/claude/exitfailure"
 	codexexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/codex/exitfailure"
 	geminipkg "github.com/portpowered/infinite-you/pkg/workers/provider/gemini"

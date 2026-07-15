@@ -10,7 +10,7 @@ import (
 	factoryresponseevents "github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	interfaceresponseevents "github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	agyadapter "github.com/portpowered/infinite-you/pkg/workers/provider/agy"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"

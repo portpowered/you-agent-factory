@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 // CommandRunner executes a low-level subprocess request for worker code.

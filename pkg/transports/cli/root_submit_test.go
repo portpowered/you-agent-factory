@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/config/configinit"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 )

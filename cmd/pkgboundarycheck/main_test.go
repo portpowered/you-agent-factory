@@ -78,6 +78,33 @@ func TestRunAllowsCanonicalTransportImports(t *testing.T) {
 	}
 }
 
+func TestRunAllowsPlatformLoggingAndRejectsRetiredLoggingImport(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/canonical.go", "runtime", "github.com/portpowered/infinite-you/pkg/platform/logging")
+
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want canonical platform logging import allowed; stderr=%q", err, stderr.String())
+	}
+
+	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/retired.go", "runtime", "github.com/portpowered/infinite-you/pkg/logging")
+	stderr.Reset()
+	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want retired logging import rejected")
+	}
+	for _, want := range []string{
+		"prohibited retired package import: github.com/portpowered/infinite-you/pkg/logging",
+		"canonical owner: pkg/platform/logging",
+	} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
+		}
+	}
+}
+
 func TestRunRejectsRetiredTransportImports(t *testing.T) {
 	t.Parallel()
 

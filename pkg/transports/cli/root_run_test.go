@@ -21,7 +21,7 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factorycli "github.com/portpowered/infinite-you/pkg/transports/cli/factory"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"

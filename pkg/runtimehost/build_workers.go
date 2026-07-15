@@ -6,7 +6,7 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"

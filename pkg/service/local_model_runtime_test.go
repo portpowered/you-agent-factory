@@ -15,7 +15,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"

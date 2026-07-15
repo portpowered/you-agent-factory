@@ -9,7 +9,7 @@ import (
 
 	factoryresponseevents "github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	cursorpkg "github.com/portpowered/infinite-you/pkg/workers/provider/cursor"
 )

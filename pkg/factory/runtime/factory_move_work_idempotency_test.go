@@ -7,7 +7,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 func TestMoveWork_RejectsDuplicateRequestId(t *testing.T) {

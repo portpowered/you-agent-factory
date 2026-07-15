@@ -24,7 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"

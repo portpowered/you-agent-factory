@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	provideradapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter"

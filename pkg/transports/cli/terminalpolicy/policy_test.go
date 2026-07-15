@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

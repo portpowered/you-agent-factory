@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/work/content"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
 )

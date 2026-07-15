@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 // WorkerPool manages WorkerRunners by worker type, providing a shared resultCh

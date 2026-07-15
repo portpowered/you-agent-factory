@@ -132,7 +132,7 @@ directive occurrence in the focused scan:
 - `pkg/invocations`
 - `pkg/models/local`
 - `pkg/models/assets`
-- `pkg/logging`
+- `pkg/platform/logging`
 - `pkg/transports/mcp/server`
 - `pkg/models/host`
 - `pkg/orchestrators/javascript/policy`

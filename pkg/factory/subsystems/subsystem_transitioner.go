@@ -17,7 +17,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/factory/workstationconfig"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
