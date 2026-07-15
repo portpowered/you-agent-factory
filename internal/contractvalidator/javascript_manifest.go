@@ -13,6 +13,14 @@ func RuntimeManifestSemanticsDiagnostics(document string, value any) []Diagnosti
 	return runtimeManifestDiagnostics(document, value)
 }
 
+type runtimeManifestSymbolIndex struct {
+	keys             []string
+	symbolsByID      map[string]string
+	symbolKindByKey  map[string]string
+	pathByKey        map[string]string
+	childrenByParent map[string]map[string]struct{}
+}
+
 func runtimeManifestDiagnostics(document string, value any) []Diagnostic {
 	root, ok := value.(map[string]any)
 	if !ok {
@@ -23,12 +31,38 @@ func runtimeManifestDiagnostics(document string, value any) []Diagnostic {
 		return nil
 	}
 
-	keys := sortedStringKeys(symbols)
+	index := indexRuntimeManifestSymbols(symbols)
+	var diagnostics []Diagnostic
+	diagnostics = append(diagnostics, runtimeManifestDuplicatePathDiagnostics(document, index)...)
+	for _, key := range index.keys {
+		symbol, ok := symbols[key].(map[string]any)
+		if !ok {
+			continue
+		}
+		symbolPath := "/symbols/" + escapeJSONPointerToken(key)
+		diagnostics = append(diagnostics, runtimeManifestSymbolRelationshipDiagnostics(document, symbolPath, symbol, index)...)
+		diagnostics = append(diagnostics, runtimeManifestCallableShapeDiagnostics(document, symbolPath, symbol)...)
+	}
+	diagnostics = append(diagnostics, runtimeManifestSupportedSurfaceDiagnostics(
+		document,
+		index.keys,
+		index.pathByKey,
+		index.symbolKindByKey,
+	)...)
 
-	symbolsByID := make(map[string]string, len(keys))
-	symbolKindByKey := make(map[string]string, len(keys))
-	pathByKey := make(map[string]string, len(keys))
-	childrenByParent := make(map[string]map[string]struct{}, len(keys))
+	sortDiagnostics(diagnostics)
+	return diagnostics
+}
+
+func indexRuntimeManifestSymbols(symbols map[string]any) runtimeManifestSymbolIndex {
+	keys := sortedStringKeys(symbols)
+	index := runtimeManifestSymbolIndex{
+		keys:             keys,
+		symbolsByID:      make(map[string]string, len(keys)),
+		symbolKindByKey:  make(map[string]string, len(keys)),
+		pathByKey:        make(map[string]string, len(keys)),
+		childrenByParent: make(map[string]map[string]struct{}, len(keys)),
+	}
 
 	for _, key := range keys {
 		symbol, ok := symbols[key].(map[string]any)
@@ -39,36 +73,40 @@ func runtimeManifestDiagnostics(document string, value any) []Diagnostic {
 		path, _ := symbol["path"].(string)
 		kind, _ := symbol["kind"].(string)
 		if id != "" {
-			symbolsByID[id] = key
+			index.symbolsByID[id] = key
 		}
-		pathByKey[key] = path
-		symbolKindByKey[key] = kind
+		index.pathByKey[key] = path
+		index.symbolKindByKey[key] = kind
 
 		parent, hasParent := symbol["parent"].(string)
 		name, _ := symbol["name"].(string)
 		if hasParent && parent != "" && name != "" {
-			if childrenByParent[parent] == nil {
-				childrenByParent[parent] = make(map[string]struct{})
+			if index.childrenByParent[parent] == nil {
+				index.childrenByParent[parent] = make(map[string]struct{})
 			}
-			childrenByParent[parent][name] = struct{}{}
+			index.childrenByParent[parent][name] = struct{}{}
 		}
 	}
+	return index
+}
 
-	var diagnostics []Diagnostic
-
-	pathToKeys := make(map[string][]string, len(keys))
-	for _, key := range keys {
-		path := pathByKey[key]
+func runtimeManifestDuplicatePathDiagnostics(document string, index runtimeManifestSymbolIndex) []Diagnostic {
+	pathToKeys := make(map[string][]string, len(index.keys))
+	for _, key := range index.keys {
+		path := index.pathByKey[key]
 		if path == "" {
 			continue
 		}
 		pathToKeys[path] = append(pathToKeys[path], key)
 	}
+
 	paths := make([]string, 0, len(pathToKeys))
 	for path := range pathToKeys {
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
+
+	var diagnostics []Diagnostic
 	for _, path := range paths {
 		keysWithPath := pathToKeys[path]
 		if len(keysWithPath) <= 1 {
@@ -84,80 +122,74 @@ func runtimeManifestDiagnostics(document string, value any) []Diagnostic {
 			))
 		}
 	}
+	return diagnostics
+}
 
-	for _, key := range keys {
-		symbol, ok := symbols[key].(map[string]any)
-		if !ok {
-			continue
-		}
-		symbolPath := "/symbols/" + escapeJSONPointerToken(key)
+func runtimeManifestSymbolRelationshipDiagnostics(document, symbolPath string, symbol map[string]any, index runtimeManifestSymbolIndex) []Diagnostic {
+	var diagnostics []Diagnostic
 
-		if parent, ok := symbol["parent"].(string); ok && parent != "" {
-			parentKey, exists := symbolsByID[parent]
-			if !exists {
-				diagnostics = append(diagnostics, newDiagnostic(
-					"javascript.parent.unresolved",
-					symbolPath+"/parent",
-					fmt.Sprintf("parent symbol %s is not declared", strconv.Quote(parent)),
-					document,
-				))
-			} else if symbolKindByKey[parentKey] != "namespace" {
-				diagnostics = append(diagnostics, newDiagnostic(
-					"javascript.parent.unresolved",
-					symbolPath+"/parent",
-					fmt.Sprintf("parent symbol %s is not a namespace", strconv.Quote(parent)),
-					document,
-				))
-			}
-		}
-
-		members, ok := symbol["members"].([]any)
-		if ok {
-			symbolID, _ := symbol["id"].(string)
-			children := childrenByParent[symbolID]
-			for index, memberValue := range members {
-				member, ok := memberValue.(string)
-				if !ok {
-					continue
-				}
-				if _, resolved := children[member]; !resolved {
-					diagnostics = append(diagnostics, newDiagnostic(
-						"javascript.member.unresolved",
-						symbolPath+"/members/"+strconv.Itoa(index),
-						fmt.Sprintf("member %s does not resolve to a declared child symbol", strconv.Quote(member)),
-						document,
-					))
-				}
-			}
-		}
-
-		if parameters, ok := symbol["parameters"].([]any); ok {
-			diagnostics = append(diagnostics, runtimeManifestParameterListDiagnostics(document, symbolPath+"/parameters", parameters)...)
-		}
-		if callback, ok := symbol["callback"].(map[string]any); ok {
-			if parameters, ok := callback["parameters"].([]any); ok {
-				diagnostics = append(diagnostics, runtimeManifestParameterListDiagnostics(document, symbolPath+"/callback/parameters", parameters)...)
-			}
-		}
-		if returnValue, ok := symbol["return"].(map[string]any); ok {
-			if serializableValue, ok := returnValue["serializableValue"]; ok {
-				diagnostics = append(diagnostics, openSerializableValueDiagnostics(
-					document,
-					symbolPath+"/return/serializableValue",
-					serializableValue,
-				)...)
-			}
+	if parent, ok := symbol["parent"].(string); ok && parent != "" {
+		parentKey, exists := index.symbolsByID[parent]
+		if !exists {
+			diagnostics = append(diagnostics, newDiagnostic(
+				"javascript.parent.unresolved",
+				symbolPath+"/parent",
+				fmt.Sprintf("parent symbol %s is not declared", strconv.Quote(parent)),
+				document,
+			))
+		} else if index.symbolKindByKey[parentKey] != "namespace" {
+			diagnostics = append(diagnostics, newDiagnostic(
+				"javascript.parent.unresolved",
+				symbolPath+"/parent",
+				fmt.Sprintf("parent symbol %s is not a namespace", strconv.Quote(parent)),
+				document,
+			))
 		}
 	}
 
-	diagnostics = append(diagnostics, runtimeManifestSupportedSurfaceDiagnostics(
-		document,
-		keys,
-		pathByKey,
-		symbolKindByKey,
-	)...)
+	members, ok := symbol["members"].([]any)
+	if !ok {
+		return diagnostics
+	}
+	symbolID, _ := symbol["id"].(string)
+	children := index.childrenByParent[symbolID]
+	for index, memberValue := range members {
+		member, ok := memberValue.(string)
+		if !ok {
+			continue
+		}
+		if _, resolved := children[member]; !resolved {
+			diagnostics = append(diagnostics, newDiagnostic(
+				"javascript.member.unresolved",
+				symbolPath+"/members/"+strconv.Itoa(index),
+				fmt.Sprintf("member %s does not resolve to a declared child symbol", strconv.Quote(member)),
+				document,
+			))
+		}
+	}
+	return diagnostics
+}
 
-	sortDiagnostics(diagnostics)
+func runtimeManifestCallableShapeDiagnostics(document, symbolPath string, symbol map[string]any) []Diagnostic {
+	var diagnostics []Diagnostic
+
+	if parameters, ok := symbol["parameters"].([]any); ok {
+		diagnostics = append(diagnostics, runtimeManifestParameterListDiagnostics(document, symbolPath+"/parameters", parameters)...)
+	}
+	if callback, ok := symbol["callback"].(map[string]any); ok {
+		if parameters, ok := callback["parameters"].([]any); ok {
+			diagnostics = append(diagnostics, runtimeManifestParameterListDiagnostics(document, symbolPath+"/callback/parameters", parameters)...)
+		}
+	}
+	if returnValue, ok := symbol["return"].(map[string]any); ok {
+		if serializableValue, ok := returnValue["serializableValue"]; ok {
+			diagnostics = append(diagnostics, openSerializableValueDiagnostics(
+				document,
+				symbolPath+"/return/serializableValue",
+				serializableValue,
+			)...)
+		}
+	}
 	return diagnostics
 }
 
