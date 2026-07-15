@@ -10,8 +10,8 @@ import (
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -159,7 +159,7 @@ func TestPauseResume_ReplayPreservesFinalPausedStatus(t *testing.T) {
 		factory.WithNet(buildMoveControlNet()),
 		factory.WithInlineDispatch(),
 		factory.WithLogger(logging.NoopLogger{}),
-		factory.WithClock(replay.NewDeterministicClock(t0, time.Second)),
+		factory.WithClock(platformclock.NewDeterministic(t0, time.Second)),
 		factory.WithWorkflowContext(&factory_context.FactoryContext{SessionID: "session-paused-only"}),
 	)
 	if err != nil {

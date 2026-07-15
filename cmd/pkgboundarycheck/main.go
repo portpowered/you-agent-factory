@@ -34,6 +34,7 @@ var retiredPackageRoots = append([]retiredPackageRoot{
 	{packagePath: "pkg/cli", canonicalOwner: "pkg/transports/cli"},
 	{packagePath: "pkg/generatedclient", canonicalOwner: "pkg/transports/http/client"},
 	{packagePath: "pkg/hostedworkers", canonicalOwner: "pkg/workers/hosted"},
+	{packagePath: "pkg/internal/cursorstorage", canonicalOwner: "pkg/platform/cursors"},
 	{packagePath: "pkg/internal/metrics", canonicalOwner: "pkg/factory/metrics for domain contracts and pkg/platform/metrics for file-backed recording"},
 	{packagePath: "pkg/invocations", canonicalOwner: "pkg/work/invocation, pkg/factory/sessions/invocation, pkg/workers/inference, or pkg/workers/skippermissions, according to the concern"},
 	{packagePath: "pkg/localmodels", canonicalOwner: "pkg/models/local or pkg/models/assets"},
@@ -41,6 +42,7 @@ var retiredPackageRoots = append([]retiredPackageRoot{
 	{packagePath: "pkg/materialize", canonicalOwner: "pkg/work/materialize"},
 	{packagePath: "pkg/mcp", canonicalOwner: "pkg/transports/mcp"},
 	{packagePath: "pkg/modelhost", canonicalOwner: "pkg/models/host"},
+	{packagePath: "pkg/sessionpersistence", canonicalOwner: "pkg/platform/cursors"},
 	{packagePath: "pkg/timework", canonicalOwner: "pkg/work/timework"},
 	{packagePath: "pkg/workcontent", canonicalOwner: "pkg/work/content"},
 	{packagePath: "pkg/workgraph", canonicalOwner: "pkg/work/graph"},
@@ -113,7 +115,6 @@ var documentedMigrationPackageExceptions = []migrationPackageException{
 	{packagePath: "pkg/cli", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after CLI adapters and callers move to pkg/transports"},
 	{packagePath: "pkg/mcp", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after MCP adapters and callers move to pkg/transports"},
 	{packagePath: "pkg/replay", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after replay and artifact infrastructure and callers move to pkg/platform"},
-	{packagePath: "pkg/sessionpersistence", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after cursor persistence and callers move to pkg/platform"},
 	{packagePath: "pkg/service", targetOwner: "pkg/wire", workItem: batch007And008ServiceMove, deletionGate: "remove after domain behavior reaches narrow owners and the remaining construction shell moves to pkg/wire"},
 	{packagePath: "pkg/runtimehost", targetOwner: "pkg/wire", workItem: batch008CompositionDeletion, deletionGate: "remove after transports and pkg/initializer consume the explicit graph"},
 	{packagePath: "pkg/composebridge", targetOwner: "pkg/wire", workItem: batch008CompositionDeletion, deletionGate: "remove after pkg/initializer consumes the explicit graph without service composition internals"},
@@ -287,6 +288,25 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		}
 
 		result.rootPackageFindings = append(result.rootPackageFindings, rootPackageFinding{packagePath: packagePath})
+	}
+	for _, retiredRoot := range retiredPackageRoots {
+		parent := filepath.ToSlash(filepath.Dir(retiredRoot.packagePath))
+		if parent == cfg.packageRoot || !strings.HasPrefix(retiredRoot.packagePath, cfg.packageRoot+"/") {
+			continue
+		}
+		info, statErr := os.Stat(filepath.Join(repoRoot, filepath.FromSlash(retiredRoot.packagePath)))
+		if statErr != nil {
+			if os.IsNotExist(statErr) {
+				continue
+			}
+			return scanResult{}, fmt.Errorf("stat retired package root %s: %w", retiredRoot.packagePath, statErr)
+		}
+		if info.IsDir() {
+			result.retiredPackageRootFindings = append(
+				result.retiredPackageRootFindings,
+				retiredPackageRootFinding{retiredRoot},
+			)
+		}
 	}
 
 	result.applicationGraphImportFindings, err = scanApplicationGraphImports(repoRoot, scanRoot, cfg.packageRoot)

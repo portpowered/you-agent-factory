@@ -84,7 +84,7 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 | `pkg/factory/sessions/execution` | 26 | 8 | directive only |
 | `pkg/factory/sessions/execution/fixtures` | 5 | 3 | directive only |
 | `pkg/interfaces` | 3 | 2 | directive + coverage baseline |
-| `pkg/internal/cursorstorage` | 10 | 5 | directive + coverage baseline |
+| `pkg/platform/cursors` | 10 | 5 | directive + coverage baseline |
 | `pkg/transports/mcp/factorysession` | 9 | 4 | directive + coverage baseline |
 | `pkg/replay` | 2 | 2 | directive + coverage baseline |
 | `pkg/replay/configtests` | 3 | 3 | directive only |
@@ -455,22 +455,22 @@ Owner: `pkg/interfaces` package maintainers. Status: **directive + coverage base
 | `pkg/interfaces/interfaces_contract_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/interfaces/interfaces_contract_test.go` | T | T gate |
 | `pkg/interfaces/work_runtime_test.go:812` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestCloneToken_PreserveNilAndEmptyValues` | T | T gate |
 
-### `pkg/internal/cursorstorage`
+### `pkg/platform/cursors`
 
-Owner: `pkg/internal/cursorstorage` package maintainers. Status: **directive + coverage baseline**.
+Owner: `pkg/platform/cursors` package maintainers. Status: **directive + coverage baseline**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/internal/cursorstorage/protobuf_decoder.go:102` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `extractProtobufFields` | P | P gate |
-| `pkg/internal/cursorstorage/redacted_reasoning_decoder.go:16` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `decodeRedactedReasoning` | P | P gate |
-| `pkg/internal/cursorstorage/store_blob_decode.go:14` | `backendsizecheck:ignore-function` | `decodeBlobEntryValue` | P | P gate |
-| `pkg/internal/cursorstorage/store_blob_decode.go:15` | `pkgmaintcheck:ignore-function-lines` | `decodeBlobEntryValue` | P | P gate |
-| `pkg/internal/cursorstorage/store_blob_decode.go:16` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `decodeBlobEntryValue` | P | P gate |
-| `pkg/internal/cursorstorage/store_parse.go:122` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `parseTextMessageFormat` | P | P gate |
-| `pkg/internal/cursorstorage/store_parse.go:222` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `parseComposerFromData` | P | P gate |
-| `pkg/internal/cursorstorage/store_parse.go:439` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `messageUnknownContentText` | P | P gate |
-| `pkg/internal/cursorstorage/store_query.go:8` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `QueryBlobsTable` | P | P gate |
-| `pkg/internal/cursorstorage/store_query.go:111` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `QueryMetaTable` | P | P gate |
+| `pkg/platform/cursors/protobuf_decoder.go:102` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `extractProtobufFields` | P | P gate |
+| `pkg/platform/cursors/redacted_reasoning_decoder.go:16` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `decodeRedactedReasoning` | P | P gate |
+| `pkg/platform/cursors/store_blob_decode.go:14` | `backendsizecheck:ignore-function` | `decodeBlobEntryValue` | P | P gate |
+| `pkg/platform/cursors/store_blob_decode.go:15` | `pkgmaintcheck:ignore-function-lines` | `decodeBlobEntryValue` | P | P gate |
+| `pkg/platform/cursors/store_blob_decode.go:16` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `decodeBlobEntryValue` | P | P gate |
+| `pkg/platform/cursors/store_parse.go:122` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `parseTextMessageFormat` | P | P gate |
+| `pkg/platform/cursors/store_parse.go:222` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `parseComposerFromData` | P | P gate |
+| `pkg/platform/cursors/store_parse.go:439` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `messageUnknownContentText` | P | P gate |
+| `pkg/platform/cursors/store_query.go:8` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `QueryBlobsTable` | P | P gate |
+| `pkg/platform/cursors/store_query.go:111` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `QueryMetaTable` | P | P gate |
 
 ### `pkg/transports/mcp/factorysession`
 
@@ -627,7 +627,7 @@ as follows:
 | Batch 006 — `converge-model-worker-families` | Every detailed directive file under `pkg/workers/**`; the other named source families have no directive file in this snapshot. |
 | Batch 006 — `converge-work-family` | The named source roots (`pkg/invocations`, `pkg/materialize`, `pkg/timework`, `pkg/workcontent`, `pkg/workgraph`, and `pkg/workquery`) have no directive file in this snapshot. |
 | Batch 006 — `converge-factory-orchestrator-families` | Every detailed directive file under `pkg/factory/sessions/execution/**`; the other explicitly named moved roots have no directive file in this snapshot. Core event-first `pkg/factory/**` files are not reserved by this work item. |
-| Batch 006 — `converge-platform-and-interfaces` | Every detailed directive file under `pkg/interfaces/**`, `pkg/internal/cursorstorage/**`, and `pkg/replay/**`, matching the work item's interfaces, cursor-storage, and replay-infrastructure moves. |
+| Batch 006 — `converge-platform-and-interfaces` | Every detailed directive file under `pkg/interfaces/**`, `pkg/platform/cursors/**`, and `pkg/replay/**`, matching the work item's interfaces, cursor-storage, and replay-infrastructure moves. |
 | Batch 007 — `move-session-state-to-factorysessions`, `split-runtime-build-ownership`, and `narrow-factory-service-facade` | Every detailed directive file under `pkg/factory/sessions/execution/**` and `pkg/service/**`. |
 | Batch 008 — `retire-legacy-composition-entrypoints` and `delete-host-composition-shims` | Every detailed directive file under `pkg/runtimehost/**` and `pkg/service/**`. Other Batch 008 deletion items have no additional directive file in this snapshot. |
 
@@ -643,7 +643,7 @@ every file in the named path set; the two file exceptions add the named PR colli
 | `pkg/cli/**` | 12 | 18 | **Externally owned:** Batch 006 transport-family convergence; `pkg/cli/root_run_test.go` also collides with Batch 005 `create-root-process-owner` |
 | `pkg/factory/sessions/execution/**` | 11 | 31 | **Externally owned:** Batch 006 factory/orchestrator convergence and Batch 007 session/service convergence |
 | `pkg/interfaces/**` | 2 | 3 | **Externally owned:** Batch 006 platform/interfaces convergence |
-| `pkg/internal/cursorstorage/**` | 5 | 10 | **Externally owned:** Batch 006 platform/interfaces convergence |
+| `pkg/platform/cursors/**` | 5 | 10 | **Externally owned:** Batch 006 platform/interfaces convergence |
 | `pkg/transports/mcp/**` | 4 | 9 | **Externally owned:** Batch 006 transport-family convergence |
 | `pkg/replay/**` | 5 | 5 | **Externally owned:** Batch 006 platform/interfaces convergence |
 | `pkg/runtimehost/**` | 3 | 5 | **Externally owned:** Batch 008 runtime-shim removal; `pkg/runtimehost/runtime_sessions.go` also collides with PR #1062 |

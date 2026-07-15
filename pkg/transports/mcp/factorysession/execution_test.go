@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/testharness"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
@@ -860,7 +860,7 @@ func newRuntimeMCPClient(t *testing.T) *runtimeMCPClient {
 	service, err := testharness.New(testharness.Config{
 		Mode:              testharness.ModeJavaScript,
 		ProjectRoot:       projectRoot,
-		Clock:             factory.RealClock{},
+		Clock:             platformclock.Real{},
 		Persistence:       runtimepersist.DirectoryStore{Dir: filepath.Join(projectRoot, "durable-sessions")},
 		ChildExecutorMode: factorysessionexecution.ChildExecutorModeFake,
 	})

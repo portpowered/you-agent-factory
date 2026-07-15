@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
@@ -38,6 +37,7 @@ import (
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -4513,7 +4513,7 @@ func newSlowConsumerProgressPublisherHarness(t *testing.T) (*FactoryService, wor
 	svc := &FactoryService{
 		sessions: sessions,
 		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
-			return responsestream.NewSessionResponseStreamWithClock(factory.RealClock{}, responsestream.RetentionLimits{MaxEvents: 2})
+			return responsestream.NewSessionResponseStreamWithClock(platformclock.Real{}, responsestream.RetentionLimits{MaxEvents: 2})
 		},
 	}
 	publisher := svc.inferenceProgressPublisher(sessionID, nil)
@@ -4631,7 +4631,7 @@ func newSlowSubscriberCompactionTestHarness(t *testing.T) (*FactoryService, work
 		sessions: sessions,
 		newSessionResponseStream: func() *factorysessions.SessionResponseStream {
 			return responsestream.NewSessionResponseStreamWithClock(
-				factory.RealClock{},
+				platformclock.Real{},
 				responsestream.RetentionLimits{MaxEvents: 2},
 			)
 		},

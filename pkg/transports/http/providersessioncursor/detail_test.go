@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/internal/cursorstorage"
+	cursorstorage "github.com/portpowered/infinite-you/pkg/platform/cursors"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	_ "modernc.org/sqlite"
 )

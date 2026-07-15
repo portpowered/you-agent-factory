@@ -9,39 +9,6 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
-func TestDeterministicClock_AdvancesFromLogicalTick(t *testing.T) {
-	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
-	clock := replay.NewDeterministicClock(base, 10*time.Millisecond)
-
-	if got := clock.Now(); !got.Equal(base) {
-		t.Fatalf("initial Now() = %s, want %s", got, base)
-	}
-
-	clock.SetTick(3)
-	want := base.Add(30 * time.Millisecond)
-	if got := clock.Now(); !got.Equal(want) {
-		t.Fatalf("tick 3 Now() = %s, want %s", got, want)
-	}
-}
-
-func TestDeterministicClock_RepeatedReplayTicksProduceSameTimes(t *testing.T) {
-	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
-	var firstRun []time.Time
-	for _, tick := range []int{1, 2, 5, 8} {
-		clock := replay.NewDeterministicClock(base, 0)
-		clock.SetTick(tick)
-		firstRun = append(firstRun, clock.Now())
-	}
-
-	for i, tick := range []int{1, 2, 5, 8} {
-		clock := replay.NewDeterministicClock(base, 0)
-		clock.SetTick(tick)
-		if got := clock.Now(); !got.Equal(firstRun[i]) {
-			t.Fatalf("tick %d repeated Now() = %s, want %s", tick, got, firstRun[i])
-		}
-	}
-}
-
 func TestNewArtifactClock_UsesRecordedTickEventTimes(t *testing.T) {
 	base := time.Date(2026, time.April, 25, 20, 59, 3, 0, time.UTC)
 	tickFour := time.Date(2026, time.April, 25, 21, 0, 0, 1067100, time.UTC)

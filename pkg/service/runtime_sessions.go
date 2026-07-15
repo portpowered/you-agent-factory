@@ -39,8 +39,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	sessioncursor "github.com/portpowered/infinite-you/pkg/platform/cursors/session"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	"github.com/portpowered/infinite-you/pkg/sessionpersistence"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -2086,13 +2086,13 @@ func AttachSessionGatewayCollaborator(shell FactoryServiceShell, gateway session
 func (fs *FactoryService) recordSessionPersistenceInvalidationFromPreflight(
 	response factoryapi.FactorySessionSyncPreflightResponse,
 ) {
-	if diagnostic, ok := sessionpersistence.InvalidationFromSyncPreflight(response); ok {
+	if diagnostic, ok := sessioncursor.InvalidationFromSyncPreflight(response); ok {
 		fs.recordSessionPersistenceInvalidation(diagnostic)
 	}
 }
 
 func (fs *FactoryService) recordSessionPersistenceInvalidation(
-	diagnostic sessionpersistence.InvalidationDiagnostic,
+	diagnostic sessioncursor.InvalidationDiagnostic,
 ) {
 	if fs == nil {
 		return
@@ -2100,8 +2100,8 @@ func (fs *FactoryService) recordSessionPersistenceInvalidation(
 	fs.sessionPersistenceObserver().Record(diagnostic)
 }
 
-func (fs *FactoryService) sessionPersistenceObserver() sessionpersistence.Observer {
-	return sessionpersistence.Observer{
+func (fs *FactoryService) sessionPersistenceObserver() sessioncursor.Observer {
+	return sessioncursor.Observer{
 		Logger: sessionPersistenceZapLogger{logger: fs.logger},
 	}
 }

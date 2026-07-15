@@ -1,4 +1,4 @@
-package cursorstorage
+package cursors
 
 import (
 	"bytes"
@@ -43,7 +43,7 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 							}
 							LogWarn("Blob %d (key='%s') failed JSON parse after extraction: %v. Value preview: %s", index+1, blob.Key, jsonErr, valuePreview)
 						}
-		return nil, nil, false
+						return nil, nil, false
 					}
 				} else {
 					// Decoded but still not JSON - log and skip
@@ -55,7 +55,7 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 						}
 						LogWarn("Blob %d (key='%s') failed JSON parse (tried base64 too): %v. Value preview: %s", index+1, blob.Key, jsonErr, valuePreview)
 					}
-		return nil, nil, false
+					return nil, nil, false
 				}
 			}
 		} else {
@@ -78,7 +78,7 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 							if index < 5 {
 								LogWarn("Blob %d (key='%s') hex decoded but JSON parse failed after extraction: %v", index+1, blob.Key, jsonErr)
 							}
-		return nil, nil, false
+							return nil, nil, false
 						}
 					} else {
 						// Hex decoded but no JSON found - skip
@@ -86,7 +86,7 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 						if index < 5 {
 							LogWarn("Blob %d (key='%s') was hex encoded but contains no JSON", index+1, blob.Key)
 						}
-		return nil, nil, false
+						return nil, nil, false
 					}
 				}
 			} else {
@@ -113,7 +113,7 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 						if index < 10 {
 							LogWarn("Blob %d (key='%s', key_len=%d) failed JSON parse after extraction: %v", index+1, blob.Key, len(blob.Key), jsonErr)
 						}
-		return nil, nil, false
+						return nil, nil, false
 					}
 				} else {
 					// Not base64 and no JSON in binary - try protobuf decode
@@ -169,11 +169,11 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 							} else {
 								// No JSON found in protobuf - try text message format
 								if bubble := parseTextMessageFormat(blob.Key, blob.Value, sessionID); bubble != nil {
-																	LogInfo("Blob %d parsed as text message format (user message): bubbleId='%s', text='%s', chatId='%s'", index+1, bubble.BubbleID, bubble.Text, bubble.ChatID)
-		return nil, nil, false
+									LogInfo("Blob %d parsed as text message format (user message): bubbleId='%s', text='%s', chatId='%s'", index+1, bubble.BubbleID, bubble.Text, bubble.ChatID)
+									return nil, nil, false
 								}
 								(*jsonParseFailures)++
-		return nil, nil, false
+								return nil, nil, false
 							}
 						} else {
 							// Protobuf decoded but no readable strings found
@@ -181,14 +181,14 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 							if index < 5 {
 								LogWarn("Blob %d (key='%s'): Decoded as protobuf but no readable strings extracted", index+1, blob.Key)
 							}
-		return nil, nil, false
+							return nil, nil, false
 						}
 					} else {
 						// Not protobuf - try parsing as text message format (text$uuid)
 						// This handles cursor-agent's user message format: "hello$027f8b2f-d09c-4a69-98b0-b53f0118605d"
 						if bubble := parseTextMessageFormat(blob.Key, blob.Value, sessionID); bubble != nil {
-													LogInfo("Blob %d parsed as text message format (user message): bubbleId='%s', text='%s', chatId='%s'", index+1, bubble.BubbleID, bubble.Text, bubble.ChatID)
-		return nil, nil, false
+							LogInfo("Blob %d parsed as text message format (user message): bubbleId='%s', text='%s', chatId='%s'", index+1, bubble.BubbleID, bubble.Text, bubble.ChatID)
+							return nil, nil, false
 						} else {
 							// Log that we tried but failed to parse as text format
 							// Only log if value appears to be readable (not binary garbage)
@@ -220,7 +220,7 @@ func decodeBlobEntryValue(blob BlobEntry, index int, sessionID string, jsonParse
 									LogInfo("  Value contains '{' but extraction failed - JSON might be incomplete or malformed")
 								}
 							}
-		return nil, nil, false
+							return nil, nil, false
 						}
 					}
 				}
@@ -260,6 +260,7 @@ func normalizeTimestamp(ts int64) int64 {
 	// Already in milliseconds
 	return ts
 }
+
 // tryBase64Decode attempts to decode a base64 string, returns decoded bytes or error
 func tryBase64Decode(s string) ([]byte, error) {
 	// Try standard base64

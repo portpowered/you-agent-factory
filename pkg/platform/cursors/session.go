@@ -1,4 +1,4 @@
-package cursorstorage
+package cursors
 
 import (
 	"fmt"
@@ -8,23 +8,23 @@ import (
 
 // SessionData is parsed cursor-agent CLI storage for one session store.db file.
 type SessionData struct {
-	SessionID          string
-	StoreDBPath        string
-	Bubbles            map[string]*RawBubble
-	Composers          []*RawComposer
-	Contexts           map[string][]*MessageContext
-	ParseStats         SessionParseStats
-	TokenUsage         SessionTokenUsage
+	SessionID   string
+	StoreDBPath string
+	Bubbles     map[string]*RawBubble
+	Composers   []*RawComposer
+	Contexts    map[string][]*MessageContext
+	ParseStats  SessionParseStats
+	TokenUsage  SessionTokenUsage
 }
 
 // SessionParseStats summarizes readable vs unavailable blob records while parsing.
 type SessionParseStats struct {
-	BlobCount              int
-	ReadableBlobCount      int
-	UnavailableBlobCount   int
-	MalformedBlobCount     int
-	MetaCount              int
-	MalformedMetaCount     int
+	BlobCount            int
+	ReadableBlobCount    int
+	UnavailableBlobCount int
+	MalformedBlobCount   int
+	MetaCount            int
+	MalformedMetaCount   int
 }
 
 // LoadSessionData opens a resolved store.db and parses bubbles, composers, and contexts in-process.

@@ -1,4 +1,4 @@
-package sessionpersistence
+package sessioncursor
 
 import (
 	"strings"

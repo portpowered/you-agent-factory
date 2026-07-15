@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -106,7 +106,7 @@ func TestSessionResponseStreamEvent_IsNotCanonicalFactoryEvent(t *testing.T) {
 		t.Fatal("internal stream kind must not alias canonical factory event types")
 	}
 
-	stream := responsestream.NewSessionResponseStreamWithClock(factory.RealClock{}, responsestream.RetentionLimits{})
+	stream := responsestream.NewSessionResponseStreamWithClock(platformclock.Real{}, responsestream.RetentionLimits{})
 	stored, compaction := stream.Append(event)
 	if compaction != nil {
 		t.Fatalf("compaction = %#v, want nil with unlimited limits", compaction)

@@ -1,4 +1,4 @@
-package cursorstorage
+package cursors
 
 import (
 	"encoding/base64"

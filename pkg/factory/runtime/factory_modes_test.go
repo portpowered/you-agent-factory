@@ -12,8 +12,9 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -484,7 +485,7 @@ func TestGetEngineStateSnapshot_AggregatesRuntimeLifecycleUptimeAndTopology(t *t
 		factory.WithNet(net),
 		factory.WithServiceMode(),
 		factory.WithLogger(logging.NoopLogger{}),
-		factory.WithClock(replay.NewDeterministicClock(base, time.Second)),
+		factory.WithClock(platformclock.NewDeterministic(base, time.Second)),
 		factory.WithWorkerExecutor("mock", executor),
 	)
 	if err != nil {

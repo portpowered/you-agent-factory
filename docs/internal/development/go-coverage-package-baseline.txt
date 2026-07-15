@@ -28,7 +28,7 @@ github.com/portpowered/infinite-you/pkg/factory/sessions/service
 github.com/portpowered/infinite-you/pkg/factory/sessions/stream
 github.com/portpowered/infinite-you/pkg/workers/hosted
 github.com/portpowered/infinite-you/pkg/workers/hosted/linear
-github.com/portpowered/infinite-you/pkg/internal/cursorstorage
+github.com/portpowered/infinite-you/pkg/platform/cursors
 github.com/portpowered/infinite-you/pkg/models/assets
 github.com/portpowered/infinite-you/pkg/models/local
 github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession

@@ -11,6 +11,7 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 )
 
 // SessionResponseEventStore retains immutable FactoryResponseEvent records for
@@ -36,7 +37,7 @@ type SessionResponseEventStore struct {
 func NewSessionResponseEventStore(factorySessionID string) *SessionResponseEventStore {
 	store, _ := NewSessionResponseEventStoreWithClockAndLimits(
 		factorySessionID,
-		factory.RealClock{},
+		platformclock.Real{},
 		DefaultRetentionLimits(),
 	)
 	return store
@@ -59,7 +60,7 @@ func NewSessionResponseEventStoreWithLimits(
 	factorySessionID string,
 	limits RetentionLimits,
 ) (*SessionResponseEventStore, error) {
-	return NewSessionResponseEventStoreWithClockAndLimits(factorySessionID, factory.RealClock{}, limits)
+	return NewSessionResponseEventStoreWithClockAndLimits(factorySessionID, platformclock.Real{}, limits)
 }
 
 // NewSessionResponseEventStoreWithClockAndLimits allocates an empty store with

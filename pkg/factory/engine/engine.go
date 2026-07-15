@@ -13,8 +13,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -74,7 +75,7 @@ func NewFactoryEngine(
 		},
 		subsystems:       sorted,
 		logger:           logging.NoopLogger{},
-		clock:            factory.RealClock{},
+		clock:            platformclock.Real{},
 		resultCh:         make(chan struct{}, 64),
 		submitSignal:     make(chan struct{}, 1),
 		submissionHook:   newQueuedSubmissionHook(),

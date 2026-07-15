@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/testharness"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	mcpcli "github.com/portpowered/infinite-you/pkg/transports/cli/mcp"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
@@ -309,7 +309,7 @@ func newMCPRuntimeResumeService(
 	service, err := testharness.New(testharness.Config{
 		Mode:              testharness.ModeJavaScript,
 		ProjectRoot:       projectRoot,
-		Clock:             factory.RealClock{},
+		Clock:             platformclock.Real{},
 		Provider:          provider,
 		Persistence:       runtimepersist.DirectoryStore{Dir: filepath.Join(t.TempDir(), "durable-sessions")},
 		ChildExecutorMode: childExecutorMode,

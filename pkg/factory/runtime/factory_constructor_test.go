@@ -11,8 +11,8 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -293,7 +293,7 @@ func TestSubmit_AssignsTraceIDWhenMissing(t *testing.T) {
 
 func TestNew_WithClockStampsDispatchesDeterministically(t *testing.T) {
 	base := time.Date(2026, time.April, 10, 12, 0, 0, 0, time.UTC)
-	clock := replay.NewDeterministicClock(base, time.Second)
+	clock := platformclock.NewDeterministic(base, time.Second)
 	f, err := New(
 		factory.WithNet(buildSimpleNet()),
 		factory.WithInlineDispatch(),

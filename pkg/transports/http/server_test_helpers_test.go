@@ -18,17 +18,16 @@ import (
 	"testing"
 	"time"
 
+	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/internal/cursorstorage"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	cursorstorage "github.com/portpowered/infinite-you/pkg/platform/cursors"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 	_ "modernc.org/sqlite"
-
-	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 )
 
 const defaultSessionWorkAPIPrefix = "/factory-sessions/" + factorysessions.DefaultSessionID

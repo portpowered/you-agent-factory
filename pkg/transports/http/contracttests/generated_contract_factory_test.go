@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/portpowered/infinite-you/pkg/sessionpersistence"
+	sessioncursor "github.com/portpowered/infinite-you/pkg/platform/cursors/session"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -519,7 +519,7 @@ func TestOpenAPIContract_SyncPreflightIdentityScopeComparisonsDistinguishBackend
 			previous := identityScopeFromFixtureMap(scenario.Previous)
 			current := identityScopeFromFixtureMap(scenario.Current)
 
-			reason, ok := sessionpersistence.ClassifyIdentityMismatch(previous, current)
+			reason, ok := sessioncursor.ClassifyIdentityMismatch(previous, current)
 			if !ok {
 				t.Fatal("ClassifyIdentityMismatch = false, want mismatch")
 			}
@@ -528,15 +528,15 @@ func TestOpenAPIContract_SyncPreflightIdentityScopeComparisonsDistinguishBackend
 			}
 
 			if previous.BackendScopeID == current.BackendScopeID &&
-				scenario.WantClassification == string(sessionpersistence.ReasonBackendScopeChanged) {
+				scenario.WantClassification == string(sessioncursor.ReasonBackendScopeChanged) {
 				t.Fatal("backend scope classification requires backendScopeId change")
 			}
 			if previous.StreamGenerationID == current.StreamGenerationID &&
-				scenario.WantClassification == string(sessionpersistence.ReasonStreamGenerationChanged) {
+				scenario.WantClassification == string(sessioncursor.ReasonStreamGenerationChanged) {
 				t.Fatal("stream generation classification requires streamGenerationId change")
 			}
 			if previous.BackendScopeID != current.BackendScopeID &&
-				scenario.WantClassification == string(sessionpersistence.ReasonStreamGenerationChanged) &&
+				scenario.WantClassification == string(sessioncursor.ReasonStreamGenerationChanged) &&
 				previous.FactorySessionID == current.FactorySessionID {
 				if previous.BackendScopeID == current.BackendScopeID {
 					t.Fatal("stream-only classification should not change backendScopeId")
@@ -587,18 +587,18 @@ func TestSessionPersistenceHardeningGateEvidence_RecoveryOutcomesControlCheckpoi
 		t.Fatal("stale cursor recovery outcome checkpointReusable = true, want false")
 	}
 
-	staleDiagnostic, ok := sessionpersistence.InvalidationFromSyncPreflight(staleResponse)
+	staleDiagnostic, ok := sessioncursor.InvalidationFromSyncPreflight(staleResponse)
 	if !ok {
 		t.Fatal("stale cursor recovery outcome missing invalidation diagnostic")
 	}
-	if staleDiagnostic.Reason != sessionpersistence.ReasonCursorStale {
-		t.Fatalf("stale cursor diagnostic reason = %q, want %q", staleDiagnostic.Reason, sessionpersistence.ReasonCursorStale)
+	if staleDiagnostic.Reason != sessioncursor.ReasonCursorStale {
+		t.Fatalf("stale cursor diagnostic reason = %q, want %q", staleDiagnostic.Reason, sessioncursor.ReasonCursorStale)
 	}
-	if staleDiagnostic.RecoveryAction != sessionpersistence.RecoveryReplayWithoutCursor {
+	if staleDiagnostic.RecoveryAction != sessioncursor.RecoveryReplayWithoutCursor {
 		t.Fatalf(
 			"stale cursor diagnostic recovery = %q, want %q",
 			staleDiagnostic.RecoveryAction,
-			sessionpersistence.RecoveryReplayWithoutCursor,
+			sessioncursor.RecoveryReplayWithoutCursor,
 		)
 	}
 }
@@ -718,7 +718,7 @@ func assertSyncPreflightInvalidationDiagnostic(
 ) {
 	t.Helper()
 
-	diagnostic, ok := sessionpersistence.InvalidationFromSyncPreflight(response)
+	diagnostic, ok := sessioncursor.InvalidationFromSyncPreflight(response)
 	switch response.ReasonCode {
 	case factoryapi.Ok:
 		if ok {
@@ -731,8 +731,8 @@ func assertSyncPreflightInvalidationDiagnostic(
 	}
 }
 
-func identityScopeFromFixtureMap(payload map[string]any) sessionpersistence.IdentityScope {
-	return sessionpersistence.IdentityScope{
+func identityScopeFromFixtureMap(payload map[string]any) sessioncursor.IdentityScope {
+	return sessioncursor.IdentityScope{
 		BackendScopeID:      stringFixtureValue(payload, "backendScopeId"),
 		LogicalSessionKeyID: stringFixtureValue(payload, "logicalSessionKeyId"),
 		FactorySessionID:    stringFixtureValue(payload, "factorySessionId"),

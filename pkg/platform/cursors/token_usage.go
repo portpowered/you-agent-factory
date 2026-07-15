@@ -1,11 +1,11 @@
-package cursorstorage
+package cursors
 
 // SessionTokenUsage aggregates Cursor CLI usage counters discovered while parsing store.db.
 type SessionTokenUsage struct {
-	InputTokens       *int
-	OutputTokens      *int
-	CacheReadTokens   *int
-	CacheWriteTokens  *int
+	InputTokens      *int
+	OutputTokens     *int
+	CacheReadTokens  *int
+	CacheWriteTokens *int
 }
 
 func mergeSessionTokenUsage(into *SessionTokenUsage, next SessionTokenUsage) {

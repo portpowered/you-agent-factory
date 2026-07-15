@@ -28,8 +28,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	sessioncursor "github.com/portpowered/infinite-you/pkg/platform/cursors/session"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	"github.com/portpowered/infinite-you/pkg/sessionpersistence"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -825,7 +825,7 @@ func (c *runtimeCoordinator) ReplaceSessionRuntime(
 	if previousScopeErr == nil {
 		if updated := fs.sessionByID(session.ID); updated != nil {
 			if currentScope, err := fs.sessionPersistenceScopeFromSession(ctx, updated); err == nil {
-				if diagnostic, ok := sessionpersistence.IdentityMismatchDiagnostic(
+				if diagnostic, ok := sessioncursor.IdentityMismatchDiagnostic(
 					previousScope,
 					currentScope,
 					session.ID,
@@ -1681,13 +1681,13 @@ func liveLifecycleControlLogFields(
 func (fs *Host) recordSessionPersistenceInvalidationFromPreflight(
 	response factoryapi.FactorySessionSyncPreflightResponse,
 ) {
-	if diagnostic, ok := sessionpersistence.InvalidationFromSyncPreflight(response); ok {
+	if diagnostic, ok := sessioncursor.InvalidationFromSyncPreflight(response); ok {
 		fs.recordSessionPersistenceInvalidation(diagnostic)
 	}
 }
 
 func (fs *Host) recordSessionPersistenceInvalidation(
-	diagnostic sessionpersistence.InvalidationDiagnostic,
+	diagnostic sessioncursor.InvalidationDiagnostic,
 ) {
 	if fs == nil {
 		return
@@ -1695,8 +1695,8 @@ func (fs *Host) recordSessionPersistenceInvalidation(
 	fs.sessionPersistenceObserver().Record(diagnostic)
 }
 
-func (fs *Host) sessionPersistenceObserver() sessionpersistence.Observer {
-	return sessionpersistence.Observer{
+func (fs *Host) sessionPersistenceObserver() sessioncursor.Observer {
+	return sessioncursor.Observer{
 		Logger: sessionPersistenceZapLogger{logger: fs.logger},
 	}
 }
@@ -1719,16 +1719,16 @@ func (l sessionPersistenceZapLogger) Info(msg string, fields map[string]string) 
 func (fs *Host) sessionPersistenceScopeFromSession(
 	ctx context.Context,
 	session *factorysessions.LiveSession,
-) (sessionpersistence.IdentityScope, error) {
+) (sessioncursor.IdentityScope, error) {
 	if fs == nil || session == nil {
-		return sessionpersistence.IdentityScope{}, fmt.Errorf("factory service is required")
+		return sessioncursor.IdentityScope{}, fmt.Errorf("factory service is required")
 	}
 	projectionCtx, err := fs.buildSessionProjectionContext(ctx, session)
 	if err != nil {
-		return sessionpersistence.IdentityScope{}, err
+		return sessioncursor.IdentityScope{}, err
 	}
 	runtime := factorysessions.ProjectRuntime(projectionCtx)
-	scope := sessionpersistence.IdentityScope{
+	scope := sessioncursor.IdentityScope{
 		BackendScopeID:      factorySessionBackendScopeID(fs, session),
 		LogicalSessionKeyID: controlplane.LogicalSessionKeyID(session),
 		FactorySessionID:    strings.TrimSpace(session.ID),
@@ -1738,7 +1738,7 @@ func (fs *Host) sessionPersistenceScopeFromSession(
 		scope.FactorySessionID = strings.TrimSpace(runtime.StreamIdentity.FactorySessionID)
 		scope.StreamGenerationID = strings.TrimSpace(runtime.StreamIdentity.StreamGenerationID)
 	}
-	return sessionpersistence.NormalizeScope(scope), nil
+	return sessioncursor.NormalizeScope(scope), nil
 }
 
 func (fs *Host) emitLiveLifecycleControlMetric(
