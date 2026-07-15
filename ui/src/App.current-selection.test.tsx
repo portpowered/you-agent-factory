@@ -156,6 +156,20 @@ const readyDispatchWorkstationRequestsByDispatchID = {
     dashboardWorkstationRequestFixtures.ready,
 } satisfies Record<string, DashboardWorkstationRequest>;
 
+const refreshedDispatchWorkstationRequestsByDispatchID = {
+  [dashboardWorkstationRequestFixtures.ready.dispatch_id]: {
+    ...dashboardWorkstationRequestFixtures.ready,
+    counts: {
+      dispatched_count: 2,
+      errored_count: 1,
+      responded_count: 1,
+    },
+    failure_message: "Projection refresh exposed the terminal failure.",
+    failure_reason: "projection_refresh_failure",
+    outcome: "FAILED",
+  },
+} satisfies Record<string, DashboardWorkstationRequest>;
+
 function getActiveStorySelectionButton(): HTMLElement {
   const explicitSelectionButton = screen.queryByRole("button", {
     name: "Select work item Active Story",
@@ -365,7 +379,7 @@ describe("App current selection", () => {
           tick_count: semanticWorkflowDashboardSnapshot.tick_count + 2,
         } satisfies DashboardSnapshot,
         activeStoryTraceFixtures,
-        readyDispatchWorkstationRequestsByDispatchID,
+        refreshedDispatchWorkstationRequestsByDispatchID,
       );
     });
     await waitFor(() => {
@@ -377,6 +391,14 @@ describe("App current selection", () => {
     });
     expect(
       within(requestDetail).getAllByText("dispatch-review-ready").length,
+    ).toBeGreaterThan(0);
+    expect(
+      within(requestDetail).getByText(
+        "Projection refresh exposed the terminal failure.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(requestDetail).getAllByText("projection_refresh_failure").length,
     ).toBeGreaterThan(0);
   });
 
