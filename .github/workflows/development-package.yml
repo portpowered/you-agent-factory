@@ -1,0 +1,107 @@
+name: Development Package
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: development-package-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+env:
+  BUN_VERSION: 1.3.12
+  NODE_VERSION: 22
+  GO_VERSION: 1.24.2
+
+jobs:
+  validate:
+    name: Validate Development Package Prerequisites
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Check out the reviewed pull request commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dashboard dependencies
+        run: make ui-deps
+
+      - name: Run typecheck
+        run: make typecheck
+
+      - name: Run lint and package boundary gates
+        run: make lint
+
+      - name: Run relevant repository tests
+        run: make test
+
+      - name: Validate repeated contract generation and drift
+        run: make contracts-smoke
+
+      - name: Validate generated API parity
+        run: make api-smoke
+
+      - name: Validate package allowlist, packing, and isolated consumption
+        run: make api-package-pack-smoke
+
+  dry-run-candidate:
+    name: Build and Smoke Exact Candidate (No Publish)
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the reviewed pull request commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Prepare and smoke the exact candidate without publishing
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .artifacts/api-development-candidate
+          node scripts/api-package-pr-dry-run.mjs \
+            --event-name "${{ github.event_name }}" \
+            --package-directory packages/api \
+            --output-directory .artifacts/api-development-candidate/package \
+            --run-id "${{ github.run_id }}" \
+            --source-commit "${{ github.event.pull_request.head.sha }}" \
+            --workspace-directory "${{ github.workspace }}" \
+            | tee .artifacts/api-development-candidate/dry-run-outcome.json
+
+      - name: Upload the preserved candidate and evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-development-candidate-${{ github.run_id }}
+          path: .artifacts/api-development-candidate/
+          if-no-files-found: error
+          retention-days: 7

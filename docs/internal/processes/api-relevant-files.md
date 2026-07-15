@@ -165,8 +165,16 @@ Use this map when changing the public REST contract.
   treat an absent exact version as a publish decision, digest-check an existing
   registry tarball for idempotent success, and fail authentication, permission,
   dependency, or immutable-conflict outcomes without publishing or changing a
-  dist-tag. Run `make api-package-pack-smoke` after contract, candidate, or
-  registry guard changes and in `verify-build-contracts`/CI.
+  dist-tag. Pull-request development-package validation lives in
+  `.github/workflows/development-package.yml`: keep prerequisite contract,
+  generation/drift, API parity, package-boundary, repository-test, allowlist,
+  pack, and isolated-consumer gates in its read-only `validate` job. The
+  dependent dry-run job must pass the reviewed head SHA and one preserved
+  candidate directly through `scripts/api-package-pr-dry-run.mjs`; it must not
+  receive registry mutation credentials or OIDC permission. Run `make
+  api-package-pack-smoke` after contract, candidate, registry, dry-run, or
+  development-package workflow guard changes and in
+  `verify-build-contracts`/CI.
 
 ## REST operation identity inventory
 
