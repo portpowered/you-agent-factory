@@ -10,6 +10,9 @@ import (
 	"strings"
 	"testing"
 
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
+	"github.com/portpowered/infinite-you/pkg/testutil"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 )
@@ -241,6 +244,48 @@ func TestHandleToolsCallValidationResultsAndCompatibilityOnlyAlias(t *testing.T)
 	assertContentTextContains(t, failure, `unsupported tool "unsupported.tool"`)
 }
 
+func TestHandleToolsCallPreservesTextOnlySuccessAndErrorEnvelopes(t *testing.T) {
+	t.Parallel()
+
+	srv := newTestServer(t)
+	tests := []struct {
+		name        string
+		params      string
+		wantIsError bool
+		wantText    string
+	}{
+		{
+			name:        "serialized success response",
+			params:      `{"name":"you.factory_session.list","arguments":{}}`,
+			wantIsError: false,
+			wantText:    `"result"`,
+		},
+		{
+			name:        "handler argument error",
+			params:      `{"name":"you.factory_session.list","arguments":"invalid"}`,
+			wantIsError: true,
+			wantText:    "decode list sessions input",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, rpcErr, err := srv.handleToolsCall(json.RawMessage(tt.params))
+			if err != nil {
+				t.Fatalf("handleToolsCall() error = %v", err)
+			}
+			if rpcErr != nil {
+				t.Fatalf("handleToolsCall() rpcErr = %#v, want nil", rpcErr)
+			}
+			envelope, ok := result.(map[string]any)
+			if !ok {
+				t.Fatalf("handleToolsCall() result type = %T, want map[string]any", result)
+			}
+			assertTextOnlyCallToolResult(t, envelope, tt.wantIsError, tt.wantText)
+		})
+	}
+}
+
 func TestServeStdioProcessesRequestsAndSkipsBlankLines(t *testing.T) {
 	t.Parallel()
 
@@ -332,8 +377,13 @@ func TestWriteResponseErrorPaths(t *testing.T) {
 func newTestServer(t *testing.T) *Server {
 	t.Helper()
 
+	catalogPath := testutil.MustRepoPath(t, fixtures.ContractFixtureCatalogRelativePath)
+	service, err := factorysessionexecution.NewFakeServiceFromContractFixtures(catalogPath)
+	if err != nil {
+		t.Fatalf("NewFakeServiceFromContractFixtures() error = %v", err)
+	}
 	srv, err := New(Options{
-		Client:        mcpfactorysession.NewClient(),
+		Client:        mcpfactorysession.NewClientWithService(service),
 		ServerName:    "test-server",
 		ServerVersion: "test-version",
 	})
@@ -408,6 +458,28 @@ func assertContentTextContains(t *testing.T, result map[string]any, want string)
 	}
 	if !strings.Contains(text, want) {
 		t.Fatalf("content[0].text = %q, want substring %q", text, want)
+	}
+}
+
+func assertTextOnlyCallToolResult(t *testing.T, result map[string]any, wantIsError bool, wantText string) {
+	t.Helper()
+
+	if len(result) != 2 {
+		t.Fatalf("CallToolResult fields = %#v, want only content and isError", result)
+	}
+	if result["isError"] != wantIsError {
+		t.Fatalf("CallToolResult isError = %#v, want %t", result["isError"], wantIsError)
+	}
+	content, ok := result["content"].([]map[string]any)
+	if !ok || len(content) != 1 {
+		t.Fatalf("CallToolResult content = %#v, want one text block", result["content"])
+	}
+	if len(content[0]) != 2 || content[0]["type"] != "text" {
+		t.Fatalf("CallToolResult content[0] = %#v, want text-only type/text fields", content[0])
+	}
+	text, ok := content[0]["text"].(string)
+	if !ok || !strings.Contains(text, wantText) {
+		t.Fatalf("CallToolResult content[0].text = %#v, want substring %q", content[0]["text"], wantText)
 	}
 }
 
