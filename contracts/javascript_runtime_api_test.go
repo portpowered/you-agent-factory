@@ -167,6 +167,48 @@ func TestJavaScriptRuntimeAPICatalogWorkflowNamespaceAndMembers(t *testing.T) {
 	}
 }
 
+func TestJavaScriptRuntimeAPICatalogRepresentativeCallBehaviorParity(t *testing.T) {
+	t.Parallel()
+
+	catalog := loadAuthoredJavaScriptRuntimeCatalog(t)
+	if err := jscatalog.VerifyCatalogCallBehaviorParity(
+		catalog,
+		callbehavior.ProjectInstalledCallBehavior(),
+	); err != nil {
+		t.Fatalf("VerifyCatalogCallBehaviorParity() error = %v", err)
+	}
+}
+
+func TestJavaScriptRuntimeAPICatalogRepresentativeCallBehaviorParityDrift(t *testing.T) {
+	t.Parallel()
+
+	raw, err := os.ReadFile(filepath.Join("testdata", "javascript", "invalid-representative-call-behavior-drift.json"))
+	if err != nil {
+		t.Fatalf("read parity drift fixture: %v", err)
+	}
+	var catalog map[string]any
+	if err := json.Unmarshal(raw, &catalog); err != nil {
+		t.Fatalf("unmarshal parity drift fixture: %v", err)
+	}
+
+	issues, err := jscatalog.CatalogCallBehaviorParityIssues(catalog, callbehavior.ProjectInstalledCallBehavior())
+	if err != nil {
+		t.Fatalf("CatalogCallBehaviorParityIssues() error = %v", err)
+	}
+	found := false
+	for _, issue := range issues {
+		if issue.Code == "javascript.call_behavior.mismatch" &&
+			issue.Path == "workflow.final" &&
+			issue.Field == "determinism" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("issues = %+v, want workflow.final determinism mismatch", issues)
+	}
+}
+
 func TestJavaScriptRuntimeAPICatalogPathCompleteness(t *testing.T) {
 	t.Parallel()
 

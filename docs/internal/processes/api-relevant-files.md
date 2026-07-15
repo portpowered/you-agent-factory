@@ -52,6 +52,13 @@ Use this map when changing the public REST contract.
   identity baseline and installed binding descriptor lives in
   `pkg/orchestrators/javascript/runtime/catalog/catalog_identity.go` and is
   wired through `internal/contractvalidator/javascript_catalog_identity.go`.
+  Representative call-behavior parity for `workflow.final`,
+  `workflow.checkpoint`, `agent.run`, `parallel`, and `pipeline` lives in
+  `pkg/orchestrators/javascript/runtime/catalog/catalog_call_behavior_parity.go`
+  and is wired through
+  `internal/contractvalidator/javascript_catalog_call_behavior_parity.go`.
+  Focused runtime execution parity for the same representative symbols remains
+  in `pkg/orchestrators/javascript/runtime/callbehavior_inventory_test.go`.
   Prove runtime dependency isolation and catalog boundaries in `contracts/runtime_manifest_boundary_test.go` and
   `contracts/javascript_runtime_api_test.go`; staged
   `packages/api/generated/javascript/runtime-api.json` remains inventory-sourced
