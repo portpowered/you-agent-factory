@@ -13,9 +13,9 @@ Use this map when changing the public REST contract.
   `ConvertCoreSchema` covers the story-001 primitive/object/array/enum/required
   surface, `ConvertRefsSchema` covers story-002 internal component references and
   deterministic `$defs` materialization, `ConvertCompositionNullableSchema` covers
-  story-003 composition and nullable forms, with later stories expanding
-  fail-closed rejection and
-  `internal/contractstaging` integration. Golden fixtures and byte-stability
+  story-003 composition and nullable forms, `ConvertFailClosedSchema` covers
+  story-004 fail-closed ambiguous and unsupported rejection, with story-005
+  expanding `internal/contractstaging` integration. Golden fixtures and byte-stability
   tests live beside the converter package; reuse
   `contractjoiner.MarshalCanonicalJSON` for canonical output bytes.
 - `internal/contractstaging` owns joined generation, the reviewed raw

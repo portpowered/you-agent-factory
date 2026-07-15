@@ -175,3 +175,61 @@ Converted schema objects are serialized with
 
 Converted fragments do not receive `$schema` or `$id` metadata unless a later
 staging story adds document-root envelope fields at the generation boundary.
+
+## Stage: `fail-closed`
+
+`ConvertFailClosedSchema` accepts the same root schema and `components.schemas`
+inputs as `ConvertCompositionNullableSchema` and extends that profile with the
+documented ambiguous-case rejection contract. Successful inputs convert with the
+same Draft 2020-12 mapping as earlier stages; rejected inputs emit no converted
+document.
+
+### Diagnostic contract
+
+Diagnostics use `contractvalidator.Diagnostic` and are sorted with
+`contractvalidator.SortDiagnostics` before return. The documented total order is
+document, path, code, then message. Every diagnostic uses `document: "schema"`.
+
+Repeated rejection of the same fixture yields identical diagnostics because
+classification is deterministic and fail-fast on the first rejected case.
+
+### Unsupported keywords
+
+Any keyword outside the cumulative supported surface for this stage fails with
+`openapi.convert.unsupported_keyword`. The diagnostic path is the JSON Pointer to
+the keyword instance (for example `/not`).
+
+### Reference rejection
+
+Reference failures reuse the `refs` stage classifier:
+
+| Case | Diagnostic code |
+| --- | --- |
+| External URL, absolute path, repository-escaping, or other non-component refs | `openapi.convert.unsupported_reference` |
+| Missing `components.schemas/<Name>` target | `openapi.convert.missing_component` |
+| Component reference cycle | `openapi.convert.reference_cycle` |
+| `$ref` combined with unsupported sibling keywords | `openapi.convert.unsupported_reference` |
+| Empty or non-string `$ref` | `openapi.convert.invalid_reference` |
+
+Reference classification runs before network access or out-of-repository reads.
+
+### Ambiguous-case rejection
+
+The profile refuses to guess the following combinations:
+
+| Case | Diagnostic code |
+| --- | --- |
+| `discriminator` keyword present | `openapi.convert.ambiguous_discriminator` |
+| Multiple composition keywords (`allOf`, `oneOf`, `anyOf`) on the same schema object | `openapi.convert.ambiguous_composition` |
+| `nullable: true` without a supported primitive `type` on the same schema object | `openapi.convert.ambiguous_nullable` |
+| `nullable: true` combined with `allOf`, `oneOf`, or `anyOf` on the same schema object | `openapi.convert.ambiguous_nullable` |
+| `nullable: true` combined with `$ref` on the same schema object | `openapi.convert.ambiguous_nullable` |
+| `default` without a supported `type` or `enum` keyword on the same schema object | `openapi.convert.ambiguous_default` |
+
+Focused rejection fixtures live under
+`internal/contractopenapiconverter/testdata/inputs/reject-*.yaml` and assert
+diagnostic identity (`code`, `path`, `message`, `document`) rather than
+third-party prose snapshots.
+
+Story `interfaces-b15-factory-converter-005` wires this profile into Factory
+schema staging through the existing contract-staging generation boundary.

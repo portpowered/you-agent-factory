@@ -91,6 +91,45 @@ func ambiguousNullable(path, reason string) contractvalidator.Diagnostic {
 	}
 }
 
+func ambiguousDiscriminator(path string) contractvalidator.Diagnostic {
+	instancePath := path
+	if instancePath == "" {
+		instancePath = "/"
+	}
+	return contractvalidator.Diagnostic{
+		Code:     codeAmbiguousDiscriminator,
+		Path:     instancePath,
+		Message:  fmt.Sprintf("discriminator is outside the %s converter profile", profileStageFailClosed),
+		Document: documentRoot,
+	}
+}
+
+func ambiguousComposition(path, reason string) contractvalidator.Diagnostic {
+	instancePath := path
+	if instancePath == "" {
+		instancePath = "/"
+	}
+	return contractvalidator.Diagnostic{
+		Code:     codeAmbiguousComposition,
+		Path:     instancePath,
+		Message:  reason,
+		Document: documentRoot,
+	}
+}
+
+func ambiguousDefault(path string) contractvalidator.Diagnostic {
+	instancePath := path
+	if instancePath == "" {
+		instancePath = "/"
+	}
+	return contractvalidator.Diagnostic{
+		Code:     codeAmbiguousDefault,
+		Path:     instancePath,
+		Message:  fmt.Sprintf("default requires a supported type or enum keyword in the %s converter profile", profileStageFailClosed),
+		Document: documentRoot,
+	}
+}
+
 func invalidSchemaValue(path string) contractvalidator.Diagnostic {
 	instancePath := path
 	if instancePath == "" {

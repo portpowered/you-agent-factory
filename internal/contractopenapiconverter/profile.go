@@ -4,12 +4,16 @@ const (
 	profileStageCoreShapes          = "core-shapes"
 	profileStageRefs                = "refs"
 	profileStageCompositionNullable = "composition-nullable"
+	profileStageFailClosed          = "fail-closed"
 	codeUnsupportedKeyword          = "openapi.convert.unsupported_keyword"
 	codeUnsupportedRef              = "openapi.convert.unsupported_reference"
 	codeMissingComponent            = "openapi.convert.missing_component"
 	codeReferenceCycle              = "openapi.convert.reference_cycle"
 	codeInvalidReference            = "openapi.convert.invalid_reference"
 	codeAmbiguousNullable           = "openapi.convert.ambiguous_nullable"
+	codeAmbiguousDiscriminator      = "openapi.convert.ambiguous_discriminator"
+	codeAmbiguousComposition        = "openapi.convert.ambiguous_composition"
+	codeAmbiguousDefault            = "openapi.convert.ambiguous_default"
 )
 
 var (
@@ -64,13 +68,19 @@ func isKeywordAllowed(stage, key string) bool {
 	if isCoreShapeKeyword(key) {
 		return true
 	}
-	if stage == profileStageCompositionNullable {
+	if stage == profileStageCompositionNullable || stage == profileStageFailClosed {
 		if key == "nullable" {
 			return true
 		}
 		if _, ok := compositionKeywords[key]; ok {
 			return true
 		}
+	}
+	if stage == profileStageFailClosed && key == "$ref" {
+		return true
+	}
+	if stage == profileStageRefs && key == "$ref" {
+		return true
 	}
 	return false
 }

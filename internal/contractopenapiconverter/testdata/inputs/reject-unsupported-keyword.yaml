@@ -1,0 +1,8 @@
+root:
+  not: true
+components: {}
+expect:
+  code: openapi.convert.unsupported_keyword
+  path: /not
+  document: schema
+  message: 'keyword "not" is outside the fail-closed converter profile'

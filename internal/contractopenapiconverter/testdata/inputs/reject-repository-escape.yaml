@@ -1,0 +1,8 @@
+root:
+  $ref: ../other/schema.json
+components: {}
+expect:
+  code: openapi.convert.unsupported_reference
+  path: /
+  document: schema
+  message: 'reference "../other/schema.json" is outside the refs converter profile'

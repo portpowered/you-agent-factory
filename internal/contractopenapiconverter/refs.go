@@ -25,6 +25,13 @@ func ConvertCompositionNullableSchema(root map[string]any, components map[string
 	return convertSchemaGraph(root, components, profileStageCompositionNullable)
 }
 
+// ConvertFailClosedSchema converts one OpenAPI 3.0.3 schema graph using the
+// fail-closed profile documented in
+// docs/internal/contract/openapi-to-draft-2020-12-converter-profile.md.
+func ConvertFailClosedSchema(root map[string]any, components map[string]any) (map[string]any, []contractvalidator.Diagnostic) {
+	return convertSchemaGraph(root, components, profileStageFailClosed)
+}
+
 func convertSchemaGraph(root map[string]any, components map[string]any, stage string) (map[string]any, []contractvalidator.Diagnostic) {
 	if components == nil {
 		components = map[string]any{}
@@ -81,10 +88,14 @@ func (ctx *convertContext) convertNode(value any, path string) (any, []contractv
 
 func (ctx *convertContext) convertSchemaObject(schema map[string]any, path string) (any, []contractvalidator.Diagnostic) {
 	if ref, hasRef := schema["$ref"]; hasRef {
-		if len(schema) != 1 {
-			return nil, []contractvalidator.Diagnostic{refWithSiblingKeywords(path)}
+		if diagnostics := ctx.validateRefSiblings(schema, path); len(diagnostics) != 0 {
+			return nil, diagnostics
 		}
 		return ctx.convertComponentRef(ref, path)
+	}
+
+	if diagnostics := ctx.validateFailClosedSemantics(schema, path); len(diagnostics) != 0 {
+		return nil, diagnostics
 	}
 
 	if diagnostics := ctx.validateNullableComposition(schema, path); len(diagnostics) != 0 {
@@ -191,7 +202,7 @@ func (ctx *convertContext) convertSchemaObject(schema map[string]any, path strin
 }
 
 func (ctx *convertContext) applyNullable(schema, result map[string]any, path string) []contractvalidator.Diagnostic {
-	if ctx.stage != profileStageCompositionNullable {
+	if ctx.stage != profileStageCompositionNullable && ctx.stage != profileStageFailClosed {
 		return nil
 	}
 	nullableValue, hasNullable := schema["nullable"]
@@ -216,8 +227,56 @@ func (ctx *convertContext) applyNullable(schema, result map[string]any, path str
 	return nil
 }
 
+func (ctx *convertContext) validateRefSiblings(schema map[string]any, path string) []contractvalidator.Diagnostic {
+	if len(schema) == 1 {
+		return nil
+	}
+	if ctx.stage == profileStageFailClosed {
+		if nullable, ok := schema["nullable"].(bool); ok && nullable {
+			return []contractvalidator.Diagnostic{ambiguousNullable(
+				joinPath(path, "nullable"),
+				fmt.Sprintf("nullable: true cannot appear with $ref in the %s converter profile", ctx.stage),
+			)}
+		}
+	}
+	return []contractvalidator.Diagnostic{refWithSiblingKeywords(path)}
+}
+
+func (ctx *convertContext) validateFailClosedSemantics(schema map[string]any, path string) []contractvalidator.Diagnostic {
+	if ctx.stage != profileStageFailClosed {
+		return nil
+	}
+	if _, ok := schema["discriminator"]; ok {
+		return []contractvalidator.Diagnostic{ambiguousDiscriminator(joinPath(path, "discriminator"))}
+	}
+	compositionCount := 0
+	for key := range compositionKeywords {
+		if _, ok := schema[key]; ok {
+			compositionCount++
+		}
+	}
+	if compositionCount > 1 {
+		compositionPath := path
+		if compositionPath == "" {
+			compositionPath = "/"
+		}
+		return []contractvalidator.Diagnostic{ambiguousComposition(
+			compositionPath,
+			fmt.Sprintf("schema cannot combine multiple composition keywords in the %s converter profile", ctx.stage),
+		)}
+	}
+	if _, hasDefault := schema["default"]; hasDefault {
+		_, hasType := schema["type"]
+		_, hasEnum := schema["enum"]
+		if !hasType && !hasEnum {
+			return []contractvalidator.Diagnostic{ambiguousDefault(joinPath(path, "default"))}
+		}
+	}
+	return nil
+}
+
 func (ctx *convertContext) validateNullableComposition(schema map[string]any, path string) []contractvalidator.Diagnostic {
-	if ctx.stage != profileStageCompositionNullable {
+	if ctx.stage != profileStageCompositionNullable && ctx.stage != profileStageFailClosed {
 		return nil
 	}
 	nullable, hasNullable := schema["nullable"].(bool)

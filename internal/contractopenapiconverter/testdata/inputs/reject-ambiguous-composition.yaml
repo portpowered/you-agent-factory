@@ -1,0 +1,11 @@
+root:
+  allOf:
+    - type: string
+  oneOf:
+    - type: integer
+components: {}
+expect:
+  code: openapi.convert.ambiguous_composition
+  path: /
+  document: schema
+  message: 'schema cannot combine multiple composition keywords in the fail-closed converter profile'
