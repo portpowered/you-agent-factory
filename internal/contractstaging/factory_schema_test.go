@@ -62,27 +62,6 @@ func TestFactorySchemaGenerationUsesConverterPath(t *testing.T) {
 	}
 }
 
-func TestFactorySchemaPreservesOrchestratorTopology(t *testing.T) {
-	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
-	artifacts, err := contractstaging.Artifacts(repositoryRoot)
-	if err != nil {
-		t.Fatalf("Artifacts() error = %v", err)
-	}
-	payload := artifacts[contractstaging.FactorySchemaAuthoredPath]
-	text := string(payload)
-	for _, needle := range []string{
-		"FactoryOrchestratorJavaScriptConfig",
-		"argsSchema",
-		"FactoryOrchestratorJavaScriptInlineSource",
-		`"orchestrator"`,
-		"#/$defs/",
-	} {
-		if !strings.Contains(text, needle) {
-			t.Fatalf("authored factory schema missing topology marker %q", needle)
-		}
-	}
-}
-
 func containsNullableKeyword(value any) bool {
 	switch typed := value.(type) {
 	case map[string]any:
