@@ -171,7 +171,11 @@ Use this map when changing the public REST contract.
   pack, and isolated-consumer gates in its read-only `validate` job. The
   dependent dry-run job must pass the reviewed head SHA and one preserved
   candidate directly through `scripts/api-package-pr-dry-run.mjs`; it must not
-  receive registry mutation credentials or OIDC permission. Protected-main
+  receive registry mutation credentials or OIDC permission.
+  `scripts/api-package-development-policy.mjs` is the executable event,
+  prerequisite, and exact-head policy used by every candidate/publication job;
+  its injected orchestration harness supplies behavioral coverage without
+  treating workflow source text as runtime evidence. Protected-main
   publication prepares and uploads its candidate in a read-only job, then the
   separately environment-protected `id-token: write` job downloads that exact
   artifact and calls `scripts/api-package-publish.mjs`. That boundary reconciles

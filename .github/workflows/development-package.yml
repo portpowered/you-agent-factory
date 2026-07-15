@@ -89,6 +89,17 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - name: Authorize the read-only pull request path
+        run: >-
+          node scripts/api-package-development-policy.mjs
+          --event-name "${{ github.event_name }}"
+          --expected-action dry-run
+          --prerequisite-result "${{ needs.validate.result }}"
+          --pull-request-head-sha "${{ github.event.pull_request.head.sha }}"
+          --ref "${{ github.ref }}"
+          --repository "${{ github.repository }}"
+          --source-commit "${{ github.event.pull_request.head.sha }}"
+
       - name: Prepare and smoke the exact candidate without publishing
         shell: bash
         run: |
@@ -133,6 +144,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+
+      - name: Authorize protected-main candidate preparation
+        run: >-
+          node scripts/api-package-development-policy.mjs
+          --event-name "${{ github.event_name }}"
+          --expected-action prepare-main
+          --prerequisite-result "${{ needs.validate.result }}"
+          --ref "${{ github.ref }}"
+          --repository "${{ github.repository }}"
+          --source-commit "${{ github.sha }}"
 
       - name: Prepare the exact protected-main candidate
         run: >-
@@ -185,6 +206,16 @@ jobs:
         with:
           name: api-development-main-candidate-${{ github.run_id }}
           path: .artifacts/api-development-candidate
+
+      - name: Authorize protected-main publication
+        run: >-
+          node scripts/api-package-development-policy.mjs
+          --event-name "${{ github.event_name }}"
+          --expected-action publish-main
+          --prerequisite-result "${{ needs.validate.result }}"
+          --ref "${{ github.ref }}"
+          --repository "${{ github.repository }}"
+          --source-commit "${{ github.sha }}"
 
       - name: Reconcile, publish once when absent, and verify exact consumption
         run: >-
