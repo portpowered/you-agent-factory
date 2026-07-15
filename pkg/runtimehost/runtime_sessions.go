@@ -232,7 +232,7 @@ func (fs *Host) registerLiveSession(
 		isDefault,
 		registration.project,
 	)
-	factorysessions.BindResponseEventCompletion(session, handle.Bundle.EventHistory.AddGeneratedRecorder)
+	factorysessions.BindResponseEventCompletion(session, handle.Bundle.EventHistory.AddEventTypeRecorder)
 	fs.sessions.Upsert(session, selectSession)
 	return sessionID
 }
@@ -816,7 +816,7 @@ func (c *runtimeCoordinator) ReplaceSessionRuntime(
 	replacementSession.ResponseEvents = factorysessions.NewSessionResponseEventStore(
 		factorysessions.CanonicalFactorySessionID(replacementSession),
 	)
-	factorysessions.BindResponseEventCompletion(replacementSession, replacement.EventHistory.AddGeneratedRecorder)
+	factorysessions.BindResponseEventCompletion(replacementSession, replacement.EventHistory.AddEventTypeRecorder)
 	fs.sessions.Upsert(replacementSession, isActiveSession)
 	if isActiveSession {
 		fs.setRunState(serviceCtx, session.ID, replacementHandle)

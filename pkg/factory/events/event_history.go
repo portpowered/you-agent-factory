@@ -60,6 +60,7 @@ type FactoryEventHistory struct {
 	streamGenerationID  string
 	events              []factoryapi.FactoryEvent
 	recorders           []func(factoryapi.FactoryEvent)
+	eventTypeRecorders  []func(interfaces.FactoryEventType)
 	nextID              int
 	streams             map[int]*eventHistorySubscription
 	runRecordedAt       time.Time
@@ -236,6 +237,27 @@ func (h *FactoryEventHistory) AddGeneratedRecorder(recorder func(factoryapi.Fact
 
 	for _, event := range events {
 		recorder(event)
+	}
+}
+
+// AddEventTypeRecorder registers a transport-independent callback for the type
+// of every future canonical Factory event. Existing event types are replayed
+// first so late Factory Session lifecycle bindings observe terminal history.
+func (h *FactoryEventHistory) AddEventTypeRecorder(recorder func(interfaces.FactoryEventType)) {
+	if h == nil || recorder == nil {
+		return
+	}
+
+	h.mu.Lock()
+	eventTypes := make([]interfaces.FactoryEventType, len(h.events))
+	for index, event := range h.events {
+		eventTypes[index] = interfaces.FactoryEventType(event.Type)
+	}
+	h.eventTypeRecorders = append(h.eventTypeRecorders, recorder)
+	h.mu.Unlock()
+
+	for _, eventType := range eventTypes {
+		recorder(eventType)
 	}
 }
 
@@ -592,10 +614,14 @@ func (h *FactoryEventHistory) appendGenerated(event factoryapi.FactoryEvent) {
 		streams = append(streams, stream)
 	}
 	recorders := append([]func(factoryapi.FactoryEvent){}, h.recorders...)
+	eventTypeRecorders := append([]func(interfaces.FactoryEventType){}, h.eventTypeRecorders...)
 	h.mu.Unlock()
 
 	for _, recorder := range recorders {
 		recorder(event)
+	}
+	for _, recorder := range eventTypeRecorders {
+		recorder(interfaces.FactoryEventType(event.Type))
 	}
 	for _, stream := range streams {
 		select {

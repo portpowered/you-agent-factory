@@ -167,3 +167,34 @@ func TestNewLiveSessionDefaultUUIDKeepsRegistryIdentity(t *testing.T) {
 		t.Fatalf("response event store session ID = %q, want registry UUID %q", got, sessionID)
 	}
 }
+
+func TestBindResponseEventCompletion_UsesCanonicalFactoryEventTypes(t *testing.T) {
+	t.Parallel()
+
+	session := NewLiveSession(
+		"session-completion",
+		"/factories/default",
+		"/workspace",
+		"/workspace",
+		TargetRef{Kind: TargetKindDefault},
+		nil,
+		true,
+		"default",
+	)
+	var recorder func(interfaces.FactoryEventType)
+	BindResponseEventCompletion(session, func(bound func(interfaces.FactoryEventType)) {
+		recorder = bound
+	})
+	if recorder == nil {
+		t.Fatal("completion recorder = nil, want canonical Factory event callback")
+	}
+
+	recorder(interfaces.FactoryEventTypeSessionResultUpdated)
+	if session.ResponseEvents.Completed() {
+		t.Fatal("response events completed for non-terminal Factory event")
+	}
+	recorder(interfaces.FactoryEventTypeSessionCompleted)
+	if !session.ResponseEvents.Completed() {
+		t.Fatal("response events remain live after SESSION_COMPLETED")
+	}
+}

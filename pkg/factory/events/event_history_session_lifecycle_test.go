@@ -62,6 +62,41 @@ func TestFactoryEventHistory_RecordSessionLifecycle_EmitsReconstructableBracketS
 	}
 }
 
+func TestFactoryEventHistory_AddEventTypeRecorder_ReplaysHistoryThenObservesCompletion(t *testing.T) {
+	t0 := time.Date(2026, 6, 9, 12, 10, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })
+	history.RecordSessionLifecycleFromFactoryConfig("session-alpha", &interfaces.FactoryConfig{
+		Name: "factory-alpha",
+	}, 0, t0)
+
+	var eventTypes []interfaces.FactoryEventType
+	history.AddEventTypeRecorder(func(eventType interfaces.FactoryEventType) {
+		eventTypes = append(eventTypes, eventType)
+	})
+	history.RecordSessionLifecycleCompletion(
+		"session-alpha",
+		&interfaces.FactoryConfig{},
+		1,
+		interfaces.FactoryStateCompleted,
+		"",
+		t0.Add(time.Second),
+	)
+
+	want := []interfaces.FactoryEventType{
+		interfaces.FactoryEventTypeSessionStarted,
+		interfaces.FactoryEventTypeSessionResultUpdated,
+		interfaces.FactoryEventTypeSessionCompleted,
+	}
+	if len(eventTypes) != len(want) {
+		t.Fatalf("event types = %v, want %v", eventTypes, want)
+	}
+	for index := range want {
+		if eventTypes[index] != want[index] {
+			t.Fatalf("event types[%d] = %q, want %q", index, eventTypes[index], want[index])
+		}
+	}
+}
+
 func TestFactoryEventHistory_RecordSessionLifecycle_FailedRunEmitsFailedWithPartialResult(t *testing.T) {
 	t0 := time.Date(2026, 6, 9, 12, 11, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })

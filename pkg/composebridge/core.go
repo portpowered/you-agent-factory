@@ -127,7 +127,7 @@ func ComposeCore(
 		true,
 		filepath.Base(runtimeBundle.FolderPath),
 	)
-	factorysessions.BindResponseEventCompletion(defaultSession, runtimeBundle.EventHistory.AddGeneratedRecorder)
+	factorysessions.BindResponseEventCompletion(defaultSession, runtimeBundle.EventHistory.AddEventTypeRecorder)
 	collaborators.Sessions.Upsert(defaultSession, true)
 
 	coreBuilt = true

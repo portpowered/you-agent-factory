@@ -5,9 +5,9 @@ import (
 
 	"github.com/google/uuid"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 // DefaultSessionID is the stable alias for the primary live factory session.
@@ -125,13 +125,13 @@ func (s *LiveSession) CloseResponseEvents() {
 // when its canonical FactoryEvent history observes terminal session completion.
 func BindResponseEventCompletion(
 	session *LiveSession,
-	addRecorder func(func(factoryapi.FactoryEvent)),
+	addRecorder func(func(interfaces.FactoryEventType)),
 ) {
 	if session == nil || addRecorder == nil {
 		return
 	}
-	addRecorder(func(event factoryapi.FactoryEvent) {
-		if event.Type == factoryapi.FactoryEventTypeSessionCompleted {
+	addRecorder(func(eventType interfaces.FactoryEventType) {
+		if eventType == interfaces.FactoryEventTypeSessionCompleted {
 			session.CompleteResponseEvents()
 		}
 	})
