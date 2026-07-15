@@ -1,0 +1,12 @@
+{
+  "formatVersion": "1.0.0",
+  "itemId": "config.defaults.worker-model-provider",
+  "layers": [
+    "file",
+    "env",
+    "flag"
+  ],
+  "environmentVariable": "YOU_DEFAULT_WORKER_MODEL_PROVIDER",
+  "flagName": "--default-worker-model-provider",
+  "unexpected": true
+}

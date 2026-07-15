@@ -9,6 +9,25 @@ type ContractFieldDocumentation struct {
 
 // ProjectContractFieldDocumentation returns canonical English and examples for every inventoried field.
 func ProjectContractFieldDocumentation() map[string]ContractFieldDocumentation {
+	documentation := make(map[string]ContractFieldDocumentation, 24)
+	mergeContractFieldDocumentation(documentation, projectContractTopLevelFieldDocumentation())
+	mergeContractFieldDocumentation(documentation, projectContractMockWorkerEntryFieldDocumentation())
+	mergeContractFieldDocumentation(documentation, projectContractWorkInputFieldDocumentation())
+	mergeContractFieldDocumentation(documentation, projectContractScriptConfigFieldDocumentation())
+	mergeContractFieldDocumentation(documentation, projectContractRejectConfigFieldDocumentation())
+	return documentation
+}
+
+func mergeContractFieldDocumentation(
+	dst map[string]ContractFieldDocumentation,
+	src map[string]ContractFieldDocumentation,
+) {
+	for key, value := range src {
+		dst[key] = value
+	}
+}
+
+func projectContractTopLevelFieldDocumentation() map[string]ContractFieldDocumentation {
 	return map[string]ContractFieldDocumentation{
 		"mockWorkers": {
 			Title:       "Mock worker entries",
@@ -34,6 +53,11 @@ func ProjectContractFieldDocumentation() map[string]ContractFieldDocumentation {
 			Description: "Controls dispatches that do not match any mockWorkers[] entry. Omitted values behave as accept.",
 			Examples:    []any{"accept", "passthrough"},
 		},
+	}
+}
+
+func projectContractMockWorkerEntryFieldDocumentation() map[string]ContractFieldDocumentation {
+	return map[string]ContractFieldDocumentation{
 		"mockWorkers[].id": {
 			Title:       "Mock worker entry identifier",
 			Description: "Optional entry identifier used for diagnostics and stable matching references.",
@@ -89,6 +113,11 @@ func ProjectContractFieldDocumentation() map[string]ContractFieldDocumentation {
 				},
 			},
 		},
+	}
+}
+
+func projectContractWorkInputFieldDocumentation() map[string]ContractFieldDocumentation {
+	return map[string]ContractFieldDocumentation{
 		"mockWorkers[].workInputs[].workId": {
 			Title:       "Work identifier selector",
 			Description: "Optional work identifier selector. Omitted selector fields do not constrain that dimension.",
@@ -124,6 +153,11 @@ func ProjectContractFieldDocumentation() map[string]ContractFieldDocumentation {
 			Description: "Optional payload hash selector. Omitted selector fields do not constrain that dimension.",
 			Examples:    []any{"sha256:deadbeef"},
 		},
+	}
+}
+
+func projectContractScriptConfigFieldDocumentation() map[string]ContractFieldDocumentation {
+	return map[string]ContractFieldDocumentation{
 		"mockWorkers[].scriptConfig.command": {
 			Title:       "Script command",
 			Description: "Required non-empty command when runType is script.",
@@ -154,6 +188,11 @@ func ProjectContractFieldDocumentation() map[string]ContractFieldDocumentation {
 			Description: "Optional local script execution time bound. Not a dispatch delay or timing field.",
 			Examples:    []any{"30s"},
 		},
+	}
+}
+
+func projectContractRejectConfigFieldDocumentation() map[string]ContractFieldDocumentation {
+	return map[string]ContractFieldDocumentation{
 		"mockWorkers[].rejectConfig.stdout": {
 			Title:       "Rejected stdout",
 			Description: "Optional stdout content for a rejected mock result.",
