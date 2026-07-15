@@ -128,29 +128,25 @@ func runStartedEventFromFactory(recordedAt time.Time, generatedFactory factoryap
 }
 
 func runFinishedEvent(finishedAt time.Time, wallClock *interfaces.ReplayWallClockMetadata, diagnostics interfaces.ReplayDiagnostics) interfaces.FactoryEvent {
-	state := factoryapi.FactoryStateCompleted
-	payload := factoryapi.RunResponseEventPayload{
+	state := interfaces.FactoryStateCompleted
+	payload := interfaces.RunResponseEventPayload{
 		State:       &state,
-		WallClock:   generatedWallClock(wallClock),
-		Diagnostics: generatedDiagnostics(diagnostics),
+		WallClock:   runEventWallClock(wallClock),
+		Diagnostics: replayDiagnosticsPtr(diagnostics),
 	}
-	var union factoryapi.FactoryEvent_Payload
-	if err := union.FromRunResponseEventPayload(payload); err != nil {
+	encodedPayload, err := json.Marshal(payload)
+	if err != nil {
 		panic(fmt.Sprintf("encode run finished event payload: %v", err))
 	}
-	event, err := interfaces.NewFactoryEvent(factoryapi.FactoryEvent{
+	return interfaces.FactoryEvent{
 		Id:            replayRunFinishedEventID,
-		SchemaVersion: factoryapi.AgentFactoryEventV1,
-		Type:          factoryapi.FactoryEventTypeRunResponse,
-		Context: factoryapi.FactoryEventContext{
+		SchemaVersion: interfaces.FactoryEventSchemaVersionV1,
+		Type:          interfaces.FactoryEventTypeRunResponse,
+		Context: interfaces.FactoryEventContext{
 			EventTime: finishedAt,
 		},
-		Payload: union,
-	})
-	if err != nil {
-		panic(fmt.Sprintf("encode run finished event: %v", err))
+		Payload: encodedPayload,
 	}
-	return event
 }
 
 func hydrateArtifactFromEvents(artifact *interfaces.ReplayArtifact) error {
@@ -173,18 +169,14 @@ func hydrateArtifactFromEvents(artifact *interfaces.ReplayArtifact) error {
 			artifact.WallClock = replayWallClockFromGenerated(payload.WallClock)
 			artifact.Diagnostics = replayDiagnosticsFromGenerated(payload.Diagnostics)
 		case interfaces.FactoryEventTypeRunResponse:
-			generatedEvent, err := generatedEventFromDomain(event)
-			if err != nil {
-				return err
-			}
-			payload, err := generatedEvent.Payload.AsRunResponseEventPayload()
-			if err != nil {
+			var payload interfaces.RunResponseEventPayload
+			if err := event.DecodePayload(&payload); err != nil {
 				return fmt.Errorf("decode run finished event %q: %w", event.Id, err)
 			}
-			if wallClock := replayWallClockFromGenerated(payload.WallClock); wallClock != nil {
+			if wallClock := replayWallClockFromRunEvent(payload.WallClock); wallClock != nil {
 				artifact.WallClock = wallClock
 			}
-			if diagnostics := replayDiagnosticsFromGenerated(payload.Diagnostics); len(diagnostics.Notes) > 0 || len(diagnostics.Workers) > 0 {
+			if diagnostics := replayDiagnosticsFromRunEvent(payload.Diagnostics); len(diagnostics.Notes) > 0 || len(diagnostics.Workers) > 0 {
 				artifact.Diagnostics = diagnostics
 			}
 		}
@@ -654,6 +646,28 @@ func replayDiagnosticsFromGenerated(diagnostics *factoryapi.Diagnostics) interfa
 	}
 }
 
+func replayDiagnosticsPtr(diagnostics interfaces.ReplayDiagnostics) *interfaces.ReplayDiagnostics {
+	detached := replayDiagnosticsFromRunEvent(&diagnostics)
+	return &detached
+}
+
+func replayDiagnosticsFromRunEvent(diagnostics *interfaces.ReplayDiagnostics) interfaces.ReplayDiagnostics {
+	if diagnostics == nil {
+		return interfaces.ReplayDiagnostics{}
+	}
+	workers := make(map[string]workerdiagnostics.SafeWorkDiagnostics, len(diagnostics.Workers))
+	for key, value := range diagnostics.Workers {
+		cloned := workerdiagnostics.CloneSafeWorkDiagnostics(&value)
+		if cloned != nil {
+			workers[key] = *cloned
+		}
+	}
+	return interfaces.ReplayDiagnostics{
+		Notes:   append([]string(nil), diagnostics.Notes...),
+		Workers: workers,
+	}
+}
+
 func generatedWorkDiagnosticsMapPtr(in map[string]workerdiagnostics.SafeWorkDiagnostics) *map[string]factoryapi.SafeWorkDiagnostics {
 	if len(in) == 0 {
 		return nil
@@ -678,6 +692,26 @@ func generatedWallClock(wallClock *interfaces.ReplayWallClockMetadata) *factorya
 }
 
 func replayWallClockFromGenerated(wallClock *factoryapi.WallClock) *interfaces.ReplayWallClockMetadata {
+	if wallClock == nil {
+		return nil
+	}
+	return &interfaces.ReplayWallClockMetadata{
+		StartedAt:  timeValue(wallClock.StartedAt),
+		FinishedAt: timeValue(wallClock.FinishedAt),
+	}
+}
+
+func runEventWallClock(wallClock *interfaces.ReplayWallClockMetadata) *interfaces.RunEventWallClock {
+	if wallClock == nil {
+		return nil
+	}
+	return &interfaces.RunEventWallClock{
+		StartedAt:  timePtrIfNotZero(wallClock.StartedAt),
+		FinishedAt: timePtrIfNotZero(wallClock.FinishedAt),
+	}
+}
+
+func replayWallClockFromRunEvent(wallClock *interfaces.RunEventWallClock) *interfaces.ReplayWallClockMetadata {
 	if wallClock == nil {
 		return nil
 	}

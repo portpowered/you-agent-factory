@@ -276,6 +276,21 @@ type WorkStateChangeEventPayload struct {
 	WorkTypeName  string                     `json:"workTypeName"`
 }
 
+// RunResponseEventPayload describes the terminal state and optional replay
+// metadata emitted when a Factory run finishes.
+type RunResponseEventPayload struct {
+	Diagnostics *ReplayDiagnostics `json:"diagnostics,omitempty"`
+	Reason      *string            `json:"reason,omitempty"`
+	State       *FactoryState      `json:"state,omitempty"`
+	WallClock   *RunEventWallClock `json:"wallClock,omitempty"`
+}
+
+// RunEventWallClock records the observable wall-clock bounds of a Factory run.
+type RunEventWallClock struct {
+	FinishedAt *time.Time `json:"finishedAt,omitempty"`
+	StartedAt  *time.Time `json:"startedAt,omitempty"`
+}
+
 // FactoryStateChangePayload describes a lifecycle state change.
 type FactoryStateChangePayload struct {
 	PreviousState string `json:"previous_state,omitempty"`

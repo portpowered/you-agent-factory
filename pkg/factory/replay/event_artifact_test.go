@@ -163,6 +163,85 @@ func TestRunStartedPayloadFromEvent_AllowsLegacyOnFailureObjectWhileNormalizingF
 	}
 }
 
+func TestRunFinishedEvent_EmitsDomainPayload(t *testing.T) {
+	startedAt := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
+	finishedAt := startedAt.Add(3 * time.Second)
+	event := runFinishedTestEvent(startedAt, finishedAt)
+
+	var domainPayload interfaces.RunResponseEventPayload
+	if err := event.DecodePayload(&domainPayload); err != nil {
+		t.Fatalf("decode domain run response payload: %v", err)
+	}
+	if domainPayload.State == nil || *domainPayload.State != interfaces.FactoryStateCompleted {
+		t.Fatalf("domain state = %#v, want COMPLETED", domainPayload.State)
+	}
+	if domainPayload.WallClock == nil || domainPayload.WallClock.StartedAt == nil || !domainPayload.WallClock.StartedAt.Equal(startedAt) {
+		t.Fatalf("domain wall clock = %#v, want startedAt %s", domainPayload.WallClock, startedAt)
+	}
+	if domainPayload.Diagnostics == nil || !reflect.DeepEqual(domainPayload.Diagnostics.Notes, []string{"completed safely"}) {
+		t.Fatalf("domain diagnostics = %#v, want completion note", domainPayload.Diagnostics)
+	}
+}
+
+func TestRunFinishedEvent_RetainsGeneratedWireCompatibility(t *testing.T) {
+	startedAt := time.Date(2026, 4, 21, 12, 0, 0, 0, time.UTC)
+	finishedAt := startedAt.Add(3 * time.Second)
+	event := runFinishedTestEvent(startedAt, finishedAt)
+
+	var generatedEvent factoryapi.FactoryEvent
+	if err := event.Decode(&generatedEvent); err != nil {
+		t.Fatalf("decode generated run response event: %v", err)
+	}
+	generatedPayload, err := generatedEvent.Payload.AsRunResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode generated run response payload: %v", err)
+	}
+	if generatedPayload.State == nil || *generatedPayload.State != factoryapi.FactoryStateCompleted {
+		t.Fatalf("generated state = %#v, want COMPLETED", generatedPayload.State)
+	}
+	if generatedPayload.WallClock == nil || generatedPayload.WallClock.FinishedAt == nil || !generatedPayload.WallClock.FinishedAt.Equal(finishedAt) {
+		t.Fatalf("generated wall clock = %#v, want finishedAt %s", generatedPayload.WallClock, finishedAt)
+	}
+	if generatedPayload.Diagnostics == nil || !reflect.DeepEqual(stringSliceValue(generatedPayload.Diagnostics.Notes), []string{"completed safely"}) {
+		t.Fatalf("generated diagnostics = %#v, want completion note", generatedPayload.Diagnostics)
+	}
+}
+
+func runFinishedTestEvent(startedAt, finishedAt time.Time) interfaces.FactoryEvent {
+	return runFinishedEvent(finishedAt, &interfaces.ReplayWallClockMetadata{
+		StartedAt:  startedAt,
+		FinishedAt: finishedAt,
+	}, interfaces.ReplayDiagnostics{Notes: []string{"completed safely"}})
+}
+
+func TestApplyReplayRunResponse_DecodesDomainPayloadAndRejectsMalformedPayload(t *testing.T) {
+	finishedAt := time.Date(2026, 4, 21, 12, 0, 3, 0, time.UTC)
+	event := interfaces.FactoryEvent{
+		Id:   "factory-event/run-finished",
+		Type: interfaces.FactoryEventTypeRunResponse,
+		Payload: json.RawMessage(`{
+			"diagnostics":{"notes":["domain-owned"]},
+			"state":"COMPLETED",
+			"wallClock":{"finishedAt":"2026-04-21T12:00:03Z"}
+		}`),
+	}
+	reduced := &replayEventLog{}
+	if err := applyReplayRunResponse(reduced, event); err != nil {
+		t.Fatalf("applyReplayRunResponse: %v", err)
+	}
+	if reduced.WallClock == nil || !reduced.WallClock.FinishedAt.Equal(finishedAt) {
+		t.Fatalf("reduced wall clock = %#v, want finishedAt %s", reduced.WallClock, finishedAt)
+	}
+	if !reflect.DeepEqual(reduced.Diagnostics.Notes, []string{"domain-owned"}) {
+		t.Fatalf("reduced diagnostics = %#v, want domain-owned note", reduced.Diagnostics)
+	}
+
+	event.Payload = json.RawMessage(`{"wallClock":`)
+	if err := applyReplayRunResponse(reduced, event); err == nil || !strings.Contains(err.Error(), "decode run finished event") {
+		t.Fatalf("malformed payload error = %v, want run-finished decode context", err)
+	}
+}
+
 func TestMergeGeneratedWorkers_ReplacesExistingEntriesAndAppendsRuntimeOnlyInSortedOrder(t *testing.T) {
 	factory := &factoryapi.Factory{
 		Workers: &[]factoryapi.Worker{

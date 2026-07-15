@@ -92,6 +92,8 @@ func reduceReplayEvent(
 		return applyReplayWorkStateChange(reduced, event)
 	case interfaces.FactoryEventTypeWorkRequest:
 		return applyReplayWorkRequest(reduced, event, workByID)
+	case interfaces.FactoryEventTypeRunResponse:
+		return applyReplayRunResponse(reduced, event)
 	}
 	generatedEvent, err := generatedEventFromDomain(event)
 	if err != nil {
@@ -102,8 +104,6 @@ func reduceReplayEvent(
 		return applyReplayInferenceResponse(generatedEvent, inferenceAttemptsByDispatchID)
 	case interfaces.FactoryEventTypeDispatchResponse:
 		return applyReplayDispatchResponse(reduced, generatedEvent, inferenceAttemptsByDispatchID)
-	case interfaces.FactoryEventTypeRunResponse:
-		return applyReplayRunResponse(reduced, generatedEvent)
 	default:
 		return nil
 	}
@@ -213,15 +213,15 @@ func applyReplayDispatchResponse(
 	return nil
 }
 
-func applyReplayRunResponse(reduced *replayEventLog, event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsRunResponseEventPayload()
-	if err != nil {
+func applyReplayRunResponse(reduced *replayEventLog, event interfaces.FactoryEvent) error {
+	var payload interfaces.RunResponseEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return fmt.Errorf("decode run finished event %q: %w", event.Id, err)
 	}
-	if wallClock := replayWallClockFromGenerated(payload.WallClock); wallClock != nil {
+	if wallClock := replayWallClockFromRunEvent(payload.WallClock); wallClock != nil {
 		reduced.WallClock = wallClock
 	}
-	if diagnostics := replayDiagnosticsFromGenerated(payload.Diagnostics); len(diagnostics.Notes) > 0 || len(diagnostics.Workers) > 0 {
+	if diagnostics := replayDiagnosticsFromRunEvent(payload.Diagnostics); len(diagnostics.Notes) > 0 || len(diagnostics.Workers) > 0 {
 		reduced.Diagnostics = diagnostics
 	}
 	return nil
