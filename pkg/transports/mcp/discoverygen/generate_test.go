@@ -109,6 +109,125 @@ func TestProductionDiscoveryArtifactMatchesGenerator(t *testing.T) {
 	}
 }
 
+func TestCheckReportsMissingAndStaleArtifacts(t *testing.T) {
+	repositoryRoot := testutil.MustRepoPath(t, ".")
+	root := t.TempDir()
+	copyCatalog(t, repositoryRoot, root)
+	if err := discoverygen.Generate(root); err != nil {
+		t.Fatalf("Generate() error = %v", err)
+	}
+	if err := os.Remove(filepath.Join(root, filepath.FromSlash(discoverygen.DiscoveryJSONPath))); err != nil {
+		t.Fatalf("remove generated JSON: %v", err)
+	}
+	goPath := filepath.Join(root, filepath.FromSlash(discoverygen.DiscoveryGoPath))
+	if err := os.WriteFile(goPath, []byte("stale"), 0o644); err != nil {
+		t.Fatalf("write stale generated Go: %v", err)
+	}
+
+	drift, err := discoverygen.Check(root)
+	if err != nil {
+		t.Fatalf("Check() error = %v", err)
+	}
+	if drift.Empty() {
+		t.Fatal("Check() drift is empty, want missing and stale artifacts")
+	}
+	if len(drift.Missing) != 1 || drift.Missing[0] != discoverygen.DiscoveryJSONPath {
+		t.Fatalf("missing artifacts = %#v", drift.Missing)
+	}
+	if len(drift.Stale) != 1 || drift.Stale[0] != discoverygen.DiscoveryGoPath {
+		t.Fatalf("stale artifacts = %#v", drift.Stale)
+	}
+}
+
+func TestProjectDiscoveryRejectsMalformedCatalogToolRecords(t *testing.T) {
+	tests := []struct {
+		name    string
+		key     string
+		mutate  func(map[string]any)
+		wantErr string
+	}{
+		{name: "empty id", mutate: func(record map[string]any) { record["id"] = "" }, wantErr: "has empty id"},
+		{name: "empty name", mutate: func(record map[string]any) { record["name"] = "" }, wantErr: "has empty name"},
+		{name: "id mismatch", mutate: func(record map[string]any) { record["id"] = "mcp.tool.you.factory_session.other" }, wantErr: "does not match record id"},
+		{name: "noncanonical id", key: "invalid", mutate: func(record map[string]any) { record["id"] = "invalid" }, wantErr: "is not a canonical tool id"},
+		{name: "missing documentation", mutate: func(record map[string]any) { delete(record, "documentation") }, wantErr: "missing documentation"},
+		{name: "missing input", mutate: func(record map[string]any) { delete(record, "input") }, wantErr: "input is not an object"},
+		{name: "missing schema", mutate: func(record map[string]any) { record["input"] = map[string]any{} }, wantErr: "input.schema is not an object"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			key := "mcp.tool.you.factory_session.example"
+			if tt.key != "" {
+				key = tt.key
+			}
+			record := validCatalogToolRecord(key)
+			tt.mutate(record)
+			_, err := discoverygen.ProjectDiscoveryFromCatalogDocument(map[string]any{
+				"tools": map[string]any{key: record},
+			})
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("ProjectDiscoveryFromCatalogDocument() error = %v, want substring %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestDiscoveryVerificationRejectsAliasesAndNestedModalities(t *testing.T) {
+	alias := discoverygen.DiscoveryMetadata{Tools: map[string]discoverygen.DiscoveryToolRecord{
+		"mcp.tool.you.workflow.run": {
+			ID:   "mcp.tool.you.workflow.run",
+			Name: "you.workflow.run",
+		},
+	}}
+	if err := discoverygen.VerifyDiscoveryAliasExclusion(alias); err == nil {
+		t.Fatal("VerifyDiscoveryAliasExclusion() error = nil, want compatibility alias rejection")
+	}
+
+	tests := []struct {
+		name    string
+		schema  map[string]any
+		wantErr string
+	}{
+		{name: "record field", schema: map[string]any{"outputSchema": map[string]any{}}, wantErr: `must not include "outputSchema"`},
+		{name: "nested property", schema: map[string]any{"properties": map[string]any{"payload": map[string]any{"structuredContent": true}}}, wantErr: "properties.payload"},
+		{name: "map items content", schema: map[string]any{"items": map[string]any{"content": []any{map[string]any{"type": "image"}}}}, wantErr: `content[0].type = "image"`},
+		{
+			name: "tuple items content",
+			schema: map[string]any{
+				"items": []any{
+					map[string]any{"content": []any{map[string]any{"type": "audio"}}},
+				},
+			},
+			wantErr: "items[0]",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			const id = "mcp.tool.you.factory_session.example"
+			metadata := discoverygen.DiscoveryMetadata{Tools: map[string]discoverygen.DiscoveryToolRecord{
+				id: {ID: id, Name: "you.factory_session.example", InputSchema: tt.schema},
+			}}
+			if err := discoverygen.VerifyDiscoveryModalityPolicy(metadata); err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("VerifyDiscoveryModalityPolicy() error = %v, want substring %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func validCatalogToolRecord(id string) map[string]any {
+	return map[string]any{
+		"id":   id,
+		"name": "you.factory_session.example",
+		"documentation": map[string]any{
+			"documentation": map[string]any{
+				"description": map[string]any{"canonicalEnglish": "Example tool."},
+			},
+		},
+		"input": map[string]any{"schema": map[string]any{"type": "object"}},
+	}
+}
+
 func copyCatalog(t *testing.T, sourceRoot, targetRoot string) {
 	t.Helper()
 	payload, err := os.ReadFile(filepath.Join(sourceRoot, filepath.FromSlash(discoverygen.AuthoredCatalogPath)))
