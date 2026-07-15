@@ -61,6 +61,14 @@ Use this map when changing the public REST contract.
   `TestFactorySchemaGenerationLeavesAuthoredAndStagedDigestsStableOnSecondRun`);
   later-phase export-map families such as `components/*` stay omitted until a
   truthful owner exists.
+- Configuration-family closeout lives in `internal/configcontractsmoke` with
+  the read-only `cmd/configcontractsmoke` entrypoint and
+  `make config-contract-smoke`. Keep its registry, production-loader/schema
+  acceptance matrix, manifest export/hash validation, and deterministic
+  `contractstaging.Check` composition together; run the runtime dependency
+  boundary in `contracts/converter_boundary_test.go` from the same target so
+  the converter remains approved build-time tooling without a second staging
+  allowlist or generator.
 - Authored JavaScript runtime symbol manifests live at
   `contracts/javascript/runtime-manifest.schema.json` with the authored product
   catalog at `contracts/javascript/runtime-api.json`, fixtures under
