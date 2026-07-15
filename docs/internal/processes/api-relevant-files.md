@@ -258,7 +258,10 @@ Use this map when changing the public REST contract.
   canonical discovery. Repository loading may project handler identities through
   `factorysession.ProjectCanonicalToolHandlerBindings`, which intentionally
   omits executable functions and returns stable tool/handler IDs in sorted
-  order; do not move handler behavior into catalog or generated code.
+  order; do not move handler behavior into catalog or generated code. Run the
+  comparison through `make mcp-contract-check`; keep that read-only target in
+  both `make mcp-contract-smoke` and `make verify-fast` so focused MCP checks
+  and normal fast verification reject boundary drift.
 - Valid MCP catalog fixtures live under `contracts/testdata/mcp/` and register
   through `internal/contractvalidator.MCPRegistry()` into
   `make contracts-validate`. The authored `contracts/mcp/tools.json` registers in
