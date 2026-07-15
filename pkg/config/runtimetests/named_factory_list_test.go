@@ -121,9 +121,9 @@ func TestListNamedFactories_RejectsInvalidCurrentPointer(t *testing.T) {
 func TestListNamedFactories_IgnoresLegacyEncodedLeafDirectories(t *testing.T) {
 	rootDir := t.TempDir()
 
-	segment, err := NamedFactoryNameToLayoutSegment("@you/goal")
+	segment, err := namedfactorypath.LegacyLayoutSegment("@you/goal")
 	if err != nil {
-		t.Fatalf("NamedFactoryNameToLayoutSegment(@you/goal): %v", err)
+		t.Fatalf("LegacyLayoutSegment(@you/goal): %v", err)
 	}
 	encodedDir := filepath.Join(rootDir, segment)
 	if err := os.MkdirAll(encodedDir, 0o755); err != nil {

@@ -3,9 +3,9 @@ package logicaltarget_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
-	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/logicaltarget"
 )
@@ -191,12 +191,11 @@ func TestNormalizeNamedTarget_EquivalentFormattingMatchesDistinctNamesDoNot(t *t
 	if err != nil {
 		t.Fatalf("NormalizeNamedTarget(@you/goal): %v", err)
 	}
-	segment, err := factoryconfig.NamedFactoryNameToLayoutSegment(scopedName)
-	if err != nil {
-		t.Fatalf("NamedFactoryNameToLayoutSegment: %v", err)
+	if scoped.NamedTarget != scopedName {
+		t.Fatalf("NamedTarget = %q, want canonical display name %q", scoped.NamedTarget, scopedName)
 	}
-	if scoped.NamedTarget != segment {
-		t.Fatalf("NamedTarget = %q, want layout segment %q", scoped.NamedTarget, segment)
+	if strings.Contains(scoped.NamedTarget, "%2F") {
+		t.Fatalf("NamedTarget = %q, must not use percent-encoded scoped layout segments", scoped.NamedTarget)
 	}
 }
 

@@ -844,18 +844,7 @@ func ReadCurrentFactoryPointer(rootDir string) (string, error) {
 	if raw == "" {
 		return "", fmt.Errorf("read current factory pointer %s: factory name is required for factory config layout", path)
 	}
-	if segments, err := NamedFactoryPathSegments(raw); err == nil {
-		name, err := NamedFactoryNameFromPathSegments(segments)
-		if err != nil {
-			return "", fmt.Errorf("read current factory pointer %s: %w", path, err)
-		}
-		return name, nil
-	}
-	segment, err := safeFactoryLayoutSegment("factory", raw)
-	if err != nil {
-		return "", fmt.Errorf("read current factory pointer %s: %w", path, err)
-	}
-	name, err := NamedFactoryLayoutSegmentToName(segment)
+	name, err := canonicalNamedFactoryName(raw)
 	if err != nil {
 		return "", fmt.Errorf("read current factory pointer %s: %w", path, err)
 	}

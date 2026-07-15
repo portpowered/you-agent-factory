@@ -181,11 +181,15 @@ func normalizeTarget(
 }
 
 func canonicalNamedTargetName(name string) (string, error) {
-	segment, err := factoryconfig.NamedFactoryNameToLayoutSegment(name)
+	segments, err := factoryconfig.NamedFactoryPathSegments(name)
 	if err != nil {
 		return "", invalidTargetError("target.name", err.Error())
 	}
-	return segment, nil
+	canonical, err := factoryconfig.NamedFactoryNameFromPathSegments(segments)
+	if err != nil {
+		return "", invalidTargetError("target.name", err.Error())
+	}
+	return canonical, nil
 }
 
 // Equivalent reports whether two canonical references identify the same logical
