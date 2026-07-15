@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
@@ -97,7 +98,7 @@ func TestRun_HumanResponseStreamConsumesOnlyCanonicalTypedEvents(t *testing.T) {
 		}
 		store.Complete()
 		return apisurface.FactoryInvocationResult{
-			Status:        factoryapi.InvocationTerminalStatusCompleted,
+			Status:        interfaces.InvocationTerminalStatusCompleted,
 			PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: answer}},
 		}, nil
 	}
@@ -179,7 +180,7 @@ func TestHumanResponseStreamRenderer_CanonicalMessagesDoNotDuplicatePrimaryResul
 		}),
 	}
 	result := apisurface.FactoryInvocationResult{
-		Status: factoryapi.InvocationTerminalStatusCompleted,
+		Status: interfaces.InvocationTerminalStatusCompleted,
 		PrimaryResult: []work.WorkContentPart{
 			{Type: work.WorkContentPartTypeText, Text: "final answer"},
 		},
@@ -226,13 +227,13 @@ func TestHumanResponseStreamRenderer_TerminalBlockIsWrittenOnce(t *testing.T) {
 	}{
 		{
 			name: "success",
-			result: apisurface.FactoryInvocationResult{Status: factoryapi.InvocationTerminalStatusCompleted,
+			result: apisurface.FactoryInvocationResult{Status: interfaces.InvocationTerminalStatusCompleted,
 				PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "answer"}}},
 			want: "answer",
 		},
 		{
 			name:   "failure",
-			result: apisurface.FactoryInvocationResult{Status: factoryapi.InvocationTerminalStatusFailed, ErrorCode: "FAILED_SAFE"},
+			result: apisurface.FactoryInvocationResult{Status: interfaces.InvocationTerminalStatusFailed, ErrorCode: "FAILED_SAFE"},
 			want:   "--- invocation outcome ---\nstatus: FAILED\nerror: FAILED_SAFE\n",
 		},
 	}
@@ -430,7 +431,7 @@ func TestHumanResponseStreamRenderer_CanonicalInvalidEventsDoNotLeakPayload(t *t
 
 	renderer.onResponseEvents([]responseevents.FactoryResponseEvent{unknownKind, invalidPhase, invalidPayload})
 	if err := renderer.writeFinalInvocationResult(apisurface.FactoryInvocationResult{
-		Status:        factoryapi.InvocationTerminalStatusCompleted,
+		Status:        interfaces.InvocationTerminalStatusCompleted,
 		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: answer}},
 	}); err != nil {
 		t.Fatalf("write final invocation result: %v", err)

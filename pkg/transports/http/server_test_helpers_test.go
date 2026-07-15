@@ -421,7 +421,7 @@ func assertFactorySessionInvocation(
 		t.Fatalf("POST /factory-sessions/~default/invocations status = %d, want 200: %s", rec.Code, rec.Body.String())
 	}
 	response := decodeJSONResponse[factoryapi.InvocationResponse](t, rec)
-	if response.RequestId != wantResult.RequestID || response.TraceId != wantResult.TraceID || response.Status != wantResult.Status {
+	if response.RequestId != wantResult.RequestID || response.TraceId != wantResult.TraceID || response.Status != factoryapi.InvocationTerminalStatus(wantResult.Status) {
 		t.Fatalf("invocation response = %#v, want completed invocation identifiers", response)
 	}
 	assertGeneratedWorkContentParts(t, response.PrimaryResult, wantResult.PrimaryResult)

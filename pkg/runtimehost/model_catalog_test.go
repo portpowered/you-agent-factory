@@ -515,7 +515,7 @@ func TestHostCompatibilityFacadePreservesTypedOutcomes(t *testing.T) {
 	validation := &apisurface.RequestValidationError{Message: "invalid factory definition"}
 	wantInvocation := apisurface.FactoryInvocationResult{
 		RequestID: "request-typed", TraceID: "trace-typed",
-		Status: factoryapi.InvocationTerminalStatusCompleted,
+		Status: "COMPLETED",
 	}
 	wantLifecycle := factoryapi.FactorySessionLifecycleControlResponse{
 		SessionId: "durable-1", Operation: factoryapi.FactorySessionLifecycleControlKindPause,

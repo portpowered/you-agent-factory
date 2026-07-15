@@ -4,7 +4,6 @@ import (
 	"time"
 
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
@@ -42,12 +41,33 @@ const (
 	RuntimeModeService RuntimeMode = "SERVICE"
 )
 
+// InvocationTerminalStatus is the Factory Session-owned terminal outcome for
+// one invocation. Transport adapters map it to their generated contract.
+type InvocationTerminalStatus = string
+
+const (
+	InvocationTerminalStatusCanceled  InvocationTerminalStatus = "CANCELED"
+	InvocationTerminalStatusCompleted InvocationTerminalStatus = "COMPLETED"
+	InvocationTerminalStatusFailed    InvocationTerminalStatus = "FAILED"
+	InvocationTerminalStatusTimedOut  InvocationTerminalStatus = "TIMED_OUT"
+)
+
+// InvocationErrorCode is the stable Factory Session-owned failure code emitted
+// with a non-completed invocation result.
+type InvocationErrorCode string
+
+const (
+	InvocationErrorCodeCanceled       InvocationErrorCode = "INVOCATION_CANCELED"
+	InvocationErrorCodeRuntimeFailure InvocationErrorCode = "INVOCATION_RUNTIME_FAILURE"
+	InvocationErrorCodeTimedOut       InvocationErrorCode = "INVOCATION_TIMED_OUT"
+)
+
 // FactoryInvocationResult carries the transport-independent outcome of one
 // Factory Session invocation after input resolution and result selection.
 type FactoryInvocationResult struct {
 	RequestID     string
 	TraceID       string
-	Status        factoryapi.InvocationTerminalStatus
+	Status        InvocationTerminalStatus
 	PrimaryResult []work.WorkContentPart
 	ErrorCode     string
 	Message       string

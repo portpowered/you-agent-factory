@@ -437,7 +437,7 @@ func (r *humanResponseStreamRenderer) writeFinalInvocationResultOnce(
 	r.stopProgressRendering()
 	r.progress.acquireOutputExclusive()
 	defer r.progress.releaseOutputExclusive()
-	if result.Status == factoryapi.InvocationTerminalStatusCompleted {
+	if result.Status == interfaces.InvocationTerminalStatusCompleted {
 		text, err := invocationPrimaryResultText(result.PrimaryResult)
 		if err != nil {
 			return err

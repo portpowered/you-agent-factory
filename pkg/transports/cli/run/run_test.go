@@ -739,7 +739,7 @@ func assertInvocationResponseMatchesFactoryResult(
 	if response.TraceId != result.TraceID {
 		t.Fatalf("traceId = %q, want %q", response.TraceId, result.TraceID)
 	}
-	if response.Status != result.Status {
+	if response.Status != factoryapi.InvocationTerminalStatus(result.Status) {
 		t.Fatalf("status = %q, want %q", response.Status, result.Status)
 	}
 	if len(result.PrimaryResult) == 0 {

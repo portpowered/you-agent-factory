@@ -19,6 +19,7 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
@@ -29,7 +30,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -4668,7 +4668,7 @@ func TestFactoryServiceCompatibilityFacadePreservesTypedOutcomes(t *testing.T) {
 	validation := &apisurface.RequestValidationError{Message: "invalid factory definition"}
 	wantInvocation := apisurface.FactoryInvocationResult{
 		RequestID: "request-typed", TraceID: "trace-typed",
-		Status: factoryapi.InvocationTerminalStatusCompleted,
+		Status: "COMPLETED",
 	}
 	wantLifecycle := factoryapi.FactorySessionLifecycleControlResponse{
 		SessionId: "durable-1", Operation: factoryapi.FactorySessionLifecycleControlKindPause,

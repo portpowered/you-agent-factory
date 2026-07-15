@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -125,7 +126,7 @@ func TestFailureBaseline_QuietLeak_OneShotNamedGoalInvocationSuppressesOperatorC
 				return apisurface.FactoryInvocationResult{
 					RequestID: "req-quiet-leak",
 					TraceID:   "trace-quiet-leak",
-					Status:    factoryapi.InvocationTerminalStatusCompleted,
+					Status:    interfaces.InvocationTerminalStatusCompleted,
 					PrimaryResult: []work.WorkContentPart{{
 						Type: work.WorkContentPartTypeText,
 						Text: "goal quiet baseline completed",
@@ -218,7 +219,7 @@ func TestFailureBaseline_TerminalPolicyNeverLeaksInvocationPromptAcrossModes(t *
 					},
 					invoke: func(_ context.Context, _ string, _ factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 						return apisurface.FactoryInvocationResult{
-							Status: factoryapi.InvocationTerminalStatusCompleted,
+							Status: interfaces.InvocationTerminalStatusCompleted,
 							PrimaryResult: []work.WorkContentPart{{
 								Type: work.WorkContentPartTypeText,
 								Text: "policy-safe primary result",

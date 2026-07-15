@@ -185,7 +185,7 @@ func TestSessionOwnerTelemetry_PackagedSuccessEmitsEachOutcomeOnce(t *testing.T)
 	owner := packagedSessionOwner(recording, cfg, observations, nil)
 
 	result := invokePackagedSessionOwner(t, owner)
-	assertSessionOwnerEqual(t, "status", result.Status, factoryapi.InvocationTerminalStatusCompleted)
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusCompleted)
 	for _, metric := range []string{
 		InvocationMetricAttempts, InvocationMetricFallbackPolicyUsed, testPackagedAttempts,
 		InvocationMetricSuccess, InvocationMetricResultType, testPackagedSuccess,
@@ -241,7 +241,7 @@ func TestSessionOwnerTelemetry_PackagedFailuresPreserveClassificationAndCounts(t
 			owner := packagedSessionOwner(recording, packagedSessionOwnerConfig(), []SessionInvocationObservation{stoppedSessionInvocationObservation()}, failure)
 
 			result := invokePackagedSessionOwner(t, owner)
-			assertSessionOwnerEqual(t, "status", result.Status, factoryapi.InvocationTerminalStatusFailed)
+			assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusFailed)
 			assertSessionOwnerEqual(t, "error code", result.ErrorCode, tt.errorCode)
 			assertSessionOwnerEqual(t, "message", result.Message, failure.Message)
 			for _, metric := range []string{InvocationMetricAttempts, testPackagedAttempts, InvocationMetricFailure, testPackagedFailure} {
@@ -273,21 +273,21 @@ func TestSessionOwnerTelemetry_WaitFailuresPreserveCorrelationAndClassification(
 		name         string
 		observation  SessionInvocationObservation
 		waitErr      error
-		wantStatus   factoryapi.InvocationTerminalStatus
+		wantStatus   interfaces.InvocationTerminalStatus
 		wantCode     string
 		failureClass string
 	}{
 		{
 			name: "timeout", observation: activeSessionInvocationObservation(), waitErr: context.DeadlineExceeded,
-			wantStatus: factoryapi.InvocationTerminalStatusTimedOut, wantCode: string(factoryapi.INVOCATIONTIMEDOUT), failureClass: "timeout",
+			wantStatus: interfaces.InvocationTerminalStatusTimedOut, wantCode: string(interfaces.InvocationErrorCodeTimedOut), failureClass: "timeout",
 		},
 		{
 			name: "cancellation", observation: activeSessionInvocationObservation(), waitErr: context.Canceled,
-			wantStatus: factoryapi.InvocationTerminalStatusCanceled, wantCode: string(factoryapi.INVOCATIONCANCELED), failureClass: "cancellation",
+			wantStatus: interfaces.InvocationTerminalStatusCanceled, wantCode: string(interfaces.InvocationErrorCodeCanceled), failureClass: "cancellation",
 		},
 		{
 			name: "primary result failure", observation: classifiedObservation(workinvocation.PrimaryResultErrorCodeBlocked, "blocked"),
-			wantStatus: factoryapi.InvocationTerminalStatusFailed, wantCode: string(workinvocation.PrimaryResultErrorCodeBlocked), failureClass: "blocked",
+			wantStatus: interfaces.InvocationTerminalStatusFailed, wantCode: string(workinvocation.PrimaryResultErrorCodeBlocked), failureClass: "blocked",
 		},
 	}
 	for _, tt := range tests {

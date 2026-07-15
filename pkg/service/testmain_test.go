@@ -24,6 +24,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
@@ -35,7 +36,6 @@ import (
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
-	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
@@ -3003,7 +3003,7 @@ func TestFactorySessionInvocation_LocalLlamaCppInferenceUsesModelHostLeases(t *t
 	if err != nil {
 		t.Fatalf("InvokeFactorySession: %v", err)
 	}
-	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
+	if result.Status != "COMPLETED" {
 		t.Fatalf("invocation status = %q, want COMPLETED (error=%q message=%q work=%q state=%q)", result.Status, result.ErrorCode, result.Message, result.WorkName, result.WorkState)
 	}
 	if len(result.PrimaryResult) == 0 {

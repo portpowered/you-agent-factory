@@ -388,7 +388,7 @@ func runFactoryInvocation(
 	if runErr != nil && !errors.Is(runErr, context.Canceled) {
 		return runErr
 	}
-	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
+	if result.Status != interfaces.InvocationTerminalStatusCompleted {
 		return writeInvocationFailure(cfg, result, streamRenderer)
 	}
 	return writeInvocationSuccess(cfg, result, streamRenderer)

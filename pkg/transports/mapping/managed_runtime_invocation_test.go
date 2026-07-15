@@ -8,10 +8,27 @@ import (
 	"strings"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
+
+func TestInvocationResponseFromResult_MapsDomainTerminalStatus(t *testing.T) {
+	response := InvocationResponseFromResult(interfaces.FactoryInvocationResult{
+		RequestID: "request-1",
+		TraceID:   "trace-1",
+		Status:    interfaces.InvocationTerminalStatusTimedOut,
+		ErrorCode: string(interfaces.InvocationErrorCodeTimedOut),
+	})
+
+	if response.Status != factoryapi.InvocationTerminalStatusTimedOut {
+		t.Fatalf("status = %q, want TIMED_OUT", response.Status)
+	}
+	if response.ErrorCode == nil || *response.ErrorCode != factoryapi.INVOCATIONTIMEDOUT {
+		t.Fatalf("error code = %#v, want INVOCATION_TIMED_OUT", response.ErrorCode)
+	}
+}
 
 func TestInvocationErrorFromManagedRuntime_ReadyAllowsInvocation(t *testing.T) {
 	err := InvocationErrorFromManagedRuntime(factoryapi.ManagedRuntime{

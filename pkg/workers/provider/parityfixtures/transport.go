@@ -377,7 +377,7 @@ func invocationResultFromTerminal(fixture Fixture, terminal TerminalResult) inte
 	return interfaces.FactoryInvocationResult{
 		RequestID: "req-parity-" + fixture.ID,
 		TraceID:   "trace-parity-" + fixture.ID,
-		Status:    factoryapi.InvocationTerminalStatusCompleted,
+		Status:    interfaces.InvocationTerminalStatusCompleted,
 		PrimaryResult: []work.WorkContentPart{
 			{Type: work.WorkContentPartTypeText, Text: terminal.Response.Content},
 		},

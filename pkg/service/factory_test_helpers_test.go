@@ -1394,7 +1394,7 @@ func TestInvocationBootstrap_InvokeFactorySessionForwardsToCanonicalOwner(t *tes
 	wantResult := sessioninvocation.FactoryInvocationResult{
 		RequestID: "result-request",
 		TraceID:   "trace-1",
-		Status:    factoryapi.InvocationTerminalStatusCompleted,
+		Status:    "COMPLETED",
 	}
 	wantErr := errors.New("owner failure")
 	invoker := &forwardingSessionInvoker{result: wantResult, err: wantErr}

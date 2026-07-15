@@ -983,7 +983,7 @@ func TestFactorySessionsAPI_InvokeFactorySession(t *testing.T) {
 			result: apisurface.FactoryInvocationResult{
 				RequestID:     "invoke-1",
 				TraceID:       "trace-invoke-1",
-				Status:        factoryapi.InvocationTerminalStatusCompleted,
+				Status:        "COMPLETED",
 				PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "primary output"}},
 			},
 		},
@@ -993,7 +993,7 @@ func TestFactorySessionsAPI_InvokeFactorySession(t *testing.T) {
 			result: apisurface.FactoryInvocationResult{
 				RequestID: "request-goal-parity-success",
 				TraceID:   "trace-goal-parity-success",
-				Status:    factoryapi.InvocationTerminalStatusCompleted,
+				Status:    "COMPLETED",
 				PrimaryResult: []work.WorkContentPart{{
 					Type: work.WorkContentPartTypeText,
 					Text: "goal parity completed",
@@ -1024,7 +1024,7 @@ func TestFactorySessionsAPI_InvokeFactorySession_DecodesStructuredArgs(t *testin
 		InvokeFactoryResult: apisurface.FactoryInvocationResult{
 			RequestID: "invoke-structured-1",
 			TraceID:   "trace-structured-1",
-			Status:    factoryapi.InvocationTerminalStatusCompleted,
+			Status:    "COMPLETED",
 			PrimaryResult: []work.WorkContentPart{{
 				Type: work.WorkContentPartTypeText,
 				Text: "ok",

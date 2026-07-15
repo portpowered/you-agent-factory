@@ -25,7 +25,7 @@ func TestSessionOwner_SubmitsOneNormalizedWorkAndWaitsWithSubmissionIdentity(t *
 
 	var submitted []workdomain.SubmitRequest
 	var waitInput SessionInvocationWaitInput
-	wantResult := FactoryInvocationResult{RequestID: "runtime-request", TraceID: "trace-1", Status: factoryapi.InvocationTerminalStatusCompleted}
+	wantResult := FactoryInvocationResult{RequestID: "runtime-request", TraceID: "trace-1", Status: interfaces.InvocationTerminalStatusCompleted}
 	owner := NewSessionOwner(SessionOwnerDependencies{
 		FactoryConfig: func(sessionID string) (*interfaces.FactoryConfig, error) {
 			assertSessionOwnerEqual(t, "sessionID", sessionID, "session-1")
@@ -244,7 +244,7 @@ func TestSessionOwnerWait_ReturnsSubmittedTerminalContent(t *testing.T) {
 	observation := completedSessionInvocationObservation("request-1", "trace-1", "completed output")
 	result := waitForSessionOwnerObservation(t, observation, nil)
 
-	assertSessionOwnerEqual(t, "status", result.Status, factoryapi.InvocationTerminalStatusCompleted)
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusCompleted)
 	assertSessionOwnerEqual(t, "request ID", result.RequestID, "request-1")
 	assertSessionOwnerEqual(t, "trace ID", result.TraceID, "trace-1")
 	assertSessionOwnerEqual(t, "primary result", result.PrimaryResult[0].Text, "completed output")
@@ -264,7 +264,7 @@ func TestSessionOwnerWait_ExplicitPolicyIgnoresUnrelatedMatchingWork(t *testing.
 		Policy: workinvocation.ReturnPolicyExplicit, WorkTypeName: "summary", TerminalState: "complete",
 	})
 
-	assertSessionOwnerEqual(t, "status", result.Status, factoryapi.InvocationTerminalStatusCompleted)
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusCompleted)
 	assertSessionOwnerEqual(t, "primary result", result.PrimaryResult[0].Text, summary.Content[0].Text)
 }
 
@@ -272,11 +272,11 @@ func TestSessionOwnerWait_MapsTimeoutAndCancellation(t *testing.T) {
 	tests := []struct {
 		name       string
 		waitErr    error
-		wantStatus factoryapi.InvocationTerminalStatus
+		wantStatus interfaces.InvocationTerminalStatus
 		wantCode   string
 	}{
-		{name: "timeout", waitErr: context.DeadlineExceeded, wantStatus: factoryapi.InvocationTerminalStatusTimedOut, wantCode: string(factoryapi.INVOCATIONTIMEDOUT)},
-		{name: "cancellation", waitErr: context.Canceled, wantStatus: factoryapi.InvocationTerminalStatusCanceled, wantCode: string(factoryapi.INVOCATIONCANCELED)},
+		{name: "timeout", waitErr: context.DeadlineExceeded, wantStatus: interfaces.InvocationTerminalStatusTimedOut, wantCode: string(interfaces.InvocationErrorCodeTimedOut)},
+		{name: "cancellation", waitErr: context.Canceled, wantStatus: interfaces.InvocationTerminalStatusCanceled, wantCode: string(interfaces.InvocationErrorCodeCanceled)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -317,7 +317,7 @@ func TestSessionOwnerWait_ConfiguredTimeoutReachesInjectedWaitBoundary(t *testin
 	if err != nil {
 		t.Fatalf("waitForResult: %v", err)
 	}
-	assertSessionOwnerEqual(t, "status", result.Status, factoryapi.InvocationTerminalStatusTimedOut)
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusTimedOut)
 }
 
 func TestSessionOwnerWait_PreservesTerminalFailureClassifications(t *testing.T) {
@@ -361,7 +361,7 @@ func TestSessionOwnerWait_PreservesTerminalFailureClassifications(t *testing.T) 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := waitForSessionOwnerObservation(t, tt.observation, nil)
-			assertSessionOwnerEqual(t, "status", result.Status, factoryapi.InvocationTerminalStatusFailed)
+			assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusFailed)
 			assertSessionOwnerEqual(t, "error code", result.ErrorCode, string(tt.wantCode))
 			assertSessionOwnerEqual(t, "message", result.Message, tt.wantMessage)
 			assertSessionOwnerEqual(t, "session ID", result.SessionID, tt.wantContext.SessionID)

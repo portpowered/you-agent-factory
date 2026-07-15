@@ -5,7 +5,6 @@ import (
 	"sort"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
@@ -143,7 +142,7 @@ func (t *sessionInvocationTelemetry) LogArgumentFailure(
 	failureClass string,
 ) {
 	fields := invocationLogFields(sessionID, source, invocationReturn(cfg), cfg)
-	fields["status"] = string(factoryapi.InvocationTerminalStatusFailed)
+	fields["status"] = string(interfaces.InvocationTerminalStatusFailed)
 	fields["failure_class"] = failureClass
 	var argumentErr *workinvocation.ArgumentError
 	if errors.As(err, &argumentErr) {
@@ -154,8 +153,8 @@ func (t *sessionInvocationTelemetry) LogArgumentFailure(
 
 func (t *sessionInvocationTelemetry) LogSubmissionFailure(sessionID string, source workinvocation.InputSourceLabel, cfg *interfaces.FactoryConfig, err error) {
 	fields := invocationLogFields(sessionID, source, invocationReturn(cfg), nil)
-	fields["status"] = string(factoryapi.InvocationTerminalStatusFailed)
-	fields["error_code"] = string(factoryapi.INVOCATIONRUNTIMEFAILURE)
+	fields["status"] = string(interfaces.InvocationTerminalStatusFailed)
+	fields["error_code"] = string(interfaces.InvocationErrorCodeRuntimeFailure)
 	fields["failure_class"] = "runtime_failure"
 	t.log("warn", "factory session invocation failed", fields, err)
 }
@@ -180,7 +179,7 @@ func (t *sessionInvocationTelemetry) LogInvocationSubmitted(
 func (t *sessionInvocationTelemetry) LogInvocationCompleted(sessionID string, input SessionInvocationWaitInput, selection workinvocation.PrimaryResultSelection) {
 	fields := invocationLogFields(sessionID, input.InputSource, input.InvocationReturn, input.FactoryConfig)
 	fields["request_id"], fields["trace_id"] = input.RequestID, input.TraceID
-	fields["status"] = string(factoryapi.InvocationTerminalStatusCompleted)
+	fields["status"] = string(interfaces.InvocationTerminalStatusCompleted)
 	fields["resolved_work_id"], fields["resolved_work_type"] = selection.WorkID, selection.WorkTypeName
 	fields["resolved_work_name"], fields["resolved_terminal_state"] = selection.WorkName, selection.TerminalState
 	fields["result_type"] = primaryResultMetricType(selection.PrimaryResult)
@@ -213,7 +212,7 @@ func (t *sessionInvocationTelemetry) PackagedInvocationCompleted(sessionID strin
 	t.packagedMetric(packaged.SuccessMetric, input.InputSource, map[string]string{"readiness_outcome": packaged.SuccessClass})
 	fields := t.packagedLogFields(sessionID, input.InputSource, input.InvocationReturn, input.FactoryConfig, packaged)
 	fields["request_id"], fields["trace_id"] = input.RequestID, input.TraceID
-	fields["status"] = string(factoryapi.InvocationTerminalStatusCompleted)
+	fields["status"] = string(interfaces.InvocationTerminalStatusCompleted)
 	fields["resolved_work_id"], fields["resolved_work_type"] = selection.WorkID, selection.WorkTypeName
 	fields["readiness_outcome"] = packaged.SuccessClass
 	t.log("info", "packaged tts invocation completed", fields, nil)
@@ -230,7 +229,7 @@ func (t *sessionInvocationTelemetry) PackagedInvocationFailed(sessionID string, 
 	}
 	fields := t.packagedLogFields(sessionID, input.InputSource, input.InvocationReturn, input.FactoryConfig, packaged)
 	fields["request_id"], fields["trace_id"] = input.RequestID, input.TraceID
-	fields["status"] = string(factoryapi.InvocationTerminalStatusFailed)
+	fields["status"] = string(interfaces.InvocationTerminalStatusFailed)
 	fields["error_code"], fields["failure_class"] = failure.ErrorCode, failure.FailureClass
 	fields["readiness_outcome"] = failure.FailureClass
 	t.log("warn", "packaged tts invocation failed", fields, nil)

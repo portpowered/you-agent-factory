@@ -141,7 +141,7 @@ func InvocationResponseFromResult(result FactoryInvocationResult) factoryapi.Inv
 	response := factoryapi.InvocationResponse{
 		RequestId: result.RequestID,
 		TraceId:   result.TraceID,
-		Status:    result.Status,
+		Status:    factoryapi.InvocationTerminalStatus(result.Status),
 	}
 	if content := contentcontract.GeneratedPtrFromParts(result.PrimaryResult); content != nil {
 		response.PrimaryResult = content

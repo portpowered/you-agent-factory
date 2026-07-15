@@ -268,7 +268,7 @@ func TestSessionInvocationService_CanceledContextReturnsCanceledStatus(t *testin
 		response := factoryapi.InvocationResponse{
 			RequestId: result.RequestID,
 			TraceId:   result.TraceID,
-			Status:    result.Status,
+			Status:    factoryapi.InvocationTerminalStatus(result.Status),
 		}
 		if result.ErrorCode != "" {
 			code := factoryapi.InvocationResponseErrorCode(result.ErrorCode)
