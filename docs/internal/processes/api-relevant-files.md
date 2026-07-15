@@ -155,9 +155,13 @@ Use this map when changing the public REST contract.
   paths under `packages/api/generated/` plus docs/license packaging; omit
   later-phase families such as `./components/*` until a truthful owner exists.
   `scripts/api-package-{pack,consumer,contract}.mjs` prove `npm pack` inventory
-  and isolated export resolution without mutating staged artifact bytes; run
-  `make api-package-pack-smoke` after contract guard changes and in
-  `verify-build-contracts`/CI.
+  and isolated export resolution without mutating staged artifact bytes.
+  Development candidates are prepared by
+  `scripts/api-package-candidate.mjs`: derive their version from a stable base,
+  immutable run ID, and fixed 12-character commit prefix; stage the manifest
+  change outside the source package; and retain exactly one reviewed tarball
+  plus digest/inventory evidence. Run `make api-package-pack-smoke` after
+  contract or candidate guard changes and in `verify-build-contracts`/CI.
 
 ## REST operation identity inventory
 
