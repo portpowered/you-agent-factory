@@ -1,0 +1,41 @@
+package main
+
+import (
+	"flag"
+	"fmt"
+	"io"
+	"os"
+
+	"github.com/portpowered/infinite-you/internal/configcontractsmoke"
+)
+
+const successMessage = "[agent-factory:config-contract-smoke] global, mock-worker, and Factory configuration contracts are aligned"
+
+type checker func(string) ([]configcontractsmoke.Diagnostic, error)
+
+func main() {
+	root := flag.String("root", ".", "repository root")
+	flag.Parse()
+	os.Exit(run(*root, os.Stdout, os.Stderr))
+}
+
+func run(root string, stdout, stderr io.Writer) int {
+	return runWithChecker(root, stdout, stderr, configcontractsmoke.Check)
+}
+
+func runWithChecker(root string, stdout, stderr io.Writer, check checker) int {
+	diagnostics, err := check(root)
+	if err != nil {
+		fmt.Fprintf(stderr, "[agent-factory:config-contract-smoke] check failed: %v\n", err)
+		return 1
+	}
+	if len(diagnostics) > 0 {
+		for _, diagnostic := range diagnostics {
+			fmt.Fprintf(stderr, "[agent-factory:config-contract-smoke] %s family=%s (%s): %s\n", diagnostic.Path, diagnostic.Family, diagnostic.Code, diagnostic.Message)
+		}
+		fmt.Fprintln(stderr, "[agent-factory:config-contract-smoke] configuration contract parity failed; restore family, acceptance, export, staging, and ownership alignment")
+		return 1
+	}
+	fmt.Fprintln(stdout, successMessage)
+	return 0
+}
