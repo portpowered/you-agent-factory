@@ -25,6 +25,9 @@ func generateManifest(repositoryRoot string, artifacts map[string][]byte) ([]byt
 
 	exports := make(map[string]any, len(paths))
 	for _, repositoryPath := range paths {
+		if !strings.HasPrefix(repositoryPath, "packages/api/") {
+			continue
+		}
 		packagePath := strings.TrimPrefix(repositoryPath, "packages/api/")
 		id := artifactID(packagePath)
 		digest := fmt.Sprintf("%x", sha256.Sum256(artifacts[repositoryPath]))

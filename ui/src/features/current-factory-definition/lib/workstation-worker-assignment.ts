@@ -11,6 +11,6 @@ export function workstationRequiresWorkerAssignment(
 ): boolean {
   return (
     resolveEditableWorkstationType(workstation) !==
-    WorkstationType.WorkstationTypeLogicalMove
+    WorkstationType.LOGICAL_MOVE
   );
 }

@@ -1,23 +1,9 @@
 type: string
 description: Worker implementation families supported by the public factory-config contract.
-x-enum-varnames:
-  - WorkerTypeInferenceWorker
-  - WorkerTypeAgentWorker
-  - WorkerTypeScriptWorker
-  - WorkerTypePollerWorker
-  - WorkerTypeModelWorker
-  - WorkerTypeHostedWorker
 enum:
-  - INFERENCE_WORKER
-  - AGENT_WORKER
-  - SCRIPT_WORKER
-  - POLLER_WORKER
-  - MODEL_WORKER
-  - HOSTED_WORKER
-x-enum-descriptions:
-  - Inference worker that performs one bounded model operation through the configured provider or managed runtime.
-  - Agent worker that executes prompt-rendered agent loops through AGENT_RUN workstations. Model capability declarations belong on INFERENCE_WORKER, not AGENT_WORKER.
-  - Script-backed worker that executes a configured command instead of calling a model provider.
-  - Poller worker that watches an external source and emits work through repository-owned hosted runtime code.
-  - Legacy alias for inference-worker behavior during the migration window.
-  - Legacy alias for poller-worker behavior during the migration window.
+    - INFERENCE_WORKER
+    - AGENT_WORKER
+    - SCRIPT_WORKER
+    - POLLER_WORKER
+    - MODEL_WORKER
+    - HOSTED_WORKER

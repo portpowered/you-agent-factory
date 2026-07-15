@@ -236,4 +236,6 @@ schema staging through the existing contract-staging generation boundary. When
 the canonical Factory graph is not yet fully endorsable, the checked-in
 `docs/internal/contract/factory-schema-b16-gaps.json` record documents the
 concrete blocking cases and staging continues emitting the legacy projection
-until B16 closes parity without broadening conversion.
+until B16 closes parity without broadening conversion. When the record status is
+`converter_endorsed`, staging emits the converter-backed projection only and
+fails closed on any undocumented diagnostic.

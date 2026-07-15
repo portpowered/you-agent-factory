@@ -22,7 +22,7 @@ export function resolveWorkstationSummaryRequiresWorkerAssignment(
 
   if (
     selectedNode.workstation_kind?.trim().toUpperCase() ===
-    WorkstationType.WorkstationTypeLogicalMove
+    WorkstationType.LOGICAL_MOVE
   ) {
     return false;
   }

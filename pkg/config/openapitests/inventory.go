@@ -68,9 +68,9 @@ func ProjectParityInventory() ParityInventory {
 
 	return ParityInventory{
 		FormatVersion: ParityInventoryFormatVersion,
-		Scope: "Factory/OpenAPI config parity index referencing existing openapitests " +
-			"fixtures; each case records GeneratedFactoryFromOpenAPIJSON and " +
-			"FactoryConfigFromOpenAPIJSON outcomes without changing schemas or mapping behavior",
+		Scope: "Factory/OpenAPI/projected-schema config parity index referencing existing openapitests " +
+			"fixtures; each case records GeneratedFactoryFromOpenAPIJSON, FactoryConfigFromOpenAPIJSON, " +
+			"and projected Draft 2020-12 factory.schema.json outcomes without changing schemas or mapping behavior",
 		Cases: cases,
 	}
 }

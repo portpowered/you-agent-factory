@@ -19,10 +19,12 @@ properties:
     items:
       type: string
   typeHint:
-    $ref: './FactoryInvocationParameterTypeHint.yaml'
+    allOf:
+      - $ref: './FactoryInvocationParameterTypeHint.yaml'
     description: String-first hint that guides parsing, docs, and dashboard form selection.
   valueMode:
-    $ref: './FactoryInvocationParameterValueMode.yaml'
+    allOf:
+      - $ref: './FactoryInvocationParameterValueMode.yaml'
     description: Declares whether the parameter consumes one value, repeated values, variadic values, or file contents.
   required:
     type: boolean

@@ -13,13 +13,13 @@ import {
 export type ApiWorkstationKind = components["schemas"]["WorkstationKind"];
 
 export const STANDARD_WORKSTATION_KIND =
-  WorkstationKind.WorkstationKindStandard satisfies ApiWorkstationKind;
+  WorkstationKind.STANDARD satisfies ApiWorkstationKind;
 export const REPEATER_WORKSTATION_KIND =
-  WorkstationKind.WorkstationKindRepeater satisfies ApiWorkstationKind;
+  WorkstationKind.REPEATER satisfies ApiWorkstationKind;
 export const CRON_WORKSTATION_KIND =
-  WorkstationKind.WorkstationKindCron satisfies ApiWorkstationKind;
+  WorkstationKind.CRON satisfies ApiWorkstationKind;
 export const POLLER_WORKSTATION_KIND =
-  WorkstationKind.WorkstationKindPoller satisfies ApiWorkstationKind;
+  WorkstationKind.POLLER satisfies ApiWorkstationKind;
 
 export const SUPPORTED_WORKSTATION_ICON_KINDS = [
   STANDARD_WORKSTATION_KIND,

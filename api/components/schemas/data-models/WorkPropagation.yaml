@@ -8,7 +8,8 @@ description: >-
   workstation output payload.
 properties:
   mode:
-    $ref: './WorkPropagationMode.yaml'
+    allOf:
+      - $ref: './WorkPropagationMode.yaml'
     description: >-
       Propagation mode for downstream work payload selection after this
       workstation succeeds.

@@ -418,7 +418,7 @@ describe("FactoryGraphEditorAddEntityDialog", () => {
             {
               ...operation.inputs[0],
               contentTypes: [
-                ModelOperationContentType.ModelOperationContentTypeText,
+                ModelOperationContentType.TEXT,
               ],
             },
           ],
