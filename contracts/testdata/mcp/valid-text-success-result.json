@@ -2,16 +2,16 @@
   "formatVersion": "1.0.0",
   "protocolVersion": "2024-11-05",
   "tools": {
-    "mcp.tool.you.factory_session.start_sync": {
-      "id": "mcp.tool.you.factory_session.start_sync",
-      "name": "you.factory_session.start_sync",
+    "mcp.tool.you.factory_session.validate_source": {
+      "id": "mcp.tool.you.factory_session.validate_source",
+      "name": "you.factory_session.validate_source",
       "documentation": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.start_sync",
+        "itemId": "mcp.tool.you.factory_session.validate_source",
         "documentation": {
           "title": {
             "id": "mcp.fixture.you.factory_session.text_success.title",
-            "canonicalEnglish": "Start Factory Session Sync"
+            "canonicalEnglish": "Validate Factory Source"
           },
           "description": {
             "id": "mcp.fixture.you.factory_session.text_success.description",
@@ -20,11 +20,8 @@
         },
         "examples": [
           {
-            "requestId": "req-sync-fixture-001",
-            "source": {
-              "kind": "WORKFLOW_NAME",
-              "workflowName": "example.workflow"
-            }
+            "sourceKind": "WORKFLOW_NAME",
+            "sourceValue": "example.workflow"
           }
         ],
         "visibility": "public",
@@ -32,7 +29,7 @@
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.start_sync",
+        "itemId": "mcp.tool.you.factory_session.validate_source",
         "state": "active",
         "since": "1.0.0"
       },
@@ -58,25 +55,18 @@
               "type": "object",
               "additionalProperties": false,
               "required": [
-                "sessionId",
-                "status"
+                "valid"
               ],
               "properties": {
-                "sessionId": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "status": {
-                  "type": "string",
-                  "minLength": 1
+                "valid": {
+                  "type": "boolean"
                 }
               }
             },
             "examples": [
               {
                 "result": {
-                  "sessionId": "dur-sess-001",
-                  "status": "SUCCEEDED"
+                  "valid": true
                 }
               }
             ]
@@ -87,7 +77,7 @@
             "content": [
               {
                 "type": "text",
-                "text": "{\"result\":{\"sessionId\":\"dur-sess-001\",\"status\":\"SUCCEEDED\"}}"
+                "text": "{\"result\":{\"valid\":true}}"
               }
             ],
             "isError": false

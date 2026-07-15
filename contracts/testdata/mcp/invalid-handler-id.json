@@ -2,29 +2,26 @@
   "formatVersion": "1.0.0",
   "protocolVersion": "2024-11-05",
   "tools": {
-    "mcp.tool.you.factory_session.start_async": {
-      "id": "mcp.tool.you.factory_session.start_async",
-      "name": "you.factory_session.start_async",
+    "mcp.tool.you.factory_session.control": {
+      "id": "mcp.tool.you.factory_session.control",
+      "name": "you.factory_session.control",
       "documentation": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.start_async",
+        "itemId": "mcp.tool.you.factory_session.control",
         "documentation": {
           "title": {
             "id": "mcp.fixture.you.factory_session.invalid_handler.title",
-            "canonicalEnglish": "Start Factory Session Async"
+            "canonicalEnglish": "Control Factory Session"
           },
           "description": {
             "id": "mcp.fixture.you.factory_session.invalid_handler.description",
-            "canonicalEnglish": "Starts one durable Factory Session asynchronously with a broken handler identity."
+            "canonicalEnglish": "Applies one durable Factory Session lifecycle control with a broken handler identity."
           }
         },
         "examples": [
           {
-            "requestId": "req-async-broken-001",
-            "source": {
-              "kind": "WORKFLOW_NAME",
-              "workflowName": "example.workflow"
-            }
+            "sessionId": "dur-sess-ctl-broken-001",
+            "operation": "PAUSE"
           }
         ],
         "visibility": "public",
@@ -32,7 +29,7 @@
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.start_async",
+        "itemId": "mcp.tool.you.factory_session.control",
         "state": "active",
         "since": "1.0.0"
       },

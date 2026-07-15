@@ -1943,6 +1943,927 @@
       "handler": {
         "id": "mcp.handler.you.factory_session.read_events"
       }
+    },
+    "mcp.tool.you.factory_session.start_async": {
+      "id": "mcp.tool.you.factory_session.start_async",
+      "name": "you.factory_session.start_async",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.start_async",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.start_async.title",
+            "canonicalEnglish": "Start Factory Session Async"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.start_async.description",
+            "canonicalEnglish": "Start one async Factory Session and return an accepted or running summary for polling. Maps to POST /factory-sessions/async."
+          }
+        },
+        "examples": [
+          {
+            "requestId": "req-js-run-n-001",
+            "source": {
+              "kind": "FACTORY_ID",
+              "factoryId": "customer-support-triage"
+            }
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.start_async",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "transports": {
+        "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.transports_stdio/transports"
+      },
+      "execution": {
+        "mode": "tools-call"
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "input": {
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requestId",
+            "source"
+          ],
+          "properties": {
+            "requestId": {
+              "type": "string",
+              "description": "Caller-supplied idempotency key for durable Factory Session start."
+            },
+            "source": {
+              "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.source/schema"
+            },
+            "args": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Structured Factory Session invocation arguments validated by the resolved source."
+            },
+            "orchestrator": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Optional orchestrator override when the resolved source does not fully determine orchestration."
+            },
+            "requestedPolicy": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Caller-requested orchestrator policy before approval, if required."
+            },
+            "wait": {
+              "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.wait/schema"
+            }
+          }
+        },
+        "arguments": {
+          "mcp.arg.you.factory_session.start_async.request_id": {
+            "id": "mcp.arg.you.factory_session.start_async.request_id",
+            "name": "requestId",
+            "required": true,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.start_async.request_id",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.start_async.request_id.title",
+                  "canonicalEnglish": "Request ID"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.start_async.request_id.description",
+                  "canonicalEnglish": "Caller-supplied idempotency key for durable Factory Session start."
+                }
+              },
+              "examples": [
+                "req-start-001"
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "internal",
+            "examples": [
+              "req-start-001"
+            ],
+            "constraints": {
+              "minLength": 1
+            }
+          },
+          "mcp.arg.you.factory_session.start_async.source": {
+            "id": "mcp.arg.you.factory_session.start_async.source",
+            "name": "source",
+            "required": true,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.start_async.source",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.start_async.source.title",
+                  "canonicalEnglish": "Source"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.start_async.source.description",
+                  "canonicalEnglish": "Durable execution source with a closed nested object shape."
+                }
+              },
+              "examples": [
+                {
+                  "kind": "WORKFLOW_NAME",
+                  "workflowName": "release-train"
+                }
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "public",
+            "examples": [
+              {
+                "kind": "WORKFLOW_NAME",
+                "workflowName": "release-train"
+              }
+            ]
+          },
+          "mcp.arg.you.factory_session.start_async.args": {
+            "id": "mcp.arg.you.factory_session.start_async.args",
+            "name": "args",
+            "required": false,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.start_async.args",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.start_async.args.title",
+                  "canonicalEnglish": "Invocation arguments"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.start_async.args.description",
+                  "canonicalEnglish": "Structured Factory Session invocation arguments validated by the resolved source."
+                }
+              },
+              "examples": [
+                {
+                  "release": "2026.06"
+                }
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "public",
+            "examples": [
+              {
+                "release": "2026.06"
+              }
+            ]
+          },
+          "mcp.arg.you.factory_session.start_async.wait": {
+            "id": "mcp.arg.you.factory_session.start_async.wait",
+            "name": "wait",
+            "required": false,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.start_async.wait",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.start_async.wait.title",
+                  "canonicalEnglish": "Sync wait options"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.start_async.wait.description",
+                  "canonicalEnglish": "Closed nested sync wait object for timeout and cancel-on-timeout behavior."
+                }
+              },
+              "examples": [
+                {
+                  "timeoutMillis": 60000,
+                  "cancelOnTimeout": true
+                }
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "public",
+            "examples": [
+              {
+                "timeoutMillis": 60000,
+                "cancelOnTimeout": true
+              }
+            ]
+          }
+        }
+      },
+      "result": {
+        "transport": {
+          "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.result_transport_serialized_json/resultTransport"
+        },
+        "domain": {
+          "success": {
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sessionId",
+                "status",
+                "orchestratorKind",
+                "resolvedSource"
+              ],
+              "properties": {
+                "sessionId": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "QUEUED",
+                    "AWAITING_APPROVAL",
+                    "RUNNING",
+                    "PAUSED",
+                    "RESUMING",
+                    "SUCCEEDED",
+                    "FAILED",
+                    "CANCELING",
+                    "CANCELED",
+                    "TIMED_OUT",
+                    "INTERRUPTED"
+                  ]
+                },
+                "orchestratorKind": {
+                  "type": "string",
+                  "enum": [
+                    "PETRI",
+                    "JAVASCRIPT"
+                  ]
+                },
+                "resolvedSource": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "sourceRef": {
+                      "type": "string"
+                    },
+                    "sourceHash": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "sourceHash": {
+                  "type": "string"
+                },
+                "effectivePolicyHash": {
+                  "type": "string"
+                },
+                "links": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "session": {
+                      "type": "string"
+                    },
+                    "results": {
+                      "type": "string"
+                    },
+                    "dispatches": {
+                      "type": "string"
+                    },
+                    "artifacts": {
+                      "type": "string"
+                    },
+                    "events": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            },
+            "examples": [
+              {
+                "result": {
+                  "sessionId": "dur-sess-js-run-n-001",
+                  "status": "RUNNING",
+                  "orchestratorKind": "JAVASCRIPT",
+                  "resolvedSource": {
+                    "kind": "FACTORY_ID",
+                    "sourceRef": "customer-support-triage",
+                    "sourceHash": "sha256:fixture-js-run-n"
+                  },
+                  "sourceHash": "sha256:fixture-js-run-n",
+                  "effectivePolicyHash": "sha256:fixture-policy",
+                  "links": {
+                    "session": "/factory-sessions/dur-sess-js-run-n-001",
+                    "results": "/factory-sessions/dur-sess-js-run-n-001/results",
+                    "dispatches": "/factory-sessions/dur-sess-js-run-n-001/dispatches",
+                    "artifacts": "/factory-sessions/dur-sess-js-run-n-001/artifacts",
+                    "events": "/factory-sessions/dur-sess-js-run-n-001/events"
+                  }
+                }
+              }
+            ]
+          },
+          "failures": {
+            "mcp.failure.you.factory_session.start_async.request_id_conflict": {
+              "id": "mcp.failure.you.factory_session.start_async.request_id_conflict",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.start.request_id_conflict",
+                    "message": "execution request id was reused with a different start tuple",
+                    "retryable": false
+                  }
+                }
+              ]
+            },
+            "mcp.failure.you.factory_session.start_async.service_unavailable": {
+              "id": "mcp.failure.you.factory_session.start_async.service_unavailable",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.service.unavailable",
+                    "message": "factory session execution service is unavailable",
+                    "retryable": false
+                  }
+                }
+              ]
+            },
+            "mcp.failure.you.factory_session.start_async.bad_request": {
+              "id": "mcp.failure.you.factory_session.start_async.bad_request",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "BAD_REQUEST",
+                    "message": "requestId is required",
+                    "retryable": false
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "examples": [
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"result\":{\"sessionId\":\"dur-sess-js-run-n-001\",\"status\":\"RUNNING\",\"orchestratorKind\":\"JAVASCRIPT\",\"resolvedSource\":{\"kind\":\"FACTORY_ID\",\"sourceRef\":\"customer-support-triage\",\"sourceHash\":\"sha256:fixture-js-run-n\"},\"sourceHash\":\"sha256:fixture-js-run-n\",\"effectivePolicyHash\":\"sha256:fixture-policy\",\"links\":{\"session\":\"/factory-sessions/dur-sess-js-run-n-001\",\"results\":\"/factory-sessions/dur-sess-js-run-n-001/results\",\"dispatches\":\"/factory-sessions/dur-sess-js-run-n-001/dispatches\",\"artifacts\":\"/factory-sessions/dur-sess-js-run-n-001/artifacts\",\"events\":\"/factory-sessions/dur-sess-js-run-n-001/events\"}}}"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"error\":{\"code\":\"factory_session.start.request_id_conflict\",\"message\":\"execution request id was reused with a different start tuple\",\"retryable\":false}}"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "handler": {
+        "id": "mcp.handler.you.factory_session.start_async"
+      }
+    },
+    "mcp.tool.you.factory_session.start_sync": {
+      "id": "mcp.tool.you.factory_session.start_sync",
+      "name": "you.factory_session.start_sync",
+      "documentation": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.start_sync",
+        "documentation": {
+          "title": {
+            "id": "mcp.tool.you.factory_session.start_sync.title",
+            "canonicalEnglish": "Start Factory Session Sync"
+          },
+          "description": {
+            "id": "mcp.tool.you.factory_session.start_sync.description",
+            "canonicalEnglish": "Start one sync Factory Session and wait for terminal completion or timeout. Maps to POST /factory-sessions/sync."
+          }
+        },
+        "examples": [
+          {
+            "requestId": "req-petri-success-001",
+            "source": {
+              "kind": "FACTORY_ID",
+              "factoryId": "customer-support-triage"
+            },
+            "args": {
+              "ticketId": "TKT-2002"
+            },
+            "wait": {
+              "timeoutMillis": 60000,
+              "cancelOnTimeout": true
+            }
+          }
+        ],
+        "visibility": "public",
+        "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      },
+      "lifecycle": {
+        "formatVersion": "1.0.0",
+        "itemId": "mcp.tool.you.factory_session.start_sync",
+        "state": "active",
+        "since": "1.0.0"
+      },
+      "transports": {
+        "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.transports_stdio/transports"
+      },
+      "execution": {
+        "mode": "tools-call"
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": true
+      },
+      "input": {
+        "schema": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requestId",
+            "source"
+          ],
+          "properties": {
+            "requestId": {
+              "type": "string",
+              "description": "Caller-supplied idempotency key for durable Factory Session start."
+            },
+            "source": {
+              "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.source/schema"
+            },
+            "args": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Structured Factory Session invocation arguments validated by the resolved source."
+            },
+            "orchestrator": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Optional orchestrator override when the resolved source does not fully determine orchestration."
+            },
+            "requestedPolicy": {
+              "type": "object",
+              "additionalProperties": true,
+              "description": "Caller-requested orchestrator policy before approval, if required."
+            },
+            "wait": {
+              "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.wait/schema"
+            }
+          }
+        },
+        "arguments": {
+          "mcp.arg.you.factory_session.start_sync.request_id": {
+            "id": "mcp.arg.you.factory_session.start_sync.request_id",
+            "name": "requestId",
+            "required": true,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.start_sync.request_id",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.start_sync.request_id.title",
+                  "canonicalEnglish": "Request ID"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.start_sync.request_id.description",
+                  "canonicalEnglish": "Caller-supplied idempotency key for durable Factory Session start."
+                }
+              },
+              "examples": [
+                "req-start-001"
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "internal",
+            "examples": [
+              "req-start-001"
+            ],
+            "constraints": {
+              "minLength": 1
+            }
+          },
+          "mcp.arg.you.factory_session.start_sync.source": {
+            "id": "mcp.arg.you.factory_session.start_sync.source",
+            "name": "source",
+            "required": true,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.start_sync.source",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.start_sync.source.title",
+                  "canonicalEnglish": "Source"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.start_sync.source.description",
+                  "canonicalEnglish": "Durable execution source with a closed nested object shape."
+                }
+              },
+              "examples": [
+                {
+                  "kind": "WORKFLOW_NAME",
+                  "workflowName": "release-train"
+                }
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "public",
+            "examples": [
+              {
+                "kind": "WORKFLOW_NAME",
+                "workflowName": "release-train"
+              }
+            ]
+          },
+          "mcp.arg.you.factory_session.start_sync.args": {
+            "id": "mcp.arg.you.factory_session.start_sync.args",
+            "name": "args",
+            "required": false,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.start_sync.args",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.start_sync.args.title",
+                  "canonicalEnglish": "Invocation arguments"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.start_sync.args.description",
+                  "canonicalEnglish": "Structured Factory Session invocation arguments validated by the resolved source."
+                }
+              },
+              "examples": [
+                {
+                  "release": "2026.06"
+                }
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "public",
+            "examples": [
+              {
+                "release": "2026.06"
+              }
+            ]
+          },
+          "mcp.arg.you.factory_session.start_sync.wait": {
+            "id": "mcp.arg.you.factory_session.start_sync.wait",
+            "name": "wait",
+            "required": false,
+            "documentation": {
+              "formatVersion": "1.0.0",
+              "itemId": "mcp.arg.you.factory_session.start_sync.wait",
+              "documentation": {
+                "title": {
+                  "id": "mcp.arg.you.factory_session.start_sync.wait.title",
+                  "canonicalEnglish": "Sync wait options"
+                },
+                "description": {
+                  "id": "mcp.arg.you.factory_session.start_sync.wait.description",
+                  "canonicalEnglish": "Closed nested sync wait object for timeout and cancel-on-timeout behavior."
+                }
+              },
+              "examples": [
+                {
+                  "timeoutMillis": 60000,
+                  "cancelOnTimeout": true
+                }
+              ],
+              "visibility": "public",
+              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            },
+            "sensitivity": "public",
+            "examples": [
+              {
+                "timeoutMillis": 60000,
+                "cancelOnTimeout": true
+              }
+            ]
+          }
+        }
+      },
+      "result": {
+        "transport": {
+          "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.result_transport_serialized_json/resultTransport"
+        },
+        "domain": {
+          "success": {
+            "schema": {
+              "$schema": "https://json-schema.org/draft/2020-12/schema",
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sessionId",
+                "status",
+                "orchestratorKind",
+                "resolvedSource",
+                "syncOutcome"
+              ],
+              "properties": {
+                "sessionId": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "QUEUED",
+                    "AWAITING_APPROVAL",
+                    "RUNNING",
+                    "PAUSED",
+                    "RESUMING",
+                    "SUCCEEDED",
+                    "FAILED",
+                    "CANCELING",
+                    "CANCELED",
+                    "TIMED_OUT",
+                    "INTERRUPTED"
+                  ]
+                },
+                "orchestratorKind": {
+                  "type": "string",
+                  "enum": [
+                    "PETRI",
+                    "JAVASCRIPT"
+                  ]
+                },
+                "resolvedSource": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "kind"
+                  ],
+                  "properties": {
+                    "kind": {
+                      "type": "string"
+                    },
+                    "sourceRef": {
+                      "type": "string"
+                    },
+                    "sourceHash": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "sourceHash": {
+                  "type": "string"
+                },
+                "effectivePolicyHash": {
+                  "type": "string"
+                },
+                "links": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "session": {
+                      "type": "string"
+                    },
+                    "results": {
+                      "type": "string"
+                    },
+                    "dispatches": {
+                      "type": "string"
+                    },
+                    "artifacts": {
+                      "type": "string"
+                    },
+                    "events": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "syncOutcome": {
+                  "type": "string",
+                  "enum": [
+                    "COMPLETED",
+                    "TIMED_OUT",
+                    "FAILED"
+                  ]
+                },
+                "timedOut": {
+                  "type": "boolean"
+                },
+                "result": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "sessionId",
+                    "resultStatus"
+                  ],
+                  "properties": {
+                    "sessionId": {
+                      "type": "string"
+                    },
+                    "resultStatus": {
+                      "type": "string",
+                      "enum": [
+                        "NOT_READY",
+                        "UNAVAILABLE",
+                        "PARTIAL",
+                        "FINAL",
+                        "FAILED_WITH_PARTIAL"
+                      ]
+                    },
+                    "sessionStatus": {
+                      "type": "string",
+                      "enum": [
+                        "QUEUED",
+                        "AWAITING_APPROVAL",
+                        "RUNNING",
+                        "PAUSED",
+                        "RESUMING",
+                        "SUCCEEDED",
+                        "FAILED",
+                        "CANCELING",
+                        "CANCELED",
+                        "TIMED_OUT",
+                        "INTERRUPTED"
+                      ]
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "final",
+                        "partial"
+                      ]
+                    },
+                    "includeArtifacts": {
+                      "type": "boolean"
+                    },
+                    "primaryResult": {
+                      "type": "array"
+                    },
+                    "artifactIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "availability": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "reason": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "retryable": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "failureDetail": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "reason": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "examples": [
+              {
+                "result": {
+                  "sessionId": "dur-sess-petri-success-001",
+                  "status": "SUCCEEDED",
+                  "orchestratorKind": "PETRI",
+                  "resolvedSource": {
+                    "kind": "FACTORY_ID",
+                    "sourceRef": "customer-support-triage",
+                    "sourceHash": "sha256:fixture-petri-success"
+                  },
+                  "sourceHash": "sha256:fixture-petri-success",
+                  "effectivePolicyHash": "sha256:fixture-policy",
+                  "syncOutcome": "COMPLETED",
+                  "timedOut": false,
+                  "links": {
+                    "session": "/factory-sessions/dur-sess-petri-success-001",
+                    "results": "/factory-sessions/dur-sess-petri-success-001/results",
+                    "dispatches": "/factory-sessions/dur-sess-petri-success-001/dispatches",
+                    "artifacts": "/factory-sessions/dur-sess-petri-success-001/artifacts",
+                    "events": "/factory-sessions/dur-sess-petri-success-001/events"
+                  },
+                  "result": {
+                    "sessionId": "dur-sess-petri-success-001",
+                    "resultStatus": "FINAL",
+                    "sessionStatus": "SUCCEEDED",
+                    "mode": "final"
+                  }
+                }
+              }
+            ]
+          },
+          "failures": {
+            "mcp.failure.you.factory_session.start_sync.request_id_conflict": {
+              "id": "mcp.failure.you.factory_session.start_sync.request_id_conflict",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.start.request_id_conflict",
+                    "message": "execution request id was reused with a different start tuple",
+                    "retryable": false
+                  }
+                }
+              ]
+            },
+            "mcp.failure.you.factory_session.start_sync.validation_failed": {
+              "id": "mcp.failure.you.factory_session.start_sync.validation_failed",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.start.validation_failed",
+                    "message": "factory session source validation failed",
+                    "retryable": false,
+                    "sessionId": "dur-sess-pending-001"
+                  }
+                }
+              ]
+            },
+            "mcp.failure.you.factory_session.start_sync.service_unavailable": {
+              "id": "mcp.failure.you.factory_session.start_sync.service_unavailable",
+              "schema": {
+                "$ref": "#/sharedSchemas/mcp.schema.you.factory_session.domain_error_envelope/schema"
+              },
+              "examples": [
+                {
+                  "error": {
+                    "code": "factory_session.service.unavailable",
+                    "message": "factory session execution service is unavailable",
+                    "retryable": false
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "examples": [
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"result\":{\"sessionId\":\"dur-sess-petri-success-001\",\"status\":\"SUCCEEDED\",\"orchestratorKind\":\"PETRI\",\"resolvedSource\":{\"kind\":\"FACTORY_ID\",\"sourceRef\":\"customer-support-triage\",\"sourceHash\":\"sha256:fixture-petri-success\"},\"sourceHash\":\"sha256:fixture-petri-success\",\"effectivePolicyHash\":\"sha256:fixture-policy\",\"syncOutcome\":\"COMPLETED\",\"timedOut\":false,\"links\":{\"session\":\"/factory-sessions/dur-sess-petri-success-001\",\"results\":\"/factory-sessions/dur-sess-petri-success-001/results\",\"dispatches\":\"/factory-sessions/dur-sess-petri-success-001/dispatches\",\"artifacts\":\"/factory-sessions/dur-sess-petri-success-001/artifacts\",\"events\":\"/factory-sessions/dur-sess-petri-success-001/events\"},\"result\":{\"sessionId\":\"dur-sess-petri-success-001\",\"resultStatus\":\"FINAL\",\"sessionStatus\":\"SUCCEEDED\",\"mode\":\"final\"}}}"
+              }
+            ],
+            "isError": false
+          },
+          {
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"error\":{\"code\":\"factory_session.start.validation_failed\",\"message\":\"factory session source validation failed\",\"retryable\":false,\"sessionId\":\"dur-sess-pending-001\"}}"
+              }
+            ],
+            "isError": false
+          }
+        ]
+      },
+      "handler": {
+        "id": "mcp.handler.you.factory_session.start_sync"
+      }
     }
   }
 }

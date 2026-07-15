@@ -2,25 +2,26 @@
   "formatVersion": "1.0.0",
   "protocolVersion": "2024-11-05",
   "tools": {
-    "mcp.tool.you.factory_session.start_sync": {
-      "id": "mcp.tool.you.factory_session.start_sync",
-      "name": "you.factory_session.start_sync",
+    "mcp.tool.you.factory_session.validate_source": {
+      "id": "mcp.tool.you.factory_session.validate_source",
+      "name": "you.factory_session.validate_source",
       "documentation": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.start_sync",
+        "itemId": "mcp.tool.you.factory_session.validate_source",
         "documentation": {
           "title": {
-            "id": "mcp.tool.you.factory_session.start_sync.title",
-            "canonicalEnglish": "Start Factory Session Sync"
+            "id": "mcp.fixture.you.factory_session.domain_failure.title",
+            "canonicalEnglish": "Validate Factory Source"
           },
           "description": {
-            "id": "mcp.tool.you.factory_session.start_sync.description",
-            "canonicalEnglish": "Starts one durable Factory Session synchronously."
+            "id": "mcp.fixture.you.factory_session.domain_failure.description",
+            "canonicalEnglish": "Fixture-only tool record demonstrating typed domain failure paired with serialized-json text error envelope."
           }
         },
         "examples": [
           {
-            "sessionId": "dur-sess-pending-001"
+            "sourceKind": "WORKFLOW_NAME",
+            "sourceValue": "example.workflow"
           }
         ],
         "visibility": "public",
@@ -28,7 +29,7 @@
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.start_sync",
+        "itemId": "mcp.tool.you.factory_session.validate_source",
         "state": "active",
         "since": "1.0.0"
       },
@@ -49,8 +50,8 @@
         },
         "domain": {
           "failures": {
-            "mcp.failure.you.factory_session.start_sync.validation_failed": {
-              "id": "mcp.failure.you.factory_session.start_sync.validation_failed",
+            "mcp.failure.you.factory_session.validate_source.validation_failed": {
+              "id": "mcp.failure.you.factory_session.validate_source.validation_failed",
               "schema": {
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "type": "object",
@@ -71,20 +72,15 @@
                   },
                   "retryable": {
                     "type": "boolean"
-                  },
-                  "sessionId": {
-                    "type": "string",
-                    "minLength": 1
                   }
                 }
               },
               "examples": [
                 {
                   "error": {
-                    "code": "factory_session.start.validation_failed",
-                    "message": "factory session source validation failed",
-                    "retryable": false,
-                    "sessionId": "dur-sess-pending-001"
+                    "code": "factory_session.validate.invalid",
+                    "message": "factory source validation found blocking issues",
+                    "retryable": false
                   }
                 }
               ]
@@ -96,10 +92,10 @@
             "content": [
               {
                 "type": "text",
-                "text": "{\"error\":{\"code\":\"factory_session.start.validation_failed\",\"message\":\"factory session source validation failed\",\"retryable\":false,\"sessionId\":\"dur-sess-pending-001\"}}"
+                "text": "{\"error\":{\"code\":\"factory_session.validate.invalid\",\"message\":\"factory source validation found blocking issues\",\"retryable\":false}}"
               }
             ],
-            "isError": true
+            "isError": false
           }
         ]
       }

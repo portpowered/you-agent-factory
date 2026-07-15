@@ -2,25 +2,26 @@
   "formatVersion": "1.0.0",
   "protocolVersion": "2024-11-05",
   "tools": {
-    "mcp.tool.you.factory_session.start_sync": {
-      "id": "mcp.tool.you.factory_session.start_sync",
-      "name": "you.factory_session.start_sync",
+    "mcp.tool.you.factory_session.control": {
+      "id": "mcp.tool.you.factory_session.control",
+      "name": "you.factory_session.control",
       "documentation": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.start_sync",
+        "itemId": "mcp.tool.you.factory_session.control",
         "documentation": {
           "title": {
-            "id": "mcp.tool.you.factory_session.start_sync.title",
-            "canonicalEnglish": "Start Factory Session Sync"
+            "id": "mcp.fixture.you.factory_session.malformed_lifecycle.title",
+            "canonicalEnglish": "Control Factory Session"
           },
           "description": {
-            "id": "mcp.tool.you.factory_session.start_sync.description",
-            "canonicalEnglish": "Starts one synchronous Factory Session."
+            "id": "mcp.fixture.you.factory_session.malformed_lifecycle.description",
+            "canonicalEnglish": "Fixture-only tool record with malformed lifecycle metadata."
           }
         },
         "examples": [
           {
-            "requestId": "req-sync-001"
+            "sessionId": "dur-sess-ctl-001",
+            "operation": "PAUSE"
           }
         ],
         "visibility": "public",
@@ -28,10 +29,8 @@
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.start_sync",
-        "state": "deprecated",
-        "since": "1.0.0",
-        "deprecated": "2.0.0"
+        "itemId": "mcp.tool.you.factory_session.control",
+        "state": "active"
       }
     }
   }

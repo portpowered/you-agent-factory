@@ -2,29 +2,26 @@
   "formatVersion": "1.0.0",
   "protocolVersion": "2024-11-05",
   "tools": {
-    "mcp.tool.you.factory_session.start_async": {
-      "id": "mcp.tool.you.factory_session.start_async",
-      "name": "you.factory_session.start_async",
+    "mcp.tool.you.factory_session.validate_source": {
+      "id": "mcp.tool.you.factory_session.validate_source",
+      "name": "you.factory_session.validate_source",
       "documentation": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.start_async",
+        "itemId": "mcp.tool.you.factory_session.validate_source",
         "documentation": {
           "title": {
-            "id": "mcp.tool.you.factory_session.start_async.title",
-            "canonicalEnglish": "Start Factory Session Async"
+            "id": "mcp.fixture.you.factory_session.closed_nested.title",
+            "canonicalEnglish": "Validate Factory Source"
           },
           "description": {
-            "id": "mcp.tool.you.factory_session.start_async.description",
-            "canonicalEnglish": "Starts one async Factory Session and returns an accepted or running summary for polling."
+            "id": "mcp.fixture.you.factory_session.closed_nested.description",
+            "canonicalEnglish": "Fixture-only tool record demonstrating closed nested input object validation."
           }
         },
         "examples": [
           {
-            "requestId": "req-001",
-            "source": {
-              "kind": "WORKFLOW_NAME",
-              "workflowName": "example.workflow"
-            }
+            "sourceKind": "WORKFLOW_NAME",
+            "sourceValue": "example.workflow"
           }
         ],
         "visibility": "public",
@@ -32,7 +29,7 @@
       },
       "lifecycle": {
         "formatVersion": "1.0.0",
-        "itemId": "mcp.tool.you.factory_session.start_async",
+        "itemId": "mcp.tool.you.factory_session.validate_source",
         "state": "active",
         "since": "1.0.0"
       },
@@ -42,114 +39,57 @@
       "execution": {
         "mode": "tools-call"
       },
-      "annotations": {
-        "readOnlyHint": false,
-        "destructiveHint": false,
-        "idempotentHint": false,
-        "openWorldHint": true
-      },
       "input": {
         "schema": {
           "$schema": "https://json-schema.org/draft/2020-12/schema",
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "requestId",
-            "source"
+            "sourceKind"
           ],
           "properties": {
-            "requestId": {
+            "sourceKind": {
               "type": "string",
-              "minLength": 1
+              "enum": [
+                "FACTORY_ID",
+                "FACTORY_INLINE",
+                "WORKFLOW_FILE",
+                "WORKFLOW_NAME",
+                "INLINE_WORKFLOW"
+              ]
             },
-            "source": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": [
-                "kind"
-              ],
-              "properties": {
-                "kind": {
-                  "type": "string",
-                  "enum": [
-                    "FACTORY_ID",
-                    "FACTORY_INLINE",
-                    "WORKFLOW_FILE",
-                    "WORKFLOW_NAME",
-                    "INLINE_WORKFLOW"
-                  ]
-                },
-                "workflowName": {
-                  "type": "string"
-                }
-              }
+            "sourceValue": {
+              "type": "string"
             }
           }
         },
         "arguments": {
-          "mcp.arg.you.factory_session.start_async.request_id": {
-            "id": "mcp.arg.you.factory_session.start_async.request_id",
-            "name": "requestId",
+          "mcp.arg.you.factory_session.validate_source.source_kind": {
+            "id": "mcp.arg.you.factory_session.validate_source.source_kind",
+            "name": "sourceKind",
             "required": true,
             "documentation": {
               "formatVersion": "1.0.0",
-              "itemId": "mcp.arg.you.factory_session.start_async.request_id",
+              "itemId": "mcp.arg.you.factory_session.validate_source.source_kind",
               "documentation": {
                 "title": {
-                  "id": "mcp.arg.you.factory_session.start_async.request_id.title",
-                  "canonicalEnglish": "Request ID"
+                  "id": "mcp.fixture.you.factory_session.closed_nested.source_kind.title",
+                  "canonicalEnglish": "Source kind"
                 },
                 "description": {
-                  "id": "mcp.arg.you.factory_session.start_async.request_id.description",
-                  "canonicalEnglish": "Caller-supplied idempotency key for durable Factory Session start."
+                  "id": "mcp.fixture.you.factory_session.closed_nested.source_kind.description",
+                  "canonicalEnglish": "Factory preview source kind for validate_source."
                 }
               },
               "examples": [
-                "req-001"
-              ],
-              "visibility": "public",
-              "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-            },
-            "sensitivity": "internal",
-            "examples": [
-              "req-001"
-            ],
-            "constraints": {
-              "minLength": 1
-            }
-          },
-          "mcp.arg.you.factory_session.start_async.source": {
-            "id": "mcp.arg.you.factory_session.start_async.source",
-            "name": "source",
-            "required": true,
-            "documentation": {
-              "formatVersion": "1.0.0",
-              "itemId": "mcp.arg.you.factory_session.start_async.source",
-              "documentation": {
-                "title": {
-                  "id": "mcp.arg.you.factory_session.start_async.source.title",
-                  "canonicalEnglish": "Source"
-                },
-                "description": {
-                  "id": "mcp.arg.you.factory_session.start_async.source.description",
-                  "canonicalEnglish": "Durable execution source with a closed nested object shape."
-                }
-              },
-              "examples": [
-                {
-                  "kind": "WORKFLOW_NAME",
-                  "workflowName": "example.workflow"
-                }
+                "WORKFLOW_NAME"
               ],
               "visibility": "public",
               "sourceHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
             },
             "sensitivity": "public",
             "examples": [
-              {
-                "kind": "WORKFLOW_NAME",
-                "workflowName": "example.workflow"
-              }
+              "WORKFLOW_NAME"
             ]
           }
         }

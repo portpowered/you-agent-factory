@@ -302,7 +302,7 @@
       }
     },
     "closedSchemaNode": {
-      "description": "Recursive Draft schema node requiring closed objects and closed array items.",
+      "description": "Recursive Draft schema node requiring explicit object openness and closed array items.",
       "type": "object",
       "allOf": [
         {
@@ -322,30 +322,48 @@
             ],
             "properties": {
               "additionalProperties": {
-                "const": false
-              },
-              "properties": {
-                "type": "object",
-                "additionalProperties": {
-                  "$ref": "#/$defs/closedSchemaNode"
-                }
-              },
-              "patternProperties": {
-                "type": "object",
-                "additionalProperties": {
-                  "$ref": "#/$defs/closedSchemaNode"
-                }
-              },
-              "propertyNames": {
-                "$ref": "#/$defs/closedSchemaNode"
-              },
-              "$defs": {
-                "type": "object",
-                "additionalProperties": {
-                  "$ref": "#/$defs/closedSchemaNode"
+                "type": "boolean"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "additionalProperties": {
+                      "const": false
+                    }
+                  },
+                  "required": [
+                    "additionalProperties"
+                  ]
+                },
+                "then": {
+                  "properties": {
+                    "properties": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/$defs/closedSchemaNode"
+                      }
+                    },
+                    "patternProperties": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/$defs/closedSchemaNode"
+                      }
+                    },
+                    "propertyNames": {
+                      "$ref": "#/$defs/closedSchemaNode"
+                    },
+                    "$defs": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/$defs/closedSchemaNode"
+                      }
+                    }
+                  }
                 }
               }
-            }
+            ]
           }
         },
         {

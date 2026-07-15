@@ -150,7 +150,11 @@ Use this map when changing the public REST contract.
 - Tool `input` combines a closed Draft `schema` (`#/$defs/closedDraftSchema`)
   with object-keyed `arguments` using `mcp.arg.*` stable IDs; `execution.mode`
   is pinned to `tools-call` and `transports` to `stdio-json-rpc` for the
-  supported protocol surface.
+  supported protocol surface. `closedSchemaNode` requires explicit
+  `additionalProperties` on object nodes and allows `additionalProperties: true`
+  for discovery-open maps such as `args` on `start_sync` / `start_async`; start
+  tools reuse shared `#/sharedSchemas/mcp.schema.you.factory_session.source` and
+  `wait` via `$ref` in tool input schemas.
 - Reusable MCP protocol components live under `contracts/mcp/protocol/`
   (`content.schema.json` documents broader MCP content kinds; `call-tool-result.schema.json`
   defines the `pinnedTextCallToolResult` envelope used by tool `result.examples`;
