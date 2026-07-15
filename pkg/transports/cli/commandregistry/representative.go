@@ -49,3 +49,55 @@ func (r *Registry) VerifyRepresentativeRunnableCoverage(manifest climanifest.Man
 	}
 	return nil
 }
+
+// RunnableSessionCommandIDs returns contracted runnable session command IDs in
+// stable sorted order and validates their stable handler identities.
+func RunnableSessionCommandIDs(manifest climanifest.Manifest) ([]string, error) {
+	ids := make([]string, 0, len(climanifestgen.SessionFamilyCommandIDs)-1)
+	for _, commandID := range climanifestgen.SessionFamilyCommandIDs {
+		record, err := manifest.CommandByID(commandID)
+		if err != nil {
+			return nil, err
+		}
+		if !record.Runnable {
+			continue
+		}
+		if record.Handler == nil || record.Handler.ID != commandID+".handler" {
+			return nil, fmt.Errorf("session runnable command %q has invalid handler id", commandID)
+		}
+		ids = append(ids, commandID)
+	}
+	sort.Strings(ids)
+	return ids, nil
+}
+
+// VerifySessionRunnableCoverage rejects missing, extra, and cross-family
+// registrations so each generated runnable leaf resolves exactly one handler.
+func (r *Registry) VerifySessionRunnableCoverage(manifest climanifest.Manifest) error {
+	runnableIDs, err := RunnableSessionCommandIDs(manifest)
+	if err != nil {
+		return err
+	}
+	want := make(map[string]bool, len(runnableIDs))
+	for _, commandID := range runnableIDs {
+		want[commandID] = true
+	}
+	var missing, extra []string
+	for _, commandID := range runnableIDs {
+		if _, lookupErr := r.Lookup(commandID); lookupErr != nil {
+			missing = append(missing, commandID)
+		}
+	}
+	if r != nil {
+		for commandID := range r.handlers {
+			if !want[commandID] {
+				extra = append(extra, commandID)
+			}
+		}
+	}
+	sort.Strings(extra)
+	if len(missing) > 0 || len(extra) > 0 {
+		return fmt.Errorf("session runnable handler coverage mismatch: missing=%v extra=%v", missing, extra)
+	}
+	return nil
+}

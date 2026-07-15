@@ -5,9 +5,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	"github.com/spf13/cobra"
 )
@@ -24,6 +26,93 @@ func TestNewRepresentativeRegistryRegistersContractedRunnableIDs(t *testing.T) {
 		if _, lookupErr := registry.Lookup(commandID); lookupErr != nil {
 			t.Fatalf("Lookup(%q) error = %v", commandID, lookupErr)
 		}
+	}
+}
+
+func TestNewSessionRegistryRegistersExactlyCanonicalRunnableIDs(t *testing.T) {
+	registry, err := commandregistry.NewSessionRegistry(commandregistry.SessionHandlers{
+		CreateRunE: noopRunE, ListRunE: noopRunE, ShowRunE: noopRunE,
+		DeleteRunE: noopRunE, PauseRunE: noopRunE, ResumeRunE: noopRunE, DispatchesRunE: noopRunE,
+	})
+	if err != nil {
+		t.Fatalf("NewSessionRegistry() error = %v", err)
+	}
+	manifest, err := generated.SessionFamilyManifest()
+	if err != nil {
+		t.Fatalf("SessionFamilyManifest() error = %v", err)
+	}
+	if err := registry.VerifySessionRunnableCoverage(manifest); err != nil {
+		t.Fatalf("VerifySessionRunnableCoverage() error = %v", err)
+	}
+	if err := registry.Register("you.work.list", noopRunE); err != nil {
+		t.Fatalf("Register(cross-family) error = %v", err)
+	}
+	if err := registry.VerifySessionRunnableCoverage(manifest); err == nil || !strings.Contains(err.Error(), "you.work.list") {
+		t.Fatalf("VerifySessionRunnableCoverage() error = %v, want extra stable ID", err)
+	}
+}
+
+func TestVerifySessionRunnableCoverageRejectsMissingAndInvalidHandlerIDs(t *testing.T) {
+	manifest, err := generated.SessionFamilyManifest()
+	if err != nil {
+		t.Fatalf("SessionFamilyManifest() error = %v", err)
+	}
+	registry := commandregistry.NewRegistry()
+	for _, commandID := range []string{
+		"you.session.create", "you.session.list", "you.session.show", "you.session.delete",
+		"you.session.pause", "you.session.resume",
+	} {
+		if err := registry.Register(commandID, noopRunE); err != nil {
+			t.Fatalf("Register(%q) error = %v", commandID, err)
+		}
+	}
+	if err := registry.VerifySessionRunnableCoverage(manifest); err == nil || !strings.Contains(err.Error(), "you.session.dispatches") {
+		t.Fatalf("missing coverage error = %v", err)
+	}
+
+	show := manifest.Commands["you.session.show"]
+	show.Handler.ID = "you.session.delete.handler"
+	manifest.Commands["you.session.show"] = show
+	if _, err := commandregistry.RunnableSessionCommandIDs(manifest); err == nil || !strings.Contains(err.Error(), "you.session.show") {
+		t.Fatalf("invalid handler ID error = %v", err)
+	}
+}
+
+func TestSessionHandlerBindingsMapFlagsArgumentsAndDiagnostics(t *testing.T) {
+	var diagnostic bytes.Buffer
+	createCfg := sessioncli.CreateConfig{}
+	createRunE := commandregistry.SessionCreateRunE(commandregistry.SessionCreateBinding{
+		Config: &createCfg,
+		SessionDiagnosticsBinding: commandregistry.SessionDiagnosticsBinding{
+			Verbose: func() bool { return true }, Debug: boolPtr(true),
+			DiagnosticsWriter: func(*cobra.Command) io.Writer { return &diagnostic },
+		},
+		CreateSession: func(cfg sessioncli.CreateConfig) error {
+			if cfg.Dir != "factory" || !cfg.Verbose || !cfg.Debug || cfg.Diagnostics != &diagnostic {
+				t.Fatalf("create config = %#v", cfg)
+			}
+			return nil
+		},
+	})
+	cmd := &cobra.Command{Use: "create", RunE: createRunE}
+	cmd.Flags().StringVar(&createCfg.Dir, "dir", "", "")
+	cmd.SetArgs([]string{"--dir", "factory"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("create Execute() error = %v", err)
+	}
+
+	deleteCfg := sessioncli.DeleteConfig{}
+	deleteRunE := commandregistry.SessionDeleteRunE(commandregistry.SessionDeleteBinding{
+		Config: &deleteCfg,
+		DeleteSession: func(cfg sessioncli.DeleteConfig) error {
+			if cfg.SessionID != "session-beta" {
+				t.Fatalf("delete session ID = %q", cfg.SessionID)
+			}
+			return nil
+		},
+	})
+	if err := deleteRunE(&cobra.Command{Use: "delete"}, []string{"session-beta"}); err != nil {
+		t.Fatalf("delete RunE() error = %v", err)
 	}
 }
 

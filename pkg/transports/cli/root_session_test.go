@@ -33,6 +33,22 @@ func TestSessionCommand_RegistersSubcommands(t *testing.T) {
 	}
 }
 
+func TestGeneratedSessionFamilyBindsEveryCanonicalHandwrittenHandler(t *testing.T) {
+	root, err := NewGeneratedSessionFamilyCommand(RootCommandOptions{})
+	if err != nil {
+		t.Fatalf("NewGeneratedSessionFamilyCommand() error = %v", err)
+	}
+	for _, name := range []string{"create", "list", "show", "delete", "pause", "resume", "dispatches"} {
+		command, _, findErr := root.Find([]string{"session", name})
+		if findErr != nil {
+			t.Fatalf("Find(session %s) error = %v", name, findErr)
+		}
+		if command.CommandPath() != "you session "+name || command.RunE == nil {
+			t.Fatalf("session %s path=%q runnable=%t", name, command.CommandPath(), command.RunE != nil)
+		}
+	}
+}
+
 func TestSessionCommand_HelpDocumentsSubcommandsAndExamples(t *testing.T) {
 	var out bytes.Buffer
 	root := NewRootCommand()
