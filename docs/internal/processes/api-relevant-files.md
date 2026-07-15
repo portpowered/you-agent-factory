@@ -20,7 +20,9 @@ Use this map when changing the public REST contract.
   `docs/internal/contract/factory-schema-b16-gaps.json` record when the canonical
   Factory graph is not yet fully endorsable. Golden fixtures and byte-stability
   tests live beside the converter package; reuse
-  `contractjoiner.MarshalCanonicalJSON` for canonical output bytes.
+  `contractjoiner.MarshalCanonicalJSON` for canonical output bytes. Prove the
+  converter stays outside API/config/service/CLI/worker/runtime dependency paths in
+  `contracts/converter_boundary_test.go`.
 - `internal/contractstaging` owns joined generation, the reviewed raw
   source-to-package projection map, the Factory JSON Schema projection from the
   canonical bundled OpenAPI `Factory` component graph, and the package contract
@@ -52,8 +54,13 @@ Use this map when changing the public REST contract.
   authored root at `contracts/config/factory.schema.json` and the staged package
   projection at `packages/api/generated/schemas/factory.schema.json` with
   identical bytes. Prove repository parity in
-  `internal/contractstaging/raw_artifacts_test.go`; later-phase export-map
-  families such as `components/*` stay omitted until a truthful owner exists.
+  `internal/contractstaging/raw_artifacts_test.go`; prove repeated authored/staged
+  factory schema digest stability in
+  `internal/contractstaging/factory_schema_test.go`
+  (`TestFactorySchemaDigestsStableAcrossRepeatedArtifactsCalls`,
+  `TestFactorySchemaGenerationLeavesAuthoredAndStagedDigestsStableOnSecondRun`);
+  later-phase export-map families such as `components/*` stay omitted until a
+  truthful owner exists.
 - Authored JavaScript runtime symbol manifests live at
   `contracts/javascript/runtime-manifest.schema.json` with fixtures under
   `contracts/testdata/javascript/` and registration in

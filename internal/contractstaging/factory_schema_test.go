@@ -2,9 +2,11 @@ package contractstaging_test
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -172,6 +174,83 @@ func TestFactorySchemaB16GapRecordCoversCanonicalFactoryGraph(t *testing.T) {
 	if len(collected) != 0 {
 		t.Fatalf("canonical Factory graph still emits converter diagnostics = %#v, want none under converter_endorsed", collected)
 	}
+}
+
+func TestFactorySchemaDigestsStableAcrossRepeatedArtifactsCalls(t *testing.T) {
+	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
+	first, err := contractstaging.Artifacts(repositoryRoot)
+	if err != nil {
+		t.Fatalf("first Artifacts() error = %v", err)
+	}
+	second, err := contractstaging.Artifacts(repositoryRoot)
+	if err != nil {
+		t.Fatalf("second Artifacts() error = %v", err)
+	}
+	for _, path := range []string{
+		contractstaging.FactorySchemaAuthoredPath,
+		"packages/api/generated/schemas/factory.schema.json",
+	} {
+		if !bytes.Equal(first[path], second[path]) {
+			t.Fatalf("repeated Artifacts() changed factory schema bytes at %s", path)
+		}
+	}
+}
+
+func TestFactorySchemaGenerationLeavesAuthoredAndStagedDigestsStableOnSecondRun(t *testing.T) {
+	repositoryRoot := testpath.MustRepoPathFromCaller(t, 0)
+	factoryPaths := []string{
+		contractstaging.FactorySchemaAuthoredPath,
+		"packages/api/generated/schemas/factory.schema.json",
+	}
+	before := factorySchemaDigests(t, repositoryRoot, factoryPaths)
+
+	drift, err := contractstaging.Check(repositoryRoot)
+	if err != nil {
+		t.Fatalf("precondition Check() error = %v", err)
+	}
+	if !drift.Empty() {
+		t.Fatalf("precondition Check() drift = %#v, want clean staging before regeneration test", drift)
+	}
+
+	if err := contractstaging.Generate(repositoryRoot); err != nil {
+		t.Fatalf("first Generate() error = %v", err)
+	}
+	afterFirst := factorySchemaDigests(t, repositoryRoot, factoryPaths)
+	if drift, err := contractstaging.Check(repositoryRoot); err != nil {
+		t.Fatalf("Check() after first Generate() error = %v", err)
+	} else if !drift.Empty() {
+		t.Fatalf("Check() after first Generate() drift = %#v, want none", drift)
+	}
+
+	if err := contractstaging.Generate(repositoryRoot); err != nil {
+		t.Fatalf("second Generate() error = %v", err)
+	}
+	afterSecond := factorySchemaDigests(t, repositoryRoot, factoryPaths)
+	if drift, err := contractstaging.Check(repositoryRoot); err != nil {
+		t.Fatalf("Check() after second Generate() error = %v", err)
+	} else if !drift.Empty() {
+		t.Fatalf("Check() after second Generate() drift = %#v, want none", drift)
+	}
+
+	if !reflect.DeepEqual(before, afterFirst) {
+		t.Fatalf("first Generate() changed factory schema digests:\nbefore=%x\nafter=%x", before, afterFirst)
+	}
+	if !reflect.DeepEqual(afterFirst, afterSecond) {
+		t.Fatalf("second Generate() changed factory schema digests:\nfirst=%x\nsecond=%x", afterFirst, afterSecond)
+	}
+}
+
+func factorySchemaDigests(t *testing.T, root string, paths []string) map[string][sha256.Size]byte {
+	t.Helper()
+	digests := make(map[string][sha256.Size]byte, len(paths))
+	for _, path := range paths {
+		content, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+		digests[path] = sha256.Sum256(content)
+	}
+	return digests
 }
 
 func TestFactorySchemaGenerationFailsClosedOnUndocumentedDiagnostics(t *testing.T) {
