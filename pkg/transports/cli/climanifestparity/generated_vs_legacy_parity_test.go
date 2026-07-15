@@ -3,6 +3,8 @@ package climanifestparity_test
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -202,53 +204,125 @@ func mustWorkflowMCPConstructorRoots(t *testing.T) (*cobra.Command, *cobra.Comma
 }
 
 func TestGeneratedVsLegacyParityMatrix_WorkflowMCPExecution(t *testing.T) {
-	cases := []struct {
-		name    string
-		argv    []string
-		wantErr bool
-	}{
-		{
-			name: "workflow validate human success",
-			argv: []string{"workflow", "validate", "--kind", "INLINE_WORKFLOW", "--inline", `meta({ name: "review", version: 1 }); phase("setup");`},
-		},
-		{
-			name: "workflow preview JSON success",
-			argv: []string{"--json", "workflow", "preview", "--kind", "INLINE_WORKFLOW", "--inline", `meta({ name: "review", version: 1 }); phase("setup");`},
-		},
-		{
-			name:    "workflow malformed source failure",
-			argv:    []string{"workflow", "validate", "--kind", "INLINE_WORKFLOW", "--inline", "phase("},
-			wantErr: true,
-		},
-		{
-			name:    "workflow conflicting source failure",
-			argv:    []string{"workflow", "preview", "--value", "review", "--inline", `phase("setup");`},
-			wantErr: true,
-		},
-		{
-			name:    "MCP mutually exclusive source failure",
-			argv:    []string{"mcp", "serve", "--runtime", "--fixture-catalog", "fixtures.json"},
-			wantErr: true,
-		},
-	}
-	for _, tc := range cases {
+	projectRoot := workflowParityProject(t)
+	for _, tc := range workflowExecutionParityCases(projectRoot) {
 		t.Run(tc.name, func(t *testing.T) {
 			legacyRoot, generatedRoot := mustWorkflowMCPConstructorRoots(t)
 			legacyOut, legacyErrOut, legacyErr := executeConstructorRoot(legacyRoot, tc.argv)
 			generatedOut, generatedErrOut, generatedErr := executeConstructorRoot(generatedRoot, tc.argv)
-			if (legacyErr != nil) != tc.wantErr || (generatedErr != nil) != tc.wantErr {
-				t.Fatalf("execution errors: legacy=%v generated=%v wantErr=%t", legacyErr, generatedErr, tc.wantErr)
-			}
-			if fmt.Sprint(legacyErr) != fmt.Sprint(generatedErr) {
-				t.Fatalf("exit/error drift: legacy=%v generated=%v", legacyErr, generatedErr)
-			}
-			if legacyOut != generatedOut {
-				t.Fatalf("stdout drift:\nlegacy:\n%s\ngenerated:\n%s", legacyOut, generatedOut)
-			}
-			if legacyErrOut != generatedErrOut {
-				t.Fatalf("stderr drift:\nlegacy:\n%s\ngenerated:\n%s", legacyErrOut, generatedErrOut)
-			}
+			assertWorkflowExecutionParity(t, tc, legacyOut, generatedOut, legacyErrOut, generatedErrOut, legacyErr, generatedErr)
 		})
+	}
+}
+
+type workflowExecutionParityCase struct {
+	name            string
+	argv            []string
+	wantErr         bool
+	wantErrContains string
+	wantStdout      []string
+}
+
+func workflowExecutionParityCases(projectRoot string) []workflowExecutionParityCase {
+	validInline := `meta({ name: "review", version: 1 }); phase("setup");`
+	return []workflowExecutionParityCase{
+		{
+			name:       "workflow validate named human success",
+			argv:       []string{"workflow", "validate", "--dir", projectRoot, "--kind", "WORKFLOW_NAME", "--value", " review "},
+			wantStdout: []string{"Workflow validation passed.", ".claude/workflows/review.js", "Source hash:"},
+		},
+		{
+			name:       "workflow validate file JSON success",
+			argv:       []string{"--json", "workflow", "validate", "--dir", projectRoot, "--kind", "WORKFLOW_FILE", "--value", " factory/workflows/review.js "},
+			wantStdout: []string{`"valid":true`, `"sourceRef":"factory/workflows/review.js"`, `"blockingDiagnostics":[]`},
+		},
+		{
+			name:       "workflow preview inline human success",
+			argv:       []string{"workflow", "preview", "--dir", projectRoot, "--kind", "INLINE_WORKFLOW", "--inline", "  " + validInline + "  "},
+			wantStdout: []string{"Factory preview passed.", "Source ref: inline", "Policy hash:", "Result constraints:"},
+		},
+		{
+			name: "workflow preview named JSON success with optional inputs",
+			argv: []string{"--json", "workflow", "preview", "--dir", projectRoot, "--kind", "WORKFLOW_NAME", "--value", "review",
+				"--args-schema", `{"type":"object"}`, "--requested-policy", `{}`},
+			wantStdout: []string{`"valid":true`, `"sourceResolution"`, `"policyPreview"`, `"resultConstraints"`},
+		},
+		{
+			name:            "workflow malformed source failure",
+			argv:            []string{"workflow", "validate", "--dir", projectRoot, "--kind", "INLINE_WORKFLOW", "--inline", "phase("},
+			wantErr:         true,
+			wantErrContains: "workflow validation found blocking issues",
+			wantStdout:      []string{"Workflow validation failed.", "Blocking diagnostics:", "workflow.source.syntaxError"},
+		},
+		{
+			name:            "workflow unresolved source JSON failure",
+			argv:            []string{"--json", "workflow", "validate", "--dir", projectRoot, "--kind", "WORKFLOW_NAME", "--value", "missing"},
+			wantErr:         true,
+			wantErrContains: "workflow validation found blocking issues",
+			wantStdout:      []string{`"valid":false`, `"blockingDiagnostics"`, "workflow.source.notFound"},
+		},
+		{
+			name:            "workflow incomplete source failure",
+			argv:            []string{"workflow", "validate", "--dir", projectRoot, "--kind", "WORKFLOW_NAME"},
+			wantErr:         true,
+			wantErrContains: "value is required when kind is WORKFLOW_NAME",
+		},
+		{
+			name:            "workflow conflicting source failure",
+			argv:            []string{"workflow", "preview", "--dir", projectRoot, "--value", "review", "--inline", validInline},
+			wantErr:         true,
+			wantErrContains: "--inline cannot be used when kind is WORKFLOW_NAME",
+		},
+		{
+			name:            "MCP mutually exclusive source failure",
+			argv:            []string{"mcp", "serve", "--runtime", "--fixture-catalog", "fixtures.json"},
+			wantErr:         true,
+			wantErrContains: "cannot combine --runtime with --fixture-catalog",
+		},
+	}
+}
+
+func workflowParityProject(t *testing.T) string {
+	t.Helper()
+	projectRoot := t.TempDir()
+	for _, relativeDir := range []string{filepath.Join(".claude", "workflows"), filepath.Join("factory", "workflows")} {
+		dir := filepath.Join(projectRoot, relativeDir)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("create workflow fixture directory: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "review.js"), []byte(`meta({ name: "review", version: 1 }); phase("setup");`), 0o600); err != nil {
+			t.Fatalf("write workflow fixture: %v", err)
+		}
+	}
+	return projectRoot
+}
+
+func assertWorkflowExecutionParity(
+	t *testing.T,
+	tc workflowExecutionParityCase,
+	legacyOut, generatedOut, legacyErrOut, generatedErrOut string,
+	legacyErr, generatedErr error,
+) {
+	t.Helper()
+	if (legacyErr != nil) != tc.wantErr || (generatedErr != nil) != tc.wantErr {
+		t.Fatalf("execution errors: legacy=%v generated=%v wantErr=%t", legacyErr, generatedErr, tc.wantErr)
+	}
+	if fmt.Sprint(legacyErr) != fmt.Sprint(generatedErr) {
+		t.Fatalf("exit/error drift: legacy=%v generated=%v", legacyErr, generatedErr)
+	}
+	if tc.wantErrContains != "" && !strings.Contains(fmt.Sprint(legacyErr), tc.wantErrContains) {
+		t.Fatalf("error = %v, want substring %q", legacyErr, tc.wantErrContains)
+	}
+	if legacyOut != generatedOut {
+		t.Fatalf("stdout drift:\nlegacy:\n%s\ngenerated:\n%s", legacyOut, generatedOut)
+	}
+	if legacyErrOut != generatedErrOut {
+		t.Fatalf("stderr drift:\nlegacy:\n%s\ngenerated:\n%s", legacyErrOut, generatedErrOut)
+	}
+	for _, want := range tc.wantStdout {
+		if !strings.Contains(legacyOut, want) {
+			t.Fatalf("stdout missing %q:\n%s", want, legacyOut)
+		}
 	}
 }
 
