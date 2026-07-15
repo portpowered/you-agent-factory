@@ -155,8 +155,37 @@ Use this map when changing the public REST contract.
   paths under `packages/api/generated/` plus docs/license packaging; omit
   later-phase families such as `./components/*` until a truthful owner exists.
   `scripts/api-package-{pack,consumer,contract}.mjs` prove `npm pack` inventory
-  and isolated export resolution without mutating staged artifact bytes; run
-  `make api-package-pack-smoke` after contract guard changes and in
+  and isolated export resolution without mutating staged artifact bytes.
+  Development candidates are prepared by
+  `scripts/api-package-candidate.mjs`: derive their version from a stable base,
+  immutable run ID, and fixed 12-character commit prefix; stage the manifest
+  change outside the source package; and retain exactly one reviewed tarball
+  plus digest/inventory evidence. Immutable registry reconciliation lives in
+  `scripts/api-package-registry.mjs`: verify the preserved local tarball first,
+  treat an absent exact version as a publish decision, digest-check an existing
+  registry tarball for idempotent success, and fail authentication, permission,
+  dependency, or immutable-conflict outcomes without publishing or changing a
+  dist-tag. Pull-request development-package validation lives in
+  `.github/workflows/development-package.yml`: keep prerequisite contract,
+  generation/drift, API parity, package-boundary, repository-test, allowlist,
+  pack, and isolated-consumer gates in its read-only `validate` job. The
+  dependent dry-run job must pass the reviewed head SHA and one preserved
+  candidate directly through `scripts/api-package-pr-dry-run.mjs`; it must not
+  receive registry mutation credentials or OIDC permission.
+  `scripts/api-package-development-policy.mjs` owns the pure event,
+  prerequisite, and exact-head policy. Every candidate/publication job invokes
+  `scripts/api-package-development-command.mjs`, which enforces that policy and
+  calls the real mode-specific dry-run, preparation, or publication boundary;
+  inject dependencies into that same production command for behavioral coverage
+  without treating workflow source text as runtime evidence. Protected-main
+  publication prepares and uploads its candidate in a read-only job, then the
+  separately environment-protected `id-token: write` job downloads that exact
+  artifact and calls `scripts/api-package-publish.mjs`. That boundary reconciles
+  before mutation, publishes an absent version at most once with public access,
+  provenance, and the `dev` tag, digest-verifies the registry result, and installs
+  the exact registry version in a clean external consumer. Run `make
+  api-package-pack-smoke` after contract, candidate, registry, dry-run, or
+  development-package workflow guard changes and in
   `verify-build-contracts`/CI.
 
 ## REST operation identity inventory
