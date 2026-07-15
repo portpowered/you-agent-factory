@@ -498,6 +498,8 @@ func TestMockWorkersSchema_StagedProjectionMatchesAuthoredCopy(t *testing.T) {
 }
 
 func TestMockWorkersSchema_StaleStagingDetectedByContractCheck(t *testing.T) {
+	defer contractstaging.LockRepositoryStagingForTest()()
+
 	repositoryRoot := testutil.MustRepoPath(t, ".")
 	target := "packages/api/generated/schemas/mock-workers.schema.json"
 	stagedPath := filepath.Join(repositoryRoot, filepath.FromSlash(target))
@@ -506,9 +508,9 @@ func TestMockWorkersSchema_StaleStagingDetectedByContractCheck(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read staged schema: %v", err)
 	}
-	t.Cleanup(func() {
+	defer func() {
 		_ = os.WriteFile(stagedPath, before, 0o644)
-	})
+	}()
 
 	corrupted := append(append([]byte(nil), before...), '\n')
 	var (

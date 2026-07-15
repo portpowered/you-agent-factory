@@ -14,7 +14,8 @@ properties:
     type: string
     description: Resource name referenced from worker requirements and workstation resourceUsage entries.
   type:
-    $ref: './ResourceType.yaml'
+    allOf:
+      - $ref: './ResourceType.yaml'
     description: Optional uppercase resource family, such as `MODEL`, `PROVIDER_QUOTA`, or `INVOCATION_SLOT`.
   capacity:
     type: integer

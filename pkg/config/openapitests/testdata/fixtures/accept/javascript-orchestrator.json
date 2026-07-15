@@ -3,7 +3,9 @@
   "orchestrator": {
     "kind": "JAVASCRIPT",
     "javascript": {
+      "dialect": "ES2023",
       "sourceRef": "factory/workflows/review.js",
+      "sourceHash": "sha256:7b6c3f9d",
       "entrypoint": "main",
       "metadata": {"team": "platform"},
       "argsSchema": {"type": "object", "properties": {"topic": {"type": "string"}}},

@@ -181,7 +181,7 @@
       "path": "generated/mcp/tools.json"
     },
     "generated.openapi.openapi": {
-      "artifactHash": "a681459c4591ab36f249bc6a9a8b347b5e4368492a8d099ed4f88ed17e2fc774",
+      "artifactHash": "74932a7018dd449663cb9f858be203d4ec3d8de9d3b44f18e944259db0eec568",
       "documentation": {
         "documentation": {
           "description": {
@@ -198,7 +198,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.openapi.openapi",
-        "sourceHash": "a681459c4591ab36f249bc6a9a8b347b5e4368492a8d099ed4f88ed17e2fc774",
+        "sourceHash": "74932a7018dd449663cb9f858be203d4ec3d8de9d3b44f18e944259db0eec568",
         "visibility": "public"
       },
       "family": "openapi",
@@ -211,7 +211,7 @@
       "path": "generated/openapi/openapi.yaml"
     },
     "generated.schemas.factory": {
-      "artifactHash": "a533c0af09782a457e2ba787de565ffa452b5d93fa227050391bfc3ba4edfac0",
+      "artifactHash": "06ddc805d0901db1f98fcffaab366655ed5764074a1f27a6b16ace51022a2a93",
       "documentation": {
         "documentation": {
           "description": {
@@ -228,7 +228,7 @@
         ],
         "formatVersion": "1.0.0",
         "itemId": "generated.schemas.factory",
-        "sourceHash": "a533c0af09782a457e2ba787de565ffa452b5d93fa227050391bfc3ba4edfac0",
+        "sourceHash": "06ddc805d0901db1f98fcffaab366655ed5764074a1f27a6b16ace51022a2a93",
         "visibility": "public"
       },
       "family": "config",
@@ -312,5 +312,5 @@
   "formatVersion": "1.0.0",
   "packageId": "you-agent-factory.api",
   "packageVersion": "0.0.0",
-  "sourceCommit": "79b5e9c691a1a9e04a5778cee379d274f25b8672"
+  "sourceCommit": "280e13dbb101809532034fef24c6b46144f7f7cc"
 }

@@ -152,6 +152,9 @@ func catalogExtraPathIssues(
 	extraPaths := make([]string, 0)
 	for path := range catalogPaths {
 		if _, ok := expectedSet[path]; !ok {
+			if isUnsupportedCatalogSurfacePath(path) {
+				continue
+			}
 			extraPaths = append(extraPaths, path)
 		}
 	}

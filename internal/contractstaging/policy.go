@@ -12,8 +12,9 @@ import (
 const joinedOutputDirectory = "packages/api/generated/joined"
 
 const (
-	manifestTarget      = "packages/api/generated/manifest.json"
-	factorySchemaTarget = "packages/api/generated/schemas/factory.schema.json"
+	manifestTarget           = "packages/api/generated/manifest.json"
+	FactorySchemaAuthoredPath = "contracts/config/factory.schema.json"
+	factorySchemaTarget      = "packages/api/generated/schemas/factory.schema.json"
 )
 
 // RawArtifact maps one canonical repository artifact into its package-facing
@@ -68,6 +69,7 @@ func SourceIdentityPaths() []string {
 		paths = append(paths, artifact.Source)
 	}
 	paths = append(paths,
+		FactorySchemaAuthoredPath,
 		"docs/internal/contract/factory-schema-b16-gaps.json",
 		"internal/contractstaging/factory_schema.go",
 		"internal/contractstaging/factory_schema_b16_gaps.go",

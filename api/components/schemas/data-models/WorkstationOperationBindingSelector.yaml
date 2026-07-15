@@ -9,7 +9,8 @@ properties:
     type: string
     description: Match a content part by its label field.
   type:
-    $ref: './ModelOperationContentType.yaml'
+    allOf:
+      - $ref: './ModelOperationContentType.yaml'
     description: Match a content part by its uppercase public type.
   role:
     type: string

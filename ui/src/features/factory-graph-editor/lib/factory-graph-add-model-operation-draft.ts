@@ -6,11 +6,11 @@ type ModelOperationContentTypeValue =
   components["schemas"]["ModelOperationContentType"];
 
 export const FACTORY_GRAPH_ADD_MODEL_OPERATION_CONTENT_TYPES = [
-  ModelOperationContentType.ModelOperationContentTypeText,
-  ModelOperationContentType.ModelOperationContentTypeImage,
-  ModelOperationContentType.ModelOperationContentTypeAudio,
-  ModelOperationContentType.ModelOperationContentTypeJSON,
-  ModelOperationContentType.ModelOperationContentTypeBinary,
+  ModelOperationContentType.TEXT,
+  ModelOperationContentType.IMAGE,
+  ModelOperationContentType.AUDIO,
+  ModelOperationContentType.JSON,
+  ModelOperationContentType.BINARY,
 ] as const satisfies readonly ModelOperationContentTypeValue[];
 
 export interface FactoryGraphAddModelOperationSlotDraft {

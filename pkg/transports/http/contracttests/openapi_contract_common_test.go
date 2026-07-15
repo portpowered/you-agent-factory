@@ -405,11 +405,6 @@ func assertOpenAPI3ArrayPropertyDescription(t *testing.T, schema *openapi3.Schem
 	return property.Items.Value
 }
 
-func assertOpenAPI3RefPropertyDescription(t *testing.T, schema *openapi3.Schema, schemaName string, propertyName string) *openapi3.Schema {
-	t.Helper()
-	return assertOpenAPI3PropertyDescription(t, schema, schemaName, propertyName)
-}
-
 func assertOpenAPI3PropertyRef(t *testing.T, schema *openapi3.Schema, schemaName string, propertyName string, wantRef string) {
 	t.Helper()
 	property, ok := schema.Properties[propertyName]

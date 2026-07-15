@@ -1,18 +1,15 @@
 type: object
 additionalProperties: false
 required:
-  - logical
-  - physical
+    - logical
+    - physical
 properties:
-  logical:
-    type: string
-    format: int64
-    pattern: '^[0-9]+$'
-    x-go-type: apitypes.Int64String
-    x-go-type-import:
-      path: github.com/portpowered/infinite-you/pkg/transports/http/apitypes
-    description: Monotonic Lamport-style logical component derived from the persisted factory definition version. Serialized as a decimal string so JavaScript clients can round-trip the 64-bit value without precision loss.
-  physical:
-    type: string
-    format: date-time
-    description: UTC physical timestamp component for the persisted factory definition version.
+    logical:
+        type: string
+        format: int64
+        pattern: '^[0-9]+$'
+        description: Monotonic Lamport-style logical component derived from the persisted factory definition version. Serialized as a decimal string so JavaScript clients can round-trip the 64-bit value without precision loss.
+    physical:
+        type: string
+        format: date-time
+        description: UTC physical timestamp component for the persisted factory definition version.

@@ -15,6 +15,31 @@ func TestVerifyProjectedInstalledBindings_PassesForLiveDescriptor(t *testing.T) 
 	}
 }
 
+func TestClassifySurface_CentralizesUnsupportedSymbolPolicy(t *testing.T) {
+	tests := []struct {
+		path string
+		kind string
+		want symbolidentity.SurfaceClassification
+	}{
+		{path: "workflow.final", kind: "function", want: symbolidentity.SurfaceSupported},
+		{path: "context.session", kind: "property", want: symbolidentity.SurfaceForbiddenHostGlobal},
+		{path: "orchestrator", kind: "object", want: symbolidentity.SurfaceForbiddenHostGlobal},
+		{path: "workflow.sleep", kind: "function", want: symbolidentity.SurfaceComparisonProjectHelper},
+		{path: "agent.verify", kind: "function", want: symbolidentity.SurfaceComparisonProjectHelper},
+		{path: "agent.parallel", kind: "function", want: symbolidentity.SurfaceComparisonProjectHelper},
+		{path: "agent", kind: "function", want: symbolidentity.SurfaceCallableAgentGlobal},
+		{path: "agent", kind: "object", want: symbolidentity.SurfaceSupported},
+	}
+
+	for _, test := range tests {
+		t.Run(test.path+"/"+test.kind, func(t *testing.T) {
+			if got := symbolidentity.ClassifySurface(test.path, test.kind); got != test.want {
+				t.Fatalf("ClassifySurface(%q, %q) = %q, want %q", test.path, test.kind, got, test.want)
+			}
+		})
+	}
+}
+
 func TestVerifyInventory_FailsWhenExpectedPathMissing(t *testing.T) {
 	inventory := symbolidentity.ProjectInstalledBindings()
 	filtered := make([]symbolidentity.SymbolRecord, 0, len(inventory.Symbols)-1)

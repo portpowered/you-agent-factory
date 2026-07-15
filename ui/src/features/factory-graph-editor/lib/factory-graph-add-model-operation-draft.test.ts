@@ -17,7 +17,7 @@ describe("factory graph add model operation draft", () => {
           inputs: [
             {
               contentTypes: [
-                ModelOperationContentType.ModelOperationContentTypeText,
+                ModelOperationContentType.TEXT,
               ],
               name: "text",
               required: true,
@@ -27,7 +27,7 @@ describe("factory graph add model operation draft", () => {
           outputs: [
             {
               contentTypes: [
-                ModelOperationContentType.ModelOperationContentTypeAudio,
+                ModelOperationContentType.AUDIO,
               ],
               name: "audio",
               required: false,
@@ -54,7 +54,7 @@ describe("factory graph add model operation draft", () => {
             },
             {
               contentTypes: [
-                ModelOperationContentType.ModelOperationContentTypeText,
+                ModelOperationContentType.TEXT,
               ],
               name: "text",
               required: false,
@@ -73,7 +73,7 @@ describe("factory graph add model operation draft", () => {
           inputs: [
             {
               contentTypes: [
-                ModelOperationContentType.ModelOperationContentTypeText,
+                ModelOperationContentType.TEXT,
               ],
               name: "text",
               required: true,
@@ -83,7 +83,7 @@ describe("factory graph add model operation draft", () => {
           outputs: [
             {
               contentTypes: [
-                ModelOperationContentType.ModelOperationContentTypeAudio,
+                ModelOperationContentType.AUDIO,
               ],
               name: "audio",
               required: false,
@@ -119,12 +119,12 @@ describe("factory graph add model operation draft", () => {
     const operation = createEmptyFactoryGraphAddModelOperationDraft();
     operation.name = "TTS";
     operation.inputs[0] = {
-      contentTypes: [ModelOperationContentType.ModelOperationContentTypeText],
+      contentTypes: [ModelOperationContentType.TEXT],
       name: "text",
       required: true,
     };
     operation.outputs[0] = {
-      contentTypes: [ModelOperationContentType.ModelOperationContentTypeAudio],
+      contentTypes: [ModelOperationContentType.AUDIO],
       name: "audio",
       required: false,
     };

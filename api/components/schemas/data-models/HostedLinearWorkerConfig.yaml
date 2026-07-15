@@ -16,8 +16,10 @@ properties:
     items:
       type: string
   mapping:
-    $ref: './HostedLinearWorkerMapping.yaml'
+    allOf:
+      - $ref: './HostedLinearWorkerMapping.yaml'
     description: Deterministic mapping fields for canonical work submission generation.
   claim:
-    $ref: './HostedLinearWorkerClaim.yaml'
+    allOf:
+      - $ref: './HostedLinearWorkerClaim.yaml'
     description: Optional claim-related configuration that v1 hosted Linear polling allows.

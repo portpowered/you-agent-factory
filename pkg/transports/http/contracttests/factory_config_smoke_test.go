@@ -641,10 +641,10 @@ func assertFactoryConfigSmokeGeneratedWorkstations(t *testing.T, factory factory
 	if firstWorkstation.Type == nil || *firstWorkstation.Type != factoryapi.WorkstationTypeAgentRun {
 		t.Fatalf("generated boundary workstation type = %#v, want AGENT_RUN", firstWorkstation.Type)
 	}
-	if firstWorkstation.Guards == nil || len(*firstWorkstation.Guards) != 1 || (*firstWorkstation.Guards)[0].Type != factoryapi.GuardTypeVisitCount {
+	if firstWorkstation.Guards == nil || len(*firstWorkstation.Guards) != 1 || (*firstWorkstation.Guards)[0].Type != factoryapi.WorkstationGuardTypeVISITCOUNT {
 		t.Fatalf("generated boundary workstation guards = %#v, want VISIT_COUNT", firstWorkstation.Guards)
 	}
-	if len(firstWorkstation.Inputs) < 2 || firstWorkstation.Inputs[1].Guards == nil || len(*firstWorkstation.Inputs[1].Guards) != 1 || (*firstWorkstation.Inputs[1].Guards)[0].Type != factoryapi.GuardTypeAllChildrenComplete {
+	if len(firstWorkstation.Inputs) < 2 || firstWorkstation.Inputs[1].Guards == nil || len(*firstWorkstation.Inputs[1].Guards) != 1 || (*firstWorkstation.Inputs[1].Guards)[0].Type != factoryapi.InputGuardTypeALLCHILDRENCOMPLETE {
 		t.Fatalf("generated boundary input guards = %#v, want ALL_CHILDREN_COMPLETE", firstWorkstation.Inputs)
 	}
 }

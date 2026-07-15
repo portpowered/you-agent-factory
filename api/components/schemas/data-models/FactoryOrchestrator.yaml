@@ -9,8 +9,10 @@ properties:
   kind:
     $ref: './FactoryOrchestratorKind.yaml'
   petri:
-    $ref: './FactoryOrchestratorPetriConfig.yaml'
+    allOf:
+      - $ref: './FactoryOrchestratorPetriConfig.yaml'
     description: Petri-specific orchestrator configuration. Required only when kind = PETRI and additional Petri options are authored.
   javascript:
-    $ref: './FactoryOrchestratorJavaScriptConfig.yaml'
+    allOf:
+      - $ref: './FactoryOrchestratorJavaScriptConfig.yaml'
     description: JavaScript-specific orchestrator configuration. Required when kind = JAVASCRIPT.

@@ -42,7 +42,7 @@ func TestSameTraceIDGuard_FixtureBoundaryMapsToRuntimeConfig(t *testing.T) {
 	}
 
 	guard := (*workstation.Inputs[1].Guards)[0]
-	if guard.Type != factoryapi.GuardTypeSameTraceID {
+	if guard.Type != factoryapi.InputGuardTypeSAMETRACEID {
 		t.Fatalf("generated guard type = %q, want SAME_TRACE_ID", guard.Type)
 	}
 	if guard.MatchInput == nil || *guard.MatchInput != "plan" {
