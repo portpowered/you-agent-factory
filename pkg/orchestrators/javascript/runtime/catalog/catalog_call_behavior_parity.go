@@ -249,84 +249,77 @@ func catalogParameterParityIssues(
 			})
 			continue
 		}
-		if got, _ := param["name"].(string); got != wantParam.Name {
-			issues = append(issues, CallBehaviorParityIssue{
-				Code:      "javascript.call_behavior.mismatch",
-				SymbolKey: symbolKey,
-				Path:      path,
-				Field:     field,
-				Message: fmt.Sprintf(
-					"catalog %s parameters[%d].name = %q, want %q",
-					strconv.Quote(path),
-					i,
-					got,
-					wantParam.Name,
-				),
-			})
-		}
-		if got, _ := param["required"].(bool); got != wantParam.Required {
-			issues = append(issues, CallBehaviorParityIssue{
-				Code:      "javascript.call_behavior.mismatch",
-				SymbolKey: symbolKey,
-				Path:      path,
-				Field:     field,
-				Message: fmt.Sprintf(
-					"catalog %s parameters[%d].required = %v, want %v",
-					strconv.Quote(path),
-					i,
-					got,
-					wantParam.Required,
-				),
-			})
-		}
-		if got, _ := param["type"].(string); got != wantParam.Type {
-			issues = append(issues, CallBehaviorParityIssue{
-				Code:      "javascript.call_behavior.mismatch",
-				SymbolKey: symbolKey,
-				Path:      path,
-				Field:     field,
-				Message: fmt.Sprintf(
-					"catalog %s parameters[%d].type = %q, want %q",
-					strconv.Quote(path),
-					i,
-					got,
-					wantParam.Type,
-				),
-			})
-		}
-		gotRest, _ := param["rest"].(bool)
-		if gotRest != wantParam.Rest {
-			issues = append(issues, CallBehaviorParityIssue{
-				Code:      "javascript.call_behavior.mismatch",
-				SymbolKey: symbolKey,
-				Path:      path,
-				Field:     field,
-				Message: fmt.Sprintf(
-					"catalog %s parameters[%d].rest = %v, want %v",
-					strconv.Quote(path),
-					i,
-					gotRest,
-					wantParam.Rest,
-				),
-			})
-		}
-		if wantParam.Default != "" {
-			got, _ := param["default"].(string)
-			if got != wantParam.Default {
-				issues = append(issues, CallBehaviorParityIssue{
-					Code:      "javascript.call_behavior.mismatch",
-					SymbolKey: symbolKey,
-					Path:      path,
-					Field:     field,
-					Message: fmt.Sprintf(
-						"catalog %s parameters[%d].default = %q, want %q",
-						strconv.Quote(path),
-						i,
-						got,
-						wantParam.Default,
-					),
-				})
-			}
+		issues = append(issues, catalogSingleParameterParityIssues(symbolKey, path, field, i, param, wantParam)...)
+	}
+	return issues
+}
+
+func catalogSingleParameterParityIssues(
+	symbolKey string,
+	path string,
+	field string,
+	index int,
+	param map[string]any,
+	wantParam callbehavior.Parameter,
+) []CallBehaviorParityIssue {
+	var issues []CallBehaviorParityIssue
+	appendMismatch := func(message string) {
+		issues = append(issues, CallBehaviorParityIssue{
+			Code:      "javascript.call_behavior.mismatch",
+			SymbolKey: symbolKey,
+			Path:      path,
+			Field:     field,
+			Message:   message,
+		})
+	}
+
+	if got, _ := param["name"].(string); got != wantParam.Name {
+		appendMismatch(fmt.Sprintf(
+			"catalog %s parameters[%d].name = %q, want %q",
+			strconv.Quote(path),
+			index,
+			got,
+			wantParam.Name,
+		))
+	}
+	if got, _ := param["required"].(bool); got != wantParam.Required {
+		appendMismatch(fmt.Sprintf(
+			"catalog %s parameters[%d].required = %v, want %v",
+			strconv.Quote(path),
+			index,
+			got,
+			wantParam.Required,
+		))
+	}
+	if got, _ := param["type"].(string); got != wantParam.Type {
+		appendMismatch(fmt.Sprintf(
+			"catalog %s parameters[%d].type = %q, want %q",
+			strconv.Quote(path),
+			index,
+			got,
+			wantParam.Type,
+		))
+	}
+	gotRest, _ := param["rest"].(bool)
+	if gotRest != wantParam.Rest {
+		appendMismatch(fmt.Sprintf(
+			"catalog %s parameters[%d].rest = %v, want %v",
+			strconv.Quote(path),
+			index,
+			gotRest,
+			wantParam.Rest,
+		))
+	}
+	if wantParam.Default != "" {
+		got, _ := param["default"].(string)
+		if got != wantParam.Default {
+			appendMismatch(fmt.Sprintf(
+				"catalog %s parameters[%d].default = %q, want %q",
+				strconv.Quote(path),
+				index,
+				got,
+				wantParam.Default,
+			))
 		}
 	}
 	return issues
