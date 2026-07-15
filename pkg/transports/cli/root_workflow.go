@@ -375,8 +375,7 @@ func NewLegacySessionFamilyCommand(options RootCommandOptions) *cobra.Command {
 
 // NewGeneratedSessionFamilyCommand builds an isolated root/session tree from
 // generated metadata with all execution paths bound to handwritten handlers.
-// Production continues to use the representative cutover until the dedicated
-// session-family cutover story changes the localized root seam.
+// Production uses the same constructor through its session-local cutover seam.
 func NewGeneratedSessionFamilyCommand(options RootCommandOptions) (*cobra.Command, error) {
 	options = normalizeRootCommandOptions(options)
 	globals := &cliGlobalOptions{server: cliserver.DefaultBaseURI}
