@@ -192,9 +192,7 @@ describe("App shell export submission flows", () => {
           ).disabled,
         ).toBe(false);
       });
-      fireEvent.change(within(dialog).getByLabelText("Factory name"), {
-        target: { value: "Factory Poster" },
-      });
+      expect(within(dialog).getByDisplayValue("Factory Poster")).toBeTruthy();
       const imageInput = within(dialog).getByLabelText(
         "Cover image",
       ) as HTMLInputElement;
@@ -212,10 +210,7 @@ describe("App shell export submission flows", () => {
 
       await waitFor(() => {
         expect(writeFactoryExportPngSpy).toHaveBeenCalledWith({
-          factory: {
-            ...exportFactoryWithoutVersion,
-            name: "Factory Poster",
-          },
+          factory: exportFactoryWithoutVersion,
           image: expect.any(File),
         });
       });
@@ -311,7 +306,7 @@ describe("App shell export submission flows", () => {
       }
       await waitFor(() => {
         expect(exportProbe.getDownloadedFilename()).toBe(
-          "semantic-workflow.png",
+          "factory-poster.png",
         );
       });
       await settleAppShellDashboardEffects();

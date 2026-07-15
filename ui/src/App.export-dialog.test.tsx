@@ -64,7 +64,7 @@ describe("App shell export dialog flows", () => {
       });
       await waitFor(() => {
         expect(
-          within(dialog).getByDisplayValue("semantic-workflow"),
+          within(dialog).getByDisplayValue("Factory Poster"),
         ).toBeTruthy();
       });
       expect(
@@ -176,7 +176,7 @@ describe("App shell export dialog flows", () => {
       });
       await waitFor(() => {
         expect(
-          within(firstDialog).getByDisplayValue("semantic-workflow"),
+          within(firstDialog).getByDisplayValue("Factory Poster"),
         ).toBeTruthy();
       });
       fireEvent.click(
