@@ -55,6 +55,25 @@ export function DashboardSessionProvider({
   children,
   renderDiscoveryState,
 }: DashboardSessionProviderProps) {
+  const inheritedScope = useContext(DashboardSessionContext);
+
+  if (inheritedScope !== null) {
+    return children;
+  }
+
+  return (
+    <DashboardSessionDiscoveryProvider
+      renderDiscoveryState={renderDiscoveryState}
+    >
+      {children}
+    </DashboardSessionDiscoveryProvider>
+  );
+}
+
+function DashboardSessionDiscoveryProvider({
+  children,
+  renderDiscoveryState,
+}: DashboardSessionProviderProps) {
   const selectedSessionID = useDashboardSessionStore(
     (state) => state.selectedSessionID,
   );

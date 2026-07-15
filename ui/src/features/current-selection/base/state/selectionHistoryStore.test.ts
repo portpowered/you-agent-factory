@@ -72,6 +72,39 @@ describe("selectionHistoryStore", () => {
     expect(useSelectionHistoryStore.getState().present.selection).toBeNull();
   });
 
+  it("reconciles from the latest explicit selection instead of a stale render", () => {
+    const staleSelection = { kind: "node" as const, nodeId: "review" };
+    const explicitSelection = {
+      dispatchId: "dispatch-active",
+      kind: "work-item" as const,
+      nodeId: "implement",
+      workItem: {
+        display_name: "Active Story",
+        work_id: "work-active",
+        work_type_id: "story",
+      },
+    };
+    const store = useSelectionHistoryStore.getState();
+
+    store.replacePresent({
+      selection: staleSelection,
+      terminalWorkDetail: null,
+    });
+    store.commitSelectionState({
+      selection: explicitSelection,
+      terminalWorkDetail: null,
+    });
+    store.reconcilePresent((present) => ({
+      ...present,
+      selection:
+        present.selection === staleSelection ? null : present.selection,
+    }));
+
+    expect(useSelectionHistoryStore.getState().present.selection).toEqual(
+      explicitSelection,
+    );
+  });
+
   it("includes worker selections in undo and redo history", () => {
     const store = useSelectionHistoryStore.getState();
 

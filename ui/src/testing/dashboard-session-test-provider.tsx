@@ -1,5 +1,8 @@
 import { type ReactNode, useMemo } from "react";
-import { DEFAULT_FACTORY_SESSION_ID } from "../api/session-routing";
+import {
+  DEFAULT_FACTORY_SESSION_ID,
+  isDefaultFactorySessionID,
+} from "../api/session-routing";
 import { buildSessionScope } from "../api/session-scope";
 import { DashboardSessionScopeProvider } from "../features/dashboard/session/dashboard-session-provider";
 // biome-ignore lint/style/noRestrictedImports: the shared test harness intentionally projects controlled store changes without production discovery IO.
@@ -34,17 +37,26 @@ export function DashboardSessionTestProvider({
 
 export function DashboardSessionStoreTestProvider({
   children,
-}: Pick<DashboardSessionTestProviderProps, "children">) {
+  resolvedDefaultSessionID,
+}: Pick<DashboardSessionTestProviderProps, "children"> & {
+  resolvedDefaultSessionID?: string;
+}) {
   const selectedSessionID = useDashboardSessionStore(
     (state) => state.selectedSessionID,
   );
   const pausedSessionIDs = useDashboardSessionStore(
     (state) => state.pausedSessionIDs,
   );
-  const scope = useMemo(
-    () => buildSessionScope(selectedSessionID, pausedSessionIDs),
-    [pausedSessionIDs, selectedSessionID],
-  );
+  const scope = useMemo(() => {
+    const resolvesDefault =
+      resolvedDefaultSessionID != null &&
+      isDefaultFactorySessionID(selectedSessionID);
+    return buildSessionScope(
+      resolvesDefault ? resolvedDefaultSessionID : selectedSessionID,
+      pausedSessionIDs,
+      resolvesDefault,
+    );
+  }, [pausedSessionIDs, resolvedDefaultSessionID, selectedSessionID]);
 
   return (
     <DashboardSessionScopeProvider scope={scope}>

@@ -60,6 +60,7 @@ describe("App shell export submission flows", () => {
   it("validates the export fields and accepts the confirmed name plus selected image", async () => {
     const exportProbe = installExportDownloadProbe();
     const { fetchMock } = renderApp({
+      sessionID: APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID,
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
@@ -158,6 +159,7 @@ describe("App shell export submission flows", () => {
         ok: true,
       });
     const { fetchMock } = renderApp({
+      sessionID: APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID,
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
@@ -242,6 +244,7 @@ describe("App shell export submission flows", () => {
         return exportResultPromise;
       });
     const { fetchMock } = renderApp({
+      sessionID: APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID,
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });

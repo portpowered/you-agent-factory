@@ -6,28 +6,28 @@ import { useSelectionSynchronization } from "./useCurrentSelection.synchronizati
 describe("useSelectionSynchronization", () => {
   it("resets selection history when the dashboard snapshot is unavailable", () => {
     const resetSelectionHistory = vi.fn();
-    const replacePresent = vi.fn();
+    const reconcilePresent = vi.fn();
 
     renderHook(() =>
       useSelectionSynchronization({
         pendingFactoryDefinition: undefined,
         projectedWorkstationRequestsByDispatchID: undefined,
-        replacePresent,
+        reconcilePresent,
         resetSelectionHistory,
-        selection: null,
         snapshot: null,
-        terminalWorkDetail: null,
         topologyFactory: undefined,
       }),
     );
 
     expect(resetSelectionHistory).toHaveBeenCalledTimes(1);
-    expect(replacePresent).not.toHaveBeenCalled();
+    expect(reconcilePresent).not.toHaveBeenCalled();
   });
 
   it("reconciles selection against the saved and pending factory documents", () => {
     const resetSelectionHistory = vi.fn();
-    const replacePresent = vi.fn();
+    const reconcilePresent = vi.fn((reconcile) =>
+      reconcile({ selection, terminalWorkDetail: null }),
+    );
     const snapshot = {
       factory: {
         name: "Current Factory",
@@ -51,17 +51,16 @@ describe("useSelectionSynchronization", () => {
       useSelectionSynchronization({
         pendingFactoryDefinition: snapshot.factory,
         projectedWorkstationRequestsByDispatchID: {},
-        replacePresent,
+        reconcilePresent,
         resetSelectionHistory,
-        selection,
         snapshot,
-        terminalWorkDetail: null,
         topologyFactory: snapshot.factory,
       }),
     );
 
     expect(resetSelectionHistory).not.toHaveBeenCalled();
-    expect(replacePresent).toHaveBeenCalledWith({
+    expect(reconcilePresent).toHaveBeenCalledTimes(1);
+    expect(reconcilePresent.mock.results[0]?.value).toEqual({
       selection,
       terminalWorkDetail: null,
     });

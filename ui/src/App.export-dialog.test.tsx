@@ -38,6 +38,7 @@ describe("App shell export dialog flows", () => {
   it("opens the export dialog from the toolbar and dismisses it without dashboard side effects", async () => {
     const exportProbe = installExportDownloadProbe();
     const { fetchMock } = renderApp({
+      sessionID: APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID,
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
@@ -143,6 +144,7 @@ describe("App shell export dialog flows", () => {
         ok: true,
       });
     const { fetchMock } = renderApp({
+      sessionID: APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID,
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });
@@ -249,6 +251,7 @@ describe("App shell export dialog flows", () => {
       .spyOn(factoryPngExportModule, "writeFactoryExportPng")
       .mockReturnValue(pendingExport.promise);
     const { fetchMock } = renderApp({
+      sessionID: APP_SHELL_RESOLVED_DEFAULT_SESSION_UUID,
       snapshot: baselineSnapshot,
       timelineEvents: exportTimelineEvents,
     });

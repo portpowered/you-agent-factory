@@ -7,17 +7,15 @@ import type {
   DashboardWorkstationRequest,
 } from "../../../../api/dashboard/types";
 import {
-  findFactoryBundledDocFile,
   type FactoryBundledDocFile,
+  findFactoryBundledDocFile,
 } from "../../../workflow-activity/lib/factory-bundled-docs";
 import {
   resourceTokenCountFromSnapshot,
   workerNamesReferencingResourceInFactoryDefinition,
   workstationNamesReferencingResourceInFactoryDefinition,
 } from "../../resource-selection/lib/resource-detail-values";
-import {
-  findFactoryResourceInSnapshot,
-} from "../../state/dashboardSelection";
+import { findFactoryResourceInSnapshot } from "../../state/dashboardSelection";
 import type {
   DashboardSelection,
   TerminalWorkDetail,
@@ -263,7 +261,10 @@ export function useCurrentSelectionDerivedState({
   const currentFactoryDefinition =
     resolveCurrentFactoryDocumentFromSnapshot(snapshot);
   const selectedWorkstationRequest =
-    selection?.kind === "workstation-request" ? selection.request : null;
+    selection?.kind === "workstation-request"
+      ? (projectedWorkstationRequestsByDispatchID?.[selection.dispatchId] ??
+        selection.request)
+      : null;
   const selectedStatePlace =
     selection?.kind === "state-node" && snapshot
       ? findStatePlace(snapshot, selection.placeId)
@@ -305,8 +306,8 @@ export function useCurrentSelectionDerivedState({
   const selectedWorkID =
     selection?.kind === "work-item"
       ? selection.workItem.work_id
-      : selection?.kind === "workstation-request"
-        ? (selection.request.work_items[0]?.work_id ?? null)
+      : selectedWorkstationRequest
+        ? (selectedWorkstationRequest.work_items[0]?.work_id ?? null)
         : (terminalWorkDetail?.traceWorkID ?? null);
   const selectedDocTargetPath =
     selection?.kind === "doc" ? selection.targetPath : null;
