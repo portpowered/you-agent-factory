@@ -62,20 +62,11 @@ func canonicalizeRunRequestEventPayloads(artifact *interfaces.ReplayArtifact) er
 		if err != nil {
 			return fmt.Errorf("decode run started event %q factory: %w", event.Id, err)
 		}
-		generatedEvent, err := generatedEventFromDomain(*event)
+		encodedPayload, err := json.Marshal(generatedPayload)
 		if err != nil {
-			return err
-		}
-		var union factoryapi.FactoryEvent_Payload
-		if err := union.FromRunRequestEventPayload(generatedPayload); err != nil {
 			return fmt.Errorf("encode run started event payload: %w", err)
 		}
-		generatedEvent.Payload = union
-		converted, err := interfaces.NewFactoryEvent(generatedEvent)
-		if err != nil {
-			return err
-		}
-		*event = converted
+		event.Payload = encodedPayload
 	}
 	return nil
 }
@@ -91,6 +82,18 @@ func generatedRunRequestPayload(payload interfaces.RunRequestEventPayload) (fact
 		WallClock:   generatedWallClock(replayWallClockFromRunEvent(payload.WallClock)),
 		Diagnostics: generatedDiagnostics(replayDiagnosticsFromRunEvent(payload.Diagnostics)),
 	}, nil
+}
+
+func encodeRunRequestEventPayload(payload interfaces.RunRequestEventPayload) (json.RawMessage, error) {
+	generated, err := generatedRunRequestPayload(payload)
+	if err != nil {
+		return nil, err
+	}
+	encoded, err := json.Marshal(generated)
+	if err != nil {
+		return nil, fmt.Errorf("encode run request event payload: %w", err)
+	}
+	return encoded, nil
 }
 
 // NewEventLogArtifactFromFactory creates a replay artifact shell whose first
@@ -126,20 +129,20 @@ func runStartedEventFromFactory(recordedAt time.Time, generatedFactory factoryap
 		WallClock:   generatedWallClock(wallClock),
 		Diagnostics: generatedDiagnostics(diagnostics),
 	}
-	var union factoryapi.FactoryEvent_Payload
-	if err := union.FromRunRequestEventPayload(payload); err != nil {
+	encodedPayload, err := json.Marshal(payload)
+	if err != nil {
 		return interfaces.FactoryEvent{}, fmt.Errorf("encode run started event payload: %w", err)
 	}
-	return interfaces.NewFactoryEvent(factoryapi.FactoryEvent{
+	return interfaces.FactoryEvent{
 		Id:            replayRunStartedEventID,
-		SchemaVersion: factoryapi.AgentFactoryEventV1,
-		Type:          factoryapi.FactoryEventTypeRunRequest,
-		Context: factoryapi.FactoryEventContext{
+		SchemaVersion: interfaces.FactoryEventSchemaVersionV1,
+		Type:          interfaces.FactoryEventTypeRunRequest,
+		Context: interfaces.FactoryEventContext{
 			EventTime: recordedAt,
 			Tick:      0,
 		},
-		Payload: union,
-	})
+		Payload: encodedPayload,
+	}, nil
 }
 
 func runFinishedEvent(finishedAt time.Time, wallClock *interfaces.ReplayWallClockMetadata, diagnostics interfaces.ReplayDiagnostics) interfaces.FactoryEvent {
@@ -478,14 +481,6 @@ func assignEventSequences(events []interfaces.FactoryEvent) {
 			events[i].Context.EventTime = time.Now().UTC()
 		}
 	}
-}
-
-func generatedEventFromDomain(event interfaces.FactoryEvent) (factoryapi.FactoryEvent, error) {
-	var generated factoryapi.FactoryEvent
-	if err := event.Decode(&generated); err != nil {
-		return factoryapi.FactoryEvent{}, fmt.Errorf("decode factory event %q at replay compatibility boundary: %w", event.Id, err)
-	}
-	return generated, nil
 }
 
 func generatedDispatchConsumedWorkRefsFromReplayDispatch(dispatch work.WorkDispatch) []factoryapi.DispatchConsumedWorkRef {

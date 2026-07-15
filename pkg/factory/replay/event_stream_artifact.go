@@ -185,20 +185,11 @@ func normalizeEventStreamRunRequestFactories(events []interfaces.FactoryEvent) e
 			}
 		}
 
-		generatedEvent, err := generatedEventFromDomain(*event)
+		encodedPayload, err := json.Marshal(generatedPayload)
 		if err != nil {
-			return err
-		}
-		var union factoryapi.FactoryEvent_Payload
-		if err := union.FromRunRequestEventPayload(generatedPayload); err != nil {
 			return fmt.Errorf("normalize run started event payload: %w", err)
 		}
-		generatedEvent.Payload = union
-		converted, err := interfaces.NewFactoryEvent(generatedEvent)
-		if err != nil {
-			return err
-		}
-		*event = converted
+		event.Payload = encodedPayload
 	}
 	return nil
 }
@@ -437,49 +428,38 @@ func mergeRuntimeWorkstationExecution(workstation *factoryapi.Workstation, autho
 }
 
 func rewriteArtifactFactoryEvents(artifact *interfaces.ReplayArtifact, generated factoryapi.Factory) error {
+	snapshot, err := interfaces.NewFactorySnapshot(generated)
+	if err != nil {
+		return fmt.Errorf("capture hydrated replay factory: %w", err)
+	}
 	for i := range artifact.Events {
 		event := &artifact.Events[i]
 		switch event.Type {
 		case interfaces.FactoryEventTypeRunRequest:
-			generatedEvent, err := generatedEventFromDomain(*event)
-			if err != nil {
-				return err
-			}
-			payload, err := generatedEvent.Payload.AsRunRequestEventPayload()
-			if err != nil {
+			var payload interfaces.RunRequestEventPayload
+			if err := event.DecodePayload(&payload); err != nil {
 				return fmt.Errorf("decode run request event %q: %w", event.Id, err)
 			}
-			payload.Factory = generated
-			var union factoryapi.FactoryEvent_Payload
-			if err := union.FromRunRequestEventPayload(payload); err != nil {
+			payload.Factory = snapshot.Clone()
+			encodedPayload, err := encodeRunRequestEventPayload(payload)
+			if err != nil {
 				return fmt.Errorf("rewrite run request factory payload: %w", err)
 			}
-			generatedEvent.Payload = union
-			converted, err := interfaces.NewFactoryEvent(generatedEvent)
-			if err != nil {
-				return err
-			}
-			*event = converted
+			event.Payload = encodedPayload
 		case interfaces.FactoryEventTypeInitialStructureRequest:
-			generatedEvent, err := generatedEventFromDomain(*event)
-			if err != nil {
-				return err
-			}
-			payload, err := generatedEvent.Payload.AsInitialStructureRequestEventPayload()
-			if err != nil {
+			var payload map[string]json.RawMessage
+			if err := event.DecodePayload(&payload); err != nil {
 				return fmt.Errorf("decode initial structure event %q: %w", event.Id, err)
 			}
-			payload.Factory = generated
-			var union factoryapi.FactoryEvent_Payload
-			if err := union.FromInitialStructureRequestEventPayload(payload); err != nil {
+			if payload == nil {
+				return fmt.Errorf("decode initial structure event %q: payload object is required", event.Id)
+			}
+			payload["factory"] = append(json.RawMessage(nil), (*snapshot)...)
+			encodedPayload, err := json.Marshal(payload)
+			if err != nil {
 				return fmt.Errorf("rewrite initial structure factory payload: %w", err)
 			}
-			generatedEvent.Payload = union
-			converted, err := interfaces.NewFactoryEvent(generatedEvent)
-			if err != nil {
-				return err
-			}
-			*event = converted
+			event.Payload = encodedPayload
 		}
 	}
 	return nil

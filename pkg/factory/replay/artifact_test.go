@@ -796,7 +796,8 @@ func requireReplayInferenceResponse(t *testing.T, events []interfaces.FactoryEve
 
 func mustGeneratedReplayEvent(t *testing.T, event interfaces.FactoryEvent) factoryapi.FactoryEvent {
 	t.Helper()
-	generated, err := generatedEventFromDomain(event)
+	var generated factoryapi.FactoryEvent
+	err := event.Decode(&generated)
 	if err != nil {
 		t.Fatalf("decode replay event %q: %v", event.Id, err)
 	}
