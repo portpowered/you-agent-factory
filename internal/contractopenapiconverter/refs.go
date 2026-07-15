@@ -116,66 +116,27 @@ func (ctx *convertContext) convertSchemaObject(schema map[string]any, path strin
 		childPath := joinPath(path, key)
 		switch key {
 		case "properties":
-			properties, ok := value.(map[string]any)
-			if !ok {
-				return nil, []contractvalidator.Diagnostic{invalidSchemaValue(childPath)}
-			}
-			converted := make(map[string]any, len(properties))
-			for name, property := range properties {
-				propertyValue, diagnostics := ctx.convertNode(property, joinPath(childPath, name))
-				if len(diagnostics) != 0 {
-					return nil, diagnostics
-				}
-				propertySchema, ok := propertyValue.(map[string]any)
-				if !ok {
-					return nil, []contractvalidator.Diagnostic{invalidSchemaValue(joinPath(childPath, name))}
-				}
-				converted[name] = propertySchema
-			}
-			result[key] = converted
-		case "items":
-			itemValue, diagnostics := ctx.convertNode(value, childPath)
+			converted, diagnostics := ctx.convertPropertiesField(value, childPath)
 			if len(diagnostics) != 0 {
 				return nil, diagnostics
 			}
-			itemSchema, ok := itemValue.(map[string]any)
-			if !ok {
-				return nil, []contractvalidator.Diagnostic{invalidSchemaValue(childPath)}
+			result[key] = converted
+		case "items":
+			itemSchema, diagnostics := ctx.convertItemsField(value, childPath)
+			if len(diagnostics) != 0 {
+				return nil, diagnostics
 			}
 			result[key] = itemSchema
 		case "additionalProperties":
-			switch typed := value.(type) {
-			case bool:
-				result[key] = typed
-			case map[string]any:
-				additionalValue, diagnostics := ctx.convertNode(typed, childPath)
-				if len(diagnostics) != 0 {
-					return nil, diagnostics
-				}
-				additionalSchema, ok := additionalValue.(map[string]any)
-				if !ok {
-					return nil, []contractvalidator.Diagnostic{invalidSchemaValue(childPath)}
-				}
-				result[key] = additionalSchema
-			default:
-				return nil, []contractvalidator.Diagnostic{invalidSchemaValue(childPath)}
+			additionalSchema, diagnostics := ctx.convertAdditionalPropertiesField(value, childPath)
+			if len(diagnostics) != 0 {
+				return nil, diagnostics
 			}
+			result[key] = additionalSchema
 		case "allOf", "oneOf", "anyOf":
-			schemas, ok := value.([]any)
-			if !ok {
-				return nil, []contractvalidator.Diagnostic{invalidSchemaValue(childPath)}
-			}
-			converted := make([]any, len(schemas))
-			for index, child := range schemas {
-				childValue, diagnostics := ctx.convertNode(child, joinPath(childPath, fmt.Sprintf("%d", index)))
-				if len(diagnostics) != 0 {
-					return nil, diagnostics
-				}
-				childSchema, ok := childValue.(map[string]any)
-				if !ok {
-					return nil, []contractvalidator.Diagnostic{invalidSchemaValue(joinPath(childPath, fmt.Sprintf("%d", index)))}
-				}
-				converted[index] = childSchema
+			converted, diagnostics := ctx.convertCompositionField(value, childPath)
+			if len(diagnostics) != 0 {
+				return nil, diagnostics
 			}
 			result[key] = converted
 		case "type":

@@ -2,7 +2,6 @@ package contractopenapiconverter_test
 
 import (
 	"bytes"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -41,10 +40,7 @@ func TestConvertCompositionNullableSchemaGoldenFixtures(t *testing.T) {
 			}
 
 			goldenPath := filepath.Join("testdata", "golden", name+".json")
-			golden, err := os.ReadFile(goldenPath)
-			if err != nil {
-				t.Fatalf("read golden %s: %v", goldenPath, err)
-			}
+			golden := readGoldenBytes(t, goldenPath)
 			if !bytes.Equal(firstJSON, golden) {
 				t.Fatalf("converted output differs from golden %s:\ngot:\n%s\nwant:\n%s", goldenPath, firstJSON, golden)
 			}
