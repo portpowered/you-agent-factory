@@ -11,7 +11,6 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 const maxEventStreamLineBytes = 16 * 1024 * 1024
@@ -168,24 +167,10 @@ func normalizeEventStreamRunRequestFactories(events []interfaces.FactoryEvent) e
 		if err != nil {
 			return err
 		}
-		generatedPayload, err := generatedRunRequestPayload(payload)
-		if err != nil {
+		if err := normalizeLegacyCronFactorySnapshot(payload.Factory); err != nil {
 			return fmt.Errorf("decode run started event %q factory: %w", event.Id, err)
 		}
-		if generatedPayload.Factory.Workstations != nil {
-			for workstationIndex := range *generatedPayload.Factory.Workstations {
-				workstation := &(*generatedPayload.Factory.Workstations)[workstationIndex]
-				if workstation.Behavior != nil &&
-					*workstation.Behavior == factoryapi.WorkstationKindCron &&
-					workstation.Cron == nil {
-					workstation.Cron = &factoryapi.WorkstationCron{
-						Schedule: legacyEventStreamCronPlaceholderSchedule,
-					}
-				}
-			}
-		}
-
-		encodedPayload, err := json.Marshal(generatedPayload)
+		encodedPayload, err := encodeRunRequestEventPayload(payload)
 		if err != nil {
 			return fmt.Errorf("normalize run started event payload: %w", err)
 		}
@@ -206,23 +191,18 @@ func hydrateArtifactFromAdjacentFactory(eventStreamPath string, artifact *interf
 	if !ok {
 		return nil
 	}
-	generated, ok := generateAdjacentFactoryRuntimeConfig(loaded)
+	authored, ok := generateAdjacentFactoryRuntimeConfig(loaded)
 	if !ok {
 		return nil
 	}
-	recorded, err := generatedFactoryFromSnapshot(artifact.Factory)
+	merged, err := mergeFactorySnapshotsMissingRuntimeFields(artifact.Factory, authored)
 	if err != nil {
 		return err
 	}
-	merged := mergeGeneratedFactoryMissingRuntimeFields(recorded, generated)
 	if err := rewriteArtifactFactoryEvents(artifact, merged); err != nil {
 		return err
 	}
-	snapshot, err := interfaces.NewFactorySnapshot(merged)
-	if err != nil {
-		return fmt.Errorf("capture hydrated replay factory: %w", err)
-	}
-	artifact.Factory = snapshot
+	artifact.Factory = merged
 	return nil
 }
 
@@ -250,7 +230,7 @@ func loadAdjacentRuntimeConfig(factoryDir string) (*config.LoadedFactoryConfig, 
 	return loaded, true
 }
 
-func generateAdjacentFactoryRuntimeConfig(loaded *config.LoadedFactoryConfig) (factoryapi.Factory, bool) {
+func generateAdjacentFactoryRuntimeConfig(loaded *config.LoadedFactoryConfig) (*interfaces.FactorySnapshot, bool) {
 	generated, err := GeneratedFactoryFromRuntimeConfig(
 		loaded.FactoryDir(),
 		loaded.FactoryConfig(),
@@ -258,180 +238,190 @@ func generateAdjacentFactoryRuntimeConfig(loaded *config.LoadedFactoryConfig) (f
 		WithGeneratedFactorySourceDirectory(loaded.FactoryDir()),
 	)
 	if err != nil {
-		return factoryapi.Factory{}, false
+		return nil, false
 	}
-	return generated, true
-}
-
-func mergeGeneratedFactoryMissingRuntimeFields(recorded factoryapi.Factory, authored factoryapi.Factory) factoryapi.Factory {
-	merged := recorded
-	mergeFactoryMetadataFields(&merged, authored)
-	mergeRuntimeWorkerFields(&merged, authored)
-	mergeRuntimeWorkstationFields(&merged, authored)
-	return merged
-}
-
-func mergeFactoryMetadataFields(merged *factoryapi.Factory, authored factoryapi.Factory) {
-	if merged.FactoryDirectory == nil {
-		merged.FactoryDirectory = authored.FactoryDirectory
-	}
-	if merged.SourceDirectory == nil {
-		merged.SourceDirectory = authored.SourceDirectory
-	}
-	if merged.Id == nil {
-		merged.Id = authored.Id
-	}
-	if merged.Metadata == nil || len(*merged.Metadata) == 0 {
-		merged.Metadata = authored.Metadata
-	}
-	if merged.InputTypes == nil || len(*merged.InputTypes) == 0 {
-		merged.InputTypes = authored.InputTypes
-	}
-}
-
-func mergeRuntimeWorkerFields(merged *factoryapi.Factory, authored factoryapi.Factory) {
-	if merged.Workers == nil || authored.Workers == nil {
-		return
-	}
-	authoredByName := make(map[string]factoryapi.Worker, len(*authored.Workers))
-	for _, worker := range *authored.Workers {
-		authoredByName[worker.Name] = worker
-	}
-	for i := range *merged.Workers {
-		worker := &(*merged.Workers)[i]
-		authoredWorker, ok := authoredByName[worker.Name]
-		if !ok {
-			continue
-		}
-		mergeRuntimeWorker(worker, authoredWorker)
-	}
-}
-
-func mergeRuntimeWorker(worker *factoryapi.Worker, authored factoryapi.Worker) {
-	if worker.Type == nil {
-		worker.Type = authored.Type
-	}
-	if worker.Command == nil {
-		worker.Command = authored.Command
-	}
-	if worker.Args == nil || len(*worker.Args) == 0 {
-		worker.Args = authored.Args
-	}
-	if worker.ModelProvider == nil {
-		worker.ModelProvider = authored.ModelProvider
-	}
-	if worker.ExecutorProvider == nil {
-		worker.ExecutorProvider = authored.ExecutorProvider
-	}
-	if worker.Timeout == nil {
-		worker.Timeout = authored.Timeout
-	}
-	if worker.StopToken == nil {
-		worker.StopToken = authored.StopToken
-	}
-	if worker.SkipPermissions == nil {
-		worker.SkipPermissions = authored.SkipPermissions
-	}
-	if worker.Body == nil {
-		worker.Body = authored.Body
-	}
-	if worker.Resources == nil || len(*worker.Resources) == 0 {
-		worker.Resources = authored.Resources
-	}
-}
-
-func mergeRuntimeWorkstationFields(merged *factoryapi.Factory, authored factoryapi.Factory) {
-	if merged.Workstations == nil || authored.Workstations == nil {
-		return
-	}
-	authoredByName := make(map[string]factoryapi.Workstation, len(*authored.Workstations))
-	for _, workstation := range *authored.Workstations {
-		authoredByName[workstation.Name] = workstation
-	}
-	for i := range *merged.Workstations {
-		workstation := &(*merged.Workstations)[i]
-		authoredWorkstation, ok := authoredByName[workstation.Name]
-		if !ok {
-			continue
-		}
-		mergeRuntimeWorkstation(workstation, authoredWorkstation)
-	}
-}
-
-func mergeRuntimeWorkstation(workstation *factoryapi.Workstation, authored factoryapi.Workstation) {
-	mergeRuntimeWorkstationIdentity(workstation, authored)
-	mergeRuntimeWorkstationFlow(workstation, authored)
-	mergeRuntimeWorkstationExecution(workstation, authored)
-}
-
-func mergeRuntimeWorkstationIdentity(workstation *factoryapi.Workstation, authored factoryapi.Workstation) {
-	if workstation.Id == nil {
-		workstation.Id = authored.Id
-	}
-	if workstation.Behavior == nil {
-		workstation.Behavior = authored.Behavior
-	}
-	if workstation.Type == nil {
-		workstation.Type = authored.Type
-	}
-	if workstation.Worker == "" {
-		workstation.Worker = authored.Worker
-	}
-}
-
-func mergeRuntimeWorkstationFlow(workstation *factoryapi.Workstation, authored factoryapi.Workstation) {
-	if len(workstation.Inputs) == 0 {
-		workstation.Inputs = authored.Inputs
-	}
-	if workstation.Outputs == nil || len(*workstation.Outputs) == 0 {
-		workstation.Outputs = authored.Outputs
-	}
-	if workstation.OnFailure == nil {
-		workstation.OnFailure = authored.OnFailure
-	}
-	if workstation.OnContinue == nil {
-		workstation.OnContinue = authored.OnContinue
-	}
-	if workstation.OnRejection == nil {
-		workstation.OnRejection = authored.OnRejection
-	}
-}
-
-func mergeRuntimeWorkstationExecution(workstation *factoryapi.Workstation, authored factoryapi.Workstation) {
-	if workstation.Resources == nil || len(*workstation.Resources) == 0 {
-		workstation.Resources = authored.Resources
-	}
-	if workstation.Cron == nil {
-		workstation.Cron = authored.Cron
-	}
-	if workstation.Guards == nil || len(*workstation.Guards) == 0 {
-		workstation.Guards = authored.Guards
-	}
-	if workstation.Limits == nil {
-		workstation.Limits = authored.Limits
-	}
-	if workstation.Worktree == nil {
-		workstation.Worktree = authored.Worktree
-	}
-	if workstation.WorkingDirectory == nil {
-		workstation.WorkingDirectory = authored.WorkingDirectory
-	}
-	if workstation.PromptFile == nil {
-		workstation.PromptFile = authored.PromptFile
-	}
-	if workstation.Body == nil {
-		workstation.Body = authored.Body
-	}
-	if workstation.StopWords == nil || len(*workstation.StopWords) == 0 {
-		workstation.StopWords = authored.StopWords
-	}
-}
-
-func rewriteArtifactFactoryEvents(artifact *interfaces.ReplayArtifact, generated factoryapi.Factory) error {
 	snapshot, err := interfaces.NewFactorySnapshot(generated)
+	return snapshot, err == nil
+}
+
+func normalizeLegacyCronFactorySnapshot(snapshot *interfaces.FactorySnapshot) error {
+	factory, err := factorySnapshotObject(snapshot)
 	if err != nil {
-		return fmt.Errorf("capture hydrated replay factory: %w", err)
+		return err
 	}
+	workstations, ok, err := objectArrayField(factory, "workstations")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	for _, workstation := range workstations {
+		if rawStringField(workstation, "behavior") == "CRON" && rawFieldMissing(workstation, "cron") {
+			workstation["cron"] = json.RawMessage(`{"schedule":"` + legacyEventStreamCronPlaceholderSchedule + `"}`)
+		}
+	}
+	encodedWorkstations, err := json.Marshal(workstations)
+	if err != nil {
+		return fmt.Errorf("encode normalized replay workstations: %w", err)
+	}
+	factory["workstations"] = encodedWorkstations
+	updated, err := interfaces.NewFactorySnapshot(factory)
+	if err != nil {
+		return fmt.Errorf("capture normalized replay factory: %w", err)
+	}
+	*snapshot = *updated
+	return nil
+}
+
+func mergeFactorySnapshotsMissingRuntimeFields(recorded, authored *interfaces.FactorySnapshot) (*interfaces.FactorySnapshot, error) {
+	merged, err := factorySnapshotObject(recorded)
+	if err != nil {
+		return nil, err
+	}
+	authoredObject, err := factorySnapshotObject(authored)
+	if err != nil {
+		return nil, err
+	}
+	copyMissingFields(merged, authoredObject, "factoryDirectory", "sourceDirectory", "id")
+	copyEmptyFields(merged, authoredObject, "metadata", "inputTypes")
+	if err := mergeNamedRuntimeEntries(merged, authoredObject, "workers", mergeRuntimeWorkerFields); err != nil {
+		return nil, err
+	}
+	if err := mergeNamedRuntimeEntries(merged, authoredObject, "workstations", mergeRuntimeWorkstationFields); err != nil {
+		return nil, err
+	}
+	snapshot, err := interfaces.NewFactorySnapshot(merged)
+	if err != nil {
+		return nil, fmt.Errorf("capture hydrated replay factory: %w", err)
+	}
+	return snapshot, nil
+}
+
+func mergeRuntimeWorkerFields(worker, authored map[string]json.RawMessage) {
+	copyMissingFields(worker, authored, "type", "command", "modelProvider", "executorProvider", "timeout", "stopToken", "skipPermissions", "body")
+	copyEmptyFields(worker, authored, "args", "resources")
+}
+
+func mergeRuntimeWorkstationFields(workstation, authored map[string]json.RawMessage) {
+	copyMissingFields(workstation, authored,
+		"id", "behavior", "type", "onFailure", "onContinue", "onRejection",
+		"cron", "limits", "worktree", "workingDirectory", "promptFile", "body",
+	)
+	copyBlankStringFields(workstation, authored, "worker")
+	copyEmptyFields(workstation, authored, "inputs", "outputs", "resources", "guards", "stopWords")
+}
+
+func mergeNamedRuntimeEntries(factory, authored map[string]json.RawMessage, field string, merge func(map[string]json.RawMessage, map[string]json.RawMessage)) error {
+	entries, ok, err := objectArrayField(factory, field)
+	if err != nil || !ok {
+		return err
+	}
+	authoredEntries, ok, err := objectArrayField(authored, field)
+	if err != nil || !ok {
+		return err
+	}
+	authoredByName := make(map[string]map[string]json.RawMessage, len(authoredEntries))
+	for _, entry := range authoredEntries {
+		authoredByName[rawStringField(entry, "name")] = entry
+	}
+	for _, entry := range entries {
+		if authoredEntry, found := authoredByName[rawStringField(entry, "name")]; found {
+			merge(entry, authoredEntry)
+		}
+	}
+	encodedEntries, err := json.Marshal(entries)
+	if err != nil {
+		return fmt.Errorf("encode replay factory %s: %w", field, err)
+	}
+	factory[field] = encodedEntries
+	return nil
+}
+
+func factorySnapshotObject(snapshot *interfaces.FactorySnapshot) (map[string]json.RawMessage, error) {
+	if snapshot == nil {
+		return nil, fmt.Errorf("replay artifact factory is required")
+	}
+	var object map[string]json.RawMessage
+	if err := snapshot.Decode(&object); err != nil {
+		return nil, fmt.Errorf("decode replay artifact factory: %w", err)
+	}
+	return object, nil
+}
+
+func objectArrayField(object map[string]json.RawMessage, field string) ([]map[string]json.RawMessage, bool, error) {
+	raw, ok := object[field]
+	if !ok || string(raw) == "null" {
+		return nil, false, nil
+	}
+	var entries []map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		return nil, false, fmt.Errorf("decode replay factory %s: %w", field, err)
+	}
+	return entries, true, nil
+}
+
+func copyMissingFields(target, source map[string]json.RawMessage, fields ...string) {
+	for _, field := range fields {
+		if sourceValue, ok := source[field]; rawFieldMissing(target, field) && ok && len(sourceValue) > 0 && string(sourceValue) != "null" {
+			target[field] = cloneRawMessage(sourceValue)
+		}
+	}
+}
+
+func copyEmptyFields(target, source map[string]json.RawMessage, fields ...string) {
+	for _, field := range fields {
+		if sourceValue, ok := source[field]; rawFieldEmpty(target, field) && ok && len(sourceValue) > 0 && string(sourceValue) != "null" {
+			target[field] = cloneRawMessage(sourceValue)
+		}
+	}
+}
+
+func copyBlankStringFields(target, source map[string]json.RawMessage, fields ...string) {
+	for _, field := range fields {
+		if rawStringField(target, field) == "" {
+			if sourceValue, ok := source[field]; ok && len(sourceValue) > 0 && string(sourceValue) != "null" {
+				target[field] = cloneRawMessage(sourceValue)
+			}
+		}
+	}
+}
+
+func rawFieldMissing(object map[string]json.RawMessage, field string) bool {
+	raw, ok := object[field]
+	return !ok || len(raw) == 0 || string(raw) == "null"
+}
+
+func rawFieldEmpty(object map[string]json.RawMessage, field string) bool {
+	if rawFieldMissing(object, field) {
+		return true
+	}
+	raw := object[field]
+	var collection any
+	if err := json.Unmarshal(raw, &collection); err != nil {
+		return false
+	}
+	switch value := collection.(type) {
+	case []any:
+		return len(value) == 0
+	case map[string]any:
+		return len(value) == 0
+	default:
+		return false
+	}
+}
+
+func rawStringField(object map[string]json.RawMessage, field string) string {
+	var value string
+	_ = json.Unmarshal(object[field], &value)
+	return value
+}
+
+func cloneRawMessage(raw json.RawMessage) json.RawMessage {
+	return append(json.RawMessage(nil), raw...)
+}
+
+func rewriteArtifactFactoryEvents(artifact *interfaces.ReplayArtifact, snapshot *interfaces.FactorySnapshot) error {
 	for i := range artifact.Events {
 		event := &artifact.Events[i]
 		switch event.Type {

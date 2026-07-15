@@ -142,6 +142,75 @@ func TestSaveArtifactFromEventStreamFile_HydratesAdjacentFactoryAndRewritesEmbed
 	assertReplayHydratedFactoryRuntime(t, initialPayload.Factory)
 }
 
+func TestMergeFactorySnapshotsMissingRuntimeFields_PreservesUnknownRecordedFields(t *testing.T) {
+	recorded, err := interfaces.NewFactorySnapshot(map[string]any{
+		"name":          "customer-project",
+		"futureFactory": map[string]any{"enabled": true},
+		"workers": []map[string]any{{
+			"name":         "executor",
+			"futureWorker": "retained",
+		}},
+		"workstations": []map[string]any{{
+			"name":              "execute-story",
+			"worker":            "",
+			"futureWorkstation": []string{"retained"},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot(recorded): %v", err)
+	}
+	authored, err := interfaces.NewFactorySnapshot(map[string]any{
+		"name":             "customer-project",
+		"factoryDirectory": "/factory",
+		"workers": []map[string]any{{
+			"name":    "executor",
+			"type":    "SCRIPT_WORKER",
+			"command": "go",
+		}},
+		"workstations": []map[string]any{{
+			"name":       "execute-story",
+			"worker":     "executor",
+			"promptFile": "prompt.md",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("NewFactorySnapshot(authored): %v", err)
+	}
+
+	merged, err := mergeFactorySnapshotsMissingRuntimeFields(recorded, authored)
+	if err != nil {
+		t.Fatalf("mergeFactorySnapshotsMissingRuntimeFields: %v", err)
+	}
+	var got map[string]any
+	if err := merged.Decode(&got); err != nil {
+		t.Fatalf("Decode merged snapshot: %v", err)
+	}
+	assertMergedFactorySnapshotFields(t, got)
+}
+
+func assertMergedFactorySnapshotFields(t *testing.T, got map[string]any) {
+	t.Helper()
+	if got["factoryDirectory"] != "/factory" {
+		t.Fatalf("factoryDirectory = %#v, want /factory", got["factoryDirectory"])
+	}
+	if future, ok := got["futureFactory"].(map[string]any); !ok || future["enabled"] != true {
+		t.Fatalf("futureFactory = %#v, want preserved object", got["futureFactory"])
+	}
+	workers := got["workers"].([]any)
+	worker := workers[0].(map[string]any)
+	if worker["type"] != "SCRIPT_WORKER" || worker["command"] != "go" || worker["futureWorker"] != "retained" {
+		t.Fatalf("merged worker = %#v", worker)
+	}
+	workstations := got["workstations"].([]any)
+	workstation := workstations[0].(map[string]any)
+	if workstation["worker"] != "executor" || workstation["promptFile"] != "prompt.md" {
+		t.Fatalf("merged workstation = %#v", workstation)
+	}
+	if future, ok := workstation["futureWorkstation"].([]any); !ok || len(future) != 1 || future[0] != "retained" {
+		t.Fatalf("futureWorkstation = %#v, want preserved collection", workstation["futureWorkstation"])
+	}
+}
+
 func decodeReplayFactorySnapshot(t *testing.T, snapshot *interfaces.FactorySnapshot) factoryapi.Factory {
 	t.Helper()
 	var factory factoryapi.Factory
