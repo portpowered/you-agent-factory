@@ -14,7 +14,7 @@ const successMessage = "[agent-factory:cli-manifest-generate] CLI family metadat
 
 func main() {
 	root := flag.String("root", ".", "repository root")
-	check := flag.Bool("check", false, "verify generated representative-family artifacts are current")
+	check := flag.Bool("check", false, "verify generated CLI family artifacts are current")
 	flag.Parse()
 	os.Exit(run(*root, *check, os.Stdout, os.Stderr))
 }
@@ -59,7 +59,11 @@ func writeDrift(stderr io.Writer, drift climanifestgen.Drift) {
 		sort.Strings(paths)
 		fmt.Fprintf(stderr, "  %s:\n", category.label)
 		for _, path := range paths {
-			fmt.Fprintf(stderr, "    - %s\n", path)
+			fmt.Fprintf(stderr, "    - %s", path)
+			if ids := drift.CommandIDs[path]; len(ids) > 0 {
+				fmt.Fprintf(stderr, " (command IDs: %v)", ids)
+			}
+			fmt.Fprintln(stderr)
 		}
 	}
 	fmt.Fprintln(stderr, "  remediation: go run ./cmd/climanifestgen -root .")

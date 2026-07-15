@@ -17,7 +17,7 @@
           },
           "description": {
             "id": "example.factory.publish.description",
-            "canonicalEnglish": "Publishes factory artifacts with an invalid no-option default on a string flag."
+            "canonicalEnglish": "Publishes factory artifacts with an invalid no-option default on an integer flag."
           }
         },
         "examples": [
@@ -45,7 +45,7 @@
           "shorthand": "",
           "aliases": [],
           "scope": "local",
-          "valueType": "string",
+          "valueType": "int",
           "required": false,
           "default": "",
           "changedDefault": false,

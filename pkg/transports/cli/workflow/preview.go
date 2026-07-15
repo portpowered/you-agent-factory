@@ -10,6 +10,7 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/spf13/cobra"
 )
 
 // PreviewConfig holds parameters for workflow preview output.
@@ -17,6 +18,18 @@ type PreviewConfig struct {
 	SourceConfig
 	JSON   bool
 	Output io.Writer
+}
+
+// PreviewRunE returns the handwritten workflow preview handler used by
+// compatibility and generated command metadata wiring.
+func PreviewRunE(cfg *PreviewConfig, jsonOutput *bool) func(*cobra.Command, []string) error {
+	return func(cmd *cobra.Command, _ []string) error {
+		if jsonOutput != nil {
+			cfg.JSON = *jsonOutput
+		}
+		cfg.Output = cmd.OutOrStdout()
+		return Preview(*cfg)
+	}
 }
 
 // Preview resolves and validates workflow source, then prints shared preview diagnostics.

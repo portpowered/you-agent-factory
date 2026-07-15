@@ -108,6 +108,9 @@
           "visibility": "visible"
         }
       },
+      "precedence": {
+        "order": null
+      },
       "channels": {
         "input": null,
         "output": null
@@ -325,15 +328,25 @@
           "kind": "mutually-exclusive",
           "participants": [
             {
-              "id": "you.session.create.flag.init-new-factory",
-              "type": "flag"
+              "type": "flag",
+              "id": "you.session.create.flag.init-new-factory"
             },
             {
-              "id": "you.session.create.flag.validate-only",
-              "type": "flag"
+              "type": "flag",
+              "id": "you.session.create.flag.validate-only"
             }
           ]
         }
+      },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
       },
       "channels": {
         "input": [
@@ -534,6 +547,16 @@
           "completion": "none",
           "visibility": "visible"
         }
+      },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
       },
       "channels": {
         "input": [
@@ -759,6 +782,16 @@
           "visibility": "visible"
         }
       },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
       "channels": {
         "input": [
           "cli",
@@ -971,6 +1004,16 @@
           "visibility": "visible"
         }
       },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
       "channels": {
         "input": [
           "cli",
@@ -1170,6 +1213,16 @@
           "completion": "none",
           "visibility": "visible"
         }
+      },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
       },
       "channels": {
         "input": [
@@ -1371,6 +1424,16 @@
           "visibility": "visible"
         }
       },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
+      },
       "channels": {
         "input": [
           "cli",
@@ -1569,6 +1632,16 @@
           "completion": "none",
           "visibility": "visible"
         }
+      },
+      "precedence": {
+        "order": [
+          "flags",
+          "args",
+          "env",
+          "config",
+          "stdin",
+          "defaults"
+        ]
       },
       "channels": {
         "input": [

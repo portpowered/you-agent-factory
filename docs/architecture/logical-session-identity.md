@@ -192,6 +192,74 @@ When preflight returns `session_not_found` or `invalid_target_reference`, the
 dashboard surfaces an explicit recoverable stale-session state with an
 accessible clean-replay action instead of entering an infinite reconnect loop.
 
+## Browser checkpoint ownership and durability
+
+The backend Factory Event stream is the authoritative history for Factory
+Session replay, lifecycle, Work, and terminal outcomes. The browser does not
+create a second canonical Factory Session store. Its reconnect cursors,
+timeline entries, materialized Work outcomes, and IndexedDB checkpoints are
+derived caches that can always be rejected and rebuilt from backend-proven
+identity and event history.
+
+### Exact cache identity and isolation
+
+Every timeline entry, reconnect cursor, materialized outcome accumulator, and
+persisted checkpoint belongs to this exact four-part identity, in this order:
+
+1. normalized backend scope (`backendScopeID`),
+2. concrete resolved Factory Session UUID (`factorySessionID`),
+3. logical session key (`logicalSessionKeyID`), and
+4. stream generation (`streamGenerationID`).
+
+All four values must be present and match before state can be restored or
+continued. Supported selectors such as `~default` are input conveniences only:
+preflight or another identity-bearing boundary resolves them to a concrete
+UUID, and the alias is never written as durable checkpoint identity. Timeline
+and materialized outcome state is held per exact identity, so switching Factory
+Sessions or generations cannot reuse another entry's cursor, samples, or
+accumulator. Retained materialized samples and compact text are bounded before
+persistence; the checkpoint is a resume optimization, not an unbounded event
+or Work-content archive.
+
+### Preflight, hydration, and stale recovery
+
+Sync preflight completes before checkpoint hydration or SSE connection. Only a
+complete, reusable identity-and-cursor result can authorize hydration. A
+rejected identity, remap, unsupported checkpoint, or stale cursor is discarded
+for the affected identity. Stale-cursor recovery then opens the resolved
+session stream without a cursor and rebuilds from canonical events; it does not
+silently hydrate first and validate later.
+
+### Durable replacement and lifecycle handoff
+
+Checkpoint writes for an exact identity are serialized and admitted
+monotonically. IndexedDB replacement reads the current record and conditionally
+writes the newer checkpoint in one transaction; the replacement becomes
+committed state only after that transaction completes. Concurrent browser
+contexts follow the same durable ordering rule. An older or equal write cannot
+replace newer committed progress, and an aborted, rejected, or failed
+replacement leaves the last committed checkpoint intact.
+
+Normal debounced persistence is supplemented by best-effort flush and handoff
+when the active stream changes, the application unmounts, the page is hidden,
+or `pagehide` fires. These lifecycle paths contain persistence failures and do
+not make cancellation the sole cleanup or durability mechanism. A later stream
+or generation remains authoritative even when lifecycle writes overlap.
+
+### Bounded diagnostics and lazy Dispatch inspection
+
+Session-persistence diagnostics are process-local, bounded outcome records.
+They may retain an approved outcome, recovery action, mismatch class, and
+one-way correlation token. They must not retain raw Factory events, Work
+content, raw identities, checkpoint payloads, or unbounded console/network
+history.
+
+Ordinary Factory Session list/detail identity, timeline, and checkpoint state
+remain free of raw Dispatch collections. Dispatch summaries and detail are
+loaded lazily through the dedicated Factory Session Dispatch inspection reads
+when a user opens that view; they are not added to the checkpoint to make
+recovery appear complete.
+
 ## Verification surfaces
 
 Use these focused surfaces when changing normalization, resolution, dashboard
@@ -199,14 +267,18 @@ remap, or default-alias behavior.
 
 | Area | Primary packages / tests |
 | --- | --- |
-| Target normalization | `pkg/factory/sessions/logicaltarget/normalize_test.go`, `derive_key_test.go`, `api_target_test.go` |
+| Target normalization | `pkg/factory/sessions/logicaltarget/normalize_test.go`, `pkg/factory/sessions/logicaltarget/derive_key_test.go`, `pkg/factory/sessions/logicaltarget/api_target_test.go` |
 | Key derivation stability | `pkg/factory/sessions/logicaltarget/derive_key_test.go`, `pkg/service/runtime_session_runtime_test.go` (logical key assertions) |
-| API resolution / sync preflight | `pkg/service/runtime_session_runtime_test.go` (resolved, remapped, unresolved, wrong-scope, invalid-key, default alias cases), `pkg/api/contracttests/openapi_contract_surface_test.go` |
-| Public contract fields | `api/components/schemas/api/FactorySessionLogicalTarget.yaml`, `FactorySessionStreamIdentity.yaml`, `FactorySessionSyncPreflight*.yaml`; regenerate with `make generate-api` |
-| Dashboard preflight decisions | `ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.test.ts`, `dashboard-session-sync-preflight.test.ts` |
+| API resolution / sync preflight | `pkg/service/runtime_session_runtime_test.go` (resolved, remapped, unresolved, wrong-scope, invalid-key, default alias cases), `pkg/transports/http/contracttests/openapi_contract_surface_test.go` |
+| Public contract fields | `api/components/schemas/api/FactorySessionLogicalTarget.yaml`, `api/components/schemas/api/FactorySessionStreamIdentity.yaml`, `api/components/schemas/api/FactorySessionSyncPreflightResponse.yaml`; regenerate with `make generate-api` |
+| Dashboard preflight decisions | `ui/src/features/dashboard/lib/preflight/resolve-dashboard-checkpoint-preflight.test.ts`, `ui/src/features/dashboard/lib/preflight/dashboard-session-sync-preflight.test.ts` |
 | Guarded checkpoint restore, remap, and recovery | `ui/src/features/dashboard/hooks/preflight/use-dashboard-checkpoint-preflight.test.tsx`, `ui/src/features/dashboard/hooks/useDashboardSnapshot.test.tsx` |
 | Quiet reload and App reconnect ordering | `ui/src/App.session-stream.test.tsx`, `ui/src/testing/quiet-checkpoint-reload-test-utils.test.ts` |
-| Default alias to UUID runtime identity | `pkg/factory/sessions/session_identity_test.go`, dashboard preflight tests proving SSE opens on resolved UUID not `~default` |
+| Four-part checkpoint identity and per-session timeline ownership | `ui/src/features/timeline/lib/stream-derived-cache-identity.test.ts`, `ui/src/features/timeline/state/checkpoint-persistence/identity/timelineCheckpointPersistence.identity.test.ts`, `ui/src/features/timeline/state/factoryTimelineStore.entries.test.ts` |
+| Durable replacement, shared-context ordering, and failure preservation | `ui/src/features/timeline/state/checkpoint-persistence/ordering/timelineCheckpointPersistence.ordered-writes.test.ts`, `ui/src/features/timeline/state/checkpoint-persistence/ordering/timelineCheckpointPersistence.shared-contexts.test.ts`, `ui/src/features/timeline/state/checkpoint-persistence/timelineCheckpointPersistence.replacement-failure.test.ts` |
+| Lifecycle flush and handoff | `ui/src/App.multi-session-checkpoint-debounce.test.tsx` |
+| Bounded, redaction-safe diagnostics | `ui/src/features/dashboard/lib/session-persistence/diagnostics.test.ts` |
+| Default alias to UUID runtime identity | `pkg/factory/sessions/registry_test.go`, dashboard preflight tests proving SSE opens on resolved UUID not `~default` |
 | Maintainer file map | `docs/internal/processes/api-relevant-files.md` (logical session and sync-preflight entries) |
 
 Focused backend verification:

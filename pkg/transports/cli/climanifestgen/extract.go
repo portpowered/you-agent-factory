@@ -24,10 +24,27 @@ func ExtractWorkFamily(manifest climanifest.Manifest) (climanifest.Manifest, err
 	return extractFamily(manifest, "work", WorkFamilyCommandIDs)
 }
 
+// ExtractRunSubmitFamily returns manifest metadata for exactly the run/submit
+// command IDs declared in commands.json.
+func ExtractRunSubmitFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
+	return extractFamily(manifest, "run/submit", RunSubmitFamilyCommandIDs)
+}
+
 // ExtractFactoryConfigInitFamily returns manifest metadata for exactly the
 // factory/config/init command IDs declared in commands.json.
 func ExtractFactoryConfigInitFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
 	return extractFamily(manifest, "factory/config/init", FactoryConfigInitFamilyCommandIDs)
+}
+
+// ExtractMCPFamily returns canonical metadata for you mcp and you mcp serve.
+func ExtractMCPFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
+	return extractFamily(manifest, "canonical MCP", MCPFamilyCommandIDs)
+}
+
+// ExtractWorkflowCompatibilityFamily returns the approved callable workflow
+// records from the separately classified compatibility manifest.
+func ExtractWorkflowCompatibilityFamily(manifest climanifest.Manifest) (climanifest.Manifest, error) {
+	return extractFamily(manifest, "workflow compatibility", WorkflowCompatibilityFamilyCommandIDs)
 }
 
 func extractFamily(

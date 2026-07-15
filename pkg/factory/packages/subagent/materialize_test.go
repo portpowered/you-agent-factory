@@ -12,6 +12,16 @@ import (
 func TestMaterializePackagedSubagentFactory_WritesEditableSplitLayout(t *testing.T) {
 	factoryDir := materializePackagedSubagentFactory(t, t.TempDir())
 	assertMaterializedSplitLayout(t, factoryDir)
+	wantWorkerPrompt := authoredSubagentPrompt(t, "prompts/worker.md")
+	wantWorkstationPrompt := authoredSubagentPrompt(t, "prompts/run-subagent.md")
+	assertMaterializedPrompt(t,
+		filepath.Join(factoryDir, interfaces.WorkersDir, PackagedWorkerName, interfaces.FactoryAgentsFileName),
+		wantWorkerPrompt,
+	)
+	assertMaterializedPrompt(t,
+		filepath.Join(factoryDir, interfaces.WorkstationsDir, PackagedRunWorkstationName, "prompts", "run-subagent.md"),
+		wantWorkstationPrompt,
+	)
 
 	loaded, err := factoryconfig.LoadRuntimeConfigFromFactoryDir(factoryDir, nil)
 	if err != nil {
@@ -27,15 +37,39 @@ func TestMaterializePackagedSubagentFactory_WritesEditableSplitLayout(t *testing
 	if !ok {
 		t.Fatal("expected materialized subagent-worker")
 	}
-	if worker.Body == "" {
-		t.Fatal("expected worker body loaded from split-layout workers/ directory")
+	if worker.Body != wantWorkerPrompt {
+		t.Fatal("reloaded worker body does not exactly match authored prompt")
 	}
 	workstation, ok := loaded.Workstation(PackagedRunWorkstationName)
 	if !ok {
 		t.Fatal("expected materialized run-subagent workstation")
 	}
-	if workstation.Body == "" {
-		t.Fatal("expected workstation body loaded from split-layout workstations/ directory")
+	if workstation.Body != wantWorkstationPrompt {
+		t.Fatal("reloaded workstation body does not exactly match authored prompt")
+	}
+	if workstation.PromptTemplate != wantWorkstationPrompt {
+		t.Fatal("reloaded workstation prompt template does not exactly match authored prompt")
+	}
+}
+
+func authoredSubagentPrompt(t *testing.T, promptFile string) string {
+	t.Helper()
+	path := filepath.Join("..", "definitions", "subagent", filepath.FromSlash(promptFile))
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	return string(content)
+}
+
+func assertMaterializedPrompt(t *testing.T, path, want string) {
+	t.Helper()
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s): %v", path, err)
+	}
+	if string(content) != want {
+		t.Fatalf("materialized prompt %s does not exactly match authored content", path)
 	}
 }
 
@@ -100,6 +134,7 @@ func assertMaterializedSplitLayout(t *testing.T, factoryDir string) {
 		filepath.Join(factoryDir, interfaces.FactoryConfigFile),
 		filepath.Join(factoryDir, interfaces.WorkersDir, PackagedWorkerName, interfaces.FactoryAgentsFileName),
 		filepath.Join(factoryDir, interfaces.WorkstationsDir, PackagedRunWorkstationName, interfaces.FactoryAgentsFileName),
+		filepath.Join(factoryDir, interfaces.WorkstationsDir, PackagedRunWorkstationName, "prompts", "run-subagent.md"),
 	} {
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("expected materialized path %s: %v", path, err)

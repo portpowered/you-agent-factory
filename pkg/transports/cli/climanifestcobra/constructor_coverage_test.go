@@ -9,7 +9,10 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/generated"
+	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
+	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
+	"github.com/spf13/cobra"
 )
 
 func TestNewSessionFamilyCommandBuildsCanonicalRunnableLeaves(t *testing.T) {
@@ -212,5 +215,124 @@ func TestNewRepresentativeFamilyCommandFromManifestBuildsDetachedTree(t *testing
 	}
 	if _, err := climanifestparity.FindCommandByPath(root, "you session show"); err != nil {
 		t.Fatalf("generated from-manifest tree missing session show: %v", err)
+	}
+}
+
+func TestNewRunSubmitFamilyComponentsBuildsDetachedContractedTree(t *testing.T) {
+	components := mustRunSubmitFamilyComponents(t)
+	if components.Run.Parent() != nil || components.Submit.Parent() != nil {
+		t.Fatal("run and submit components must remain detached from the shared root")
+	}
+	if components.SubmitBatch.Parent() != components.Submit {
+		t.Fatal("submit batch must be attached only beneath submit")
+	}
+	if !components.Run.DisableFlagParsing || !components.Run.SilenceErrors {
+		t.Fatal("generated run must preserve custom parser and silence-errors metadata")
+	}
+	if !strings.Contains(components.Run.Example, "you run --work") || strings.Contains(components.Run.Example, "session pause") {
+		t.Fatalf("generated run examples do not describe run behavior:\n%s", components.Run.Example)
+	}
+	for _, cmd := range []*cobra.Command{components.Run, components.Submit, components.SubmitBatch} {
+		if cmd.PreRunE == nil || cmd.RunE == nil {
+			t.Fatalf("%s missing handwritten lifecycle", cmd.CommandPath())
+		}
+	}
+}
+
+func TestNewRunSubmitFamilyComponentsRegistersLocalFlagsWithoutChangingHandlerValidation(t *testing.T) {
+	components := mustRunSubmitFamilyComponents(t)
+	for _, flagName := range []string{
+		"continuously", "work", "dir", "named", "factory", "record", "no-record",
+		"replay", "runtime-log-dir", "runtime-log-max-size-mb", "runtime-log-max-backups",
+		"runtime-log-max-age-days", "runtime-log-compress", "runtime-metrics-dir",
+		"runtime-metrics-max-size-mb", "runtime-metrics-max-backups",
+		"runtime-metrics-max-age-days", "runtime-metrics-compress", "with-mock-workers",
+		"quiet", "output", "skip-permissions", "port",
+	} {
+		if components.Run.Flags().Lookup(flagName) == nil {
+			t.Fatalf("generated run missing local flag %q", flagName)
+		}
+	}
+	if flag := components.Run.Flags().Lookup("with-mock-workers"); flag == nil || flag.NoOptDefVal == "" {
+		t.Fatalf("with-mock-workers no-option contract = %#v", flag)
+	}
+	for _, flagName := range []string{"name", "work-type-name", "payload", "session", "port"} {
+		if components.Submit.Flags().Lookup(flagName) == nil {
+			t.Fatalf("generated submit missing local flag %q", flagName)
+		}
+	}
+	if err := components.Submit.ValidateRequiredFlags(); err != nil {
+		t.Fatalf("submit Cobra validation = %v, want handwritten handler to retain required-input validation", err)
+	}
+	for _, flagName := range []string{"file", "dry-run", "session", "port"} {
+		if components.SubmitBatch.Flags().Lookup(flagName) == nil {
+			t.Fatalf("generated submit batch missing local flag %q", flagName)
+		}
+	}
+	if components.SubmitBatch.Args != nil {
+		t.Fatal("submit batch Cobra Args validation should remain in the handwritten input resolver")
+	}
+}
+
+func TestNewRunSubmitFamilyComponentsRejectsMissingAndOutOfFamilyBindings(t *testing.T) {
+	bindings := testRunSubmitBindings()
+	if _, err := climanifestcobra.NewRunSubmitFamilyComponents(nil, bindings); err == nil {
+		t.Fatal("nil registry = nil, want error")
+	}
+	registry := mustRunSubmitRegistry(t)
+	bindings.SubmitBatch = nil
+	if _, err := climanifestcobra.NewRunSubmitFamilyComponents(registry, bindings); err == nil {
+		t.Fatal("missing submit batch binding = nil, want error")
+	}
+
+	manifest, err := generated.RunSubmitFamilyManifest()
+	if err != nil {
+		t.Fatalf("RunSubmitFamilyManifest() error = %v", err)
+	}
+	manifest.Commands["you.work.list"] = manifest.Commands["you.run"]
+	delete(manifest.Commands, "you.run")
+	if _, err := climanifestcobra.NewRunSubmitFamilyComponentsFromManifest(
+		manifest,
+		registry,
+		testRunSubmitBindings(),
+	); err == nil {
+		t.Fatal("out-of-family manifest command = nil, want error")
+	}
+}
+
+func mustRunSubmitFamilyComponents(t *testing.T) climanifestcobra.RunSubmitFamilyComponents {
+	t.Helper()
+	components, err := climanifestcobra.NewRunSubmitFamilyComponents(
+		mustRunSubmitRegistry(t),
+		testRunSubmitBindings(),
+	)
+	if err != nil {
+		t.Fatalf("NewRunSubmitFamilyComponents() error = %v", err)
+	}
+	return components
+}
+
+func mustRunSubmitRegistry(t *testing.T) *commandregistry.Registry {
+	t.Helper()
+	preRun := func(*cobra.Command, []string) error { return nil }
+	registry, err := commandregistry.NewRunSubmitRegistry(commandregistry.RunSubmitHandlers{
+		Run:         commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
+		Submit:      commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
+		SubmitBatch: commandregistry.CommandHandlers{PreRunE: preRun, RunE: noopRunE},
+	})
+	if err != nil {
+		t.Fatalf("NewRunSubmitRegistry() error = %v", err)
+	}
+	return registry
+}
+
+func testRunSubmitBindings() climanifestcobra.RunSubmitFlagBindings {
+	runConfig := &runcli.RunConfig{}
+	output := ""
+	return climanifestcobra.RunSubmitFlagBindings{
+		Run:                 runConfig,
+		RunInvocationOutput: &output,
+		Submit:              &submitcli.SubmitConfig{},
+		SubmitBatch:         &submitcli.BatchConfig{},
 	}
 }
