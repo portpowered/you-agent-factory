@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream/removalgate"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 func TestRepoRoot(t *testing.T) {

@@ -3,10 +3,10 @@ package scheduler
 import (
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 )
 
 var baseTokenTime = time.Date(2026, 4, 17, 9, 0, 0, 0, time.UTC)

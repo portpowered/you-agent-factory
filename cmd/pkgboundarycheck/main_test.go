@@ -78,6 +78,19 @@ func TestRunAllowsCanonicalTransportImports(t *testing.T) {
 	}
 }
 
+func TestRunAllowsCanonicalDomainAndInternalTestSupportImports(t *testing.T) {
+	t.Parallel()
+
+	repoRoot := t.TempDir()
+	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/contracts.go", "runtime", "github.com/portpowered/infinite-you/pkg/factory/contracts")
+	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/runtime_test.go", "runtime", "github.com/portpowered/infinite-you/internal/testutil")
+
+	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want canonical domain and internal test-support imports allowed; stderr=%q", err, stderr.String())
+	}
+}
+
 func TestRunAllowsPlatformObservabilityAndRejectsRetiredImports(t *testing.T) {
 	t.Parallel()
 
@@ -223,7 +236,9 @@ func TestRunRejectsRetiredPackageRootsWithCanonicalOwners(t *testing.T) {
 		{packagePath: "pkg/workcontent", canonicalOwner: "pkg/work/content"},
 		{packagePath: "pkg/workgraph", canonicalOwner: "pkg/work/graph"},
 		{packagePath: "pkg/workquery", canonicalOwner: "pkg/work/query"},
+		{packagePath: "pkg/interfaces", canonicalOwner: "the defining domain under pkg/factory, pkg/work, pkg/workers, or pkg/models"},
 		{packagePath: "pkg/replay", canonicalOwner: "pkg/platform/replay"},
+		{packagePath: "pkg/testutil", canonicalOwner: "internal/testutil or package-local test helpers"},
 	} {
 		t.Run(tt.packagePath, func(t *testing.T) {
 			t.Parallel()
@@ -307,9 +322,19 @@ func TestRunRejectsRetiredPackageImportsWithCanonicalOwners(t *testing.T) {
 			canonicalOwner: "pkg/work/query",
 		},
 		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/interfaces",
+			retiredRoot:    "pkg/interfaces",
+			canonicalOwner: "the defining domain under pkg/factory, pkg/work, pkg/workers, or pkg/models",
+		},
+		{
 			importPath:     "github.com/portpowered/infinite-you/pkg/replay",
 			retiredRoot:    "pkg/replay",
 			canonicalOwner: "pkg/platform/replay",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures",
+			retiredRoot:    "pkg/testutil",
+			canonicalOwner: "internal/testutil or package-local test helpers",
 		},
 	} {
 		t.Run(tt.retiredRoot, func(t *testing.T) {

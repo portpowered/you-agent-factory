@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/config/globalconfiginventory"
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 const fixturesRelativeDir = "pkg/config/systemconfig/testdata/fixtures"

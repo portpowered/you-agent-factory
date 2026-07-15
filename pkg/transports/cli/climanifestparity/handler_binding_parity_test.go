@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/portpowered/infinite-you/pkg/testutil"
-	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity"
+	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 )
 
 func TestProductionManifestHandlerBinding_SessionShow(t *testing.T) {

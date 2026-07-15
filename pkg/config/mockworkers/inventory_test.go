@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/config/mockworkers"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 func TestProjectTopologyInventory_RecordsLoaderBoundariesAndRunTypes(t *testing.T) {

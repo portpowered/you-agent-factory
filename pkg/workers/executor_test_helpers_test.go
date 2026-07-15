@@ -7,7 +7,7 @@ import (
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
-	runtimefixtures "github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	runtimefixtures "github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 )
 
 type staticRuntimeConfig = runtimefixtures.RuntimeConfigLookupFixture

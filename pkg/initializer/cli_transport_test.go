@@ -5,10 +5,10 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/cmd/factory/compose"
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 )
 
 func TestInitializeCLITransport_RejectsMissingFactoryConfig(t *testing.T) {

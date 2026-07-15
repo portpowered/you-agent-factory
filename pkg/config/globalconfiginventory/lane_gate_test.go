@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/config/globalconfiginventory"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 // productionLoaderSources records the loader implementation files this inventory

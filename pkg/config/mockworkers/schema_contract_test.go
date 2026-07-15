@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractstaging"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/config/mockworkers"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -164,8 +164,8 @@ func TestMockWorkersSchema_DoesNotAdvertiseUnsupportedCapabilities(t *testing.T)
 
 	schema := loadAuthoredMockWorkersSchema(t)
 	instanceSurface := map[string]any{
-		"properties": schema["properties"],
-		"$defs":      schema["$defs"],
+		"properties":  schema["properties"],
+		"$defs":       schema["$defs"],
 		"description": schema["description"],
 	}
 	encoded, err := json.Marshal(instanceSurface)

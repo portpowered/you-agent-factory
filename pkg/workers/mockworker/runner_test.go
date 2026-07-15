@@ -17,8 +17,8 @@ import (
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 
+	runtimefixtures "github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	runtimefixtures "github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 

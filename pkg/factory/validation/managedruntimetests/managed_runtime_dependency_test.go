@@ -3,9 +3,9 @@ package validation_test
 import (
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 )
 
 func TestManagedRuntimeDependencyTargets_RejectsUnsupportedIdentity(t *testing.T) {

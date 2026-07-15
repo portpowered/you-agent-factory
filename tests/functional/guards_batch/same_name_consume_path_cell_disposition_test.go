@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -17,8 +17,8 @@ import (
 type consumePathCellDisposition string
 
 const (
-	cellDispositionComplete                  consumePathCellDisposition = "complete"
-	cellDispositionNeedsBoundedManualMove    consumePathCellDisposition = "needs_bounded_manual_move"
+	cellDispositionComplete                   consumePathCellDisposition = "complete"
+	cellDispositionNeedsBoundedManualMove     consumePathCellDisposition = "needs_bounded_manual_move"
 	cellDispositionNeedsBoundedFollowupRepair consumePathCellDisposition = "needs_bounded_followup_repair"
 )
 
