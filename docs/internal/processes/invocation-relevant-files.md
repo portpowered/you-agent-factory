@@ -569,9 +569,14 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `tests/functional/acceptance/invalid_quiet_outcomes_test.go` via unknown
   named-factory rejection, invalid topology graph-reference guidance, quiet
   operational-failure terminal mute, and quiet successful primary-result-only
-  named `@you/goal` mock-worker runs. Later S24 scenario stories should compose
-  scenario assertions on top of this package rather than re-building
-  binary/home/log wiring in each test file.
+  named `@you/goal` mock-worker runs; primary-only and human/JSON response-stream
+  output customer outcomes are asserted in
+  `tests/functional/acceptance/output_outcomes_test.go` via built-CLI primary
+  result-only stdout, canonical response-stream NDJSON records, human
+  response-stream vocabulary, and primary-only versus response-stream terminal
+  `InvocationResponse` parity on the same mock-worker fixture. Later S24 scenario
+  stories should compose scenario assertions on top of this package rather than
+  re-building binary/home/log wiring in each test file.
 - `pkg/factory/packages/catalog.go` owns packaged factory lookup and metadata;
   payload sources live under `pkg/factory/packages/definitions/`, and config
   initialization is the only catalog-to-disk installation boundary. Named
