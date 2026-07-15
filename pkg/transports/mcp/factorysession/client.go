@@ -3,6 +3,8 @@ package factorysession
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
+	"strings"
 
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -49,6 +51,26 @@ type canonicalToolBinding struct {
 type ToolHandlerBinding struct {
 	ToolID    string
 	HandlerID string
+}
+
+// ProjectCanonicalToolHandlerBindings returns the handwritten stable-ID
+// registry as a sorted, read-only identity projection. It deliberately omits
+// executable handler functions and compatibility aliases.
+func ProjectCanonicalToolHandlerBindings() []ToolHandlerBinding {
+	bindings := make([]ToolHandlerBinding, 0, len(canonicalToolHandlersByID))
+	for toolID, binding := range canonicalToolHandlersByID {
+		bindings = append(bindings, ToolHandlerBinding{
+			ToolID:    toolID,
+			HandlerID: binding.handlerID,
+		})
+	}
+	slices.SortFunc(bindings, func(left, right ToolHandlerBinding) int {
+		if left.ToolID != right.ToolID {
+			return strings.Compare(left.ToolID, right.ToolID)
+		}
+		return strings.Compare(left.HandlerID, right.HandlerID)
+	})
+	return bindings
 }
 
 const (
