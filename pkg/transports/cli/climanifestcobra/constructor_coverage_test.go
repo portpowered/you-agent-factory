@@ -177,7 +177,7 @@ func TestNewRunSubmitFamilyComponentsBuildsDetachedContractedTree(t *testing.T) 
 	}
 }
 
-func TestNewRunSubmitFamilyComponentsRegistersLocalFlagsAndRequiredSubmitInputs(t *testing.T) {
+func TestNewRunSubmitFamilyComponentsRegistersLocalFlagsWithoutChangingHandlerValidation(t *testing.T) {
 	components := mustRunSubmitFamilyComponents(t)
 	for _, flagName := range []string{
 		"continuously", "work", "dir", "named", "factory", "record", "no-record",
@@ -199,8 +199,8 @@ func TestNewRunSubmitFamilyComponentsRegistersLocalFlagsAndRequiredSubmitInputs(
 			t.Fatalf("generated submit missing local flag %q", flagName)
 		}
 	}
-	if err := components.Submit.ValidateRequiredFlags(); err == nil {
-		t.Fatal("submit required flag validation = nil without named inputs")
+	if err := components.Submit.ValidateRequiredFlags(); err != nil {
+		t.Fatalf("submit Cobra validation = %v, want handwritten handler to retain required-input validation", err)
 	}
 	for _, flagName := range []string{"file", "dry-run", "session", "port"} {
 		if components.SubmitBatch.Flags().Lookup(flagName) == nil {

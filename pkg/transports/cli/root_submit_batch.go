@@ -11,6 +11,14 @@ import (
 )
 
 func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {
+	return newSubmitCommandWithHandler(globals, diagnostics, submitWork)
+}
+
+func newSubmitCommandWithHandler(
+	globals *cliGlobalOptions,
+	diagnostics *cliDiagnosticsOptions,
+	submitHandler func(submitcli.SubmitConfig) error,
+) *cobra.Command {
 	cfg := submitcli.SubmitConfig{Server: globals.server}
 
 	cmd := &cobra.Command{
@@ -25,7 +33,7 @@ func newSubmitCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOpti
 			"Use --session to submit to one specific live factory session instead.",
 		PreRunE: rejectDeprecatedPortFlag,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return executeSubmitCommand(cmd, &cfg, globals, diagnostics)
+			return executeSubmitCommand(cmd, &cfg, globals, diagnostics, submitHandler)
 		},
 	}
 
@@ -43,6 +51,7 @@ func executeSubmitCommand(
 	cfg *submitcli.SubmitConfig,
 	globals *cliGlobalOptions,
 	diagnostics *cliDiagnosticsOptions,
+	submitHandler func(submitcli.SubmitConfig) error,
 ) error {
 	cfg.Server = globals.server
 	cfg.JSON = globals.json
@@ -50,7 +59,7 @@ func executeSubmitCommand(
 	cfg.Diagnostics = diagnostics.writer(cmd)
 	cfg.Verbose = diagnostics.verboseEnabled()
 	cfg.Debug = diagnostics.debug
-	return submitWork(*cfg)
+	return submitHandler(*cfg)
 }
 
 func newSubmitBatchCommand(globals *cliGlobalOptions, diagnostics *cliDiagnosticsOptions) *cobra.Command {

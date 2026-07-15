@@ -151,9 +151,10 @@ func registerRunSubmitLocalFlags(
 		if err := applyFlagContract(cmd.Flags().Lookup(flag.Long), flag); err != nil {
 			return fmt.Errorf("apply local flag %q contract: %w", flag.Long, err)
 		}
-		if flag.Required {
-			_ = cmd.MarkFlagRequired(flag.Long)
-		}
+		// Required in the command record describes the public input contract.
+		// This retained family historically validates named submit inputs inside
+		// its handwritten handler, which preserves its stable diagnostics and
+		// validation ordering. Do not add Cobra required annotations here.
 	}
 	return nil
 }

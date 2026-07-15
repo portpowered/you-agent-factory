@@ -30,7 +30,12 @@ primary-result behavior.
   `NewRunSubmitFamilyParityRoots` builds independent legacy and generated roots
   with injected `RootCommandOptions`; use it for observable parser, resolved
   `RunConfig`, service-call, stdout/stderr, and error parity without sharing
-  mutable Cobra flag state. Run-specific coverage lives in
+  mutable Cobra flag state. Inject unary submit through `RootCommandOptions.SubmitWork`
+  and call the real submit transport against an `httptest` server when parity
+  must prove request path/body, default or explicit session selection, and
+  human/JSON output. Manifest-required submit inputs remain validated by the
+  retained handwritten handler so generated construction does not preempt its
+  stable diagnostics or validation ordering. Run-specific coverage lives in
   `pkg/transports/cli/climanifestparity/runparity/run_parity_test.go`.
 
 ## CLI invocation output modes (primary-result, human response-stream, NDJSON)
