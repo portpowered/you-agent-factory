@@ -5,6 +5,8 @@
 ## Commands
 
 - Default non-long lane: `make test-functional`
+- Independent functional coverage report: `make test-functional-coverage`
+- Independent backend unit coverage report: `make test-unit-coverage`
 - Built-CLI S24 acceptance lane (also run by `make verify-pr`): `make test-built-cli-acceptance`
 - Opt-in long lane: `make test-functional-long`
 - Real local-inference lane: `make long-tests`
@@ -37,6 +39,25 @@ names, stays portable across environments, and avoids the slow Windows
 wildcard `./tests/functional/...` path. The long lane runs the full behavior
 tree plus any `functionallong`-tagged files, so broad or slow scenarios stay
 available without widening the default feedback loop.
+
+The coverage lanes intentionally use separate profiles. The
+`make test-functional-coverage` command executes only the maintained non-long
+functional packages while measuring backend-owned `cmd/factory` and `pkg/...`.
+It uses the same bounded `go test -p 2` package concurrency as the default
+functional lane so coverage instrumentation does not increase cross-package
+resource contention.
+Its total and per-package percentages come from the functional-only profile;
+packages untouched by those functional flows are shown at `0.0%` even when
+their package-local unit tests have higher coverage.
+The lane enforces the current aggregate floor and an 80% target for every new
+backend package. Existing packages below 80% are explicitly grandfathered in
+the functional package baseline and should be removed from that file as their
+functional coverage reaches the target.
+
+The `make test-unit-coverage` command executes only backend package tests
+against that same owned code set. Functional coverage therefore remains
+visible independently instead of being merged with unit, stress, or release
+test results.
 
 ## Package Taxonomy
 

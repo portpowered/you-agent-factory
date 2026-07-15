@@ -62,6 +62,80 @@ func TestExecuteReportsPassingCoverage(t *testing.T) {
 	}
 }
 
+func TestExecuteTotalOnlyReportsIndependentSuiteCoverageWithPackageSummaries(t *testing.T) {
+	originalExecCommand := execCommand
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		execCommand = originalExecCommand
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	execCommand = fakeGoCoverageCommandPassing
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		min:       80,
+		coverpkg:  modulePath + "/pkg/config",
+		packages:  "./tests/functional/runtime_api",
+		totalOnly: true,
+	})
+	if err != nil {
+		t.Fatalf("execute() error = %v", err)
+	}
+
+	got := stdout.String()
+	if !strings.Contains(got, "total: (statements) 100.0%") {
+		t.Fatalf("execute() stdout = %q, want total coverage line", got)
+	}
+	if !strings.Contains(got, modulePath+"/pkg/config\tcoverage: 100.0% of statements") {
+		t.Fatalf("execute() stdout = %q, want package summary from the selected suite profile", got)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
+func TestExecuteFunctionalFailsForNonBaselinedPackageBelowTarget(t *testing.T) {
+	originalExecCommand := execCommand
+	originalStdout := stdoutWriter
+	originalStderr := stderrWriter
+	defer func() {
+		execCommand = originalExecCommand
+		stdoutWriter = originalStdout
+		stderrWriter = originalStderr
+	}()
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	execCommand = fakeGoCoverageCommand
+	stdoutWriter = &stdout
+	stderrWriter = &stderr
+
+	err := execute(config{
+		coverpkg:        modulePath + "/pkg/config",
+		packages:        "./tests/functional/runtime_api",
+		packageBaseline: emptyPackageCoverageBaselinePath(t),
+		packageMin:      80,
+		suite:           "functional",
+	})
+	if err == nil {
+		t.Fatal("execute() unexpectedly accepted a new functional package below target")
+	}
+	want := "go coverage found non-baselined backend packages below 80.0% statement coverage: " +
+		modulePath + "/pkg/config (0.0%)"
+	if err.Error() != want {
+		t.Fatalf("execute() error = %q, want %q", err.Error(), want)
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("execute() stderr = %q, want empty stderr", stderr.String())
+	}
+}
+
 func TestExecuteFailsWhenCoverageBelowMinimum(t *testing.T) {
 	originalExecCommand := execCommand
 	originalStdout := stdoutWriter
@@ -497,7 +571,7 @@ func TestResolveCoverageLaneFailsWhenDefaultCoverageDiscoveryMatchesNoBackendPac
 	}
 }
 
-func TestResolveCoverageLaneFailsWhenDefaultTestDiscoveryMatchesNoBackendPackages(t *testing.T) {
+func TestResolveCoverageLaneFailsWhenFunctionalDiscoveryMatchesNoMaintainedPackages(t *testing.T) {
 	originalExecCommand := execCommand
 	defer func() {
 		execCommand = originalExecCommand
@@ -505,7 +579,7 @@ func TestResolveCoverageLaneFailsWhenDefaultTestDiscoveryMatchesNoBackendPackage
 
 	execCommand = fakeGoListCommandWithCoverageButNoTestPackages
 
-	_, _, err := resolveCoverageLane(config{})
+	_, _, err := resolveCoverageLane(config{suite: "functional"})
 	if err == nil {
 		t.Fatal("resolveCoverageLane() unexpectedly succeeded")
 	}

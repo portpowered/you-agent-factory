@@ -47,7 +47,7 @@ func TestIsBackendCoveragePackage(t *testing.T) {
 	}
 }
 
-func TestIsBackendTestPackage(t *testing.T) {
+func TestIsFunctionalTestPackage(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -55,7 +55,7 @@ func TestIsBackendTestPackage(t *testing.T) {
 		importPath string
 		want       bool
 	}{
-		{name: "backend package", importPath: modulePath + "/pkg/config", want: true},
+		{name: "backend package", importPath: modulePath + "/pkg/config", want: false},
 		{name: "functional runtime package", importPath: modulePath + "/tests/functional/runtime_api", want: true},
 		{name: "functional internal helper", importPath: modulePath + "/tests/functional/internal/support", want: false},
 		{name: "ui package", importPath: modulePath + "/ui", want: false},
@@ -66,14 +66,14 @@ func TestIsBackendTestPackage(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := isBackendTestPackage(tc.importPath); got != tc.want {
-				t.Fatalf("isBackendTestPackage(%q) = %t, want %t", tc.importPath, got, tc.want)
+			if got := isFunctionalTestPackage(tc.importPath); got != tc.want {
+				t.Fatalf("isFunctionalTestPackage(%q) = %t, want %t", tc.importPath, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestResolveCoverageLaneDefaults(t *testing.T) {
+func TestResolveCoverageLaneDefaultsToUnitPackages(t *testing.T) {
 	coverPackages, testPackages, err := resolveCoverageLane(config{})
 	if err != nil {
 		t.Fatalf("resolveCoverageLane() error = %v", err)
@@ -88,9 +88,20 @@ func TestResolveCoverageLaneDefaults(t *testing.T) {
 	if slices.Contains(coverPackages, modulePath+"/pkg/testutil") {
 		t.Fatalf("cover packages unexpectedly include test helper package: %v", coverPackages)
 	}
-	if !slices.Contains(testPackages, modulePath+"/tests/functional/runtime_api") {
-		t.Fatalf("test packages missing backend functional package: %v", testPackages)
+	if !slices.Contains(testPackages, modulePath+"/pkg/config") {
+		t.Fatalf("test packages missing backend unit package: %v", testPackages)
 	}
+	if slices.Contains(testPackages, modulePath+"/tests/functional/runtime_api") {
+		t.Fatalf("unit test packages unexpectedly include functional package: %v", testPackages)
+	}
+}
+
+func TestResolveCoverageLaneFunctionalSuite(t *testing.T) {
+	_, testPackages, err := resolveCoverageLane(config{suite: "functional"})
+	if err != nil {
+		t.Fatalf("resolveCoverageLane() error = %v", err)
+	}
+
 	for _, functionalPackage := range []string{
 		modulePath + "/tests/functional/acceptance",
 		modulePath + "/tests/functional/bootstrap_portability",
@@ -107,6 +118,31 @@ func TestResolveCoverageLaneDefaults(t *testing.T) {
 	}
 	if slices.Contains(testPackages, modulePath+"/tests/functional/internal/support") {
 		t.Fatalf("test packages unexpectedly include functional support helpers: %v", testPackages)
+	}
+	if slices.Contains(testPackages, modulePath+"/pkg/config") {
+		t.Fatalf("functional test packages unexpectedly include backend unit package: %v", testPackages)
+	}
+}
+
+func TestCoverageTestJobs(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		cfg  config
+		want int
+	}{
+		{name: "unit uses go default", cfg: config{suite: "unit"}, want: 0},
+		{name: "functional is bounded", cfg: config{suite: "functional"}, want: defaultFunctionalCoverageJobs},
+		{name: "explicit override", cfg: config{suite: "functional", jobs: 1}, want: 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := tc.cfg.testJobs(); got != tc.want {
+				t.Fatalf("config.testJobs() = %d, want %d", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -167,6 +203,21 @@ func TestReadPackageCoverageBaselineSkipsCommentsAndBlankLines(t *testing.T) {
 	}
 }
 
+func TestPackageCoverageBaselinePathDefaultsBySuite(t *testing.T) {
+	t.Parallel()
+
+	if got := (config{suite: "unit"}).packageCoverageBaselinePath(); got != defaultPackageCoverageBaselinePath {
+		t.Fatalf("unit baseline path = %q, want %q", got, defaultPackageCoverageBaselinePath)
+	}
+	if got := (config{suite: "functional"}).packageCoverageBaselinePath(); got != defaultFunctionalPackageCoverageBaselinePath {
+		t.Fatalf("functional baseline path = %q, want %q", got, defaultFunctionalPackageCoverageBaselinePath)
+	}
+	const override = "custom-functional-baseline.txt"
+	if got := (config{suite: "functional", packageBaseline: override}).packageCoverageBaselinePath(); got != override {
+		t.Fatalf("explicit baseline path = %q, want %q", got, override)
+	}
+}
+
 func TestFindInsufficientCoveragePackagesSkipsBaselinedPackages(t *testing.T) {
 	t.Parallel()
 
@@ -185,6 +236,31 @@ func TestFindInsufficientCoveragePackagesSkipsBaselinedPackages(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("findInsufficientCoveragePackages() = %v, want %v", got, want)
+	}
+}
+
+func TestSummarizePackageCoverageFromTotalsUsesOnlySelectedSuiteProfile(t *testing.T) {
+	t.Parallel()
+
+	coveredPackage := modulePath + "/pkg/workers/service"
+	unitCoveredButFunctionallyUntouched := modulePath + "/pkg/workers/worktree"
+	got := summarizePackageCoverageFromTotals(
+		map[string]packageCoverageTotals{
+			coveredPackage: {coveredStatements: 8, totalStatements: 10},
+			unitCoveredButFunctionallyUntouched: {
+				coveredStatements: 0,
+				totalStatements:   10,
+			},
+		},
+		[]string{unitCoveredButFunctionallyUntouched, coveredPackage},
+	)
+
+	want := []packageCoverageSummary{
+		{importPath: coveredPackage, coverage: 80},
+		{importPath: unitCoveredButFunctionallyUntouched, coverage: 0},
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("summarizePackageCoverageFromTotals() = %v, want %v", got, want)
 	}
 }
 

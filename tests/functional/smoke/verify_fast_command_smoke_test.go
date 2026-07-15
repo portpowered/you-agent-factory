@@ -81,7 +81,8 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 		"release-surface-smoke":                "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"test-built-cli-acceptance":            "@printf '%s\\n' 'stub:test-built-cli-acceptance'\n",
 		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n",
-		"test-backend-verification":            "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"test-unit-coverage":                   "@printf '%s\\n' 'stub:test-unit-coverage'\n",
+		"test-functional-coverage":             "@printf '%s\\n' 'stub:test-functional-coverage'\n",
 		"verify":                               "@printf '%s\\n' 'unexpected:verify'\n\t@exit 99\n",
 		"test-backend-functional":              "@printf '%s\\n' 'unexpected:test-backend-functional'\n\t@exit 99\n",
 		"ui-test":                              "@printf '%s\\n' 'unexpected:ui-test'\n\t@exit 99\n",
@@ -97,15 +98,17 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 		"==> build contracts and static verification [make verify-build-contracts]",
 		"stub:verify-build-contracts",
 		"==> required CI-equivalent test lanes [make verify-tests]",
-		"Running required CI-equivalent test lanes: release surface smoke + built-CLI S24 acceptance + concurrent UI coverage/browser integration + backend verification",
+		"Running required CI-equivalent test lanes: release surface smoke + built-CLI S24 acceptance + concurrent UI coverage/browser integration + independent backend unit and functional coverage",
 		"==> Release surface smoke lane [make release-surface-smoke]",
 		"stub:release-surface-smoke",
 		"==> Built-CLI S24 acceptance lane [make test-built-cli-acceptance]",
 		"stub:test-built-cli-acceptance",
 		"==> Concurrent UI Coverage + UI Browser Integration lanes [make run-concurrent-ui-verification-lanes]",
 		"stub:run-concurrent-ui-verification-lanes",
-		"==> Backend Verification lane [make test-backend-verification]",
-		"stub:test-backend-verification",
+		"==> Backend Unit Coverage lane [make test-unit-coverage]",
+		"stub:test-unit-coverage",
+		"==> Backend Functional Coverage lane [make test-functional-coverage]",
+		"stub:test-functional-coverage",
 	)
 
 	for _, expected := range []string{
@@ -113,7 +116,8 @@ func TestVerifyPRCommandSmoke_UsesRequiredLanesOnce(t *testing.T) {
 		"stub:release-surface-smoke",
 		"stub:test-built-cli-acceptance",
 		"stub:run-concurrent-ui-verification-lanes",
-		"stub:test-backend-verification",
+		"stub:test-unit-coverage",
+		"stub:test-functional-coverage",
 	} {
 		if count := strings.Count(output, expected); count != 1 {
 			t.Fatalf("expected %q exactly once, found %d:\n%s", expected, count, output)
@@ -138,7 +142,8 @@ func TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun(t *testing.T) {
 		"release-surface-smoke":                "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"test-built-cli-acceptance":            "@printf '%s\\n' 'stub:test-built-cli-acceptance'\n",
 		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n\t@exit 23\n",
-		"test-backend-verification":            "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"test-unit-coverage":                   "@printf '%s\\n' 'stub:test-unit-coverage'\n",
+		"test-functional-coverage":             "@printf '%s\\n' 'stub:test-functional-coverage'\n",
 	})
 
 	output, err := runMakefileTarget(repoRoot, makefilePath, "verify-pr")
@@ -148,42 +153,38 @@ func TestVerifyPRCommandSmoke_FailureReportsExactLaneRerun(t *testing.T) {
 	if !strings.Contains(output, "FAIL: Concurrent UI Coverage + UI Browser Integration lanes [make run-concurrent-ui-verification-lanes] failed. Rerun with: make run-concurrent-ui-verification-lanes") {
 		t.Fatalf("verify-pr failure output missing exact lane rerun hint:\n%s", output)
 	}
-	if strings.Contains(output, "stub:test-backend-verification") {
+	if strings.Contains(output, "stub:test-unit-coverage") || strings.Contains(output, "stub:test-functional-coverage") {
 		t.Fatalf("verify-pr continued after the failing required lane:\n%s", output)
 	}
 }
 
-func TestBackendVerificationCompatibilityAliasesSmoke_RedirectToCanonicalLane(t *testing.T) {
+func TestBackendCoverageAliasesSmoke_RedirectToIndependentLanes(t *testing.T) {
 	repoRoot := testutil.MustRepoPath(t, ".")
 	makefilePath := writeVerifyFastWrapperMakefile(t, repoRoot, map[string]string{
-		"test-backend-verification": "@printf '%s\\n' 'stub:test-backend-verification'\n",
-		"test-coverage-go":          "@printf '%s\\n' 'unexpected:test-coverage-go'\n\t@exit 99\n",
+		"test-unit-coverage":       "@printf '%s\\n' 'stub:test-unit-coverage'\n",
+		"test-functional-coverage": "@printf '%s\\n' 'stub:test-functional-coverage'\n",
 	})
 
 	coverageOutput, err := runMakefileTarget(repoRoot, makefilePath, "test-backend-coverage")
 	if err != nil {
 		t.Fatalf("run test-backend-coverage wrapper: %v\n%s", err, coverageOutput)
 	}
-	if count := strings.Count(coverageOutput, "stub:test-backend-verification"); count != 1 {
-		t.Fatalf("test-backend-coverage should delegate to the canonical backend lane exactly once, found %d:\n%s", count, coverageOutput)
+	if count := strings.Count(coverageOutput, "stub:test-unit-coverage"); count != 1 {
+		t.Fatalf("test-backend-coverage should delegate to unit coverage exactly once, found %d:\n%s", count, coverageOutput)
 	}
-	if strings.Contains(coverageOutput, "unexpected:test-coverage-go") {
-		t.Fatalf("test-backend-coverage bypassed the canonical backend lane:\n%s", coverageOutput)
+	if strings.Contains(coverageOutput, "stub:test-functional-coverage") {
+		t.Fatalf("test-backend-coverage unexpectedly ran functional coverage:\n%s", coverageOutput)
 	}
 
 	functionalOutput, err := runMakefileTarget(repoRoot, makefilePath, "test-backend-functional")
 	if err != nil {
 		t.Fatalf("run test-backend-functional wrapper: %v\n%s", err, functionalOutput)
 	}
-	assertOutputOrder(t, functionalOutput,
-		"Backend functional verification is merged into make test-backend-verification; rerun that target for the required PR lane.",
-		"stub:test-backend-verification",
-	)
-	if count := strings.Count(functionalOutput, "stub:test-backend-verification"); count != 1 {
-		t.Fatalf("test-backend-functional should delegate to the canonical backend lane exactly once, found %d:\n%s", count, functionalOutput)
+	if count := strings.Count(functionalOutput, "stub:test-functional-coverage"); count != 1 {
+		t.Fatalf("test-backend-functional should delegate to functional coverage exactly once, found %d:\n%s", count, functionalOutput)
 	}
-	if strings.Contains(functionalOutput, "unexpected:test-coverage-go") {
-		t.Fatalf("test-backend-functional bypassed the canonical backend lane:\n%s", functionalOutput)
+	if strings.Contains(functionalOutput, "stub:test-unit-coverage") {
+		t.Fatalf("test-backend-functional unexpectedly ran unit coverage:\n%s", functionalOutput)
 	}
 }
 
@@ -232,7 +233,8 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 		"release-surface-smoke":                "@printf '%s\\n' 'stub:release-surface-smoke'\n",
 		"test-built-cli-acceptance":            "@printf '%s\\n' 'stub:test-built-cli-acceptance'\n",
 		"run-concurrent-ui-verification-lanes": "@printf '%s\\n' 'stub:run-concurrent-ui-verification-lanes'\n",
-		"test-backend-verification":            "@printf '%s\\n' 'stub:test-backend-verification'\n",
+		"test-unit-coverage":                   "@printf '%s\\n' 'stub:test-unit-coverage'\n",
+		"test-functional-coverage":             "@printf '%s\\n' 'stub:test-functional-coverage'\n",
 	})
 
 	output, err := runMakefileTarget(repoRoot, makefilePath, "verify")
@@ -252,8 +254,10 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 		"stub:test-built-cli-acceptance",
 		"==> Concurrent UI Coverage + UI Browser Integration lanes [make run-concurrent-ui-verification-lanes]",
 		"stub:run-concurrent-ui-verification-lanes",
-		"==> Backend Verification lane [make test-backend-verification]",
-		"stub:test-backend-verification",
+		"==> Backend Unit Coverage lane [make test-unit-coverage]",
+		"stub:test-unit-coverage",
+		"==> Backend Functional Coverage lane [make test-functional-coverage]",
+		"stub:test-functional-coverage",
 	)
 
 	for _, expected := range []string{
@@ -261,7 +265,8 @@ func TestVerifyCompatibilityAliasSmoke_RedirectsToCanonicalPRTier(t *testing.T) 
 		"stub:release-surface-smoke",
 		"stub:test-built-cli-acceptance",
 		"stub:run-concurrent-ui-verification-lanes",
-		"stub:test-backend-verification",
+		"stub:test-unit-coverage",
+		"stub:test-functional-coverage",
 	} {
 		if count := strings.Count(output, expected); count != 1 {
 			t.Fatalf("expected %q exactly once through the verify compatibility alias, found %d:\n%s", expected, count, output)

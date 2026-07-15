@@ -80,3 +80,5 @@ github.com/portpowered/infinite-you/pkg/workers
 github.com/portpowered/infinite-you/pkg/workers/executor
 github.com/portpowered/infinite-you/pkg/workers/process
 github.com/portpowered/infinite-you/pkg/workers/prompting
+# Unit-only coverage is below the package gate; functional coverage is reported independently.
+github.com/portpowered/infinite-you/pkg/wire
