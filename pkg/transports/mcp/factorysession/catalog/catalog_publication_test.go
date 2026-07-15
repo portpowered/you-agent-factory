@@ -1,10 +1,10 @@
-package factorysession_test
+package catalog_test
 
 import (
 	"strings"
 	"testing"
 
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 )
 
 func TestVerifyCatalogAliasExclusion_RejectsWorkflowAliasName(t *testing.T) {
@@ -16,7 +16,7 @@ func TestVerifyCatalogAliasExclusion_RejectsWorkflowAliasName(t *testing.T) {
 			},
 		},
 	}
-	err := mcpfactorysession.VerifyCatalogAliasExclusion(document)
+	err := mcpfactorycatalog.VerifyCatalogAliasExclusion(document)
 	if err == nil {
 		t.Fatal("VerifyCatalogAliasExclusion() error = nil, want workflow alias rejection")
 	}
@@ -51,7 +51,7 @@ func TestVerifyCatalogModalityPolicy_RejectsStructuredContentTransport(t *testin
 			},
 		},
 	}
-	err := mcpfactorysession.VerifyCatalogModalityPolicy(document)
+	err := mcpfactorycatalog.VerifyCatalogModalityPolicy(document)
 	if err == nil {
 		t.Fatal("VerifyCatalogModalityPolicy() error = nil, want structuredContent rejection")
 	}
@@ -86,7 +86,7 @@ func TestVerifyCatalogModalityPolicy_RejectsHTTPTransport(t *testing.T) {
 			},
 		},
 	}
-	err := mcpfactorysession.VerifyCatalogModalityPolicy(document)
+	err := mcpfactorycatalog.VerifyCatalogModalityPolicy(document)
 	if err == nil {
 		t.Fatal("VerifyCatalogModalityPolicy() error = nil, want HTTP transport rejection")
 	}
@@ -121,7 +121,7 @@ func TestVerifyCatalogModalityPolicy_RejectsImageContentExample(t *testing.T) {
 			},
 		},
 	}
-	err := mcpfactorysession.VerifyCatalogModalityPolicy(document)
+	err := mcpfactorycatalog.VerifyCatalogModalityPolicy(document)
 	if err == nil {
 		t.Fatal("VerifyCatalogModalityPolicy() error = nil, want image content rejection")
 	}
@@ -141,7 +141,7 @@ func TestVerifyCatalogByteStability_RepeatSerializationMatches(t *testing.T) {
 			},
 		},
 	}
-	if err := mcpfactorysession.VerifyCatalogByteStability(document); err != nil {
+	if err := mcpfactorycatalog.VerifyCatalogByteStability(document); err != nil {
 		t.Fatalf("VerifyCatalogByteStability() error = %v", err)
 	}
 }
@@ -154,7 +154,7 @@ func TestVerifyAuthoredCatalogStagingBoundary_RejectsInventoryArrayShape(t *test
 			map[string]any{"name": "you.factory_session.list"},
 		},
 	}
-	err := mcpfactorysession.VerifyAuthoredCatalogStagingBoundary(document)
+	err := mcpfactorycatalog.VerifyAuthoredCatalogStagingBoundary(document)
 	if err == nil {
 		t.Fatal("VerifyAuthoredCatalogStagingBoundary() error = nil, want staging inventory rejection")
 	}

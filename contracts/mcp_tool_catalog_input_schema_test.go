@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/contractvalidator"
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -18,11 +19,11 @@ func TestMCPToolCatalogInputSchemaParity_AuthoredCatalogMatchesDiscoverTools(t *
 	if len(diagnostics) != 0 {
 		t.Fatalf("resolve authored catalog diagnostics = %+v", diagnostics)
 	}
-	schemas, err := mcpfactorysession.CatalogInputSchemasFromCatalogDocument(resolved)
+	schemas, err := mcpfactorycatalog.CatalogInputSchemasFromCatalogDocument(resolved)
 	if err != nil {
 		t.Fatalf("CatalogInputSchemasFromCatalogDocument() error = %v", err)
 	}
-	if err := mcpfactorysession.VerifyCatalogInputSchemaParity(schemas, mcpfactorysession.DiscoverTools()); err != nil {
+	if err := mcpfactorycatalog.VerifyCatalogInputSchemaParity(schemas, mcpfactorysession.DiscoverTools()); err != nil {
 		t.Fatalf("VerifyCatalogInputSchemaParity() error = %v", err)
 	}
 }
@@ -135,7 +136,7 @@ func resolvedAuthoredCatalogInputSchema(t *testing.T, toolName string) map[strin
 	if !ok {
 		t.Fatal("resolved catalog tools missing")
 	}
-	record, ok := tools[mcpfactorysession.CatalogToolIDForName(toolName)].(map[string]any)
+	record, ok := tools[mcpfactorycatalog.CatalogToolIDForName(toolName)].(map[string]any)
 	if !ok {
 		t.Fatalf("resolved catalog missing tool %q", toolName)
 	}

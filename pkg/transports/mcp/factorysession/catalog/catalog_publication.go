@@ -1,4 +1,4 @@
-package factorysession
+package catalog
 
 import (
 	"bytes"

@@ -1,9 +1,11 @@
-package factorysession
+package catalog
 
 import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
 // CatalogInputSchema records one authored catalog tool input schema projection.
@@ -64,7 +66,7 @@ func PrepareCatalogInputSchemaForParity(schema map[string]any) (map[string]any, 
 	}
 	delete(root, "$schema")
 	normalizeInputSchemaForParity(root)
-	prepared, err := canonicalizeInputSchema(root)
+	prepared, err := mcpfactorysession.CanonicalizeInputSchema(root)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +76,7 @@ func PrepareCatalogInputSchemaForParity(schema map[string]any) (map[string]any, 
 // VerifyCatalogInputSchemaParity ensures every discovered canonical tool input
 // schema matches the authored catalog after reference resolution and parity
 // normalization without mutating discovery maps.
-func VerifyCatalogInputSchemaParity(catalog []CatalogInputSchema, discovered []ToolDefinition) error {
+func VerifyCatalogInputSchemaParity(catalog []CatalogInputSchema, discovered []mcpfactorysession.ToolDefinition) error {
 	byName := make(map[string]map[string]any, len(catalog))
 	for _, entry := range catalog {
 		if _, ok := byName[entry.Name]; ok {

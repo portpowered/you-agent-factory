@@ -1,23 +1,24 @@
-package factorysession_test
+package catalog_test
 
 import (
 	"encoding/json"
 	"strings"
 	"testing"
 
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
 func TestVerifyCatalogInputSchemaParity_PassesForDiscoverToolsProjection(t *testing.T) {
 	discovered := mcpfactorysession.DiscoverTools()
-	catalog := make([]mcpfactorysession.CatalogInputSchema, 0, len(discovered))
+	catalog := make([]mcpfactorycatalog.CatalogInputSchema, 0, len(discovered))
 	for _, tool := range discovered {
-		catalog = append(catalog, mcpfactorysession.CatalogInputSchema{
+		catalog = append(catalog, mcpfactorycatalog.CatalogInputSchema{
 			Name:   tool.Name,
 			Schema: tool.InputSchema,
 		})
 	}
-	if err := mcpfactorysession.VerifyCatalogInputSchemaParity(catalog, discovered); err != nil {
+	if err := mcpfactorycatalog.VerifyCatalogInputSchemaParity(catalog, discovered); err != nil {
 		t.Fatalf("VerifyCatalogInputSchemaParity() error = %v", err)
 	}
 }
@@ -29,11 +30,11 @@ func TestVerifyCatalogInputSchemaParity_FailsWhenRequiredFieldMissing(t *testing
 	}
 	schema := cloneSchemaMap(t, tool.InputSchema)
 	delete(schema, "required")
-	catalog := []mcpfactorysession.CatalogInputSchema{{
+	catalog := []mcpfactorycatalog.CatalogInputSchema{{
 		Name:   tool.Name,
 		Schema: schema,
 	}}
-	err := mcpfactorysession.VerifyCatalogInputSchemaParity(catalog, []mcpfactorysession.ToolDefinition{tool})
+	err := mcpfactorycatalog.VerifyCatalogInputSchemaParity(catalog, []mcpfactorysession.ToolDefinition{tool})
 	if err == nil {
 		t.Fatal("VerifyCatalogInputSchemaParity() error = nil, want required-field mismatch")
 	}
@@ -51,11 +52,11 @@ func TestVerifyCatalogInputSchemaParity_FailsWhenNestedObjectNotClosed(t *testin
 	properties := schema["properties"].(map[string]any)
 	source := properties["source"].(map[string]any)
 	source["additionalProperties"] = true
-	catalog := []mcpfactorysession.CatalogInputSchema{{
+	catalog := []mcpfactorycatalog.CatalogInputSchema{{
 		Name:   tool.Name,
 		Schema: schema,
 	}}
-	err := mcpfactorysession.VerifyCatalogInputSchemaParity(catalog, []mcpfactorysession.ToolDefinition{tool})
+	err := mcpfactorycatalog.VerifyCatalogInputSchemaParity(catalog, []mcpfactorysession.ToolDefinition{tool})
 	if err == nil {
 		t.Fatal("VerifyCatalogInputSchemaParity() error = nil, want nested closing mismatch")
 	}
@@ -66,14 +67,14 @@ func TestVerifyCatalogInputSchemaParity_FailsWhenNestedObjectNotClosed(t *testin
 
 func TestVerifyCatalogInputSchemaParity_DoesNotMutateDiscoverySchemas(t *testing.T) {
 	before := cloneToolDefinitions(t, mcpfactorysession.DiscoverTools())
-	catalog := make([]mcpfactorysession.CatalogInputSchema, 0, len(before))
+	catalog := make([]mcpfactorycatalog.CatalogInputSchema, 0, len(before))
 	for _, tool := range before {
-		catalog = append(catalog, mcpfactorysession.CatalogInputSchema{
+		catalog = append(catalog, mcpfactorycatalog.CatalogInputSchema{
 			Name:   tool.Name,
 			Schema: tool.InputSchema,
 		})
 	}
-	if err := mcpfactorysession.VerifyCatalogInputSchemaParity(catalog, before); err != nil {
+	if err := mcpfactorycatalog.VerifyCatalogInputSchemaParity(catalog, before); err != nil {
 		t.Fatalf("VerifyCatalogInputSchemaParity() error = %v", err)
 	}
 	after := mcpfactorysession.DiscoverTools()
@@ -104,6 +105,19 @@ func cloneSchemaMap(t *testing.T, schema map[string]any) map[string]any {
 	var cloned map[string]any
 	if err := json.Unmarshal(encoded, &cloned); err != nil {
 		t.Fatalf("unmarshal schema: %v", err)
+	}
+	return cloned
+}
+
+func cloneToolDefinitions(t *testing.T, tools []mcpfactorysession.ToolDefinition) []mcpfactorysession.ToolDefinition {
+	t.Helper()
+	encoded, err := json.Marshal(tools)
+	if err != nil {
+		t.Fatalf("marshal tools: %v", err)
+	}
+	var cloned []mcpfactorysession.ToolDefinition
+	if err := json.Unmarshal(encoded, &cloned); err != nil {
+		t.Fatalf("unmarshal tools: %v", err)
 	}
 	return cloned
 }

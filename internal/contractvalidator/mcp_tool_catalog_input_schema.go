@@ -3,6 +3,7 @@ package contractvalidator
 import (
 	"strings"
 
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
@@ -12,14 +13,14 @@ func MCPToolCatalogInputSchemaDiagnostics(document string, value any) []Diagnost
 	if document != authoredMCPToolCatalogPath {
 		return nil
 	}
-	schemas, err := mcpfactorysession.CatalogInputSchemasFromCatalogDocument(value)
+	schemas, err := mcpfactorycatalog.CatalogInputSchemasFromCatalogDocument(value)
 	if err != nil {
 		return []Diagnostic{newDiagnostic("catalog.input_schema.parse", "/tools", err.Error(), document)}
 	}
-	if err := mcpfactorysession.VerifyCatalogInputSchemaParity(schemas, mcpfactorysession.DiscoverTools()); err != nil {
+	if err := mcpfactorycatalog.VerifyCatalogInputSchemaParity(schemas, mcpfactorysession.DiscoverTools()); err != nil {
 		path := "/tools"
 		if toolName := catalogInputSchemaParityToolName(err.Error()); toolName != "" {
-			path = mcpfactorysession.CatalogInputSchemaToolPath(toolName)
+			path = mcpfactorycatalog.CatalogInputSchemaToolPath(toolName)
 		}
 		return []Diagnostic{newDiagnostic("catalog.input_schema.parity", path, err.Error(), document)}
 	}

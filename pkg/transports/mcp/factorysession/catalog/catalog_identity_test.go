@@ -1,36 +1,37 @@
-package factorysession_test
+package catalog_test
 
 import (
 	"strings"
 	"testing"
 
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
 func TestVerifyCatalogToolIdentityCompleteness_PassesForAuthoredCatalogShape(t *testing.T) {
 	discovered := mcpfactorysession.DiscoverTools()
-	catalog := make([]mcpfactorysession.CatalogToolIdentity, 0, len(discovered))
+	catalog := make([]mcpfactorycatalog.CatalogToolIdentity, 0, len(discovered))
 	for _, tool := range discovered {
-		catalog = append(catalog, mcpfactorysession.CatalogToolIdentity{
-			ID:   mcpfactorysession.CatalogToolIDForName(tool.Name),
+		catalog = append(catalog, mcpfactorycatalog.CatalogToolIdentity{
+			ID:   mcpfactorycatalog.CatalogToolIDForName(tool.Name),
 			Name: tool.Name,
 		})
 	}
-	if err := mcpfactorysession.VerifyCatalogToolIdentityCompleteness(catalog, discovered); err != nil {
+	if err := mcpfactorycatalog.VerifyCatalogToolIdentityCompleteness(catalog, discovered); err != nil {
 		t.Fatalf("VerifyCatalogToolIdentityCompleteness() error = %v", err)
 	}
 }
 
 func TestVerifyCatalogToolIdentityCompleteness_FailsWhenDiscoveredToolMissing(t *testing.T) {
 	discovered := mcpfactorysession.DiscoverTools()
-	catalog := make([]mcpfactorysession.CatalogToolIdentity, 0, len(discovered)-1)
+	catalog := make([]mcpfactorycatalog.CatalogToolIdentity, 0, len(discovered)-1)
 	for _, tool := range discovered[1:] {
-		catalog = append(catalog, mcpfactorysession.CatalogToolIdentity{
-			ID:   mcpfactorysession.CatalogToolIDForName(tool.Name),
+		catalog = append(catalog, mcpfactorycatalog.CatalogToolIdentity{
+			ID:   mcpfactorycatalog.CatalogToolIDForName(tool.Name),
 			Name: tool.Name,
 		})
 	}
-	err := mcpfactorysession.VerifyCatalogToolIdentityCompleteness(catalog, discovered)
+	err := mcpfactorycatalog.VerifyCatalogToolIdentityCompleteness(catalog, discovered)
 	if err == nil {
 		t.Fatal("VerifyCatalogToolIdentityCompleteness() error = nil, want missing-tool failure")
 	}
@@ -41,18 +42,18 @@ func TestVerifyCatalogToolIdentityCompleteness_FailsWhenDiscoveredToolMissing(t 
 
 func TestVerifyCatalogToolIdentityCompleteness_FailsWhenCatalogContainsExtraTool(t *testing.T) {
 	discovered := mcpfactorysession.DiscoverTools()
-	catalog := make([]mcpfactorysession.CatalogToolIdentity, 0, len(discovered)+1)
+	catalog := make([]mcpfactorycatalog.CatalogToolIdentity, 0, len(discovered)+1)
 	for _, tool := range discovered {
-		catalog = append(catalog, mcpfactorysession.CatalogToolIdentity{
-			ID:   mcpfactorysession.CatalogToolIDForName(tool.Name),
+		catalog = append(catalog, mcpfactorycatalog.CatalogToolIdentity{
+			ID:   mcpfactorycatalog.CatalogToolIDForName(tool.Name),
 			Name: tool.Name,
 		})
 	}
-	catalog = append(catalog, mcpfactorysession.CatalogToolIdentity{
+	catalog = append(catalog, mcpfactorycatalog.CatalogToolIdentity{
 		ID:   "mcp.tool.you.factory_session.extra_probe",
 		Name: "you.factory_session.extra_probe",
 	})
-	err := mcpfactorysession.VerifyCatalogToolIdentityCompleteness(catalog, discovered)
+	err := mcpfactorycatalog.VerifyCatalogToolIdentityCompleteness(catalog, discovered)
 	if err == nil {
 		t.Fatal("VerifyCatalogToolIdentityCompleteness() error = nil, want extra-tool failure")
 	}
@@ -63,9 +64,9 @@ func TestVerifyCatalogToolIdentityCompleteness_FailsWhenCatalogContainsExtraTool
 
 func TestVerifyCatalogToolIdentityCompleteness_FailsWhenPublicNameDuplicated(t *testing.T) {
 	discovered := mcpfactorysession.DiscoverTools()
-	catalog := []mcpfactorysession.CatalogToolIdentity{
+	catalog := []mcpfactorycatalog.CatalogToolIdentity{
 		{
-			ID:   mcpfactorysession.CatalogToolIDForName(discovered[0].Name),
+			ID:   mcpfactorycatalog.CatalogToolIDForName(discovered[0].Name),
 			Name: discovered[0].Name,
 		},
 		{
@@ -73,7 +74,7 @@ func TestVerifyCatalogToolIdentityCompleteness_FailsWhenPublicNameDuplicated(t *
 			Name: discovered[0].Name,
 		},
 	}
-	err := mcpfactorysession.VerifyCatalogToolIdentityCompleteness(catalog, discovered[:1])
+	err := mcpfactorycatalog.VerifyCatalogToolIdentityCompleteness(catalog, discovered[:1])
 	if err == nil {
 		t.Fatal("VerifyCatalogToolIdentityCompleteness() error = nil, want duplicate-name failure")
 	}
@@ -84,11 +85,11 @@ func TestVerifyCatalogToolIdentityCompleteness_FailsWhenPublicNameDuplicated(t *
 
 func TestVerifyCatalogToolIdentityCompleteness_RejectsCompatibilityAliasName(t *testing.T) {
 	discovered := mcpfactorysession.DiscoverTools()
-	catalog := []mcpfactorysession.CatalogToolIdentity{{
-		ID:   mcpfactorysession.CatalogToolIDForName(mcpfactorysession.ToolWorkflowValidate),
+	catalog := []mcpfactorycatalog.CatalogToolIdentity{{
+		ID:   mcpfactorycatalog.CatalogToolIDForName(mcpfactorysession.ToolWorkflowValidate),
 		Name: mcpfactorysession.ToolWorkflowValidate,
 	}}
-	err := mcpfactorysession.VerifyCatalogToolIdentityCompleteness(catalog, discovered[:1])
+	err := mcpfactorycatalog.VerifyCatalogToolIdentityCompleteness(catalog, discovered[:1])
 	if err == nil {
 		t.Fatal("VerifyCatalogToolIdentityCompleteness() error = nil, want alias rejection")
 	}
@@ -102,11 +103,11 @@ func TestVerifyCatalogToolIdentityCompleteness_RejectsCompatibilityAliasName(t *
 
 func TestVerifyCatalogToolIdentityCompleteness_FailsWhenStableIDMismatchesName(t *testing.T) {
 	discovered := mcpfactorysession.DiscoverTools()
-	catalog := []mcpfactorysession.CatalogToolIdentity{{
+	catalog := []mcpfactorycatalog.CatalogToolIdentity{{
 		ID:   "mcp.tool.you.factory_session.wrong_id",
 		Name: discovered[0].Name,
 	}}
-	err := mcpfactorysession.VerifyCatalogToolIdentityCompleteness(catalog, discovered[:1])
+	err := mcpfactorycatalog.VerifyCatalogToolIdentityCompleteness(catalog, discovered[:1])
 	if err == nil {
 		t.Fatal("VerifyCatalogToolIdentityCompleteness() error = nil, want stable-ID mismatch failure")
 	}

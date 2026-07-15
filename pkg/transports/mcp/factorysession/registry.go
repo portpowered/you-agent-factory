@@ -45,7 +45,7 @@ func ProjectToolInventory() (ToolInventory, error) {
 func ProjectToolInventoryFromDiscovered(discovered []ToolDefinition) (ToolInventory, error) {
 	entries := make([]ToolInventoryEntry, 0, len(discovered))
 	for _, tool := range discovered {
-		inputSchema, err := canonicalizeInputSchema(tool.InputSchema)
+		inputSchema, err := CanonicalizeInputSchema(tool.InputSchema)
 		if err != nil {
 			return ToolInventory{}, err
 		}
@@ -113,7 +113,8 @@ func deriveToolIDCandidate(name string) string {
 	return strings.ReplaceAll(candidate, "_", "-")
 }
 
-func canonicalizeInputSchema(schema map[string]any) (map[string]any, error) {
+// CanonicalizeInputSchema normalizes one JSON Schema object map for stable comparison.
+func CanonicalizeInputSchema(schema map[string]any) (map[string]any, error) {
 	if len(schema) == 0 {
 		return nil, nil
 	}

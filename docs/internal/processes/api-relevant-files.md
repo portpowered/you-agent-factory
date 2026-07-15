@@ -134,7 +134,7 @@ Use this map when changing the public REST contract.
   Tool records may reference shared schemas through in-document `$ref` pointers
   resolved by `internal/contractvalidator` before schema validation.
 - Authored catalog identity completeness is proven by
-  `pkg/transports/mcp/factorysession/catalog_identity.go`
+  `pkg/transports/mcp/factorysession/catalog/catalog_identity.go`
   (`CatalogToolIdentitiesFromCatalogDocument`, `VerifyCatalogToolIdentityCompleteness`,
   `CatalogToolIDForName`) against `DiscoverTools()` stable ID (`mcp.tool.<name>`)
   and public name parity; compatibility alias names are rejected. Wire the check
@@ -142,18 +142,18 @@ Use this map when changing the public REST contract.
   `internal/contractvalidator/mcp_tool_catalog_identity.go`, and prove success
   plus missing/extra/duplicate/alias failures in
   `contracts/mcp_tool_catalog_identity_test.go` and
-  `pkg/transports/mcp/factorysession/catalog_identity_test.go`.
+  `pkg/transports/mcp/factorysession/catalog/catalog_identity_test.go`.
 - Authored catalog input-schema parity is proven by
-  `pkg/transports/mcp/factorysession/catalog_input_schema.go`
+  `pkg/transports/mcp/factorysession/catalog/catalog_input_schema.go`
   (`CatalogInputSchemasFromCatalogDocument`, `PrepareCatalogInputSchemaForParity`,
   `VerifyCatalogInputSchemaParity`) against resolved `input.schema` maps and
   `DiscoverTools()` semantics; wire into `make contracts-validate` via
   `internal/contractvalidator/mcp_tool_catalog_input_schema.go`, and prove
   success plus nested valid/invalid argument validation in
   `contracts/mcp_tool_catalog_input_schema_test.go` and
-  `pkg/transports/mcp/factorysession/catalog_input_schema_test.go`.
+  `pkg/transports/mcp/factorysession/catalog/catalog_input_schema_test.go`.
 - Authored catalog publication guards live in
-  `pkg/transports/mcp/factorysession/catalog_publication.go`
+  `pkg/transports/mcp/factorysession/catalog/catalog_publication.go`
   (`VerifyCatalogAliasExclusion`, `VerifyCatalogModalityPolicy`,
   `VerifyAuthoredCatalogStagingBoundary`, `MarshalCatalogDocumentJSON`,
   `VerifyCatalogByteStability`). Wire alias exclusion, text-only modality,
@@ -162,7 +162,7 @@ Use this map when changing the public REST contract.
   `contracts/mcp/tools.json` via
   `internal/contractvalidator/mcp_tool_catalog_publication.go`; prove success and
   failure paths in `contracts/mcp_tool_catalog_publication_test.go` and
-  `pkg/transports/mcp/factorysession/catalog_publication_test.go`. Staged MCP
+  `pkg/transports/mcp/factorysession/catalog/catalog_publication_test.go`. Staged MCP
   tools remain projected only from `contracts/testdata/baseline/mcp-tools.json`
   through `internal/contractstaging/policy.go`, not from the authored catalog.
 - Valid MCP catalog fixtures live under `contracts/testdata/mcp/` and register

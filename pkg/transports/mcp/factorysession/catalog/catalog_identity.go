@@ -1,9 +1,11 @@
-package factorysession
+package catalog
 
 import (
 	"fmt"
 	"slices"
 	"strings"
+
+	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 )
 
 const (
@@ -66,7 +68,7 @@ func CatalogToolIdentitiesFromCatalogDocument(value any) ([]CatalogToolIdentity,
 // VerifyCatalogToolIdentityCompleteness ensures every discovered canonical tool occurs
 // exactly once in the catalog by stable ID and public name, rejects extras and
 // duplicates, and excludes compatibility alias names from canonical catalog identity.
-func VerifyCatalogToolIdentityCompleteness(catalog []CatalogToolIdentity, discovered []ToolDefinition) error {
+func VerifyCatalogToolIdentityCompleteness(catalog []CatalogToolIdentity, discovered []mcpfactorysession.ToolDefinition) error {
 	aliasNames := compatibilityAliasNameSet()
 
 	byID := make(map[string]string, len(catalog))
@@ -112,4 +114,13 @@ func VerifyCatalogToolIdentityCompleteness(catalog []CatalogToolIdentity, discov
 	}
 
 	return nil
+}
+
+func compatibilityAliasNameSet() map[string]struct{} {
+	aliases := mcpfactorysession.DiscoverCompatibilityAliases()
+	names := make(map[string]struct{}, len(aliases))
+	for _, alias := range aliases {
+		names[alias.Name] = struct{}{}
+	}
+	return names
 }

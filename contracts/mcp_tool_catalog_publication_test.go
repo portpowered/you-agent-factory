@@ -9,7 +9,7 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/contractstaging"
 	"github.com/portpowered/infinite-you/internal/contractvalidator"
-	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
+	mcpfactorycatalog "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession/catalog"
 )
 
 func TestMCPToolCatalogPublication_AuthoredCatalogPassesGuards(t *testing.T) {
@@ -21,16 +21,16 @@ func TestMCPToolCatalogPublication_AuthoredCatalogPassesGuards(t *testing.T) {
 	if len(diagnostics) != 0 {
 		t.Fatalf("resolve authored catalog diagnostics = %+v", diagnostics)
 	}
-	if err := mcpfactorysession.VerifyCatalogAliasExclusion(resolved); err != nil {
+	if err := mcpfactorycatalog.VerifyCatalogAliasExclusion(resolved); err != nil {
 		t.Fatalf("VerifyCatalogAliasExclusion() error = %v", err)
 	}
-	if err := mcpfactorysession.VerifyCatalogModalityPolicy(resolved); err != nil {
+	if err := mcpfactorycatalog.VerifyCatalogModalityPolicy(resolved); err != nil {
 		t.Fatalf("VerifyCatalogModalityPolicy() error = %v", err)
 	}
-	if err := mcpfactorysession.VerifyAuthoredCatalogStagingBoundary(resolved); err != nil {
+	if err := mcpfactorycatalog.VerifyAuthoredCatalogStagingBoundary(resolved); err != nil {
 		t.Fatalf("VerifyAuthoredCatalogStagingBoundary() error = %v", err)
 	}
-	if err := mcpfactorysession.VerifyCatalogByteStability(resolved); err != nil {
+	if err := mcpfactorycatalog.VerifyCatalogByteStability(resolved); err != nil {
 		t.Fatalf("VerifyCatalogByteStability() error = %v", err)
 	}
 }
@@ -48,7 +48,7 @@ func TestMCPToolCatalogPublication_OnDiskCatalogIsCanonicallyByteStable(t *testi
 	if err := json.Unmarshal(onDisk, &document); err != nil {
 		t.Fatalf("unmarshal authored catalog: %v", err)
 	}
-	canonical, err := mcpfactorysession.MarshalCatalogDocumentJSON(document)
+	canonical, err := mcpfactorycatalog.MarshalCatalogDocumentJSON(document)
 	if err != nil {
 		t.Fatalf("MarshalCatalogDocumentJSON() error = %v", err)
 	}
