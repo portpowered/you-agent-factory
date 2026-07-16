@@ -61,7 +61,7 @@ func TestJavaScriptRecordingContract_RoundTripsCompletedAndFailedSessionFacts(t 
 			if err != nil {
 				t.Fatalf("NewEventLogArtifact: %v", err)
 			}
-			artifact.Events = append(artifact.Events, testutil.FactoryEvents(t, history.Events())...)
+			artifact.Events = append(artifact.Events, history.CanonicalEvents()...)
 			path := filepath.Join(t.TempDir(), testCase.name+".replay.json")
 			if err := replay.Save(path, artifact); err != nil {
 				t.Fatalf("Save: %v", err)

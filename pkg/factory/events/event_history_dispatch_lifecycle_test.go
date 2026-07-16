@@ -17,7 +17,7 @@ func TestFactoryEventHistory_RecordDispatchLifecycle_EmitsReconstructableQueueIn
 	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })
 	recordDispatchLifecycleSequence(t, history, t0)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 4 {
 		t.Fatalf("events = %d, want queued, interrupted, reconciled, artifact", len(events))
 	}

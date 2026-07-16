@@ -16,16 +16,6 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
-func generatedFactoryEvents(events []interfaces.FactoryEvent) []factoryapi.FactoryEvent {
-	converted := make([]factoryapi.FactoryEvent, len(events))
-	for index, event := range events {
-		if err := event.Decode(&converted[index]); err != nil {
-			panic(fmt.Sprintf("decode canonical factory event %q for generated boundary: %v", event.Id, err))
-		}
-	}
-	return converted
-}
-
 func cloneFactoryEvents(events []interfaces.FactoryEvent) []interfaces.FactoryEvent {
 	clones := make([]interfaces.FactoryEvent, len(events))
 	for index, event := range events {

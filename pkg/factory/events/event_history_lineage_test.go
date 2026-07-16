@@ -35,7 +35,7 @@ func TestFactoryEventHistory_RecordWorkRequest_PreservesGeneratedWorkChainingTra
 		}},
 	}, eventTime)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -109,7 +109,7 @@ func TestFactoryEventHistory_RecordWorkRequest_AppendsWorkOwnedCanonicalPayloads
 		t.Fatalf("canonical relationship payload = %#v, want Work-owned relationship", relationshipPayload)
 	}
 
-	generated := history.Events()
+	generated := generatedHistoryEvents(t, history)
 	if _, err := generated[0].Payload.AsWorkRequestEventPayload(); err != nil {
 		t.Fatalf("decode generated work request boundary: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestFactoryEventHistory_RecordWorkRequest_UsesCanonicalGeneratedWorkContent
 		},
 	}, eventTime)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -174,7 +174,7 @@ func TestFactoryEventHistory_RecordWorkstationEvents_PreserveChainingTraceLineag
 	history.RecordWorkstationRequest(8, chainingTraceLineageDispatchRecord(consumed), eventTime)
 	history.RecordWorkstationResponse(9, chainingTraceLineageResult(), chainingTraceLineageCompletion(eventTime, consumed))
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 2 {
 		t.Fatalf("event count = %d, want 2", len(events))
 	}
@@ -191,7 +191,7 @@ func TestFactoryEventHistory_RecordWorkstationEvents_CanonicalizesFanInLineageAn
 	history.RecordWorkstationRequest(12, record, eventTime)
 	history.RecordWorkstationResponse(13, chainingTraceLineageResult(), completion)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 2 {
 		t.Fatalf("event count = %d, want 2", len(events))
 	}
@@ -547,7 +547,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_PreserveInputExposesConsu
 		}},
 	})
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 2 {
 		t.Fatalf("event count = %d, want 2", len(events))
 	}
@@ -641,7 +641,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesRes
 		}},
 	})
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 2 {
 		t.Fatalf("event count = %d, want 2", len(events))
 	}
@@ -737,7 +737,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesNex
 		}},
 	})
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 2 {
 		t.Fatalf("event count = %d, want 2", len(events))
 	}
@@ -878,5 +878,5 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedPreservesRequestCon
 		}},
 	})
 
-	assertFailedPreservesRequestContentResponse(t, history.Events())
+	assertFailedPreservesRequestContentResponse(t, generatedHistoryEvents(t, history))
 }

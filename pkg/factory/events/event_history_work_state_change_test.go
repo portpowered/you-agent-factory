@@ -42,7 +42,7 @@ func TestFactoryEventHistory_RecordWorkStateChange_OperatorMoveShape(t *testing.
 		t.Fatalf("canonical payload = %#v, want owner-defined work state fields", canonicalPayload)
 	}
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -112,7 +112,7 @@ func TestFactoryEventHistory_RecordWorkStateChange_NormalizesEventTimeToUTC(t *t
 		Source:      work.WorkStateChangeSourceAPI,
 	}, eventTime)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -140,7 +140,7 @@ func TestFactoryEventHistory_RecordWorkStateChange_MatchesRecordWorkRequestEvent
 		Source:      work.WorkStateChangeSourceCLI,
 	}, eventTime)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 2 {
 		t.Fatalf("event count = %d, want 2", len(events))
 	}
@@ -164,7 +164,7 @@ func TestFactoryEventHistory_StateEventsUseCanonicalPayloadsAndRetainPublicWireS
 		t.Fatalf("canonical history count = %d, want 2", len(stream.History))
 	}
 	assertCanonicalFactoryStateEvents(t, stream.History, finishedAt)
-	assertPublicFactoryStateEvents(t, history.Events())
+	assertPublicFactoryStateEvents(t, generatedHistoryEvents(t, history))
 }
 
 func assertCanonicalFactoryStateEvents(t *testing.T, events []interfaces.FactoryEvent, finishedAt time.Time) {

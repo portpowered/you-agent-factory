@@ -201,12 +201,6 @@
     },
     {
       "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
-      "target": "pkg/factory/events/event_history.go#factoryEventPayload",
-      "owner": "backend-maintainers",
-      "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: canonical event payload union stays on one generated-type switch for replay-safe emission."
-    },
-    {
-      "rule": "pkgmaintcheck:ignore-cyclomatic-complexity",
       "target": "pkg/factory/events/event_history_dispatch_lifecycle.go#FactoryEventHistory.RecordDispatchQueued",
       "owner": "backend-maintainers",
       "removalReason": "Refactor the target to satisfy the pkgmaintcheck:ignore-cyclomatic-complexity threshold. Current rationale: dispatch queue emission keeps optional replay metadata on one canonical recorder."

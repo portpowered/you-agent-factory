@@ -258,9 +258,33 @@ func reconnectFixtureEvent(
 	context.Tick = tick
 	context.EventTime = eventTime
 	context.Sequence = sequence
-	event := factoryEvent(eventType, id, context, payload)
+	event := factoryapi.FactoryEvent{
+		Type:    eventType,
+		Id:      id,
+		Context: context,
+		Payload: reconnectFixturePayload(payload),
+	}
 	event.SchemaVersion = factoryapi.AgentFactoryEventV1
 	return event
+}
+
+func reconnectFixturePayload(payload any) factoryapi.FactoryEvent_Payload {
+	var out factoryapi.FactoryEvent_Payload
+	var err error
+	switch typed := payload.(type) {
+	case factoryapi.DispatchQueuedEventPayload:
+		err = out.FromDispatchQueuedEventPayload(typed)
+	case factoryapi.DispatchInterruptedEventPayload:
+		err = out.FromDispatchInterruptedEventPayload(typed)
+	case factoryapi.DispatchReconciledEventPayload:
+		err = out.FromDispatchReconciledEventPayload(typed)
+	default:
+		panic(fmt.Sprintf("unsupported reconnect fixture payload %T", payload))
+	}
+	if err != nil {
+		panic(fmt.Sprintf("encode reconnect fixture payload %T: %v", payload, err))
+	}
+	return out
 }
 
 func intPtr(value int) *int {

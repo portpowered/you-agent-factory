@@ -37,7 +37,7 @@ func TestFactoryEventHistory_RecordSessionLifecycle_EmitsReconstructableBracketS
 		t0.Add(2*time.Second),
 	)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 3 {
 		t.Fatalf("events = %d, want started, result-updated, completed", len(events))
 	}
@@ -113,7 +113,7 @@ func TestFactoryEventHistory_RecordSessionLifecycle_FailedRunEmitsFailedWithPart
 		t0.Add(time.Second),
 	)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 3 {
 		t.Fatalf("events = %d, want started, failed-with-partial result, completed", len(events))
 	}
@@ -159,7 +159,7 @@ func TestFactoryEventHistory_RecordSessionLifecycleControl_EmitsPauseAndResume(t
 		Reason:           "resume requested",
 	}, t0.Add(time.Second))
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 2 {
 		t.Fatalf("events = %d, want pause and resume lifecycle controls", len(events))
 	}
@@ -223,7 +223,7 @@ func TestFactoryEventHistory_RecordSessionPauseResume_EmitsReconstructableContro
 		Tick:             2,
 	}, t0.Add(2*time.Second))
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 3 {
 		t.Fatalf("events = %d, want started, paused, resumed", len(events))
 	}

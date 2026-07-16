@@ -62,7 +62,7 @@ func TestFactoryEventHistory_RecordWorkRequest_SerializesContentURLNotMaterializ
 	})
 	history.RecordWorkRequest(3, record, time.Date(2026, 6, 1, 12, 0, 1, 0, time.UTC))
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}

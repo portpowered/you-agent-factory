@@ -20,6 +20,18 @@ import (
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
+func generatedHistoryEvents(t testing.TB, history *FactoryEventHistory) []factoryapi.FactoryEvent {
+	t.Helper()
+	canonical := history.CanonicalEvents()
+	generated := make([]factoryapi.FactoryEvent, len(canonical))
+	for index, event := range canonical {
+		if err := event.Decode(&generated[index]); err != nil {
+			t.Fatalf("decode canonical Factory event %q for compatibility assertion: %v", event.Id, err)
+		}
+	}
+	return generated
+}
+
 func TestFactoryEventHistory_EventRecorderCannotMutateCanonicalHistory(t *testing.T) {
 	history := NewFactoryEventHistory(
 		eventHistoryProjectionNet(),
@@ -32,7 +44,7 @@ func TestFactoryEventHistory_EventRecorderCannotMutateCanonicalHistory(t *testin
 
 	history.RecordInitialStructure()
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -119,7 +131,7 @@ func TestFactoryEventHistory_FactoryChangeUsesFactoryOwnedPayloadAndRetainsPubli
 	}, eventTime)
 
 	assertCanonicalFactoryChangeEvent(t, history.CanonicalEvents(), sourceDirectory)
-	assertPublicFactoryChangeEvent(t, history.Events())
+	assertPublicFactoryChangeEvent(t, generatedHistoryEvents(t, history))
 }
 
 func assertCanonicalFactoryChangeEvent(t *testing.T, canonical []interfaces.FactoryEvent, sourceDirectory string) {
@@ -183,7 +195,7 @@ func TestFactoryEventHistory_RecordInitialStructure_UsesRuntimeConfigProjection(
 
 	history.RecordInitialStructure()
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -248,7 +260,7 @@ func TestFactoryEventHistory_RecordInitialStructure_IncludesEditableFactoryDocum
 
 	history.RecordInitialStructure()
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -345,7 +357,7 @@ func TestFactoryEventHistory_RecordInitialStructure_EmitsCanonicalPublicWorkstat
 
 	history.RecordInitialStructure()
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -378,7 +390,7 @@ func TestFactoryEventHistory_RecordInitialStructure_PreservesNonSuccessRouteArra
 
 	history.RecordInitialStructure()
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -430,7 +442,7 @@ func TestFactoryEventHistory_RecordInitialStructure_ProjectsImplicitCronFailureR
 	history := NewFactoryEventHistory(net, func() time.Time { return time.Unix(0, 0).UTC() })
 	history.RecordInitialStructure()
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -482,7 +494,7 @@ func TestFactoryEventHistory_RecordInitialStructure_PreservesGeneratedPublicEnum
 
 	history.RecordInitialStructure()
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -539,7 +551,7 @@ func TestFactoryEventHistory_RecordDispatchCompletion_PreservesSelectedClassific
 
 	history.RecordWorkstationResponse(3, result, completed)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -588,7 +600,7 @@ func TestFactoryEventHistory_RecordDispatchCompletion_PreservesOutputWorkStateFr
 
 	history.RecordWorkstationResponse(3, result, completed)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}

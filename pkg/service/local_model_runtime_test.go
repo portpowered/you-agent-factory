@@ -260,7 +260,7 @@ func TestLoadWorkersFromConfig_LocalModelWorkerRecordsModelExecutionEvents(t *te
 	if result.Outcome != workerexecution.OutcomeAccepted {
 		t.Fatalf("outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
-	assertRecordedLocalModelExecutionEvents(t, history.Events(), audioPath)
+	assertRecordedLocalModelExecutionEvents(t, generatedFactoryEventsForTest(t, history.CanonicalEvents()), audioPath)
 }
 
 func TestLoadWorkersFromConfig_LocalModelWorkerDetachesClonedWorkerRequestsFromLaterSourceMutation(t *testing.T) {

@@ -72,7 +72,7 @@ func TestFactoryEventHistory_RecordWorkstationRequest_UsesContextForRequestIdent
 		t.Fatalf("canonical metadata = %#v, want replay-1", canonicalPayload.Metadata)
 	}
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -108,7 +108,7 @@ func TestFactoryEventHistory_RecordWorkstationRequest_NormalizesEventTimeToUTC(t
 		},
 	}, eventTime)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -227,7 +227,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedResultIncludesFailu
 		t.Fatalf("canonical failure detail = %#v, want throttled", canonicalPayload.FailureDetail)
 	}
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -284,7 +284,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_UsesUTCFallbackAndDuratio
 
 	history.RecordWorkstationResponse(9, result, completed)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -324,7 +324,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_CodexWindowsExitCode42949
 
 	history.RecordWorkstationResponse(12, result, completed)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -368,7 +368,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OmitsRetiredProviderAttem
 
 	history.RecordWorkstationResponse(12, safeDiagnosticsWorkResult(), safeDiagnosticsCompletedDispatch(eventTime))
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -522,7 +522,7 @@ func dispatchRequestMetadataForEventHistoryTest(t *testing.T, history *FactoryEv
 		},
 	}, time.Date(2026, 4, 22, 16, 0, 0, 0, time.UTC))
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}

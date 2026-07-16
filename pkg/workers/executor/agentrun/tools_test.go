@@ -21,9 +21,21 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/http/workstationprojection"
 	"github.com/portpowered/infinite-you/pkg/work"
 )
+
+func generatedFactoryEventsForToolTest(t testing.TB, events []interfaces.FactoryEvent) []factoryapi.FactoryEvent {
+	t.Helper()
+	generated := make([]factoryapi.FactoryEvent, len(events))
+	for index, event := range events {
+		if err := event.Decode(&generated[index]); err != nil {
+			t.Fatalf("decode canonical Factory event %q for compatibility assertion: %v", event.Id, err)
+		}
+	}
+	return generated
+}
 
 func TestPolicyToolExecutor_DisabledDeniesToolCalls(t *testing.T) {
 	t.Parallel()
@@ -427,7 +439,7 @@ func TestAgentRunToolFailure_SanitizedFailureMessageThroughDispatchProjection(t 
 		Reason:          result.Error,
 		Duration:        time.Second,
 	})
-	events := history.Events()
+	events := generatedFactoryEventsForToolTest(t, history.CanonicalEvents())
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}

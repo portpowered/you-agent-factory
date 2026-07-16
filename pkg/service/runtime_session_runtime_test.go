@@ -144,12 +144,12 @@ func TestFactoryService_LiveSessionsOwnIsolatedResponseEventStores(t *testing.T)
 
 	defaultHistory := liveSessionHandle(defaultSession).Bundle.EventHistory
 	betaHistory := liveSessionHandle(betaSession).Bundle.EventHistory
-	defaultHistoryCount := len(defaultHistory.Events())
-	betaHistoryCount := len(betaHistory.Events())
+	defaultHistoryCount := len(defaultHistory.CanonicalEvents())
+	betaHistoryCount := len(betaHistory.CanonicalEvents())
 	defaultEvent := publishSessionResponseEvent(t, defaultSession, "run-default")
 	betaEvent := publishSessionResponseEvent(t, betaSession, "run-beta")
 	assertPublishedResponseEventsAreSessionIsolated(t, defaultSession, betaSession, defaultEvent, betaEvent)
-	if len(defaultHistory.Events()) != defaultHistoryCount || len(betaHistory.Events()) != betaHistoryCount {
+	if len(defaultHistory.CanonicalEvents()) != defaultHistoryCount || len(betaHistory.CanonicalEvents()) != betaHistoryCount {
 		t.Fatal("response-event publication mutated canonical FactoryEvent history")
 	}
 
@@ -3657,7 +3657,7 @@ func TestFactoryService_GetFactorySessionSyncPreflight_ValidatesReconnectCursor(
 
 	session := harness.requireSession(t, defaultFactorySessionID)
 	eventHistory := liveSessionHandle(session).Bundle.EventHistory
-	recorded := eventHistory.Events()
+	recorded := generatedFactoryEventsForTest(t, eventHistory.CanonicalEvents())
 	if len(recorded) == 0 {
 		t.Fatal("event history = empty, want initial structure event")
 	}

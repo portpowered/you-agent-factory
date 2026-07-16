@@ -13,7 +13,6 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
@@ -118,17 +117,6 @@ func (h *FactoryEventHistory) SetInitialStructureFactory(factory *interfaces.Fac
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.initialFactory = factory.Clone()
-}
-
-// Events returns the recorded events in append order.
-func (h *FactoryEventHistory) Events() []factoryapi.FactoryEvent {
-	if h == nil {
-		return nil
-	}
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	return generatedFactoryEvents(h.events)
 }
 
 // CanonicalEvents returns detached Factory-owned events in append order.
@@ -542,16 +530,6 @@ func (h *FactoryEventHistory) RecordAgentRunEvent(event workerexecution.AgentRun
 	))
 }
 
-// AppendRecordedEvent appends one already-shaped canonical event into the
-// history so callers can bridge runtime-owned events into a wider stream.
-func (h *FactoryEventHistory) AppendRecordedEvent(event factoryapi.FactoryEvent) {
-	if h == nil {
-		return
-	}
-	event.Context.EventTime = interfaces.CanonicalEventTime(event.Context.EventTime)
-	h.appendGenerated(event)
-}
-
 // RecordRunResponse records the canonical run completion event after the
 // runtime has reached a terminal state.
 func (h *FactoryEventHistory) RecordRunResponse(tick int, state interfaces.FactoryState, reason string, eventTime time.Time) {
@@ -642,14 +620,6 @@ func (h *FactoryEventHistory) RecordFactoryStateChange(tick int, previous interf
 	))
 }
 
-func (h *FactoryEventHistory) appendGenerated(event factoryapi.FactoryEvent) {
-	domainEvent, err := interfaces.NewFactoryEvent(event)
-	if err != nil {
-		panic(fmt.Sprintf("convert generated factory event %q to canonical envelope: %v", event.Id, err))
-	}
-	h.appendEvent(domainEvent)
-}
-
 func (h *FactoryEventHistory) appendEvent(event interfaces.FactoryEvent) {
 	h.mu.Lock()
 	event.SchemaVersion = interfaces.FactoryEventSchemaVersionV1
@@ -682,15 +652,6 @@ func (h *FactoryEventHistory) appendEvent(event interfaces.FactoryEvent) {
 	}
 }
 
-func factoryEvent(eventType factoryapi.FactoryEventType, id string, context factoryapi.FactoryEventContext, payload any) factoryapi.FactoryEvent {
-	return factoryapi.FactoryEvent{
-		Type:    eventType,
-		Id:      id,
-		Context: context,
-		Payload: factoryEventPayload(payload),
-	}
-}
-
 func domainFactoryEvent(eventType interfaces.FactoryEventType, id string, context interfaces.FactoryEventContext, payload any) interfaces.FactoryEvent {
 	encoded, err := json.Marshal(payload)
 	if err != nil {
@@ -702,45 +663,6 @@ func domainFactoryEvent(eventType interfaces.FactoryEventType, id string, contex
 		Context: context,
 		Payload: encoded,
 	}
-}
-
-// pkgmaintcheck:ignore-cyclomatic-complexity canonical event payload union stays on one generated-type switch for replay-safe emission.
-func factoryEventPayload(payload any) factoryapi.FactoryEvent_Payload {
-	var out factoryapi.FactoryEvent_Payload
-	var err error
-	switch typed := payload.(type) {
-	case factoryapi.RunRequestEventPayload:
-		err = out.FromRunRequestEventPayload(typed)
-	case factoryapi.InitialStructureRequestEventPayload:
-		err = out.FromInitialStructureRequestEventPayload(typed)
-	case factoryapi.DispatchRequestEventPayload:
-		err = out.FromDispatchRequestEventPayload(typed)
-	case factoryapi.DispatchResponseEventPayload:
-		err = out.FromDispatchResponseEventPayload(typed)
-	case factoryapi.SessionStartedEventPayload:
-		err = out.FromSessionStartedEventPayload(typed)
-	case factoryapi.SessionResultUpdatedEventPayload:
-		err = out.FromSessionResultUpdatedEventPayload(typed)
-	case factoryapi.SessionCompletedEventPayload:
-		err = out.FromSessionCompletedEventPayload(typed)
-	case factoryapi.SessionLifecycleControlEventPayload:
-		err = out.FromSessionLifecycleControlEventPayload(typed)
-	case factoryapi.SessionPausedEventPayload:
-		err = out.FromSessionPausedEventPayload(typed)
-	case factoryapi.SessionResumedEventPayload:
-		err = out.FromSessionResumedEventPayload(typed)
-	default:
-		encoded, marshalErr := json.Marshal(typed)
-		if marshalErr != nil {
-			err = marshalErr
-		} else {
-			err = out.UnmarshalJSON(encoded)
-		}
-	}
-	if err != nil {
-		panic(fmt.Sprintf("factory event payload %T: %v", payload, err))
-	}
-	return out
 }
 
 func (h *FactoryEventHistory) resolvedRunnerSelectionForDispatch(dispatch work.WorkDispatch) workerexecution.ResolvedRunnerSelection {

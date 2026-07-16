@@ -50,6 +50,17 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
+func generatedFactoryEventsForTest(t testing.TB, events []interfaces.FactoryEvent) []factoryapi.FactoryEvent {
+	t.Helper()
+	generated := make([]factoryapi.FactoryEvent, len(events))
+	for index, event := range events {
+		if err := event.Decode(&generated[index]); err != nil {
+			t.Fatalf("decode canonical Factory event %q for compatibility assertion: %v", event.Id, err)
+		}
+	}
+	return generated
+}
+
 func generatedFactoryFromRuntimeConfigForTest(factoryDir string, factoryCfg *interfaces.FactoryConfig, runtimeCfg interfaces.RuntimeDefinitionLookup) (factoryapi.Factory, error) {
 	snapshot, err := replay.FactorySnapshotFromRuntimeConfig(factoryDir, factoryCfg, runtimeCfg)
 	if err != nil {
@@ -2634,7 +2645,7 @@ func TestWorkerWorkstationTaxonomyRuntime_InferenceTaxonomyRecordsModelExecution
 	if result.Outcome != workerexecution.OutcomeAccepted {
 		t.Fatalf("outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
-	assertRecordedLocalModelExecutionEvents(t, history.Events(), audioPath)
+	assertRecordedLocalModelExecutionEvents(t, generatedFactoryEventsForTest(t, history.CanonicalEvents()), audioPath)
 }
 
 func TestWorkerWorkstationTaxonomyRuntime_AgentRunWithInferenceWorkerFailsValidationBeforeDispatch(t *testing.T) {

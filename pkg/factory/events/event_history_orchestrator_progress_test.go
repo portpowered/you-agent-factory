@@ -68,7 +68,7 @@ func TestFactoryEventHistory_RecordOrchestratorProgress_EmitsReconstructablePhas
 		}},
 	}, checkpointTime)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 3 {
 		t.Fatalf("events = %d, want phase, phase, checkpoint", len(events))
 	}

@@ -37,7 +37,7 @@ func TestFactoryEventHistory_RecordInferenceEvent_OwnsEnvelopeAndPreservesPublic
 		},
 	})
 	assertCanonicalInferenceResponseEvent(t, history.CanonicalEvents(), eventTime)
-	assertPublicInferenceResponseEvent(t, history.Events())
+	assertPublicInferenceResponseEvent(t, generatedHistoryEvents(t, history))
 }
 
 func assertCanonicalInferenceResponseEvent(t *testing.T, canonical []interfaces.FactoryEvent, eventTime time.Time) {
@@ -81,7 +81,7 @@ func TestFactoryEventHistory_RecordInferenceEvent_IgnoresMalformedFacts(t *testi
 		Response:   &workerexecution.InferenceResponseEventPayload{},
 	})
 
-	if events := history.Events(); len(events) != 0 {
+	if events := generatedHistoryEvents(t, history); len(events) != 0 {
 		t.Fatalf("event count = %d, want 0 for mismatched inference fact", len(events))
 	}
 }
@@ -114,7 +114,7 @@ func TestFactoryEventHistory_RecordAgentRunEvent_OwnsEnvelopeAndPreservesPublicP
 		t.Fatalf("dispatch ID = %#v, want dispatch-agent", canonical[0].Context.DispatchID)
 	}
 
-	publicEvents := history.Events()
+	publicEvents := generatedHistoryEvents(t, history)
 	payload, err := publicEvents[0].Payload.AsAgentRunResponseEventPayload()
 	if err != nil {
 		t.Fatalf("decode public agent-run payload: %v", err)
@@ -134,7 +134,7 @@ func TestFactoryEventHistory_RecordScriptEvent_AppendsScriptBoundaryEvents(t *te
 
 	recordScriptBoundaryEvents(history, eventTime, scriptRequestID)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	assertRecordedScriptBoundaryEvents(t, events)
 	assertRecordedScriptRequestPayload(t, events[0], scriptRequestID)
 	assertRecordedScriptResponsePayload(t, events[1], scriptRequestID)
@@ -151,7 +151,7 @@ func TestFactoryEventHistory_RecordScriptEvent_IgnoresNonScriptEvents(t *testing
 		Response:   &workerexecution.ScriptResponseEventPayload{},
 	})
 
-	if events := history.Events(); len(events) != 0 {
+	if events := generatedHistoryEvents(t, history); len(events) != 0 {
 		t.Fatalf("event count = %d, want 0 when script recorder receives non-script event", len(events))
 	}
 }
