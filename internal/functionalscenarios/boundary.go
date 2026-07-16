@@ -61,6 +61,38 @@ func CheckFunctionalTestBoundaries(repositoryRoot string) error {
 	if err != nil {
 		return fmt.Errorf("scan functional test boundaries: %w", err)
 	}
+	return firstFunctionalBoundaryViolation(violations)
+}
+
+// CheckRequiredFunctionalTestBoundaries checks the exact test files bound into
+// the reviewed required short lane. CheckRequiredScenarios should run first so
+// each path and symbol has already been validated.
+func CheckRequiredFunctionalTestBoundaries(repositoryRoot string, manifest *RequiredManifest) error {
+	if manifest == nil {
+		return fmt.Errorf("check required functional test boundaries: manifest is nil")
+	}
+	checked := make(map[string]bool, len(manifest.Scenarios))
+	var violations []FunctionalBoundaryViolation
+	for _, scenario := range manifest.Scenarios {
+		testPath, _, found := strings.Cut(scenario.Test, "::")
+		if !found || testPath == "" {
+			return fmt.Errorf("check required functional test boundaries: scenario %q has invalid test identity %q", scenario.StableID, scenario.Test)
+		}
+		normalizedPath := filepath.ToSlash(filepath.Clean(testPath))
+		if checked[normalizedPath] {
+			continue
+		}
+		checked[normalizedPath] = true
+		fileViolations, err := checkFunctionalBoundaryFile(repositoryRoot, filepath.Join(repositoryRoot, filepath.FromSlash(normalizedPath)))
+		if err != nil {
+			return err
+		}
+		violations = append(violations, fileViolations...)
+	}
+	return firstFunctionalBoundaryViolation(violations)
+}
+
+func firstFunctionalBoundaryViolation(violations []FunctionalBoundaryViolation) error {
 	if len(violations) == 0 {
 		return nil
 	}

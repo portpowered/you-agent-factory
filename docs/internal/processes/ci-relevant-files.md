@@ -38,3 +38,9 @@
   a failed CI result has a direct local rerun. In `pwsh` summary steps, write
   expanded GitHub expressions as plain text rather than surrounding them with
   PowerShell backticks, which can escape the closing quote after expansion.
+  Both `make test-functional` and `make test-functional-coverage` run
+  `required-functional-check` before executing scenarios. Keep that prerequisite
+  on required functional lanes so reviewed scenario bindings and customer-boundary
+  enforcement for their exact test files fail consistently before credential-free
+  short tests begin. The broader repository scanner remains available for focused
+  migration of implementation-level functional tests outside the reviewed minimum.

@@ -64,7 +64,7 @@ func TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure(t *testing
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
 	host := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.ProviderCommandRunnerOverride = generatedRESTStreamingRunner{}
+		support.ConfigureWorkerCommands(t, cfg, generatedRESTStreamingRunner{}, nil)
 	})
 
 	traceID := submitGeneratedWork(t, host.URL(), factoryapi.SubmitWorkRequest{
@@ -141,7 +141,7 @@ func TestGeneratedRESTClientSmoke_BoundsCancellationAndDeadline(t *testing.T) {
 	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
 	host := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
-		cfg.ProviderCommandRunnerOverride = generatedRESTStreamingRunner{}
+		support.ConfigureWorkerCommands(t, cfg, generatedRESTStreamingRunner{}, nil)
 	})
 
 	traceID := submitGeneratedWork(t, host.URL(), factoryapi.SubmitWorkRequest{

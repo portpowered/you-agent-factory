@@ -44,9 +44,12 @@ func run(cfg config, stdout io.Writer) error {
 	if err := functionalscenarios.CheckRequiredScenarios(cfg.root, manifest); err != nil {
 		return err
 	}
+	if err := functionalscenarios.CheckRequiredFunctionalTestBoundaries(cfg.root, manifest); err != nil {
+		return err
+	}
 	_, err = fmt.Fprintf(
 		stdout,
-		"[agent-factory:required-functional] %d required short customer-boundary scenario(s) are current; %d reviewed non-required SSE disposition(s) are explicit\n",
+		"[agent-factory:required-functional] %d required short customer-boundary scenario(s) are current; %d reviewed non-required SSE disposition(s) are explicit; functional tests use approved customer boundaries\n",
 		len(manifest.Scenarios),
 		len(manifest.NonRequiredScenarios),
 	)
