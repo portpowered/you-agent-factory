@@ -9,7 +9,7 @@ import (
 )
 
 func TestCatalogDefinitionsAreRunnableAndMatchMetadata(t *testing.T) {
-	wantNames := []string{"@you/fusion", "@you/goal", "@you/subagent", "@you/tts"}
+	wantNames := []string{"@you/fix", "@you/fusion", "@you/goal", "@you/subagent", "@you/tts"}
 	if got := factorypackages.Names(); !reflect.DeepEqual(got, wantNames) {
 		t.Fatalf("Names() = %v, want %v", got, wantNames)
 	}

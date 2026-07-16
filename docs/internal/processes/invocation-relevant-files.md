@@ -778,6 +778,15 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `{{ .WorkID }}` fail prompt rendering before mock-worker dispatch. Resolution
   never repairs legacy prompts, so installed files remain customer-owned and
   byte-for-byte unchanged by `you run --named` lookup.
+- Packaged `@you/fix` is authored under `pkg/factory/packages/definitions/fix/`
+  and exposes its public identity and topology constants under
+  `pkg/factory/packages/fix/`. Its plan, implementation, and review
+  workstations share a `fix-{{ (index .Inputs 0).TraceID }}` worktree template;
+  with `CODEX` model-provider workers and no authored working directory, the
+  existing workstation executor prepares that one factory-local worktree before
+  the planner dispatches and reuses it for later stages. Review rejection routes
+  `fix:review` back to `fix:implement`; only the review output reaches the
+  explicit `fix:complete` invocation return.
 - `pkg/factory/packages/definitions/subagent/` owns the authored `@you/subagent` one-pass factory
   scaffold (`factory.json`, prompt files) assembled into `BuiltInSubagentFactoryJSON`
   and registered by `pkg/factory/packages/catalog.go`. The topology uses exactly one `AGENT_WORKER`

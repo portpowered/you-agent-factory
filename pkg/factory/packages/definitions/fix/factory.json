@@ -1,0 +1,75 @@
+{
+  "name": "@you/fix",
+  "id": "builtin-fix",
+  "invocationSignature": {
+    "parameters": [
+      {
+        "name": "input",
+        "description": "Change request to plan, implement, and review in an isolated worktree.",
+        "required": true,
+        "bindings": [
+          {"kind": "POSITIONAL", "position": 1},
+          {"kind": "STDIN"}
+        ]
+      }
+    ]
+  },
+  "invocationReturn": {
+    "policy": "EXPLICIT",
+    "workTypeName": "fix",
+    "terminalState": "complete"
+  },
+  "workTypes": [
+    {
+      "name": "fix",
+      "handlingBehavior": ["DEFAULT"],
+      "states": [
+        {"name": "plan", "type": "INITIAL"},
+        {"name": "implement", "type": "PROCESSING"},
+        {"name": "review", "type": "IN_REVIEW"},
+        {"name": "complete", "type": "TERMINAL"},
+        {"name": "failed", "type": "FAILED"}
+      ]
+    }
+  ],
+  "workers": [
+    {"name": "fix-planner", "type": "AGENT_WORKER", "modelProvider": "CODEX", "promptFile": "prompts/planner.md"},
+    {"name": "fix-implementer", "type": "AGENT_WORKER", "modelProvider": "CODEX", "stopToken": "<COMPLETE>", "promptFile": "prompts/implementer.md"},
+    {"name": "fix-reviewer", "type": "AGENT_WORKER", "modelProvider": "CODEX", "stopToken": "<COMPLETE>", "promptFile": "prompts/reviewer.md"}
+  ],
+  "workstations": [
+    {
+      "name": "plan-fix",
+      "type": "AGENT_RUN",
+      "worker": "fix-planner",
+      "worktree": "fix-{{ (index .Inputs 0).TraceID }}",
+      "inputs": [{"workType": "fix", "state": "plan"}],
+      "outputs": [{"workType": "fix", "state": "implement"}],
+      "onFailure": [{"workType": "fix", "state": "failed"}],
+      "promptFile": "prompts/planner.md"
+    },
+    {
+      "name": "implement-fix",
+      "type": "AGENT_RUN",
+      "behavior": "REPEATER",
+      "worker": "fix-implementer",
+      "worktree": "fix-{{ (index .Inputs 0).TraceID }}",
+      "inputs": [{"workType": "fix", "state": "implement"}],
+      "outputs": [{"workType": "fix", "state": "review"}],
+      "onContinue": [{"workType": "fix", "state": "implement"}],
+      "onFailure": [{"workType": "fix", "state": "failed"}],
+      "promptFile": "prompts/implementer.md"
+    },
+    {
+      "name": "review-fix",
+      "type": "AGENT_RUN",
+      "worker": "fix-reviewer",
+      "worktree": "fix-{{ (index .Inputs 0).TraceID }}",
+      "inputs": [{"workType": "fix", "state": "review"}],
+      "outputs": [{"workType": "fix", "state": "complete"}],
+      "onRejection": [{"workType": "fix", "state": "implement"}],
+      "onFailure": [{"workType": "fix", "state": "failed"}],
+      "promptFile": "prompts/reviewer.md"
+    }
+  ]
+}

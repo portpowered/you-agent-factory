@@ -4,6 +4,7 @@ package packages
 import (
 	"sort"
 
+	builtinfix "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fix"
 	builtinfusion "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fusion"
 	builtingoal "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/goal"
 	builtinsubagent "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/subagent"
@@ -18,6 +19,11 @@ type Definition struct {
 }
 
 var catalog = map[string]Definition{
+	"@you/fix": {
+		Name:    "@you/fix",
+		Project: "builtin-fix",
+		JSON:    builtinfix.BuiltInFixFactoryJSON,
+	},
 	"@you/fusion": {
 		Name:    "@you/fusion",
 		Project: "builtin-fusion",

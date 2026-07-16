@@ -279,21 +279,32 @@ This precedence is selection-only: the CLI chooses exactly one matching named
 factory directory and never merges a project-local definition with a global
 definition of the same canonical name.
 
-First-party built-ins such as `@you/goal` and `@you/tts` also use the
+First-party built-ins such as `@you/fix`, `@you/goal`, and `@you/tts` also use the
 named-factory path:
 
 ```bash
+you run --named @you/fix "Repair the login retry regression"
 you run --named @you/goal "Ship the login fix by Friday"
 you run --named @you/tts --output primary "Read the release summary."
 ```
 
-Start with `@you/goal` when you want a goal-oriented factory you can run
-immediately and customize on disk instead of authoring `factory.json` from
-scratch. Start with `@you/tts` when you need the inference-oriented packaged
-TTS example. See `you docs run` for named-Factory invocation inputs and stdout
-result modes, `you docs sessions` for stopped-run inspection and recovery, and
-`you docs models` for TTS readiness, direct invocation, and audio or JSON
-result choices.
+Start with `@you/fix` when a change needs an isolated worktree, an actionable
+plan, implementation, and an approval gate. Start with `@you/goal` when you
+want a goal-oriented factory you can run immediately and customize on disk
+instead of authoring `factory.json` from scratch. Start with `@you/tts` when
+you need the inference-oriented packaged TTS example. See `you docs run` for
+named-Factory invocation inputs and stdout result modes, `you docs sessions`
+for stopped-run inspection and recovery, and `you docs models` for TTS
+readiness, direct invocation, and audio or JSON result choices.
+
+### Built-in `@you/fix` workflow
+
+The shipped fix factory creates a factory-managed Codex worktree named from the
+invocation trace before planning begins. It then routes one `fix` request through
+`plan-fix`, the repeating `implement-fix` stage, and `review-fix`. Rejected
+review returns the same request to implementation; only an approved response
+ending with `<COMPLETE>` reaches `fix:complete` and becomes the invocation
+result.
 
 ### Built-in `@you/goal` repeater
 
