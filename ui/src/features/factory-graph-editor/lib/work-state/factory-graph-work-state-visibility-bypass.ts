@@ -151,7 +151,7 @@ function workstationReference(
   workstationId: string,
 ): FactoryGraphNodeReference {
   const node = nodesById.get(workstationId);
-  if (!node || node.key.kind !== "workstation") {
+  if (node?.key.kind !== "workstation") {
     throw new Error(`Expected workstation node ${workstationId}`);
   }
 

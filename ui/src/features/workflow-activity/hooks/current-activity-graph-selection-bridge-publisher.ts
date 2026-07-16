@@ -46,7 +46,7 @@ function dispatchGraphSelectionDashboardSyncAction(
 function resolveDashboardSyncActionForPrimaryTarget(
   primaryTarget: FactoryGraphEditorSelectionTarget | null,
 ): GraphSelectionDashboardSyncAction | null {
-  if (!primaryTarget || primaryTarget.kind !== "node") {
+  if (primaryTarget?.kind !== "node") {
     return null;
   }
 

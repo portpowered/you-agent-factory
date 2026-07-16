@@ -939,7 +939,7 @@ describe("current activity graph editor handles", () => {
     const resourceNode = graphLayout.nodes.find(
       (node) => node.nodeId === "resource:gpu" && node.nodeKind === "resource",
     );
-    if (!resourceNode || resourceNode.nodeKind !== "resource") {
+    if (resourceNode?.nodeKind !== "resource") {
       throw new Error("Expected canonical resource node in graph layout.");
     }
 
