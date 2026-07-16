@@ -96,7 +96,7 @@ endef
 
 .PHONY: test-unit test-functional test-stress test-release test-unit-coverage test-functional-coverage
 .PHONY: mcp-contract-check
-.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke api-package-pack-smoke contracts-validate contracts-generate contracts-check contracts-smoke cli-contract-smoke cli-manifest-generate cli-manifest-check docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend test-backend-coverage test-backend-functional test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke config-contract-smoke response-stream-stress-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check model-facade-check readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy init dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install clean
+.PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke api-package-pack-smoke contracts-validate contracts-generate contracts-check contracts-smoke cli-contract-smoke cli-manifest-generate cli-manifest-check docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build verify-lint verify-api verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend test-backend-coverage test-backend-functional test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke config-contract-smoke response-stream-stress-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check model-facade-check readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy init dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install clean
 
 .PHONY: ui-storybook
 .PHONY: default build intall bundle-api generate-api generate-go-api generate-go-server-api generate-go-client-api generate-ui-api generate-wire wire-smoke api-smoke api-package-pack-smoke contracts-validate contracts-generate contracts-check contracts-smoke mcp-contract-smoke mcp-discovery-generate mcp-discovery-check cli-manifest-generate cli-manifest-check docs-reference-check docs-reference-smoke test test-full test-functional test-functional-long verify-fast verify-pr verify-pr-inference verify-extended verify-build-contracts verify-tests run-concurrent-ui-verification-lanes run-sharded-ui-coverage verify test-ui-coverage test-ui-coverage-merge test-ui-browser-integration test-ui-durable-session-real-backend test-backend-coverage test-backend-functional test-backend-verification test-built-cli-acceptance long-tests long-tests-managed-runtime long-tests-functional-runtime pr-inference-approval test-coverage-go script-timeout-companion-smoke-100 cron-time-work-smoke current-factory-watcher-switch-smoke provider-parity-smoke javascript-contract-smoke response-stream-stress-smoke release-surface-smoke artifact-contract-closeout lint backend-size pkg-maint pkg-file-count pkg-boundary durable-runtime-construction-check logging-boundary-check compatibility-alias-check retired-surface-check model-facade-check readme-check deadcode ui-deadcode test-race fmt vet deps deps-tidy init dashboard-verify typecheck release ci ci-typecheck ci-verify-build-contracts ci-verify-tests ui-deps ui-lint ui-build ui-test ui-integration-test ui-durable-session-real-backend-integration-test ui-test-coverage ui-replay-coverage-check ui-install-playwright ui-storybook ui-test-storybook ui-components-typecheck ui-components-test ui-components-storybook ui-components-boundary ui-components-dependency-direction ui-components-verify ui-verify-fresh-npm-install clean
@@ -374,17 +374,26 @@ deadcode:
 ui-deadcode:
 	cd ui && $(UI_SCRIPT) deadcode
 
-verify-build-contracts:
-	$(MAKE) typecheck
+verify-build:
 	$(MAKE) ui-build
 	$(MAKE) build
+
+verify-lint:
 	$(MAKE) lint
 	$(MAKE) ui-components-verify
+
+verify-api:
 	$(MAKE) contracts-smoke
 	$(MAKE) api-smoke
 	$(MAKE) response-stream-stress-smoke
 	$(MAKE) api-package-pack-smoke
 	$(MAKE) wire-smoke
+
+verify-build-contracts:
+	$(MAKE) typecheck
+	$(MAKE) verify-build
+	$(MAKE) verify-lint
+	$(MAKE) verify-api
 
 run-sharded-ui-coverage:
 	./scripts/ci/run-sharded-ui-coverage.sh
@@ -419,15 +428,9 @@ ci-typecheck:
 	$(MAKE) typecheck
 
 ci-verify-build-contracts: ci-typecheck
-	$(MAKE) ui-build
-	$(MAKE) build
-	$(MAKE) lint
-	$(MAKE) ui-components-verify
-	$(MAKE) contracts-smoke
-	$(MAKE) api-smoke
-	$(MAKE) response-stream-stress-smoke
-	$(MAKE) api-package-pack-smoke
-	$(MAKE) wire-smoke
+	$(MAKE) verify-build
+	$(MAKE) verify-lint
+	$(MAKE) verify-api
 
 ci-verify-tests: ci-verify-build-contracts
 	$(MAKE) ui-install-playwright
@@ -549,12 +552,11 @@ ui-components-dependency-direction:
 	cd ui/packages/components && $(UI_SCRIPT) check:package-dependency-direction
 
 ui-components-verify:
-	@printf '%s\n' "Running component package verification harness"
-	$(call run_verification_step,ui-components-typecheck,component package typecheck)
-	$(call run_verification_step,ui-components-test,component package tests)
-	$(call run_verification_step,ui-components-storybook,component package Storybook build)
-	$(call run_verification_step,ui-components-boundary,component package boundary checks)
-	$(call run_verification_step,ui-components-dependency-direction,component package dependency-direction checks)
+	$(MAKE) ui-components-typecheck
+	$(MAKE) ui-components-test
+	$(MAKE) ui-components-storybook
+	$(MAKE) ui-components-boundary
+	$(MAKE) ui-components-dependency-direction
 
 clean:
 	$(GO) clean ./...
