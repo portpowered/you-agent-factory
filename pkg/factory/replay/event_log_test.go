@@ -13,9 +13,9 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerdiagnosticsmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
@@ -150,7 +150,7 @@ func replayDispatchCompletedEvent(t *testing.T, completionID string, result work
 		OutputWork:      generatedReplayOutputWorkPtr(result.RecordedOutputWork),
 		Error:           stringPtrIfNotEmpty(result.Error),
 		Feedback:        stringPtrIfNotEmpty(result.Feedback),
-		ProviderFailure: workerdiagnostics.GeneratedWorkFailureMetadata(result.FailureMetadata),
+		ProviderFailure: workerdiagnosticsmapping.GeneratedWorkFailureMetadata(result.FailureMetadata),
 		Metrics:         generatedWorkMetrics(result.Metrics),
 	}
 	var union factoryapi.FactoryEvent_Payload
@@ -719,8 +719,8 @@ func replayInferenceResponseEvent(
 		InferenceRequestId: inferenceRequestID,
 		Attempt:            attempt,
 		DurationMillis:     125,
-		ProviderSession:    workerdiagnostics.GeneratedProviderSessionMetadata(providerSession),
-		Diagnostics:        workerdiagnostics.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(diagnostics),
+		ProviderSession:    workerdiagnosticsmapping.GeneratedProviderSessionMetadata(providerSession),
+		Diagnostics:        workerdiagnosticsmapping.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(diagnostics),
 	}
 	if errorClass != "" {
 		payload.Outcome = factoryapi.InferenceOutcomeFailed

@@ -12,6 +12,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerdiagnosticsmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 )
@@ -800,7 +801,7 @@ func generatedFactoryWorldAgentRunInspection(
 	if diagnostics == nil || diagnostics.AgentRun == nil {
 		return nil
 	}
-	return workerdiagnostics.GeneratedFactoryWorldAgentRunInspectionView(diagnostics.AgentRun)
+	return workerdiagnosticsmapping.GeneratedFactoryWorldAgentRunInspectionView(diagnostics.AgentRun)
 }
 
 func stringSlicePtr(values []string) *[]string {

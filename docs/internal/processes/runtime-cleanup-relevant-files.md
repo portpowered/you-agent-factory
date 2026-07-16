@@ -387,6 +387,11 @@ Provider, script, and agent-run executors emit worker-owned facts from
 event vocabulary, schema version, ordering, correlation context, and UTC time.
 Generated OpenAPI event unions are decoded only at transport-facing or explicit
 public-compatibility test boundaries, not passed back into worker execution.
+Worker-safe diagnostic redaction, cloning, event-payload normalization, and
+rehydration belong in `pkg/workers/diagnostics`; conversion to generated safe
+diagnostic, provider-session, failure-metadata, and world-inspection contracts
+belongs in `pkg/transports/mapping/workerdiagnostics`. Keep HTTP projections on
+that outward mapper rather than adding generated types to the worker owner.
 Initial topology snapshots follow the same rule: `pkg/factory/events/snapshot`
 constructs the detached canonical Factory document from owner-defined topology,
 and transport adapters decode that snapshot only when a generated Factory is

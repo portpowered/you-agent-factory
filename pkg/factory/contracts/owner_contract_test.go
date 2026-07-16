@@ -8,6 +8,7 @@ import (
 	workercompatibility "github.com/portpowered/infinite-you/pkg/workers/compatibility"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerdiagnosticsmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
@@ -133,12 +134,12 @@ var (
 	CloneWorkFailureMetadata                  = workerexecution.CloneWorkFailureMetadata
 	CanonicalProviderSessionProvider          = workerexecution.CanonicalProviderSessionProvider
 	BuiltInRunnerMetadata                     = workerrunner.BuiltInRunnerMetadata
-	GeneratedSafeWorkDiagnostics              = workerdiagnostics.GeneratedSafeWorkDiagnostics
+	GeneratedSafeWorkDiagnostics              = workerdiagnosticsmapping.GeneratedSafeWorkDiagnostics
 	NewRunnerCapabilities                     = workerrunner.NewCapabilities
-	ProviderSessionMetadataFromGenerated      = workerdiagnostics.ProviderSessionMetadataFromGenerated
+	ProviderSessionMetadataFromGenerated      = workerdiagnosticsmapping.ProviderSessionMetadataFromGenerated
 	ResolveRunnerSelection                    = workerrunner.ResolveRunnerSelection
 	SafeAgentRunDiagnosticFromWorkDiagnostics = workerdiagnostics.SafeAgentRunDiagnosticFromWorkDiagnostics
-	SafeWorkDiagnosticsFromGenerated          = workerdiagnostics.SafeWorkDiagnosticsFromGenerated
+	SafeWorkDiagnosticsFromGenerated          = workerdiagnosticsmapping.SafeWorkDiagnosticsFromGenerated
 	SafeWorkDiagnosticsFromWorkDiagnostics    = workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics
 	V1RunnerBaselineCapabilities              = workerrunner.V1BaselineCapabilities
 	ClearGuardBlockingFields                  = factorytoken.ClearGuardBlockingFields

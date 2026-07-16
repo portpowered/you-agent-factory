@@ -8,6 +8,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerdiagnosticsmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics"
 	"github.com/portpowered/infinite-you/pkg/work"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
@@ -543,7 +544,7 @@ func workstationResponseEvent(tick int, eventTime time.Time, payload interfaces.
 		Feedback:                    stringPtrForProjectionTest(payload.Result.Feedback),
 		SelectedClassificationLabel: stringPtrForProjectionTest(payload.Result.SelectedClassificationLabel),
 		FailureDetail:               failureDetailForProjectionTestValue(payload.Result.FailureDetail),
-		ProviderFailure:             workerdiagnostics.GeneratedWorkFailureMetadata(payload.Result.FailureMetadata),
+		ProviderFailure:             workerdiagnosticsmapping.GeneratedWorkFailureMetadata(payload.Result.FailureMetadata),
 		DurationMillis:              int64PtrForProjectionTest(payload.DurationMillis),
 		OutputWork:                  &outputWork,
 		OutputResources:             generatedResourcesForProjectionTest(payload.OutputResources),
@@ -832,7 +833,7 @@ func generatedProviderSessionForProjectionTest(session *workerexecution.Provider
 }
 
 func generatedWorkDiagnosticsForProjectionTest(diagnostics *workerdiagnostics.SafeWorkDiagnostics) *factoryapi.SafeWorkDiagnostics {
-	return workerdiagnostics.GeneratedSafeWorkDiagnostics(diagnostics)
+	return workerdiagnosticsmapping.GeneratedSafeWorkDiagnostics(diagnostics)
 }
 
 func generatedStringMapForProjectionTest(values map[string]string) *factoryapi.StringMap {

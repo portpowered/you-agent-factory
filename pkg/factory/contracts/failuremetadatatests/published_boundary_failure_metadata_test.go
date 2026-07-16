@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+	workerdiagnosticsmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
@@ -16,7 +16,7 @@ func TestWorkFailureMetadataFromGenerated_MapsProviderFailureOnlyWireInput(t *te
 		Type:   &failureType,
 	}
 
-	got := workerdiagnostics.WorkFailureMetadataFromGenerated(wire)
+	got := workerdiagnosticsmapping.WorkFailureMetadataFromGenerated(wire)
 	if got == nil {
 		t.Fatal("ingress failure metadata = nil, want retryable/internal_server_error")
 	}
@@ -29,7 +29,7 @@ func TestWorkFailureMetadataFromGenerated_MapsProviderFailureOnlyWireInput(t *te
 }
 
 func TestWorkFailureMetadataFromGenerated_ReturnsNilForNilWire(t *testing.T) {
-	if got := workerdiagnostics.WorkFailureMetadataFromGenerated(nil); got != nil {
+	if got := workerdiagnosticsmapping.WorkFailureMetadataFromGenerated(nil); got != nil {
 		t.Fatalf("ingress failure metadata = %#v, want nil", got)
 	}
 }
@@ -40,7 +40,7 @@ func TestGeneratedWorkFailureMetadata_MapsFailureMetadataToPublishedWire(t *test
 		Type:   workerexecution.WorkFailureTypeThrottled,
 	}
 
-	got := workerdiagnostics.GeneratedWorkFailureMetadata(failure)
+	got := workerdiagnosticsmapping.GeneratedWorkFailureMetadata(failure)
 	if got == nil {
 		t.Fatal("published provider failure = nil, want throttle/throttled metadata")
 	}
@@ -53,7 +53,7 @@ func TestGeneratedWorkFailureMetadata_MapsFailureMetadataToPublishedWire(t *test
 }
 
 func TestGeneratedWorkFailureMetadata_OmitsWhenFailureMetadataUnset(t *testing.T) {
-	if got := workerdiagnostics.GeneratedWorkFailureMetadata(nil); got != nil {
+	if got := workerdiagnosticsmapping.GeneratedWorkFailureMetadata(nil); got != nil {
 		t.Fatalf("published provider failure = %#v, want nil", got)
 	}
 }
@@ -64,12 +64,12 @@ func TestGeneratedWorkFailureMetadataAndWorkFailureMetadataFromGenerated_RoundTr
 		Type:   workerexecution.WorkFailureTypeInternalServerError,
 	}
 
-	wire := workerdiagnostics.GeneratedWorkFailureMetadata(original)
+	wire := workerdiagnosticsmapping.GeneratedWorkFailureMetadata(original)
 	if wire == nil {
 		t.Fatal("published provider failure = nil, want retryable/internal_server_error wire")
 	}
 
-	got := workerdiagnostics.WorkFailureMetadataFromGenerated(wire)
+	got := workerdiagnosticsmapping.WorkFailureMetadataFromGenerated(wire)
 	if got == nil {
 		t.Fatal("ingress failure metadata = nil, want retryable/internal_server_error")
 	}

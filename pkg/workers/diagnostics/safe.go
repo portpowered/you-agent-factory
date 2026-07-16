@@ -1,5 +1,4 @@
-// Package diagnostics owns customer-safe worker diagnostic projection and
-// generated-boundary conversion.
+// Package diagnostics owns customer-safe worker diagnostic projection.
 package diagnostics
 
 import (
@@ -8,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
@@ -218,49 +216,6 @@ func safeEventFieldNames() map[string]string {
 	}
 }
 
-// SafeWorkDiagnosticsFromGenerated converts the generated safe diagnostics
-// contract into the canonical internal safe boundary.
-func SafeWorkDiagnosticsFromGenerated(diagnostics *factoryapi.SafeWorkDiagnostics) *SafeWorkDiagnostics {
-	if diagnostics == nil {
-		return nil
-	}
-	out := &SafeWorkDiagnostics{
-		RenderedPrompt: safeRenderedPromptDiagnosticFromGenerated(diagnostics.RenderedPrompt),
-		Provider:       safeProviderDiagnosticFromGenerated(diagnostics.Provider),
-		AgentRun:       SafeAgentRunDiagnosticFromGenerated(diagnostics.AgentRun),
-		Invocation:     invocationDiagnosticFromGenerated(diagnostics.Invocation),
-	}
-	if out.RenderedPrompt == nil && out.Provider == nil && out.AgentRun == nil && out.Invocation == nil {
-		return nil
-	}
-	return out
-}
-
-// GeneratedSafeWorkDiagnostics converts the canonical internal safe boundary
-// into the generated event contract.
-func GeneratedSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *factoryapi.SafeWorkDiagnostics {
-	if diagnostics == nil {
-		return nil
-	}
-	out := &factoryapi.SafeWorkDiagnostics{
-		RenderedPrompt: generatedSafeRenderedPromptDiagnostic(diagnostics.RenderedPrompt),
-		Provider:       generatedSafeProviderDiagnostic(diagnostics.Provider),
-		AgentRun:       GeneratedSafeAgentRunDiagnostic(diagnostics.AgentRun),
-		Invocation:     generatedInvocationDiagnostic(diagnostics.Invocation),
-	}
-	if out.RenderedPrompt == nil && out.Provider == nil && out.AgentRun == nil && out.Invocation == nil {
-		return nil
-	}
-	return out
-}
-
-// GeneratedSafeWorkDiagnosticsFromWorkDiagnostics projects worker-internal
-// diagnostics to the canonical safe boundary and then to the generated event
-// contract.
-func GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(diagnostics *workerexecution.WorkDiagnostics) *factoryapi.SafeWorkDiagnostics {
-	return GeneratedSafeWorkDiagnostics(SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics))
-}
-
 // WorkDiagnosticsFromSafeWorkDiagnostics rehydrates worker-facing diagnostics
 // from the canonical safe diagnostics boundary.
 func WorkDiagnosticsFromSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *workerexecution.WorkDiagnostics {
@@ -281,58 +236,6 @@ func WorkDiagnosticsFromSafeWorkDiagnostics(diagnostics *SafeWorkDiagnostics) *w
 	return out
 }
 
-// GeneratedWorkFailureMetadata converts canonical work-failure metadata into
-// the generated event contract.
-func GeneratedWorkFailureMetadata(failure *workerexecution.WorkFailureMetadata) *factoryapi.ProviderFailureMetadata {
-	if failure == nil {
-		return nil
-	}
-	family := factoryapi.WorkFailureFamily(failure.Family)
-	failureType := factoryapi.WorkFailureType(failure.Type)
-	return &factoryapi.ProviderFailureMetadata{
-		Family: &family,
-		Type:   &failureType,
-	}
-}
-
-// WorkFailureMetadataFromGenerated converts the generated provider-failure
-// contract into canonical work-failure metadata.
-func WorkFailureMetadataFromGenerated(failure *factoryapi.ProviderFailureMetadata) *workerexecution.WorkFailureMetadata {
-	if failure == nil {
-		return nil
-	}
-	return &workerexecution.WorkFailureMetadata{
-		Family: workerexecution.WorkFailureFamily(safeDiagnosticsEnumStringValue(failure.Family)),
-		Type:   workerexecution.WorkFailureType(safeDiagnosticsEnumStringValue(failure.Type)),
-	}
-}
-
-// GeneratedProviderSessionMetadata converts canonical provider-session
-// metadata into the generated event contract.
-func GeneratedProviderSessionMetadata(session *workerexecution.ProviderSessionMetadata) *factoryapi.ProviderSessionMetadata {
-	if session == nil {
-		return nil
-	}
-	return &factoryapi.ProviderSessionMetadata{
-		Provider: safeDiagnosticsStringPtrIfNotEmpty(workerexecution.CanonicalProviderSessionProvider(session.Provider)),
-		Kind:     safeDiagnosticsStringPtrIfNotEmpty(session.Kind),
-		Id:       safeDiagnosticsStringPtrIfNotEmpty(session.ID),
-	}
-}
-
-// ProviderSessionMetadataFromGenerated converts the generated provider-session
-// contract into canonical provider-session metadata.
-func ProviderSessionMetadataFromGenerated(session *factoryapi.ProviderSessionMetadata) *workerexecution.ProviderSessionMetadata {
-	if session == nil {
-		return nil
-	}
-	return &workerexecution.ProviderSessionMetadata{
-		Provider: workerexecution.CanonicalProviderSessionProvider(safeDiagnosticsStringValue(session.Provider)),
-		Kind:     safeDiagnosticsStringValue(session.Kind),
-		ID:       safeDiagnosticsStringValue(session.Id),
-	}
-}
-
 func safeRenderedPromptDiagnosticFromWorkDiagnostics(diagnostic *workerexecution.RenderedPromptDiagnostic) *SafeRenderedPromptDiagnostic {
 	if diagnostic == nil {
 		return nil
@@ -341,28 +244,6 @@ func safeRenderedPromptDiagnosticFromWorkDiagnostics(diagnostic *workerexecution
 		SystemPromptHash: diagnostic.SystemPromptHash,
 		UserMessageHash:  diagnostic.UserMessageHash,
 		Variables:        safeRenderedPromptVariables(diagnostic.Variables),
-	}
-}
-
-func safeRenderedPromptDiagnosticFromGenerated(diagnostic *factoryapi.RenderedPromptDiagnostic) *SafeRenderedPromptDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	return &SafeRenderedPromptDiagnostic{
-		SystemPromptHash: safeDiagnosticsStringValue(diagnostic.SystemPromptHash),
-		UserMessageHash:  safeDiagnosticsStringValue(diagnostic.UserMessageHash),
-		Variables:        safeDiagnosticsStringMapValue(diagnostic.Variables),
-	}
-}
-
-func generatedSafeRenderedPromptDiagnostic(diagnostic *SafeRenderedPromptDiagnostic) *factoryapi.RenderedPromptDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	return &factoryapi.RenderedPromptDiagnostic{
-		SystemPromptHash: safeDiagnosticsStringPtrIfNotEmpty(diagnostic.SystemPromptHash),
-		UserMessageHash:  safeDiagnosticsStringPtrIfNotEmpty(diagnostic.UserMessageHash),
-		Variables:        safeDiagnosticsStringMapPtr(diagnostic.Variables),
 	}
 }
 
@@ -389,30 +270,6 @@ func safeProviderDiagnosticFromWorkDiagnostics(diagnostic *workerexecution.Provi
 	}
 }
 
-func safeProviderDiagnosticFromGenerated(diagnostic *factoryapi.ProviderDiagnostic) *SafeProviderDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	return &SafeProviderDiagnostic{
-		Provider:         safeDiagnosticsStringValue(diagnostic.Provider),
-		Model:            safeDiagnosticsStringValue(diagnostic.Model),
-		RequestMetadata:  safeDiagnosticsStringMapValue(diagnostic.RequestMetadata),
-		ResponseMetadata: safeDiagnosticsStringMapValue(diagnostic.ResponseMetadata),
-	}
-}
-
-func generatedSafeProviderDiagnostic(diagnostic *SafeProviderDiagnostic) *factoryapi.ProviderDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	return &factoryapi.ProviderDiagnostic{
-		Provider:         safeDiagnosticsStringPtrIfNotEmpty(diagnostic.Provider),
-		Model:            safeDiagnosticsStringPtrIfNotEmpty(diagnostic.Model),
-		RequestMetadata:  safeDiagnosticsStringMapPtr(diagnostic.RequestMetadata),
-		ResponseMetadata: safeDiagnosticsStringMapPtr(diagnostic.ResponseMetadata),
-	}
-}
-
 func providerDiagnosticFromSafeWorkDiagnostics(diagnostic *SafeProviderDiagnostic) *workerexecution.ProviderDiagnostic {
 	if diagnostic == nil {
 		return nil
@@ -423,55 +280,6 @@ func providerDiagnosticFromSafeWorkDiagnostics(diagnostic *SafeProviderDiagnosti
 		RequestMetadata:  cloneStringMap(diagnostic.RequestMetadata),
 		ResponseMetadata: cloneStringMap(diagnostic.ResponseMetadata),
 	}
-}
-
-func invocationDiagnosticFromGenerated(diagnostic *factoryapi.InvocationDiagnostic) *workerexecution.InvocationDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	out := &workerexecution.InvocationDiagnostic{
-		SignatureHash: safeDiagnosticsStringValue(diagnostic.SignatureHash),
-	}
-	if diagnostic.Parameters != nil && len(*diagnostic.Parameters) > 0 {
-		out.Parameters = make([]workerexecution.InvocationParameterDiagnostic, 0, len(*diagnostic.Parameters))
-		for _, parameter := range *diagnostic.Parameters {
-			out.Parameters = append(out.Parameters, workerexecution.InvocationParameterDiagnostic{
-				Name:        safeDiagnosticsStringValue(parameter.Name),
-				SourceKinds: cloneStringSlice(stringSlicePtrValue(parameter.SourceKinds)),
-				ValueCount:  int(int64PtrValue(parameter.ValueCount)),
-				Redacted:    boolPtrValue(parameter.Redacted),
-			})
-		}
-	}
-	if out.SignatureHash == "" && len(out.Parameters) == 0 {
-		return nil
-	}
-	return out
-}
-
-func generatedInvocationDiagnostic(diagnostic *workerexecution.InvocationDiagnostic) *factoryapi.InvocationDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	out := &factoryapi.InvocationDiagnostic{
-		SignatureHash: safeDiagnosticsStringPtrIfNotEmpty(diagnostic.SignatureHash),
-	}
-	if len(diagnostic.Parameters) > 0 {
-		parameters := make([]factoryapi.InvocationParameterDiagnostic, 0, len(diagnostic.Parameters))
-		for _, parameter := range diagnostic.Parameters {
-			parameters = append(parameters, factoryapi.InvocationParameterDiagnostic{
-				Name:        safeDiagnosticsStringPtrIfNotEmpty(parameter.Name),
-				SourceKinds: stringSlicePtr(parameter.SourceKinds),
-				ValueCount:  int64Ptr(int64(parameter.ValueCount)),
-				Redacted:    boolPtr(parameter.Redacted),
-			})
-		}
-		out.Parameters = &parameters
-	}
-	if out.SignatureHash == nil && out.Parameters == nil {
-		return nil
-	}
-	return out
 }
 
 func safeRenderedPromptVariables(input map[string]string) map[string]string {
@@ -538,83 +346,6 @@ func isSafeProviderMetadataKey(key string) bool {
 	default:
 		return false
 	}
-}
-
-func safeDiagnosticsStringMapPtr(values map[string]string) *factoryapi.StringMap {
-	if len(values) == 0 {
-		return nil
-	}
-	converted := factoryapi.StringMap(cloneStringMap(values))
-	return &converted
-}
-
-func safeDiagnosticsStringMapValue(values *factoryapi.StringMap) map[string]string {
-	if values == nil {
-		return nil
-	}
-	cloned := cloneStringMap(map[string]string(*values))
-	if len(cloned) == 0 {
-		return nil
-	}
-	return cloned
-}
-
-func safeDiagnosticsStringPtrIfNotEmpty(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
-}
-
-func safeDiagnosticsStringValue(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
-}
-
-func safeDiagnosticsEnumStringValue[T ~string](value *T) string {
-	if value == nil {
-		return ""
-	}
-	return string(*value)
-}
-
-func boolPtr(value bool) *bool {
-	return &value
-}
-
-func boolPtrValue(value *bool) bool {
-	if value == nil {
-		return false
-	}
-	return *value
-}
-
-func int64Ptr(value int64) *int64 {
-	return &value
-}
-
-func int64PtrValue(value *int64) int64 {
-	if value == nil {
-		return 0
-	}
-	return *value
-}
-
-func stringSlicePtr(values []string) *[]string {
-	if len(values) == 0 {
-		return nil
-	}
-	cloned := cloneStringSlice(values)
-	return &cloned
-}
-
-func stringSlicePtrValue(values *[]string) []string {
-	if values == nil {
-		return nil
-	}
-	return append([]string(nil), (*values)...)
 }
 
 func cloneInvocationDiagnostic(diagnostic *workerexecution.InvocationDiagnostic) *workerexecution.InvocationDiagnostic {
@@ -742,95 +473,6 @@ func parseAgentRunToolDiagnosticEntry(raw string) AgentRunToolDiagnostic {
 	}
 }
 
-// GeneratedSafeAgentRunDiagnostic converts the canonical safe agent-run boundary
-// into the generated event contract.
-func GeneratedSafeAgentRunDiagnostic(diagnostic *SafeAgentRunDiagnostic) *factoryapi.SafeAgentRunDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	out := &factoryapi.SafeAgentRunDiagnostic{
-		FailureClass:   safeDiagnosticsStringPtrIfNotEmpty(diagnostic.FailureClass),
-		RecoveryAction: safeDiagnosticsStringPtrIfNotEmpty(diagnostic.RecoveryAction),
-		ToolPolicy:     safeDiagnosticsStringPtrIfNotEmpty(diagnostic.ToolPolicy),
-	}
-	if diagnostic.ExecutionBehavior != "" {
-		behavior := factoryapi.SafeAgentRunDiagnosticExecutionBehavior(diagnostic.ExecutionBehavior)
-		out.ExecutionBehavior = &behavior
-	}
-	if diagnostic.ToolCallCount > 0 {
-		count := int32(diagnostic.ToolCallCount)
-		out.ToolCallCount = &count
-	}
-	if entries := generatedAgentRunToolDiagnostics(diagnostic.ToolDiagnostics); entries != nil {
-		out.ToolDiagnostics = entries
-	}
-	if entries := generatedAgentRunTranscript(diagnostic.Transcript); entries != nil {
-		out.Transcript = entries
-	}
-	if out.ExecutionBehavior == nil && out.FailureClass == nil && out.RecoveryAction == nil &&
-		out.ToolPolicy == nil && out.ToolCallCount == nil && out.ToolDiagnostics == nil && out.Transcript == nil {
-		return nil
-	}
-	return out
-}
-
-// SafeAgentRunDiagnosticFromGenerated converts generated agent-run diagnostics
-// into the canonical safe boundary.
-func SafeAgentRunDiagnosticFromGenerated(diagnostic *factoryapi.SafeAgentRunDiagnostic) *SafeAgentRunDiagnostic {
-	if diagnostic == nil {
-		return nil
-	}
-	out := &SafeAgentRunDiagnostic{
-		ExecutionBehavior: safeDiagnosticsEnumStringValue(diagnostic.ExecutionBehavior),
-		FailureClass:      safeDiagnosticsStringValue(diagnostic.FailureClass),
-		RecoveryAction:    safeDiagnosticsStringValue(diagnostic.RecoveryAction),
-		ToolPolicy:        safeDiagnosticsStringValue(diagnostic.ToolPolicy),
-	}
-	if diagnostic.ToolCallCount != nil {
-		out.ToolCallCount = int(*diagnostic.ToolCallCount)
-	}
-	if diagnostic.ToolDiagnostics != nil {
-		out.ToolDiagnostics = safeAgentRunToolDiagnosticsFromGenerated(*diagnostic.ToolDiagnostics)
-	}
-	if diagnostic.Transcript != nil {
-		out.Transcript = safeAgentRunTranscriptFromGenerated(*diagnostic.Transcript)
-	}
-	if out.ExecutionBehavior == "" && out.FailureClass == "" && out.RecoveryAction == "" &&
-		out.ToolPolicy == "" && out.ToolCallCount == 0 && len(out.ToolDiagnostics) == 0 && len(out.Transcript) == 0 {
-		return nil
-	}
-	return out
-}
-
-// GeneratedFactoryWorldAgentRunInspectionView converts canonical agent-run
-// inspection into the factory-world workstation response contract.
-func GeneratedFactoryWorldAgentRunInspectionView(diagnostic *SafeAgentRunDiagnostic) *factoryapi.FactoryWorldAgentRunInspectionView {
-	if diagnostic == nil {
-		return nil
-	}
-	out := &factoryapi.FactoryWorldAgentRunInspectionView{
-		ExecutionBehavior: safeDiagnosticsStringPtrIfNotEmpty(diagnostic.ExecutionBehavior),
-		FailureClass:      safeDiagnosticsStringPtrIfNotEmpty(diagnostic.FailureClass),
-		RecoveryAction:    safeDiagnosticsStringPtrIfNotEmpty(diagnostic.RecoveryAction),
-		ToolPolicy:        safeDiagnosticsStringPtrIfNotEmpty(diagnostic.ToolPolicy),
-	}
-	if diagnostic.ToolCallCount > 0 {
-		count := int32(diagnostic.ToolCallCount)
-		out.ToolCallCount = &count
-	}
-	if entries := generatedAgentRunToolDiagnostics(diagnostic.ToolDiagnostics); entries != nil {
-		out.ToolDiagnostics = entries
-	}
-	if entries := generatedAgentRunTranscript(diagnostic.Transcript); entries != nil {
-		out.Transcript = entries
-	}
-	if out.ExecutionBehavior == nil && out.FailureClass == nil && out.RecoveryAction == nil &&
-		out.ToolPolicy == nil && out.ToolCallCount == nil && out.ToolDiagnostics == nil && out.Transcript == nil {
-		return nil
-	}
-	return out
-}
-
 func cloneStringMap(values map[string]string) map[string]string {
 	if len(values) == 0 {
 		return nil
@@ -847,64 +489,6 @@ func cloneStringSlice(values []string) []string {
 		return nil
 	}
 	return append([]string(nil), values...)
-}
-
-func generatedAgentRunToolDiagnostics(entries []AgentRunToolDiagnostic) *[]factoryapi.AgentRunToolDiagnosticEntry {
-	if len(entries) == 0 {
-		return nil
-	}
-	out := make([]factoryapi.AgentRunToolDiagnosticEntry, 0, len(entries))
-	for _, entry := range entries {
-		out = append(out, factoryapi.AgentRunToolDiagnosticEntry{
-			ToolName: safeDiagnosticsStringPtrIfNotEmpty(entry.ToolName),
-			Phase:    safeDiagnosticsStringPtrIfNotEmpty(entry.Phase),
-			Detail:   safeDiagnosticsStringPtrIfNotEmpty(entry.Detail),
-		})
-	}
-	return &out
-}
-
-func generatedAgentRunTranscript(entries []AgentRunTranscriptEntry) *[]factoryapi.AgentRunTranscriptEntry {
-	if len(entries) == 0 {
-		return nil
-	}
-	out := make([]factoryapi.AgentRunTranscriptEntry, 0, len(entries))
-	for _, entry := range entries {
-		out = append(out, factoryapi.AgentRunTranscriptEntry{
-			Role:    safeDiagnosticsStringPtrIfNotEmpty(entry.Role),
-			Summary: safeDiagnosticsStringPtrIfNotEmpty(entry.Summary),
-		})
-	}
-	return &out
-}
-
-func safeAgentRunToolDiagnosticsFromGenerated(entries []factoryapi.AgentRunToolDiagnosticEntry) []AgentRunToolDiagnostic {
-	if len(entries) == 0 {
-		return nil
-	}
-	out := make([]AgentRunToolDiagnostic, 0, len(entries))
-	for _, entry := range entries {
-		out = append(out, AgentRunToolDiagnostic{
-			ToolName: safeDiagnosticsStringValue(entry.ToolName),
-			Phase:    safeDiagnosticsStringValue(entry.Phase),
-			Detail:   safeDiagnosticsStringValue(entry.Detail),
-		})
-	}
-	return out
-}
-
-func safeAgentRunTranscriptFromGenerated(entries []factoryapi.AgentRunTranscriptEntry) []AgentRunTranscriptEntry {
-	if len(entries) == 0 {
-		return nil
-	}
-	out := make([]AgentRunTranscriptEntry, 0, len(entries))
-	for _, entry := range entries {
-		out = append(out, AgentRunTranscriptEntry{
-			Role:    safeDiagnosticsStringValue(entry.Role),
-			Summary: safeDiagnosticsStringValue(entry.Summary),
-		})
-	}
-	return out
 }
 
 func cloneSafeAgentRunDiagnostic(diagnostic *SafeAgentRunDiagnostic) *SafeAgentRunDiagnostic {

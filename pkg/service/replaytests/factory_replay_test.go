@@ -21,9 +21,9 @@ import (
 	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	service "github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerdiagnosticsmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap/zapcore"
 )
@@ -600,7 +600,7 @@ func serviceReplayDispatchCompletedEvent(t *testing.T, completionID string, resu
 		Error:                       serviceStringPtr(result.Error),
 		Feedback:                    serviceStringPtr(result.Feedback),
 		SelectedClassificationLabel: serviceStringPtr(result.SelectedClassificationLabel),
-		ProviderFailure:             workerdiagnostics.GeneratedWorkFailureMetadata(result.FailureMetadata),
+		ProviderFailure:             workerdiagnosticsmapping.GeneratedWorkFailureMetadata(result.FailureMetadata),
 		Metrics:                     serviceWorkMetricsPtr(result.Metrics),
 	}
 	var union factoryapi.FactoryEvent_Payload

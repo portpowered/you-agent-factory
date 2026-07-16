@@ -36,12 +36,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerdiagnosticsmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerdiagnostics"
 	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
-	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
@@ -840,7 +840,7 @@ func serviceReplayDispatchCompletedEvent(t *testing.T, completionID string, resu
 		Error:                       serviceStringPtr(result.Error),
 		Feedback:                    serviceStringPtr(result.Feedback),
 		SelectedClassificationLabel: serviceStringPtr(result.SelectedClassificationLabel),
-		ProviderFailure:             workerdiagnostics.GeneratedWorkFailureMetadata(result.FailureMetadata),
+		ProviderFailure:             workerdiagnosticsmapping.GeneratedWorkFailureMetadata(result.FailureMetadata),
 		Metrics:                     serviceWorkMetricsPtr(result.Metrics),
 	}
 	var union factoryapi.FactoryEvent_Payload
