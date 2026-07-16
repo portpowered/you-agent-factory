@@ -33,6 +33,10 @@
   writers before canonicalizing repeated source blocks into one sorted profile;
   keep that ordering so concurrent packages cannot corrupt the shared profile
   and the uploaded artifact matches the totals enforced by the lane.
+  When merging `main` into a branch, retain `main`'s reviewed package-minimum
+  manifest entries unless the branch has independently regenerated and proven
+  a stricter floor. Reintroducing a stale branch floor can turn a passing
+  profile into a coverage-policy failure without any source behavior change.
   Local concurrent lane scripts must redirect each background command directly
   to its retained log, wait on that command, and replay the log afterward. Do
   not put background commands behind live `while`/`tee` pipelines: on Windows,
