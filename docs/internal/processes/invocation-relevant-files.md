@@ -1017,9 +1017,12 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
 - `pkg/config/defaultpaths/default_paths.go` owns the canonical shared named-factory
   root for both `you config init` materialization and `you run --named` lookup;
   use `defaultpaths.NamedFactoriesRoot` instead of duplicating the home-relative
-  directory in runtime code or tests. `configinit.Init` migrates valid layouts
-  from `LegacyNamedFactoriesRoot` before packaged installation; migration must
-  preflight conflicts and never overwrite the canonical customer-owned copy.
+  directory in runtime code or tests. `configinit.Init` inventories legacy
+  factory identities from their hierarchical directories and migrates them from
+  `LegacyNamedFactoriesRoot` before packaged installation, even when an edited
+  `factory.json` is temporarily invalid. Migration must preflight conflicts and
+  never overwrite the canonical customer-owned copy or silently install a
+  packaged replacement for an invalid legacy edit.
   `docs/reference/sessions.md` owns operator controls and inspect-first recovery;
   `docs/reference/authoring-factories.md` owns named Factory authoring and
   materialization. Prove packaged guidance through the installed command in

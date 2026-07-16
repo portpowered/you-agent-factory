@@ -116,6 +116,47 @@ func TestInit_LegacyMigrationIsIdempotentAndPreservesCanonicalEdits(t *testing.T
 	assertDirectorySnapshotUnchanged(t, canonicalDir, beforeSnapshot)
 }
 
+func TestInit_MigratesInvalidLegacyFactoryBeforePackagedInstallation(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	definition, ok := factorypackages.Lookup("@you/goal")
+	if !ok {
+		t.Fatal("expected @you/goal packaged definition")
+	}
+	legacyDir, err := factoryconfig.PersistNamedFactory(defaultpaths.LegacyNamedFactoriesRoot(homeDir), definition.Name, definition.JSON)
+	if err != nil {
+		t.Fatalf("PersistNamedFactory(legacy): %v", err)
+	}
+	invalidConfig := []byte("{ customer edited but temporarily invalid\n")
+	if err := os.WriteFile(filepath.Join(legacyDir, "factory.json"), invalidConfig, 0o600); err != nil {
+		t.Fatalf("WriteFile(invalid legacy factory): %v", err)
+	}
+	markerPath := filepath.Join(legacyDir, "customer-edit.txt")
+	if err := os.WriteFile(markerPath, []byte("must not be replaced\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(customer marker): %v", err)
+	}
+	legacyBefore := snapshotDirectoryContents(t, legacyDir)
+
+	_, err = Init(homeDir)
+	if err == nil {
+		t.Fatal("expected invalid migrated factory error")
+	}
+	canonicalDir, mapErr := factoryconfig.MapNamedFactoryDir(defaultpaths.NamedFactoriesRoot(homeDir), definition.Name)
+	if mapErr != nil {
+		t.Fatalf("MapNamedFactoryDir(canonical): %v", mapErr)
+	}
+	for _, want := range []string{"install packaged factory", definition.Name, canonicalDir, "existing target", "invalid"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Init() error = %q, want substring %q", err, want)
+		}
+	}
+	if _, statErr := os.Stat(legacyDir); !os.IsNotExist(statErr) {
+		t.Fatalf("invalid legacy factory still exists after lossless migration: %v", statErr)
+	}
+	assertDirectorySnapshotUnchanged(t, canonicalDir, legacyBefore)
+}
+
 func TestInit_RejectsLegacyRootThatIsNotADirectory(t *testing.T) {
 	t.Parallel()
 

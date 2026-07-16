@@ -117,31 +117,21 @@ func migrateLegacyNamedFactories(homeDir, namedFactoriesRoot string) error {
 		return fmt.Errorf("migrate legacy global factory root %s: path is not a directory; rename or remove it before retrying", legacyRoot)
 	}
 
-	entries, err := factoryconfig.ListNamedFactories(legacyRoot)
+	migrations, err := inventoryLegacyFactoryMigrations(legacyRoot, namedFactoriesRoot)
 	if err != nil {
 		return fmt.Errorf("list legacy global factories in %s: %w", legacyRoot, err)
 	}
-	migrations := make([]legacyFactoryMigration, 0, len(entries))
-	for _, entry := range entries {
-		targetDir, err := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, entry.Name)
-		if err != nil {
-			return fmt.Errorf("map legacy factory %q from %s: %w", entry.Name, legacyRoot, err)
-		}
-		if _, err := os.Stat(targetDir); err == nil {
+	for _, migration := range migrations {
+		if _, err := os.Stat(migration.targetDir); err == nil {
 			return fmt.Errorf(
 				"migrate legacy factory %q: canonical destination %s already exists; preserved legacy factory at %s without overwriting either copy; move or rename one copy and retry",
-				entry.Name,
-				targetDir,
-				entry.FactoryDir,
+				migration.name,
+				migration.targetDir,
+				migration.sourceDir,
 			)
 		} else if !os.IsNotExist(err) {
-			return fmt.Errorf("inspect canonical destination %s for legacy factory %q: %w", targetDir, entry.Name, err)
+			return fmt.Errorf("inspect canonical destination %s for legacy factory %q: %w", migration.targetDir, migration.name, err)
 		}
-		migrations = append(migrations, legacyFactoryMigration{
-			name:      entry.Name,
-			sourceDir: entry.FactoryDir,
-			targetDir: targetDir,
-		})
 	}
 
 	for _, migration := range migrations {
@@ -155,6 +145,70 @@ func migrateLegacyNamedFactories(homeDir, namedFactoriesRoot string) error {
 		}
 	}
 	return nil
+}
+
+func inventoryLegacyFactoryMigrations(legacyRoot, namedFactoriesRoot string) ([]legacyFactoryMigration, error) {
+	// Keep pointer validation from the normal list path, but do not use that
+	// list for migration: it intentionally omits factories with invalid config.
+	if _, err := factoryconfig.ListNamedFactories(legacyRoot); err != nil {
+		return nil, err
+	}
+	children, err := os.ReadDir(legacyRoot)
+	if err != nil {
+		return nil, fmt.Errorf("read legacy factory root %s: %w", legacyRoot, err)
+	}
+
+	migrations := make([]legacyFactoryMigration, 0, len(children))
+	for _, child := range children {
+		if !child.IsDir() || isLegacyMigrationStagingDir(child.Name()) {
+			continue
+		}
+		if !strings.HasPrefix(child.Name(), "@") {
+			migration, err := mapLegacyFactoryMigration(legacyRoot, namedFactoriesRoot, []string{child.Name()})
+			if err != nil {
+				return nil, err
+			}
+			migrations = append(migrations, migration)
+			continue
+		}
+
+		scopeDir := filepath.Join(legacyRoot, child.Name())
+		scopeChildren, err := os.ReadDir(scopeDir)
+		if err != nil {
+			return nil, fmt.Errorf("read legacy factory scope %s: %w", scopeDir, err)
+		}
+		for _, scopeChild := range scopeChildren {
+			if !scopeChild.IsDir() || isLegacyMigrationStagingDir(scopeChild.Name()) {
+				continue
+			}
+			migration, err := mapLegacyFactoryMigration(legacyRoot, namedFactoriesRoot, []string{child.Name(), scopeChild.Name()})
+			if err != nil {
+				return nil, err
+			}
+			migrations = append(migrations, migration)
+		}
+	}
+	return migrations, nil
+}
+
+func mapLegacyFactoryMigration(legacyRoot, namedFactoriesRoot string, segments []string) (legacyFactoryMigration, error) {
+	name, err := factoryconfig.NamedFactoryNameFromPathSegments(segments)
+	if err != nil {
+		return legacyFactoryMigration{}, fmt.Errorf("map legacy factory directory %s: %w", filepath.Join(append([]string{legacyRoot}, segments...)...), err)
+	}
+	targetDir, err := factoryconfig.MapNamedFactoryDir(namedFactoriesRoot, name)
+	if err != nil {
+		return legacyFactoryMigration{}, fmt.Errorf("map legacy factory %q from %s: %w", name, legacyRoot, err)
+	}
+	return legacyFactoryMigration{
+		name:      name,
+		sourceDir: filepath.Join(append([]string{legacyRoot}, segments...)...),
+		targetDir: targetDir,
+	}, nil
+}
+
+func isLegacyMigrationStagingDir(name string) bool {
+	return strings.HasPrefix(name, ".") && strings.Contains(name, ".staging-")
 }
 
 func ensureSystemConfigParentIsDirectory(configPath string) error {
