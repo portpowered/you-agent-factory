@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 func TestValidateFactoryAPI_ProfileTopology_ReturnsTaxonomyCompatibilityTargets(t *testing.T) {

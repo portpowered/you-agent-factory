@@ -66,7 +66,7 @@ github.com/portpowered/infinite-you/pkg/factory/subsystems
 github.com/portpowered/infinite-you/pkg/factory/throttle
 github.com/portpowered/infinite-you/pkg/factory/token_transformer
 github.com/portpowered/infinite-you/pkg/factory/validation
-github.com/portpowered/infinite-you/pkg/factory/validationentry
+github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry
 github.com/portpowered/infinite-you/pkg/factory/workstationconfig
 github.com/portpowered/infinite-you/pkg/initializer
 github.com/portpowered/infinite-you/pkg/initializer/dashboard

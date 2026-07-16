@@ -1,6 +1,5 @@
-// Package validationentry validates factoryapi.Factory payloads through the
-// canonical validation package without creating an import cycle between
-// pkg/factory/validation and pkg/config.
+// Package validationentry maps and validates generated Factory payloads
+// through the canonical Factory validation owner.
 package validationentry
 
 import (

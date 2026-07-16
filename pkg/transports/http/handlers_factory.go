@@ -12,10 +12,10 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"go.uber.org/zap"
 )

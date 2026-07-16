@@ -6,8 +6,8 @@ import (
 
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 // topologyDeferredOutcomeRouteCodes are validate-only structural findings that

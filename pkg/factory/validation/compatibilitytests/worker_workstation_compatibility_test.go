@@ -8,7 +8,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
