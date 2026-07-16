@@ -2,6 +2,7 @@ package functionalhost
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -101,34 +102,39 @@ func (host *FunctionalHTTPHost) Done() <-chan struct{} { return host.done }
 // in-process runtime state.
 func (host *FunctionalHTTPHost) WaitForReady(t *testing.T) {
 	t.Helper()
-	deadline := time.Now().Add(functionalHTTPHostReadyTimeout)
+	ctx, cancel := context.WithTimeout(t.Context(), functionalHTTPHostReadyTimeout)
+	defer cancel()
+	if err := host.waitForReady(ctx); err != nil {
+		host.Stop(t)
+		t.Fatal(err)
+	}
+}
+
+func (host *FunctionalHTTPHost) waitForReady(ctx context.Context) error {
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
-	var lastStatus string
-	for time.Now().Before(deadline) {
-		request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, host.URL()+"/status", nil)
+	lastStatus := "no public response observed"
+	for {
+		request, err := http.NewRequestWithContext(ctx, http.MethodGet, host.URL()+"/status", nil)
 		if err != nil {
-			t.Fatalf("build status readiness request: %v", err)
+			return fmt.Errorf("functional HTTP host: build status readiness request: %w", err)
 		}
 		response, err := host.Client().Do(request)
 		if err == nil {
 			lastStatus = response.Status
-			response.Body.Close()
+			_ = response.Body.Close()
 			if response.StatusCode == http.StatusOK {
-				return
+				return nil
 			}
 		} else {
 			lastStatus = err.Error()
 		}
 		select {
-		case <-t.Context().Done():
-			host.Stop(t)
-			t.Fatalf("functional HTTP host: readiness canceled; last public observation: %s", lastStatus)
+		case <-ctx.Done():
+			return fmt.Errorf("functional HTTP host: readiness ended: %w; last public observation: %s", ctx.Err(), lastStatus)
 		case <-ticker.C:
 		}
 	}
-	host.Stop(t)
-	t.Fatalf("functional HTTP host: timed out waiting for GET /status; last public observation: %s", lastStatus)
 }
 
 func (host *FunctionalHTTPHost) Stop(t *testing.T) {

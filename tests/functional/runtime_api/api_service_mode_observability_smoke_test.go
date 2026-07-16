@@ -39,7 +39,9 @@ func TestServiceModeSmoke_PublicSessionEventsAndWorkStayReachableUntilCanceled(t
 	}
 	waitForPublicCompletedWork(t, host, traceID, 10*time.Second)
 	requirePublicStatus(t, host, http.StatusOK)
-	stream.Close()
+	if err := stream.Close(); err != nil {
+		t.Fatalf("close Factory Session event stream: %v", err)
+	}
 	host.Stop(t)
 	select {
 	case <-host.Done():

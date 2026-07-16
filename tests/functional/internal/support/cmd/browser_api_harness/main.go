@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -40,14 +42,19 @@ func main() {
 	cfg := parseHarnessConfig()
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	if err := runHarness(ctx, cfg, os.Stdout); err != nil {
+		fatalf("%v", err)
+	}
+}
 
+func runHarness(ctx context.Context, cfg harnessConfig, stdout io.Writer) (runErr error) {
 	projectRoot, cleanupProjectRoot, err := prepareWorkflowProjectRoot(
 		cfg.executionBaseDir,
 		cfg.workflowFixture,
 		cfg.workflowName,
 	)
 	if err != nil {
-		fatalf("prepare workflow project root: %v", err)
+		return fmt.Errorf("prepare workflow project root: %w", err)
 	}
 	defer cleanupProjectRoot()
 
@@ -58,12 +65,12 @@ func main() {
 		UseMockWorkers:   true,
 	})
 	if err != nil {
-		fatalf("start composed functional HTTP host: %v", err)
+		return fmt.Errorf("start composed functional HTTP host: %w", err)
 	}
 	defer func() {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), startupTimeout)
 		defer shutdownCancel()
-		_ = host.Shutdown(shutdownCtx)
+		runErr = errors.Join(runErr, host.Shutdown(shutdownCtx))
 	}()
 
 	startRequest := factoryapi.FactorySessionExecutionRequest{
@@ -75,18 +82,19 @@ func main() {
 	}
 	sessionID, err := startSession(ctx, host.URL(), cfg.startMode, startRequest)
 	if err != nil {
-		fatalf("start durable factory session (%s): %v", cfg.startMode, err)
+		return fmt.Errorf("start durable factory session (%s): %w", cfg.startMode, err)
 	}
 
-	if err := json.NewEncoder(os.Stdout).Encode(readyPayload{
+	if err := json.NewEncoder(stdout).Encode(readyPayload{
 		APIPort:   cfg.apiPort,
 		APIOrigin: host.URL(),
 		SessionID: sessionID,
 	}); err != nil {
-		fatalf("encode ready payload: %v", err)
+		return fmt.Errorf("encode ready payload: %w", err)
 	}
 
 	<-ctx.Done()
+	return nil
 }
 
 func parseHarnessConfig() harnessConfig {

@@ -2,6 +2,7 @@ package functionalhost
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -31,12 +32,14 @@ type FunctionalHTTPServerConfig struct {
 type FunctionalHTTPServer struct {
 	url         string
 	server      *http.Server
+	cancel      context.CancelFunc
 	serviceDone <-chan struct{}
 }
 
 // StartFunctionalHTTPServer starts a production-shaped HTTP server and waits
 // for the public status endpoint before returning.
 func StartFunctionalHTTPServer(ctx context.Context, cfg FunctionalHTTPServerConfig) (*FunctionalHTTPServer, error) {
+	runCtx, cancel := context.WithCancel(ctx)
 	var handler http.Handler
 	ready := make(chan struct{})
 	serviceCfg := testdeps.QuietFactoryServiceConfig(&service.FactoryServiceConfig{
@@ -55,39 +58,62 @@ func StartFunctionalHTTPServer(ctx context.Context, cfg FunctionalHTTPServerConf
 		serviceCfg.MockWorkersConfig = config.NewEmptyMockWorkersConfig()
 	}
 
-	svc, err := wire.InjectFactoryService(ctx, serviceCfg)
+	svc, err := wire.InjectFactoryService(runCtx, serviceCfg)
 	if err != nil {
+		cancel()
 		return nil, fmt.Errorf("construct functional HTTP server: %w", err)
 	}
 	serviceDone := make(chan struct{})
 	go func() {
 		defer close(serviceDone)
-		_ = svc.Run(ctx)
+		_ = svc.Run(runCtx)
 	}()
 	select {
 	case <-ready:
 	case <-ctx.Done():
-		return nil, fmt.Errorf("wait for functional HTTP handler: %w", ctx.Err())
+		return nil, errors.Join(
+			fmt.Errorf("wait for functional HTTP handler: %w", ctx.Err()),
+			cancelAndWaitForFunctionalService(cancel, serviceDone),
+		)
 	case <-time.After(functionalHTTPHostReadyTimeout):
-		return nil, fmt.Errorf("timed out waiting for functional HTTP handler")
+		return nil, errors.Join(
+			fmt.Errorf("timed out waiting for functional HTTP handler"),
+			cancelAndWaitForFunctionalService(cancel, serviceDone),
+		)
 	}
 
 	listener, err := net.Listen("tcp", cfg.Address)
 	if err != nil {
-		return nil, fmt.Errorf("listen for functional HTTP server: %w", err)
+		return nil, errors.Join(
+			fmt.Errorf("listen for functional HTTP server: %w", err),
+			cancelAndWaitForFunctionalService(cancel, serviceDone),
+		)
 	}
 	server := &http.Server{Handler: handler}
 	go func() { _ = server.Serve(listener) }()
 	host := &FunctionalHTTPServer{
 		url:         "http://" + listener.Addr().String(),
 		server:      server,
+		cancel:      cancel,
 		serviceDone: serviceDone,
 	}
 	if err := host.WaitForReady(ctx); err != nil {
-		_ = host.Shutdown(context.Background())
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), functionalHTTPHostReadyTimeout)
+		defer shutdownCancel()
+		_ = host.Shutdown(shutdownCtx)
 		return nil, err
 	}
 	return host, nil
+}
+
+func cancelAndWaitForFunctionalService(cancel context.CancelFunc, done <-chan struct{}) error {
+	cancel()
+	select {
+	case <-done:
+		return nil
+	case <-time.After(functionalHTTPHostReadyTimeout):
+		return fmt.Errorf("timed out waiting for functional service shutdown")
+	}
 }
 
 func (host *FunctionalHTTPServer) URL() string { return host.url }
@@ -113,5 +139,12 @@ func (host *FunctionalHTTPServer) WaitForReady(ctx context.Context) error {
 // Shutdown stops the HTTP listener. The caller's context bounds server-side
 // shutdown while the enclosing application context owns service shutdown.
 func (host *FunctionalHTTPServer) Shutdown(ctx context.Context) error {
-	return host.server.Shutdown(ctx)
+	serverErr := host.server.Shutdown(ctx)
+	host.cancel()
+	select {
+	case <-host.serviceDone:
+		return serverErr
+	case <-ctx.Done():
+		return errors.Join(serverErr, fmt.Errorf("wait for functional service shutdown: %w", ctx.Err()))
+	}
 }

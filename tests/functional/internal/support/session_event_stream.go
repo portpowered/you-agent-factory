@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,11 +19,23 @@ import (
 // endpoint. It exposes only decoded public events and bounded cancellation.
 type FactorySessionEventStream struct {
 	t      *testing.T
+	ctx    context.Context
 	cancel context.CancelFunc
+	body   io.ReadCloser
 	done   chan struct{}
 	events chan factoryapi.FactoryEvent
 	errs   chan error
+
+	observationMu sync.Mutex
+	observation   string
+	closeOnce     sync.Once
+	closeErr      error
 }
+
+const (
+	factorySessionEventStreamOpenTimeout  = 5 * time.Second
+	factorySessionEventStreamCloseTimeout = 2 * time.Second
+)
 
 // OpenDefaultSessionFactoryEventStream opens the default session's canonical
 // event stream for a composed functional host.
@@ -43,15 +57,9 @@ func OpenFactorySessionEventStream(
 ) *FactorySessionEventStream {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	resp, err := openFactorySessionEventStreamResponse(ctx, cancel, client, endpoint, factorySessionEventStreamOpenTimeout)
 	if err != nil {
-		cancel()
-		t.Fatalf("build Factory Session event stream request: %v", err)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		cancel()
-		t.Fatalf("GET Factory Session event stream: %v", err)
+		t.Fatalf("GET Factory Session event stream: %v; last public observation: no response headers observed", err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
@@ -65,15 +73,67 @@ func OpenFactorySessionEventStream(
 	}
 
 	stream := &FactorySessionEventStream{
-		t:      t,
-		cancel: cancel,
-		done:   make(chan struct{}),
-		events: make(chan factoryapi.FactoryEvent, 128),
-		errs:   make(chan error, 1),
+		t:           t,
+		ctx:         ctx,
+		cancel:      cancel,
+		body:        resp.Body,
+		done:        make(chan struct{}),
+		events:      make(chan factoryapi.FactoryEvent, 128),
+		errs:        make(chan error, 1),
+		observation: fmt.Sprintf("HTTP %s with Content-Type %q", resp.Status, resp.Header.Get("Content-Type")),
 	}
 	go stream.read(resp)
-	t.Cleanup(stream.Close)
+	t.Cleanup(func() {
+		if err := stream.Close(); err != nil {
+			t.Errorf("close Factory Session event stream: %v", err)
+		}
+	})
 	return stream
+}
+
+type eventStreamResponse struct {
+	response *http.Response
+	err      error
+}
+
+func openFactorySessionEventStreamResponse(
+	ctx context.Context,
+	cancel context.CancelFunc,
+	client *http.Client,
+	endpoint string,
+	timeout time.Duration,
+) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("build request: %w", err)
+	}
+	result := make(chan eventStreamResponse)
+	go func() {
+		response, requestErr := client.Do(req)
+		select {
+		case result <- eventStreamResponse{response: response, err: requestErr}:
+		case <-ctx.Done():
+			if response != nil {
+				_ = response.Body.Close()
+			}
+		}
+	}()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case completed := <-result:
+		if completed.err != nil {
+			cancel()
+		}
+		return completed.response, completed.err
+	case <-ctx.Done():
+		cancel()
+		return nil, ctx.Err()
+	case <-timer.C:
+		cancel()
+		return nil, fmt.Errorf("timed out after %s waiting for response headers", timeout)
+	}
 }
 
 func (stream *FactorySessionEventStream) read(resp *http.Response) {
@@ -91,6 +151,7 @@ func (stream *FactorySessionEventStream) read(resp *http.Response) {
 			stream.reportError(fmt.Errorf("decode Factory Session event: %w", err))
 			return
 		}
+		stream.setObservation(fmt.Sprintf("Factory Event %q", event.Type))
 		select {
 		case stream.events <- event:
 		default:
@@ -109,9 +170,21 @@ func (stream *FactorySessionEventStream) read(resp *http.Response) {
 		}
 	}
 	flush()
-	if err := scanner.Err(); err != nil && err != context.Canceled {
+	if err := scanner.Err(); err != nil && stream.ctx.Err() == nil {
 		stream.reportError(err)
 	}
+}
+
+func (stream *FactorySessionEventStream) setObservation(observation string) {
+	stream.observationMu.Lock()
+	defer stream.observationMu.Unlock()
+	stream.observation = observation
+}
+
+func (stream *FactorySessionEventStream) lastObservation() string {
+	stream.observationMu.Lock()
+	defer stream.observationMu.Unlock()
+	return stream.observation
 }
 
 func (stream *FactorySessionEventStream) reportError(err error) {
@@ -135,11 +208,24 @@ func (stream *FactorySessionEventStream) Next(timeout time.Duration) factoryapi.
 	return factoryapi.FactoryEvent{}
 }
 
-// Close cancels the stream and waits briefly for its owned reader to exit.
-func (stream *FactorySessionEventStream) Close() {
+// Close cancels the stream, closes its response body, and reports failure if
+// the owned reader cannot exit within the bounded shutdown interval.
+func (stream *FactorySessionEventStream) Close() error {
+	stream.closeOnce.Do(func() {
+		stream.closeErr = stream.closeWithin(factorySessionEventStreamCloseTimeout)
+	})
+	return stream.closeErr
+}
+
+func (stream *FactorySessionEventStream) closeWithin(timeout time.Duration) error {
 	stream.cancel()
+	_ = stream.body.Close()
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
 	select {
 	case <-stream.done:
-	case <-time.After(2 * time.Second):
+		return nil
+	case <-timer.C:
+		return fmt.Errorf("timed out after %s waiting for owned reader shutdown; last public observation: %s", timeout, stream.lastObservation())
 	}
 }
