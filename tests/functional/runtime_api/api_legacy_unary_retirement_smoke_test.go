@@ -8,13 +8,11 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
-	"go.uber.org/zap"
 )
 
 // portos:func-length-exception owner=agent-factory reason=legacy-unary-runtime-submit-smoke review=2026-07-22 removal=split-http-upsert-workfile-watcher-and-cron-submit-assertions-before-next-unary-retirement-change
@@ -87,20 +85,10 @@ func assertLegacyUnaryStartupWorkFileBatch(t *testing.T) {
 		Payload:    []byte(`{"title":"startup file canonical submit"}`),
 	})
 
-	svc := buildLegacyUnaryService(t, context.Background(), dir, func(cfg *service.FactoryServiceConfig) {
+	server := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
 		cfg.WorkFile = workFile
 	})
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := svc.Run(ctx); err != nil {
-		t.Fatalf("FactoryService.Run: %v", err)
-	}
-
-	events, err := svc.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
-	support.AssertSingleWorkRequestEvent(t, events, "request-retired-unary-work-file", "work-retired-unary-work-file", "task")
+	support.AssertSingleWorkRequestEvent(t, server.GetFactoryEvents(t), "request-retired-unary-work-file", "work-retired-unary-work-file", "task")
 }
 
 func assertLegacyUnaryFileWatcherBatchConversion(t *testing.T) {
@@ -115,18 +103,8 @@ func assertLegacyUnaryFileWatcherBatchConversion(t *testing.T) {
 		t.Fatalf("write non-batch seed: %v", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	svc := buildLegacyUnaryService(t, ctx, dir, nil)
-	if err := svc.Run(ctx); err != nil {
-		t.Fatalf("FactoryService.Run: %v", err)
-	}
-
-	events, err := svc.GetFactoryEvents(context.Background())
-	if err != nil {
-		t.Fatalf("GetFactoryEvents: %v", err)
-	}
-	support.AssertSingleWorkRequestEventByWorkName(t, events, "non-batch", "task")
+	server := startFunctionalServer(t, dir, true)
+	support.AssertSingleWorkRequestEventByWorkName(t, server.GetFactoryEvents(t), "non-batch", "task")
 }
 
 func assertLegacyUnaryCronSubmitPath(t *testing.T) {
@@ -155,29 +133,6 @@ func assertLegacyUnaryCronSubmitPath(t *testing.T) {
 	}
 
 	assertWorkRequestEventIncludesWorkID(t, server.GetFactoryEvents(t), record.Request.WorkID, "poll-for-work")
-}
-
-func buildLegacyUnaryService(
-	t *testing.T,
-	ctx context.Context,
-	dir string,
-	configure func(*service.FactoryServiceConfig),
-) *service.FactoryService {
-	t.Helper()
-
-	cfg := &service.FactoryServiceConfig{
-		Dir:               dir,
-		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
-		Logger:            zap.NewNop(),
-	}
-	if configure != nil {
-		configure(cfg)
-	}
-	svc, err := service.BuildFactoryService(ctx, cfg)
-	if err != nil {
-		t.Fatalf("BuildFactoryService: %v", err)
-	}
-	return svc
 }
 
 func retiredUnaryCronFactoryConfig(schedule string) map[string]any {
