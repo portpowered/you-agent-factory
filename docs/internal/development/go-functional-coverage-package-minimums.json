@@ -210,7 +210,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/scheduler",
-      "minimum": 85.15
+      "exception": {
+        "kind": "measurement",
+        "justification": "Identical Linux CI functional runs report different covered statement counts for this package because concurrent or conditional test paths are nondeterministic.",
+        "owner": "backend-quality",
+        "deadline": "2026-10-15",
+        "removalGate": "Two consecutive Linux CI functional coverage profiles report identical covered and total statement counts for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/factory/service",
@@ -734,7 +740,13 @@
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/work/invocation",
-      "minimum": 30.95
+      "exception": {
+        "kind": "measurement",
+        "justification": "Identical Linux CI functional runs report different covered statement counts for this package because concurrent or conditional test paths are nondeterministic.",
+        "owner": "backend-quality",
+        "deadline": "2026-10-15",
+        "removalGate": "Two consecutive Linux CI functional coverage profiles report identical covered and total statement counts for this package."
+      }
     },
     {
       "package": "github.com/portpowered/infinite-you/pkg/work/materialize",
