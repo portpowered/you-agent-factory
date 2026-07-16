@@ -64,9 +64,22 @@ return a `NormalizationError` with the customer interface and stable field path;
 in particular, each required progress count is decoded with presence awareness
 and is never defaulted to zero.
 
-Protocol envelopes, HTTP status and headers, CLI rendering or diagnostics, and
-MCP JSON-RPC request-correlation metadata do not belong in this contract
-because they are not Factory Session facts.
+The adapters exclude only transport mechanics that do not describe Factory
+Session state:
+
+- REST capture status, headers, request identifiers, methods, and paths describe
+  the HTTP exchange rather than the session.
+- CLI presentation choices and command diagnostics describe rendering and the
+  local command invocation rather than the session.
+- MCP JSON-RPC versions, envelope fields, request IDs, and tracing or
+  request-correlation metadata describe the tool exchange rather than the
+  session. The typed value under each `result` remains fully retained.
+
+Focused tests mutate each of these exclusions on its real capture shape and
+require an unchanged projection. The same tests mutate the retained session
+status inside each interface's real customer value and require a
+`lifecycle.status` difference, preventing envelope exclusion from hiding
+Factory Session drift.
 
 ## Difference reports
 
