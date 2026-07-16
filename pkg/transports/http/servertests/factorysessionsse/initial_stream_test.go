@@ -1,6 +1,7 @@
 package factorysessionsse
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -104,6 +105,11 @@ func TestFactorySessionSSEInitialStream_ContinuesWithLiveEventWithoutRetainedRep
 		retainedIDs[event.Id] = struct{}{}
 	}
 
+	_, err := stream.TryReadNextEvent(150 * time.Millisecond)
+	if !errors.Is(err, errFactorySessionSSEHarnessTimeout) {
+		t.Fatalf("idle read error = %v, want bounded timeout", err)
+	}
+
 	live := fixture.LiveDispatchEvent(t)
 	fixture.PublishLive(live)
 	gotLive := stream.ReadNextEvent()
@@ -117,9 +123,9 @@ func TestFactorySessionSSEInitialStream_ContinuesWithLiveEventWithoutRetainedRep
 		t.Fatalf("live event id %q was replayed from retained history", gotLive.Id)
 	}
 
-	_, err := stream.TryReadNextEvent(150 * time.Millisecond)
-	if err == nil {
-		t.Fatal("expected timeout after live event, got another SSE frame")
+	_, err = stream.TryReadNextEvent(150 * time.Millisecond)
+	if !errors.Is(err, errFactorySessionSSEHarnessTimeout) {
+		t.Fatalf("post-live idle read error = %v, want bounded timeout", err)
 	}
 }
 

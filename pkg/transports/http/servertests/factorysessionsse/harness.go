@@ -78,6 +78,12 @@ func (e *FactorySessionSSEParseError) Error() string {
 
 func (e *FactorySessionSSEParseError) Unwrap() error { return e.Err }
 
+type factorySessionSSEReadResult struct {
+	frame FactorySessionSSEFrame
+	ok    bool
+	err   error
+}
+
 // FactorySessionSSEStream is one open session event SSE connection.
 type FactorySessionSSEStream struct {
 	t         *testing.T
@@ -86,6 +92,7 @@ type FactorySessionSSEStream struct {
 	Identity  FactorySessionSSEStreamIdentity
 	reader    *bufio.Reader
 	cancel    context.CancelFunc
+	pending   <-chan factorySessionSSEReadResult
 	lastFrame FactorySessionSSEFrame
 	hasFrame  bool
 }
@@ -326,21 +333,20 @@ func (s *FactorySessionSSEStream) TryReadNextFrame(timeout time.Duration) (Facto
 	if timeout <= 0 {
 		timeout = s.timeout
 	}
-	type readResult struct {
-		frame FactorySessionSSEFrame
-		ok    bool
-		err   error
+	if s.pending == nil {
+		done := make(chan factorySessionSSEReadResult, 1)
+		s.pending = done
+		go func() {
+			frame, ok, err := tryReadNextSSEFrame(s.reader)
+			done <- factorySessionSSEReadResult{frame: frame, ok: ok, err: err}
+		}()
 	}
-	done := make(chan readResult, 1)
-	go func() {
-		frame, ok, err := tryReadNextSSEFrame(s.reader)
-		done <- readResult{frame: frame, ok: ok, err: err}
-	}()
 
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
-	case result := <-done:
+	case result := <-s.pending:
+		s.pending = nil
 		if result.err != nil {
 			return result.frame, result.err
 		}
