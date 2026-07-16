@@ -306,7 +306,7 @@ func (r *recordingReader) Read(data []byte) (int, error) {
 				continue
 			}
 			r.responses++
-			if r.responses > 1 {
+			if r.gate != nil && r.responses > 1 {
 				select {
 				case <-r.gate:
 				case <-time.After(testTimeout):
