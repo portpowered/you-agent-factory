@@ -20,6 +20,7 @@ const (
 	TopicAuthoringFactories  Topic = "authoring-factories"
 	TopicRun                 Topic = "run"
 	TopicConfig              Topic = "config"
+	TopicLoop                Topic = "loop"
 	TopicMockWorkers         Topic = "mock-workers"
 	TopicRecordReplay        Topic = "record-replay"
 	TopicGuards              Topic = "guards"
@@ -47,6 +48,7 @@ const (
 	referenceAuthoringFactoriesPath  = "authoring-factories.md"
 	referenceRunPath                 = "run.md"
 	referenceConfigPath              = "config.md"
+	referenceLoopPath                = "loop.md"
 	referenceMockWorkersPath         = "mock-workers.md"
 	referenceRecordReplayPath        = "record-replay.md"
 	referenceGuardsPath              = "guards.md"
@@ -77,6 +79,7 @@ var topicDocuments = []topicDocument{
 	{topic: TopicAuthoringFactories, description: "Practical factory authoring workflow, runnable examples, mock workers, and replay.", path: referenceAuthoringFactoriesPath, displayOrder: 10},
 	{topic: TopicRun, description: "Supported local, one-shot, batch, continuous, and mock-worker run shapes.", path: referenceRunPath, displayOrder: 15},
 	{topic: TopicConfig, description: "Operator initialization and Factory validation, flattening, expansion, and minimum authoring contract.", path: referenceConfigPath, displayOrder: 20},
+	{topic: TopicLoop, description: "The supported @you/loop packaged Factory: recurring request invocation, cadence, worktree isolation, and session recovery.", path: referenceLoopPath, displayOrder: 22},
 	{topic: TopicMockWorkers, description: "Mock-worker runs, JSON selection contract, and deterministic accept, reject, and script outcomes.", path: referenceMockWorkersPath, displayOrder: 25},
 	{topic: TopicRecordReplay, description: "Record and replay run modes, artifact paths, sensitivity, and incompatible flag combinations.", path: referenceRecordReplayPath, displayOrder: 26},
 	{topic: TopicGuards, description: "Workstation, input, and factory guards, guarded LOGICAL_MOVE loop breakers, and guard attachment levels.", path: referenceGuardsPath, displayOrder: 27},

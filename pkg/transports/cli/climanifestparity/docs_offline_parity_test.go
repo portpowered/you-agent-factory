@@ -8,10 +8,10 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
+	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestcobra"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifestparity"
-	"github.com/portpowered/infinite-you/pkg/transports/cli/cliinputs"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/commandregistry"
 	docscli "github.com/portpowered/infinite-you/pkg/transports/cli/docs"
 	"github.com/spf13/cobra"
@@ -181,7 +181,7 @@ func TestProductionManifestOfflineDocsParity_DocsFamily(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected unsupported docs topic to fail")
 		}
-		if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, run, config, mock-workers, record-replay, guards, relationships, work, sessions, orchestrators, javascript-workflows, mcp, workstations, workers, resources, models, batch-inputs, templates)` {
+		if got := err.Error(); got != `unsupported docs topic "unknown" (supported: agents, authoring-factories, run, config, loop, mock-workers, record-replay, guards, relationships, work, sessions, orchestrators, javascript-workflows, mcp, workstations, workers, resources, models, batch-inputs, templates)` {
 			t.Fatalf("unexpected docs error %q", got)
 		}
 		if got := stdout.String(); got != "" {

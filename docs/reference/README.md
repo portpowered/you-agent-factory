@@ -26,6 +26,7 @@ concept owners below when you need the complete customer-facing contract.
 | `authoring-factories` | Practical factory authoring workflow, runnable examples, and cross-links to run-mode guides | [Author factories](authoring-factories.md) |
 | `run` | Supported local, one-shot, batch, continuous, and mock-worker run shapes | [Run](run.md) |
 | `config` | Operator initialization plus Factory validation, transformation, and minimum authoring contract | [Config](config.md) and [Author factories](authoring-factories.md) |
+| `loop` | Supported `@you/loop` recurring request invocation, cadence, worktree isolation, and session recovery | [Recurring loop factory](loop.md) |
 | `mock-workers` | `--with-mock-workers` and the `mockWorkers` JSON contract | [Mock workers](mock-workers.md) |
 | `record-replay` | Default recording, `--record`, `--replay`, and `--no-record` | [Record and replay](record-replay.md) |
 | `work` | Submitted work: session-scoped work routes, tags, and batch cross-links | [Submitted work](work.md) |
@@ -75,6 +76,8 @@ filesystem work around that invocation.
 
 - [Config](config.md) owns work types, work states, top-level `factory.json`,
   routing behavior, runtime resources, and portability fields.
+- [Recurring loop factory](loop.md) owns `@you/loop` installation, invocation,
+  cadence/worktree options, and package-specific session expectations.
 - [Submitted work](work.md) owns `POST /factory-sessions/{session_id}/work`,
   submitted-work tags, and batch cross-links.
 - [Sessions](sessions.md) owns live session discovery, session show, pause and

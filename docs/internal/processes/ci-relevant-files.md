@@ -1,5 +1,17 @@
 # CI Relevant Files
 
+## Packaged CLI reference topics
+
+- Adding a `you docs <topic>` page requires the canonical markdown in
+  `docs/reference/`, an explicit `docs/reference/embed.go` entry, and the
+  registry entry in `pkg/transports/cli/docs/docs.go`. Keep the public
+  `you.docs` enum in `contracts/cli/commands.json`, the generated
+  `pkg/transports/cli/generated/models_docs_family.json`, and the CLI topic and
+  input baseline fixtures aligned by running `make cli-manifest-generate` and
+  the opt-in `UPDATE_CLI_BASELINES=1` CLI-input baseline test. Run
+  `make docs-reference-smoke` afterwards to prove installed-binary embedding
+  and topic routing.
+
 ## Pull-request verification workflow
 
 - `.github/workflows/ci.yml` owns pull-request and `main` CI lane scheduling.

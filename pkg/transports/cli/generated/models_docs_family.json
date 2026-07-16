@@ -50,6 +50,7 @@
             "authoring-factories",
             "run",
             "config",
+            "loop",
             "mock-workers",
             "record-replay",
             "guards",
