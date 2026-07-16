@@ -53,6 +53,9 @@
   interface belong with the owning package rather than in `tests/functional`;
   move them there before removing their baseline entry, while keeping
   customer-observable scenarios on approved CLI, REST, MCP, or SSE seams.
+  Replay serialization tests that construct event histories or invoke replay
+  save/load APIs are owner-package coverage; keep them in `pkg/replay` rather
+  than treating those internal calls as functional customer behavior.
   When a functional scenario already observes its queue outcome through the
   approved service-test harness, keep that runtime assertion and remove any
   duplicate direct projection reconstruction before deleting the file's
