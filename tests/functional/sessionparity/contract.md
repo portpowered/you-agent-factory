@@ -46,3 +46,14 @@ value is defaulted to create false parity.
 Protocol envelopes, HTTP status and headers, CLI rendering or diagnostics, and
 MCP JSON-RPC request-correlation metadata do not belong in this contract
 because they are not Factory Session facts.
+
+## Deterministic fixture observations
+
+`TerminalSuccessObservations` and `TerminalFailureObservations` provide static
+captured JSON for REST, CLI JSON, and MCP. The success fixture has two completed
+dispatches, a result artifact, a final result, and ordered terminal-success
+cursors. The failure fixture has a completed dispatch, a failed dispatch, a
+diagnostic artifact, a failure correlated to that dispatch, and ordered
+terminal-failure cursors. Neither fixture starts a process or constructs runtime
+composition; later functional scenarios may instead pass their own captures to
+the normalizers.
