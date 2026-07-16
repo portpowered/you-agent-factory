@@ -7,8 +7,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/work/content"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
 )
@@ -16,22 +24,22 @@ import (
 func TestClaudeProviderBehavior_BuildArgs(t *testing.T) {
 	testCases := []struct {
 		name            string
-		req             interfaces.ProviderInferenceRequest
+		req             workerexecution.ProviderInferenceRequest
 		skipPermissions bool
 		want            []string
 	}{
 		{
 			name: "BasicPrompt",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderClaude),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Claude),
 				UserMessage:   "hello",
 			},
 			want: []string{"-p", "hello"},
 		},
 		{
 			name: "WithSkipPermissions",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderClaude),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Claude),
 				UserMessage:   "hello",
 			},
 			skipPermissions: true,
@@ -39,8 +47,8 @@ func TestClaudeProviderBehavior_BuildArgs(t *testing.T) {
 		},
 		{
 			name: "WithSystemPromptAndModel",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderClaude),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Claude),
 				UserMessage:   "do stuff",
 				SystemPrompt:  "You are helpful",
 				Model:         "claude-sonnet-4-5-20250514",
@@ -49,8 +57,8 @@ func TestClaudeProviderBehavior_BuildArgs(t *testing.T) {
 		},
 		{
 			name: "WithResumeSessionID",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderClaude),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Claude),
 				UserMessage:   "do stuff",
 				SessionID:     "claude-session-123",
 			},
@@ -73,22 +81,22 @@ func TestClaudeProviderBehavior_BuildArgs(t *testing.T) {
 func TestCodexProviderBehavior_BuildArgs(t *testing.T) {
 	testCases := []struct {
 		name            string
-		req             interfaces.ProviderInferenceRequest
+		req             workerexecution.ProviderInferenceRequest
 		skipPermissions bool
 		want            []string
 	}{
 		{
 			name: "BasicPrompt",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderCodex),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Codex),
 				UserMessage:   "fix the bug",
 			},
 			want: []string{"exec", "-"},
 		},
 		{
 			name: "WithSkipPermissionsAndModel",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderCodex),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Codex),
 				Model:         "gpt-5-codex",
 				UserMessage:   "hello",
 			},
@@ -97,8 +105,8 @@ func TestCodexProviderBehavior_BuildArgs(t *testing.T) {
 		},
 		{
 			name: "WithWorkingDirectoryRetainsStdinPlaceholderOnly",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider:    string(interfaces.ModelProviderCodex),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider:    string(modelprovider.Codex),
 				WorkingDirectory: "C:\\worktree",
 				Model:            "gpt-5-codex",
 				UserMessage:      "line 1\nline 2",
@@ -121,12 +129,12 @@ func TestCodexProviderBehavior_BuildArgs(t *testing.T) {
 
 func TestCodexProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
-	_, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderCodex),
+	_, err := behavior.BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.Codex),
 		UserMessage:   "summarize the workspace",
 		Worktree:      "feature-worktree",
-		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
-			interfaces.RunnerOptionalCapabilityWorktree,
+		RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{
+			workerexecution.RunnerOptionalCapabilityWorktree,
 		},
 	}, false, nil)
 	if err == nil || err.Error() != "worktree selection is not supported by the codex runner in v1" {
@@ -136,13 +144,13 @@ func TestCodexProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(
 
 func TestCodexProviderBehavior_BuildArgs_AllowsWorktreeMetadataWithPreparedWorkingDirectory(t *testing.T) {
 	behavior := codexProviderBehavior{logger: logging.NoopLogger{}}
-	args, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider:    string(interfaces.ModelProviderCodex),
+	args, err := behavior.BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider:    string(modelprovider.Codex),
 		UserMessage:      "summarize the workspace",
 		Worktree:         "feature-worktree",
 		WorkingDirectory: "/tmp/factory/.worktrees/feature-worktree",
-		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
-			interfaces.RunnerOptionalCapabilityWorkingDirectory,
+		RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{
+			workerexecution.RunnerOptionalCapabilityWorkingDirectory,
 		},
 	}, false, nil)
 	if err != nil {
@@ -173,15 +181,15 @@ func TestCodexProviderBehavior_BuildArgs_MaterializesLocalFileURLWithoutCopy(t *
 	cache := materialize.NewDispatchCache()
 	defer cache.Release()
 
-	args, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderCodex),
+	args, err := behavior.BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.Codex),
 		Model:         "gpt-5-codex",
 		UserMessage:   "inspect",
-		InputTokens: InputTokens(interfaces.Token{
+		InputTokens: InputTokens(factorytoken.Token{
 			ID: "token-1",
-			Color: interfaces.TokenColor{
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeImage, URL: rawURL},
+			Color: factorytoken.Color{
+				Content: []work.WorkContentPart{
+					{Type: work.WorkContentPartTypeImage, URL: rawURL},
 				},
 			},
 		}),
@@ -196,22 +204,22 @@ func TestCodexProviderBehavior_BuildArgs_MaterializesLocalFileURLWithoutCopy(t *
 func TestGeminiProviderBehavior_BuildArgs(t *testing.T) {
 	testCases := []struct {
 		name            string
-		req             interfaces.ProviderInferenceRequest
+		req             workerexecution.ProviderInferenceRequest
 		skipPermissions bool
 		want            []string
 	}{
 		{
 			name: "BasicPrompt",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderGemini),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Gemini),
 				UserMessage:   "summarize the workspace",
 			},
 			want: []string{"--prompt", "summarize the workspace"},
 		},
 		{
 			name: "WithModelAndSkipPermissions",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderGemini),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Gemini),
 				Model:         "gemini-2.5-flash",
 				UserMessage:   "run the tests",
 			},
@@ -234,11 +242,11 @@ func TestGeminiProviderBehavior_BuildArgs(t *testing.T) {
 
 func TestGeminiProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 	behavior := geminiProviderBehavior{logger: logging.NoopLogger{}}
-	_, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderGemini),
+	_, err := behavior.BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.Gemini),
 		UserMessage:   "summarize the workspace",
-		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
-			interfaces.RunnerOptionalCapabilityStructuredOutput,
+		RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{
+			workerexecution.RunnerOptionalCapabilityStructuredOutput,
 		},
 	}, false, nil)
 	if err == nil || err.Error() != "structured output is not supported by the gemini runner in v1" {
@@ -249,22 +257,22 @@ func TestGeminiProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities
 func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
 	testCases := []struct {
 		name            string
-		req             interfaces.ProviderInferenceRequest
+		req             workerexecution.ProviderInferenceRequest
 		skipPermissions bool
 		want            []string
 	}{
 		{
 			name: "BasicPrompt",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderKiro),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Kiro),
 				UserMessage:   "summarize the workspace",
 			},
 			want: []string{"chat", "--no-interactive", "summarize the workspace"},
 		},
 		{
 			name: "ComposedContextAndUserPrompt",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderKiro),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Kiro),
 				SystemPrompt:  "You are a careful reviewer.",
 				UserMessage:   "run the tests",
 			},
@@ -276,15 +284,15 @@ func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
 		},
 		{
 			name: "EmptyPrompt",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderKiro),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Kiro),
 			},
 			want: []string{"chat", "--no-interactive"},
 		},
 		{
 			name: "TrustedTools",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderKiro),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Kiro),
 				UserMessage:   "run the tests",
 			},
 			skipPermissions: true,
@@ -292,8 +300,8 @@ func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
 		},
 		{
 			name: "ResumeSession",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderKiro),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Kiro),
 				UserMessage:   "continue the review",
 				SessionID:     "kiro-session-123",
 			},
@@ -301,7 +309,7 @@ func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
 		},
 	}
 
-	behavior := providerBehaviorFor(string(interfaces.ModelProviderKiro), logging.NoopLogger{})
+	behavior := providerBehaviorFor(string(modelprovider.Kiro), logging.NoopLogger{})
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			args, err := behavior.BuildArgs(context.Background(), tc.req, tc.skipPermissions, nil)
@@ -315,11 +323,11 @@ func TestKiroProviderBehavior_BuildArgs(t *testing.T) {
 
 func TestKiroProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 	behavior := kiroProviderBehavior{logger: logging.NoopLogger{}}
-	_, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderKiro),
+	_, err := behavior.BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.Kiro),
 		UserMessage:   "summarize the workspace",
-		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
-			interfaces.RunnerOptionalCapabilityStructuredOutput,
+		RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{
+			workerexecution.RunnerOptionalCapabilityStructuredOutput,
 		},
 	}, false, nil)
 	if err == nil || err.Error() != "structured output is not supported by the kiro runner in v1" {
@@ -330,22 +338,22 @@ func TestKiroProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t
 func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 	testCases := []struct {
 		name            string
-		req             interfaces.ProviderInferenceRequest
+		req             workerexecution.ProviderInferenceRequest
 		skipPermissions bool
 		want            []string
 	}{
 		{
 			name: "BasicPrompt",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderCursor),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Cursor),
 				UserMessage:   "summarize the workspace",
 			},
 			want: []string{"-p", "--output-format", "stream-json", "--stream-partial-output", "summarize the workspace"},
 		},
 		{
 			name: "WithModelSessionAndForce",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderCursor),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Cursor),
 				Model:         "gpt-5",
 				SessionID:     "cursor-session-123",
 				UserMessage:   "run the tests",
@@ -355,8 +363,8 @@ func TestCursorProviderBehavior_BuildArgs(t *testing.T) {
 		},
 		{
 			name: "WithWorkspace",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider:    string(interfaces.ModelProviderCursor),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider:    string(modelprovider.Cursor),
 				WorkingDirectory: "/tmp/project",
 				UserMessage:      "inspect the repo",
 			},
@@ -380,8 +388,8 @@ func TestCursorProviderBehavior_BuildArgs_WindowsLongPromptUsesArgumentFile(t *t
 	tempDir := t.TempDir()
 	buildCtx := &ProviderBuildContext{operatingSystem: "windows", tempDir: tempDir}
 	prompt := strings.Repeat("long cursor instruction ", cursorWindowsPromptArgumentLimit)
-	req := interfaces.ProviderInferenceRequest{
-		ModelProvider:    string(interfaces.ModelProviderCursor),
+	req := workerexecution.ProviderInferenceRequest{
+		ModelProvider:    string(modelprovider.Cursor),
 		SystemPrompt:     "system guidance",
 		UserMessage:      prompt,
 		Model:            "composer-2.5",
@@ -429,8 +437,8 @@ func TestCursorProviderBehavior_BuildArgs_DoesNotWrapShortOrNonWindowsPrompts(t 
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			args, err := (cursorProviderBehavior{logger: logging.NoopLogger{}}).BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderCursor), UserMessage: tc.prompt,
+			args, err := (cursorProviderBehavior{logger: logging.NoopLogger{}}).BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Cursor), UserMessage: tc.prompt,
 			}, false, &ProviderBuildContext{operatingSystem: tc.operatingSystem, tempDir: t.TempDir()})
 			if err != nil {
 				t.Fatalf("BuildArgs returned error: %v", err)
@@ -444,11 +452,11 @@ func TestCursorProviderBehavior_BuildArgs_DoesNotWrapShortOrNonWindowsPrompts(t 
 
 func TestCursorProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities(t *testing.T) {
 	behavior := cursorProviderBehavior{logger: logging.NoopLogger{}}
-	_, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderCursor),
+	_, err := behavior.BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.Cursor),
 		UserMessage:   "summarize the workspace",
-		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
-			interfaces.RunnerOptionalCapabilityStructuredOutput,
+		RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{
+			workerexecution.RunnerOptionalCapabilityStructuredOutput,
 		},
 	}, false, nil)
 	if err == nil || err.Error() != "structured output is not supported by the cursor-cli runner in v1" {
@@ -459,22 +467,22 @@ func TestCursorProviderBehavior_BuildArgs_RejectsUnsupportedOptionalCapabilities
 func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
 	testCases := []struct {
 		name            string
-		req             interfaces.ProviderInferenceRequest
+		req             workerexecution.ProviderInferenceRequest
 		skipPermissions bool
 		want            []string
 	}{
 		{
 			name: "BasicPrompt",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderOpenCode),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.OpenCode),
 				UserMessage:   "summarize the workspace",
 			},
 			want: []string{"run", "summarize the workspace"},
 		},
 		{
 			name: "WithModelSessionWorkingDirectoryAndSkipPermissions",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider:    string(interfaces.ModelProviderOpenCode),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider:    string(modelprovider.OpenCode),
 				Model:            "openai/gpt-5",
 				SessionID:        "opencode-session-123",
 				WorkingDirectory: "/tmp/project",
@@ -485,8 +493,8 @@ func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
 		},
 		{
 			name: "WithOpenCodeAgent",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderOpenCode),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.OpenCode),
 				OpenCodeAgent: "implementer",
 				UserMessage:   "summarize the workspace",
 			},
@@ -494,8 +502,8 @@ func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
 		},
 		{
 			name: "WithOpenCodeAgentModelSessionWorkingDirectoryAndSkipPermissions",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider:    string(interfaces.ModelProviderOpenCode),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider:    string(modelprovider.OpenCode),
 				Model:            "openai/gpt-5",
 				OpenCodeAgent:    "implementer",
 				SessionID:        "opencode-session-123",
@@ -521,11 +529,11 @@ func TestOpenCodeProviderBehavior_BuildArgs(t *testing.T) {
 
 func TestOpenCodeProviderBehavior_BuildArgs_AcceptsNegotiatedStructuredCapability(t *testing.T) {
 	behavior := openCodeProviderBehavior{logger: logging.NoopLogger{}}
-	args, err := behavior.BuildArgs(context.Background(), interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderOpenCode),
+	args, err := behavior.BuildArgs(context.Background(), workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.OpenCode),
 		UserMessage:   "summarize the workspace",
-		RequiredOptionalCapabilities: []interfaces.RunnerOptionalCapability{
-			interfaces.RunnerOptionalCapabilityStructuredOutput,
+		RequiredOptionalCapabilities: []workerexecution.RunnerOptionalCapability{
+			workerexecution.RunnerOptionalCapabilityStructuredOutput,
 		},
 	}, false, nil)
 	if err != nil {
@@ -562,7 +570,7 @@ func TestNonCodexProviderBehavior_BuildCommandRequest(t *testing.T) {
 }
 
 func TestFailureBaseline_AbsentDefault_BuildCommandRequestUsesEmptyProviderCommandWhenModelProviderUnset(t *testing.T) {
-	req := interfaces.ProviderInferenceRequest{
+	req := workerexecution.ProviderInferenceRequest{
 		UserMessage: "plan the goal",
 	}
 	request := providerBehaviorFor("", logging.NoopLogger{}).BuildCommandRequest(req, []string{"-p", "plan the goal"})
@@ -573,17 +581,17 @@ func TestFailureBaseline_AbsentDefault_BuildCommandRequestUsesEmptyProviderComma
 
 type nonCodexCommandRequestTestCase struct {
 	name    string
-	req     interfaces.ProviderInferenceRequest
+	req     workerexecution.ProviderInferenceRequest
 	args    []string
 	wantEnv string
 }
 
 func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
-	token := interfaces.Token{
+	token := factorytoken.Token{
 		ID: "token-1",
-		Color: interfaces.TokenColor{
-			Content: []interfaces.WorkContentPart{
-				{Type: interfaces.WorkContentPartTypeText, Text: "hello"},
+		Color: factorytoken.Color{
+			Content: []work.WorkContentPart{
+				{Type: work.WorkContentPartTypeText, Text: "hello"},
 			},
 		},
 	}
@@ -591,8 +599,8 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 	return []nonCodexCommandRequestTestCase{
 		{
 			name: "Claude",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderClaude),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Claude),
 				UserMessage:   "review this",
 				EnvVars: map[string]string{
 					"AGENT_FACTORY_PROVIDER": "claude",
@@ -604,8 +612,8 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 		},
 		{
 			name: "Gemini",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderGemini),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Gemini),
 				UserMessage:   "review this",
 				EnvVars: map[string]string{
 					"AGENT_FACTORY_PROVIDER": "gemini",
@@ -617,8 +625,8 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 		},
 		{
 			name: "Kiro",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderKiro),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Kiro),
 				UserMessage:   "review this",
 				EnvVars: map[string]string{
 					"AGENT_FACTORY_PROVIDER": "kiro",
@@ -630,8 +638,8 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 		},
 		{
 			name: "Cursor",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderCursor),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Cursor),
 				UserMessage:   "review this",
 				EnvVars: map[string]string{
 					"AGENT_FACTORY_PROVIDER": "cursor",
@@ -643,8 +651,8 @@ func nonCodexCommandRequestTestCases() []nonCodexCommandRequestTestCase {
 		},
 		{
 			name: "OpenCode",
-			req: interfaces.ProviderInferenceRequest{
-				ModelProvider:    string(interfaces.ModelProviderOpenCode),
+			req: workerexecution.ProviderInferenceRequest{
+				ModelProvider:    string(modelprovider.OpenCode),
 				UserMessage:      "review this",
 				WorkingDirectory: "/tmp/project",
 				EnvVars: map[string]string{
@@ -673,8 +681,8 @@ func TestScriptWrapProvider_Infer_KiroKnownFailuresUseCanonicalParserAndPolicy(t
 		entry := providerErrorCorpusEntryForTest(t, name)
 		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
 			provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{result: entry.CommandResult()}))
-			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderKiro),
+			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Kiro),
 				UserMessage:   "private prompt that must stay out of normalized failures",
 			})
 			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
@@ -699,12 +707,12 @@ func TestScriptWrapProvider_Infer_KiroUnknownFailuresUseBoundedParserMessages(t 
 		entry := providerErrorCorpusEntryForTest(t, name)
 		t.Run(providerErrorCorpusEntryLabel(entry), func(t *testing.T) {
 			provider := NewScriptWrapProvider(WithProviderCommandRunner(&recordingProviderExec{result: entry.CommandResult()}))
-			_, err := provider.Infer(context.Background(), interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderKiro),
+			_, err := provider.Infer(context.Background(), workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Kiro),
 				UserMessage:   "private prompt that must stay out of normalized failures",
 			})
 			assertNormalizedProviderFailure(t, err, normalizedProviderFailureExpectation{
-				wantType: interfaces.WorkFailureTypeUnknown, wantFamily: interfaces.WorkFailureFamilyTerminal,
+				wantType: workerexecution.WorkFailureTypeUnknown, wantFamily: workerexecution.WorkFailureFamilyTerminal,
 				wantMessage: wantMessage, rejectTexts: append(entry.RejectMessageContains, "private prompt"),
 				wantTerminal: true,
 			})
@@ -716,42 +724,42 @@ func providerOwnedCursorAndCodexFailureTestCases() []exitFailureInferenceTestCas
 	return []exitFailureInferenceTestCase{
 		{
 			name:        "CursorUsesItsOwnErrorExtraction",
-			provider:    string(interfaces.ModelProviderCursor),
+			provider:    string(modelprovider.Cursor),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte("noise before\nERROR: unexpected status 500 from cursor upstream")},
 			wantMessage: "ERROR: unexpected status 500 from cursor upstream",
-			wantType:    interfaces.WorkFailureTypeInternalServerError,
+			wantType:    workerexecution.WorkFailureTypeInternalServerError,
 		},
 		{
 			name:        "CursorDoesNotInheritCodexHighDemandClassification",
-			provider:    string(interfaces.ModelProviderCursor),
+			provider:    string(modelprovider.Cursor),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte(codexHighDemandTemporaryErrorsNeedle)},
 			wantMessage: codexHighDemandTemporaryErrorsNeedle,
-			wantType:    interfaces.WorkFailureTypeUnknown,
+			wantType:    workerexecution.WorkFailureTypeUnknown,
 		},
 		{
 			name:        "CodexUsesItsOwnSafeServerResult",
-			provider:    string(interfaces.ModelProviderCodex),
+			provider:    string(modelprovider.Codex),
 			result:      CommandResult{ExitCode: 1, Stderr: []byte("noise before\nERROR: unexpected status 500 from codex upstream")},
 			wantMessage: codexServerFailureMessage,
-			wantType:    interfaces.WorkFailureTypeInternalServerError,
+			wantType:    workerexecution.WorkFailureTypeInternalServerError,
 		},
 		{
 			name:        "UnsupportedProviderDoesNotFallBackToCodexParser",
 			provider:    "custom-provider",
 			result:      CommandResult{ExitCode: 1, Stderr: []byte(codexHighDemandTemporaryErrorsNeedle)},
 			wantMessage: codexHighDemandTemporaryErrorsNeedle,
-			wantType:    interfaces.WorkFailureTypeUnknown,
+			wantType:    workerexecution.WorkFailureTypeUnknown,
 		},
 	}
 }
 
 func TestWorkDiagnosticsForInferenceRequest_IncludesOpenCodeAgentWhenConfigured(t *testing.T) {
 	t.Parallel()
-	diagnostics := workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderOpenCode),
+	diagnostics := workDiagnosticsForInferenceRequest(workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.OpenCode),
 		Model:         "openai/gpt-5",
 		OpenCodeAgent: "implementer",
-		WorkerType:    interfaces.WorkerTypeModel,
+		WorkerType:    workertaxonomy.WorkerTypeModel,
 	})
 	if got := diagnostics.Provider.RequestMetadata["opencode_agent"]; got != "implementer" {
 		t.Fatalf("opencode_agent = %q, want implementer", got)
@@ -760,10 +768,10 @@ func TestWorkDiagnosticsForInferenceRequest_IncludesOpenCodeAgentWhenConfigured(
 
 func TestWorkDiagnosticsForInferenceRequest_OmitsOpenCodeAgentWhenUnset(t *testing.T) {
 	t.Parallel()
-	diagnostics := workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderOpenCode),
+	diagnostics := workDiagnosticsForInferenceRequest(workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.OpenCode),
 		Model:         "openai/gpt-5",
-		WorkerType:    interfaces.WorkerTypeModel,
+		WorkerType:    workertaxonomy.WorkerTypeModel,
 	})
 	if _, ok := diagnostics.Provider.RequestMetadata["opencode_agent"]; ok {
 		t.Fatalf("request metadata = %#v, want opencode_agent omitted", diagnostics.Provider.RequestMetadata)
@@ -772,21 +780,21 @@ func TestWorkDiagnosticsForInferenceRequest_OmitsOpenCodeAgentWhenUnset(t *testi
 
 func TestWorkDiagnosticsForInferenceRequest_SafeProjectionPreservesOpenCodeAgent(t *testing.T) {
 	t.Parallel()
-	diagnostics := workDiagnosticsForInferenceRequest(interfaces.ProviderInferenceRequest{
-		ModelProvider: string(interfaces.ModelProviderOpenCode),
+	diagnostics := workDiagnosticsForInferenceRequest(workerexecution.ProviderInferenceRequest{
+		ModelProvider: string(modelprovider.OpenCode),
 		OpenCodeAgent: "implementer",
 	})
-	safe := interfaces.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
+	safe := workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics)
 	if got := safe.Provider.RequestMetadata["opencode_agent"]; got != "implementer" {
 		t.Fatalf("safe opencode_agent = %q, want implementer", got)
 	}
 }
 
 type s14ProviderCase struct {
-	provider       interfaces.ModelProvider
+	provider       modelprovider.ID
 	unsafeMarker   string
-	unsafeReq      interfaces.ProviderInferenceRequest
-	safeReq        interfaces.ProviderInferenceRequest
+	unsafeReq      workerexecution.ProviderInferenceRequest
+	safeReq        workerexecution.ProviderInferenceRequest
 	unsafeArgCheck func(args []string) bool
 	safeArgCheck   func(args []string) bool
 }
@@ -794,14 +802,14 @@ type s14ProviderCase struct {
 func s14SkipPermissionsProviderCases() []s14ProviderCase {
 	return []s14ProviderCase{
 		{
-			provider:     interfaces.ModelProviderClaude,
+			provider:     modelprovider.Claude,
 			unsafeMarker: "--dangerously-skip-permissions",
-			unsafeReq: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderClaude),
+			unsafeReq: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Claude),
 				UserMessage:   "run the tests",
 			},
-			safeReq: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderClaude),
+			safeReq: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Claude),
 				UserMessage:   "run the tests",
 			},
 			unsafeArgCheck: func(args []string) bool {
@@ -812,14 +820,14 @@ func s14SkipPermissionsProviderCases() []s14ProviderCase {
 			},
 		},
 		{
-			provider:     interfaces.ModelProviderCodex,
+			provider:     modelprovider.Codex,
 			unsafeMarker: "--dangerously-bypass-approvals-and-sandbox",
-			unsafeReq: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderCodex),
+			unsafeReq: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Codex),
 				UserMessage:   "run the tests",
 			},
-			safeReq: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderCodex),
+			safeReq: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Codex),
 				UserMessage:   "run the tests",
 			},
 			unsafeArgCheck: func(args []string) bool {
@@ -827,14 +835,14 @@ func s14SkipPermissionsProviderCases() []s14ProviderCase {
 			},
 		},
 		{
-			provider:     interfaces.ModelProviderGemini,
+			provider:     modelprovider.Gemini,
 			unsafeMarker: "--approval-mode",
-			unsafeReq: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderGemini),
+			unsafeReq: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Gemini),
 				UserMessage:   "run the tests",
 			},
-			safeReq: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderGemini),
+			safeReq: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Gemini),
 				UserMessage:   "run the tests",
 			},
 			unsafeArgCheck: func(args []string) bool {
@@ -844,14 +852,14 @@ func s14SkipPermissionsProviderCases() []s14ProviderCase {
 			},
 		},
 		{
-			provider:     interfaces.ModelProviderKiro,
+			provider:     modelprovider.Kiro,
 			unsafeMarker: "--trust-all-tools",
-			unsafeReq: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderKiro),
+			unsafeReq: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Kiro),
 				UserMessage:   "run the tests",
 			},
-			safeReq: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderKiro),
+			safeReq: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Kiro),
 				UserMessage:   "run the tests",
 			},
 			unsafeArgCheck: func(args []string) bool {
@@ -859,14 +867,14 @@ func s14SkipPermissionsProviderCases() []s14ProviderCase {
 			},
 		},
 		{
-			provider:     interfaces.ModelProviderCursor,
+			provider:     modelprovider.Cursor,
 			unsafeMarker: "-f",
-			unsafeReq: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderCursor),
+			unsafeReq: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Cursor),
 				UserMessage:   "run the tests",
 			},
-			safeReq: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderCursor),
+			safeReq: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.Cursor),
 				UserMessage:   "run the tests",
 			},
 			unsafeArgCheck: func(args []string) bool {
@@ -874,14 +882,14 @@ func s14SkipPermissionsProviderCases() []s14ProviderCase {
 			},
 		},
 		{
-			provider:     interfaces.ModelProviderOpenCode,
+			provider:     modelprovider.OpenCode,
 			unsafeMarker: "--dangerously-skip-permissions",
-			unsafeReq: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderOpenCode),
+			unsafeReq: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.OpenCode),
 				UserMessage:   "run the tests",
 			},
-			safeReq: interfaces.ProviderInferenceRequest{
-				ModelProvider: string(interfaces.ModelProviderOpenCode),
+			safeReq: workerexecution.ProviderInferenceRequest{
+				ModelProvider: string(modelprovider.OpenCode),
 				UserMessage:   "run the tests",
 			},
 			unsafeArgCheck: func(args []string) bool {
@@ -899,7 +907,7 @@ func s14ResolveSafeArgCheck(tc *s14ProviderCase) {
 	tc.safeArgCheck = func(args []string) bool {
 		return !strings.Contains(strings.Join(args, " "), marker)
 	}
-	if tc.provider == interfaces.ModelProviderCursor {
+	if tc.provider == modelprovider.Cursor {
 		tc.safeArgCheck = func(args []string) bool {
 			return len(args) == 0 || args[0] != "-f"
 		}

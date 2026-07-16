@@ -5,10 +5,13 @@ import (
 	"errors"
 	"testing"
 
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestEnsureManagedRuntimeReadyForInvocation_BlocksMissingRuntime(t *testing.T) {
@@ -71,7 +74,7 @@ func TestEnsureManagedRuntimeReadyForInvocation_AllowsReadyRuntime(t *testing.T)
 	if err != nil {
 		t.Fatalf("EnsureManagedRuntimeReadyForInvocation: %v", err)
 	}
-	if managed.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+	if managed.ReadinessState != managedruntime.ReadinessStateReady {
 		t.Fatalf("readiness = %s, want READY", managed.ReadinessState)
 	}
 }
@@ -122,7 +125,7 @@ func TestManager_BlocksInvocationWhenManagedRuntimeMissing(t *testing.T) {
 	}
 
 	runner := manager.WrapRunner(stubRunner{}, loaded, factoryCfg, worker)
-	_, err = runner.Execute(context.Background(), interfaces.RunnerExecutionRequest{ModelOperation: "TTS"})
+	_, err = runner.Execute(context.Background(), workerexecution.RunnerExecutionRequest{ModelOperation: "TTS"})
 	if err == nil || !apisurface.IsManagedRuntimeMissing(err) {
 		t.Fatalf("Execute error = %v, want managed runtime missing", err)
 	}
@@ -140,11 +143,11 @@ func (s stubInvocationReadinessAssetPuller) PullModel(_ context.Context, _ *fact
 	return apisurface.ModelPullResult{}, nil
 }
 
-func (s stubInvocationReadinessAssetPuller) EnsureModelAvailable(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *interfaces.WorkerConfig) error {
+func (s stubInvocationReadinessAssetPuller) EnsureModelAvailable(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *workerconfig.Config) error {
 	return nil
 }
 
-func (s stubInvocationReadinessAssetPuller) ResolveModelCache(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *interfaces.WorkerConfig) (CacheLayout, error) {
+func (s stubInvocationReadinessAssetPuller) ResolveModelCache(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *workerconfig.Config) (CacheLayout, error) {
 	return s.cache, nil
 }
 

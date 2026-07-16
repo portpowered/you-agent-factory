@@ -3,7 +3,7 @@ package process
 import (
 	"errors"
 
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 var errCommandProcessCleanupPartialFailure = errors.New("command process cleanup partial failure")

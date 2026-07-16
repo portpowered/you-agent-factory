@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 func TestServiceMode_SubmissionWhilePaused_BuffersUntilResume(t *testing.T) {

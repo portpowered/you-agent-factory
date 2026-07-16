@@ -12,17 +12,18 @@ import (
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	factoryingest "github.com/portpowered/infinite-you/pkg/factory/ingest"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
-	"github.com/portpowered/infinite-you/pkg/replay"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 	"go.uber.org/zap"
 )
 
@@ -129,34 +130,38 @@ func Build(ctx context.Context, input BuildInput) (*Bundle, error) {
 	return assembleRuntimeBundle(input, logger, logSink, metricsSink, net, eventHistory, localModels, workerOpts)
 }
 
-func editableEventFactorySnapshot(input BuildInput) (factoryapi.Factory, error) {
+func editableEventFactorySnapshot(input BuildInput) (*interfaces.FactorySnapshot, error) {
 	if input.LoadedFactoryCfg == nil || input.LoadedFactoryCfg.FactoryConfig() == nil {
-		return factoryapi.Factory{}, fmt.Errorf("loaded factory config is unavailable")
+		return nil, fmt.Errorf("loaded factory config is unavailable")
 	}
 	factoryCfg, err := factoryconfig.CloneFactoryConfig(input.LoadedFactoryCfg.FactoryConfig())
 	if err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("clone factory config: %w", err)
+		return nil, fmt.Errorf("clone factory config: %w", err)
 	}
 	if err := factoryconfig.ApplySupportedPortableBundledFiles(input.LoadedFactoryCfg.FactoryDir(), factoryCfg, true, false); err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("inline portable bundled files: %w", err)
+		return nil, fmt.Errorf("inline portable bundled files: %w", err)
 	}
 	if err := factoryconfig.ApplySharedFactoryStarterWork(input.LoadedFactoryCfg.FactoryDir(), factoryCfg); err != nil {
-		return factoryapi.Factory{}, fmt.Errorf("inline shared factory starter work: %w", err)
+		return nil, fmt.Errorf("inline shared factory starter work: %w", err)
 	}
-	return replay.GeneratedFactoryFromRuntimeConfig(
+	snapshot, err := replay.FactorySnapshotFromRuntimeConfig(
 		input.LoadedFactoryCfg.FactoryDir(),
 		factoryCfg,
 		input.LoadedFactoryCfg,
-		replay.WithGeneratedFactorySourceDirectory(input.LoadedFactoryCfg.FactoryDir()),
-		replay.WithGeneratedFactoryWorkflowID(input.WorkflowID),
+		replay.WithFactorySnapshotSourceDirectory(input.LoadedFactoryCfg.FactoryDir()),
+		replay.WithFactorySnapshotWorkflowID(input.WorkflowID),
 	)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot, nil
 }
 
 func assembleRuntimeBundle(
 	input BuildInput,
 	logger *zap.Logger,
 	logSink *logging.RuntimeLogSink,
-	metricsSink *logging.RuntimeMetricsSink,
+	metricsSink *platformmetrics.RuntimeMetricsSink,
 	net *state.Net,
 	eventHistory *factoryevents.FactoryEventHistory,
 	localModels LocalModelDomain,
@@ -210,10 +215,11 @@ func assembleRuntimeBundle(
 		factory.WithCompletionRecorder(bundle.recordCompletionMetrics),
 	}
 	if input.RecordPath != "" {
-		opts = append(opts, factory.WithFactoryEventRecorder(func(event factoryapi.FactoryEvent) {
-			if recording != nil {
-				recording.RecordEvent(event)
+		opts = append(opts, factory.WithFactoryEventRecorder(func(event interfaces.FactoryEvent) {
+			if recording == nil {
+				return
 			}
+			recording.RecordEvent(event)
 		}))
 	}
 	opts = append(opts, input.AdditionalFactoryOpts...)
@@ -283,13 +289,13 @@ func runtimeWorkflowContext(cfg *interfaces.FactoryConfig, sessionID string) *fa
 }
 
 func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryConfig) string {
-	if runner := interfaces.NormalizeRunnerID(override); runner != "" {
+	if runner := workerrunner.NormalizeRunnerID(override); runner != "" {
 		return runner
 	}
 	if factoryCfg == nil {
 		return ""
 	}
-	return interfaces.NormalizeRunnerID(factoryCfg.Runner)
+	return workerrunner.NormalizeRunnerID(factoryCfg.Runner)
 }
 
 func dirExists(path string) bool {
@@ -356,11 +362,11 @@ func buildRuntimeMetricsSink(
 	runtimeInstanceID string,
 	folderPath string,
 	factoryDir string,
-) (*logging.RuntimeMetricsSink, error) {
+) (*platformmetrics.RuntimeMetricsSink, error) {
 	if !runtimeMetricsEnabled(cfg.RuntimeMetricsPolicy) {
 		return nil, nil
 	}
-	metricsSink, err := logging.BuildRuntimeMetricsSink(
+	metricsSink, err := platformmetrics.BuildRuntimeMetricsSink(
 		sessionID,
 		runtimeInstanceID,
 		folderPath,
@@ -375,7 +381,7 @@ func buildRuntimeMetricsSink(
 }
 
 // CloseBundleSinks closes runtime log and metrics sinks created during bundle build.
-func CloseBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *logging.RuntimeMetricsSink) error {
+func CloseBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *platformmetrics.RuntimeMetricsSink) error {
 	var errs []error
 	if logSink != nil {
 		if err := logSink.Close(); err != nil {
@@ -426,17 +432,17 @@ func newRecordingArtifact(
 		return nil, nil
 	}
 	now := factory.EnsureClock(clock).Now().UTC()
-	generatedFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
+	factorySnapshot, err := replay.FactorySnapshotFromRuntimeConfig(
 		factoryDir,
 		factoryCfg,
 		runtimeCfg,
-		replay.WithGeneratedFactorySourceDirectory(factoryDir),
-		replay.WithGeneratedFactoryWorkflowID(workflowID),
+		replay.WithFactorySnapshotSourceDirectory(factoryDir),
+		replay.WithFactorySnapshotWorkflowID(workflowID),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("build replay artifact config: %w", err)
 	}
-	return replay.NewEventLogArtifactFromFactory(now, generatedFactory, &interfaces.ReplayWallClockMetadata{
+	return replay.NewEventLogArtifact(now, factorySnapshot, &interfaces.ReplayWallClockMetadata{
 		StartedAt: now,
 	}, interfaces.ReplayDiagnostics{})
 }

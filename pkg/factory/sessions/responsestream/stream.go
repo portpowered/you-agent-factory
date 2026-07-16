@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // SessionResponseStream keeps ordered internal provider progress for one live
@@ -29,7 +30,7 @@ type SessionResponseStream struct {
 // NewSessionResponseStream allocates an empty internal response stream with
 // documented default retention limits.
 func NewSessionResponseStream() *SessionResponseStream {
-	return NewSessionResponseStreamWithClock(factory.RealClock{}, DefaultRetentionLimits())
+	return NewSessionResponseStreamWithClock(platformclock.Real{}, DefaultRetentionLimits())
 }
 
 // NewSessionResponseStreamWithClock allocates an empty stream using the
@@ -306,7 +307,7 @@ func canCoalesceEvents(left, right Event) bool {
 	return providerSessionRefEqual(left.ProviderSessionRef, right.ProviderSessionRef)
 }
 
-func providerSessionRefEqual(left, right *interfaces.ProviderSessionMetadata) bool {
+func providerSessionRefEqual(left, right *workerexecution.ProviderSessionMetadata) bool {
 	if left == nil && right == nil {
 		return true
 	}

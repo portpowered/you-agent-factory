@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 )
 
 const (
@@ -196,7 +196,7 @@ func toolFailureReason(err error) string {
 
 func toolDiagnosticsMetadata(policy string, recorder *ToolDiagnosticRecorder) map[string]string {
 	metadata := map[string]string{
-		DiagnosticToolPolicy: interfaces.NormalizeAgentWorkerToolPolicy(policy),
+		DiagnosticToolPolicy: workerconfig.NormalizeAgentToolPolicy(policy),
 	}
 	if recorder == nil {
 		return metadata
@@ -230,13 +230,13 @@ func mergeToolDiagnostics(base map[string]string, policy string, recorder *ToolD
 }
 
 func toolDefinitionsForPolicy(policy string) []messages.ToolDefinition {
-	switch interfaces.NormalizeAgentWorkerToolPolicy(policy) {
-	case interfaces.AgentWorkerToolPolicyReadOnly:
+	switch workerconfig.NormalizeAgentToolPolicy(policy) {
+	case workerconfig.AgentToolPolicyReadOnly:
 		return []messages.ToolDefinition{
 			{Name: ToolNameReadFile, Description: "Read a UTF-8 text file relative to the agent working directory."},
 			{Name: ToolNameListDirectory, Description: "List entries in a directory relative to the agent working directory."},
 		}
-	case interfaces.AgentWorkerToolPolicyEnabled:
+	case workerconfig.AgentToolPolicyEnabled:
 		return []messages.ToolDefinition{
 			{Name: ToolNameReadFile, Description: "Read a UTF-8 text file relative to the agent working directory."},
 			{Name: ToolNameListDirectory, Description: "List entries in a directory relative to the agent working directory."},
@@ -256,7 +256,7 @@ type PolicyToolExecutor struct {
 
 func NewPolicyToolExecutor(policy, workingDir string, recorder *ToolDiagnosticRecorder) *PolicyToolExecutor {
 	return &PolicyToolExecutor{
-		policy:     interfaces.NormalizeAgentWorkerToolPolicy(policy),
+		policy:     workerconfig.NormalizeAgentToolPolicy(policy),
 		workingDir: strings.TrimSpace(workingDir),
 		recorder:   recorder,
 	}
@@ -268,15 +268,15 @@ func (executor *PolicyToolExecutor) Execute(ctx context.Context, call messages.T
 	executor.recorder.Record(toolName, "start", "")
 
 	switch executor.policy {
-	case interfaces.AgentWorkerToolPolicyDisabled:
+	case workerconfig.AgentToolPolicyDisabled:
 		executor.recorder.Record(toolName, "denied", "policy=disabled")
 		return messages.ToolCallResponse{}, fmt.Errorf("%w: tools are disabled for this agent worker", ErrToolPolicyDenied)
-	case interfaces.AgentWorkerToolPolicyReadOnly:
+	case workerconfig.AgentToolPolicyReadOnly:
 		if toolName == ToolNameWriteFile {
 			executor.recorder.Record(toolName, "denied", "policy=read_only")
 			return messages.ToolCallResponse{}, fmt.Errorf("%w: write tools are not allowed in read-only mode", ErrToolPolicyDenied)
 		}
-	case interfaces.AgentWorkerToolPolicyEnabled:
+	case workerconfig.AgentToolPolicyEnabled:
 	default:
 		executor.recorder.Record(toolName, "denied", "policy=invalid")
 		return messages.ToolCallResponse{}, fmt.Errorf("%w: unsupported tool policy %q", ErrToolPolicyDenied, executor.policy)

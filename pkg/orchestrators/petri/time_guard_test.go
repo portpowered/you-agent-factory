@@ -4,7 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 )
 
 func TestCronTimeWindowGuard_EvaluateAt(t *testing.T) {
@@ -15,7 +16,7 @@ func TestCronTimeWindowGuard_EvaluateAt(t *testing.T) {
 	tests := []struct {
 		name      string
 		now       time.Time
-		token     interfaces.Token
+		token     factorytoken.Token
 		wantOK    bool
 		wantToken string
 	}{
@@ -65,7 +66,7 @@ func TestCronTimeWindowGuard_EvaluateAt(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			guard := &CronTimeWindowGuard{Workstation: "refresh"}
-			matched, ok := guard.EvaluateAt(tt.now, []interfaces.Token{tt.token}, nil, nil)
+			matched, ok := guard.EvaluateAt(tt.now, []factorytoken.Token{tt.token}, nil, nil)
 			if ok != tt.wantOK {
 				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
 			}
@@ -87,7 +88,7 @@ func TestExpiredTimeWorkGuard_EvaluateAt(t *testing.T) {
 	expiresAt := base.Add(5 * time.Minute)
 	guard := &ExpiredTimeWorkGuard{}
 
-	candidates := []interfaces.Token{
+	candidates := []factorytoken.Token{
 		cronTimeToken("time-expired", "refresh", base, expiresAt),
 		cronTimeToken("time-pending", "refresh", base, expiresAt.Add(time.Hour)),
 		cronTimeTokenWithTags("time-bad-expiry", map[string]string{
@@ -112,17 +113,17 @@ func TestClockedTimeGuards_FailClosedWithoutRuntimeClock(t *testing.T) {
 	token := cronTimeToken("time-ready", "refresh", now, now.Add(time.Minute))
 
 	windowGuard := &CronTimeWindowGuard{Workstation: "refresh"}
-	if matched, ok := windowGuard.Evaluate([]interfaces.Token{token}, nil, nil); ok || len(matched) != 0 {
+	if matched, ok := windowGuard.Evaluate([]factorytoken.Token{token}, nil, nil); ok || len(matched) != 0 {
 		t.Fatalf("window guard direct Evaluate = (%#v, %v), want fail closed", matched, ok)
 	}
 
 	expiryGuard := &ExpiredTimeWorkGuard{}
-	if matched, ok := expiryGuard.Evaluate([]interfaces.Token{token}, nil, nil); ok || len(matched) != 0 {
+	if matched, ok := expiryGuard.Evaluate([]factorytoken.Token{token}, nil, nil); ok || len(matched) != 0 {
 		t.Fatalf("expiry guard direct Evaluate = (%#v, %v), want fail closed", matched, ok)
 	}
 }
 
-func cronTimeToken(id string, workstation string, dueAt time.Time, expiresAt time.Time) interfaces.Token {
+func cronTimeToken(id string, workstation string, dueAt time.Time, expiresAt time.Time) factorytoken.Token {
 	return cronTimeTokenWithTags(id, map[string]string{
 		interfaces.TimeWorkTagKeySource:          interfaces.TimeWorkSourceCron,
 		interfaces.TimeWorkTagKeyCronWorkstation: workstation,
@@ -131,13 +132,13 @@ func cronTimeToken(id string, workstation string, dueAt time.Time, expiresAt tim
 	})
 }
 
-func cronTimeTokenWithTags(id string, tags map[string]string) interfaces.Token {
-	return interfaces.Token{
+func cronTimeTokenWithTags(id string, tags map[string]string) factorytoken.Token {
+	return factorytoken.Token{
 		ID: id,
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     id,
 			WorkTypeID: interfaces.SystemTimeWorkTypeID,
-			DataType:   interfaces.DataTypeWork,
+			DataType:   factorytoken.DataTypeWork,
 			Tags:       tags,
 		},
 	}

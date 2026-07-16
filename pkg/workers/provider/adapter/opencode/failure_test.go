@@ -4,7 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	opencodepkg "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
 	providertestdata "github.com/portpowered/infinite-you/pkg/workers/provider/testdata"
 )
@@ -52,7 +53,7 @@ func TestParseProviderFailure_StructuredFailurePrecedesText(t *testing.T) {
 		Stderr:   []byte("Error: rate limit exceeded"),
 		Stdout:   []byte(`{"type":"error","error":{"name":"APIError","data":{"statusCode":400,"message":"Choose a supported model."}}}`),
 	})
-	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != "Choose a supported model." {
+	if got.Reason != workerexecution.WorkFailureTypePermanentBadRequest || got.Message != "Choose a supported model." {
 		t.Fatalf("ParseProviderFailure() = %#v, want structured bad request", got)
 	}
 }
@@ -63,7 +64,7 @@ func TestParseProviderFailure_SanitizesKnownActionableDetails(t *testing.T) {
 		Stdout: []byte(`{"type":"error","error":{"name":"APIError","data":{"statusCode":400,"message":"prompt: ` +
 			strings.Repeat("private ", 100) + ` Authorization: Bearer secret-token"}}}`),
 	})
-	if got.Reason != interfaces.WorkFailureTypePermanentBadRequest || got.Message != opencodepkg.BadRequestFailureMessage {
+	if got.Reason != workerexecution.WorkFailureTypePermanentBadRequest || got.Message != opencodepkg.BadRequestFailureMessage {
 		t.Fatalf("ParseProviderFailure() = %#v, want sanitized fixed bad-request message", got)
 	}
 	if len(got.Message) > opencodeFailureMessageBytes || strings.Contains(got.Message, "secret-token") || strings.Contains(got.Message, "private") {
@@ -102,7 +103,7 @@ func TestParseProviderFailure_UnknownFailuresUseSafeBoundedExcerptOrExitCode(t *
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := parseFailure(tc.input)
-			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != tc.wantMessage {
+			if got.Reason != workerexecution.WorkFailureTypeUnknown || got.Message != tc.wantMessage {
 				t.Fatalf("ParseProviderFailure() = %#v, want unknown message %q", got, tc.wantMessage)
 			}
 			if len(got.Message) > opencodeFailureMessageBytes {

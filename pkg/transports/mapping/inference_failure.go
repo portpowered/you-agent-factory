@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -101,8 +101,8 @@ func ClassifyInferenceFailure(err error, ctx InferenceFailureContext) (*Inferenc
 
 // ClassifyInferenceWorkResultFailure maps one failed inference workstation
 // result onto the shared inference failure contract.
-func ClassifyInferenceWorkResultFailure(result interfaces.WorkResult, ctx InferenceFailureContext) (*InferenceFailure, bool) {
-	if result.Outcome != interfaces.OutcomeFailed {
+func ClassifyInferenceWorkResultFailure(result workerexecution.WorkResult, ctx InferenceFailureContext) (*InferenceFailure, bool) {
+	if result.Outcome != workerexecution.OutcomeFailed {
 		return nil, false
 	}
 	if result.FailureMetadata != nil && result.FailureMetadata.Type != "" {
@@ -259,7 +259,7 @@ func classifyProviderFailure(providerErr *workerprovider.ProviderError, ctx Infe
 	if isRawSubprocessFailureMessage(message) {
 		message = ""
 	}
-	if providerErr.Type == interfaces.WorkFailureTypeTimeout {
+	if providerErr.Type == workerexecution.WorkFailureTypeTimeout {
 		return &InferenceFailure{
 			Class: InferenceFailureClassTimeout,
 			Message: fmt.Sprintf(

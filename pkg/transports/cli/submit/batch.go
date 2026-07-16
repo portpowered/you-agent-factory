@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clidiag"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/clihttp"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/cliserver"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 const batchErrorBodyPreviewLimit = 200
@@ -66,9 +66,9 @@ func SubmitBatch(cfg BatchConfig) error {
 	return upsertBatchHTTP(cfg, req, resolved.data, batchSource)
 }
 
-func validateBatchRequest(req interfaces.WorkRequest) error {
-	if req.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
-		return fmt.Errorf("batch type must be %q", interfaces.WorkRequestTypeFactoryRequestBatch)
+func validateBatchRequest(req work.WorkRequest) error {
+	if req.Type != work.WorkRequestTypeFactoryRequestBatch {
+		return fmt.Errorf("batch type must be %q", work.WorkRequestTypeFactoryRequestBatch)
 	}
 	if strings.TrimSpace(req.RequestID) == "" {
 		return fmt.Errorf("batch requestId is required")
@@ -79,7 +79,7 @@ func validateBatchRequest(req interfaces.WorkRequest) error {
 	return nil
 }
 
-func printBatchDryRunSummary(cfg BatchConfig, req interfaces.WorkRequest, batchSource, endpointPath string) error {
+func printBatchDryRunSummary(cfg BatchConfig, req work.WorkRequest, batchSource, endpointPath string) error {
 	names := make([]string, 0, len(req.Works))
 	for _, work := range req.Works {
 		names = append(names, work.Name)
@@ -109,7 +109,7 @@ func printBatchDryRunSummary(cfg BatchConfig, req interfaces.WorkRequest, batchS
 	return err
 }
 
-func upsertBatchHTTP(cfg BatchConfig, req interfaces.WorkRequest, body []byte, batchSource string) error {
+func upsertBatchHTTP(cfg BatchConfig, req work.WorkRequest, body []byte, batchSource string) error {
 	requestID := req.RequestID
 	endpointPath := batchSubmitEndpointPath(cfg.SessionID, requestID)
 	endpointURL, err := cliserver.RequestURL(cfg.Server, endpointPath)

@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/testharness"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const finalWorkflow = `return { subject: args.subject };`
@@ -60,11 +60,11 @@ type recordingProvider struct {
 	calls int
 }
 
-func (p *recordingProvider) Infer(context.Context, interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *recordingProvider) Infer(context.Context, workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	p.calls++
 	p.mu.Unlock()
-	return interfaces.InferenceResponse{Content: `{"text":"provider result"}`}, nil
+	return workerexecution.InferenceResponse{Content: `{"text":"provider result"}`}, nil
 }
 
 func (p *recordingProvider) callCount() int {

@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 type codexFailureReportingFacts struct {
-	Type          interfaces.WorkFailureType
-	Family        interfaces.WorkFailureFamily
+	Type          workerexecution.WorkFailureType
+	Family        workerexecution.WorkFailureFamily
 	Message       string
 	Retryable     bool
 	Terminal      bool
@@ -51,56 +51,56 @@ func codexFailureReportingAgreementCases() []codexFailureReportingAgreementCase 
 		{
 			name: "auth", streamMessage: "unexpected status 401", exitStderr: "ERROR: unexpected status 401\n", exitCode: 1,
 			want: codexFailureReportingFacts{
-				Type: interfaces.WorkFailureTypeAuthFailure, Family: interfaces.WorkFailureFamilyTerminal,
+				Type: workerexecution.WorkFailureTypeAuthFailure, Family: workerexecution.WorkFailureFamilyTerminal,
 				Message: codexAuthFailureMessage, Terminal: true,
 			},
 		},
 		{
 			name: "invalid_request", streamMessage: "unexpected status 400", exitStderr: "ERROR: unexpected status 400\n", exitCode: 1,
 			want: codexFailureReportingFacts{
-				Type: interfaces.WorkFailureTypePermanentBadRequest, Family: interfaces.WorkFailureFamilyTerminal,
+				Type: workerexecution.WorkFailureTypePermanentBadRequest, Family: workerexecution.WorkFailureFamilyTerminal,
 				Message: codexBadRequestFailureMessage, Terminal: true,
 			},
 		},
 		{
 			name: "throttle", streamMessage: "unexpected status 429", exitStderr: "ERROR: unexpected status 429\n", exitCode: 1,
 			want: codexFailureReportingFacts{
-				Type: interfaces.WorkFailureTypeThrottled, Family: interfaces.WorkFailureFamilyThrottle,
+				Type: workerexecution.WorkFailureTypeThrottled, Family: workerexecution.WorkFailureFamilyThrottle,
 				Message: codexThrottleFailureMessage, Retryable: true, ThrottlePause: true,
 			},
 		},
 		{
 			name: "capacity", streamMessage: "selected model is at capacity", exitStderr: "ERROR: selected model is at capacity\n", exitCode: 1,
 			want: codexFailureReportingFacts{
-				Type: interfaces.WorkFailureTypeThrottled, Family: interfaces.WorkFailureFamilyThrottle,
+				Type: workerexecution.WorkFailureTypeThrottled, Family: workerexecution.WorkFailureFamilyThrottle,
 				Message: codexThrottleFailureMessage, Retryable: true, ThrottlePause: true,
 			},
 		},
 		{
 			name: "usage_limit", streamMessage: "you've hit your usage limit", exitStderr: "ERROR: you've hit your usage limit\n", exitCode: 1,
 			want: codexFailureReportingFacts{
-				Type: interfaces.WorkFailureTypeThrottled, Family: interfaces.WorkFailureFamilyThrottle,
+				Type: workerexecution.WorkFailureTypeThrottled, Family: workerexecution.WorkFailureFamilyThrottle,
 				Message: codexThrottleFailureMessage, Retryable: true, ThrottlePause: true,
 			},
 		},
 		{
 			name: "timeout", streamMessage: "command timed out", exitStderr: "ERROR: command timed out\n", exitCode: 124,
 			want: codexFailureReportingFacts{
-				Type: interfaces.WorkFailureTypeTimeout, Family: interfaces.WorkFailureFamilyRetryable,
+				Type: workerexecution.WorkFailureTypeTimeout, Family: workerexecution.WorkFailureFamilyRetryable,
 				Message: codexTimeoutFailureMessage, Retryable: true,
 			},
 		},
 		{
 			name: "disconnect", streamMessage: "unexpected status 502", exitStderr: "ERROR: unexpected status 502\n", exitCode: 1,
 			want: codexFailureReportingFacts{
-				Type: interfaces.WorkFailureTypeInternalServerError, Family: interfaces.WorkFailureFamilyRetryable,
+				Type: workerexecution.WorkFailureTypeInternalServerError, Family: workerexecution.WorkFailureFamilyRetryable,
 				Message: codexServerFailureMessage, Retryable: true,
 			},
 		},
 		{
 			name: "server", streamMessage: "unexpected status 503", exitStderr: "ERROR: unexpected status 503\n", exitCode: 1,
 			want: codexFailureReportingFacts{
-				Type: interfaces.WorkFailureTypeInternalServerError, Family: interfaces.WorkFailureFamilyRetryable,
+				Type: workerexecution.WorkFailureTypeInternalServerError, Family: workerexecution.WorkFailureFamilyRetryable,
 				Message: codexServerFailureMessage, Retryable: true,
 			},
 		},
@@ -108,14 +108,14 @@ func codexFailureReportingAgreementCases() []codexFailureReportingAgreementCase 
 			name: "malformed", streamMessage: "operation failed with private transcript details",
 			exitStderr: `ERROR: {"type":"error","error":{"message":"private transcript"}}` + "\n", exitCode: 1,
 			want: codexFailureReportingFacts{
-				Type: interfaces.WorkFailureTypeUnknown, Family: interfaces.WorkFailureFamilyTerminal,
+				Type: workerexecution.WorkFailureTypeUnknown, Family: workerexecution.WorkFailureFamilyTerminal,
 				Message: codexUnknownFailureMessage, Terminal: true,
 			},
 		},
 		{
 			name: "unknown", streamMessage: "cleanup detail that is not a recognized provider failure", exitStderr: "", exitCode: 17,
 			want: codexFailureReportingFacts{
-				Type: interfaces.WorkFailureTypeUnknown, Family: interfaces.WorkFailureFamilyTerminal,
+				Type: workerexecution.WorkFailureTypeUnknown, Family: workerexecution.WorkFailureFamilyTerminal,
 				Message: codexUnknownFailureMessage, Terminal: true,
 			},
 		},
@@ -172,7 +172,7 @@ func TestCodexFailureReportingPaths_CanceledAgreesAcrossCompetingSignals(t *test
 	}
 
 	want := codexFailureReportingFacts{
-		Type: interfaces.WorkFailureTypeUnknown, Family: interfaces.WorkFailureFamilyTerminal,
+		Type: workerexecution.WorkFailureTypeUnknown, Family: workerexecution.WorkFailureFamilyTerminal,
 		Message: "Codex execution was canceled.", Terminal: true,
 	}
 	input := provider.CodexFailureResolutionInput{FlushReason: provider.CodexFlushReasonCanceled}
@@ -216,7 +216,7 @@ func TestCodexFailureReportingPaths_TimeoutAgreesAcrossCompetingSignals(t *testi
 	}
 
 	want := codexFailureReportingFacts{
-		Type: interfaces.WorkFailureTypeTimeout, Family: interfaces.WorkFailureFamilyRetryable,
+		Type: workerexecution.WorkFailureTypeTimeout, Family: workerexecution.WorkFailureFamilyRetryable,
 		Message: "Codex execution timed out.", Retryable: true,
 	}
 

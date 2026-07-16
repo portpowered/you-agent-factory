@@ -11,19 +11,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -101,7 +102,7 @@ func modelCatalogFixture(t *testing.T) (string, *recordingModelAssets) {
 		{"name": "worker-a", "type": "SCRIPT_WORKER", "command": "test", "body": "Process work."},
 		{
 			"name": "model-worker", "type": "INFERENCE_WORKER", "modelProvider": "CODEX",
-			"model": "OMNIVOICE_Q4_K_M", "modelLocality": interfaces.ModelLocalityLocal,
+			"model": "OMNIVOICE_Q4_K_M", "modelLocality": workerconfig.ModelLocalityLocal,
 			"resources": []map[string]any{{"name": "omnivoice-cache", "capacity": 1}},
 		},
 	}

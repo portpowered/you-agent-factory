@@ -6,9 +6,11 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestReconstructFactoryWorldState_JavaScriptDispatchLifecycleReconstructsQueueInterruptReconcileAndArtifact(t *testing.T) {
@@ -86,7 +88,7 @@ func lateDispatchReconciledEvent(tick int, eventTime time.Time) factoryapi.Facto
 
 func TestReconstructFactoryWorldState_PetriDispatchRequestResponseRemainsRepresentable(t *testing.T) {
 	t0 := time.Date(2026, 6, 9, 14, 15, 0, 0, time.UTC)
-	workItem := interfaces.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "draft", TraceID: "trace-1"}
+	workItem := work.FactoryWorkItem{ID: "work-1", WorkTypeID: "task", DisplayName: "draft", TraceID: "trace-1"}
 	events := []factoryapi.FactoryEvent{
 		initialStructureEvent(t0),
 		workInputEvent(1, t0.Add(time.Second), workItem),
@@ -103,7 +105,7 @@ func TestReconstructFactoryWorldState_PetriDispatchRequestResponseRemainsReprese
 		workstationResponseEvent(2, t0.Add(3*time.Second), interfaces.WorkstationResponsePayload{
 			DispatchID:   "dispatch-petri-1",
 			TransitionID: "t-review",
-			Result:       interfaces.WorkstationResult{Outcome: string(interfaces.OutcomeContinue)},
+			Result:       interfaces.WorkstationResult{Outcome: string(workerexecution.OutcomeContinue)},
 		}),
 	}
 
@@ -121,25 +123,25 @@ func TestReconstructFactoryWorldState_PetriDispatchRequestResponseRemainsReprese
 
 func TestReconstructFactoryWorldState_ContinueDispatchReplaysNextTurnContent(t *testing.T) {
 	t0 := time.Date(2026, 7, 12, 19, 0, 0, 0, time.UTC)
-	input := interfaces.FactoryWorkItem{
+	input := work.FactoryWorkItem{
 		ID:          "work-1",
 		WorkTypeID:  "task",
 		DisplayName: "draft",
 		TraceID:     "trace-1",
 		PlaceID:     "task:init",
-		Content: []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
 			Text: "input-content",
 		}},
 	}
-	continued := interfaces.FactoryWorkItem{
+	continued := work.FactoryWorkItem{
 		ID:          "work-1",
 		WorkTypeID:  "task",
 		DisplayName: "draft",
 		TraceID:     "trace-1",
 		PlaceID:     "task:init",
-		Content: []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
 			Text: "next-turn-output",
 		}},
 	}
@@ -183,7 +185,7 @@ func TestReconstructFactoryWorldState_ContinueDispatchReplaysNextTurnContent(t *
 		t.Fatalf("completed dispatches = %#v, want one continue dispatch", worldState.CompletedDispatches)
 	}
 	dispatch := worldState.CompletedDispatches[0]
-	if dispatch.Result.Outcome != string(interfaces.OutcomeContinue) {
+	if dispatch.Result.Outcome != string(workerexecution.OutcomeContinue) {
 		t.Fatalf("dispatch outcome = %s, want CONTINUE", dispatch.Result.Outcome)
 	}
 	if len(dispatch.OutputWorkItems) != 1 {
@@ -199,25 +201,25 @@ func TestReconstructFactoryWorldState_ContinueDispatchReplaysNextTurnContent(t *
 
 func TestReconstructFactoryWorldState_FailedDispatchReplaysRequestContent(t *testing.T) {
 	t0 := time.Date(2026, 7, 12, 20, 0, 0, 0, time.UTC)
-	input := interfaces.FactoryWorkItem{
+	input := work.FactoryWorkItem{
 		ID:          "work-1",
 		WorkTypeID:  "task",
 		DisplayName: "draft",
 		TraceID:     "trace-1",
 		PlaceID:     "task:init",
-		Content: []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
 			Text: "input-content",
 		}},
 	}
-	failed := interfaces.FactoryWorkItem{
+	failed := work.FactoryWorkItem{
 		ID:          "work-1",
 		WorkTypeID:  "task",
 		DisplayName: "draft",
 		TraceID:     "trace-1",
 		PlaceID:     "task:failed",
-		Content: []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
 			Text: "input-content",
 		}},
 	}
@@ -261,7 +263,7 @@ func TestReconstructFactoryWorldState_FailedDispatchReplaysRequestContent(t *tes
 		t.Fatalf("failed dispatches = %#v, want one failed dispatch", worldState.FailedDispatches)
 	}
 	dispatch := worldState.FailedDispatches[0]
-	if dispatch.Result.Outcome != string(interfaces.OutcomeFailed) {
+	if dispatch.Result.Outcome != string(workerexecution.OutcomeFailed) {
 		t.Fatalf("dispatch outcome = %s, want FAILED", dispatch.Result.Outcome)
 	}
 	if len(dispatch.OutputWorkItems) != 1 {

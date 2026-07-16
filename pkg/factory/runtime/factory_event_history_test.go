@@ -10,14 +10,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/logging"
-	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -38,7 +42,7 @@ func TestNew_ProviderBoundPetriDispatchPreservesPublicContractOnReplay(t *testin
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID: "work-provider-contract", WorkTypeID: "task", TraceID: "trace-provider-contract",
 	}}); err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
@@ -50,7 +54,7 @@ func TestNew_ProviderBoundPetriDispatchPreservesPublicContractOnReplay(t *testin
 	liveEvents := runtimeGeneratedEvents(t, f)
 	live := publicPetriProviderContract(t, liveEvents)
 	loaded := roundTripSafeBoundaryArtifact(t, liveEvents)
-	replayed := publicPetriProviderContract(t, loaded.Events)
+	replayed := publicPetriProviderContract(t, runtimeGeneratedReplayEvents(t, loaded.Events))
 	if !reflect.DeepEqual(replayed, live) {
 		t.Fatalf("replayed public Petri provider contract = %#v, want live %#v", replayed, live)
 	}
@@ -58,13 +62,13 @@ func TestNew_ProviderBoundPetriDispatchPreservesPublicContractOnReplay(t *testin
 
 type providerBoundaryFake struct{}
 
-func (providerBoundaryFake) Infer(_ context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
-	return interfaces.InferenceResponse{
+func (providerBoundaryFake) Infer(_ context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+	return workerexecution.InferenceResponse{
 		Content: "provider contract output",
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "mock", Kind: "session_id", ID: "petri-provider-session-1",
 		},
-		Diagnostics: &interfaces.WorkDiagnostics{Provider: &interfaces.ProviderDiagnostic{
+		Diagnostics: &workerexecution.WorkDiagnostics{Provider: &workerexecution.ProviderDiagnostic{
 			Provider: "mock",
 			Model:    "fixture-model",
 			ResponseMetadata: map[string]string{
@@ -78,8 +82,8 @@ type providerBoundaryExecutor struct {
 	provider workerprovider.Provider
 }
 
-func (e providerBoundaryExecutor) Execute(ctx context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	response, err := e.provider.Infer(ctx, interfaces.ProviderInferenceRequest{
+func (e providerBoundaryExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	response, err := e.provider.Infer(ctx, workerexecution.ProviderInferenceRequest{
 		Dispatch:      dispatch,
 		WorkerType:    dispatch.WorkerType,
 		UserMessage:   "deterministic provider contract prompt",
@@ -87,12 +91,12 @@ func (e providerBoundaryExecutor) Execute(ctx context.Context, dispatch interfac
 		ModelProvider: "mock",
 	})
 	if err != nil {
-		return interfaces.WorkResult{}, err
+		return workerexecution.WorkResult{}, err
 	}
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:      dispatch.DispatchID,
 		TransitionID:    dispatch.TransitionID,
-		Outcome:         interfaces.OutcomeAccepted,
+		Outcome:         workerexecution.OutcomeAccepted,
 		Output:          response.Content,
 		ProviderSession: response.ProviderSession,
 		Diagnostics:     response.Diagnostics,
@@ -103,7 +107,7 @@ type petriPublicProviderContract struct {
 	DispatchID      string
 	Provider        string
 	Model           string
-	ProviderSession interfaces.ProviderSessionMetadata
+	ProviderSession workerexecution.ProviderSessionMetadata
 }
 
 func publicPetriProviderContract(t *testing.T, events []factoryapi.FactoryEvent) petriPublicProviderContract {
@@ -139,7 +143,7 @@ func publicPetriProviderContract(t *testing.T, events []factoryapi.FactoryEvent)
 	if session.Diagnostics == nil || session.Diagnostics.Provider == nil {
 		t.Fatalf("public provider session = %#v, want identity and safe metadata", session)
 	}
-	wantSession := interfaces.ProviderSessionMetadata{
+	wantSession := workerexecution.ProviderSessionMetadata{
 		Provider: "mock",
 		Kind:     "session_id",
 		ID:       "petri-provider-session-1",
@@ -168,10 +172,11 @@ func TestNew_SafeDiagnosticsBoundarySurvivesReplayAndSelectedTickProjection(t *t
 	assertDispatchResponseCount(t, events, 3)
 
 	loaded := roundTripSafeBoundaryArtifact(t, events)
-	assertDispatchResponseCount(t, loaded.Events, 3)
-	assertThinDispatchResponsesOmitRetiredProviderAttemptFields(t, loaded.Events)
+	generatedReplayEvents := runtimeGeneratedReplayEvents(t, loaded.Events)
+	assertDispatchResponseCount(t, generatedReplayEvents, 3)
+	assertThinDispatchResponsesOmitRetiredProviderAttemptFields(t, generatedReplayEvents)
 
-	worldState := reconstructWorldStateAtFinalTick(t, loaded.Events)
+	worldState := reconstructWorldStateAtFinalTick(t, generatedReplayEvents)
 	assertExecutedPetriDispatchContractSurvivesReplay(t, liveSnapshot.DispatchHistory, worldState)
 	assertSafeBoundaryWorldState(t, worldState)
 	assertSafeBoundaryRequestViews(t, worldState)
@@ -181,7 +186,7 @@ func TestNew_SafeDiagnosticsBoundarySurvivesReplayAndSelectedTickProjection(t *t
 type petriDispatchContract struct {
 	DispatchID   string
 	TransitionID string
-	Outcome      interfaces.WorkOutcome
+	Outcome      workerexecution.WorkOutcome
 }
 
 func assertExecutedPetriDispatchContractSurvivesReplay(
@@ -203,7 +208,7 @@ func assertExecutedPetriDispatchContractSurvivesReplay(
 		replayedContract := petriDispatchContract{
 			DispatchID:   completion.DispatchID,
 			TransitionID: completion.TransitionID,
-			Outcome:      interfaces.WorkOutcome(completion.Result.Outcome),
+			Outcome:      workerexecution.WorkOutcome(completion.Result.Outcome),
 		}
 		if !reflect.DeepEqual(replayedContract, liveContract) {
 			t.Fatalf("replayed Petri dispatch[%d] = %#v, want live %#v", index, replayedContract, liveContract)
@@ -227,10 +232,10 @@ func TestNew_SubmitWorkRequestRecordsCanonicalWorkRequestEvent(t *testing.T) {
 	f := newPassingInlineRuntime(t)
 	tickable := tickableFactory(t, f)
 
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-canonical-work-event",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
 			Name:       "canonical",
 			WorkID:     "work-canonical",
 			WorkTypeID: "task",
@@ -333,7 +338,7 @@ func newSafeBoundaryRuntime(t *testing.T) factory.Factory {
 
 func submitSafeBoundaryRequests(t *testing.T, f factory.Factory) {
 	t.Helper()
-	_, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{
+	_, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{
 		{WorkID: "work-safe-success", WorkTypeID: "task", TraceID: "trace-safe-success", Payload: json.RawMessage(`{"story":"safe success"}`)},
 		{WorkID: "work-safe-failure", WorkTypeID: "task", TraceID: "trace-safe-failure", Payload: json.RawMessage(`{"story":"safe failure"}`)},
 		{WorkID: "work-safe-windows-process-failure", WorkTypeID: "task", TraceID: "trace-safe-windows-process-failure", Payload: json.RawMessage(`{"story":"safe windows process failure"}`)},
@@ -365,11 +370,15 @@ func assertDispatchResponseCount(t *testing.T, events []factoryapi.FactoryEvent,
 func roundTripSafeBoundaryArtifact(t *testing.T, events []factoryapi.FactoryEvent) *interfaces.ReplayArtifact {
 	t.Helper()
 	recordedAt := time.Date(2026, time.April, 21, 20, 0, 0, 0, time.UTC)
-	artifact, err := replay.NewEventLogArtifactFromFactory(recordedAt, safeBoundaryGeneratedFactory(), nil, interfaces.ReplayDiagnostics{})
+	factorySnapshot, err := interfaces.NewFactorySnapshot(safeBoundaryGeneratedFactory())
 	if err != nil {
-		t.Fatalf("NewEventLogArtifactFromFactory: %v", err)
+		t.Fatalf("NewFactorySnapshot: %v", err)
 	}
-	artifact.Events = append(artifact.Events, events...)
+	artifact, err := replay.NewEventLogArtifact(recordedAt, factorySnapshot, nil, interfaces.ReplayDiagnostics{})
+	if err != nil {
+		t.Fatalf("NewEventLogArtifact: %v", err)
+	}
+	artifact.Events = append(artifact.Events, runtimeDomainReplayEvents(t, events)...)
 
 	artifactPath := filepath.Join(t.TempDir(), "safe-boundary.replay.json")
 	if err := replay.Save(artifactPath, artifact); err != nil {
@@ -389,9 +398,35 @@ func roundTripSafeBoundaryArtifact(t *testing.T, events []factoryapi.FactoryEven
 	return loaded
 }
 
+func runtimeDomainReplayEvents(t *testing.T, events []factoryapi.FactoryEvent) []interfaces.FactoryEvent {
+	t.Helper()
+	converted := make([]interfaces.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		domainEvent, err := interfaces.NewFactoryEvent(event)
+		if err != nil {
+			t.Fatalf("convert runtime replay event %q: %v", event.Id, err)
+		}
+		converted = append(converted, domainEvent)
+	}
+	return converted
+}
+
+func runtimeGeneratedReplayEvents(t *testing.T, events []interfaces.FactoryEvent) []factoryapi.FactoryEvent {
+	t.Helper()
+	converted := make([]factoryapi.FactoryEvent, 0, len(events))
+	for _, event := range events {
+		var generated factoryapi.FactoryEvent
+		if err := event.Decode(&generated); err != nil {
+			t.Fatalf("decode runtime replay event %q: %v", event.Id, err)
+		}
+		converted = append(converted, generated)
+	}
+	return converted
+}
+
 func reconstructWorldStateAtFinalTick(t *testing.T, events []factoryapi.FactoryEvent) interfaces.FactoryWorldState {
 	t.Helper()
-	worldState, err := projections.ReconstructFactoryWorldState(events, maxEventTick(events))
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, maxEventTick(events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -403,12 +438,12 @@ func assertSafeBoundaryWorldState(t *testing.T, worldState interfaces.FactoryWor
 	if got := len(worldState.CompletedDispatches); got != 3 {
 		t.Fatalf("completed dispatch count = %d, want 3", got)
 	}
-	if got := worldState.FailureDetailsByWorkID["work-safe-failure"].FailureDetail.Reason; got != interfaces.WorkFailureTypeTimeout {
+	if got := worldState.FailureDetailsByWorkID["work-safe-failure"].FailureDetail.Reason; got != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("failed work detail reason = %q, want timeout", got)
 	}
 	windowsDetail := worldState.FailureDetailsByWorkID["work-safe-windows-process-failure"]
-	if windowsDetail.FailureDetail == nil || windowsDetail.FailureDetail.Reason != interfaces.WorkFailureTypeInternalServerError {
-		t.Fatalf("windows failed work detail = %#v, want %q", windowsDetail.FailureDetail, interfaces.WorkFailureTypeInternalServerError)
+	if windowsDetail.FailureDetail == nil || windowsDetail.FailureDetail.Reason != workerexecution.WorkFailureTypeInternalServerError {
+		t.Fatalf("windows failed work detail = %#v, want %q", windowsDetail.FailureDetail, workerexecution.WorkFailureTypeInternalServerError)
 	}
 	if windowsDetail.FailureDetail.Message != "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)" {
 		t.Fatalf("windows failed work detail message = %q", windowsDetail.FailureDetail.Message)
@@ -427,14 +462,14 @@ func assertSafeBoundaryRequestViews(t *testing.T, worldState interfaces.FactoryW
 	assertSafeBoundaryRequestView(t, worldState, requestViewForWork(t, worldState, "work-safe-success"),
 		"work-safe-success", "resp-safe-success", "", "", "")
 	assertSafeBoundaryRequestView(t, worldState, requestViewForWork(t, worldState, "work-safe-failure"),
-		"work-safe-failure", "sess-safe-failure", string(interfaces.WorkFailureFamilyRetryable), string(interfaces.WorkFailureTypeTimeout), "provider timed out")
+		"work-safe-failure", "sess-safe-failure", string(workerexecution.WorkFailureFamilyRetryable), string(workerexecution.WorkFailureTypeTimeout), "provider timed out")
 
 	windowsRequest := requestViewForWork(t, worldState, "work-safe-windows-process-failure")
 	assertSafeBoundaryRequestView(t, worldState, windowsRequest,
 		"work-safe-windows-process-failure",
 		"sess-safe-windows-4294967295",
-		string(interfaces.WorkFailureFamilyRetryable),
-		string(interfaces.WorkFailureTypeInternalServerError),
+		string(workerexecution.WorkFailureFamilyRetryable),
+		string(workerexecution.WorkFailureTypeInternalServerError),
 		"provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)",
 	)
 	assertNoAuthRemediationText(t, windowsRequest.Response.FailureDetail.Message)
@@ -442,13 +477,13 @@ func assertSafeBoundaryRequestViews(t *testing.T, worldState interfaces.FactoryW
 
 func submitOrderedEventHistoryRequest(t *testing.T, f factory.Factory) {
 	t.Helper()
-	_, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	_, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID:     "work-1",
 		Name:       "Write PRD",
 		WorkTypeID: "task",
 		TraceID:    "trace-1",
-		Relations: []interfaces.Relation{{
-			Type:          interfaces.RelationDependsOn,
+		Relations: []work.Relation{{
+			Type:          work.RelationDependsOn,
 			TargetWorkID:  "upstream-1",
 			RequiredState: "done",
 		}},
@@ -548,7 +583,7 @@ func assertOrderedEventPayloads(t *testing.T, events []factoryapi.FactoryEvent) 
 
 func assertOrderedEventProjection(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
-	world, err := projections.ReconstructFactoryWorldState(events, events[runtimeEventIndex(3)].Context.Tick)
+	world, err := factoryeventprojection.ReconstructFactoryWorldState(events, events[runtimeEventIndex(3)].Context.Tick)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -577,16 +612,16 @@ func assertRuntimeEventIDsStable(t *testing.T, f factory.Factory, events []facto
 	}
 }
 
-func mustUnmarshalRuntimeWorkRequest(t *testing.T, body string) interfaces.WorkRequest {
+func mustUnmarshalRuntimeWorkRequest(t *testing.T, body string) work.WorkRequest {
 	t.Helper()
-	var request interfaces.WorkRequest
+	var request work.WorkRequest
 	if err := json.Unmarshal([]byte(body), &request); err != nil {
 		t.Fatalf("Unmarshal WorkRequest: %v", err)
 	}
 	return request
 }
 
-func assertIdempotentBatchSubmit(t *testing.T, f factory.Factory, request interfaces.WorkRequest) {
+func assertIdempotentBatchSubmit(t *testing.T, f factory.Factory, request work.WorkRequest) {
 	t.Helper()
 	result, err := f.SubmitWorkRequest(context.Background(), request)
 	if err != nil {
@@ -657,7 +692,7 @@ func assertBatchRequestReplayEvents(t *testing.T, events []factoryapi.FactoryEve
 
 func assertBatchRequestReplayProjection(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
-	world, err := projections.ReconstructFactoryWorldState(events, events[runtimeEventIndex(1)].Context.Tick)
+	world, err := factoryeventprojection.ReconstructFactoryWorldState(events, events[runtimeEventIndex(1)].Context.Tick)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -670,27 +705,27 @@ func assertBatchRequestReplayProjection(t *testing.T, events []factoryapi.Factor
 	}
 }
 
-func generatedRuntimeBatchFixture() interfaces.GeneratedSubmissionBatch {
-	return interfaces.GeneratedSubmissionBatch{
-		Request: interfaces.WorkRequest{
+func generatedRuntimeBatchFixture() work.GeneratedSubmissionBatch {
+	return work.GeneratedSubmissionBatch{
+		Request: work.WorkRequest{
 			RequestID: "generated-request-events",
-			Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-			Works: []interfaces.Work{
+			Type:      work.WorkRequestTypeFactoryRequestBatch,
+			Works: []work.Work{
 				{Name: "draft", WorkID: "work-draft", WorkTypeID: "task", TraceID: "trace-generated"},
 				{Name: "review", WorkID: "work-review", WorkTypeID: "task"},
 			},
-			Relations: []interfaces.WorkRelation{{
-				Type:           interfaces.WorkRelationDependsOn,
+			Relations: []work.WorkRelation{{
+				Type:           work.WorkRelationDependsOn,
 				SourceWorkName: "review",
 				TargetWorkName: "draft",
 				RequiredState:  "done",
 			}},
 		},
-		Metadata: interfaces.GeneratedSubmissionBatchMetadata{
+		Metadata: work.GeneratedSubmissionBatchMetadata{
 			Source:        "worker-output:dispatch-parent",
 			ParentLineage: []string{"request-parent", "work-parent"},
 		},
-		Submissions: []interfaces.SubmitRequest{{
+		Submissions: []work.SubmitRequest{{
 			Name:        "review",
 			WorkID:      "work-review",
 			TargetState: "done",
@@ -751,7 +786,7 @@ func assertGeneratedBatchEvents(t *testing.T, events []factoryapi.FactoryEvent) 
 
 func assertGeneratedBatchProjection(t *testing.T, events []factoryapi.FactoryEvent) {
 	t.Helper()
-	world, err := projections.ReconstructFactoryWorldState(events, events[runtimeEventIndex(1)].Context.Tick)
+	world, err := factoryeventprojection.ReconstructFactoryWorldState(events, events[runtimeEventIndex(1)].Context.Tick)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

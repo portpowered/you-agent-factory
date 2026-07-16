@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -24,7 +24,7 @@ func assertReplayArtifactDoesNotContainRawValue(t *testing.T, artifactPath, rawV
 func replayEventCount(artifact *interfaces.ReplayArtifact, eventType factoryapi.FactoryEventType) int {
 	count := 0
 	for _, event := range artifact.Events {
-		if event.Type == eventType {
+		if string(event.Type) == string(eventType) {
 			count++
 		}
 	}

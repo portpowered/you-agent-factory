@@ -6,7 +6,11 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // Dispatcher manages worker execution. It supports two execution modes:
@@ -17,9 +21,9 @@ import (
 type Dispatcher interface {
 	// Dispatch executes a work dispatch synchronously, blocking until the
 	// result is available.
-	Dispatch(ctx context.Context, dispatch *interfaces.WorkDispatch) (interfaces.WorkResult, error)
+	Dispatch(ctx context.Context, dispatch *work.WorkDispatch) (workerexecution.WorkResult, error)
 	// WorkerState returns a point-in-time snapshot of the dispatcher state.
-	WorkerState() interfaces.WorkerState
+	WorkerState() workerexecution.WorkerState
 	// Tick processes all currently queued dispatches synchronously, blocking
 	// until each submitted element completes.
 	Tick()
@@ -27,12 +31,12 @@ type Dispatcher interface {
 	Run()
 }
 
-func cloneInputTokens(rawTokens []any) []interfaces.Token {
+func cloneInputTokens(rawTokens []any) []factorytoken.Token {
 	if len(rawTokens) == 0 {
 		return nil
 	}
 
-	out := make([]interfaces.Token, 0, len(rawTokens))
+	out := make([]factorytoken.Token, 0, len(rawTokens))
 	for _, raw := range rawTokens {
 		token, ok := decodeToken(raw)
 		if !ok {
@@ -43,7 +47,7 @@ func cloneInputTokens(rawTokens []any) []interfaces.Token {
 	return out
 }
 
-func clonePetriInputTokens(inputTokens []interfaces.Token) []any {
+func clonePetriInputTokens(inputTokens []factorytoken.Token) []any {
 	if len(inputTokens) == 0 {
 		return nil
 	}
@@ -55,28 +59,28 @@ func clonePetriInputTokens(inputTokens []interfaces.Token) []any {
 	return out
 }
 
-func decodeToken(raw any) (interfaces.Token, bool) {
-	if token, ok := raw.(interfaces.Token); ok {
+func decodeToken(raw any) (factorytoken.Token, bool) {
+	if token, ok := raw.(factorytoken.Token); ok {
 		return token, true
 	}
 
 	encoded, err := json.Marshal(raw)
 	if err != nil {
-		return interfaces.Token{}, false
+		return factorytoken.Token{}, false
 	}
-	var token interfaces.Token
+	var token factorytoken.Token
 	if err := json.Unmarshal(encoded, &token); err != nil {
-		return interfaces.Token{}, false
+		return factorytoken.Token{}, false
 	}
 	return token, true
 }
 
 // InputTokens converts typed petri tokens into the shared dispatch representation.
-func InputTokens(tokens ...interfaces.Token) []any {
+func InputTokens(tokens ...factorytoken.Token) []any {
 	return clonePetriInputTokens(tokens)
 }
 
 // WorkDispatchInputTokens returns the token payload as typed petri tokens.
-func WorkDispatchInputTokens(dispatch interfaces.WorkDispatch) []interfaces.Token {
+func WorkDispatchInputTokens(dispatch work.WorkDispatch) []factorytoken.Token {
 	return cloneInputTokens(dispatch.InputTokens)
 }

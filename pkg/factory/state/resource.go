@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
@@ -19,7 +20,7 @@ type ResourceDef struct {
 
 // GenerateResourcePlaces produces a Place with ID '{resource_id}:available'
 // and a slice of pre-loaded resource tokens for the given ResourceDef.
-func GenerateResourcePlaces(def *ResourceDef) (*petri.Place, []*interfaces.Token) {
+func GenerateResourcePlaces(def *ResourceDef) (*petri.Place, []*factorytoken.Token) {
 	placeID := fmt.Sprintf("%s:%s", def.ID, interfaces.ResourceStateAvailable)
 
 	place := &petri.Place{
@@ -28,20 +29,20 @@ func GenerateResourcePlaces(def *ResourceDef) (*petri.Place, []*interfaces.Token
 		State:  interfaces.ResourceStateAvailable,
 	}
 
-	tokens := make([]*interfaces.Token, 0, def.Capacity)
+	tokens := make([]*factorytoken.Token, 0, def.Capacity)
 	for i := range def.Capacity {
-		tokens = append(tokens, &interfaces.Token{
+		tokens = append(tokens, &factorytoken.Token{
 			// Why?
 			ID:      fmt.Sprintf("%s:resource:%d", def.ID, i),
 			PlaceID: placeID,
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     fmt.Sprintf("%s:%d", def.ID, i),
 				WorkTypeID: def.ID,
-				DataType:   interfaces.DataTypeResource,
+				DataType:   factorytoken.DataTypeResource,
 			},
 			CreatedAt: time.Now(),
 			EnteredAt: time.Now(),
-			History:   interfaces.TokenHistory{},
+			History:   factorytoken.History{},
 		})
 	}
 

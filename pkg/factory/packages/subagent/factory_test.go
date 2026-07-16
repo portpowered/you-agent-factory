@@ -5,8 +5,9 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestBuiltInFactoryJSON_LoadsRunnablePackagedSubagentFactory(t *testing.T) {
@@ -122,8 +123,8 @@ func assertSharedAgentToolsPolicy(t *testing.T, cfg *interfaces.FactoryConfig) {
 		if worker.AgentTools == nil {
 			t.Fatal("subagent-worker agentTools = nil, want explicit shared policy")
 		}
-		if worker.AgentTools.Policy != interfaces.AgentWorkerToolPolicyReadOnly {
-			t.Fatalf("agentTools.policy = %q, want %s", worker.AgentTools.Policy, interfaces.AgentWorkerToolPolicyReadOnly)
+		if worker.AgentTools.Policy != workerconfig.AgentToolPolicyReadOnly {
+			t.Fatalf("agentTools.policy = %q, want %s", worker.AgentTools.Policy, workerconfig.AgentToolPolicyReadOnly)
 		}
 		return
 	}

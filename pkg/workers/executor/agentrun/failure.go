@@ -5,10 +5,10 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 const (
@@ -29,7 +29,7 @@ const (
 	FailureClassToolRuntime    = "agent_run_tool_failure"
 )
 
-func agentRunDiagnostics(extra map[string]string) *interfaces.WorkDiagnostics {
+func agentRunDiagnostics(extra map[string]string) *workerexecution.WorkDiagnostics {
 	metadata := map[string]string{
 		DiagnosticExecutionBehavior: ExecutionBehaviorAgentRun,
 	}
@@ -39,7 +39,7 @@ func agentRunDiagnostics(extra map[string]string) *interfaces.WorkDiagnostics {
 		}
 		metadata[key] = value
 	}
-	return &interfaces.WorkDiagnostics{Metadata: metadata}
+	return &workerexecution.WorkDiagnostics{Metadata: metadata}
 }
 
 func failureClassForError(err error) string {
@@ -61,23 +61,23 @@ func failureClassForError(err error) string {
 	return FailureClassHarnessRuntime
 }
 
-func failureMetadataForError(err error) *interfaces.WorkFailureMetadata {
+func failureMetadataForError(err error) *workerexecution.WorkFailureMetadata {
 	if err == nil {
 		return nil
 	}
 	if metadata := modelhostFailureMetadata(err); metadata != nil {
 		return metadata
 	}
-	family := interfaces.WorkFailureFamilyTerminal
-	failureType := interfaces.WorkFailureTypeInternalServerError
+	family := workerexecution.WorkFailureFamilyTerminal
+	failureType := workerexecution.WorkFailureTypeInternalServerError
 	if errors.Is(err, context.Canceled) {
-		failureType = interfaces.WorkFailureTypeUnknown
+		failureType = workerexecution.WorkFailureTypeUnknown
 	}
 	if errors.Is(err, context.DeadlineExceeded) {
-		family = interfaces.WorkFailureFamilyRetryable
-		failureType = interfaces.WorkFailureTypeTimeout
+		family = workerexecution.WorkFailureFamilyRetryable
+		failureType = workerexecution.WorkFailureTypeTimeout
 	}
-	return &interfaces.WorkFailureMetadata{
+	return &workerexecution.WorkFailureMetadata{
 		Family: family,
 		Type:   failureType,
 	}
@@ -123,11 +123,10 @@ func recoveryActionForError(err error) string {
 	}
 	var readinessErr *modelhost.ReadinessError
 	if errors.As(err, &readinessErr) {
-		return recoveryActionForReadiness(readinessErr.Snapshot.ReadinessState)
+		return recoveryActionForReadiness(managedruntime.ReadinessState(readinessErr.Snapshot.ReadinessState))
 	}
-	var invocationErr *apisurface.ManagedRuntimeInvocationError
-	if errors.As(err, &invocationErr) {
-		return recoveryActionForReadiness(invocationErr.ReadinessState)
+	if readiness, ok := managedruntime.ReadinessStateFromError(err); ok {
+		return recoveryActionForReadiness(readiness)
 	}
 	if errors.Is(err, modelhost.ErrProcessCrash) {
 		return "resolve the managed runtime failure before retrying the agent run"
@@ -135,15 +134,15 @@ func recoveryActionForError(err error) string {
 	return ""
 }
 
-func recoveryActionForReadiness(readiness factoryapi.ManagedRuntimeReadinessState) string {
+func recoveryActionForReadiness(readiness managedruntime.ReadinessState) string {
 	switch readiness {
-	case factoryapi.ManagedRuntimeReadinessStateMISSING:
+	case managedruntime.ReadinessStateMissing:
 		return "pull or install the managed runtime before retrying the agent run"
-	case factoryapi.ManagedRuntimeReadinessStateLOADING:
+	case managedruntime.ReadinessStateLoading:
 		return "wait for the managed runtime to finish loading before retrying the agent run"
-	case factoryapi.ManagedRuntimeReadinessStateFAILED:
+	case managedruntime.ReadinessStateFailed:
 		return "resolve the managed runtime failure before retrying the agent run"
-	case factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED:
+	case managedruntime.ReadinessStateUnsupported:
 		return "use a supported managed runtime configuration for the agent worker"
 	default:
 		return ""
@@ -158,9 +157,8 @@ func modelhostFailureClass(err error) (string, bool) {
 	if errors.As(err, &readinessErr) {
 		return readinessFailureClass(readinessErr), true
 	}
-	var invocationErr *apisurface.ManagedRuntimeInvocationError
-	if errors.As(err, &invocationErr) {
-		return managedRuntimeInvocationFailureClass(invocationErr), true
+	if class, ok := managedRuntimeInvocationFailureClass(err); ok {
+		return class, true
 	}
 	if errors.Is(err, modelhost.ErrProcessCrash) ||
 		errors.Is(err, modelhost.ErrUnsupportedRuntime) ||
@@ -180,8 +178,8 @@ func readinessFailureClass(err *modelhost.ReadinessError) string {
 	case modelhost.FailureClassMissingAssets, modelhost.FailureClassLoadingTimeout:
 		return FailureClassModelNotReady
 	default:
-		switch err.Snapshot.ReadinessState {
-		case factoryapi.ManagedRuntimeReadinessStateMISSING, factoryapi.ManagedRuntimeReadinessStateLOADING:
+		switch managedruntime.ReadinessState(err.Snapshot.ReadinessState) {
+		case managedruntime.ReadinessStateMissing, managedruntime.ReadinessStateLoading:
 			return FailureClassModelNotReady
 		default:
 			return FailureClassModelRuntime
@@ -189,13 +187,16 @@ func readinessFailureClass(err *modelhost.ReadinessError) string {
 	}
 }
 
-func managedRuntimeInvocationFailureClass(err *apisurface.ManagedRuntimeInvocationError) string {
-	switch {
-	case errors.Is(err, apisurface.ErrManagedRuntimeMissing),
-		errors.Is(err, apisurface.ErrManagedRuntimeLoading):
-		return FailureClassModelNotReady
+func managedRuntimeInvocationFailureClass(err error) (string, bool) {
+	readiness, ok := managedruntime.ReadinessStateFromError(err)
+	if !ok {
+		return "", false
+	}
+	switch readiness {
+	case managedruntime.ReadinessStateMissing, managedruntime.ReadinessStateLoading:
+		return FailureClassModelNotReady, true
 	default:
-		return FailureClassModelRuntime
+		return FailureClassModelRuntime, true
 	}
 }
 
@@ -240,26 +241,26 @@ func toolFailureClass(err error) (string, bool) {
 	return "", false
 }
 
-func modelhostFailureMetadata(err error) *interfaces.WorkFailureMetadata {
+func modelhostFailureMetadata(err error) *workerexecution.WorkFailureMetadata {
 	class, ok := modelhostFailureClass(err)
 	if !ok {
 		return nil
 	}
 	switch class {
 	case FailureClassLeaseDenied:
-		return &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyThrottle,
-			Type:   interfaces.WorkFailureTypeThrottled,
+		return &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyThrottle,
+			Type:   workerexecution.WorkFailureTypeThrottled,
 		}
 	case FailureClassModelNotReady:
-		return &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyRetryable,
-			Type:   interfaces.WorkFailureTypeTimeout,
+		return &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyRetryable,
+			Type:   workerexecution.WorkFailureTypeTimeout,
 		}
 	default:
-		return &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyTerminal,
-			Type:   interfaces.WorkFailureTypeInternalServerError,
+		return &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyTerminal,
+			Type:   workerexecution.WorkFailureTypeInternalServerError,
 		}
 	}
 }

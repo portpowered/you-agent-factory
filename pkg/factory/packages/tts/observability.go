@@ -3,8 +3,8 @@ package tts
 import (
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const (
@@ -131,14 +131,14 @@ func failureEvidence(detail interfaces.FactoryWorldFailureDetail, hasDetail bool
 	}, " "))
 }
 
-func failureDetailReason(detail *interfaces.FailureDetail) string {
+func failureDetailReason(detail *workerexecution.FailureDetail) string {
 	if detail == nil {
 		return ""
 	}
 	return strings.TrimSpace(string(detail.Reason))
 }
 
-func failureDetailMessage(detail *interfaces.FailureDetail) string {
+func failureDetailMessage(detail *workerexecution.FailureDetail) string {
 	if detail == nil {
 		return ""
 	}
@@ -149,9 +149,6 @@ func isModelNotReadyFailure(message string) bool {
 	trimmed := strings.ToLower(strings.TrimSpace(message))
 	if trimmed == "" {
 		return false
-	}
-	if strings.Contains(trimmed, strings.ToLower(apisurface.ErrModelNotAvailable.Error())) {
-		return true
 	}
 	return strings.Contains(trimmed, "model not available") ||
 		strings.Contains(trimmed, "required assets missing")

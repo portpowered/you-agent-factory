@@ -1,11 +1,14 @@
 package layouttests
 
 import (
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"reflect"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	. "github.com/portpowered/infinite-you/pkg/config"
+	"github.com/portpowered/infinite-you/pkg/work"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestFactoryConfig_SharedSurfaceRetiresExhaustionRules(t *testing.T) {
@@ -193,26 +196,26 @@ func TestCloneFactoryConfig_ClonesModelOperationBindingWorkContent(t *testing.T)
 			Operation: "MODEL_INVOKE",
 			OperationBindings: []interfaces.ModelOperationBinding{{
 				Slot: "draft",
-				Config: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
+				Config: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText,
 					Text: "configured prompt",
 				}, {
-					Type:  interfaces.WorkContentPartTypeImage,
+					Type:  work.WorkContentPartTypeImage,
 					File:  "configured-diagram.png",
 					Label: "Configured diagram",
 				}},
-				DefaultContent: []interfaces.WorkContentPart{{
-					Type: interfaces.WorkContentPartTypeText,
+				DefaultContent: []work.WorkContentPart{{
+					Type: work.WorkContentPartTypeText,
 					Text: "fallback prompt",
 				}, {
-					Type:  interfaces.WorkContentPartTypeImage,
+					Type:  work.WorkContentPartTypeImage,
 					File:  "fallback-diagram.png",
 					Label: "Fallback diagram",
 				}},
 			}, {
 				Slot:           "empty",
-				Config:         []interfaces.WorkContentPart{},
-				DefaultContent: []interfaces.WorkContentPart{},
+				Config:         []work.WorkContentPart{},
+				DefaultContent: []work.WorkContentPart{},
 			}},
 		}},
 	}
@@ -243,7 +246,7 @@ func TestCloneFactoryConfig_ClonesModelOperationBindingWorkContent(t *testing.T)
 }
 
 func TestCloneWorkerConfig_PreservesNilHostedConfig(t *testing.T) {
-	cloned := CloneWorkerConfig(interfaces.WorkerConfig{
+	cloned := CloneWorkerConfig(workerconfig.Config{
 		Name:     "hosted-linear",
 		Type:     interfaces.WorkerTypeHosted,
 		Provider: interfaces.HostedWorkerProviderLinear,
@@ -258,18 +261,18 @@ func TestCloneWorkerConfig_PreservesNilHostedConfig(t *testing.T) {
 }
 
 func TestCloneWorkerConfig_DetachesHostedNestedConfig(t *testing.T) {
-	source := interfaces.WorkerConfig{
+	source := workerconfig.Config{
 		Name:     "hosted-linear",
 		Type:     interfaces.WorkerTypeHosted,
 		Provider: interfaces.HostedWorkerProviderLinear,
-		Auth: &interfaces.HostedWorkerAuthConfig{
+		Auth: &workerconfig.HostedWorkerAuthConfig{
 			SecretRef: "linear-secret",
 		},
-		Linear: &interfaces.HostedLinearWorkerConfig{
+		Linear: &workerconfig.HostedLinearWorkerConfig{
 			PollInterval: "30s",
 			TeamIDs:      []string{"team-1", "team-2"},
 			StateIDs:     []string{"state-1", "state-2"},
-			Claim: &interfaces.HostedLinearWorkerClaimConfig{
+			Claim: &workerconfig.HostedLinearWorkerClaimConfig{
 				AssigneeField: "owner",
 			},
 		},
@@ -313,7 +316,7 @@ func TestCloneWorkerConfig_DetachesHostedNestedConfig(t *testing.T) {
 
 func assertBindingMultiPartContent(
 	t *testing.T,
-	parts []interfaces.WorkContentPart,
+	parts []work.WorkContentPart,
 	wantText string,
 	wantFile string,
 	wantLabel string,

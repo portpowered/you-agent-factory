@@ -4,7 +4,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // SimpleDashboardRenderData carries only the event-first data the simple
@@ -181,11 +182,11 @@ func customerActiveDispatchIDs(state interfaces.FactoryWorldState) []string {
 	return activeIDs
 }
 
-func dispatchHasCustomerWork(ids []string, items map[string]interfaces.FactoryWorkItem) bool {
+func dispatchHasCustomerWork(ids []string, items map[string]work.FactoryWorkItem) bool {
 	return len(workItemRefsForIDs(ids, items)) > 0
 }
 
-func hasCustomerWorkItems(items map[string]interfaces.FactoryWorkItem) bool {
+func hasCustomerWorkItems(items map[string]work.FactoryWorkItem) bool {
 	for _, item := range items {
 		if !interfaces.IsSystemTimeWorkType(item.WorkTypeID) {
 			return true
@@ -333,7 +334,7 @@ func countCompletedDispatches(state interfaces.FactoryWorldState) int {
 	return count
 }
 
-func countFailedWorkItems(failed map[string]interfaces.FactoryWorkItem) int {
+func countFailedWorkItems(failed map[string]work.FactoryWorkItem) int {
 	count := 0
 	for _, work := range failed {
 		if interfaces.IsSystemTimeWorkType(work.WorkTypeID) {
@@ -370,7 +371,7 @@ func countTerminalByWorkType(terminal map[string]interfaces.FactoryTerminalWork)
 	return nilIfEmpty(counts)
 }
 
-func countFailedByWorkType(failed map[string]interfaces.FactoryWorkItem) map[string]int {
+func countFailedByWorkType(failed map[string]work.FactoryWorkItem) map[string]int {
 	counts := make(map[string]int)
 	for _, work := range failed {
 		if interfaces.IsSystemTimeWorkType(work.WorkTypeID) {
@@ -381,7 +382,7 @@ func countFailedByWorkType(failed map[string]interfaces.FactoryWorkItem) map[str
 	return nilIfEmpty(counts)
 }
 
-func workItemRefsForIDs(ids []string, items map[string]interfaces.FactoryWorkItem) []interfaces.FactoryWorldWorkItemRef {
+func workItemRefsForIDs(ids []string, items map[string]work.FactoryWorkItem) []interfaces.FactoryWorldWorkItemRef {
 	refs := make([]interfaces.FactoryWorldWorkItemRef, 0, len(ids))
 	for _, id := range sortedStrings(ids) {
 		item, ok := items[id]
@@ -393,7 +394,7 @@ func workItemRefsForIDs(ids []string, items map[string]interfaces.FactoryWorkIte
 	return refs
 }
 
-func workRefsForActiveIDs(ids []string, items map[string]interfaces.FactoryWorkItem) []interfaces.FactoryWorldWorkItemRef {
+func workRefsForActiveIDs(ids []string, items map[string]work.FactoryWorkItem) []interfaces.FactoryWorldWorkItemRef {
 	refs := workItemRefsForIDs(ids, items)
 	if refs == nil {
 		return []interfaces.FactoryWorldWorkItemRef{}
@@ -401,7 +402,7 @@ func workRefsForActiveIDs(ids []string, items map[string]interfaces.FactoryWorkI
 	return refs
 }
 
-func workItemRef(item interfaces.FactoryWorkItem) interfaces.FactoryWorldWorkItemRef {
+func workItemRef(item work.FactoryWorkItem) interfaces.FactoryWorldWorkItemRef {
 	currentChainingTraceID := item.CurrentChainingTraceID
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = item.TraceID

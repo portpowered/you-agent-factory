@@ -5,14 +5,15 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
 func TestPackagedTTSInvocationPrimaryResult_ReturnsMetadataNotRawAudio(t *testing.T) {
 	audioPath := filepath.Join(t.TempDir(), "speech.wav")
-	encodedOutput, err := json.Marshal([]interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeAudio, File: audioPath, ContentType: "audio/wav", Slot: "audio",
+	encodedOutput, err := json.Marshal([]work.WorkContentPart{{
+		Type: work.WorkContentPartTypeAudio, File: audioPath, ContentType: "audio/wav", Slot: "audio",
 	}})
 	if err != nil {
 		t.Fatalf("marshal worker output: %v", err)
@@ -25,17 +26,17 @@ func TestPackagedTTSInvocationPrimaryResult_ReturnsMetadataNotRawAudio(t *testin
 
 	requestID := "req-tts"
 	workID := "work-tts"
-	submitted := interfaces.FactoryWorkItem{
+	submitted := work.FactoryWorkItem{
 		ID:         workID,
 		WorkTypeID: "task",
 		State:      "init",
 		TraceID:    requestID,
-		Content: []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
 			Text: "hi there",
 		}},
 	}
-	terminal := interfaces.FactoryWorkItem{
+	terminal := work.FactoryWorkItem{
 		ID:         workID,
 		WorkTypeID: "task",
 		State:      "complete",
@@ -45,18 +46,18 @@ func TestPackagedTTSInvocationPrimaryResult_ReturnsMetadataNotRawAudio(t *testin
 	}
 
 	state := interfaces.FactoryWorldState{
-		PayloadLineage:   interfaces.WorkPayloadLineageProjection{},
+		PayloadLineage:   work.WorkPayloadLineageProjection{},
 		WorkRequestsByID: make(map[string]interfaces.WorkRequestPayload),
 		TerminalWorkByID: make(map[string]interfaces.FactoryTerminalWork),
 	}
 	state.WorkRequestsByID[requestID] = interfaces.WorkRequestPayload{
 		RequestID: requestID,
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		WorkItems: []interfaces.FactoryWorkItem{submitted},
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		WorkItems: []work.FactoryWorkItem{submitted},
 	}
 	state.PayloadLineage.RecordWorkRequestSnapshot(1, requestID, submitted)
 	state.PayloadLineage.RecordConsumedInputSnapshot("dispatch-tts", submitted)
-	state.PayloadLineage.RecordDispatchOutputSnapshot(2, "dispatch-tts", []interfaces.FactoryWorkItem{submitted}, terminal, 0)
+	state.PayloadLineage.RecordDispatchOutputSnapshot(2, "dispatch-tts", []work.FactoryWorkItem{submitted}, terminal, 0)
 	state.TerminalWorkByID[workID] = interfaces.FactoryTerminalWork{WorkItem: terminal, Status: "TERMINAL"}
 
 	selection, err := invocations.ResolvePrimaryResult(invocations.PrimaryResultSelectionInput{
@@ -66,7 +67,7 @@ func TestPackagedTTSInvocationPrimaryResult_ReturnsMetadataNotRawAudio(t *testin
 	if err != nil {
 		t.Fatalf("ResolvePrimaryResult: %v", err)
 	}
-	if len(selection.PrimaryResult) != 1 || selection.PrimaryResult[0].Type != interfaces.WorkContentPartTypeText {
+	if len(selection.PrimaryResult) != 1 || selection.PrimaryResult[0].Type != work.WorkContentPartTypeText {
 		t.Fatalf("primary result = %#v, want one text metadata part", selection.PrimaryResult)
 	}
 

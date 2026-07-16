@@ -1,6 +1,6 @@
 package validation
 
-import "github.com/portpowered/infinite-you/pkg/interfaces"
+import interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 
 // NormalizeFixtureConfig augments programmatic test fixtures with the minimum
 // structural fields required by canonical validation without changing mapping intent.

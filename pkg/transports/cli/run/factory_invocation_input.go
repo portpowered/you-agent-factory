@@ -12,14 +12,15 @@ import (
 	"time"
 
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"
 )
@@ -387,7 +388,7 @@ func runFactoryInvocation(
 	if runErr != nil && !errors.Is(runErr, context.Canceled) {
 		return runErr
 	}
-	if result.Status != factoryapi.InvocationTerminalStatusCompleted {
+	if result.Status != interfaces.InvocationTerminalStatusCompleted {
 		return writeInvocationFailure(cfg, result, streamRenderer)
 	}
 	return writeInvocationSuccess(cfg, result, streamRenderer)
@@ -586,14 +587,14 @@ func writeInvocationJSON(cfg RunConfig, result apisurface.FactoryInvocationResul
 	return err
 }
 
-func invocationPrimaryResultText(parts []interfaces.WorkContentPart) (string, error) {
+func invocationPrimaryResultText(parts []work.WorkContentPart) (string, error) {
 	if len(parts) == 0 {
 		return "", fmt.Errorf("invocation primary result is empty")
 	}
 
 	textParts := make([]string, 0, len(parts))
 	for _, part := range parts {
-		if part.Type.Normalized() != interfaces.WorkContentPartTypeText {
+		if part.Type.Normalized() != work.WorkContentPartTypeText {
 			return "", fmt.Errorf("invocation primary result is not plain text; use --json")
 		}
 		textParts = append(textParts, part.Text)

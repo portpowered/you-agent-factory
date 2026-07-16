@@ -7,19 +7,25 @@ import (
 	"testing"
 	"time"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
-	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 )
 
 func cronWorkstationConfigForTest(name string) interfaces.FactoryWorkstationConfig {
 	return interfaces.FactoryWorkstationConfig{
 		Name: name,
-		Kind: interfaces.WorkstationKindCron,
+		Kind: workertaxonomy.WorkstationKindCron,
 		Cron: &interfaces.CronConfig{Schedule: "* * * * *"},
 		Outputs: []interfaces.IOConfig{
 			{WorkTypeName: "task", StateName: "init"},
@@ -59,7 +65,7 @@ func (c cronRuntimeWorkstationLookup) Workstation(name string) (*interfaces.Fact
 func TestSubmitCronTick_TimeoutFailureIsClassifiedAndBounded(t *testing.T) {
 	logCore, observedLogs := observer.New(zap.InfoLevel)
 	submitCalls := 0
-	submitter := func(ctx context.Context, _ interfaces.WorkRequest) error {
+	submitter := func(ctx context.Context, _ work.WorkRequest) error {
 		submitCalls++
 		<-ctx.Done()
 		return ctx.Err()
@@ -102,7 +108,7 @@ func TestSubmitCronTick_TimeoutFailureIsClassifiedAndBounded(t *testing.T) {
 	}
 
 	failure := workersservice.ClassifyCronTriggerFailure(err)
-	if !failure.Retryable || failure.Family != interfaces.WorkFailureFamilyRetryable || failure.Type != interfaces.WorkFailureTypeTimeout {
+	if !failure.Retryable || failure.Family != workerexecution.WorkFailureFamilyRetryable || failure.Type != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("cron timeout classification = %#v, want retryable timeout", failure)
 	}
 }
@@ -148,7 +154,7 @@ func TestSubmitCronTick_RetryableFailureRetriesBeforeSuccess(t *testing.T) {
 	retryErr := errors.New("temporary submission ingress failure")
 	attempt := 0
 	submitCalls := 0
-	submitter := func(_ context.Context, _ interfaces.WorkRequest) error {
+	submitter := func(_ context.Context, _ work.WorkRequest) error {
 		attempt++
 		submitCalls++
 		if attempt <= workersservice.CronMaxRetries {
@@ -184,10 +190,10 @@ func TestStartCronWatchersForRuntime_DisablesInvalidSchedulesWithoutAffectingVal
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
 	logCore, observedLogs := observer.New(zap.InfoLevel)
-	observedRequests := make(chan interfaces.WorkRequest, 8)
+	observedRequests := make(chan work.WorkRequest, 8)
 	validCron := interfaces.FactoryWorkstationConfig{
 		Name: "valid-cron",
-		Kind: interfaces.WorkstationKindCron,
+		Kind: workertaxonomy.WorkstationKindCron,
 		Cron: &interfaces.CronConfig{
 			Schedule:       "* * * * *",
 			TriggerAtStart: true,
@@ -199,7 +205,7 @@ func TestStartCronWatchersForRuntime_DisablesInvalidSchedulesWithoutAffectingVal
 	}
 	invalidCron := interfaces.FactoryWorkstationConfig{
 		Name: "invalid-cron",
-		Kind: interfaces.WorkstationKindCron,
+		Kind: workertaxonomy.WorkstationKindCron,
 		Cron: &interfaces.CronConfig{
 			Schedule:       "not-a-cron",
 			TriggerAtStart: true,
@@ -234,7 +240,7 @@ func TestStartCronWatchersForRuntime_DisablesInvalidSchedulesWithoutAffectingVal
 		"factory-alpha",
 		runtimeCfg.FactoryConfig(),
 		runtimeCfg,
-		func(_ context.Context, request interfaces.WorkRequest) error {
+		func(_ context.Context, request work.WorkRequest) error {
 			select {
 			case observedRequests <- request:
 			default:
@@ -275,18 +281,18 @@ func TestStartCronWatchersForRuntime_DisablesInvalidSchedulesWithoutAffectingVal
 	}
 }
 
-func waitForCronWorkRequest(t *testing.T, requests <-chan interfaces.WorkRequest, timeout time.Duration) interfaces.WorkRequest {
+func waitForCronWorkRequest(t *testing.T, requests <-chan work.WorkRequest, timeout time.Duration) work.WorkRequest {
 	t.Helper()
 	select {
 	case request := <-requests:
 		return request
 	case <-time.After(timeout):
 		t.Fatal("timed out waiting for cron work request")
-		return interfaces.WorkRequest{}
+		return work.WorkRequest{}
 	}
 }
 
-func assertNoCronWorkRequestQueued(t *testing.T, requests <-chan interfaces.WorkRequest) {
+func assertNoCronWorkRequestQueued(t *testing.T, requests <-chan work.WorkRequest) {
 	t.Helper()
 	select {
 	case request := <-requests:
@@ -295,7 +301,7 @@ func assertNoCronWorkRequestQueued(t *testing.T, requests <-chan interfaces.Work
 	}
 }
 
-func assertCronWorkRequestForWorkstation(t *testing.T, request interfaces.WorkRequest, want time.Time, workstation string) {
+func assertCronWorkRequestForWorkstation(t *testing.T, request work.WorkRequest, want time.Time, workstation string) {
 	t.Helper()
 	assertCronWorkRequestNominalAt(t, request, want)
 	if got := request.Works[0].Tags[interfaces.TimeWorkTagKeyCronWorkstation]; got != workstation {
@@ -303,7 +309,7 @@ func assertCronWorkRequestForWorkstation(t *testing.T, request interfaces.WorkRe
 	}
 }
 
-func assertCronWorkRequestNominalAt(t *testing.T, request interfaces.WorkRequest, want time.Time) {
+func assertCronWorkRequestNominalAt(t *testing.T, request work.WorkRequest, want time.Time) {
 	t.Helper()
 	got := request.Works[0].Tags[interfaces.TimeWorkTagKeyNominalAt]
 	wantTag := want.Format(time.RFC3339Nano)

@@ -9,14 +9,20 @@ import (
 	"testing"
 	"time"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	"github.com/jonboulle/clockwork"
-	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
-	"github.com/portpowered/infinite-you/pkg/workers"
-	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	"github.com/portpowered/infinite-you/pkg/workers"
+	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 )
 
 func TestWorkflowIdentityForFactoryDir_UsesConfiguredWorkflowID(t *testing.T) {
@@ -45,26 +51,26 @@ func TestStartPollersForRuntime_LogsDisabledPaths(t *testing.T) {
 
 	missingBinding := interfaces.FactoryWorkstationConfig{
 		Name: "missing-binding",
-		Kind: interfaces.WorkstationKindPoller,
+		Kind: workertaxonomy.WorkstationKindPoller,
 	}
 	missingWorker := interfaces.FactoryWorkstationConfig{
 		Name:           "missing-worker",
-		Kind:           interfaces.WorkstationKindPoller,
+		Kind:           workertaxonomy.WorkstationKindPoller,
 		WorkerTypeName: "unknown-worker",
 	}
 	unsupportedHosted := interfaces.FactoryWorkstationConfig{
 		Name:           "unsupported-hosted",
-		Kind:           interfaces.WorkstationKindPoller,
+		Kind:           workertaxonomy.WorkstationKindPoller,
 		WorkerTypeName: "github-poller",
 	}
-	githubWorker := &interfaces.WorkerConfig{
+	githubWorker := &workerconfig.Config{
 		Name:     "github-poller",
-		Type:     interfaces.WorkerTypeHosted,
+		Type:     workertaxonomy.WorkerTypeHosted,
 		Provider: "github",
 	}
 
 	factoryCfg := &interfaces.FactoryConfig{
-		Workers: []interfaces.WorkerConfig{{Name: githubWorker.Name}},
+		Workers: []workerconfig.Config{{Name: githubWorker.Name}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			missingBinding,
 			missingWorker,
@@ -72,7 +78,7 @@ func TestStartPollersForRuntime_LogsDisabledPaths(t *testing.T) {
 		},
 	}
 	runtimeCfg, err := config.NewLoadedFactoryConfig("", factoryCfg, runtimefixtures.RuntimeDefinitionLookupFixture{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			githubWorker.Name: githubWorker,
 		},
 	})
@@ -86,7 +92,7 @@ func TestStartPollersForRuntime_LogsDisabledPaths(t *testing.T) {
 		&sidecars,
 		factoryCfg,
 		runtimeCfg,
-		func(context.Context, interfaces.WorkRequest) error { return nil },
+		func(context.Context, work.WorkRequest) error { return nil },
 	)
 
 	if observedLogs.FilterMessage("script poller disabled").Len() != 2 {
@@ -143,7 +149,7 @@ func TestRunScriptPoller_UsesWorkerTimeout(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	err := svc.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, func(context.Context, interfaces.WorkRequest) error {
+	err := svc.RunScriptPoller(ctx, runner, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
 		return nil
 	})
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
@@ -204,7 +210,7 @@ func TestStartScriptPoller_StopReasonOnContextCancel(t *testing.T) {
 
 	runCtx, cancelRun := context.WithCancel(context.Background())
 	var sidecars sync.WaitGroup
-	svc.StartScriptPoller(runCtx, &sidecars, runtimeCfg, poller, worker, func(context.Context, interfaces.WorkRequest) error {
+	svc.StartScriptPoller(runCtx, &sidecars, runtimeCfg, poller, worker, func(context.Context, work.WorkRequest) error {
 		return nil
 	})
 	cancelRun()
@@ -248,7 +254,7 @@ func TestStartCronWatchersForRuntime_LogsTriggerFailure(t *testing.T) {
 		"factory-alpha",
 		factoryCfg,
 		runtimeCfg,
-		func(context.Context, interfaces.WorkRequest) error {
+		func(context.Context, work.WorkRequest) error {
 			return errors.New("cron submit rejected")
 		},
 	)
@@ -297,7 +303,7 @@ func TestService_DefaultCollaboratorsWhenConfigUnset(t *testing.T) {
 		runtimeCfg,
 		poller,
 		worker,
-		func(context.Context, interfaces.WorkRequest) error { return nil },
+		func(context.Context, work.WorkRequest) error { return nil },
 	)
 	if err == nil || !strings.Contains(err.Error(), "exited unexpectedly") {
 		t.Fatalf("RunScriptPoller with default collaborators error = %v", err)

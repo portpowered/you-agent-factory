@@ -5,20 +5,21 @@ import (
 	"os"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	runtimefixtures "github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	runtimefixtures "github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 )
 
 type staticRuntimeConfig = runtimefixtures.RuntimeConfigLookupFixture
 
 type wsMockExecutor struct {
-	dispatch interfaces.WorkstationExecutionRequest
+	dispatch workerexecution.WorkstationExecutionRequest
 	called   bool
-	result   interfaces.WorkResult
+	result   workerexecution.WorkResult
 	err      error
 }
 
-func (m *wsMockExecutor) Execute(_ context.Context, request interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (m *wsMockExecutor) Execute(_ context.Context, request workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	m.called = true
 	m.dispatch = request
 	return m.result, m.err

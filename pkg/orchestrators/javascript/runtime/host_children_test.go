@@ -11,10 +11,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
-	"github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workflowpolicy "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/policy"
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
+	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 )
 
 func TestRun_DocumentedSimpleFinalWorkflow(t *testing.T) {
@@ -667,4 +667,3 @@ func assertStubChildResult(t *testing.T, value any, wantLabel, wantDispatchID st
 		t.Fatalf("child output text = %#v, want %q", output["text"], wantText)
 	}
 }
-

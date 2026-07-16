@@ -4,7 +4,9 @@ import (
 	"context"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 )
 
@@ -14,7 +16,7 @@ func (s *Service) StartHostedLinearPoller(
 	sidecars *sync.WaitGroup,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	submitter WorkRequestSubmitter,
 ) error {
 	if submitter == nil {
@@ -34,7 +36,7 @@ func (s *Service) StartHostedLinearPoller(
 func (s *Service) validateHostedLinearPoller(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	submitter WorkRequestSubmitter,
 ) error {
 	_, err := hostedworkers.NewLinearPoller(hostedworkers.LinearPollerDependencies{

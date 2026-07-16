@@ -7,11 +7,13 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type workerPoolDispatchResultHook struct {
@@ -20,7 +22,7 @@ type workerPoolDispatchResultHook struct {
 	executors     map[string]workers.WorkerExecutor
 	logger        logging.Logger
 	waitCh        chan struct{}
-	results       []interfaces.WorkResult
+	results       []workerexecution.WorkResult
 	deliveryTicks map[string]int
 	planner       factory.CompletionDeliveryPlanner
 	mu            sync.Mutex
@@ -33,7 +35,7 @@ type replayTickValidator interface {
 }
 
 type plannedCompletionResultProvider interface {
-	PlannedResultForDispatch(dispatch interfaces.WorkDispatch) (interfaces.WorkResult, bool, error)
+	PlannedResultForDispatch(dispatch work.WorkDispatch) (workerexecution.WorkResult, bool, error)
 }
 
 func newWorkerPoolDispatchResultHook(
@@ -58,7 +60,7 @@ func newWorkerPoolDispatchResultHook(
 	}
 }
 
-func (h *workerPoolDispatchResultHook) SubmitDispatch(ctx context.Context, dispatch interfaces.WorkDispatch) error {
+func (h *workerPoolDispatchResultHook) SubmitDispatch(ctx context.Context, dispatch work.WorkDispatch) error {
 	tr, ok := h.net.Transitions[dispatch.TransitionID]
 	if !ok {
 		return fmt.Errorf("unknown transition %q", dispatch.TransitionID)
@@ -86,7 +88,7 @@ func (h *workerPoolDispatchResultHook) SubmitDispatch(ctx context.Context, dispa
 			if err != nil {
 				return err
 			}
-			if hasPlanned && result.Outcome != interfaces.OutcomeFailed {
+			if hasPlanned && result.Outcome != workerexecution.OutcomeFailed {
 				result = planned
 			}
 		}
@@ -107,7 +109,7 @@ func (h *workerPoolDispatchResultHook) SubmitDispatch(ctx context.Context, dispa
 	return nil
 }
 
-func (h *workerPoolDispatchResultHook) OnTick(_ context.Context, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]interfaces.WorkResult, error) {
+func (h *workerPoolDispatchResultHook) OnTick(_ context.Context, snapshot interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]) ([]workerexecution.WorkResult, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if validator, ok := h.planner.(replayTickValidator); ok {
@@ -130,8 +132,8 @@ func (h *workerPoolDispatchResultHook) OnTick(_ context.Context, snapshot interf
 	return results, nil
 }
 
-func (h *workerPoolDispatchResultHook) takeDueResults(currentTick int) []interfaces.WorkResult {
-	results := make([]interfaces.WorkResult, 0, len(h.results))
+func (h *workerPoolDispatchResultHook) takeDueResults(currentTick int) []workerexecution.WorkResult {
+	results := make([]workerexecution.WorkResult, 0, len(h.results))
 	pending := h.results[:0]
 	for _, result := range h.results {
 		deliveryTick, delayed := h.deliveryTicks[result.DispatchID]
@@ -196,13 +198,13 @@ func (h *workerPoolDispatchResultHook) signalWaitLocked() {
 
 func executeDispatchSynchronously(
 	ctx context.Context,
-	dispatch interfaces.WorkDispatch,
+	dispatch work.WorkDispatch,
 	runnerKey string,
 	executors map[string]workers.WorkerExecutor,
-) interfaces.WorkResult {
+) workerexecution.WorkResult {
 	if exec, ok := executors[runnerKey]; ok {
 		var (
-			result interfaces.WorkResult
+			result workerexecution.WorkResult
 			err    error
 		)
 		start := time.Now()
@@ -218,22 +220,22 @@ func executeDispatchSynchronously(
 		if err == nil {
 			return result
 		}
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeFailed,
+			Outcome:      workerexecution.OutcomeFailed,
 			Error:        err.Error(),
 		}
 	}
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        fmt.Sprintf("no executor registered for worker type %q (transition %s)", runnerKey, dispatch.TransitionID),
 	}
 }
 
-func dispatchRunnerKey(tr *petri.Transition, dispatch interfaces.WorkDispatch) string {
+func dispatchRunnerKey(tr *petri.Transition, dispatch work.WorkDispatch) string {
 	if tr != nil && tr.WorkerType != "" {
 		return tr.WorkerType
 	}

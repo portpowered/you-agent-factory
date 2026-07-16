@@ -12,9 +12,13 @@ import (
 	"testing"
 	"time"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	runtimefixtures "github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	runtimefixtures "github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
 
@@ -24,8 +28,8 @@ func TestMockWorkerCommandRunner_DefaultAcceptIncludesConfiguredStopToken(t *tes
 	runner := &MockWorkerCommandRunner{
 		Config: factoryconfig.NewEmptyMockWorkersConfig(),
 		RuntimeConfig: staticRuntimeConfig{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"worker": {Type: interfaces.WorkerTypeModel, StopToken: "COMPLETE"},
+			Workers: map[string]*workerconfig.Config{
+				"worker": {Type: workertaxonomy.WorkerTypeModel, StopToken: "COMPLETE"},
 			},
 		},
 		Next: failCommandRunner{t: t},
@@ -194,11 +198,11 @@ func TestMockWorkerCommandRunner_SelectsByWorkerWorkstationAndInput(t *testing.T
 		InputBindings: map[string][]string{
 			"work": {"token-1"},
 		},
-		InputTokens: inputTokens(interfaces.Token{
+		InputTokens: inputTokens(factorytoken.Token{
 			ID:      "token-1",
 			PlaceID: "task:init",
-			Color: interfaces.TokenColor{
-				DataType:   interfaces.DataTypeWork,
+			Color: factorytoken.Color{
+				DataType:   factorytoken.DataTypeWork,
 				WorkID:     "work-1",
 				WorkTypeID: "task",
 				TraceID:    "trace-1",
@@ -396,11 +400,11 @@ func TestCommandRequestInputTokensDecodesStructuredAndSkipsInvalid(t *testing.T)
 	timestamp := time.Unix(1700000000, 0).UTC()
 	tokens := commandRequestInputTokens(workerprocess.CommandRequest{
 		InputTokens: []any{
-			interfaces.Token{
+			factorytoken.Token{
 				ID:      "token-direct",
 				PlaceID: "task:init",
-				Color: interfaces.TokenColor{
-					DataType:   interfaces.DataTypeWork,
+				Color: factorytoken.Color{
+					DataType:   factorytoken.DataTypeWork,
 					WorkID:     "work-1",
 					WorkTypeID: "task",
 				},
@@ -411,7 +415,7 @@ func TestCommandRequestInputTokensDecodesStructuredAndSkipsInvalid(t *testing.T)
 				"created_at": timestamp.Format(time.RFC3339Nano),
 				"entered_at": timestamp.Format(time.RFC3339Nano),
 				"color": map[string]any{
-					"data_type":    string(interfaces.DataTypeWork),
+					"data_type":    string(factorytoken.DataTypeWork),
 					"work_id":      "work-2",
 					"work_type_id": "task",
 				},
@@ -441,17 +445,17 @@ func TestMockWorkInputSelectorMatchesSkipsResourcesAndChecksAllFields(t *testing
 		Channel:     "chat",
 		PayloadHash: "sha256:" + hex.EncodeToString(sum[:]),
 	}
-	tokens := []interfaces.Token{
+	tokens := []factorytoken.Token{
 		{
 			ID:      "resource-1",
 			PlaceID: "resource:ready",
-			Color:   interfaces.TokenColor{DataType: interfaces.DataTypeResource},
+			Color:   factorytoken.Color{DataType: factorytoken.DataTypeResource},
 		},
 		{
 			ID:      "token-1",
 			PlaceID: "task:ready",
-			Color: interfaces.TokenColor{
-				DataType:   interfaces.DataTypeWork,
+			Color: factorytoken.Color{
+				DataType:   factorytoken.DataTypeWork,
 				WorkID:     "work-1",
 				WorkTypeID: "task",
 				TraceID:    "trace-1",
@@ -470,11 +474,11 @@ func TestMockWorkInputSelectorMatchesSkipsResourcesAndChecksAllFields(t *testing
 }
 
 func TestSelectorHelpersCoverMismatchBranches(t *testing.T) {
-	token := interfaces.Token{
+	token := factorytoken.Token{
 		ID:      "token-1",
 		PlaceID: "task:ready",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-1",
 			WorkTypeID: "task",
 			TraceID:    "trace-1",
@@ -516,7 +520,7 @@ func TestHelperFunctions(t *testing.T) {
 	if bindingContainsToken(map[string][]string{"work": {"other"}}, "work", "token-1") {
 		t.Fatal("bindingContainsToken matched missing token")
 	}
-	if tokenState(interfaces.Token{PlaceID: "no-prefix", Color: interfaces.TokenColor{WorkTypeID: "task"}}) != "" {
+	if tokenState(factorytoken.Token{PlaceID: "no-prefix", Color: factorytoken.Color{WorkTypeID: "task"}}) != "" {
 		t.Fatal("tokenState returned non-empty state for unrelated place")
 	}
 	if payloadHash(nil) != "" {
@@ -556,7 +560,7 @@ func (r *inspectingCommandRunner) Run(ctx context.Context, req workerprocess.Com
 	return workerprocess.CommandResult{}, nil
 }
 
-func inputTokens(tokens ...interfaces.Token) []any {
+func inputTokens(tokens ...factorytoken.Token) []any {
 	out := make([]any, 0, len(tokens))
 	for _, token := range tokens {
 		out = append(out, token)

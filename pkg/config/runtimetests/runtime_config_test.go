@@ -2,13 +2,17 @@ package runtimetests
 
 import (
 	"encoding/json"
-	. "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+
+	. "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 )
 
 // portos:func-length-exception owner=agent-factory reason=legacy-runtime-config-fixture review=2026-07-18 removal=split-runtime-config-fixture-before-next-runtime-config-change
@@ -178,7 +182,7 @@ func TestLoadRuntimeConfig_DetachesInlineWorkerMutableNestedFields(t *testing.T)
 
 func inlineWorkerDetachmentSourceConfig() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:             "executor",
 			Type:             interfaces.WorkerTypeModel,
 			Provider:         "anthropic",
@@ -187,46 +191,46 @@ func inlineWorkerDetachmentSourceConfig() *interfaces.FactoryConfig {
 			ExecutorProvider: "codex",
 			Command:          "run-worker",
 			Args:             []string{"--mode", "inline"},
-			Resources: []interfaces.ResourceConfig{{
+			Resources: []factoryresource.Config{{
 				Name:     "agent-slot",
-				Type:     interfaces.ResourceTypeInvocationSlot,
+				Type:     factoryresource.TypeInvocationSlot,
 				Capacity: 2,
 				Provider: "shared",
 			}},
 			Timeout:         "45s",
 			StopToken:       "COMPLETE",
 			SkipPermissions: true,
-			Auth:            &interfaces.HostedWorkerAuthConfig{SecretRef: "linear-token"},
-			Linear: &interfaces.HostedLinearWorkerConfig{
+			Auth:            &workerconfig.HostedWorkerAuthConfig{SecretRef: "linear-token"},
+			Linear: &workerconfig.HostedLinearWorkerConfig{
 				PollInterval: "30s",
 				TeamIDs:      []string{"team-a"},
 				StateIDs:     []string{"state-a"},
-				Mapping: interfaces.HostedLinearWorkerMappingConfig{
+				Mapping: workerconfig.HostedLinearWorkerMappingConfig{
 					WorkType: "story",
 					State:    "ready",
 				},
-				Claim: &interfaces.HostedLinearWorkerClaimConfig{
+				Claim: &workerconfig.HostedLinearWorkerClaimConfig{
 					AssigneeField: "owner",
 				},
 			},
 			Body: "You are the inline executor.",
-			Operations: []interfaces.ModelOperation{{
+			Operations: []workerconfig.ModelOperation{{
 				Name: "TTS",
-				Inputs: []interfaces.ModelOperationSlot{{
+				Inputs: []workerconfig.ModelOperationSlot{{
 					Name:         "text",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+					ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 					Required:     true,
 				}},
-				Outputs: []interfaces.ModelOperationSlot{{
+				Outputs: []workerconfig.ModelOperationSlot{{
 					Name:         "audio",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+					ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 				}},
 			}},
 		}},
 	}
 }
 
-func mutateInlineWorkerMutableNestedFields(sourceWorker *interfaces.WorkerConfig) {
+func mutateInlineWorkerMutableNestedFields(sourceWorker *workerconfig.Config) {
 	sourceWorker.Args[0] = "--mutated"
 	sourceWorker.Resources[0].Name = "mutated-slot"
 	sourceWorker.Resources[0].Capacity = 9
@@ -237,12 +241,12 @@ func mutateInlineWorkerMutableNestedFields(sourceWorker *interfaces.WorkerConfig
 	sourceWorker.Linear.Mapping.State = "triage"
 	sourceWorker.Linear.Claim.AssigneeField = "reviewer"
 	sourceWorker.Operations[0].Inputs[0].Name = "mutated-input"
-	sourceWorker.Operations[0].Inputs[0].ContentTypes[0] = interfaces.ModelOperationContentTypeJSON
+	sourceWorker.Operations[0].Inputs[0].ContentTypes[0] = workerconfig.ModelOperationContentTypeJSON
 	sourceWorker.Operations[0].Outputs[0].Name = "mutated-output"
-	sourceWorker.Operations[0].Outputs[0].ContentTypes[0] = interfaces.ModelOperationContentTypeBinary
+	sourceWorker.Operations[0].Outputs[0].ContentTypes[0] = workerconfig.ModelOperationContentTypeBinary
 }
 
-func assertDetachedInlineWorkerMutableNestedFields(t *testing.T, workerDef *interfaces.WorkerConfig) {
+func assertDetachedInlineWorkerMutableNestedFields(t *testing.T, workerDef *workerconfig.Config) {
 	t.Helper()
 
 	assertDetachedInlineWorkerArgsAndResources(t, workerDef)
@@ -250,15 +254,15 @@ func assertDetachedInlineWorkerMutableNestedFields(t *testing.T, workerDef *inte
 	assertDetachedInlineWorkerOperations(t, workerDef)
 }
 
-func assertDetachedInlineWorkerArgsAndResources(t *testing.T, workerDef *interfaces.WorkerConfig) {
+func assertDetachedInlineWorkerArgsAndResources(t *testing.T, workerDef *workerconfig.Config) {
 	t.Helper()
 
 	if !reflect.DeepEqual(workerDef.Args, []string{"--mode", "inline"}) {
 		t.Fatalf("expected inline worker args to stay detached, got %#v", workerDef.Args)
 	}
-	if !reflect.DeepEqual(workerDef.Resources, []interfaces.ResourceConfig{{
+	if !reflect.DeepEqual(workerDef.Resources, []factoryresource.Config{{
 		Name:     "agent-slot",
-		Type:     interfaces.ResourceTypeInvocationSlot,
+		Type:     factoryresource.TypeInvocationSlot,
 		Capacity: 2,
 		Provider: "shared",
 	}}) {
@@ -266,7 +270,7 @@ func assertDetachedInlineWorkerArgsAndResources(t *testing.T, workerDef *interfa
 	}
 }
 
-func assertDetachedInlineWorkerAuthAndLinear(t *testing.T, workerDef *interfaces.WorkerConfig) {
+func assertDetachedInlineWorkerAuthAndLinear(t *testing.T, workerDef *workerconfig.Config) {
 	t.Helper()
 
 	if workerDef.Auth == nil || workerDef.Auth.SecretRef != "linear-token" {
@@ -289,7 +293,7 @@ func assertDetachedInlineWorkerAuthAndLinear(t *testing.T, workerDef *interfaces
 	}
 }
 
-func assertDetachedInlineWorkerOperations(t *testing.T, workerDef *interfaces.WorkerConfig) {
+func assertDetachedInlineWorkerOperations(t *testing.T, workerDef *workerconfig.Config) {
 	t.Helper()
 
 	if len(workerDef.Operations) != 1 {
@@ -298,13 +302,13 @@ func assertDetachedInlineWorkerOperations(t *testing.T, workerDef *interfaces.Wo
 	if workerDef.Operations[0].Inputs[0].Name != "text" {
 		t.Fatalf("expected inline worker operation input name to stay detached, got %#v", workerDef.Operations[0].Inputs)
 	}
-	if !reflect.DeepEqual(workerDef.Operations[0].Inputs[0].ContentTypes, []string{interfaces.ModelOperationContentTypeText}) {
+	if !reflect.DeepEqual(workerDef.Operations[0].Inputs[0].ContentTypes, []string{workerconfig.ModelOperationContentTypeText}) {
 		t.Fatalf("expected inline worker operation input content types to stay detached, got %#v", workerDef.Operations[0].Inputs[0].ContentTypes)
 	}
 	if workerDef.Operations[0].Outputs[0].Name != "audio" {
 		t.Fatalf("expected inline worker operation output name to stay detached, got %#v", workerDef.Operations[0].Outputs)
 	}
-	if !reflect.DeepEqual(workerDef.Operations[0].Outputs[0].ContentTypes, []string{interfaces.ModelOperationContentTypeAudio}) {
+	if !reflect.DeepEqual(workerDef.Operations[0].Outputs[0].ContentTypes, []string{workerconfig.ModelOperationContentTypeAudio}) {
 		t.Fatalf("expected inline worker operation output content types to stay detached, got %#v", workerDef.Operations[0].Outputs[0].ContentTypes)
 	}
 }
@@ -958,7 +962,7 @@ Workstation body.
 	if loaded.FactoryConfig().Workstations[0].OpenCodeAgent != "implementer" {
 		t.Fatalf("factory workstation OpenCodeAgent = %q, want implementer", loaded.FactoryConfig().Workstations[0].OpenCodeAgent)
 	}
-	if got := interfaces.ResolveOpenCodeAgent(workstation.OpenCodeAgent, worker.OpenCodeAgent); got != "implementer" {
+	if got := workerrunner.ResolveOpenCodeAgent(workstation.OpenCodeAgent, worker.OpenCodeAgent); got != "implementer" {
 		t.Fatalf("ResolveOpenCodeAgent(...) = %q, want workstation override implementer", got)
 	}
 }

@@ -7,11 +7,13 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -215,7 +217,7 @@ func newServiceModeObservabilityServer(t *testing.T) (*FunctionalServer, chan st
 	server := StartFunctionalServer(t, dir, false,
 		factory.WithServiceMode(),
 		factory.WithWorkerExecutor("worker-a", dispatchExecutor),
-		factory.WithWorkerExecutor("worker-b", staticOutcomeExecutor{outcome: interfaces.OutcomeAccepted}),
+		factory.WithWorkerExecutor("worker-b", staticOutcomeExecutor{outcome: workerexecution.OutcomeAccepted}),
 	)
 	return server, dispatchRelease
 }
@@ -358,11 +360,11 @@ func assertServiceModeServerStops(t *testing.T, server *FunctionalServer) {
 }
 
 type staticOutcomeExecutor struct {
-	outcome interfaces.WorkOutcome
+	outcome workerexecution.WorkOutcome
 }
 
-func (e staticOutcomeExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{
+func (e staticOutcomeExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
 		Outcome:      e.outcome,

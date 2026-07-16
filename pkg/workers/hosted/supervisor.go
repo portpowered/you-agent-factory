@@ -8,8 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	hostedlinear "github.com/portpowered/infinite-you/pkg/workers/hosted/linear"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
 	"go.uber.org/zap"
 )
 
@@ -26,7 +28,7 @@ func StartLinearPoller(
 	cfg Config,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	workstation interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	submitter Submitter,
 ) error {
 	if ctx == nil {
@@ -51,7 +53,7 @@ func StartLinearPoller(
 }
 
 func (p *LinearPoller) supervise(ctx context.Context) {
-	logger := pollerLogger(p.config, p.workstation, p.worker).With(zap.String("provider", interfaces.HostedWorkerProviderLinear))
+	logger := pollerLogger(p.config, p.workstation, p.worker).With(zap.String("provider", workertaxonomy.HostedWorkerProviderLinear))
 	backoffClock := p.config.Clock
 	attempt := 0
 	logger.Info("hosted linear poller started")
@@ -134,7 +136,7 @@ func redactResolvedSecret(err error, secret string) error {
 	return errors.New(strings.ReplaceAll(err.Error(), secret, "[REDACTED]"))
 }
 
-func pollerLogger(cfg Config, workstation interfaces.FactoryWorkstationConfig, workerDef *interfaces.WorkerConfig) *zap.Logger {
+func pollerLogger(cfg Config, workstation interfaces.FactoryWorkstationConfig, workerDef *workerconfig.Config) *zap.Logger {
 	return cfg.logger().With(
 		zap.String("workstation", workstation.Name),
 		zap.String("worker", workerDef.Name),

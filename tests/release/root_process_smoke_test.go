@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
 )
 
 // TestRootProcessCompiledBinaryModeMatrix proves the process-root migration at

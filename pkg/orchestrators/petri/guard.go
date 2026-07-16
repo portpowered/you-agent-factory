@@ -5,7 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // Guard is a predicate evaluated against tokens in a place to determine
@@ -18,13 +20,13 @@ type Guard interface {
 	// candidates are tokens from THIS arc's place.
 	// bindings are tokens already matched by other input arcs (arc name → token).
 	// marking is the full marking snapshot, providing world state for advanced guards.
-	Evaluate(candidates []interfaces.Token, bindings map[string]*interfaces.Token, marking *MarkingSnapshot) (matched []interfaces.Token, ok bool)
+	Evaluate(candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *MarkingSnapshot) (matched []factorytoken.Token, ok bool)
 }
 
 // ClockedGuard is implemented by guards whose result depends on runtime time.
 type ClockedGuard interface {
 	Guard
-	EvaluateAt(now time.Time, candidates []interfaces.Token, bindings map[string]*interfaces.Token, marking *MarkingSnapshot) (matched []interfaces.Token, ok bool)
+	EvaluateAt(now time.Time, candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *MarkingSnapshot) (matched []factorytoken.Token, ok bool)
 }
 
 // MatchColorGuard matches a field on candidate tokens against a field on a bound token.
@@ -43,7 +45,7 @@ var _ Guard = (*MatchColorGuard)(nil)
 
 // Evaluate returns all candidates whose Field value equals the MatchField value
 // on the bound token identified by MatchBinding.
-func (g *MatchColorGuard) Evaluate(candidates []interfaces.Token, bindings map[string]*interfaces.Token, _ *MarkingSnapshot) ([]interfaces.Token, bool) {
+func (g *MatchColorGuard) Evaluate(candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, _ *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	bound, exists := bindings[g.MatchBinding]
 	if !exists {
 		return nil, false
@@ -51,7 +53,7 @@ func (g *MatchColorGuard) Evaluate(candidates []interfaces.Token, bindings map[s
 
 	boundValue := tokenColorField(bound.Color, g.MatchField)
 
-	var matched []interfaces.Token
+	var matched []factorytoken.Token
 	for _, c := range candidates {
 		if tokenColorField(c.Color, g.Field) == boundValue {
 			matched = append(matched, c)
@@ -73,13 +75,13 @@ var _ Guard = (*SameNameGuard)(nil)
 // Evaluate returns all candidates whose authored name equals the bound token's
 // authored name. The guard fails when the binding is missing or either side has
 // no usable authored name.
-func (g *SameNameGuard) Evaluate(candidates []interfaces.Token, bindings map[string]*interfaces.Token, _ *MarkingSnapshot) ([]interfaces.Token, bool) {
+func (g *SameNameGuard) Evaluate(candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, _ *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	bound, exists := bindings[g.MatchBinding]
 	if !exists || bound == nil || bound.Color.Name == "" {
 		return nil, false
 	}
 
-	var matched []interfaces.Token
+	var matched []factorytoken.Token
 	for _, candidate := range candidates {
 		if candidate.Color.Name == "" {
 			continue
@@ -105,7 +107,7 @@ var _ Guard = (*SameTraceIDGuard)(nil)
 // Evaluate returns all candidates whose canonical trace identity equals the
 // bound token's canonical trace identity. The guard fails when the binding is
 // missing or either side has no usable trace identity.
-func (g *SameTraceIDGuard) Evaluate(candidates []interfaces.Token, bindings map[string]*interfaces.Token, _ *MarkingSnapshot) ([]interfaces.Token, bool) {
+func (g *SameTraceIDGuard) Evaluate(candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, _ *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	bound, exists := bindings[g.MatchBinding]
 	if !exists || bound == nil {
 		return nil, false
@@ -116,7 +118,7 @@ func (g *SameTraceIDGuard) Evaluate(candidates []interfaces.Token, bindings map[
 		return nil, false
 	}
 
-	var matched []interfaces.Token
+	var matched []factorytoken.Token
 	for _, candidate := range candidates {
 		if canonicalTraceIdentity(candidate.Color) != boundTraceID {
 			continue
@@ -137,7 +139,7 @@ type AllGuard struct {
 var _ Guard = (*AllGuard)(nil)
 var _ RuntimeGuard = (*AllGuard)(nil)
 
-func (g *AllGuard) Evaluate(candidates []interfaces.Token, bindings map[string]*interfaces.Token, marking *MarkingSnapshot) ([]interfaces.Token, bool) {
+func (g *AllGuard) Evaluate(candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	current := candidates
 	for _, guard := range g.Guards {
 		if guard == nil {
@@ -152,14 +154,14 @@ func (g *AllGuard) Evaluate(candidates []interfaces.Token, bindings map[string]*
 	return current, len(current) > 0
 }
 
-func (g *AllGuard) EvaluateRuntime(ctx RuntimeGuardContext, candidates []interfaces.Token, bindings map[string]*interfaces.Token, marking *MarkingSnapshot) ([]interfaces.Token, bool) {
+func (g *AllGuard) EvaluateRuntime(ctx RuntimeGuardContext, candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	current := candidates
 	for _, guard := range g.Guards {
 		if guard == nil {
 			continue
 		}
 		var (
-			matched []interfaces.Token
+			matched []factorytoken.Token
 			ok      bool
 		)
 		switch typed := guard.(type) {
@@ -189,7 +191,7 @@ type MatchesFieldsGuard struct {
 
 var _ Guard = (*MatchesFieldsGuard)(nil)
 
-func (g *MatchesFieldsGuard) Evaluate(candidates []interfaces.Token, bindings map[string]*interfaces.Token, _ *MarkingSnapshot) ([]interfaces.Token, bool) {
+func (g *MatchesFieldsGuard) Evaluate(candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, _ *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	selector := strings.TrimSpace(g.InputKey)
 	if selector == "" {
 		return nil, false
@@ -208,7 +210,7 @@ func (g *MatchesFieldsGuard) Evaluate(candidates []interfaces.Token, bindings ma
 		boundValue = resolved
 	}
 
-	var matched []interfaces.Token
+	var matched []factorytoken.Token
 	for _, candidate := range candidates {
 		resolved, ok := resolveTokenSelector(candidate, selector)
 		if !ok {
@@ -234,8 +236,8 @@ var _ Guard = (*VisitCountGuard)(nil)
 
 // Evaluate returns all candidates whose TotalVisits for the configured transition
 // meets or exceeds MaxVisits.
-func (g *VisitCountGuard) Evaluate(candidates []interfaces.Token, _ map[string]*interfaces.Token, _ *MarkingSnapshot) ([]interfaces.Token, bool) {
-	var matched []interfaces.Token
+func (g *VisitCountGuard) Evaluate(candidates []factorytoken.Token, _ map[string]*factorytoken.Token, _ *MarkingSnapshot) ([]factorytoken.Token, bool) {
+	var matched []factorytoken.Token
 	for _, c := range candidates {
 		visits := c.History.TotalVisits[g.TransitionID]
 		if visits >= g.MaxVisits {
@@ -257,7 +259,7 @@ var _ Guard = (*AllWithParentGuard)(nil)
 
 // Evaluate returns all candidates whose ParentID equals the WorkID of the
 // bound token identified by MatchBinding.
-func (g *AllWithParentGuard) Evaluate(candidates []interfaces.Token, bindings map[string]*interfaces.Token, _ *MarkingSnapshot) ([]interfaces.Token, bool) {
+func (g *AllWithParentGuard) Evaluate(candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, _ *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	bound, exists := bindings[g.MatchBinding]
 	if !exists {
 		return nil, false
@@ -265,7 +267,7 @@ func (g *AllWithParentGuard) Evaluate(candidates []interfaces.Token, bindings ma
 
 	parentWorkID := bound.Color.WorkID
 
-	var matched []interfaces.Token
+	var matched []factorytoken.Token
 	for _, c := range candidates {
 		if c.Color.ParentID == parentWorkID {
 			matched = append(matched, c)
@@ -286,7 +288,7 @@ var _ Guard = (*AnyWithParentGuard)(nil)
 
 // Evaluate returns the first candidate whose ParentID equals the WorkID of the
 // bound token identified by MatchBinding.
-func (g *AnyWithParentGuard) Evaluate(candidates []interfaces.Token, bindings map[string]*interfaces.Token, _ *MarkingSnapshot) ([]interfaces.Token, bool) {
+func (g *AnyWithParentGuard) Evaluate(candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, _ *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	bound, exists := bindings[g.MatchBinding]
 	if !exists {
 		return nil, false
@@ -296,7 +298,7 @@ func (g *AnyWithParentGuard) Evaluate(candidates []interfaces.Token, bindings ma
 
 	for _, c := range candidates {
 		if c.Color.ParentID == parentWorkID {
-			return []interfaces.Token{c}, true
+			return []factorytoken.Token{c}, true
 		}
 	}
 
@@ -313,18 +315,18 @@ type DependencyGuard struct{}
 var _ Guard = (*DependencyGuard)(nil)
 
 // Evaluate returns candidates whose DEPENDS_ON relations are all satisfied.
-func (g *DependencyGuard) Evaluate(candidates []interfaces.Token, _ map[string]*interfaces.Token, marking *MarkingSnapshot) ([]interfaces.Token, bool) {
+func (g *DependencyGuard) Evaluate(candidates []factorytoken.Token, _ map[string]*factorytoken.Token, marking *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	if marking == nil {
 		return nil, false
 	}
 
 	// Build a lookup from WorkID → token for fast dependency resolution.
-	workIndex := make(map[string]*interfaces.Token, len(marking.Tokens))
+	workIndex := make(map[string]*factorytoken.Token, len(marking.Tokens))
 	for _, tok := range marking.Tokens {
 		workIndex[tok.Color.WorkID] = tok
 	}
 
-	var matched []interfaces.Token
+	var matched []factorytoken.Token
 	for _, c := range candidates {
 		if g.allDependenciesMet(c, workIndex) {
 			matched = append(matched, c)
@@ -336,9 +338,9 @@ func (g *DependencyGuard) Evaluate(candidates []interfaces.Token, _ map[string]*
 
 // allDependenciesMet checks that every DEPENDS_ON relation on the token is
 // satisfied: the target token exists and is in the required state place.
-func (g *DependencyGuard) allDependenciesMet(tok interfaces.Token, workIndex map[string]*interfaces.Token) bool {
+func (g *DependencyGuard) allDependenciesMet(tok factorytoken.Token, workIndex map[string]*factorytoken.Token) bool {
 	for _, rel := range tok.Color.Relations {
-		if rel.Type != interfaces.RelationDependsOn {
+		if rel.Type != work.RelationDependsOn {
 			continue
 		}
 		dep, ok := workIndex[rel.TargetWorkID]
@@ -373,7 +375,7 @@ var _ Guard = (*FanoutCountGuard)(nil)
 
 // Evaluate returns all candidates whose ParentID matches the parent token's WorkID,
 // but only if the total count equals the expected count from the count token.
-func (g *FanoutCountGuard) Evaluate(candidates []interfaces.Token, bindings map[string]*interfaces.Token, _ *MarkingSnapshot) ([]interfaces.Token, bool) {
+func (g *FanoutCountGuard) Evaluate(candidates []factorytoken.Token, bindings map[string]*factorytoken.Token, _ *MarkingSnapshot) ([]factorytoken.Token, bool) {
 	parent, exists := bindings[g.MatchBinding]
 	if !exists {
 		return nil, false
@@ -395,7 +397,7 @@ func (g *FanoutCountGuard) Evaluate(candidates []interfaces.Token, bindings map[
 
 	parentWorkID := parent.Color.WorkID
 
-	var matched []interfaces.Token
+	var matched []factorytoken.Token
 	for _, c := range candidates {
 		if c.Color.ParentID == parentWorkID {
 			matched = append(matched, c)
@@ -412,7 +414,7 @@ func (g *FanoutCountGuard) Evaluate(candidates []interfaces.Token, bindings map[
 // tokenColorField returns the value of a named field on a TokenColor.
 // Supported fields: work_id, work_type_id, trace_id, parent_id.
 // Returns empty string for unknown fields.
-func tokenColorField(color interfaces.TokenColor, field string) string {
+func tokenColorField(color factorytoken.Color, field string) string {
 	switch field {
 	case interfaces.WorkID:
 		return color.WorkID
@@ -427,7 +429,7 @@ func tokenColorField(color interfaces.TokenColor, field string) string {
 	}
 }
 
-func resolveTokenSelector(token interfaces.Token, selector string) (string, bool) {
+func resolveTokenSelector(token factorytoken.Token, selector string) (string, bool) {
 	selector = strings.TrimSpace(selector)
 	if selector == "" || selector[0] != '.' {
 		return "", false
@@ -477,7 +479,7 @@ func parseTagSelector(selector string) (string, bool) {
 	return key, true
 }
 
-func canonicalTraceIdentity(color interfaces.TokenColor) string {
+func canonicalTraceIdentity(color factorytoken.Color) string {
 	if color.CurrentChainingTraceID != "" {
 		return color.CurrentChainingTraceID
 	}

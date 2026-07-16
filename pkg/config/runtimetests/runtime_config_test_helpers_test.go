@@ -10,7 +10,9 @@ import (
 	"testing"
 
 	. "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 const generatedFactoryBoundaryErrorPrefix = "decode factory generated-schema boundary"
@@ -64,7 +66,7 @@ func canonicalMergeFactoryConfig() *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:      "executor",
 			Type:      interfaces.WorkerTypeModel,
 			Model:     "canonical-model",
@@ -77,10 +79,10 @@ func canonicalMergeFactoryConfig() *interfaces.FactoryConfig {
 
 func canonicalMergeRuntimeDefinitions() interfaces.RuntimeDefinitionLookup {
 	runtimeDefs := testRuntimeDefinitionLookup{
-		workers:      map[string]*interfaces.WorkerConfig{},
+		workers:      map[string]*workerconfig.Config{},
 		workstations: map[string]*interfaces.FactoryWorkstationConfig{},
 	}
-	runtimeDefs.workers["executor"] = &interfaces.WorkerConfig{
+	runtimeDefs.workers["executor"] = &workerconfig.Config{
 		Type:        interfaces.WorkerTypeScript,
 		Command:     "go",
 		Args:        []string{"test", "./..."},
@@ -103,17 +105,17 @@ func canonicalMergeRuntimeDefinitions() interfaces.RuntimeDefinitionLookup {
 
 func emptyRuntimeDefinitionLookup() interfaces.RuntimeDefinitionLookup {
 	return testRuntimeDefinitionLookup{
-		workers:      map[string]*interfaces.WorkerConfig{},
+		workers:      map[string]*workerconfig.Config{},
 		workstations: map[string]*interfaces.FactoryWorkstationConfig{},
 	}
 }
 
 type testRuntimeDefinitionLookup struct {
-	workers      map[string]*interfaces.WorkerConfig
+	workers      map[string]*workerconfig.Config
 	workstations map[string]*interfaces.FactoryWorkstationConfig
 }
 
-func (lookup testRuntimeDefinitionLookup) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (lookup testRuntimeDefinitionLookup) Worker(name string) (*workerconfig.Config, bool) {
 	worker, ok := lookup.workers[name]
 	return worker, ok
 }
@@ -134,7 +136,7 @@ func canonicalMergeWorkstation() interfaces.FactoryWorkstationConfig {
 		Inputs:           []interfaces.IOConfig{{WorkTypeName: "story", StateName: "init"}},
 		Outputs:          []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
 		OnFailure:        []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}},
-		Resources:        []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 1}},
+		Resources:        []factoryresource.Config{{Name: "agent-slot", Capacity: 1}},
 		StopWords:        []string{"CANONICAL"},
 		PromptTemplate:   "Canonical prompt.",
 		Timeout:          "30m",

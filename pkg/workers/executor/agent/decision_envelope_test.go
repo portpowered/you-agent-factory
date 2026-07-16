@@ -6,22 +6,28 @@ import (
 	"testing"
 	"time"
 
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 	executorpkg "github.com/portpowered/infinite-you/pkg/workers/executor"
 	"github.com/portpowered/infinite-you/pkg/workers/prompting"
 )
 
-func reviewAgentRequest(dispatchID string, content string) (interfaces.WorkstationExecutionRequest, *agentMockProvider) {
+func reviewAgentRequest(dispatchID string, content string) (workerexecution.WorkstationExecutionRequest, *agentMockProvider) {
 	provider := &agentMockProvider{
-		response: interfaces.InferenceResponse{Content: content},
+		response: workerexecution.InferenceResponse{Content: content},
 	}
 	request := testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:      dispatchID,
 			TransitionID:    "review",
 			WorkerType:      "planner",
@@ -35,7 +41,7 @@ func reviewAgentRequest(dispatchID string, content string) (interfaces.Workstati
 
 func reviewAgentExecutor(provider *agentMockProvider) *executorpkg.AgentExecutor {
 	return executorpkg.NewAgentExecutor(runtimefixtures.RuntimeConfigLookupFixture{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"planner": {Model: "test-model", StopToken: "<COMPLETE>"},
 		},
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
@@ -53,7 +59,7 @@ func TestAgentExecutor_ReviewWorkstation_ParsesDecisionEnvelopeAccepted(t *testi
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
+	if result.Outcome != workerexecution.OutcomeAccepted {
 		t.Fatalf("Outcome = %q, want ACCEPTED", result.Outcome)
 	}
 	if result.Feedback != "All criteria pass." {
@@ -106,9 +112,9 @@ func TestAgentExecutor_ReviewWorkstation_OmittedOutputDoesNotLeakIntoRetryPrompt
 			},
 		},
 	)
-	consumed := interfaces.Token{
+	consumed := factorytoken.Token{
 		ID: "work-task-1",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "work-task-1",
 			WorkTypeID: "task",
 			Payload:    []byte(priorDraft),
@@ -122,13 +128,13 @@ func TestAgentExecutor_ReviewWorkstation_OmittedOutputDoesNotLeakIntoRetryPrompt
 		Arcs: []petri.Arc{
 			{PlaceID: "task:init", Direction: petri.ArcOutput},
 		},
-		ConsumedTokens: []interfaces.Token{consumed},
-		InputColors:    []interfaces.TokenColor{consumed.Color},
+		ConsumedTokens: []factorytoken.Token{consumed},
+		InputColors:    []factorytoken.Color{consumed.Color},
 		Output:         result.Output,
 		Outcome:        result.Outcome,
 		Feedback:       result.Feedback,
 		Now:            now,
-		History:        interfaces.TokenHistory{TotalVisits: map[string]int{"review": 1}},
+		History:        factorytoken.History{TotalVisits: map[string]int{"review": 1}},
 	})
 	if err != nil {
 		t.Fatalf("OutputToken: %v", err)
@@ -144,7 +150,7 @@ func TestAgentExecutor_ReviewWorkstation_OmittedOutputDoesNotLeakIntoRetryPrompt
 	renderer := &prompting.DefaultPromptRenderer{}
 	rendered, err := renderer.Render(
 		`Previous output: {{ (index .Inputs 0).PreviousOutput }}`,
-		[]interfaces.Token{*outputToken},
+		[]factorytoken.Token{*outputToken},
 		nil,
 	)
 	if err != nil {
@@ -162,10 +168,10 @@ func TestAgentExecutor_ReviewWorkstation_ParsesDecisionEnvelopeContinueAndReject
 	cases := []struct {
 		name     string
 		decision string
-		want     interfaces.WorkOutcome
+		want     workerexecution.WorkOutcome
 	}{
-		{name: "continue", decision: "CONTINUE", want: interfaces.OutcomeContinue},
-		{name: "rejected", decision: "REJECTED", want: interfaces.OutcomeRejected},
+		{name: "continue", decision: "CONTINUE", want: workerexecution.OutcomeContinue},
+		{name: "rejected", decision: "REJECTED", want: workerexecution.OutcomeRejected},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -222,16 +228,16 @@ func TestAgentExecutor_ReviewWorkstation_MalformedEnvelopeUsesFailedOutcome(t *t
 
 func TestAgentExecutor_ProcessWorkstation_StillUsesStopTokenWhenNotReview(t *testing.T) {
 	provider := &agentMockProvider{
-		response: interfaces.InferenceResponse{Content: `{"decision":"ACCEPTED","feedback":"ignored"}`},
+		response: workerexecution.InferenceResponse{Content: `{"decision":"ACCEPTED","feedback":"ignored"}`},
 	}
 	executor := executorpkg.NewAgentExecutor(runtimefixtures.RuntimeConfigLookupFixture{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"processor": {Model: "test-model", StopToken: "<COMPLETE>"},
 		},
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:      "d-process-1",
 			TransitionID:    "process",
 			WorkerType:      "processor",
@@ -242,7 +248,7 @@ func TestAgentExecutor_ProcessWorkstation_StillUsesStopTokenWhenNotReview(t *tes
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeRejected {
+	if result.Outcome != workerexecution.OutcomeRejected {
 		t.Fatalf("Outcome = %q, want REJECTED from stop-token path", result.Outcome)
 	}
 }

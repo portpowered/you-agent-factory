@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	provider "github.com/portpowered/infinite-you/pkg/workers/provider"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
 
@@ -42,16 +43,16 @@ func classifyPiRetryFailure(input adapter.FailureContext) adapter.FailureResult 
 
 func classifyPiExecutionFailure(input adapter.FailureContext) adapter.FailureResult {
 	if errors.Is(input.CommandError, context.Canceled) || input.FlushReason == adapter.FlushReasonCanceled {
-		return normalizedFailureResult(interfaces.WorkFailureTypeUnknown, "Pi execution was canceled.", nil)
+		return normalizedFailureResult(workerexecution.WorkFailureTypeUnknown, "Pi execution was canceled.", nil)
 	}
 	if errors.Is(input.CommandError, context.DeadlineExceeded) || input.CommandResult.ExitCode == 124 {
-		return normalizedFailureResult(interfaces.WorkFailureTypeTimeout, "Pi execution timed out.", nil)
+		return normalizedFailureResult(workerexecution.WorkFailureTypeTimeout, "Pi execution timed out.", nil)
 	}
 	if input.CommandError != nil || input.CommandResult.ExitCode != 0 {
-		return normalizedFailureResult(interfaces.WorkFailureTypeUnknown, "Pi invocation failed.", nil)
+		return normalizedFailureResult(workerexecution.WorkFailureTypeUnknown, "Pi invocation failed.", nil)
 	}
 	if input.DecodeError != nil || input.FlushError != nil || input.ParseError != nil {
-		return normalizedFailureResult(interfaces.WorkFailureTypeUnknown, "Pi did not produce a valid completed response.", nil)
+		return normalizedFailureResult(workerexecution.WorkFailureTypeUnknown, "Pi did not produce a valid completed response.", nil)
 	}
 	return adapter.FailureResult{}
 }
@@ -61,10 +62,10 @@ func terminalFailureResult(err error) adapter.FailureResult {
 	if err != nil {
 		message = err.Error()
 	}
-	return normalizedFailureResult(interfaces.WorkFailureTypeUnknown, message, nil)
+	return normalizedFailureResult(workerexecution.WorkFailureTypeUnknown, message, nil)
 }
 
-func normalizedFailureResult(failureType interfaces.WorkFailureType, message string, session *interfaces.ProviderSessionMetadata) adapter.FailureResult {
+func normalizedFailureResult(failureType workerexecution.WorkFailureType, message string, session *workerexecution.ProviderSessionMetadata) adapter.FailureResult {
 	providerError := provider.NewProviderErrorFromResult(provider.ProviderFailureResult{Reason: failureType, Message: message}, nil)
 	decision := provider.WorkFailureDecisionFromProviderError(providerError)
 	return adapter.FailureResult{Failure: &adapter.FailureFacts{

@@ -11,8 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -53,7 +55,7 @@ Spawn a descendant and wait for the factory timeout to cancel it.
 		t.Fatalf("write worker AGENTS.md: %v", err)
 	}
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-timeout-cleanup-smoke",
 		WorkTypeID: "task",
 		TraceID:    "trace-timeout-cleanup-smoke",
@@ -89,8 +91,8 @@ Spawn a descendant and wait for the factory timeout to cancel it.
 	if len(engineState.DispatchHistory) == 0 {
 		t.Fatal("DispatchHistory is empty, want completed timeout dispatch")
 	}
-	if engineState.DispatchHistory[0].Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("first dispatch outcome = %s, want %s", engineState.DispatchHistory[0].Outcome, interfaces.OutcomeFailed)
+	if engineState.DispatchHistory[0].Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("first dispatch outcome = %s, want %s", engineState.DispatchHistory[0].Outcome, workerexecution.OutcomeFailed)
 	}
 	if engineState.DispatchHistory[0].Reason != "execution timeout" {
 		t.Fatalf("first dispatch reason = %q, want execution timeout", engineState.DispatchHistory[0].Reason)
@@ -119,7 +121,7 @@ Timeout once, then succeed after the Agent Factory requeues the work.
 		t.Fatalf("write worker AGENTS.md: %v", err)
 	}
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-timeout-requeue-smoke",
 		WorkTypeID: "task",
 		TraceID:    "trace-timeout-requeue-smoke",
@@ -143,8 +145,8 @@ Timeout once, then succeed after the Agent Factory requeues the work.
 		t.Fatalf("dispatch count for timeout work = %d, want 2", len(dispatches))
 	}
 	first := dispatches[0]
-	if first.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("first dispatch outcome = %s, want %s", first.Outcome, interfaces.OutcomeFailed)
+	if first.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("first dispatch outcome = %s, want %s", first.Outcome, workerexecution.OutcomeFailed)
 	}
 	if first.Reason != "execution timeout" {
 		t.Fatalf("first dispatch reason = %q, want execution timeout", first.Reason)
@@ -152,11 +154,11 @@ Timeout once, then succeed after the Agent Factory requeues the work.
 	if first.FailureMetadata == nil {
 		t.Fatal("first dispatch FailureMetadata is nil, want timeout metadata")
 	}
-	if first.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
-		t.Fatalf("first dispatch failure metadata type = %s, want %s", first.FailureMetadata.Type, interfaces.WorkFailureTypeTimeout)
+	if first.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
+		t.Fatalf("first dispatch failure metadata type = %s, want %s", first.FailureMetadata.Type, workerexecution.WorkFailureTypeTimeout)
 	}
-	if first.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("first dispatch failure metadata family = %s, want %s", first.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
+	if first.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable {
+		t.Fatalf("first dispatch failure metadata family = %s, want %s", first.FailureMetadata.Family, workerexecution.WorkFailureFamilyRetryable)
 	}
 	if len(first.OutputMutations) == 0 || first.OutputMutations[0].ToPlace != "task:init" {
 		t.Fatalf("first dispatch mutations = %#v, want requeue to task:init", first.OutputMutations)
@@ -166,8 +168,8 @@ Timeout once, then succeed after the Agent Factory requeues the work.
 	}
 
 	second := dispatches[1]
-	if second.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("second dispatch outcome = %s, want %s", second.Outcome, interfaces.OutcomeAccepted)
+	if second.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("second dispatch outcome = %s, want %s", second.Outcome, workerexecution.OutcomeAccepted)
 	}
 }
 

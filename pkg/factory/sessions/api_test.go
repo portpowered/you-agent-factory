@@ -1,65 +1,36 @@
 package factorysessions
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
-func TestListSummaries_OrdersDefaultSessionFirst(t *testing.T) {
-	registry := NewRegistry()
-	registry.Upsert(NewLiveSession(
-		"session-b",
-		"/factories/b",
-		"/workspace",
-		"/workspace",
-		TargetRef{Kind: TargetKindNamed, Name: "b"},
-		nil,
-		false,
-		"b",
-	), true)
-	registry.Upsert(NewLiveSession(
-		DefaultSessionID,
-		"/factories/default",
-		"/workspace",
-		"/workspace",
-		TargetRef{Kind: TargetKindDefault},
-		nil,
-		true,
-		"default",
-	), false)
+func TestSessionErrorsMatchStableBoundarySentinels(t *testing.T) {
+	t.Parallel()
 
-	summaries := ListSummaries(registry)
-	if len(summaries) != 2 {
-		t.Fatalf("len(summaries) = %d, want 2", len(summaries))
+	tests := []struct {
+		name   string
+		domain error
+		legacy error
+	}{
+		{name: "not found", domain: ErrNotFound, legacy: errors.New("factory session not found")},
+		{name: "result unavailable", domain: ErrResultUnavailable, legacy: errors.New("factory session result unavailable")},
 	}
-	if !summaries[0].IsDefault || summaries[0].Id != CanonicalFactorySessionID(registry.DefaultSession()) {
-		t.Fatalf("first summary = %#v, want default session first", summaries[0])
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if !errors.Is(fmt.Errorf("read session: %w", test.domain), test.legacy) {
+				t.Fatalf("wrapped %v did not match stable boundary sentinel %v", test.domain, test.legacy)
+			}
+		})
 	}
 }
 
-func TestSummaryResponse_MapsLiveSessionFields(t *testing.T) {
-	name := "beta"
-	summary := SummaryResponse(&LiveSession{
-		ID: "session-1",
-		SessionState: SessionState{
-			FactoryDir: "/factories/beta",
-			FolderPath: "/workspace",
-		},
-		IsDefault: false,
-		Project:   "beta-project",
-		Target:    TargetRef{Kind: TargetKindNamed, Name: name},
-	})
-	if summary.Id != "session-1" || summary.Project != "beta-project" {
-		t.Fatalf("summary = %#v, want mapped session fields", summary)
-	}
-	if summary.Target.Kind != factoryapi.FactorySessionTargetRefKindNamed || summary.Target.Name == nil || *summary.Target.Name != name {
-		t.Fatalf("summary target = %#v, want named beta target", summary.Target)
-	}
-}
 func TestValidateInitNewFactoryNestedDir_AllowsMissingNestedDirectory(t *testing.T) {
 	root := t.TempDir()
 	if err := ValidateInitNewFactoryNestedDir(root); err != nil {
@@ -165,5 +136,36 @@ func TestNewLiveSessionDefaultUUIDKeepsRegistryIdentity(t *testing.T) {
 	}
 	if got := session.ResponseEvents.FactorySessionID(); got != sessionID {
 		t.Fatalf("response event store session ID = %q, want registry UUID %q", got, sessionID)
+	}
+}
+
+func TestBindResponseEventCompletion_UsesCanonicalFactoryEventTypes(t *testing.T) {
+	t.Parallel()
+
+	session := NewLiveSession(
+		"session-completion",
+		"/factories/default",
+		"/workspace",
+		"/workspace",
+		TargetRef{Kind: TargetKindDefault},
+		nil,
+		true,
+		"default",
+	)
+	var recorder func(interfaces.FactoryEventType)
+	BindResponseEventCompletion(session, func(bound func(interfaces.FactoryEventType)) {
+		recorder = bound
+	})
+	if recorder == nil {
+		t.Fatal("completion recorder = nil, want canonical Factory event callback")
+	}
+
+	recorder(interfaces.FactoryEventTypeSessionResultUpdated)
+	if session.ResponseEvents.Completed() {
+		t.Fatal("response events completed for non-terminal Factory event")
+	}
+	recorder(interfaces.FactoryEventTypeSessionCompleted)
+	if !session.ResponseEvents.Completed() {
+		t.Fatal("response events remain live after SESSION_COMPLETED")
 	}
 }

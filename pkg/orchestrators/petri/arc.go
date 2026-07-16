@@ -1,6 +1,6 @@
 package petri
 
-import "github.com/portpowered/infinite-you/pkg/interfaces"
+import interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 
 // Arc connects a Place to a Transition (input) or a Transition to a Place (output).
 type Arc struct {

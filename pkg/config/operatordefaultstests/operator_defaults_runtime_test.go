@@ -10,7 +10,9 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestApplyOperatorDefaultsToLoadedConfig_FillsOmittedModelWorkerFields(t *testing.T) {
@@ -33,8 +35,8 @@ func TestApplyOperatorDefaultsToLoadedConfig_FillsOmittedModelWorkerFields(t *te
 	if !ok {
 		t.Fatal("expected executor worker")
 	}
-	if worker.ModelProvider != string(interfaces.ModelProviderCodex) {
-		t.Fatalf("modelProvider = %q, want %q", worker.ModelProvider, interfaces.ModelProviderCodex)
+	if worker.ModelProvider != string(modelprovider.Codex) {
+		t.Fatalf("modelProvider = %q, want %q", worker.ModelProvider, modelprovider.Codex)
 	}
 	if worker.Model != "gpt-5-codex" {
 		t.Fatalf("model = %q, want gpt-5-codex", worker.Model)
@@ -63,8 +65,8 @@ func TestApplyOperatorDefaultsToLoadedConfig_PreservesAuthoredModelWorkerFields(
 	if !ok {
 		t.Fatal("expected executor worker")
 	}
-	if worker.ModelProvider != string(interfaces.ModelProviderClaude) {
-		t.Fatalf("modelProvider = %q, want %q", worker.ModelProvider, interfaces.ModelProviderClaude)
+	if worker.ModelProvider != string(modelprovider.Claude) {
+		t.Fatalf("modelProvider = %q, want %q", worker.ModelProvider, modelprovider.Claude)
 	}
 	if worker.Model != "claude-sonnet-4-20250514" {
 		t.Fatalf("model = %q, want authored model", worker.Model)
@@ -74,7 +76,7 @@ func TestApplyOperatorDefaultsToLoadedConfig_PreservesAuthoredModelWorkerFields(
 func TestApplyOperatorDefaultsToLoadedConfig_SkipsScriptAndHostedWorkers(t *testing.T) {
 	factoryDir := t.TempDir()
 	loaded, err := config.NewLoadedFactoryConfig(factoryDir, &interfaces.FactoryConfig{
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "script-worker", Type: interfaces.WorkerTypeScript, Body: "Run scripts."},
 			{Name: "hosted-worker", Type: interfaces.WorkerTypeHosted, Provider: interfaces.HostedWorkerProviderLinear, Body: "Poll linear."},
 		},
@@ -107,7 +109,7 @@ func TestApplyOperatorDefaultsToLoadedConfig_SkipsScriptAndHostedWorkers(t *test
 func TestValidateModelWorkerRuntimeProviders_RejectsUnsupportedProvider(t *testing.T) {
 	factoryDir := t.TempDir()
 	loaded, err := config.NewLoadedFactoryConfig(factoryDir, &interfaces.FactoryConfig{
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:          "executor",
 			Type:          interfaces.WorkerTypeModel,
 			ModelProvider: "not-a-provider",
@@ -135,7 +137,7 @@ func TestValidateModelWorkerRuntimeProviders_AllowsInvocationInterpolationProvid
 				Name: "firstProvider",
 			}},
 		},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:          "executor",
 			Type:          interfaces.WorkerTypeModel,
 			ModelProvider: "${firstProvider}",

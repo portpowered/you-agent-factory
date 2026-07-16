@@ -11,15 +11,15 @@ import (
 	"testing"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
 	"go.uber.org/zap"
 )
 
@@ -45,23 +45,23 @@ func (f *orderedStopFactory) Run(ctx context.Context) error {
 }
 
 func (f *lifecycleObserverFactory) Run(context.Context) error { return nil }
-func (f *lifecycleObserverFactory) SubmitWorkRequest(context.Context, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
-	return interfaces.WorkRequestSubmitResult{}, nil
+func (f *lifecycleObserverFactory) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	return work.WorkRequestSubmitResult{}, nil
 }
 func (f *lifecycleObserverFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
-	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
+	return &interfaces.FactoryEventStream{Events: make(chan interfaces.FactoryEvent)}, nil
 }
 func (f *lifecycleObserverFactory) Pause(context.Context) error  { return nil }
 func (f *lifecycleObserverFactory) Resume(context.Context) error { return nil }
-func (f *lifecycleObserverFactory) MoveWork(context.Context, string, string, interfaces.WorkStateChangeSource, string) (interfaces.OperatorMoveResult, error) {
-	return interfaces.OperatorMoveResult{}, nil
+func (f *lifecycleObserverFactory) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {
+	return work.OperatorMoveResult{}, nil
 }
 func (f *lifecycleObserverFactory) GetEngineStateSnapshot(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	return f.engineState, nil
 }
-func (f *lifecycleObserverFactory) GetFactoryEvents(context.Context) ([]factoryapi.FactoryEvent, error) {
+func (f *lifecycleObserverFactory) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
 	return nil, nil
 }
 func (f *lifecycleObserverFactory) WaitToComplete() <-chan struct{} {
@@ -123,13 +123,13 @@ func TestRuntimeStopOutcome_PrefersTerminalResultOverForcedCancel(t *testing.T) 
 }
 
 func TestStop_EmitsCompletedLifecycleMetricWithoutRootService(t *testing.T) {
-	metricsSink, err := logging.BuildRuntimeMetricsSink(
+	metricsSink, err := platformmetrics.BuildRuntimeMetricsSink(
 		"session-shutdown",
 		"runtime-shutdown",
 		"/factory",
 		"/factory/current",
 		t.TempDir(),
-		logging.RuntimeMetricsConfig{},
+		platformmetrics.RuntimeMetricsConfig{},
 	)
 	if err != nil {
 		t.Fatalf("BuildRuntimeMetricsSink: %v", err)

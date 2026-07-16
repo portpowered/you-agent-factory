@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // MalformedEnvelopeFailureOutcome is the WorkOutcome used when reviewer/checker output
 // is not valid JSON or contains an unsupported decision value. Both failure cases use
 // the runtime FAILED path so routing does not silently coerce or guess a decision.
-const MalformedEnvelopeFailureOutcome = interfaces.OutcomeFailed
+const MalformedEnvelopeFailureOutcome = workerexecution.OutcomeFailed
 
 // DecisionEnvelope is the canonical JSON response shape for reviewer/checker workers
 // in packaged @you/goal flows.
@@ -25,18 +27,18 @@ const MalformedEnvelopeFailureOutcome = interfaces.OutcomeFailed
 //     WorkResultFromDecisionEnvelopeJSONOrFailed; callers that prefer explicit Go errors
 //     can use WorkResultFromDecisionEnvelopeJSON and FailedWorkResultFromDecisionEnvelopeError.
 type DecisionEnvelope struct {
-	Decision           string                       `json:"decision"`
-	Feedback           string                       `json:"feedback"`
-	Output             string                       `json:"output,omitempty"`
-	RecordedOutputWork []interfaces.FactoryWorkItem `json:"recorded_output_work,omitempty"`
+	Decision           string                 `json:"decision"`
+	Feedback           string                 `json:"feedback"`
+	Output             string                 `json:"output,omitempty"`
+	RecordedOutputWork []work.FactoryWorkItem `json:"recorded_output_work,omitempty"`
 }
 
 // Accepted reviewer/checker decision values map one-to-one onto WorkOutcome.
 const (
-	DecisionAccepted = string(interfaces.OutcomeAccepted)
-	DecisionContinue = string(interfaces.OutcomeContinue)
-	DecisionRejected = string(interfaces.OutcomeRejected)
-	DecisionFailed   = string(interfaces.OutcomeFailed)
+	DecisionAccepted = string(workerexecution.OutcomeAccepted)
+	DecisionContinue = string(workerexecution.OutcomeContinue)
+	DecisionRejected = string(workerexecution.OutcomeRejected)
+	DecisionFailed   = string(workerexecution.OutcomeFailed)
 )
 
 // DecisionEnvelopeOutcomeFormat is the workstation outcomeFormat value that routes
@@ -105,17 +107,17 @@ func SupportedDecisions() []string {
 }
 
 // OutcomeFromDecision maps an envelope decision value to a WorkOutcome.
-func OutcomeFromDecision(decision string) (interfaces.WorkOutcome, error) {
+func OutcomeFromDecision(decision string) (workerexecution.WorkOutcome, error) {
 	trimmed := strings.TrimSpace(decision)
 	if trimmed == "" {
 		return "", fmt.Errorf("decision envelope: decision is required")
 	}
-	switch interfaces.WorkOutcome(trimmed) {
-	case interfaces.OutcomeAccepted,
-		interfaces.OutcomeContinue,
-		interfaces.OutcomeRejected,
-		interfaces.OutcomeFailed:
-		return interfaces.WorkOutcome(trimmed), nil
+	switch workerexecution.WorkOutcome(trimmed) {
+	case workerexecution.OutcomeAccepted,
+		workerexecution.OutcomeContinue,
+		workerexecution.OutcomeRejected,
+		workerexecution.OutcomeFailed:
+		return workerexecution.WorkOutcome(trimmed), nil
 	default:
 		return "", fmt.Errorf("decision envelope: unknown decision %q", trimmed)
 	}
@@ -135,12 +137,12 @@ func ParseDecisionEnvelopeJSON(raw string) (DecisionEnvelope, error) {
 }
 
 // WorkResultFromDecisionEnvelope maps a parsed envelope onto the existing WorkResult contract.
-func WorkResultFromDecisionEnvelope(dispatchID, transitionID string, envelope DecisionEnvelope) (interfaces.WorkResult, error) {
+func WorkResultFromDecisionEnvelope(dispatchID, transitionID string, envelope DecisionEnvelope) (workerexecution.WorkResult, error) {
 	outcome, err := OutcomeFromDecision(envelope.Decision)
 	if err != nil {
-		return interfaces.WorkResult{}, err
+		return workerexecution.WorkResult{}, err
 	}
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:         dispatchID,
 		TransitionID:       transitionID,
 		Outcome:            outcome,
@@ -151,10 +153,10 @@ func WorkResultFromDecisionEnvelope(dispatchID, transitionID string, envelope De
 }
 
 // WorkResultFromDecisionEnvelopeJSON parses reviewer/checker output and maps it to WorkResult.
-func WorkResultFromDecisionEnvelopeJSON(dispatchID, transitionID, raw string) (interfaces.WorkResult, error) {
+func WorkResultFromDecisionEnvelopeJSON(dispatchID, transitionID, raw string) (workerexecution.WorkResult, error) {
 	envelope, err := ParseDecisionEnvelopeJSON(raw)
 	if err != nil {
-		return interfaces.WorkResult{}, err
+		return workerexecution.WorkResult{}, err
 	}
 	return WorkResultFromDecisionEnvelope(dispatchID, transitionID, envelope)
 }
@@ -166,12 +168,12 @@ func FailedWorkResultFromDecisionEnvelopeError(
 	dispatchID, transitionID string,
 	err error,
 	partial DecisionEnvelope,
-) interfaces.WorkResult {
+) workerexecution.WorkResult {
 	message := "reviewer decision envelope invalid"
 	if err != nil {
 		message += ": " + err.Error()
 	}
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatchID,
 		TransitionID: transitionID,
 		Outcome:      MalformedEnvelopeFailureOutcome,
@@ -182,7 +184,7 @@ func FailedWorkResultFromDecisionEnvelopeError(
 
 // WorkResultFromDecisionEnvelopeJSONOrFailed parses reviewer/checker output and always
 // returns a WorkResult. Invalid JSON and unknown decisions use MalformedEnvelopeFailureOutcome.
-func WorkResultFromDecisionEnvelopeJSONOrFailed(dispatchID, transitionID, raw string) interfaces.WorkResult {
+func WorkResultFromDecisionEnvelopeJSONOrFailed(dispatchID, transitionID, raw string) workerexecution.WorkResult {
 	envelope, err := ParseDecisionEnvelopeJSON(raw)
 	if err != nil {
 		return FailedWorkResultFromDecisionEnvelopeError(dispatchID, transitionID, err, DecisionEnvelope{})
@@ -197,15 +199,15 @@ func WorkResultFromDecisionEnvelopeJSONOrFailed(dispatchID, transitionID, raw st
 // WorkResultFromGoalRoutingDecisionEnvelope maps a parsed envelope onto WorkResult using the
 // packaged goal routing vocabulary. Routing uses SelectedClassificationLabel so optional
 // envelope output text can remain in WorkResult.Output.
-func WorkResultFromGoalRoutingDecisionEnvelope(dispatchID, transitionID string, envelope DecisionEnvelope) (interfaces.WorkResult, error) {
+func WorkResultFromGoalRoutingDecisionEnvelope(dispatchID, transitionID string, envelope DecisionEnvelope) (workerexecution.WorkResult, error) {
 	label, err := NormalizeGoalRoutingDecision(envelope.Decision)
 	if err != nil {
-		return interfaces.WorkResult{}, err
+		return workerexecution.WorkResult{}, err
 	}
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:                  dispatchID,
 		TransitionID:                transitionID,
-		Outcome:                     interfaces.OutcomeAccepted,
+		Outcome:                     workerexecution.OutcomeAccepted,
 		SelectedClassificationLabel: label,
 		Feedback:                    envelope.Feedback,
 		Output:                      envelope.Output,
@@ -215,17 +217,17 @@ func WorkResultFromGoalRoutingDecisionEnvelope(dispatchID, transitionID string, 
 
 // WorkResultFromGoalRoutingDecisionEnvelopeJSON parses reviewer/checker output and maps it
 // to the packaged goal routing WorkResult contract.
-func WorkResultFromGoalRoutingDecisionEnvelopeJSON(dispatchID, transitionID, raw string) (interfaces.WorkResult, error) {
+func WorkResultFromGoalRoutingDecisionEnvelopeJSON(dispatchID, transitionID, raw string) (workerexecution.WorkResult, error) {
 	envelope, err := ParseDecisionEnvelopeJSON(raw)
 	if err != nil {
-		return interfaces.WorkResult{}, err
+		return workerexecution.WorkResult{}, err
 	}
 	return WorkResultFromGoalRoutingDecisionEnvelope(dispatchID, transitionID, envelope)
 }
 
 // WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed parses reviewer/checker output for
 // packaged goal routing workstations and always returns a WorkResult.
-func WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed(dispatchID, transitionID, raw string) interfaces.WorkResult {
+func WorkResultFromGoalRoutingDecisionEnvelopeJSONOrFailed(dispatchID, transitionID, raw string) workerexecution.WorkResult {
 	envelope, err := ParseDecisionEnvelopeJSON(raw)
 	if err != nil {
 		return FailedWorkResultFromDecisionEnvelopeError(dispatchID, transitionID, err, DecisionEnvelope{})

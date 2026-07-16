@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -18,11 +19,11 @@ func TestRepeater_YieldsBetweenIterations(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	execMock := h.MockWorker("exec-worker",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 	finishMock := h.MockWorker("finish-worker",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	h.RunUntilComplete(t, 10*time.Second)
@@ -40,7 +41,7 @@ func TestRepeater_YieldsBetweenIterations(t *testing.T) {
 func TestParameterizedFields_WorkingDirectoryResolvesFromTags(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "repeater_workstation"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		Payload:    []byte(`{}`),
 		Tags:       map[string]string{"branch": "feature-abc"},
@@ -49,11 +50,11 @@ func TestParameterizedFields_WorkingDirectoryResolvesFromTags(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	capture := &capturingExecutor{
-		result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	}
 	h.SetCustomExecutor("exec-worker", capture)
 	h.MockWorker("finish-worker",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	h.RunUntilComplete(t, 10*time.Second)
@@ -79,7 +80,7 @@ func TestParameterizedFields_UnresolvedTemplateRoutesToFailure(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "unresolved template test"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Should not reach COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Should not reach COMPLETE"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -106,12 +107,12 @@ func TestRepeater_ResourceReleaseBetweenIterations(t *testing.T) {
 	h := testutil.NewServiceTestHarness(t, dir)
 
 	execMock := h.MockWorker("exec-worker",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeRejected},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeRejected},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 	h.MockWorker("finish-worker",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	h.RunUntilComplete(t, 10*time.Second)

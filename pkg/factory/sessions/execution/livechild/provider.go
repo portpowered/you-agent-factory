@@ -7,9 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 )
 
@@ -121,7 +122,7 @@ func (e *ProviderChildExecutor) Execute(ctx context.Context, req workflowruntime
 
 func (e *ProviderChildExecutor) executeWithRetry(
 	ctx context.Context,
-	req interfaces.ProviderInferenceRequest,
+	req workerexecution.ProviderInferenceRequest,
 	base workflowruntime.ChildDispatchRecord,
 ) (providerexecution.ExecutionResult, error) {
 	for attempt := 1; ; attempt++ {
@@ -166,8 +167,8 @@ func (e *ProviderChildExecutor) failedChildResult(
 	childIndex int,
 	providerName string,
 	providerSessionRef string,
-	failureDetail *interfaces.FailureDetail,
-	failureDecision *interfaces.WorkFailureDecision,
+	failureDetail *workerexecution.FailureDetail,
+	failureDecision *workerexecution.WorkFailureDecision,
 ) (workflowruntime.ChildExecutionResult, error) {
 	failed := base
 	failed.Status = workflowruntime.ChildDispatchStatusFailed
@@ -210,15 +211,15 @@ func providerInferenceRequestFromChild(
 	sessionID string,
 	dispatchID string,
 	req workflowruntime.ChildExecutionRequest,
-) interfaces.ProviderInferenceRequest {
+) workerexecution.ProviderInferenceRequest {
 	outputSchema := ""
 	if req.OutputSchema != nil {
 		if encoded, err := json.Marshal(req.OutputSchema); err == nil {
 			outputSchema = string(encoded)
 		}
 	}
-	inferReq := interfaces.ProviderInferenceRequest{
-		Dispatch: interfaces.WorkDispatch{
+	inferReq := workerexecution.ProviderInferenceRequest{
+		Dispatch: work.WorkDispatch{
 			DispatchID: dispatchID,
 		},
 		UserMessage:   req.Prompt,
@@ -246,11 +247,11 @@ func providerChildOutput(req workflowruntime.ChildExecutionRequest, content stri
 	}
 }
 
-func providerSessionFields(session *interfaces.ProviderSessionMetadata) (providerName, sessionRef string) {
+func providerSessionFields(session *workerexecution.ProviderSessionMetadata) (providerName, sessionRef string) {
 	if session == nil {
 		return "", ""
 	}
-	providerName = interfaces.CanonicalProviderSessionProvider(session.Provider)
+	providerName = workerexecution.CanonicalProviderSessionProvider(session.Provider)
 	if providerName == "" {
 		providerName = strings.TrimSpace(session.Provider)
 	}

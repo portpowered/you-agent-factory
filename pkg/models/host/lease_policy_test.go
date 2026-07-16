@@ -11,8 +11,8 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 func TestCatalogHost_AllowsConcurrentLeasesWhenCapacityAllows(t *testing.T) {
@@ -186,7 +186,7 @@ func TestCatalogHost_IdleUnloadDoesNotEvictActiveLease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InspectReadiness: %v", err)
 	}
-	if ready.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+	if ready.ReadinessState != managedruntime.ReadinessStateReady {
 		t.Fatalf("readiness = %s, want READY", ready.ReadinessState)
 	}
 	if err := host.ReleaseLease(ctx, lease.ID); err != nil {

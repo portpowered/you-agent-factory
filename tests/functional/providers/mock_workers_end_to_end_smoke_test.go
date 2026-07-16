@@ -10,11 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
@@ -35,19 +37,19 @@ args:
 ---
 `)
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "mock-smoke-accept-work",
 		WorkTypeID: "accept-task",
 		TraceID:    "mock-smoke-accept-trace",
 		Payload:    []byte(`{"title":"default accept"}`),
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "mock-smoke-reject-work",
 		WorkTypeID: "reject-task",
 		TraceID:    "mock-smoke-reject-trace",
 		Payload:    []byte(`{"title":"configured reject"}`),
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "mock-smoke-script-work",
 		WorkTypeID: "script-task",
 		TraceID:    "mock-smoke-script-trace",
@@ -197,7 +199,7 @@ func assertMockWorkersSmokeRecordedOutcomes(t *testing.T, artifact *interfaces.R
 	t.Helper()
 
 	dispatchCount := 0
-	for _, event := range artifact.Events {
+	for _, event := range testutil.GeneratedFactoryEvents(t, artifact.Events) {
 		if event.Type != factoryapi.FactoryEventTypeDispatchRequest {
 			continue
 		}
@@ -219,25 +221,25 @@ func assertMockWorkersSmokeRecordedOutcomes(t *testing.T, artifact *interfaces.R
 		outcomes[completion.TransitionId] = completion
 	}
 
-	if got := outcomes["accept-process"].Outcome; got != factoryapi.WorkOutcome(interfaces.OutcomeAccepted) {
-		t.Fatalf("accept-process outcome = %s, want %s", got, interfaces.OutcomeAccepted)
+	if got := outcomes["accept-process"].Outcome; got != factoryapi.WorkOutcome(workerexecution.OutcomeAccepted) {
+		t.Fatalf("accept-process outcome = %s, want %s", got, workerexecution.OutcomeAccepted)
 	}
 	rejectResult := outcomes["reject-process"]
-	if rejectResult.Outcome != factoryapi.WorkOutcome(interfaces.OutcomeFailed) {
-		t.Fatalf("reject-process outcome = %s, want %s", rejectResult.Outcome, interfaces.OutcomeFailed)
+	if rejectResult.Outcome != factoryapi.WorkOutcome(workerexecution.OutcomeFailed) {
+		t.Fatalf("reject-process outcome = %s, want %s", rejectResult.Outcome, workerexecution.OutcomeFailed)
 	}
 	if rejectResult.FailureDetail == nil || rejectResult.FailureDetail.Reason == "" {
 		t.Fatal("reject-process result missing failure reason")
 	}
-	if string(rejectResult.FailureDetail.Reason) != string(interfaces.WorkFailureTypeUnknown) {
-		t.Fatalf("reject-process failure reason = %q, want stable %q", rejectResult.FailureDetail.Reason, interfaces.WorkFailureTypeUnknown)
+	if string(rejectResult.FailureDetail.Reason) != string(workerexecution.WorkFailureTypeUnknown) {
+		t.Fatalf("reject-process failure reason = %q, want stable %q", rejectResult.FailureDetail.Reason, workerexecution.WorkFailureTypeUnknown)
 	}
 	if !strings.Contains(stringPointerValue(rejectResult.Error), "provider error: unknown: Codex reported a terminal error.") {
 		t.Fatalf("reject-process error = %q, want stable unknown code with audited message", stringPointerValue(rejectResult.Error))
 	}
 	scriptResult := outcomes["script-process"]
-	if scriptResult.Outcome != factoryapi.WorkOutcome(interfaces.OutcomeAccepted) {
-		t.Fatalf("script-process outcome = %s, want %s", scriptResult.Outcome, interfaces.OutcomeAccepted)
+	if scriptResult.Outcome != factoryapi.WorkOutcome(workerexecution.OutcomeAccepted) {
+		t.Fatalf("script-process outcome = %s, want %s", scriptResult.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if !strings.Contains(stringPointerValue(scriptResult.Output), "mock script helper wrote file") {
 		t.Fatalf("script-process output = %q, want helper output", stringPointerValue(scriptResult.Output))

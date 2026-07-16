@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
@@ -16,7 +17,7 @@ func TestEnablementEvaluator_ContextPassedThrough(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	marking := makeTestSnapshot(map[string]*interfaces.Token{})
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{})
 	enabled := eval.FindEnabledTransitions(ctx, &state.Net{Transitions: map[string]*petri.Transition{}}, &marking)
 	if len(enabled) != 0 {
 		t.Fatalf("expected 0 enabled transitions, got %d", len(enabled))
@@ -41,7 +42,7 @@ func TestEnablementEvaluator_UsesInjectedClockForCronTimeWindowGuard(t *testing.
 		},
 	}
 	marking := petri.MarkingSnapshot{
-		Tokens:      map[string]*interfaces.Token{"time-refresh": schedulerCronTimeToken("time-refresh", "refresh", dueAt, expiresAt)},
+		Tokens:      map[string]*factorytoken.Token{"time-refresh": schedulerCronTimeToken("time-refresh", "refresh", dueAt, expiresAt)},
 		PlaceTokens: map[string][]string{interfaces.SystemTimePendingPlaceID: {"time-refresh"}},
 	}
 
@@ -74,7 +75,7 @@ func TestEnablementEvaluator_OrdersEnabledTransitionsByID(t *testing.T) {
 		},
 	}
 	marking := petri.MarkingSnapshot{
-		Tokens:      map[string]*interfaces.Token{"tok-zeta": {ID: "tok-zeta", PlaceID: "p-zeta"}, "tok-alpha": {ID: "tok-alpha", PlaceID: "p-alpha"}, "tok-beta": {ID: "tok-beta", PlaceID: "p-beta"}},
+		Tokens:      map[string]*factorytoken.Token{"tok-zeta": {ID: "tok-zeta", PlaceID: "p-zeta"}, "tok-alpha": {ID: "tok-alpha", PlaceID: "p-alpha"}, "tok-beta": {ID: "tok-beta", PlaceID: "p-beta"}},
 		PlaceTokens: map[string][]string{"p-zeta": {"tok-zeta"}, "p-alpha": {"tok-alpha"}, "p-beta": {"tok-beta"}},
 	}
 
@@ -95,10 +96,10 @@ func TestEnablementEvaluator_SelectsOrdinaryTokensByStableID(t *testing.T) {
 		},
 	}
 	marking := petri.MarkingSnapshot{
-		Tokens: map[string]*interfaces.Token{
-			"tok-c": {ID: "tok-c", PlaceID: "p-work", Color: interfaces.TokenColor{DataType: interfaces.DataTypeWork}},
-			"tok-a": {ID: "tok-a", PlaceID: "p-work", Color: interfaces.TokenColor{DataType: interfaces.DataTypeWork}},
-			"tok-b": {ID: "tok-b", PlaceID: "p-work", Color: interfaces.TokenColor{DataType: interfaces.DataTypeWork}},
+		Tokens: map[string]*factorytoken.Token{
+			"tok-c": {ID: "tok-c", PlaceID: "p-work", Color: factorytoken.Color{DataType: factorytoken.DataTypeWork}},
+			"tok-a": {ID: "tok-a", PlaceID: "p-work", Color: factorytoken.Color{DataType: factorytoken.DataTypeWork}},
+			"tok-b": {ID: "tok-b", PlaceID: "p-work", Color: factorytoken.Color{DataType: factorytoken.DataTypeWork}},
 		},
 		PlaceTokens: map[string][]string{"p-work": {"tok-c", "tok-a", "tok-b"}},
 	}
@@ -121,9 +122,9 @@ func TestEnablementEvaluator_SelectsResourceTokensByStableID(t *testing.T) {
 		},
 	}
 	marking := petri.MarkingSnapshot{
-		Tokens: map[string]*interfaces.Token{
-			"slot-2": {ID: "slot-2", PlaceID: "slot:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource}},
-			"slot-1": {ID: "slot-1", PlaceID: "slot:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource}},
+		Tokens: map[string]*factorytoken.Token{
+			"slot-2": {ID: "slot-2", PlaceID: "slot:available", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource}},
+			"slot-1": {ID: "slot-1", PlaceID: "slot:available", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource}},
 		},
 		PlaceTokens: map[string][]string{"slot:available": {"slot-2", "slot-1"}},
 	}
@@ -149,11 +150,11 @@ func TestEnablementEvaluator_ExpandsRepeatedWorkAndResourceBindingsForSameTransi
 		},
 	}
 	marking := petri.MarkingSnapshot{
-		Tokens: map[string]*interfaces.Token{
-			"work-b": {ID: "work-b", PlaceID: "task:init", Color: interfaces.TokenColor{DataType: interfaces.DataTypeWork}},
-			"work-a": {ID: "work-a", PlaceID: "task:init", Color: interfaces.TokenColor{DataType: interfaces.DataTypeWork}},
-			"slot-2": {ID: "slot-2", PlaceID: "executor-slot:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource}},
-			"slot-1": {ID: "slot-1", PlaceID: "executor-slot:available", Color: interfaces.TokenColor{DataType: interfaces.DataTypeResource}},
+		Tokens: map[string]*factorytoken.Token{
+			"work-b": {ID: "work-b", PlaceID: "task:init", Color: factorytoken.Color{DataType: factorytoken.DataTypeWork}},
+			"work-a": {ID: "work-a", PlaceID: "task:init", Color: factorytoken.Color{DataType: factorytoken.DataTypeWork}},
+			"slot-2": {ID: "slot-2", PlaceID: "executor-slot:available", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource}},
+			"slot-1": {ID: "slot-1", PlaceID: "executor-slot:available", Color: factorytoken.Color{DataType: factorytoken.DataTypeResource}},
 		},
 		PlaceTokens: map[string][]string{"task:init": {"work-b", "work-a"}, "executor-slot:available": {"slot-2", "slot-1"}},
 	}

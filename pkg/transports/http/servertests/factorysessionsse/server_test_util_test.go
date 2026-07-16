@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	"go.uber.org/zap"
 )

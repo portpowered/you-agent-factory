@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 func TestUpdateFromFile_WritesHumanReadableConfirmation(t *testing.T) {
@@ -132,7 +132,7 @@ func TestUpdateFromFile_RejectsInvalidTopologyBeforePersist(t *testing.T) {
 	if _, err := factoryconfig.PersistNamedFactory(rootDir, "alpha", saveTestNamedFactoryPayload(t, "alpha")); err != nil {
 		t.Fatalf("PersistNamedFactory: %v", err)
 	}
-	from := writeFactoryConfigFile(t, rootDir, "invalid", []byte(factoryvalidation.CrossPathInvalidFactoryJSON))
+	from := writeFactoryConfigFile(t, rootDir, "invalid", []byte(factoryfixtures.CrossPathInvalidFactoryJSON))
 
 	err := UpdateFromFile(UpdateFromFileConfig{
 		Name:   "alpha",

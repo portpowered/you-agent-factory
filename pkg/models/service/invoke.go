@@ -5,18 +5,26 @@ import (
 	"fmt"
 	"strings"
 
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	modelinference "github.com/portpowered/infinite-you/pkg/models/inference"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/work"
+
+	"go.uber.org/zap"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
-	"go.uber.org/zap"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 const directModelInvocationTransitionID = "direct-model-invocation"
@@ -32,91 +40,91 @@ type ModelInvocationExecutor func(
 func (s *Service) InvokeModel(
 	ctx context.Context,
 	modelName string,
-	request factoryapi.ModelInvocationRequest,
-) (apisurface.ModelInvocationResult, error) {
+	request modelinference.Request,
+) (modelinference.Result, error) {
 	runtimeCfg := s.runtimeConfig()
 	if runtimeCfg == nil {
-		return apisurface.ModelInvocationResult{}, fmt.Errorf("factory service runtime is not available")
+		return modelinference.Result{}, fmt.Errorf("factory service runtime is not available")
 	}
 	factoryCfg := runtimeCfg.FactoryConfig()
 	if factoryCfg == nil {
-		return apisurface.ModelInvocationResult{}, fmt.Errorf("factory config is not available")
+		return modelinference.Result{}, fmt.Errorf("factory config is not available")
 	}
 
 	workerDef, operation, err := localmodels.SelectInvocationWorker(runtimeCfg, modelName, request.Operation)
-	failureContext := apisurface.InferenceFailureContext{
+	failureContext := modelinference.TargetError{
 		ModelName: strings.TrimSpace(modelName),
 		Operation: strings.TrimSpace(request.Operation),
 	}
 	if err != nil {
-		if failure, ok := apisurface.ClassifyInferenceFailure(err, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
-		}
-		return apisurface.ModelInvocationResult{}, err
+		failureContext.Cause = err
+		return modelinference.Result{}, &failureContext
 	}
 	failureContext.WorkerName = workerDef.Name
 	failureContext.ModelName = workerDef.Model
 	managed, readinessErr := s.ensureInvocationReady(ctx, runtimeCfg, workerDef.Model)
 	s.recordManagedRuntimeInvocationReadiness(modelName, managed, readinessErr)
 	if readinessErr != nil {
-		if failure, ok := apisurface.ClassifyInferenceFailure(readinessErr, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
-		}
-		return apisurface.ModelInvocationResult{}, readinessErr
+		failureContext.Cause = readinessErr
+		return modelinference.Result{}, &failureContext
 	}
 
-	inputContent := contentcontract.PartsFromGenerated(request.Content)
-	inputTokens := []interfaces.Token{{
+	inputContent := request.Content
+	inputTokens := []factorytoken.Token{{
 		ID: "direct-model-invocation-input",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			Content: inputContent,
 		},
 	}}
 	workstationDef := workerinference.DirectInferenceWorkstationConfig(
 		request.Operation,
-		workerinference.OperationBindingsFromGenerated(request.Bindings),
+		request.Bindings,
 	)
 	resolvedBindings, err := workerinference.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
 	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
+		return modelinference.Result{}, err
 	}
 
 	executor, err := s.modelInvocationExecutor(runtimeCfg, factoryCfg, workerDef.Name)
 	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
+		return modelinference.Result{}, err
 	}
 	workstationRequest := directModelInvocationWorkstationRequest(workerDef, request, inputTokens, resolvedBindings, s.factoryRunnerID())
 
 	result, err := executor.Execute(ctx, workstationRequest)
 	if err != nil {
-		if failure, ok := apisurface.ClassifyInferenceFailure(err, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
-		}
-		return apisurface.ModelInvocationResult{}, err
+		failureContext.Cause = err
+		return modelinference.Result{}, &failureContext
 	}
-	if result.Outcome == interfaces.OutcomeFailed {
-		if failure, ok := apisurface.ClassifyInferenceWorkResultFailure(result, failureContext); ok {
-			return apisurface.ModelInvocationResult{}, failure
+	if result.Outcome == workerexecution.OutcomeFailed {
+		if result.FailureMetadata != nil && result.FailureMetadata.Type != "" {
+			failureContext.Cause = workerprovider.NewProviderError(
+				result.FailureMetadata.Type,
+				strings.TrimSpace(result.Error),
+				nil,
+			)
+		} else {
+			failureContext.Cause = fmt.Errorf("provider execution failed: %s", strings.TrimSpace(result.Error))
 		}
-		return apisurface.ModelInvocationResult{}, fmt.Errorf("provider execution failed: %s", strings.TrimSpace(result.Error))
+		return modelinference.Result{}, &failureContext
 	}
 
 	outputContent, err := workerinference.WorkContentFromInferenceOutput(result.Output, operation)
 	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
+		return modelinference.Result{}, err
 	}
 	streamFile, streamContentType, err := directModelInvocationStream(outputContent, request.Options)
 	if err != nil {
-		return apisurface.ModelInvocationResult{}, err
+		return modelinference.Result{}, err
 	}
 
-	return apisurface.ModelInvocationResult{
+	return modelinference.Result{
 		ModelName:         workerDef.Model,
 		Worker:            workerDef.Name,
 		Operation:         strings.TrimSpace(request.Operation),
 		ProviderLocality:  workerDef.ModelLocality,
 		Content:           outputContent,
-		Bindings:          interfaces.CloneResolvedModelOperationBindings(resolvedBindings),
+		Bindings:          workerexecution.CloneResolvedModelOperationBindings(resolvedBindings),
 		StreamFile:        streamFile,
 		StreamContentType: streamContentType,
 	}, nil
@@ -126,9 +134,9 @@ func (s *Service) ensureInvocationReady(
 	ctx context.Context,
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,
 	modelName string,
-) (factoryapi.ManagedRuntime, error) {
+) (managedruntime.Runtime, error) {
 	if runtimeCfg == nil {
-		return factoryapi.ManagedRuntime{}, fmt.Errorf("runtime config is not available")
+		return managedruntime.Runtime{}, fmt.Errorf("runtime config is not available")
 	}
 	host := s.modelHost()
 	if host == nil {
@@ -136,26 +144,26 @@ func (s *Service) ensureInvocationReady(
 	}
 	snapshot, err := host.InspectReadiness(ctx, runtimeCfg, modelName)
 	if err != nil {
-		return factoryapi.ManagedRuntime{}, err
+		return managedruntime.Runtime{}, err
 	}
 	managed := modelhost.ManagedRuntimeFromSnapshot(snapshot)
-	if invocationErr := apisurface.InvocationErrorFromManagedRuntime(managed); invocationErr != nil {
+	if invocationErr := managedruntime.InvocationErrorForRuntime(managed); invocationErr != nil {
 		return managed, invocationErr
 	}
 	return managed, nil
 }
 
 func directModelInvocationWorkstationRequest(
-	workerDef *interfaces.WorkerConfig,
-	request factoryapi.ModelInvocationRequest,
-	inputTokens []interfaces.Token,
-	resolvedBindings []interfaces.ResolvedModelOperationBinding,
+	workerDef *workerconfig.Config,
+	request modelinference.Request,
+	inputTokens []factorytoken.Token,
+	resolvedBindings []workerexecution.ResolvedModelOperationBinding,
 	factoryRunnerID string,
-) interfaces.WorkstationExecutionRequest {
-	selection := interfaces.ResolveRunnerSelection("", factoryRunnerID, workerDef.ModelProvider)
-	inputContent := contentcontract.PartsFromGenerated(request.Content)
-	return interfaces.WorkstationExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{
+) workerexecution.WorkstationExecutionRequest {
+	selection := workerrunner.ResolveRunnerSelection("", factoryRunnerID, workerDef.ModelProvider)
+	inputContent := request.Content
+	return workerexecution.WorkstationExecutionRequest{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      directModelInvocationTransitionID,
 			TransitionID:    directModelInvocationTransitionID,
 			WorkerType:      workerDef.Name,
@@ -174,12 +182,12 @@ func directModelInvocationWorkstationRequest(
 	}
 }
 
-func directModelInvocationStream(content []interfaces.WorkContentPart, options *factoryapi.ModelInvocationOptions) (string, string, error) {
-	if options == nil || options.ResponseMode == nil || *options.ResponseMode != factoryapi.AUDIOSTREAM {
+func directModelInvocationStream(content []work.WorkContentPart, options *modelinference.Options) (string, string, error) {
+	if options == nil || options.ResponseMode != modelinference.ResponseModeAudioStream {
 		return "", "", nil
 	}
 	for _, part := range content {
-		if part.Type.Normalized() != interfaces.WorkContentPartTypeAudio || strings.TrimSpace(part.File) == "" {
+		if part.Type.Normalized() != work.WorkContentPartTypeAudio || strings.TrimSpace(part.File) == "" {
 			continue
 		}
 		contentType := strings.TrimSpace(part.ContentType)
@@ -188,7 +196,7 @@ func directModelInvocationStream(content []interfaces.WorkContentPart, options *
 		}
 		return part.File, contentType, nil
 	}
-	return "", "", fmt.Errorf("%w: invocation did not produce audio output", apisurface.ErrModelInvocationUnsupportedMode)
+	return "", "", fmt.Errorf("%w: invocation did not produce audio output", modelinference.ErrUnsupportedResponseMode)
 }
 
 func (s *Service) modelInvocationExecutor(
@@ -211,7 +219,7 @@ func (s *Service) factoryRunnerID() string {
 
 func (s *Service) recordManagedRuntimeInvocationReadiness(
 	modelName string,
-	managed factoryapi.ManagedRuntime,
+	managed managedruntime.Runtime,
 	err error,
 ) {
 	logger := s.logger()

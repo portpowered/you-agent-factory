@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestBuildFactoryWorldWorkMoveOperationProjectionSlice_ProjectsWorkKeyedGeneratedContract(t *testing.T) {
@@ -19,7 +20,7 @@ func TestBuildFactoryWorldWorkMoveOperationProjectionSlice_ProjectsWorkKeyedGene
 				ToState:      "review",
 				FromPlaceID:  "task:init",
 				ToPlaceID:    "task:review",
-				Source:       interfaces.WorkStateChangeSourceAPI,
+				Source:       work.WorkStateChangeSourceAPI,
 				RequestID:    "move-request-1",
 				Tick:         2,
 				Sequence:     1,

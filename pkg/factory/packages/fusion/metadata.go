@@ -3,8 +3,8 @@ package fusion
 import (
 	"strings"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	builtinfusion "github.com/portpowered/infinite-you/pkg/factory/packages/definitions/fusion"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // BuiltInFactoryJSON is the canonical runnable @you/fusion definition owned

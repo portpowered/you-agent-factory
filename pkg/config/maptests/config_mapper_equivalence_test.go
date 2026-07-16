@@ -6,10 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/state/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 // TestConfigMapper_BuilderEquivalence verifies that the config mapper produces
@@ -99,7 +101,7 @@ func configSimpleLinear() *interfaces.FactoryConfig {
 		WorkTypes: []interfaces.WorkTypeConfig{
 			{Name: "task", States: threeStates("init", "complete", "failed")},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "transform-worker"},
 		},
 		Workstations: []interfaces.FactoryWorkstationConfig{
@@ -147,7 +149,7 @@ func configRejectionFailure() *interfaces.FactoryConfig {
 		WorkTypes: []interfaces.WorkTypeConfig{
 			{Name: "task", States: fourStates("init", "processing", "complete", "failed")},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "process-worker"},
 		},
 		Workstations: []interfaces.FactoryWorkstationConfig{
@@ -208,7 +210,7 @@ func configRejectionGuardedLoopBreaker() *interfaces.FactoryConfig {
 		WorkTypes: []interfaces.WorkTypeConfig{
 			{Name: "task", States: threeStates("init", "complete", "failed")},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "review-worker"},
 		},
 		Workstations: []interfaces.FactoryWorkstationConfig{
@@ -266,10 +268,10 @@ func configResourceContention() *interfaces.FactoryConfig {
 		WorkTypes: []interfaces.WorkTypeConfig{
 			{Name: "task", States: threeStates("init", "complete", "failed")},
 		},
-		Resources: []interfaces.ResourceConfig{
+		Resources: []factoryresource.Config{
 			{Name: "gpu", Capacity: 2},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "gpu-worker"},
 		},
 		Workstations: []interfaces.FactoryWorkstationConfig{
@@ -278,7 +280,7 @@ func configResourceContention() *interfaces.FactoryConfig {
 				WorkerTypeName: "gpu-worker",
 				Inputs:         []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 				Outputs:        []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}},
-				Resources:      []interfaces.ResourceConfig{{Name: "gpu", Capacity: 1}},
+				Resources:      []factoryresource.Config{{Name: "gpu", Capacity: 1}},
 			},
 		},
 	}
@@ -339,7 +341,7 @@ func configFanoutAllChildrenGuard() *interfaces.FactoryConfig {
 			{Name: "request", States: fourStates("init", "waiting", "complete", "failed")},
 			{Name: "page", States: threeStates("init", "complete", "failed")},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "split-worker"},
 			{Name: "page-worker"},
 			{Name: "collect-worker"},
@@ -432,7 +434,7 @@ func configMultiWorkType() *interfaces.FactoryConfig {
 			{Name: "request", States: fourStates("init", "validated", "complete", "failed")},
 			{Name: "report", States: threeStates("init", "complete", "failed")},
 		},
-		Workers: []interfaces.WorkerConfig{
+		Workers: []workerconfig.Config{
 			{Name: "validation-worker"},
 			{Name: "report-worker"},
 			{Name: "finalize-worker"},

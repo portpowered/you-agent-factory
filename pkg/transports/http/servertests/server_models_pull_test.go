@@ -6,10 +6,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestPullModel_ReturnsManagedRuntimeSourceFetchFailureOutcome(t *testing.T) {
@@ -17,7 +17,7 @@ func TestPullModel_ReturnsManagedRuntimeSourceFetchFailureOutcome(t *testing.T) 
 		PullModelErr: &apisurface.ManagedRuntimePullError{
 			Result: apisurface.ModelPullResult{
 				ModelName:          "OMNIVOICE_Q4_K_M",
-				ProviderLocality:   interfaces.ModelLocalityLocal,
+				ProviderLocality:   workerconfig.ModelLocalityLocal,
 				ManagedPullOutcome: "SOURCE_FETCH_FAILED",
 				ReadinessState:     "FAILED",
 			},
@@ -46,7 +46,7 @@ func TestPullModel_ReturnsManagedRuntimeTimeoutOutcome(t *testing.T) {
 		PullModelErr: &apisurface.ManagedRuntimePullError{
 			Result: apisurface.ModelPullResult{
 				ModelName:          "OMNIVOICE_Q4_K_M",
-				ProviderLocality:   interfaces.ModelLocalityLocal,
+				ProviderLocality:   workerconfig.ModelLocalityLocal,
 				ManagedPullOutcome: "TIMED_OUT",
 				ReadinessState:     "FAILED",
 			},

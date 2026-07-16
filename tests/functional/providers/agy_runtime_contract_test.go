@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/agy"
 )
@@ -54,8 +55,8 @@ func TestAgyRuntimeContractExecutesThroughNativePTYBoundary(t *testing.T) {
 	const prompt = "summarize this; preserve argv boundaries"
 	result, err := adapter.Execute(context.Background(), registry, runner, adapter.ExecuteInput{
 		Provider: providerAdapter.Identity(),
-		Command: adapter.CommandContext{Request: interfaces.ProviderInferenceRequest{
-			Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-functional-agy"},
+		Command: adapter.CommandContext{Request: workerexecution.ProviderInferenceRequest{
+			Dispatch:         work.WorkDispatch{DispatchID: "dispatch-functional-agy"},
 			Model:            "gemini-pro",
 			SessionID:        "session-functional-agy",
 			WorkingDirectory: ".",

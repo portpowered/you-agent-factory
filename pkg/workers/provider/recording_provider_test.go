@@ -11,20 +11,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type recordingProviderFake struct {
-	responses []interfaces.InferenceResponse
+	responses []workerexecution.InferenceResponse
 	errors    []error
-	calls     []interfaces.ProviderInferenceRequest
+	calls     []workerexecution.ProviderInferenceRequest
 }
 
-func (p *recordingProviderFake) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
-	p.calls = append(p.calls, interfaces.CloneProviderInferenceRequest(req))
+func (p *recordingProviderFake) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
+	p.calls = append(p.calls, workerexecution.CloneProviderInferenceRequest(req))
 	idx := len(p.calls) - 1
-	var resp interfaces.InferenceResponse
+	var resp workerexecution.InferenceResponse
 	if idx < len(p.responses) {
 		resp = p.responses[idx]
 	}
@@ -37,7 +41,7 @@ func (p *recordingProviderFake) Infer(_ context.Context, req interfaces.Provider
 
 func TestRecordingProvider_Infer_SuccessEmitsRequestAndResponseEventsInOrder(t *testing.T) {
 	fake := &recordingProviderFake{
-		responses: []interfaces.InferenceResponse{{Content: "provider response"}},
+		responses: []workerexecution.InferenceResponse{{Content: "provider response"}},
 	}
 	events := &recordingEvents{}
 	provider := NewRecordingProvider(fake, events.record, WithRecordingProviderClock(sequenceClock(
@@ -76,15 +80,15 @@ func TestRecordingProvider_Infer_SuccessEmitsRequestAndResponseEventsInOrder(t *
 	if response.DurationMillis != 5 {
 		t.Fatalf("durationMillis = %d, want 5", response.DurationMillis)
 	}
-	assertInferenceEventContext(t, events.items[0].Context)
-	assertInferenceEventContext(t, events.items[1].Context)
+	assertInferenceEventContext(t, events.items[0])
+	assertInferenceEventContext(t, events.items[1])
 }
 
 func TestRecordingProvider_Infer_NormalizesEventTimesToUTC(t *testing.T) {
 	localZone := time.FixedZone("Provider/Local", 3*60*60)
 	events := &recordingEvents{}
 	provider := NewRecordingProvider(
-		&recordingProviderFake{responses: []interfaces.InferenceResponse{{Content: "provider response"}}},
+		&recordingProviderFake{responses: []workerexecution.InferenceResponse{{Content: "provider response"}}},
 		events.record,
 		WithRecordingProviderClock(sequenceClock(
 			time.Date(2026, 4, 18, 15, 0, 0, 0, localZone),
@@ -104,9 +108,9 @@ func TestRecordingProvider_Infer_NormalizesEventTimesToUTC(t *testing.T) {
 }
 
 func TestRecordingProvider_Infer_FailureEmitsFailedResponseWithProviderDetails(t *testing.T) {
-	providerErr := NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timed out", nil)
-	providerErr.Diagnostics = &interfaces.WorkDiagnostics{
-		Command: &interfaces.CommandDiagnostic{ExitCode: 124},
+	providerErr := NewProviderError(workerexecution.WorkFailureTypeTimeout, "provider timed out", nil)
+	providerErr.Diagnostics = &workerexecution.WorkDiagnostics{
+		Command: &workerexecution.CommandDiagnostic{ExitCode: 124},
 	}
 	fake := &recordingProviderFake{errors: []error{providerErr}}
 	events := &recordingEvents{}
@@ -148,7 +152,7 @@ func TestRecordingProvider_Infer_FailureEmitsFailedResponseWithProviderDetails(t
 func TestRecordingProvider_Infer_FailureExitCodeEmissionMatchesDiagnosticPolicy(t *testing.T) {
 	testCases := []struct {
 		name         string
-		diagnostics  *interfaces.WorkDiagnostics
+		diagnostics  *workerexecution.WorkDiagnostics
 		wantExitCode *int
 	}{
 		{
@@ -158,15 +162,15 @@ func TestRecordingProvider_Infer_FailureExitCodeEmissionMatchesDiagnosticPolicy(
 		},
 		{
 			name: "omits zero exit code",
-			diagnostics: &interfaces.WorkDiagnostics{
-				Command: &interfaces.CommandDiagnostic{ExitCode: 0},
+			diagnostics: &workerexecution.WorkDiagnostics{
+				Command: &workerexecution.CommandDiagnostic{ExitCode: 0},
 			},
 			wantExitCode: nil,
 		},
 		{
 			name: "emits nonzero exit code",
-			diagnostics: &interfaces.WorkDiagnostics{
-				Command: &interfaces.CommandDiagnostic{ExitCode: 23},
+			diagnostics: &workerexecution.WorkDiagnostics{
+				Command: &workerexecution.CommandDiagnostic{ExitCode: 23},
 			},
 			wantExitCode: intPtr(23),
 		},
@@ -174,7 +178,7 @@ func TestRecordingProvider_Infer_FailureExitCodeEmissionMatchesDiagnosticPolicy(
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			providerErr := NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timed out", nil)
+			providerErr := NewProviderError(workerexecution.WorkFailureTypeTimeout, "provider timed out", nil)
 			providerErr.Diagnostics = tc.diagnostics
 			fake := &recordingProviderFake{errors: []error{providerErr}}
 			events := &recordingEvents{}
@@ -206,13 +210,13 @@ func TestRecordingProvider_Infer_FailureExitCodeEmissionMatchesDiagnosticPolicy(
 }
 
 func TestRecordingProvider_Infer_SuccessPreservesProviderSessionAndSafeDiagnostics(t *testing.T) {
-	respSession := &interfaces.ProviderSessionMetadata{Provider: "claude", Kind: "session_id", ID: "sess-123"}
+	respSession := &workerexecution.ProviderSessionMetadata{Provider: "claude", Kind: "session_id", ID: "sess-123"}
 	fake := &recordingProviderFake{
-		responses: []interfaces.InferenceResponse{{
+		responses: []workerexecution.InferenceResponse{{
 			Content:         "provider response",
 			ProviderSession: respSession,
-			Diagnostics: &interfaces.WorkDiagnostics{
-				Provider: &interfaces.ProviderDiagnostic{
+			Diagnostics: &workerexecution.WorkDiagnostics{
+				Provider: &workerexecution.ProviderDiagnostic{
 					Provider: "claude",
 					Model:    "claude-sonnet-4",
 					RequestMetadata: map[string]string{
@@ -265,18 +269,18 @@ func TestRecordingProvider_Infer_SuccessPreservesProviderSessionAndSafeDiagnosti
 }
 
 func TestRecordingProvider_Infer_CursorSessionMetadataIsCanonicalizedInEvents(t *testing.T) {
-	respSession := &interfaces.ProviderSessionMetadata{
-		Provider: string(interfaces.ModelProviderCursor),
+	respSession := &workerexecution.ProviderSessionMetadata{
+		Provider: string(modelprovider.Cursor),
 		Kind:     "session_id",
 		ID:       "cursor-session-123",
 	}
 	fake := &recordingProviderFake{
-		responses: []interfaces.InferenceResponse{{
+		responses: []workerexecution.InferenceResponse{{
 			Content:         "provider response",
 			ProviderSession: respSession,
-			Diagnostics: &interfaces.WorkDiagnostics{
-				Provider: &interfaces.ProviderDiagnostic{
-					Provider: string(interfaces.ModelProviderCursor),
+			Diagnostics: &workerexecution.WorkDiagnostics{
+				Provider: &workerexecution.ProviderDiagnostic{
+					Provider: string(modelprovider.Cursor),
 					Model:    "gpt-5",
 				},
 			},
@@ -298,7 +302,7 @@ func TestRecordingProvider_Infer_CursorSessionMetadataIsCanonicalizedInEvents(t 
 	assertInferenceProviderDiagnostics(
 		t,
 		response.Diagnostics,
-		string(interfaces.ModelProviderCursor),
+		string(modelprovider.Cursor),
 		"gpt-5",
 		map[string]string{
 			"worker_type":       "worker-a",
@@ -317,13 +321,13 @@ func TestRecordingProvider_Infer_CursorSessionMetadataIsCanonicalizedInEvents(t 
 
 func TestRecordingProvider_Infer_FailureZeroExitCodeStillPreservesProviderSessionAndSafeDiagnostics(t *testing.T) {
 	providerErr := NewProviderErrorWithSession(
-		interfaces.WorkFailureTypeTimeout,
+		workerexecution.WorkFailureTypeTimeout,
 		"provider timed out",
 		nil,
-		&interfaces.ProviderSessionMetadata{Provider: "claude", Kind: "session_id", ID: "sess-456"},
+		&workerexecution.ProviderSessionMetadata{Provider: "claude", Kind: "session_id", ID: "sess-456"},
 	)
-	providerErr.Diagnostics = &interfaces.WorkDiagnostics{
-		Provider: &interfaces.ProviderDiagnostic{
+	providerErr.Diagnostics = &workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
 			Provider: "claude",
 			Model:    "claude-sonnet-4",
 			ResponseMetadata: map[string]string{
@@ -331,7 +335,7 @@ func TestRecordingProvider_Infer_FailureZeroExitCodeStillPreservesProviderSessio
 				"unsafe": "drop-me",
 			},
 		},
-		Command: &interfaces.CommandDiagnostic{ExitCode: 0},
+		Command: &workerexecution.CommandDiagnostic{ExitCode: 0},
 	}
 	fake := &recordingProviderFake{errors: []error{providerErr}}
 	events := &recordingEvents{}
@@ -371,11 +375,11 @@ func TestRecordingProvider_Infer_MultipleAttemptsIncrementAndKeepUniqueRequestID
 	start := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
 	fake := &recordingProviderFake{
 		errors: []error{
-			NewProviderError(interfaces.WorkFailureTypeInternalServerError, "provider 500", nil),
-			NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timeout", nil),
+			NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "provider 500", nil),
+			NewProviderError(workerexecution.WorkFailureTypeTimeout, "provider timeout", nil),
 			nil,
 		},
-		responses: []interfaces.InferenceResponse{
+		responses: []workerexecution.InferenceResponse{
 			{},
 			{},
 			{Content: "recovered"},
@@ -420,11 +424,11 @@ func TestRecordingProvider_Infer_RetryableFailureKeepsAttemptCounterUntilTermina
 	start := time.Date(2026, 4, 18, 12, 0, 0, 0, time.UTC)
 	fake := &recordingProviderFake{
 		errors: []error{
-			NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timed out", nil),
-			NewProviderError(interfaces.WorkFailureTypePermanentBadRequest, "prompt invalid", nil),
+			NewProviderError(workerexecution.WorkFailureTypeTimeout, "provider timed out", nil),
+			NewProviderError(workerexecution.WorkFailureTypePermanentBadRequest, "prompt invalid", nil),
 			nil,
 		},
-		responses: []interfaces.InferenceResponse{
+		responses: []workerexecution.InferenceResponse{
 			{},
 			{},
 			{Content: "fresh dispatch"},
@@ -484,8 +488,8 @@ func TestRecordingProvider_Infer_MissingInnerProviderEmitsMisconfiguredFailureEv
 	if !ok {
 		t.Fatalf("expected ProviderError, got %T", err)
 	}
-	if providerErr.Type != interfaces.WorkFailureTypeMisconfigured {
-		t.Fatalf("provider error type = %q, want %q", providerErr.Type, interfaces.WorkFailureTypeMisconfigured)
+	if providerErr.Type != workerexecution.WorkFailureTypeMisconfigured {
+		t.Fatalf("provider error type = %q, want %q", providerErr.Type, workerexecution.WorkFailureTypeMisconfigured)
 	}
 	if providerErr.Message != "recording provider requires an inner provider" {
 		t.Fatalf("provider error message = %q", providerErr.Message)
@@ -517,12 +521,12 @@ func TestRecordingProvider_Infer_MissingInnerProviderEmitsMisconfiguredFailureEv
 	}
 }
 
-func recordingProviderDispatch() interfaces.ProviderInferenceRequest {
-	dispatch := interfaces.WorkDispatch{
+func recordingProviderDispatch() workerexecution.ProviderInferenceRequest {
+	dispatch := work.WorkDispatch{
 		DispatchID:   "dispatch-1",
 		TransitionID: "transition-1",
 		WorkerType:   "worker-a",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			DispatchCreatedTick: 7,
 			CurrentTick:         8,
 			RequestID:           "request-1",
@@ -530,7 +534,7 @@ func recordingProviderDispatch() interfaces.ProviderInferenceRequest {
 			WorkIDs:             []string{"work-1", "work-2"},
 		},
 	}
-	return interfaces.ProviderInferenceRequest{
+	return workerexecution.ProviderInferenceRequest{
 		Dispatch:         dispatch,
 		WorkerType:       dispatch.WorkerType,
 		WorkingDirectory: "C:\\repo",
@@ -540,10 +544,10 @@ func recordingProviderDispatch() interfaces.ProviderInferenceRequest {
 }
 
 type recordingEvents struct {
-	items []factoryapi.FactoryEvent
+	items []workerexecution.InferenceEvent
 }
 
-func (r *recordingEvents) record(event factoryapi.FactoryEvent) {
+func (r *recordingEvents) record(event workerexecution.InferenceEvent) {
 	r.items = append(r.items, event)
 }
 
@@ -570,66 +574,64 @@ func sequenceClock(values ...any) func() time.Time {
 	}
 }
 
-func assertInferenceRequestEvent(t *testing.T, event factoryapi.FactoryEvent) factoryapi.InferenceRequestEventPayload {
+func assertInferenceRequestEvent(t *testing.T, event workerexecution.InferenceEvent) factoryapi.InferenceRequestEventPayload {
 	t.Helper()
-	if event.SchemaVersion != factoryapi.AgentFactoryEventV1 {
-		t.Fatalf("schemaVersion = %q, want %q", event.SchemaVersion, factoryapi.AgentFactoryEventV1)
+	if event.Kind != workerexecution.InferenceEventKindRequest || event.Request == nil || event.Response != nil {
+		t.Fatalf("event = %#v, want inference request", event)
 	}
-	if event.Type != factoryapi.FactoryEventTypeInferenceRequest {
-		t.Fatalf("event type = %s, want INFERENCE_REQUEST", event.Type)
-	}
-	payload, err := event.Payload.AsInferenceRequestEventPayload()
+	encoded, err := json.Marshal(event.Request)
 	if err != nil {
+		t.Fatalf("request payload encode: %v", err)
+	}
+	var payload factoryapi.InferenceRequestEventPayload
+	if err := json.Unmarshal(encoded, &payload); err != nil {
 		t.Fatalf("request payload decode: %v", err)
 	}
 	return payload
 }
 
-func assertInferenceResponseEvent(t *testing.T, event factoryapi.FactoryEvent) factoryapi.InferenceResponseEventPayload {
+func assertInferenceResponseEvent(t *testing.T, event workerexecution.InferenceEvent) factoryapi.InferenceResponseEventPayload {
 	t.Helper()
-	if event.SchemaVersion != factoryapi.AgentFactoryEventV1 {
-		t.Fatalf("schemaVersion = %q, want %q", event.SchemaVersion, factoryapi.AgentFactoryEventV1)
+	if event.Kind != workerexecution.InferenceEventKindResponse || event.Response == nil || event.Request != nil {
+		t.Fatalf("event = %#v, want inference response", event)
 	}
-	if event.Type != factoryapi.FactoryEventTypeInferenceResponse {
-		t.Fatalf("event type = %s, want INFERENCE_RESPONSE", event.Type)
-	}
-	payload, err := event.Payload.AsInferenceResponseEventPayload()
+	encoded, err := json.Marshal(event.Response)
 	if err != nil {
+		t.Fatalf("response payload encode: %v", err)
+	}
+	var payload factoryapi.InferenceResponseEventPayload
+	if err := json.Unmarshal(encoded, &payload); err != nil {
 		t.Fatalf("response payload decode: %v", err)
 	}
 	return payload
 }
 
-func assertInferenceEventContext(t *testing.T, context factoryapi.FactoryEventContext) {
+func assertInferenceEventContext(t *testing.T, event workerexecution.InferenceEvent) {
 	t.Helper()
-	if context.Tick != 8 {
-		t.Fatalf("context tick = %d, want 8", context.Tick)
+	if event.Tick != 8 {
+		t.Fatalf("tick = %d, want 8", event.Tick)
 	}
-	if context.DispatchId == nil || *context.DispatchId != "dispatch-1" {
-		t.Fatalf("context dispatchId = %#v, want dispatch-1", context.DispatchId)
+	if event.DispatchID != "dispatch-1" {
+		t.Fatalf("dispatchId = %q, want dispatch-1", event.DispatchID)
 	}
-	if context.RequestId == nil || *context.RequestId != "request-1" {
-		t.Fatalf("context requestId = %#v, want request-1", context.RequestId)
+	if event.RequestID != "request-1" {
+		t.Fatalf("requestId = %q, want request-1", event.RequestID)
 	}
-	if context.TraceIds == nil || len(*context.TraceIds) != 1 || (*context.TraceIds)[0] != "trace-1" {
-		t.Fatalf("context traceIds = %#v, want trace-1", context.TraceIds)
+	if len(event.TraceIDs) != 1 || event.TraceIDs[0] != "trace-1" {
+		t.Fatalf("traceIds = %#v, want trace-1", event.TraceIDs)
 	}
-	if context.WorkIds == nil || len(*context.WorkIds) != 2 || (*context.WorkIds)[0] != "work-1" || (*context.WorkIds)[1] != "work-2" {
-		t.Fatalf("context workIds = %#v, want work-1/work-2", context.WorkIds)
+	if len(event.WorkIDs) != 2 || event.WorkIDs[0] != "work-1" || event.WorkIDs[1] != "work-2" {
+		t.Fatalf("workIds = %#v, want work-1/work-2", event.WorkIDs)
 	}
 }
 
-func assertProviderEventTimeJSON(t *testing.T, event factoryapi.FactoryEvent, want string) {
+func assertProviderEventTimeJSON(t *testing.T, event workerexecution.InferenceEvent, want string) {
 	t.Helper()
-	if event.Context.EventTime.Location() != time.UTC {
-		t.Fatalf("event time location = %v, want UTC", event.Context.EventTime.Location())
+	if event.EventTime.Location() != time.UTC {
+		t.Fatalf("event time location = %v, want UTC", event.EventTime.Location())
 	}
-	data, err := json.Marshal(event)
-	if err != nil {
-		t.Fatalf("marshal event: %v", err)
-	}
-	if !strings.Contains(string(data), `"eventTime":"`+want+`"`) {
-		t.Fatalf("event JSON = %s, want eventTime %q", data, want)
+	if got := event.EventTime.Format(time.RFC3339Nano); got != want {
+		t.Fatalf("event time = %q, want %q", got, want)
 	}
 }
 
@@ -720,7 +722,7 @@ func TestInferenceProgressPublishingCommandRunner_NormalizesCodexStructuredEvent
 		Command:         scriptPath,
 		DispatchID:      "dispatch-codex-json-1",
 		WorkstationName: "review",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			WorkIDs: []string{"work-codex-json-1"},
 		},
 	})
@@ -770,7 +772,7 @@ func TestInferenceProgressPublishingCommandRunner_MapsUnknownAndMalformedCodexEv
 		Command:         scriptPath,
 		DispatchID:      "dispatch-codex-json-2",
 		WorkstationName: "review",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			WorkIDs: []string{"work-codex-json-2"},
 		},
 	})
@@ -825,7 +827,7 @@ func TestInferenceProgressPublishingCommandRunner_MapsFailureCancelAndTruncation
 		Command:         scriptPath,
 		DispatchID:      "dispatch-codex-json-3",
 		WorkstationName: "review",
-		Execution: interfaces.ExecutionMetadata{
+		Execution: work.ExecutionMetadata{
 			WorkIDs: []string{"work-codex-json-3"},
 		},
 	})

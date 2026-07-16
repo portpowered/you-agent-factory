@@ -6,8 +6,9 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestInjectTokensCreatesTokenInInitialPlace(t *testing.T) {
@@ -16,7 +17,7 @@ func TestInjectTokensCreatesTokenInInitialPlace(t *testing.T) {
 	engine := NewFactoryEngine(n, marking, nil)
 
 	engine.mu.Lock()
-	engine.injectTokens([]interfaces.SubmitRequest{{
+	engine.injectTokens([]work.SubmitRequest{{
 		WorkTypeID: "task",
 		TraceID:    "t1",
 		Tags:       map[string]string{"key": "val"},
@@ -31,8 +32,8 @@ func TestInjectTokensCreatesTokenInInitialPlace(t *testing.T) {
 	if tokens[0].Color.Tags["key"] != "val" {
 		t.Error("expected tag 'key'='val'")
 	}
-	if tokens[0].Color.DataType != interfaces.DataTypeWork {
-		t.Errorf("expected DataType %q, got %q", interfaces.DataTypeWork, tokens[0].Color.DataType)
+	if tokens[0].Color.DataType != factorytoken.DataTypeWork {
+		t.Errorf("expected DataType %q, got %q", factorytoken.DataTypeWork, tokens[0].Color.DataType)
 	}
 }
 
@@ -42,7 +43,7 @@ func TestInjectTokensSkipsUnknownWorkType(t *testing.T) {
 	engine := NewFactoryEngine(n, marking, nil)
 
 	engine.mu.Lock()
-	engine.injectTokens([]interfaces.SubmitRequest{{WorkTypeID: "nonexistent"}})
+	engine.injectTokens([]work.SubmitRequest{{WorkTypeID: "nonexistent"}})
 	engine.mu.Unlock()
 
 	if got := len(engine.GetMarking().Tokens); got != 0 {
@@ -59,7 +60,7 @@ func TestSubmit_RejectsWhenSubmissionIngressClosed(t *testing.T) {
 	engine.acceptingSubmits = false
 	engine.mu.Unlock()
 
-	_, err := submitWorkRequests(context.Background(), engine, []interfaces.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-after-stop"}})
+	_, err := submitWorkRequests(context.Background(), engine, []work.SubmitRequest{{WorkTypeID: "task", TraceID: "trace-after-stop"}})
 	if err == nil {
 		t.Fatal("expected submit to fail when submission ingress is closed")
 	}
@@ -74,16 +75,16 @@ func TestSubmit_RejectsWhenSubmissionIngressClosed(t *testing.T) {
 	}
 }
 
-func batchSubmitTestRequest() interfaces.WorkRequest {
-	return interfaces.WorkRequest{
+func batchSubmitTestRequest() work.WorkRequest {
+	return work.WorkRequest{
 		RequestID: "request-batch-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{Name: "plan", WorkID: "work-plan", WorkTypeID: "task", TraceID: "trace-batch"},
 			{Name: "test", WorkID: "work-test", WorkTypeID: "task"},
 		},
-		Relations: []interfaces.WorkRelation{{
-			Type:           interfaces.WorkRelationDependsOn,
+		Relations: []work.WorkRelation{{
+			Type:           work.WorkRelationDependsOn,
 			SourceWorkName: "test",
 			TargetWorkName: "plan",
 			RequiredState:  "complete",
@@ -91,14 +92,14 @@ func batchSubmitTestRequest() interfaces.WorkRequest {
 	}
 }
 
-func assertAcceptedBatchSubmitResult(t *testing.T, result interfaces.WorkRequestSubmitResult) {
+func assertAcceptedBatchSubmitResult(t *testing.T, result work.WorkRequestSubmitResult) {
 	t.Helper()
 	if result.RequestID != "request-batch-1" || result.TraceID != "trace-batch" || !result.Accepted {
 		t.Fatalf("submit result = %#v, want accepted original request metadata", result)
 	}
 }
 
-func assertDuplicateBatchSubmitResult(t *testing.T, repeated, first interfaces.WorkRequestSubmitResult) {
+func assertDuplicateBatchSubmitResult(t *testing.T, repeated, first work.WorkRequestSubmitResult) {
 	t.Helper()
 	if repeated.RequestID != first.RequestID || repeated.TraceID != first.TraceID || repeated.Accepted {
 		t.Fatalf("duplicate submit result = %#v, want original metadata with Accepted=false", repeated)
@@ -108,7 +109,7 @@ func assertDuplicateBatchSubmitResult(t *testing.T, repeated, first interfaces.W
 	}
 }
 
-func assertWorkInputsShareRequestID(t *testing.T, workInputs []interfaces.SubmitRequest, want string) {
+func assertWorkInputsShareRequestID(t *testing.T, workInputs []work.SubmitRequest, want string) {
 	t.Helper()
 	for _, req := range workInputs {
 		if req.RequestID != want {
@@ -120,9 +121,9 @@ func assertWorkInputsShareRequestID(t *testing.T, workInputs []interfaces.Submit
 func TestSubmitWorkRequest_InjectsBatchAtomicallyAndIgnoresDuplicateRequestID(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
-	var workInputs []interfaces.SubmitRequest
+	var workInputs []work.SubmitRequest
 
-	eng := NewFactoryEngine(n, marking, nil, WithWorkInputRecorder(func(_ int, req interfaces.SubmitRequest, _ interfaces.Token) {
+	eng := NewFactoryEngine(n, marking, nil, WithWorkInputRecorder(func(_ int, req work.SubmitRequest, _ factorytoken.Token) {
 		workInputs = append(workInputs, req)
 	}))
 	request := batchSubmitTestRequest()
@@ -156,10 +157,10 @@ func TestSubmitWorkRequest_ValidationFailureQueuesNoPartialWork(t *testing.T) {
 	marking := petri.NewMarking("test-wf")
 	eng := NewFactoryEngine(n, marking, nil)
 
-	_, err := eng.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	_, err := eng.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-invalid",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{Name: "valid", WorkTypeID: "task"},
 			{Name: "invalid", WorkTypeID: "missing-type"},
 		},
@@ -182,7 +183,7 @@ func TestSubmitWorkRequest_WrappedRequestsPreserveRuntimeFields(t *testing.T) {
 	n := buildTestNet()
 	marking := petri.NewMarking("test-wf")
 	eng := NewFactoryEngine(n, marking, nil)
-	request := interfaces.SubmitRequest{
+	request := work.SubmitRequest{
 		RequestID:   "request-unary-1",
 		WorkID:      "work-unary-1",
 		WorkTypeID:  "task",
@@ -190,13 +191,13 @@ func TestSubmitWorkRequest_WrappedRequestsPreserveRuntimeFields(t *testing.T) {
 		TargetState: "complete",
 		ExecutionID: "execution-1",
 		Tags:        map[string]string{"_work_name": "Unary work"},
-		Relations: []interfaces.Relation{{
-			Type:          interfaces.RelationDependsOn,
+		Relations: []work.Relation{{
+			Type:          work.RelationDependsOn,
 			TargetWorkID:  "upstream-1",
 			RequiredState: "complete",
 		}},
 	}
-	if _, err := submitWorkRequests(context.Background(), eng, []interfaces.SubmitRequest{request}); err != nil {
+	if _, err := submitWorkRequests(context.Background(), eng, []work.SubmitRequest{request}); err != nil {
 		t.Fatalf("SubmitWorkRequest: %v", err)
 	}
 	if err := eng.Tick(context.Background()); err != nil {
@@ -216,7 +217,7 @@ func TestSubmitWorkRequest_WrappedRequestsPreserveRuntimeFields(t *testing.T) {
 		t.Fatalf("token relations = %#v, want submitted relation", token.Color.Relations)
 	}
 
-	if _, err := submitWorkRequests(context.Background(), eng, []interfaces.SubmitRequest{request}); err != nil {
+	if _, err := submitWorkRequests(context.Background(), eng, []work.SubmitRequest{request}); err != nil {
 		t.Fatalf("duplicate SubmitWorkRequest: %v", err)
 	}
 	if err := eng.Tick(context.Background()); err != nil {
@@ -233,10 +234,10 @@ func TestSubmitWorkRequest_RejectsUnknownExplicitStateBeforeEnqueue(t *testing.T
 	marking := petri.NewMarking("test-wf")
 	eng := NewFactoryEngine(n, marking, nil)
 
-	_, err := eng.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	_, err := eng.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-invalid-state",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
 			Name:       "draft",
 			WorkTypeID: "task",
 			State:      "queued",
@@ -264,16 +265,16 @@ func TestSubmitWorkRequest_RejectsInvalidParentChildBatchBeforeEnqueue(t *testin
 	marking := petri.NewMarking("test-wf")
 	eng := NewFactoryEngine(n, marking, nil)
 
-	_, err := eng.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	_, err := eng.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-invalid-parent-child",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{Name: "parent", WorkTypeID: "task"},
 			{Name: "child", WorkTypeID: "task"},
 		},
-		Relations: []interfaces.WorkRelation{
-			{Type: interfaces.WorkRelationParentChild, SourceWorkName: "child", TargetWorkName: "parent"},
-			{Type: interfaces.WorkRelationParentChild, SourceWorkName: "child", TargetWorkName: "parent"},
+		Relations: []work.WorkRelation{
+			{Type: work.WorkRelationParentChild, SourceWorkName: "child", TargetWorkName: "parent"},
+			{Type: work.WorkRelationParentChild, SourceWorkName: "child", TargetWorkName: "parent"},
 		},
 	})
 	if err == nil {
@@ -293,7 +294,7 @@ func TestSubmitWorkRequest_RejectsInvalidParentChildBatchBeforeEnqueue(t *testin
 	}
 }
 
-func assertSubmittedTokensAndInputs(t *testing.T, eng *FactoryEngine, workInputs []interfaces.SubmitRequest, want int) {
+func assertSubmittedTokensAndInputs(t *testing.T, eng *FactoryEngine, workInputs []work.SubmitRequest, want int) {
 	t.Helper()
 	snap := eng.GetMarking()
 	if tokens := snap.TokensInPlace("task:init"); len(tokens) != want {
@@ -313,10 +314,10 @@ func TestSubmitWhileAutomaticTicksPaused_AcceptsAndBuffersUntilResume(t *testing
 		return paused
 	}))
 
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-paused-submit-001",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
 			Name:       "paused-submit",
 			WorkTypeID: "task",
 			TraceID:    "trace-paused-submit",
@@ -384,7 +385,7 @@ func TestWakeForPendingProcessing_SignalsBufferedSubmissionAfterPausedWake(t *te
 		return paused
 	}))
 
-	if _, err := submitWorkRequests(context.Background(), engine, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), engine, []work.SubmitRequest{{
 		WorkTypeID: "task",
 		TraceID:    "trace-paused-wake",
 	}}); err != nil {

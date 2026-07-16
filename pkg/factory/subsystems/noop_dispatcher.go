@@ -5,12 +5,15 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // NoOpDispatcherSubsystem is a synchronous dispatcher that auto-accepts all
@@ -23,13 +26,13 @@ import (
 type NoOpDispatcherSubsystem struct {
 	state        *state.Net
 	sched        scheduler.Scheduler
-	resultBuffer *buffers.TypedBuffer[interfaces.WorkResult]
+	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]
 }
 
 // NewNoOpDispatcher creates a NoOpDispatcherSubsystem that auto-accepts all
 // dispatches. Results are written to the provided typed buffer so the engine or
 // test harness can drain them through the normal runtime-state path.
-func NewNoOpDispatcher(n *state.Net, sched scheduler.Scheduler, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult]) *NoOpDispatcherSubsystem {
+func NewNoOpDispatcher(n *state.Net, sched scheduler.Scheduler, resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]) *NoOpDispatcherSubsystem {
 	return &NoOpDispatcherSubsystem{
 		state:        n,
 		sched:        sched,
@@ -81,7 +84,7 @@ func (d *NoOpDispatcherSubsystem) Execute(ctx context.Context, snapshot *interfa
 		mutations = append(mutations, consumeMutations...)
 
 		// Collect input tokens for the result.
-		inputTokens := make([]interfaces.Token, 0, len(decision.ConsumeTokens))
+		inputTokens := make([]factorytoken.Token, 0, len(decision.ConsumeTokens))
 		for _, id := range decision.ConsumeTokens {
 			if tok, ok := snapshot.Marking.Tokens[id]; ok {
 				inputTokens = append(inputTokens, *tok)
@@ -90,12 +93,12 @@ func (d *NoOpDispatcherSubsystem) Execute(ctx context.Context, snapshot *interfa
 
 		// Build the dispatch record pairing the dispatch with its consumed mutations.
 		execution := executionMetadataForDispatch(decision.TransitionID, snapshot.TickCount, inputTokens)
-		dispatch := interfaces.WorkDispatch{
+		dispatch := work.WorkDispatch{
 			DispatchID:               uuid.NewString(),
 			TransitionID:             decision.TransitionID,
 			WorkerType:               decision.WorkerType,
-			CurrentChainingTraceID:   interfaces.CurrentChainingTraceIDFromTokens(inputTokens),
-			PreviousChainingTraceIDs: interfaces.PreviousChainingTraceIDsFromTokens(inputTokens),
+			CurrentChainingTraceID:   factorytoken.CurrentChainingTraceID(inputTokens, interfaces.SystemTimeWorkTypeID),
+			PreviousChainingTraceIDs: factorytoken.PreviousChainingTraceIDs(inputTokens),
 			Execution:                execution,
 			InputTokens:              workers.InputTokens(inputTokens...),
 		}
@@ -105,10 +108,10 @@ func (d *NoOpDispatcherSubsystem) Execute(ctx context.Context, snapshot *interfa
 		})
 
 		// Build the result as if an executor returned ACCEPTED.
-		result := interfaces.WorkResult{
+		result := workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: decision.TransitionID,
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 		}
 
 		if d.resultBuffer != nil {

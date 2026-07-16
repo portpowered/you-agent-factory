@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
+
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestAgentRunID_DefaultsWhenDispatchMissing(t *testing.T) {
@@ -63,9 +64,9 @@ func TestAgentRunSafeDiagnostics_IncludesTranscript(t *testing.T) {
 func TestAgentRunResponseEvent_MapsDispatchAndOutcome(t *testing.T) {
 	t.Parallel()
 
-	dispatch := interfaces.WorkDispatch{DispatchID: "dispatch-42"}
-	result := interfaces.WorkResult{
-		Outcome: interfaces.OutcomeAccepted,
+	dispatch := work.WorkDispatch{DispatchID: "dispatch-42"}
+	result := workerexecution.WorkResult{
+		Outcome: workerexecution.OutcomeAccepted,
 		Output:  "done",
 	}
 	event := agentRunResponseEvent(
@@ -75,14 +76,10 @@ func TestAgentRunResponseEvent_MapsDispatchAndOutcome(t *testing.T) {
 		nil,
 		time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 	)
-	if event.Type != factoryapi.FactoryEventTypeAgentRunResponse {
-		t.Fatalf("event type = %s", event.Type)
+	if event.ID != "factory-event/agent-run-response/dispatch-42" || event.DispatchID != "dispatch-42" {
+		t.Fatalf("event identity = %#v", event)
 	}
-	payload, err := event.Payload.AsAgentRunResponseEventPayload()
-	if err != nil {
-		t.Fatalf("AsAgentRunResponseEventPayload: %v", err)
-	}
-	if payload.DurationMillis != 1500 || payload.AgentRunId != "dispatch-42/agent-run/1" {
-		t.Fatalf("payload = %#v", payload)
+	if event.Payload.DurationMillis != 1500 || event.Payload.AgentRunID != "dispatch-42/agent-run/1" {
+		t.Fatalf("payload = %#v", event.Payload)
 	}
 }

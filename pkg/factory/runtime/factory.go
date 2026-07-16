@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
@@ -22,11 +22,12 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/factory/token_transformer"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
@@ -49,7 +50,7 @@ type factoryImpl struct {
 	cfg          *factory.FactoryConfig
 	topology     *state.Net
 	logger       logging.Logger
-	resultBuffer *buffers.TypedBuffer[interfaces.WorkResult]
+	resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]
 	dispatchHook *workerPoolDispatchResultHook
 	eventHistory *factoryevents.FactoryEventHistory
 	state        interfaces.FactoryState
@@ -66,7 +67,7 @@ type factoryImpl struct {
 
 type appliedOperatorMove struct {
 	workID string
-	result interfaces.OperatorMoveResult
+	result work.OperatorMoveResult
 }
 
 // Compile-time checks.
@@ -93,7 +94,7 @@ func New(opts ...factory.FactoryOption) (factory.Factory, error) {
 	logger := logging.EnsureLogger(cfg.Logger)
 	sharedTransformer, subs := buildRuntimeSubsystems(cfg, sched, logger)
 	marking := buildRuntimeMarking(cfg)
-	resultBuffer := buffers.NewTypedBuffer[interfaces.WorkResult](defaultRuntimeBufferSize)
+	resultBuffer := buffers.NewTypedBuffer[workerexecution.WorkResult](defaultRuntimeBufferSize)
 	eventHistory := ensureEventHistory(cfg)
 	engineOpts := buildRuntimeEngineOptions(cfg, logger, sharedTransformer, resultBuffer, eventHistory)
 	usePool := !cfg.IsInlineDispatch()
@@ -167,7 +168,7 @@ func ensureEventHistory(cfg *factory.FactoryConfig) *factoryevents.FactoryEventH
 		eventHistory = factoryevents.NewFactoryEventHistory(cfg.GetNet(), cfg.Clock.Now, cfg.RuntimeConfig)
 	}
 	eventHistory.RecordRunRequest()
-	eventHistory.AddGeneratedRecorder(cfg.FactoryEventRecorder)
+	eventHistory.AddEventRecorder(cfg.FactoryEventRecorder)
 	eventHistory.RecordInitialStructure()
 	recordSessionStartedFromFactoryConfig(cfg, eventHistory)
 	return eventHistory
@@ -235,7 +236,7 @@ func (f *factoryImpl) recordSessionLifecyclePause() {
 	}
 	f.eventHistory.RecordSessionPaused(factoryevents.SessionLifecycleControlInput{
 		SessionID:        sessionIDFromFactoryConfig(f.cfg),
-		OrchestratorKind: interfaces.GeneratedPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryConfigFromFactoryConfig(f.cfg))),
+		OrchestratorKind: interfaces.StrictPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryConfigFromFactoryConfig(f.cfg))),
 		Source:           "runtime",
 		Tick:             tick,
 	}, f.clock.Now())
@@ -251,25 +252,25 @@ func (f *factoryImpl) recordSessionLifecycleResume() {
 	}
 	f.eventHistory.RecordSessionResumed(factoryevents.SessionLifecycleControlInput{
 		SessionID:        sessionIDFromFactoryConfig(f.cfg),
-		OrchestratorKind: interfaces.GeneratedPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryConfigFromFactoryConfig(f.cfg))),
+		OrchestratorKind: interfaces.StrictPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryConfigFromFactoryConfig(f.cfg))),
 		Source:           "runtime",
 		Tick:             tick,
 	}, f.clock.Now())
 }
 
-func buildRuntimeEngineOptions(cfg *factory.FactoryConfig, logger logging.Logger, sharedTransformer *token_transformer.Transformer, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], eventHistory *factoryevents.FactoryEventHistory) []engine.Option {
+func buildRuntimeEngineOptions(cfg *factory.FactoryConfig, logger logging.Logger, sharedTransformer *token_transformer.Transformer, resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult], eventHistory *factoryevents.FactoryEventHistory) []engine.Option {
 	engineOpts := []engine.Option{
 		engine.WithLogger(logger),
 		engine.WithClock(cfg.Clock),
 		engine.WithTokenTransformer(sharedTransformer),
 		engine.WithResultBuffer(resultBuffer),
-		engine.WithWorkRequestRecorder(func(tick int, record interfaces.WorkRequestRecord) {
+		engine.WithWorkRequestRecorder(func(tick int, record work.WorkRequestRecord) {
 			eventHistory.RecordWorkRequest(tick, record, cfg.Clock.Now())
 		}),
-		engine.WithWorkInputRecorder(func(tick int, req interfaces.SubmitRequest, token interfaces.Token) {
+		engine.WithWorkInputRecorder(func(tick int, req work.SubmitRequest, token factorytoken.Token) {
 			eventHistory.RecordWorkInput(tick, req, token, cfg.Clock.Now())
 		}),
-		engine.WithWorkstationResponseRecorder(func(tick int, result interfaces.WorkResult, completed interfaces.CompletedDispatch) {
+		engine.WithWorkstationResponseRecorder(func(tick int, result workerexecution.WorkResult, completed interfaces.CompletedDispatch) {
 			eventHistory.RecordWorkstationResponse(tick, result, completed)
 		}),
 		engine.WithDispatchRecorder(func(record interfaces.FactoryDispatchRecord) {
@@ -296,7 +297,7 @@ func buildRuntimeEngineOptions(cfg *factory.FactoryConfig, logger logging.Logger
 	return engineOpts
 }
 
-func configureRuntimeDispatch(cfg *factory.FactoryConfig, logger logging.Logger, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], usePool bool, engineOpts []engine.Option) (*workers.WorkerPool, *workerPoolDispatchResultHook, []engine.Option) {
+func configureRuntimeDispatch(cfg *factory.FactoryConfig, logger logging.Logger, resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult], usePool bool, engineOpts []engine.Option) (*workers.WorkerPool, *workerPoolDispatchResultHook, []engine.Option) {
 	if !usePool {
 		return nil, nil, append(engineOpts, engine.WithDispatchHandler(inlineDispatchHandler(cfg, resultBuffer)))
 	}
@@ -316,10 +317,10 @@ func configureRuntimeDispatch(cfg *factory.FactoryConfig, logger logging.Logger,
 	return pool, dispatchHook, append(engineOpts, engine.WithDispatchResultHook(dispatchHook))
 }
 
-func inlineDispatchHandler(cfg *factory.FactoryConfig, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult]) func(interfaces.WorkDispatch) {
+func inlineDispatchHandler(cfg *factory.FactoryConfig, resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult]) func(work.WorkDispatch) {
 	executors := cfg.WorkerExecutors
 	net := cfg.GetNet()
-	return func(d interfaces.WorkDispatch) {
+	return func(d work.WorkDispatch) {
 		tr := net.Transitions[d.TransitionID]
 		workerType := dispatchRunnerKey(tr, d)
 		result := executeDispatchSynchronously(context.Background(), d, workerType, executors)
@@ -327,7 +328,7 @@ func inlineDispatchHandler(cfg *factory.FactoryConfig, resultBuffer *buffers.Typ
 	}
 }
 
-func newFactoryImpl(cfg *factory.FactoryConfig, eng *engine.FactoryEngine, pool *workers.WorkerPool, logger logging.Logger, resultBuffer *buffers.TypedBuffer[interfaces.WorkResult], dispatchHook *workerPoolDispatchResultHook, eventHistory *factoryevents.FactoryEventHistory, usePool bool) *factoryImpl {
+func newFactoryImpl(cfg *factory.FactoryConfig, eng *engine.FactoryEngine, pool *workers.WorkerPool, logger logging.Logger, resultBuffer *buffers.TypedBuffer[workerexecution.WorkResult], dispatchHook *workerPoolDispatchResultHook, eventHistory *factoryevents.FactoryEventHistory, usePool bool) *factoryImpl {
 	return &factoryImpl{
 		engine:               eng,
 		pool:                 pool,
@@ -405,21 +406,21 @@ func (f *factoryImpl) Run(ctx context.Context) error {
 }
 
 // SubmitWorkRequest injects a canonical work request batch idempotently.
-func (f *factoryImpl) SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (f *factoryImpl) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	return f.engine.SubmitWorkRequest(ctx, request)
 }
 
 // MoveWork validates and applies a synchronous operator relocation for one work item.
-func (f *factoryImpl) MoveWork(ctx context.Context, workID string, stateName string, source interfaces.WorkStateChangeSource, requestID string) (interfaces.OperatorMoveResult, error) {
+func (f *factoryImpl) MoveWork(ctx context.Context, workID string, stateName string, source work.WorkStateChangeSource, requestID string) (work.OperatorMoveResult, error) {
 	requestID = strings.TrimSpace(requestID)
 	if requestID != "" {
 		f.mu.RLock()
 		if existing, ok := f.operatorMoveRequests[requestID]; ok {
 			f.mu.RUnlock()
 			if existing.workID != workID {
-				return interfaces.OperatorMoveResult{}, interfaces.ErrMoveWorkRequestAlreadyApplied
+				return work.OperatorMoveResult{}, work.ErrMoveWorkRequestAlreadyApplied
 			}
-			return interfaces.OperatorMoveResult{}, interfaces.ErrMoveWorkRequestAlreadyApplied
+			return work.OperatorMoveResult{}, work.ErrMoveWorkRequestAlreadyApplied
 		}
 		f.mu.RUnlock()
 	}
@@ -447,7 +448,7 @@ func (f *factoryImpl) MoveWork(ctx context.Context, workID string, stateName str
 	return result, nil
 }
 
-func (f *factoryImpl) recordOperatorWorkStateChange(result interfaces.OperatorMoveResult, source interfaces.WorkStateChangeSource, requestID, triggerWorkID, reason string) {
+func (f *factoryImpl) recordOperatorWorkStateChange(result work.OperatorMoveResult, source work.WorkStateChangeSource, requestID, triggerWorkID, reason string) {
 	workTypeName := result.WorkTypeID
 	if workType, ok := f.topology.WorkTypes[result.WorkTypeID]; ok && workType != nil {
 		if name := strings.TrimSpace(workType.Name); name != "" {
@@ -455,7 +456,7 @@ func (f *factoryImpl) recordOperatorWorkStateChange(result interfaces.OperatorMo
 		}
 	}
 	tick := f.engine.GetRuntimeStateSnapshot().TickCount
-	f.eventHistory.RecordWorkStateChange(tick, interfaces.WorkStateChangeRecord{
+	f.eventHistory.RecordWorkStateChange(tick, work.WorkStateChangeRecord{
 		WorkID:        result.WorkID,
 		WorkTypeID:    result.WorkTypeID,
 		WorkTypeName:  workTypeName,
@@ -474,9 +475,6 @@ func (f *factoryImpl) recordOperatorWorkStateChange(result interfaces.OperatorMo
 func (f *factoryImpl) SubscribeFactoryEvents(ctx context.Context, reconnect *interfaces.FactoryEventReconnectCursor, scope interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
 	stream, err := f.eventHistory.Subscribe(ctx, reconnect, scope)
 	if err != nil {
-		if errors.Is(err, factoryevents.ErrReconnectCursorNotFound) {
-			return nil, fmt.Errorf("%w: %v", apisurface.ErrInvalidEventReconnectCursor, err)
-		}
 		return nil, err
 	}
 	return &stream, nil
@@ -498,7 +496,7 @@ func (f *factoryImpl) Pause(_ context.Context) error {
 	f.mu.Unlock()
 	reason := "pause requested"
 	f.recordStateChange(previousState, interfaces.FactoryStatePaused, reason)
-	f.recordSessionLifecycleControl(previousState, interfaces.FactoryStatePaused, factoryapi.FactorySessionLifecycleControlKindPause, reason)
+	f.recordSessionLifecycleControl(previousState, interfaces.FactoryStatePaused, interfaces.FactorySessionLifecycleControlPause, reason)
 	f.recordSessionLifecyclePause()
 	f.logRuntimeLifecycleControl("PAUSE", previousState, interfaces.FactoryStatePaused, "ACCEPTED")
 	return nil
@@ -520,7 +518,7 @@ func (f *factoryImpl) Resume(_ context.Context) error {
 	f.mu.Unlock()
 	reason := "resume requested"
 	f.recordStateChange(previousState, interfaces.FactoryStateRunning, reason)
-	f.recordSessionLifecycleControl(previousState, interfaces.FactoryStateRunning, factoryapi.FactorySessionLifecycleControlKindResume, reason)
+	f.recordSessionLifecycleControl(previousState, interfaces.FactoryStateRunning, interfaces.FactorySessionLifecycleControlResume, reason)
 	f.recordSessionLifecycleResume()
 	f.markResumeDrainPending()
 	f.logRuntimeLifecycleControl("RESUME", previousState, interfaces.FactoryStateRunning, "ACCEPTED")
@@ -559,8 +557,8 @@ func (f *factoryImpl) GetEngineStateSnapshot(_ context.Context) (*interfaces.Eng
 }
 
 // GetFactoryEvents returns the current-process canonical event history.
-func (f *factoryImpl) GetFactoryEvents(_ context.Context) ([]factoryapi.FactoryEvent, error) {
-	return f.eventHistory.Events(), nil
+func (f *factoryImpl) GetFactoryEvents(_ context.Context) ([]interfaces.FactoryEvent, error) {
+	return f.eventHistory.CanonicalEvents(), nil
 }
 
 // WaitToComplete returns a channel that is closed when Run() returns (either
@@ -600,7 +598,7 @@ func (f *factoryImpl) recordStateChange(previous interfaces.FactoryState, next i
 func (f *factoryImpl) recordSessionLifecycleControl(
 	previous interfaces.FactoryState,
 	next interfaces.FactoryState,
-	operation factoryapi.FactorySessionLifecycleControlKind,
+	operation interfaces.FactorySessionLifecycleControlKind,
 	reason string,
 ) {
 	if f.eventHistory == nil || f.cfg == nil {
@@ -611,7 +609,7 @@ func (f *factoryImpl) recordSessionLifecycleControl(
 		tick = f.engine.GetRuntimeStateSnapshot().TickCount
 	}
 	factoryCfg := factoryConfigFromFactoryConfig(f.cfg)
-	orchestratorKind := interfaces.GeneratedPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryCfg))
+	orchestratorKind := interfaces.StrictPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryCfg))
 	var orchestratorDialect string
 	if factoryCfg != nil && factoryCfg.Orchestrator != nil && factoryCfg.Orchestrator.JavaScript != nil {
 		orchestratorDialect = factoryCfg.Orchestrator.JavaScript.Dialect
@@ -623,7 +621,7 @@ func (f *factoryImpl) recordSessionLifecycleControl(
 		Source:              "runtime",
 		Tick:                tick,
 		Operation:           operation,
-		Outcome:             factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
+		Outcome:             interfaces.FactorySessionLifecycleControlOutcomeAccepted,
 		PreviousStatus:      factoryevents.FactoryStateToDurableLifecycleStatus(previous),
 		NewStatus:           factoryevents.FactoryStateToDurableLifecycleStatus(next),
 		Reason:              reason,
@@ -693,7 +691,7 @@ func (f *factoryImpl) currentWorldState(tick int) *interfaces.FactoryWorldState 
 	if f.eventHistory == nil {
 		return nil
 	}
-	state, err := projections.ReconstructFactoryWorldState(f.eventHistory.Events(), tick)
+	state, err := projections.ReconstructCanonicalFactoryWorldState(f.eventHistory.CanonicalEvents(), tick)
 	if err != nil {
 		f.logger.Warn("factory world-state reconstruction failed; falling back to runtime snapshot", "error", err)
 		return nil
@@ -753,7 +751,7 @@ func hasNonTerminalWork(marking petri.MarkingSnapshot, topology *state.Net) bool
 	}
 
 	for _, token := range marking.Tokens {
-		if token == nil || token.Color.DataType == interfaces.DataTypeResource || token.Color.WorkTypeID == "" {
+		if token == nil || token.Color.DataType == factorytoken.DataTypeResource || token.Color.WorkTypeID == "" {
 			continue
 		}
 

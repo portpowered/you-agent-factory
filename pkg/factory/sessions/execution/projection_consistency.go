@@ -7,8 +7,9 @@ import (
 	"strings"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recording"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // RecordingError correlates a safe export failure without changing the live session.
@@ -947,12 +948,12 @@ func summaryTextFromWorkContent(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""
 	}
-	var parts []interfaces.WorkContentPart
+	var parts []work.WorkContentPart
 	if err := json.Unmarshal(raw, &parts); err != nil {
 		return ""
 	}
 	for _, part := range parts {
-		if part.Type.Normalized() == interfaces.WorkContentPartTypeText {
+		if part.Type.Normalized() == work.WorkContentPartTypeText {
 			if text := strings.TrimSpace(part.Text); text != "" {
 				return text
 			}

@@ -7,10 +7,13 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchCreatesGeneratedWork(t *testing.T) {
@@ -37,7 +40,7 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchPreservesCanonicalCha
 
 	result := executeWorkerBatchTransition(t, transitioner, snapshot)
 	batch := result.GeneratedBatches[0]
-	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, work.WorkRequestNormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true, "child": true},
 	})
 	if err != nil {
@@ -77,7 +80,7 @@ func executeWorkerBatchTransition(
 	return result
 }
 
-func assertGeneratedWorkerBatchMetadata(t *testing.T, result *interfaces.TickResult) (interfaces.GeneratedSubmissionBatch, string) {
+func assertGeneratedWorkerBatchMetadata(t *testing.T, result *interfaces.TickResult) (work.GeneratedSubmissionBatch, string) {
 	t.Helper()
 
 	if len(result.Mutations) != 0 {
@@ -97,10 +100,10 @@ func assertGeneratedWorkerBatchMetadata(t *testing.T, result *interfaces.TickRes
 	return batch, requestID
 }
 
-func normalizeGeneratedWorkerBatch(t *testing.T, batch interfaces.GeneratedSubmissionBatch) []interfaces.SubmitRequest {
+func normalizeGeneratedWorkerBatch(t *testing.T, batch work.GeneratedSubmissionBatch) []work.SubmitRequest {
 	t.Helper()
 
-	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, work.WorkRequestNormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true, "child": true},
 	})
 	if err != nil {
@@ -113,8 +116,8 @@ func assertGeneratedWorkerBatchSubmissions(
 	t *testing.T,
 	requestID string,
 	source string,
-	normalized []interfaces.SubmitRequest,
-) interfaces.SubmitRequest {
+	normalized []work.SubmitRequest,
+) work.SubmitRequest {
 	t.Helper()
 
 	record := requests.WorkRequestRecordFromSubmitRequests(requestID, source, normalized)
@@ -167,8 +170,8 @@ func assertRepeatedGeneratedWorkerBatchRequestID(
 func assertGeneratedWorkerBatchOutcome(
 	t *testing.T,
 	result *interfaces.TickResult,
-	first interfaces.SubmitRequest,
-	second interfaces.SubmitRequest,
+	first work.SubmitRequest,
+	second work.SubmitRequest,
 ) {
 	t.Helper()
 
@@ -184,7 +187,7 @@ func assertGeneratedWorkerBatchOutcome(
 	if len(second.Relations) != 1 || second.Relations[0].TargetWorkID != first.WorkID {
 		t.Fatalf("generated dependency relation = %#v, want target %q", second.Relations, first.WorkID)
 	}
-	if result.CompletedDispatches[0].Outcome != interfaces.OutcomeAccepted {
+	if result.CompletedDispatches[0].Outcome != workerexecution.OutcomeAccepted {
 		t.Fatalf("completed outcome = %s, want ACCEPTED", result.CompletedDispatches[0].Outcome)
 	}
 }
@@ -207,15 +210,15 @@ func TestTransitioner_WorkerEmittedFactoryRequestBatchReleasesConsumedResources(
 	transitioner := NewTransitioner(net, nil, WithTransitionerClock(func() time.Time { return now }))
 	output := `{"request":{"type":"FACTORY_REQUEST_BATCH","works":[{"name":"follow-up","workTypeName":"child"}]}}`
 	snapshot := workerBatchSnapshot(output)
-	snapshot.Dispatches["dispatch-1"].ConsumedTokens = append(snapshot.Dispatches["dispatch-1"].ConsumedTokens, interfaces.Token{
+	snapshot.Dispatches["dispatch-1"].ConsumedTokens = append(snapshot.Dispatches["dispatch-1"].ConsumedTokens, factorytoken.Token{
 		ID:        "agent-slot:resource:0",
 		PlaceID:   "agent-slot:available",
 		CreatedAt: now.Add(-time.Hour),
 		EnteredAt: now.Add(-time.Hour),
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "agent-slot:0",
 			WorkTypeID: "agent-slot",
-			DataType:   interfaces.DataTypeResource,
+			DataType:   factorytoken.DataTypeResource,
 		},
 	})
 
@@ -228,21 +231,21 @@ func TestTransitioner_WorkerEmittedFactoryRequestBatchReleasesConsumedResources(
 	}
 
 	var generatedWork int
-	var releasedResource *interfaces.Token
+	var releasedResource *factorytoken.Token
 	for i := range result.Mutations {
 		mutation := result.Mutations[i]
 		if mutation.NewToken == nil {
 			continue
 		}
 		switch mutation.NewToken.Color.DataType {
-		case interfaces.DataTypeWork:
+		case factorytoken.DataTypeWork:
 			if mutation.ToPlace == "child:init" {
 				generatedWork++
 			}
 			if mutation.ToPlace == "task:complete" {
 				t.Fatalf("worker-emitted batch should replace normal accepted work output, got mutation %#v", mutation)
 			}
-		case interfaces.DataTypeResource:
+		case factorytoken.DataTypeResource:
 			if mutation.ToPlace == "agent-slot:available" {
 				releasedResource = mutation.NewToken
 			}
@@ -284,26 +287,26 @@ func TestTransitioner_AcceptedTransitionReleasesAllConsumedResourceUnitsForCardi
 	transitioner := NewTransitioner(net, nil, WithTransitionerClock(func() time.Time { return now }))
 	snapshot := workerBatchSnapshot("accepted")
 	snapshot.Dispatches["dispatch-1"].ConsumedTokens = append(snapshot.Dispatches["dispatch-1"].ConsumedTokens,
-		interfaces.Token{
+		factorytoken.Token{
 			ID:        "agent-slot:resource:0",
 			PlaceID:   "agent-slot:available",
 			CreatedAt: now.Add(-time.Hour),
 			EnteredAt: now.Add(-time.Hour),
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "agent-slot:0",
 				WorkTypeID: "agent-slot",
-				DataType:   interfaces.DataTypeResource,
+				DataType:   factorytoken.DataTypeResource,
 			},
 		},
-		interfaces.Token{
+		factorytoken.Token{
 			ID:        "agent-slot:resource:1",
 			PlaceID:   "agent-slot:available",
 			CreatedAt: now.Add(-time.Hour),
 			EnteredAt: now.Add(-time.Hour),
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "agent-slot:1",
 				WorkTypeID: "agent-slot",
-				DataType:   interfaces.DataTypeResource,
+				DataType:   factorytoken.DataTypeResource,
 			},
 		},
 	)
@@ -319,7 +322,7 @@ func TestTransitioner_AcceptedTransitionReleasesAllConsumedResourceUnitsForCardi
 	releasedIDs := make([]string, 0, 2)
 	for i := range result.Mutations {
 		mutation := result.Mutations[i]
-		if mutation.NewToken == nil || mutation.NewToken.Color.DataType != interfaces.DataTypeResource {
+		if mutation.NewToken == nil || mutation.NewToken.Color.DataType != factorytoken.DataTypeResource {
 			continue
 		}
 		if mutation.ToPlace != "agent-slot:available" {
@@ -359,7 +362,7 @@ func TestTransitioner_RawWorkerEmittedFactoryRequestBatchRoutesAsAcceptedOutput(
 	if string(token.Color.Payload) != output {
 		t.Fatalf("accepted output payload = %q, want raw JSON", token.Color.Payload)
 	}
-	if result.CompletedDispatches[0].Outcome != interfaces.OutcomeAccepted {
+	if result.CompletedDispatches[0].Outcome != workerexecution.OutcomeAccepted {
 		t.Fatalf("completed outcome = %s, want ACCEPTED", result.CompletedDispatches[0].Outcome)
 	}
 }
@@ -391,7 +394,7 @@ func TestTransitioner_WorkerEmittedGeneratedSubmissionBatchUsesBatchMetadataSour
 	if len(batch.Metadata.ParentLineage) != 2 {
 		t.Fatalf("parent lineage = %#v, want metadata preserved", batch.Metadata.ParentLineage)
 	}
-	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, interfaces.WorkRequestNormalizeOptions{
+	normalized, err := requests.NormalizeGeneratedSubmissionBatch(batch, work.WorkRequestNormalizeOptions{
 		ValidWorkTypes: map[string]bool{"task": true, "child": true},
 	})
 	if err != nil {
@@ -425,7 +428,7 @@ func TestTransitioner_MalformedWorkerEmittedFactoryRequestBatchFailsDispatch(t *
 		t.Fatalf("completed dispatches = %#v, want 1", result)
 	}
 	completed := result.CompletedDispatches[0]
-	if completed.Outcome != interfaces.OutcomeFailed {
+	if completed.Outcome != workerexecution.OutcomeFailed {
 		t.Fatalf("completed outcome = %s, want FAILED", completed.Outcome)
 	}
 	if !strings.Contains(completed.Reason, "worker-emitted work request batch") {

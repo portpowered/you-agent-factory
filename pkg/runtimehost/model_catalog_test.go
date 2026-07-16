@@ -10,16 +10,21 @@ import (
 
 	"github.com/jonboulle/clockwork"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responsestream"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	modelcatalogmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/modelcatalog"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -248,16 +253,16 @@ func TestCoreModelServiceAttachmentIsVisibleToSnapshotsAndHostFacade(t *testing.
 func TestRuntimeHostModelServicePreservesCatalogPullObservabilityAndErrors(t *testing.T) {
 	runtimeCfg := runtimeHostModelConfig(t)
 	modelHost := &runtimeHostModelHost{readiness: modelhost.ReadinessSnapshot{
-		Identity:       modelhost.Identity{Name: "voice-model", Locality: factoryapi.WorkerModelLocalityLocal},
-		ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-		LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADED,
+		Identity:       modelhost.Identity{Name: "voice-model", Locality: managedruntime.LocalityLocal},
+		ReadinessState: managedruntime.ReadinessStateReady,
+		LifecycleState: managedruntime.LifecycleStateLoaded,
 	}, pull: modelhost.PullSnapshot{
 		ReadinessSnapshot: modelhost.ReadinessSnapshot{
-			Identity:       modelhost.Identity{Name: "voice-model", Locality: factoryapi.WorkerModelLocalityLocal},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADED,
+			Identity:       modelhost.Identity{Name: "voice-model", Locality: managedruntime.LocalityLocal},
+			ReadinessState: managedruntime.ReadinessStateReady,
+			LifecycleState: managedruntime.LifecycleStateLoaded,
 		},
-		PullOutcome:   factoryapi.ManagedRuntimePullOutcomeALREADYREADY,
+		PullOutcome:   managedruntime.PullOutcomeAlreadyReady,
 		LegacyOutcome: "ALREADY_PRESENT",
 		CachePath:     "/tmp/model",
 		Revision:      "rev-1",
@@ -326,9 +331,9 @@ func TestRuntimeHostModelServicePreservesFactoryRunnerIdentityForInvocation(t *t
 	}
 	cfg.WorkerApplication = components
 	host := runtimeHostModelFacade(t, runtimeCfg, &runtimeHostModelHost{readiness: modelhost.ReadinessSnapshot{
-		Identity:       modelhost.Identity{Name: "voice-model", Locality: factoryapi.WorkerModelLocalityLocal},
-		ReadinessState: factoryapi.ManagedRuntimeReadinessStateREADY,
-		LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADED,
+		Identity:       modelhost.Identity{Name: "voice-model", Locality: managedruntime.LocalityLocal},
+		ReadinessState: managedruntime.ReadinessStateReady,
+		LifecycleState: managedruntime.LifecycleStateLoaded,
 	}}, &runtimeHostModelPuller{}, cfg)
 
 	result, err := host.InvokeModel(context.Background(), "voice-model", factoryapi.ModelInvocationRequest{Operation: "TTS"})
@@ -347,10 +352,10 @@ func runtimeHostModelConfig(t *testing.T) *factoryconfig.LoadedFactoryConfig {
 	t.Helper()
 	cfg, err := factoryconfig.NewLoadedFactoryConfig(t.TempDir(), &interfaces.FactoryConfig{
 		Name: "runtime-host-models",
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name: "voice-worker", Type: interfaces.WorkerTypeModel, Model: "voice-model",
-			ModelLocality: interfaces.ModelLocalityLocal,
-			Operations:    []interfaces.ModelOperation{{Name: "TTS"}},
+			ModelLocality: workerconfig.ModelLocalityLocal,
+			Operations:    []workerconfig.ModelOperation{{Name: "TTS"}},
 		}},
 	}, nil)
 	if err != nil {
@@ -376,7 +381,7 @@ func runtimeHostModelFacade(t *testing.T, runtimeCfg *factoryconfig.LoadedFactor
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
 	}
-	facade.modelService = modelAPI
+	facade.modelService = modelcatalogmapping.NewAdapter(modelAPI)
 	return facade
 }
 
@@ -399,10 +404,10 @@ type runtimeHostModelPuller struct {
 func (p *runtimeHostModelPuller) PullModel(context.Context, *factoryconfig.LoadedFactoryConfig, string) (apisurface.ModelPullResult, error) {
 	return p.result, p.err
 }
-func (p *runtimeHostModelPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) error {
+func (p *runtimeHostModelPuller) EnsureModelAvailable(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) error {
 	return nil
 }
-func (p *runtimeHostModelPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
+func (p *runtimeHostModelPuller) ResolveModelCache(context.Context, *factoryconfig.LoadedFactoryConfig, *workerconfig.Config) (localmodels.CacheLayout, error) {
 	return localmodels.CacheLayout{}, nil
 }
 func (p *runtimeHostModelPuller) InspectRuntimeCache(context.Context, *factoryconfig.LoadedFactoryConfig, string) (localmodels.RuntimeCacheInspection, error) {
@@ -455,14 +460,14 @@ func (r *runtimeHostPullMetricsRecorder) names() []string {
 
 type runtimeHostInvocationProvider struct {
 	mu       sync.Mutex
-	requests []interfaces.ProviderInferenceRequest
+	requests []workerexecution.ProviderInferenceRequest
 }
 
-func (p *runtimeHostInvocationProvider) Infer(_ context.Context, request interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *runtimeHostInvocationProvider) Infer(_ context.Context, request workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.requests = append(p.requests, request)
-	return interfaces.InferenceResponse{Content: "spoken response"}, nil
+	return workerexecution.InferenceResponse{Content: "spoken response"}, nil
 }
 func (p *runtimeHostInvocationProvider) runnerIDs() []string {
 	p.mu.Lock()
@@ -521,7 +526,7 @@ func TestHostInvokeModelForwardsContextRequestResultAndErrorUnchanged(t *testing
 	ctx := context.WithValue(context.Background(), contextKey("request"), "invoke-request")
 	invokeErr := &apisurface.ManagedRuntimeInvocationError{
 		Identity:       "invoke-model",
-		ReadinessState: factoryapi.ManagedRuntimeReadinessStateMISSING,
+		ReadinessState: managedruntime.ReadinessStateMissing,
 		Cause:          apisurface.ErrManagedRuntimeMissing,
 	}
 	request := factoryapi.ModelInvocationRequest{Operation: "TTS"}
@@ -606,10 +611,10 @@ func (s *catalogModelServiceStub) InvokeModel(ctx context.Context, modelName str
 
 type compatibilitySessionGateway struct {
 	SessionGateway
-	getFactorySession func(context.Context, string) (factoryapi.FactorySession, error)
+	getFactorySession func(context.Context, string) (factorysessions.ProjectionContext, error)
 }
 
-func (f compatibilitySessionGateway) GetFactorySession(ctx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+func (f compatibilitySessionGateway) GetFactorySession(ctx context.Context, sessionID string) (factorysessions.ProjectionContext, error) {
 	return f.getFactorySession(ctx, sessionID)
 }
 
@@ -631,10 +636,10 @@ func (f compatibilityFactorySave) Save(ctx context.Context, sessionID string, mo
 }
 
 type compatibilityInvocationAPI struct {
-	invoke func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error)
+	invoke func(context.Context, string, sessioninvocation.InvocationRequest) (apisurface.FactoryInvocationResult, error)
 }
 
-func (f compatibilityInvocationAPI) InvokeFactorySession(ctx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+func (f compatibilityInvocationAPI) InvokeFactorySession(ctx context.Context, sessionID string, request sessioninvocation.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 	return f.invoke(ctx, sessionID, request)
 }
 
@@ -661,12 +666,12 @@ func TestHostCompatibilityFacadeForwardsToCanonicalCollaborators(t *testing.T) {
 	calls := map[string]int{}
 
 	host := &Host{}
-	host.sessionGateway = compatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+	host.sessionGateway = compatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factorysessions.ProjectionContext, error) {
 		calls["session"]++
 		if gotCtx != ctx || sessionID != "missing-session" {
 			t.Fatalf("session args = (%v, %q)", gotCtx, sessionID)
 		}
-		return factoryapi.FactorySession{}, sentinel
+		return factorysessions.ProjectionContext{}, sentinel
 	}}
 	host.modelService = compatibilityModelAPI{getModel: func(gotCtx context.Context, modelName string) (factoryapi.ModelDetail, error) {
 		calls["model"]++
@@ -682,7 +687,7 @@ func TestHostCompatibilityFacadeForwardsToCanonicalCollaborators(t *testing.T) {
 		}
 		return factoryapi.Factory{}, sentinel
 	}}
-	host.sessionInvoker = compatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+	host.sessionInvoker = compatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request sessioninvocation.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 		calls["invocation"]++
 		if gotCtx != ctx || sessionID != "session-1" {
 			t.Fatalf("invocation args = (%v, %q, %#v)", gotCtx, sessionID, request)
@@ -717,7 +722,7 @@ func TestHostCompatibilityFacadePreservesTypedOutcomes(t *testing.T) {
 	validation := &apisurface.RequestValidationError{Message: "invalid factory definition"}
 	wantInvocation := apisurface.FactoryInvocationResult{
 		RequestID: "request-typed", TraceID: "trace-typed",
-		Status: factoryapi.InvocationTerminalStatusCompleted,
+		Status: "COMPLETED",
 	}
 	wantLifecycle := factoryapi.FactorySessionLifecycleControlResponse{
 		SessionId: "durable-1", Operation: factoryapi.FactorySessionLifecycleControlKindPause,
@@ -726,17 +731,17 @@ func TestHostCompatibilityFacadePreservesTypedOutcomes(t *testing.T) {
 	calls := map[string]int{}
 
 	host := &Host{
-		sessionGateway: compatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factoryapi.FactorySession, error) {
+		sessionGateway: compatibilitySessionGateway{getFactorySession: func(gotCtx context.Context, sessionID string) (factorysessions.ProjectionContext, error) {
 			calls["not-found"]++
 			requireHostCompatibility(t, gotCtx == ctx && sessionID == "missing", "session args = (%v, %q)", gotCtx, sessionID)
-			return factoryapi.FactorySession{}, errors.Join(apisurface.ErrFactorySessionNotFound, notFound)
+			return factorysessions.ProjectionContext{}, errors.Join(apisurface.ErrFactorySessionNotFound, notFound)
 		}},
 		factorySave: compatibilityFactorySave{save: func(gotCtx context.Context, sessionID string, mode factoryapi.FactorySaveMode, request factoryapi.Factory) (factoryapi.Factory, error) {
 			calls["validation"]++
 			requireHostCompatibility(t, gotCtx == ctx && sessionID == "session-1" && mode == factoryapi.FactorySaveModeReplaceCurrent, "factory-definition args = (%v, %q, %q)", gotCtx, sessionID, mode)
 			return factoryapi.Factory{}, validation
 		}},
-		sessionInvoker: compatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
+		sessionInvoker: compatibilityInvocationAPI{invoke: func(gotCtx context.Context, sessionID string, request sessioninvocation.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 			calls["invocation"]++
 			requireHostCompatibility(t, gotCtx == ctx && sessionID == "session-1", "invocation args = (%v, %q)", gotCtx, sessionID)
 			return wantInvocation, nil

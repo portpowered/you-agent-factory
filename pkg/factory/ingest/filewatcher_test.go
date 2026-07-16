@@ -12,42 +12,31 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"go.uber.org/zap"
 )
 
 // mockFactory records SubmitWorkRequest calls for test assertions.
 type mockFactory struct {
 	mu           sync.Mutex
-	submitted    []interfaces.SubmitRequest
-	workRequests []interfaces.WorkRequest
+	submitted    []work.SubmitRequest
+	workRequests []work.WorkRequest
 }
 
-func TestFileWatcherWatchReturnsCanceledContextDeterministically(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	fw := NewFileWatcher(t.TempDir(), &mockFactory{}, zap.NewNop())
-	if err := fw.Watch(ctx); !errors.Is(err, context.Canceled) {
-		t.Fatalf("Watch(canceled context) error = %v, want context.Canceled", err)
-	}
-}
-
-func (m *mockFactory) SubmitWorkRequest(_ context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
-	normalized, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
+func (m *mockFactory) SubmitWorkRequest(_ context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	normalized, err := requests.NormalizeWorkRequest(request, work.WorkRequestNormalizeOptions{})
 	if err != nil {
-		return interfaces.WorkRequestSubmitResult{}, err
+		return work.WorkRequestSubmitResult{}, err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.workRequests = append(m.workRequests, cloneWorkRequest(request))
 	m.submitted = append(m.submitted, normalized...)
-	result := interfaces.WorkRequestSubmitResult{RequestID: request.RequestID, Accepted: true}
+	result := work.WorkRequestSubmitResult{RequestID: request.RequestID, Accepted: true}
 	if len(normalized) > 0 {
 		result.TraceID = normalized[0].TraceID
 	}
@@ -56,45 +45,45 @@ func (m *mockFactory) SubmitWorkRequest(_ context.Context, request interfaces.Wo
 
 func (m *mockFactory) Run(_ context.Context) error { return nil }
 func (m *mockFactory) SubscribeFactoryEvents(_ context.Context, _ *interfaces.FactoryEventReconnectCursor, _ interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
-	return &interfaces.FactoryEventStream{Events: make(chan factoryapi.FactoryEvent)}, nil
+	return &interfaces.FactoryEventStream{Events: make(chan interfaces.FactoryEvent)}, nil
 }
 func (m *mockFactory) Pause(_ context.Context) error  { return nil }
 func (m *mockFactory) Resume(_ context.Context) error { return nil }
-func (m *mockFactory) MoveWork(_ context.Context, _ string, _ string, _ interfaces.WorkStateChangeSource, _ string) (interfaces.OperatorMoveResult, error) {
-	return interfaces.OperatorMoveResult{}, errors.New("MoveWork is not implemented in ingest mockFactory")
+func (m *mockFactory) MoveWork(_ context.Context, _ string, _ string, _ work.WorkStateChangeSource, _ string) (work.OperatorMoveResult, error) {
+	return work.OperatorMoveResult{}, errors.New("MoveWork is not implemented in ingest mockFactory")
 }
 
 func (m *mockFactory) GetEngineStateSnapshot(_ context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
 	return &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{}, nil
 }
-func (m *mockFactory) GetFactoryEvents(_ context.Context) ([]factoryapi.FactoryEvent, error) {
+func (m *mockFactory) GetFactoryEvents(_ context.Context) ([]interfaces.FactoryEvent, error) {
 	return nil, nil
 }
 func (m *mockFactory) WaitToComplete() <-chan struct{} {
 	return make(chan struct{})
 }
 
-func (m *mockFactory) getSubmitted() []interfaces.SubmitRequest {
+func (m *mockFactory) getSubmitted() []work.SubmitRequest {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make([]interfaces.SubmitRequest, len(m.submitted))
+	out := make([]work.SubmitRequest, len(m.submitted))
 	copy(out, m.submitted)
 	return out
 }
 
-func (m *mockFactory) getWorkRequests() []interfaces.WorkRequest {
+func (m *mockFactory) getWorkRequests() []work.WorkRequest {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	out := make([]interfaces.WorkRequest, len(m.workRequests))
+	out := make([]work.WorkRequest, len(m.workRequests))
 	for i := range m.workRequests {
 		out[i] = cloneWorkRequest(m.workRequests[i])
 	}
 	return out
 }
 
-func cloneWorkRequest(request interfaces.WorkRequest) interfaces.WorkRequest {
+func cloneWorkRequest(request work.WorkRequest) work.WorkRequest {
 	out := request
-	out.Works = make([]interfaces.Work, len(request.Works))
+	out.Works = make([]work.Work, len(request.Works))
 	for i := range request.Works {
 		out.Works[i] = request.Works[i]
 		if payload, ok := request.Works[i].Payload.([]byte); ok {
@@ -107,7 +96,7 @@ func cloneWorkRequest(request interfaces.WorkRequest) interfaces.WorkRequest {
 			}
 		}
 	}
-	out.Relations = append([]interfaces.WorkRelation(nil), request.Relations...)
+	out.Relations = append([]work.WorkRelation(nil), request.Relations...)
 	return out
 }
 
@@ -135,7 +124,7 @@ func setupMultiChannelDir(t *testing.T) string {
 	return dir
 }
 
-func waitForSubmission(t *testing.T, mf *mockFactory, count int) []interfaces.SubmitRequest {
+func waitForSubmission(t *testing.T, mf *mockFactory, count int) []work.SubmitRequest {
 	t.Helper()
 	deadline := time.After(5 * time.Second)
 	for {
@@ -187,7 +176,7 @@ func TestFileWatcher_MDFile(t *testing.T) {
 	if len(requests) != 1 {
 		t.Fatalf("expected 1 work request, got %d", len(requests))
 	}
-	if requests[0].Type != interfaces.WorkRequestTypeFactoryRequestBatch {
+	if requests[0].Type != work.WorkRequestTypeFactoryRequestBatch {
 		t.Fatalf("request type = %q, want FACTORY_REQUEST_BATCH", requests[0].Type)
 	}
 	if len(requests[0].Works) != 1 {
@@ -230,7 +219,7 @@ func TestFileWatcher_JSONNonBatchWrapsRawPayload(t *testing.T) {
 	if len(requests) != 1 {
 		t.Fatalf("expected 1 work request, got %d", len(requests))
 	}
-	if requests[0].Type != interfaces.WorkRequestTypeFactoryRequestBatch {
+	if requests[0].Type != work.WorkRequestTypeFactoryRequestBatch {
 		t.Fatalf("request type = %q, want FACTORY_REQUEST_BATCH", requests[0].Type)
 	}
 	if got := requests[0].Works[0].WorkTypeID; got != "request" {
@@ -286,10 +275,10 @@ func TestFileWatcher_JSONFallbackPayload(t *testing.T) {
 
 func TestFileWatcher_JSONFactoryRequestBatch(t *testing.T) {
 	dir := setupWatchDir(t)
-	batch := interfaces.WorkRequest{
+	batch := work.WorkRequest{
 		RequestID: "request-batch-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{
 				Name:    "first",
 				TraceID: "trace-batch",
@@ -300,9 +289,9 @@ func TestFileWatcher_JSONFactoryRequestBatch(t *testing.T) {
 				Payload: map[string]string{"step": "second"},
 			},
 		},
-		Relations: []interfaces.WorkRelation{
+		Relations: []work.WorkRelation{
 			{
-				Type:           interfaces.WorkRelationDependsOn,
+				Type:           work.WorkRelationDependsOn,
 				SourceWorkName: "second",
 				TargetWorkName: "first",
 				RequiredState:  "complete",
@@ -328,7 +317,7 @@ func TestFileWatcher_JSONFactoryRequestBatch(t *testing.T) {
 	if len(requests) != 1 {
 		t.Fatalf("expected 1 work request, got %d", len(requests))
 	}
-	if requests[0].Type != interfaces.WorkRequestTypeFactoryRequestBatch {
+	if requests[0].Type != work.WorkRequestTypeFactoryRequestBatch {
 		t.Fatalf("request type = %q, want FACTORY_REQUEST_BATCH", requests[0].Type)
 	}
 	if len(requests[0].Works) != 2 {
@@ -435,7 +424,7 @@ func TestFileWatcher_JSONFactoryRequestBatchAcceptsParentChildByWorkName(t *test
 		t.Fatalf("expected 3 submissions, got %d", len(submitted))
 	}
 
-	var child interfaces.SubmitRequest
+	var child work.SubmitRequest
 	for _, request := range submitted {
 		if request.Name == "child" {
 			child = request
@@ -452,17 +441,17 @@ func TestFileWatcher_JSONFactoryRequestBatchAcceptsParentChildByWorkName(t *test
 		t.Fatalf("child relations = %d, want 2", len(child.Relations))
 	}
 
-	relationsByType := make(map[interfaces.RelationType]interfaces.Relation, len(child.Relations))
+	relationsByType := make(map[work.RelationType]work.Relation, len(child.Relations))
 	for _, relation := range child.Relations {
 		relationsByType[relation.Type] = relation
 	}
-	wantRelations := map[interfaces.RelationType]interfaces.Relation{
-		interfaces.RelationParentChild: {
-			Type:         interfaces.RelationParentChild,
+	wantRelations := map[work.RelationType]work.Relation{
+		work.RelationParentChild: {
+			Type:         work.RelationParentChild,
 			TargetWorkID: "batch-request-batch-parent-child-parent",
 		},
-		interfaces.RelationDependsOn: {
-			Type:          interfaces.RelationDependsOn,
+		work.RelationDependsOn: {
+			Type:          work.RelationDependsOn,
 			TargetWorkID:  "batch-request-batch-parent-child-prerequisite",
 			RequiredState: "complete",
 		},
@@ -506,8 +495,8 @@ func TestFileWatcher_JSONFactoryRequestBatchMapsStateAndParentChild(t *testing.T
 	if len(requests[0].Relations) != 1 {
 		t.Fatalf("expected 1 request relation, got %d", len(requests[0].Relations))
 	}
-	if requests[0].Relations[0].Type != interfaces.WorkRelationParentChild {
-		t.Fatalf("request relation type = %q, want %q", requests[0].Relations[0].Type, interfaces.WorkRelationParentChild)
+	if requests[0].Relations[0].Type != work.WorkRelationParentChild {
+		t.Fatalf("request relation type = %q, want %q", requests[0].Relations[0].Type, work.WorkRelationParentChild)
 	}
 	if len(submitted) != 2 {
 		t.Fatalf("expected 2 submissions, got %d", len(submitted))
@@ -521,8 +510,8 @@ func TestFileWatcher_JSONFactoryRequestBatchMapsStateAndParentChild(t *testing.T
 	if len(submitted[1].Relations) != 1 {
 		t.Fatalf("expected child relation on second work, got %d", len(submitted[1].Relations))
 	}
-	if submitted[1].Relations[0].Type != interfaces.RelationParentChild {
-		t.Fatalf("normalized relation type = %q, want %q", submitted[1].Relations[0].Type, interfaces.RelationParentChild)
+	if submitted[1].Relations[0].Type != work.RelationParentChild {
+		t.Fatalf("normalized relation type = %q, want %q", submitted[1].Relations[0].Type, work.RelationParentChild)
 	}
 }
 
@@ -623,10 +612,10 @@ func TestFileWatcher_JSONFactoryRequestBatchRejectsConflictingTraceAliases(t *te
 
 func TestFileWatcher_JSONFactoryRequestBatchRejectsConflictingWorkType(t *testing.T) {
 	dir := setupWatchDir(t)
-	batch := interfaces.WorkRequest{
+	batch := work.WorkRequest{
 		RequestID: "request-batch-conflict",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{
 			{
 				Name:       "wrong-folder",
 				WorkTypeID: "chapter",
@@ -657,10 +646,10 @@ func TestFileWatcher_PreseedValidatesAllFilesBeforeSubmitting(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "request", "default", "a-valid.md"), []byte("valid"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	batch := interfaces.WorkRequest{
+	batch := work.WorkRequest{
 		RequestID: "request-empty-batch",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works:     []interfaces.Work{},
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works:     []work.Work{},
 	}
 	data, err := json.Marshal(batch)
 	if err != nil {

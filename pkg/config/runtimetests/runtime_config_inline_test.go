@@ -2,14 +2,16 @@ package runtimetests
 
 import (
 	"context"
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	. "github.com/portpowered/infinite-you/pkg/config"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestLoadRuntimeConfig_LoadsCronWorkstationConfig(t *testing.T) {
@@ -821,7 +823,7 @@ func TestFactoryConfigWithRuntimeDefinitions_PreservesCanonicalWorkstationKindFo
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{
+		Workers: []workerconfig.Config{{
 			Name:  "executor",
 			Type:  interfaces.WorkerTypeModel,
 			Model: "canonical-model",
@@ -836,7 +838,7 @@ func TestFactoryConfigWithRuntimeDefinitions_PreservesCanonicalWorkstationKindFo
 		}},
 	}
 	runtimeDefs := testRuntimeDefinitionLookup{
-		workers:      map[string]*interfaces.WorkerConfig{},
+		workers:      map[string]*workerconfig.Config{},
 		workstations: map[string]*interfaces.FactoryWorkstationConfig{},
 	}
 	runtimeDefs.workstations["review"] = &interfaces.FactoryWorkstationConfig{

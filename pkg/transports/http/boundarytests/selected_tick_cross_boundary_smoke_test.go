@@ -6,20 +6,24 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboard"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/dashboardrender"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	"github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestSelectedTickCrossBoundarySmoke_ReconstructsCanonicalStateAcrossSupportedBoundaries(t *testing.T) {
 	t0 := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
 
-	worldState, err := projections.ReconstructFactoryWorldState(crossBoundarySelectedTickEvents(t0), 11)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(crossBoundarySelectedTickEvents(t0), 11)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -85,10 +89,10 @@ func assertSelectedTickCanonicalState(t *testing.T, worldState interfaces.Factor
 	if len(failedAttempts) != 1 {
 		t.Fatalf("failed inference attempts = %#v, want one attempt", failedAttempts)
 	}
-	if detail := failedAttempts["dispatch-runtime-failed/inference-request/1"].FailureDetail; detail == nil || detail.Reason != interfaces.WorkFailureTypeThrottled {
+	if detail := failedAttempts["dispatch-runtime-failed/inference-request/1"].FailureDetail; detail == nil || detail.Reason != workerexecution.WorkFailureTypeThrottled {
 		t.Fatalf("failed inference failureDetail = %#v, want throttled", detail)
 	}
-	if detail := worldState.FailureDetailsByWorkID["work-runtime-failed"].FailureDetail; detail == nil || detail.Reason != interfaces.WorkFailureTypeThrottled {
+	if detail := worldState.FailureDetailsByWorkID["work-runtime-failed"].FailureDetail; detail == nil || detail.Reason != workerexecution.WorkFailureTypeThrottled {
 		t.Fatalf("failed work failureDetail = %#v, want throttled", detail)
 	}
 }
@@ -191,9 +195,9 @@ func assertTimeEqual(t *testing.T, label string, got, want time.Time) {
 }
 
 func crossBoundarySelectedTickEvents(t0 time.Time) []generated.FactoryEvent {
-	pending := interfaces.FactoryWorkItem{ID: "work-runtime-pending", WorkTypeID: "task", DisplayName: "Pending Runtime Story", TraceID: "trace-runtime-pending", PlaceID: "task:init"}
-	completed := interfaces.FactoryWorkItem{ID: "work-runtime-completed", WorkTypeID: "task", DisplayName: "Completed Runtime Story", TraceID: "trace-runtime-completed", PlaceID: "task:init"}
-	failed := interfaces.FactoryWorkItem{ID: "work-runtime-failed", WorkTypeID: "task", DisplayName: "Failed Runtime Story", TraceID: "trace-runtime-failed", PlaceID: "task:init"}
+	pending := work.FactoryWorkItem{ID: "work-runtime-pending", WorkTypeID: "task", DisplayName: "Pending Runtime Story", TraceID: "trace-runtime-pending", PlaceID: "task:init"}
+	completed := work.FactoryWorkItem{ID: "work-runtime-completed", WorkTypeID: "task", DisplayName: "Completed Runtime Story", TraceID: "trace-runtime-completed", PlaceID: "task:init"}
+	failed := work.FactoryWorkItem{ID: "work-runtime-failed", WorkTypeID: "task", DisplayName: "Failed Runtime Story", TraceID: "trace-runtime-failed", PlaceID: "task:init"}
 
 	return []generated.FactoryEvent{
 		crossBoundaryInitialStructureEvent(t0),
@@ -291,7 +295,7 @@ func crossBoundaryInitialStructureEvent(eventTime time.Time) generated.FactoryEv
 func crossBoundaryWorkRequestEvent(
 	tick int,
 	eventTime time.Time,
-	workItem interfaces.FactoryWorkItem,
+	workItem work.FactoryWorkItem,
 ) generated.FactoryEvent {
 	requestID := "request/" + workItem.ID
 	works := []generated.Work{crossBoundaryGeneratedWork(workItem, requestID)}
@@ -316,7 +320,7 @@ func crossBoundaryDispatchCreatedEvent(
 	tick int,
 	eventTime time.Time,
 	dispatchID string,
-	workItem interfaces.FactoryWorkItem,
+	workItem work.FactoryWorkItem,
 ) generated.FactoryEvent {
 	return crossBoundaryEvent(
 		generated.FactoryEventTypeDispatchRequest,
@@ -396,7 +400,7 @@ func crossBoundaryInferenceResponseEvent(
 func crossBoundaryAcceptedResponseEvent(
 	tick int,
 	eventTime time.Time,
-	workItem interfaces.FactoryWorkItem,
+	workItem work.FactoryWorkItem,
 ) generated.FactoryEvent {
 	outputWork := []generated.Work{crossBoundaryGeneratedWork(workItem, "")}
 	return crossBoundaryEvent(
@@ -421,7 +425,7 @@ func crossBoundaryAcceptedResponseEvent(
 func crossBoundaryFailedResponseEvent(
 	tick int,
 	eventTime time.Time,
-	workItem interfaces.FactoryWorkItem,
+	workItem work.FactoryWorkItem,
 ) generated.FactoryEvent {
 	outputWork := []generated.Work{crossBoundaryGeneratedWork(workItem, "")}
 	return crossBoundaryEvent(
@@ -448,7 +452,7 @@ func crossBoundaryFailedResponseEvent(
 }
 
 func crossBoundaryGeneratedWork(
-	workItem interfaces.FactoryWorkItem,
+	workItem work.FactoryWorkItem,
 	requestID string,
 ) generated.Work {
 	return generated.Work{

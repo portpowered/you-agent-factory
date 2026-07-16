@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -16,7 +16,7 @@ func TestColdStart_PreSeededTokensProcessed(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "logging"}`))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "metrics"}`))
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"swe": {
 			{Content: "Done. COMPLETE"},
 			{Content: "Done. COMPLETE"},
@@ -52,7 +52,7 @@ func TestColdStart_MixedPreSeededAndLateSubmit(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "pre-existing"}`))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"task": "new-arrival"}`))
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"swe":      {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 		"reviewer": {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 	})

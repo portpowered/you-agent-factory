@@ -3,23 +3,24 @@ package petri
 import (
 	"maps"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // Marking represents the complete state of tokens across places in a petri net.
 // It is the single source of truth. The factory loop reads and writes markings.
 type Marking struct {
-	Tokens       map[string]*interfaces.Token `json:"tokens"`       // token ID → token (all live tokens)
-	PlaceTokens  map[string][]string          `json:"place_tokens"` // place ID → token IDs (index for fast lookup)
-	TickCount    int                          `json:"tick_count"`
-	WorkflowID   string                       `json:"workflow_id"`
-	TraceContext map[string]string            `json:"trace_context"` // workflow-level trace metadata
+	Tokens       map[string]*factorytoken.Token `json:"tokens"`       // token ID → token (all live tokens)
+	PlaceTokens  map[string][]string            `json:"place_tokens"` // place ID → token IDs (index for fast lookup)
+	TickCount    int                            `json:"tick_count"`
+	WorkflowID   string                         `json:"workflow_id"`
+	TraceContext map[string]string              `json:"trace_context"` // workflow-level trace metadata
 }
 
 // NewMarking creates an empty Marking for the given workflow.
 func NewMarking(workflowID string) *Marking {
 	return &Marking{
-		Tokens:       make(map[string]*interfaces.Token),
+		Tokens:       make(map[string]*factorytoken.Token),
 		PlaceTokens:  make(map[string][]string),
 		WorkflowID:   workflowID,
 		TraceContext: make(map[string]string),
@@ -27,7 +28,7 @@ func NewMarking(workflowID string) *Marking {
 }
 
 // AddToken adds a token to the marking and updates the place index.
-func (m *Marking) AddToken(token *interfaces.Token) {
+func (m *Marking) AddToken(token *factorytoken.Token) {
 	m.Tokens[token.ID] = token
 	m.PlaceTokens[token.PlaceID] = append(m.PlaceTokens[token.PlaceID], token.ID)
 }
@@ -57,9 +58,9 @@ func (m *Marking) removeTokenFromPlaceIndex(placeID, tokenID string) {
 }
 
 // TokensInPlace returns all tokens currently in the given place.
-func (m *Marking) TokensInPlace(placeID string) []interfaces.Token {
+func (m *Marking) TokensInPlace(placeID string) []factorytoken.Token {
 	ids := m.PlaceTokens[placeID]
-	tokens := make([]interfaces.Token, 0, len(ids))
+	tokens := make([]factorytoken.Token, 0, len(ids))
 	for _, id := range ids {
 		if t, ok := m.Tokens[id]; ok {
 			tokens = append(tokens, *t)
@@ -71,16 +72,16 @@ func (m *Marking) TokensInPlace(placeID string) []interfaces.Token {
 // MarkingSnapshot is an immutable deep copy of a Marking, used for
 // subsystem reads and history.
 type MarkingSnapshot struct {
-	Tokens       map[string]*interfaces.Token `json:"tokens"`
-	PlaceTokens  map[string][]string          `json:"place_tokens"`
-	TickCount    int                          `json:"tick_count"`
-	WorkflowID   string                       `json:"workflow_id"`
-	TraceContext map[string]string            `json:"trace_context"`
+	Tokens       map[string]*factorytoken.Token `json:"tokens"`
+	PlaceTokens  map[string][]string            `json:"place_tokens"`
+	TickCount    int                            `json:"tick_count"`
+	WorkflowID   string                         `json:"workflow_id"`
+	TraceContext map[string]string              `json:"trace_context"`
 }
 
 // Snapshot returns a deep copy of the marking as an immutable MarkingSnapshot.
 func (m *Marking) Snapshot() MarkingSnapshot {
-	tokens := make(map[string]*interfaces.Token, len(m.Tokens))
+	tokens := make(map[string]*factorytoken.Token, len(m.Tokens))
 	for id, t := range m.Tokens {
 		cp := deepCopyToken(t)
 		tokens[id] = &cp
@@ -106,9 +107,9 @@ func (m *Marking) Snapshot() MarkingSnapshot {
 }
 
 // TokensInPlace returns all tokens in the given place from the snapshot.
-func (s *MarkingSnapshot) TokensInPlace(placeID string) []interfaces.Token {
+func (s *MarkingSnapshot) TokensInPlace(placeID string) []factorytoken.Token {
 	ids := s.PlaceTokens[placeID]
-	tokens := make([]interfaces.Token, 0, len(ids))
+	tokens := make([]factorytoken.Token, 0, len(ids))
 	for _, id := range ids {
 		if t, ok := s.Tokens[id]; ok {
 			tokens = append(tokens, *t)
@@ -118,7 +119,7 @@ func (s *MarkingSnapshot) TokensInPlace(placeID string) []interfaces.Token {
 }
 
 // deepCopyToken creates a deep copy of a Token.
-func deepCopyToken(t *interfaces.Token) interfaces.Token {
+func deepCopyToken(t *factorytoken.Token) factorytoken.Token {
 	cp := *t
 
 	// Deep copy Color
@@ -127,7 +128,7 @@ func deepCopyToken(t *interfaces.Token) interfaces.Token {
 		maps.Copy(cp.Color.Tags, t.Color.Tags)
 	}
 	if t.Color.Relations != nil {
-		cp.Color.Relations = make([]interfaces.Relation, len(t.Color.Relations))
+		cp.Color.Relations = make([]work.Relation, len(t.Color.Relations))
 		copy(cp.Color.Relations, t.Color.Relations)
 	}
 	if t.Color.Payload != nil {
@@ -149,7 +150,7 @@ func deepCopyToken(t *interfaces.Token) interfaces.Token {
 		maps.Copy(cp.History.PlaceVisits, t.History.PlaceVisits)
 	}
 	if t.History.FailureLog != nil {
-		cp.History.FailureLog = make([]interfaces.FailureRecord, len(t.History.FailureLog))
+		cp.History.FailureLog = make([]factorytoken.Failure, len(t.History.FailureLog))
 		copy(cp.History.FailureLog, t.History.FailureLog)
 	}
 

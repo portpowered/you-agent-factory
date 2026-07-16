@@ -10,9 +10,11 @@ import (
 	"testing"
 	"time"
 
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 func TestCatalogHost_SupervisedBackend_InspectPreservesInstalledAssetReadinessWithoutLiveSlot(t *testing.T) {
@@ -23,10 +25,10 @@ func TestCatalogHost_SupervisedBackend_InspectPreservesInstalledAssetReadinessWi
 	if err != nil {
 		t.Fatalf("InspectReadiness: %v", err)
 	}
-	if ready.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+	if ready.ReadinessState != managedruntime.ReadinessStateReady {
 		t.Fatalf("readiness = %s, want READY for installed assets without a live supervised slot", ready.ReadinessState)
 	}
-	if ready.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
+	if ready.LifecycleState != managedruntime.LifecycleStateInstalled {
 		t.Fatalf("lifecycle = %s, want INSTALLED", ready.LifecycleState)
 	}
 }
@@ -110,7 +112,7 @@ func TestCatalogHost_SupervisedBackend_PostStartCrashSurfacesFailedReadiness(t *
 		if inspectErr != nil {
 			t.Fatalf("InspectReadiness: %v", inspectErr)
 		}
-		if ready.ReadinessState == factoryapi.ManagedRuntimeReadinessStateFAILED {
+		if ready.ReadinessState == managedruntime.ReadinessStateFailed {
 			if ready.FailureClass != FailureClassProcessCrash {
 				t.Fatalf("failure class = %s, want %s", ready.FailureClass, FailureClassProcessCrash)
 			}
@@ -343,7 +345,7 @@ func TestDefaultLlamaCppServerStartBuilder_RequiresHealthEndpointArg(t *testing.
 	_, err := defaultLlamaCppServerStartBuilder(
 		Identity{Name: "OMNIVOICE_Q4_K_M", Backend: "LLAMACPP"},
 		CacheInspection{CachePath: t.TempDir(), Installed: true},
-		&interfaces.WorkerConfig{Command: "fake-server"},
+		&workerconfig.Config{Command: "fake-server"},
 	)
 	if err == nil {
 		t.Fatal("expected missing health endpoint error")

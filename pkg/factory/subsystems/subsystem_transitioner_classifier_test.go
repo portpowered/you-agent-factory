@@ -6,10 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestTransitioner_ClassifierAcceptedRoutesOnlyMatchedLabel(t *testing.T) {
@@ -31,7 +33,7 @@ func TestTransitioner_ClassifierAcceptedRoutesOnlyMatchedLabel(t *testing.T) {
 		t.Fatalf("completed dispatches = %#v, want 1", result)
 	}
 	completed := result.CompletedDispatches[0]
-	if completed.Outcome != interfaces.OutcomeAccepted {
+	if completed.Outcome != workerexecution.OutcomeAccepted {
 		t.Fatalf("completed outcome = %s, want ACCEPTED", completed.Outcome)
 	}
 	if completed.SelectedClassificationLabel != "approved" {
@@ -58,7 +60,7 @@ func TestTransitioner_ClassifierUnknownLabelFallsThroughFailureWithoutSelectedLa
 		t.Fatalf("failure output place = %q, want task:failed", result.Mutations[0].ToPlace)
 	}
 	completed := result.CompletedDispatches[0]
-	if completed.Outcome != interfaces.OutcomeFailed {
+	if completed.Outcome != workerexecution.OutcomeFailed {
 		t.Fatalf("completed outcome = %s, want FAILED", completed.Outcome)
 	}
 	if completed.SelectedClassificationLabel != "" {
@@ -84,7 +86,7 @@ func TestTransitioner_ClassifierUnknownLabelUsesImplicitNormalizedFailureArc(t *
 	if result.Mutations[0].ToPlace != "task:failed" {
 		t.Fatalf("failure output place = %q, want task:failed", result.Mutations[0].ToPlace)
 	}
-	if completed := result.CompletedDispatches[0]; completed.Outcome != interfaces.OutcomeFailed {
+	if completed := result.CompletedDispatches[0]; completed.Outcome != workerexecution.OutcomeFailed {
 		t.Fatalf("completed outcome = %s, want FAILED", completed.Outcome)
 	}
 }
@@ -185,16 +187,16 @@ func newClassifierSnapshot(now time.Time, output string) *interfaces.EngineState
 				TransitionID:    "t1",
 				WorkstationName: "classifier",
 				StartTime:       now.Add(-time.Second),
-				ConsumedTokens: []interfaces.Token{{
+				ConsumedTokens: []factorytoken.Token{{
 					ID:        "tok-1",
 					PlaceID:   "task:init",
 					CreatedAt: now.Add(-time.Hour),
 					EnteredAt: now.Add(-time.Hour),
-					Color: interfaces.TokenColor{
+					Color: factorytoken.Color{
 						WorkID:     "work-1",
 						WorkTypeID: "task",
 					},
-					History: interfaces.TokenHistory{
+					History: factorytoken.History{
 						TotalVisits:         map[string]int{},
 						ConsecutiveFailures: map[string]int{},
 						PlaceVisits:         map[string]int{},
@@ -202,10 +204,10 @@ func newClassifierSnapshot(now time.Time, output string) *interfaces.EngineState
 				}},
 			},
 		},
-		Results: []interfaces.WorkResult{{
+		Results: []workerexecution.WorkResult{{
 			DispatchID:   "d-1",
 			TransitionID: "t1",
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 			Output:       output,
 		}},
 	}
@@ -213,26 +215,26 @@ func newClassifierSnapshot(now time.Time, output string) *interfaces.EngineState
 func TestExecutorReviewReconcile_ProcessAcceptPreservesSiblingLaneReviewInit(t *testing.T) {
 	const traceID = "trace-process-sibling"
 	now := time.Date(2026, 6, 15, 15, 0, 0, 0, time.UTC)
-	marking := buildExecutorReviewReconcileMarking(t, []*interfaces.Token{
+	marking := buildExecutorReviewReconcileMarking(t, []*factorytoken.Token{
 		{
 			ID: "review-lane-a-old", PlaceID: "review:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-review-a-old", WorkTypeID: "review", Name: "lane-a",
 				CurrentChainingTraceID: traceID,
 			},
 		},
 		{
 			ID: "review-lane-b-sibling", PlaceID: "review:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-review-b", WorkTypeID: "review", Name: "lane-b",
 				CurrentChainingTraceID: traceID,
 			},
 		},
 	})
 
-	consumed := []interfaces.Token{{
+	consumed := []factorytoken.Token{{
 		ID: "task-input", PlaceID: "task:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID: "work-task-a", WorkTypeID: "task", Name: "lane-a",
 			CurrentChainingTraceID: traceID,
 		},
@@ -241,7 +243,7 @@ func TestExecutorReviewReconcile_ProcessAcceptPreservesSiblingLaneReviewInit(t *
 	mutations := executorReviewReconcileMutations(
 		marking,
 		executorReviewWorkstationProcess,
-		interfaces.OutcomeAccepted,
+		workerexecution.OutcomeAccepted,
 		consumed,
 		[]petri.Arc{
 			{PlaceID: state.PlaceID("task", "in-review")},
@@ -264,17 +266,17 @@ func TestExecutorReviewReconcile_ReviewAcceptPreservesSiblingLaneReviewInit(t *t
 		laneName = "lane-a"
 	)
 	now := time.Date(2026, 6, 15, 15, 5, 0, 0, time.UTC)
-	marking := buildExecutorReviewReconcileMarking(t, []*interfaces.Token{
+	marking := buildExecutorReviewReconcileMarking(t, []*factorytoken.Token{
 		{
 			ID: "review-lane-a-extra", PlaceID: "review:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-review-a-extra", WorkTypeID: "review", Name: laneName,
 				CurrentChainingTraceID: traceID,
 			},
 		},
 		{
 			ID: "review-lane-b-sibling", PlaceID: "review:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-review-b", WorkTypeID: "review", Name: "lane-b",
 				CurrentChainingTraceID: traceID,
 			},
@@ -285,7 +287,7 @@ func TestExecutorReviewReconcile_ReviewAcceptPreservesSiblingLaneReviewInit(t *t
 	mutations := executorReviewReconcileMutations(
 		marking,
 		executorReviewWorkstationReview,
-		interfaces.OutcomeAccepted,
+		workerexecution.OutcomeAccepted,
 		consumed,
 		[]petri.Arc{
 			{PlaceID: state.PlaceID("task", "to-complete")},
@@ -308,10 +310,10 @@ func TestExecutorReviewReconcile_ReviewAcceptPreservesSiblingLaneReviewInit(t *t
 func TestExecutorReviewReconcile_ProcessAcceptConsumesExistingReviewInitForTrace(t *testing.T) {
 	const traceID = "trace-process-review"
 	now := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
-	marking := buildExecutorReviewReconcileMarking(t, []*interfaces.Token{{
+	marking := buildExecutorReviewReconcileMarking(t, []*factorytoken.Token{{
 		ID:      "review-old",
 		PlaceID: "review:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:                 "work-review-old",
 			WorkTypeID:             "review",
 			Name:                   "lane-a",
@@ -319,10 +321,10 @@ func TestExecutorReviewReconcile_ProcessAcceptConsumesExistingReviewInitForTrace
 		},
 	}})
 
-	consumed := []interfaces.Token{{
+	consumed := []factorytoken.Token{{
 		ID:      "task-input",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:                 "work-task-1",
 			WorkTypeID:             "task",
 			Name:                   "lane-a",
@@ -333,7 +335,7 @@ func TestExecutorReviewReconcile_ProcessAcceptConsumesExistingReviewInitForTrace
 	mutations := executorReviewReconcileMutations(
 		marking,
 		executorReviewWorkstationProcess,
-		interfaces.OutcomeAccepted,
+		workerexecution.OutcomeAccepted,
 		consumed,
 		[]petri.Arc{
 			{PlaceID: state.PlaceID("task", "in-review")},
@@ -361,7 +363,7 @@ func TestExecutorReviewReconcile_ReviewAcceptConsumesDuplicateReviewsAndStaleTas
 	mutations := executorReviewReconcileMutations(
 		marking,
 		executorReviewWorkstationReview,
-		interfaces.OutcomeAccepted,
+		workerexecution.OutcomeAccepted,
 		consumed,
 		[]petri.Arc{
 			{PlaceID: state.PlaceID("task", "to-complete")},
@@ -375,38 +377,38 @@ func TestExecutorReviewReconcile_ReviewAcceptConsumesDuplicateReviewsAndStaleTas
 func buildReviewReconcileResidueMarking(t *testing.T, traceID, laneName string) *petri.MarkingSnapshot {
 	t.Helper()
 
-	return buildExecutorReviewReconcileMarking(t, []*interfaces.Token{
+	return buildExecutorReviewReconcileMarking(t, []*factorytoken.Token{
 		{
 			ID: "review-extra-1", PlaceID: "review:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-review-extra-1", WorkTypeID: "review", Name: laneName,
 				CurrentChainingTraceID: traceID,
 			},
 		},
 		{
 			ID: "review-extra-2", PlaceID: "review:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-review-extra-2", WorkTypeID: "review", Name: laneName,
 				CurrentChainingTraceID: traceID,
 			},
 		},
 		{
 			ID: "task-stale-init", PlaceID: "task:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-task-stale-init", WorkTypeID: "task", Name: laneName,
 				CurrentChainingTraceID: traceID,
 			},
 		},
 		{
 			ID: "task-stale-failed", PlaceID: "task:failed",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-task-stale-failed", WorkTypeID: "task", Name: laneName,
 				CurrentChainingTraceID: traceID,
 			},
 		},
 		{
 			ID: "task-other-lane", PlaceID: "task:failed",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-task-other", WorkTypeID: "task", Name: "other-lane",
 				CurrentChainingTraceID: traceID,
 			},
@@ -414,18 +416,18 @@ func buildReviewReconcileResidueMarking(t *testing.T, traceID, laneName string) 
 	})
 }
 
-func buildReviewReconcileActiveDispatchTokens(traceID, laneName string) []interfaces.Token {
-	return []interfaces.Token{
+func buildReviewReconcileActiveDispatchTokens(traceID, laneName string) []factorytoken.Token {
+	return []factorytoken.Token{
 		{
 			ID: "task-in-review", PlaceID: "task:in-review",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-task-1", WorkTypeID: "task", Name: laneName,
 				CurrentChainingTraceID: traceID,
 			},
 		},
 		{
 			ID: "review-active", PlaceID: "review:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-review-active", WorkTypeID: "review", Name: laneName,
 				CurrentChainingTraceID: traceID,
 			},
@@ -461,16 +463,16 @@ func assertReviewReconcileResidueConsumes(t *testing.T, mutations []interfaces.M
 }
 
 func TestExecutorReviewReconcile_SkipsNonAcceptedOutcomes(t *testing.T) {
-	marking := buildExecutorReviewReconcileMarking(t, []*interfaces.Token{{
+	marking := buildExecutorReviewReconcileMarking(t, []*factorytoken.Token{{
 		ID:      "review-old",
 		PlaceID: "review:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkTypeID:             "review",
 			CurrentChainingTraceID: "trace-skip",
 		},
 	}})
-	consumed := []interfaces.Token{{
-		Color: interfaces.TokenColor{
+	consumed := []factorytoken.Token{{
+		Color: factorytoken.Color{
 			WorkTypeID:             "task",
 			CurrentChainingTraceID: "trace-skip",
 		},
@@ -479,7 +481,7 @@ func TestExecutorReviewReconcile_SkipsNonAcceptedOutcomes(t *testing.T) {
 	mutations := executorReviewReconcileMutations(
 		marking,
 		executorReviewWorkstationProcess,
-		interfaces.OutcomeRejected,
+		workerexecution.OutcomeRejected,
 		consumed,
 		[]petri.Arc{{PlaceID: state.PlaceID("review", "init")}},
 		time.Now(),
@@ -499,7 +501,7 @@ func mutationTokenIDs(mutations []interfaces.MarkingMutation) map[string]bool {
 	return out
 }
 
-func buildExecutorReviewReconcileMarking(t *testing.T, tokens []*interfaces.Token) *petri.MarkingSnapshot {
+func buildExecutorReviewReconcileMarking(t *testing.T, tokens []*factorytoken.Token) *petri.MarkingSnapshot {
 	t.Helper()
 
 	marking := petri.NewMarking("executor-review-reconcile")

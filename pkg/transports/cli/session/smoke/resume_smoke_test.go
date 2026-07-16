@@ -13,17 +13,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/testharness"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	platformclock "github.com/portpowered/infinite-you/pkg/platform/clock"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 )
 
@@ -407,7 +407,7 @@ func newCLIResumeRuntimeService(
 	service, err := testharness.New(testharness.Config{
 		Mode:              testharness.ModeJavaScript,
 		ProjectRoot:       projectRoot,
-		Clock:             factory.RealClock{},
+		Clock:             platformclock.Real{},
 		Provider:          provider,
 		Persistence:       runtimepersist.DirectoryStore{Dir: filepath.Join(t.TempDir(), "durable-sessions")},
 		ChildExecutorMode: childExecutorMode,
@@ -705,7 +705,7 @@ func (p *cliResumeSmokeBlockingProvider) callCount() int {
 	return p.calls
 }
 
-func (p *cliResumeSmokeBlockingProvider) Infer(ctx context.Context, _ interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *cliResumeSmokeBlockingProvider) Infer(ctx context.Context, _ workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
@@ -713,9 +713,9 @@ func (p *cliResumeSmokeBlockingProvider) Infer(ctx context.Context, _ interfaces
 	p.mu.Unlock()
 
 	if call == 1 {
-		return interfaces.InferenceResponse{
+		return workerexecution.InferenceResponse{
 			Content: fmt.Sprintf(`{"text":"live:%s:step-one:step-one:workflows","label":"step-one"}`, p.workflowName),
-			ProviderSession: &interfaces.ProviderSessionMetadata{
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
 				Provider: "mock",
 				Kind:     "session_id",
 				ID:       "live-provider-session-1",
@@ -732,12 +732,12 @@ func (p *cliResumeSmokeBlockingProvider) Infer(ctx context.Context, _ interfaces
 		p.mu.Lock()
 		p.contextCanceled++
 		p.mu.Unlock()
-		return interfaces.InferenceResponse{}, ctx.Err()
+		return workerexecution.InferenceResponse{}, ctx.Err()
 	}
 
-	return interfaces.InferenceResponse{
+	return workerexecution.InferenceResponse{
 		Content: fmt.Sprintf(`{"text":"live:%s:step-two:step-two:workflows","label":"step-two"}`, p.workflowName),
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "mock",
 			Kind:     "session_id",
 			ID:       "live-provider-session-2",

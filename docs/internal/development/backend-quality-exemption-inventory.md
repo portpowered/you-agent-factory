@@ -51,9 +51,9 @@ later removal. Line numbers are revision-stamped source locations, not stable id
 
 The coverage baseline is parsed like `gocoveragecheck`: trim surrounding whitespace, ignore
 blank and `#` comment lines, and deduplicate the remaining full import paths. It contains
-**71** packages. Of **37** directive-owning package directories,
+**72** packages. Of **37** directive-owning package directories,
 **18** are in both systems and **19** are directive only; the remaining
-**53** baseline packages are coverage-baseline only.
+**54** baseline packages are coverage-baseline only.
 
 | Owning package | Active directives | Files | Quality-system status |
 | --- | ---: | ---: | --- |
@@ -83,11 +83,11 @@ blank and `#` comment lines, and deduplicate the remaining full import paths. It
 | `pkg/factory/validation` | 2 | 1 | directive + coverage baseline |
 | `pkg/factory/sessions/execution` | 26 | 8 | directive only |
 | `pkg/factory/sessions/execution/fixtures` | 5 | 3 | directive only |
-| `pkg/interfaces` | 3 | 2 | directive + coverage baseline |
-| `pkg/internal/cursorstorage` | 10 | 5 | directive + coverage baseline |
+| `pkg/factory/contracts` | 3 | 2 | directive + coverage baseline |
+| `pkg/platform/cursors` | 10 | 5 | directive + coverage baseline |
 | `pkg/transports/mcp/factorysession` | 9 | 4 | directive + coverage baseline |
-| `pkg/replay` | 2 | 2 | directive + coverage baseline |
-| `pkg/replay/configtests` | 3 | 3 | directive only |
+| `pkg/factory/replay` | 2 | 2 | directive + coverage baseline |
+| `pkg/factory/replay/configtests` | 3 | 3 | directive only |
 | `pkg/runtimehost` | 5 | 3 | directive + coverage baseline |
 | `pkg/service` | 29 | 9 | directive + coverage baseline |
 | `pkg/service/runtimelogtests` | 2 | 1 | directive only |
@@ -102,6 +102,7 @@ directive occurrence in the focused scan:
 
 - `pkg/transports/http/apitypes`
 - `pkg/transports/mapping`
+- `pkg/transports/mapping/factorydefinition`
 - `pkg/transports/mapping/optional`
 - `pkg/transports/cli/clidiag`
 - `pkg/transports/cli/dashboardrender`
@@ -132,7 +133,7 @@ directive occurrence in the focused scan:
 - `pkg/invocations`
 - `pkg/models/local`
 - `pkg/models/assets`
-- `pkg/logging`
+- `pkg/platform/logging`
 - `pkg/transports/mcp/server`
 - `pkg/models/host`
 - `pkg/orchestrators/javascript/policy`
@@ -445,32 +446,32 @@ Owner: `pkg/factory/sessions/execution/fixtures` package maintainers. Status: **
 | `pkg/factory/sessions/execution/fixtures/runtime_restart_resume_test.go:1` | `backendsizecheck:ignore-file` | `pkg/factory/sessions/execution/fixtures/runtime_restart_resume_test.go` | T | T gate |
 | `pkg/factory/sessions/execution/fixtures/runtime_restart_resume_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/factory/sessions/execution/fixtures/runtime_restart_resume_test.go` | T | T gate |
 
-### `pkg/interfaces`
+### `pkg/factory/contracts`
 
-Owner: `pkg/interfaces` package maintainers. Status: **directive + coverage baseline**.
-
-| Source | Directive rule | Target | Reason | Evidence |
-| --- | --- | --- | --- | --- |
-| `pkg/interfaces/interfaces_contract_test.go:1` | `backendsizecheck:ignore-file` | `pkg/interfaces/interfaces_contract_test.go` | T | T gate |
-| `pkg/interfaces/interfaces_contract_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/interfaces/interfaces_contract_test.go` | T | T gate |
-| `pkg/interfaces/work_runtime_test.go:812` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestCloneToken_PreserveNilAndEmptyValues` | T | T gate |
-
-### `pkg/internal/cursorstorage`
-
-Owner: `pkg/internal/cursorstorage` package maintainers. Status: **directive + coverage baseline**.
+Owner: `pkg/factory/contracts` package maintainers. Status: **directive + coverage baseline**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/internal/cursorstorage/protobuf_decoder.go:102` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `extractProtobufFields` | P | P gate |
-| `pkg/internal/cursorstorage/redacted_reasoning_decoder.go:16` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `decodeRedactedReasoning` | P | P gate |
-| `pkg/internal/cursorstorage/store_blob_decode.go:14` | `backendsizecheck:ignore-function` | `decodeBlobEntryValue` | P | P gate |
-| `pkg/internal/cursorstorage/store_blob_decode.go:15` | `pkgmaintcheck:ignore-function-lines` | `decodeBlobEntryValue` | P | P gate |
-| `pkg/internal/cursorstorage/store_blob_decode.go:16` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `decodeBlobEntryValue` | P | P gate |
-| `pkg/internal/cursorstorage/store_parse.go:122` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `parseTextMessageFormat` | P | P gate |
-| `pkg/internal/cursorstorage/store_parse.go:222` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `parseComposerFromData` | P | P gate |
-| `pkg/internal/cursorstorage/store_parse.go:439` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `messageUnknownContentText` | P | P gate |
-| `pkg/internal/cursorstorage/store_query.go:8` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `QueryBlobsTable` | P | P gate |
-| `pkg/internal/cursorstorage/store_query.go:111` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `QueryMetaTable` | P | P gate |
+| `pkg/factory/contracts/interfaces_contract_test.go:1` | `backendsizecheck:ignore-file` | `pkg/factory/contracts/interfaces_contract_test.go` | T | T gate |
+| `pkg/factory/contracts/interfaces_contract_test.go:2` | `pkgmaintcheck:ignore-file-lines` | `pkg/factory/contracts/interfaces_contract_test.go` | T | T gate |
+| `pkg/factory/contracts/work_runtime_test.go:812` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestCloneToken_PreserveNilAndEmptyValues` | T | T gate |
+
+### `pkg/platform/cursors`
+
+Owner: `pkg/platform/cursors` package maintainers. Status: **directive + coverage baseline**.
+
+| Source | Directive rule | Target | Reason | Evidence |
+| --- | --- | --- | --- | --- |
+| `pkg/platform/cursors/protobuf_decoder.go:102` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `extractProtobufFields` | P | P gate |
+| `pkg/platform/cursors/redacted_reasoning_decoder.go:16` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `decodeRedactedReasoning` | P | P gate |
+| `pkg/platform/cursors/store_blob_decode.go:14` | `backendsizecheck:ignore-function` | `decodeBlobEntryValue` | P | P gate |
+| `pkg/platform/cursors/store_blob_decode.go:15` | `pkgmaintcheck:ignore-function-lines` | `decodeBlobEntryValue` | P | P gate |
+| `pkg/platform/cursors/store_blob_decode.go:16` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `decodeBlobEntryValue` | P | P gate |
+| `pkg/platform/cursors/store_parse.go:122` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `parseTextMessageFormat` | P | P gate |
+| `pkg/platform/cursors/store_parse.go:222` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `parseComposerFromData` | P | P gate |
+| `pkg/platform/cursors/store_parse.go:439` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `messageUnknownContentText` | P | P gate |
+| `pkg/platform/cursors/store_query.go:8` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `QueryBlobsTable` | P | P gate |
+| `pkg/platform/cursors/store_query.go:111` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `QueryMetaTable` | P | P gate |
 
 ### `pkg/transports/mcp/factorysession`
 
@@ -488,24 +489,24 @@ Owner: `pkg/transports/mcp/factorysession` package maintainers. Status: **direct
 | `pkg/transports/mcp/factorysession/inspection_test.go:306` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_ReadEvents_EventReconnectFixtureReturnsOrderedCanonicalEvents` | T | T gate |
 | `pkg/transports/mcp/factorysession/inspection_test.go:363` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestMockClient_Control_LifecycleFixtureReturnsAcceptedRejectedAndIsolatesSessions` | T | T gate |
 
-### `pkg/replay`
+### `pkg/factory/replay`
 
-Owner: `pkg/replay` package maintainers. Status: **directive + coverage baseline**.
-
-| Source | Directive rule | Target | Reason | Evidence |
-| --- | --- | --- | --- | --- |
-| `pkg/replay/event_artifact_test.go:287` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertMergedGeneratedWorkstations` | T | T gate |
-| `pkg/replay/event_log_test.go:459` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertReducedCompletionSafeDiagnostics` | T | T gate |
-
-### `pkg/replay/configtests`
-
-Owner: `pkg/replay/configtests` package maintainers. Status: **directive only**.
+Owner: `pkg/factory/replay` package maintainers. Status: **directive + coverage baseline**.
 
 | Source | Directive rule | Target | Reason | Evidence |
 | --- | --- | --- | --- | --- |
-| `pkg/replay/configtests/effective_config_generated_test.go:63` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertEmbeddedGeneratedFactory` | T | T gate |
-| `pkg/replay/configtests/effective_config_test.go:335` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind` | T | T gate |
-| `pkg/replay/configtests/generated_factory_test.go:19` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory` | T | T gate |
+| `pkg/factory/replay/event_artifact_test.go:287` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertMergedGeneratedWorkstations` | T | T gate |
+| `pkg/factory/replay/event_log_test.go:459` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertReducedCompletionSafeDiagnostics` | T | T gate |
+
+### `pkg/factory/replay/configtests`
+
+Owner: `pkg/factory/replay/configtests` package maintainers. Status: **directive only**.
+
+| Source | Directive rule | Target | Reason | Evidence |
+| --- | --- | --- | --- | --- |
+| `pkg/factory/replay/configtests/effective_config_generated_test.go:63` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `assertEmbeddedGeneratedFactory` | T | T gate |
+| `pkg/factory/replay/configtests/effective_config_test.go:335` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestGeneratedFactoryFromLoadedConfig_EmitsCanonicalPublicWorkstationKind` | T | T gate |
+| `pkg/factory/replay/configtests/generated_factory_test.go:19` | `pkgmaintcheck:ignore-cyclomatic-complexity` | `TestGeneratedFactoryFromLoadedConfig_EmbedsSplitRuntimeDefinitionsInGeneratedFactory` | T | T gate |
 
 ### `pkg/runtimehost`
 
@@ -627,7 +628,7 @@ as follows:
 | Batch 006 — `converge-model-worker-families` | Every detailed directive file under `pkg/workers/**`; the other named source families have no directive file in this snapshot. |
 | Batch 006 — `converge-work-family` | The named source roots (`pkg/invocations`, `pkg/materialize`, `pkg/timework`, `pkg/workcontent`, `pkg/workgraph`, and `pkg/workquery`) have no directive file in this snapshot. |
 | Batch 006 — `converge-factory-orchestrator-families` | Every detailed directive file under `pkg/factory/sessions/execution/**`; the other explicitly named moved roots have no directive file in this snapshot. Core event-first `pkg/factory/**` files are not reserved by this work item. |
-| Batch 006 — `converge-platform-and-interfaces` | Every detailed directive file under `pkg/interfaces/**`, `pkg/internal/cursorstorage/**`, and `pkg/replay/**`, matching the work item's interfaces, cursor-storage, and replay-infrastructure moves. |
+| Batch 006 — `converge-platform-and-interfaces` | Every detailed directive file under `pkg/factory/contracts/**`, `pkg/platform/cursors/**`, `pkg/factory/replay/**`, and `pkg/platform/replay/**`, matching the work item's interfaces, cursor-storage, Factory replay, and replay-infrastructure moves. |
 | Batch 007 — `move-session-state-to-factorysessions`, `split-runtime-build-ownership`, and `narrow-factory-service-facade` | Every detailed directive file under `pkg/factory/sessions/execution/**` and `pkg/service/**`. |
 | Batch 008 — `retire-legacy-composition-entrypoints` and `delete-host-composition-shims` | Every detailed directive file under `pkg/runtimehost/**` and `pkg/service/**`. Other Batch 008 deletion items have no additional directive file in this snapshot. |
 
@@ -642,10 +643,10 @@ every file in the named path set; the two file exceptions add the named PR colli
 | `pkg/apisurface/**` | 6 | 8 | **Externally owned:** Batch 006 transport-family convergence |
 | `pkg/cli/**` | 12 | 18 | **Externally owned:** Batch 006 transport-family convergence; `pkg/cli/root_run_test.go` also collides with Batch 005 `create-root-process-owner` |
 | `pkg/factory/sessions/execution/**` | 11 | 31 | **Externally owned:** Batch 006 factory/orchestrator convergence and Batch 007 session/service convergence |
-| `pkg/interfaces/**` | 2 | 3 | **Externally owned:** Batch 006 platform/interfaces convergence |
-| `pkg/internal/cursorstorage/**` | 5 | 10 | **Externally owned:** Batch 006 platform/interfaces convergence |
+| `pkg/factory/contracts/**` | 2 | 3 | **Externally owned:** Batch 006 platform/interfaces convergence |
+| `pkg/platform/cursors/**` | 5 | 10 | **Externally owned:** Batch 006 platform/interfaces convergence |
 | `pkg/transports/mcp/**` | 4 | 9 | **Externally owned:** Batch 006 transport-family convergence |
-| `pkg/replay/**` | 5 | 5 | **Externally owned:** Batch 006 platform/interfaces convergence |
+| `pkg/factory/replay/**` | 5 | 5 | **Externally owned:** Batch 006 platform/interfaces convergence |
 | `pkg/runtimehost/**` | 3 | 5 | **Externally owned:** Batch 008 runtime-shim removal; `pkg/runtimehost/runtime_sessions.go` also collides with PR #1062 |
 | `pkg/service/**` | 10 | 31 | **Externally owned:** Batch 007 session/service convergence and Batch 008 runtime-shim removal |
 | `pkg/workers/**` | 5 | 9 | **Externally owned:** Batch 006 model/worker convergence; `pkg/workers/provider/recording_provider_test.go` also collides with PR #1001 |

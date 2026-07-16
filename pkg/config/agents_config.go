@@ -3,13 +3,17 @@ package config
 import (
 	"errors"
 	"fmt"
-	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"gopkg.in/yaml.v3"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/portpowered/infinite-you/pkg/config/retiredboundary"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
+	"gopkg.in/yaml.v3"
 )
 
 // WorkstationLoader loads workstation definitions by name.
@@ -133,7 +137,7 @@ func IsNamedFactoryNotFound(err error) bool { return errors.Is(err, ErrNamedFact
 // LoadWorkerConfig loads a worker configuration from the given directory.
 // It reads AGENTS.md, parses YAML frontmatter into WorkerConfig, and sets
 // Body to the remaining markdown content.
-func LoadWorkerConfig(dir string) (*interfaces.WorkerConfig, error) {
+func LoadWorkerConfig(dir string) (*workerconfig.Config, error) {
 	agentsPath := filepath.Join(dir, interfaces.FactoryAgentsFileName)
 	frontmatter, body, err := parseAgentsMD(agentsPath)
 	if err != nil {
@@ -158,7 +162,7 @@ func LoadWorkerConfig(dir string) (*interfaces.WorkerConfig, error) {
 		return nil, fmt.Errorf("parse worker frontmatter in %s: %w", agentsPath, err)
 	}
 
-	cfg := interfaces.WorkerConfig{
+	cfg := workerconfig.Config{
 		Type:             parsed.Type,
 		Provider:         parsed.Provider,
 		Model:            parsed.Model,
@@ -166,7 +170,7 @@ func LoadWorkerConfig(dir string) (*interfaces.WorkerConfig, error) {
 		ExecutorProvider: parsed.ExecutorProvider,
 		Command:          parsed.Command,
 		Args:             append([]string(nil), parsed.Args...),
-		Resources:        append([]interfaces.ResourceConfig(nil), parsed.Resources...),
+		Resources:        append([]factoryresource.Config(nil), parsed.Resources...),
 		Timeout:          parsed.Timeout,
 		StopToken:        parsed.StopToken,
 		SkipPermissions:  parsed.SkipPermissions,
@@ -193,20 +197,20 @@ func LoadWorkerConfig(dir string) (*interfaces.WorkerConfig, error) {
 }
 
 type workerFrontmatterInput struct {
-	Type             string                               `yaml:"type"`
-	Provider         string                               `yaml:"provider,omitempty"`
-	Model            string                               `yaml:"model,omitempty"`
-	ModelProvider    string                               `yaml:"modelProvider,omitempty"`
-	ExecutorProvider string                               `yaml:"executorProvider,omitempty"`
-	Command          string                               `yaml:"command,omitempty"`
-	Args             []string                             `yaml:"args,omitempty"`
-	Resources        []interfaces.ResourceConfig          `yaml:"resources,omitempty"`
-	Timeout          string                               `yaml:"timeout,omitempty"`
-	StopToken        string                               `yaml:"stopToken,omitempty"`
-	SkipPermissions  bool                                 `yaml:"skipPermissions,omitempty"`
-	OpenCodeAgent    string                               `yaml:"openCodeAgent,omitempty"`
-	Auth             *interfaces.HostedWorkerAuthConfig   `yaml:"auth,omitempty"`
-	Linear           *interfaces.HostedLinearWorkerConfig `yaml:"linear,omitempty"`
+	Type             string                                 `yaml:"type"`
+	Provider         string                                 `yaml:"provider,omitempty"`
+	Model            string                                 `yaml:"model,omitempty"`
+	ModelProvider    string                                 `yaml:"modelProvider,omitempty"`
+	ExecutorProvider string                                 `yaml:"executorProvider,omitempty"`
+	Command          string                                 `yaml:"command,omitempty"`
+	Args             []string                               `yaml:"args,omitempty"`
+	Resources        []factoryresource.Config               `yaml:"resources,omitempty"`
+	Timeout          string                                 `yaml:"timeout,omitempty"`
+	StopToken        string                                 `yaml:"stopToken,omitempty"`
+	SkipPermissions  bool                                   `yaml:"skipPermissions,omitempty"`
+	OpenCodeAgent    string                                 `yaml:"openCodeAgent,omitempty"`
+	Auth             *workerconfig.HostedWorkerAuthConfig   `yaml:"auth,omitempty"`
+	Linear           *workerconfig.HostedLinearWorkerConfig `yaml:"linear,omitempty"`
 }
 
 func validateOpenCodeAgentInFrontmatter(frontmatter map[string]any, path string) error {
@@ -228,7 +232,7 @@ func validateOpenCodeAgentField(path, agent string) error {
 	return nil
 }
 
-func cloneHostedWorkerAuthConfig(cfg *interfaces.HostedWorkerAuthConfig) *interfaces.HostedWorkerAuthConfig {
+func cloneHostedWorkerAuthConfig(cfg *workerconfig.HostedWorkerAuthConfig) *workerconfig.HostedWorkerAuthConfig {
 	if cfg == nil {
 		return nil
 	}
@@ -236,7 +240,7 @@ func cloneHostedWorkerAuthConfig(cfg *interfaces.HostedWorkerAuthConfig) *interf
 	return &cloned
 }
 
-func cloneHostedLinearWorkerConfig(cfg *interfaces.HostedLinearWorkerConfig) *interfaces.HostedLinearWorkerConfig {
+func cloneHostedLinearWorkerConfig(cfg *workerconfig.HostedLinearWorkerConfig) *workerconfig.HostedLinearWorkerConfig {
 	if cfg == nil {
 		return nil
 	}
@@ -328,7 +332,7 @@ func normalizeWorkstationPublicEnums(cfg *interfaces.FactoryWorkstationConfig) {
 	if cfg == nil {
 		return
 	}
-	cfg.Runner = interfaces.NormalizeRunnerID(cfg.Runner)
+	cfg.Runner = workerrunner.NormalizeRunnerID(cfg.Runner)
 	if cfg.Kind != "" {
 		behavior := factoryapi.WorkstationKind(cfg.Kind)
 		cfg.Kind = internalFactoryWorkstationKindFromPublic(&behavior)
@@ -556,20 +560,20 @@ func splitRuntimeEntityDirExists(dir string) bool {
 }
 
 type workerFrontmatter struct {
-	Type             string                               `yaml:"type"`
-	Provider         string                               `yaml:"provider,omitempty"`
-	Model            string                               `yaml:"model,omitempty"`
-	ModelProvider    string                               `yaml:"modelProvider,omitempty"`
-	ExecutorProvider string                               `yaml:"executorProvider,omitempty"`
-	Command          string                               `yaml:"command,omitempty"`
-	Args             []string                             `yaml:"args,omitempty"`
-	Resources        []interfaces.ResourceConfig          `yaml:"resources,omitempty"`
-	Timeout          string                               `yaml:"timeout,omitempty"`
-	StopToken        string                               `yaml:"stopToken,omitempty"`
-	SkipPermissions  bool                                 `yaml:"skipPermissions,omitempty"`
-	OpenCodeAgent    string                               `yaml:"openCodeAgent,omitempty"`
-	Auth             *interfaces.HostedWorkerAuthConfig   `yaml:"auth,omitempty"`
-	Linear           *interfaces.HostedLinearWorkerConfig `yaml:"linear,omitempty"`
+	Type             string                                 `yaml:"type"`
+	Provider         string                                 `yaml:"provider,omitempty"`
+	Model            string                                 `yaml:"model,omitempty"`
+	ModelProvider    string                                 `yaml:"modelProvider,omitempty"`
+	ExecutorProvider string                                 `yaml:"executorProvider,omitempty"`
+	Command          string                                 `yaml:"command,omitempty"`
+	Args             []string                               `yaml:"args,omitempty"`
+	Resources        []factoryresource.Config               `yaml:"resources,omitempty"`
+	Timeout          string                                 `yaml:"timeout,omitempty"`
+	StopToken        string                                 `yaml:"stopToken,omitempty"`
+	SkipPermissions  bool                                   `yaml:"skipPermissions,omitempty"`
+	OpenCodeAgent    string                                 `yaml:"openCodeAgent,omitempty"`
+	Auth             *workerconfig.HostedWorkerAuthConfig   `yaml:"auth,omitempty"`
+	Linear           *workerconfig.HostedLinearWorkerConfig `yaml:"linear,omitempty"`
 }
 
 type workstationFrontmatter struct {
@@ -589,7 +593,7 @@ type workstationFrontmatter struct {
 	OnContinue       []ioFrontmatter              `yaml:"onContinue,omitempty"`
 	OnRejection      []ioFrontmatter              `yaml:"onRejection,omitempty"`
 	OnFailure        []ioFrontmatter              `yaml:"onFailure,omitempty"`
-	Resources        []interfaces.ResourceConfig  `yaml:"resources,omitempty"`
+	Resources        []factoryresource.Config     `yaml:"resources,omitempty"`
 	Guards           []guardFrontmatter           `yaml:"guards,omitempty"`
 	StopWords        []string                     `yaml:"stopWords,omitempty"`
 	WorkingDirectory string                       `yaml:"workingDirectory,omitempty"`
@@ -650,7 +654,7 @@ func workstationFrontmatterForExpansion(def interfaces.FactoryWorkstationConfig)
 		OnContinue:       ioFrontmatterSlice(def.OnContinue),
 		OnRejection:      ioFrontmatterSlice(def.OnRejection),
 		OnFailure:        ioFrontmatterSlice(def.OnFailure),
-		Resources:        append([]interfaces.ResourceConfig(nil), def.Resources...),
+		Resources:        append([]factoryresource.Config(nil), def.Resources...),
 		Guards:           guardFrontmatterSlice(def.Guards),
 		StopWords:        append([]string(nil), def.StopWords...),
 		WorkingDirectory: def.WorkingDirectory,
@@ -683,7 +687,7 @@ func ioFrontmatterSlice(configs []interfaces.IOConfig) []ioFrontmatter {
 	return out
 }
 
-func workerFrontmatterForExpansion(def interfaces.WorkerConfig) workerFrontmatter {
+func workerFrontmatterForExpansion(def workerconfig.Config) workerFrontmatter {
 	modelProvider := def.ModelProvider
 	if def.ModelProvider != "" {
 		modelProvider = string(publicFactoryWorkerModelProviderFromInternal(def.ModelProvider))
@@ -700,7 +704,7 @@ func workerFrontmatterForExpansion(def interfaces.WorkerConfig) workerFrontmatte
 		ExecutorProvider: executorProvider,
 		Command:          def.Command,
 		Args:             append([]string(nil), def.Args...),
-		Resources:        append([]interfaces.ResourceConfig(nil), def.Resources...),
+		Resources:        append([]factoryresource.Config(nil), def.Resources...),
 		Timeout:          def.Timeout,
 		StopToken:        def.StopToken,
 		SkipPermissions:  def.SkipPermissions,

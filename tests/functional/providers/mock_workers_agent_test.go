@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -33,8 +33,8 @@ func TestMockWorkers_AgentDefaultAcceptMovesWorkToOutputPlace(t *testing.T) {
 	if len(snapshot.DispatchHistory) != 1 {
 		t.Fatalf("DispatchHistory count = %d, want 1", len(snapshot.DispatchHistory))
 	}
-	if snapshot.DispatchHistory[0].Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("dispatch outcome = %s, want %s", snapshot.DispatchHistory[0].Outcome, interfaces.OutcomeAccepted)
+	if snapshot.DispatchHistory[0].Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("dispatch outcome = %s, want %s", snapshot.DispatchHistory[0].Outcome, workerexecution.OutcomeAccepted)
 	}
 }
 
@@ -75,11 +75,11 @@ func TestMockWorkers_AgentRejectConfigRoutesFailureWithoutLoggingCommandOutput(t
 	if len(snapshot.DispatchHistory) != 1 {
 		t.Fatalf("DispatchHistory count = %d, want 1", len(snapshot.DispatchHistory))
 	}
-	if snapshot.DispatchHistory[0].Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("dispatch outcome = %s, want %s", snapshot.DispatchHistory[0].Outcome, interfaces.OutcomeFailed)
+	if snapshot.DispatchHistory[0].Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("dispatch outcome = %s, want %s", snapshot.DispatchHistory[0].Outcome, workerexecution.OutcomeFailed)
 	}
-	if snapshot.DispatchHistory[0].FailureMetadata == nil || snapshot.DispatchHistory[0].FailureMetadata.Type != interfaces.WorkFailureTypeUnknown {
-		t.Fatalf("FailureMetadata.Type = %#v, want %q", snapshot.DispatchHistory[0].FailureMetadata, interfaces.WorkFailureTypeUnknown)
+	if snapshot.DispatchHistory[0].FailureMetadata == nil || snapshot.DispatchHistory[0].FailureMetadata.Type != workerexecution.WorkFailureTypeUnknown {
+		t.Fatalf("FailureMetadata.Type = %#v, want %q", snapshot.DispatchHistory[0].FailureMetadata, workerexecution.WorkFailureTypeUnknown)
 	}
 	if !strings.Contains(snapshot.DispatchHistory[0].Reason, "provider error: unknown: Codex reported a terminal error.") {
 		t.Fatalf("dispatch reason = %q, want stable unknown code with audited message", snapshot.DispatchHistory[0].Reason)
@@ -130,11 +130,11 @@ func TestMockWorkers_AgentRejectConfigWithZeroExitCodeStillRoutesFailure(t *test
 	if len(snapshot.DispatchHistory) != 1 {
 		t.Fatalf("DispatchHistory count = %d, want 1", len(snapshot.DispatchHistory))
 	}
-	if snapshot.DispatchHistory[0].Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("dispatch outcome = %s, want %s", snapshot.DispatchHistory[0].Outcome, interfaces.OutcomeFailed)
+	if snapshot.DispatchHistory[0].Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("dispatch outcome = %s, want %s", snapshot.DispatchHistory[0].Outcome, workerexecution.OutcomeFailed)
 	}
-	if snapshot.DispatchHistory[0].FailureMetadata == nil || snapshot.DispatchHistory[0].FailureMetadata.Type != interfaces.WorkFailureTypeUnknown {
-		t.Fatalf("FailureMetadata.Type = %#v, want %q", snapshot.DispatchHistory[0].FailureMetadata, interfaces.WorkFailureTypeUnknown)
+	if snapshot.DispatchHistory[0].FailureMetadata == nil || snapshot.DispatchHistory[0].FailureMetadata.Type != workerexecution.WorkFailureTypeUnknown {
+		t.Fatalf("FailureMetadata.Type = %#v, want %q", snapshot.DispatchHistory[0].FailureMetadata, workerexecution.WorkFailureTypeUnknown)
 	}
 	if !strings.Contains(snapshot.DispatchHistory[0].Reason, "provider error: unknown: Codex reported a terminal error.") {
 		t.Fatalf("dispatch reason = %q, want stable unknown code with audited message", snapshot.DispatchHistory[0].Reason)

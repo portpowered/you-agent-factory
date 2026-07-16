@@ -9,8 +9,9 @@ import (
 	"time"
 
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const (
@@ -25,7 +26,7 @@ const (
 // SessionLifecycleStartInput carries replay-safe facts for SESSION_STARTED.
 type SessionLifecycleStartInput struct {
 	SessionID           string
-	OrchestratorKind    factoryapi.FactoryOrchestratorKind
+	OrchestratorKind    string
 	OrchestratorDialect string
 	Source              string
 	FactoryID           string
@@ -39,40 +40,40 @@ type SessionLifecycleStartInput struct {
 // SessionLifecycleResultInput carries replay-safe facts for SESSION_RESULT_UPDATED.
 type SessionLifecycleResultInput struct {
 	SessionID        string
-	OrchestratorKind factoryapi.FactoryOrchestratorKind
+	OrchestratorKind string
 	PhaseID          string
 	PhaseName        string
 	Source           string
 	Tick             int
-	ResultStatus     factoryapi.FactoryEventSessionResultStatus
-	ResultSummary    []interfaces.WorkContentPart
+	ResultStatus     interfaces.FactorySessionResultStatus
+	ResultSummary    []work.WorkContentPart
 	ArtifactIDs      []string
 }
 
 // SessionLifecycleCompleteInput carries replay-safe facts for SESSION_COMPLETED.
 type SessionLifecycleCompleteInput struct {
 	SessionID        string
-	OrchestratorKind factoryapi.FactoryOrchestratorKind
+	OrchestratorKind string
 	Source           string
 	Tick             int
-	FinalStatus      factoryapi.FactorySessionDurableLifecycleStatus
-	ResultStatus     *factoryapi.FactoryEventSessionResultStatus
+	FinalStatus      interfaces.FactorySessionLifecycleStatus
+	ResultStatus     *interfaces.FactorySessionResultStatus
 	ArtifactIDs      []string
-	DispatchCounts   *factoryapi.FactorySessionJavaScriptChildDispatchCounts
-	FailureDetail    *factoryapi.FailureDetail
+	DispatchCounts   *interfaces.FactorySessionChildDispatchCounts
+	FailureDetail    *workerexecution.FailureDetail
 }
 
 // SessionLifecycleControlInput carries replay-safe facts for SESSION_LIFECYCLE_CONTROL.
 type SessionLifecycleControlInput struct {
 	SessionID           string
-	OrchestratorKind    factoryapi.FactoryOrchestratorKind
+	OrchestratorKind    string
 	OrchestratorDialect string
 	Source              string
 	Tick                int
-	Operation           factoryapi.FactorySessionLifecycleControlKind
-	Outcome             factoryapi.FactorySessionLifecycleControlOutcome
-	PreviousStatus      factoryapi.FactorySessionDurableLifecycleStatus
-	NewStatus           factoryapi.FactorySessionDurableLifecycleStatus
+	Operation           interfaces.FactorySessionLifecycleControlKind
+	Outcome             interfaces.FactorySessionLifecycleControlOutcome
+	PreviousStatus      interfaces.FactorySessionLifecycleStatus
+	NewStatus           interfaces.FactorySessionLifecycleStatus
 	Reason              string
 }
 
@@ -83,12 +84,12 @@ func (h *FactoryEventHistory) RecordSessionPaused(input SessionLifecycleControlI
 	}
 	eventTime = interfaces.CanonicalEventTime(eventTime)
 	sequence := h.allocateSessionLifecycleSequence()
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeSessionPaused,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeSessionPaused,
 		fmt.Sprintf("%s/%d", eventIDSessionPausedPrefix, sequence),
-		h.sessionLifecycleContext(input.SessionID, input.OrchestratorKind, input.OrchestratorDialect, input.Source, input.Tick, eventTime, sequence),
-		factoryapi.SessionPausedEventPayload{
-			Status:   factoryapi.FactorySessionDurableLifecycleStatusPaused,
+		h.domainSessionLifecycleContext(input.SessionID, input.OrchestratorKind, input.OrchestratorDialect, input.Source, input.Tick, eventTime, sequence),
+		interfaces.FactorySessionPausedEventPayload{
+			Status:   interfaces.FactorySessionLifecycleStatusPaused,
 			PausedAt: eventTime,
 		},
 	))
@@ -101,12 +102,12 @@ func (h *FactoryEventHistory) RecordSessionResumed(input SessionLifecycleControl
 	}
 	eventTime = interfaces.CanonicalEventTime(eventTime)
 	sequence := h.allocateSessionLifecycleSequence()
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeSessionResumed,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeSessionResumed,
 		fmt.Sprintf("%s/%d", eventIDSessionResumedPrefix, sequence),
-		h.sessionLifecycleContext(input.SessionID, input.OrchestratorKind, input.OrchestratorDialect, input.Source, input.Tick, eventTime, sequence),
-		factoryapi.SessionResumedEventPayload{
-			Status:    factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		h.domainSessionLifecycleContext(input.SessionID, input.OrchestratorKind, input.OrchestratorDialect, input.Source, input.Tick, eventTime, sequence),
+		interfaces.FactorySessionResumedEventPayload{
+			Status:    interfaces.FactorySessionLifecycleStatusRunning,
 			ResumedAt: eventTime,
 		},
 	))
@@ -128,12 +129,12 @@ func (h *FactoryEventHistory) RecordSessionStarted(input SessionLifecycleStartIn
 
 	eventTime = interfaces.CanonicalEventTime(eventTime)
 	sequence := h.allocateSessionLifecycleSequence()
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeSessionStarted,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeSessionStarted,
 		eventIDSessionStarted,
-		h.sessionLifecycleContext(input.SessionID, input.OrchestratorKind, input.OrchestratorDialect, input.Source, input.Tick, eventTime, sequence),
-		factoryapi.SessionStartedEventPayload{
-			FactoryId:  stringPtrIfNotEmpty(input.FactoryID),
+		h.domainSessionLifecycleContext(input.SessionID, input.OrchestratorKind, input.OrchestratorDialect, input.Source, input.Tick, eventTime, sequence),
+		interfaces.FactorySessionStartedEventPayload{
+			FactoryID:  stringPtrIfNotEmpty(input.FactoryID),
 			SourceRef:  stringPtrIfNotEmpty(input.SourceRef),
 			SourceHash: stringPtrIfNotEmpty(input.SourceHash),
 			PolicyHash: stringPtrIfNotEmpty(input.PolicyHash),
@@ -150,25 +151,24 @@ func (h *FactoryEventHistory) RecordSessionResultUpdated(input SessionLifecycleR
 	}
 	eventTime = interfaces.CanonicalEventTime(eventTime)
 	sequence := h.allocateSessionLifecycleSequence()
-	context := h.sessionLifecycleContext(input.SessionID, input.OrchestratorKind, "", input.Source, input.Tick, eventTime, sequence)
+	context := h.domainSessionLifecycleContext(input.SessionID, input.OrchestratorKind, "", input.Source, input.Tick, eventTime, sequence)
 	if phaseID := strings.TrimSpace(input.PhaseID); phaseID != "" {
-		context.PhaseId = &phaseID
+		context.PhaseID = &phaseID
 	}
 	if phaseName := strings.TrimSpace(input.PhaseName); phaseName != "" {
 		context.PhaseName = &phaseName
 	}
-	payload := factoryapi.SessionResultUpdatedEventPayload{
+	payload := interfaces.FactorySessionResultUpdatedEventPayload{
 		ResultStatus: input.ResultStatus,
 	}
-	if summary := generatedWorkContentPtr(input.ResultSummary); summary != nil {
-		payload.ResultSummary = summary
+	if len(input.ResultSummary) > 0 {
+		payload.ResultSummary = append([]work.WorkContentPart(nil), input.ResultSummary...)
 	}
 	if len(input.ArtifactIDs) > 0 {
-		artifactIDs := append([]string(nil), input.ArtifactIDs...)
-		payload.ArtifactIds = &artifactIDs
+		payload.ArtifactIDs = append([]string(nil), input.ArtifactIDs...)
 	}
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeSessionResultUpdated,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeSessionResultUpdated,
 		fmt.Sprintf("%s/%d", eventIDSessionResultUpdatedPrefix, sequence),
 		context,
 		payload,
@@ -197,7 +197,7 @@ func (h *FactoryEventHistory) RecordSessionCompleted(input SessionLifecycleCompl
 			durationMillis = 0
 		}
 	}
-	payload := factoryapi.SessionCompletedEventPayload{
+	payload := interfaces.FactorySessionCompletedEventPayload{
 		FinalStatus:    input.FinalStatus,
 		CompletedAt:    eventTime,
 		DurationMillis: int64Ptr(durationMillis),
@@ -205,17 +205,16 @@ func (h *FactoryEventHistory) RecordSessionCompleted(input SessionLifecycleCompl
 		FailureDetail:  input.FailureDetail,
 	}
 	if len(input.ArtifactIDs) > 0 {
-		artifactIDs := append([]string(nil), input.ArtifactIDs...)
-		payload.ArtifactIds = &artifactIDs
+		payload.ArtifactIDs = append([]string(nil), input.ArtifactIDs...)
 	}
 	if input.DispatchCounts != nil {
 		payload.DispatchCounts = input.DispatchCounts
 	}
 	sequence := h.allocateSessionLifecycleSequence()
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeSessionCompleted,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeSessionCompleted,
 		eventIDSessionCompleted,
-		h.sessionLifecycleContext(input.SessionID, input.OrchestratorKind, "", input.Source, input.Tick, eventTime, sequence),
+		h.domainSessionLifecycleContext(input.SessionID, input.OrchestratorKind, "", input.Source, input.Tick, eventTime, sequence),
 		payload,
 	))
 }
@@ -235,7 +234,7 @@ func (h *FactoryEventHistory) RecordSessionLifecycleFromFactoryConfig(
 	}
 	input := SessionLifecycleStartInput{
 		SessionID:        sessionID,
-		OrchestratorKind: interfaces.GeneratedPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryCfg)),
+		OrchestratorKind: interfaces.StrictPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryCfg)),
 		Source:           "runtime",
 		Tick:             tick,
 	}
@@ -272,15 +271,15 @@ func (h *FactoryEventHistory) RecordSessionLifecycleCompletion(
 	if strings.TrimSpace(sessionID) == "" {
 		sessionID = factory_context.DefaultSessionID
 	}
-	orchestratorKind := interfaces.GeneratedPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryCfg))
-	finalStatus := factoryapi.FactorySessionDurableLifecycleStatusSucceeded
-	resultStatus := factoryapi.FactoryEventSessionResultStatusFinal
-	var failureDetail *factoryapi.FailureDetail
+	orchestratorKind := interfaces.StrictPublicFactoryOrchestratorKind(interfaces.EffectiveOrchestratorKind(factoryCfg))
+	finalStatus := interfaces.FactorySessionLifecycleStatusSucceeded
+	resultStatus := interfaces.FactorySessionResultStatusFinal
+	var failureDetail *workerexecution.FailureDetail
 	if factoryState == interfaces.FactoryStateFailed {
-		finalStatus = factoryapi.FactorySessionDurableLifecycleStatusFailed
-		resultStatus = factoryapi.FactoryEventSessionResultStatusFailedWithPartial
+		finalStatus = interfaces.FactorySessionLifecycleStatusFailed
+		resultStatus = interfaces.FactorySessionResultStatusFailedWithPartial
 		if strings.TrimSpace(reason) != "" {
-			failureDetail = failureDetailValue(string(factoryapi.WorkFailureTypeUnknown), reason)
+			failureDetail = &workerexecution.FailureDetail{Reason: workerexecution.WorkFailureTypeUnknown, Message: reason}
 		}
 	}
 	result := resultStatus
@@ -308,11 +307,11 @@ func (h *FactoryEventHistory) RecordSessionLifecycleControl(input SessionLifecyc
 	if h == nil || strings.TrimSpace(input.SessionID) == "" {
 		return
 	}
-	if input.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+	if input.Outcome != interfaces.FactorySessionLifecycleControlOutcomeAccepted {
 		return
 	}
-	if input.Operation != factoryapi.FactorySessionLifecycleControlKindPause &&
-		input.Operation != factoryapi.FactorySessionLifecycleControlKindResume {
+	if input.Operation != interfaces.FactorySessionLifecycleControlPause &&
+		input.Operation != interfaces.FactorySessionLifecycleControlResume {
 		return
 	}
 	if input.PreviousStatus == input.NewStatus {
@@ -321,7 +320,7 @@ func (h *FactoryEventHistory) RecordSessionLifecycleControl(input SessionLifecyc
 
 	eventTime = interfaces.CanonicalEventTime(eventTime)
 	sequence := h.allocateSessionLifecycleSequence()
-	payload := factoryapi.SessionLifecycleControlEventPayload{
+	payload := interfaces.FactorySessionLifecycleControlEventPayload{
 		Operation:      input.Operation,
 		Outcome:        input.Outcome,
 		PreviousStatus: input.PreviousStatus,
@@ -331,40 +330,40 @@ func (h *FactoryEventHistory) RecordSessionLifecycleControl(input SessionLifecyc
 	if reason := strings.TrimSpace(input.Reason); reason != "" {
 		payload.Reason = stringPtrIfNotEmpty(reason)
 	}
-	h.appendGenerated(factoryEvent(
-		factoryapi.FactoryEventTypeSessionLifecycleControl,
+	h.appendEvent(domainFactoryEvent(
+		interfaces.FactoryEventTypeSessionLifecycleControl,
 		fmt.Sprintf("%s/%s/%d", eventIDSessionLifecycleControlPrefix, input.SessionID, sequence),
-		h.sessionLifecycleContext(input.SessionID, input.OrchestratorKind, input.OrchestratorDialect, input.Source, input.Tick, eventTime, sequence),
+		h.domainSessionLifecycleContext(input.SessionID, input.OrchestratorKind, input.OrchestratorDialect, input.Source, input.Tick, eventTime, sequence),
 		payload,
 	))
 }
 
-func FactoryStateToDurableLifecycleStatus(state interfaces.FactoryState) factoryapi.FactorySessionDurableLifecycleStatus {
+func FactoryStateToDurableLifecycleStatus(state interfaces.FactoryState) interfaces.FactorySessionLifecycleStatus {
 	switch state {
 	case interfaces.FactoryStatePaused:
-		return factoryapi.FactorySessionDurableLifecycleStatusPaused
+		return interfaces.FactorySessionLifecycleStatusPaused
 	case interfaces.FactoryStateCompleted:
-		return factoryapi.FactorySessionDurableLifecycleStatusSucceeded
+		return interfaces.FactorySessionLifecycleStatusSucceeded
 	case interfaces.FactoryStateFailed:
-		return factoryapi.FactorySessionDurableLifecycleStatusFailed
+		return interfaces.FactorySessionLifecycleStatusFailed
 	default:
-		return factoryapi.FactorySessionDurableLifecycleStatusRunning
+		return interfaces.FactorySessionLifecycleStatusRunning
 	}
 }
 
-func (h *FactoryEventHistory) sessionLifecycleContext(
+func (h *FactoryEventHistory) domainSessionLifecycleContext(
 	sessionID string,
-	orchestratorKind factoryapi.FactoryOrchestratorKind,
+	orchestratorKind string,
 	orchestratorDialect string,
 	source string,
 	tick int,
 	eventTime time.Time,
 	sessionSequence int,
-) factoryapi.FactoryEventContext {
-	context := factoryapi.FactoryEventContext{
+) interfaces.FactoryEventContext {
+	context := interfaces.FactoryEventContext{
 		Tick:      tick,
 		EventTime: eventTime,
-		SessionId: stringPtr(sessionID),
+		SessionID: stringPtr(sessionID),
 	}
 	if orchestratorKind != "" {
 		kind := orchestratorKind
@@ -397,35 +396,4 @@ func sessionLifecycleDigestJSON(raw json.RawMessage) string {
 	}
 	sum := sha256.Sum256(raw)
 	return "sha256:" + hex.EncodeToString(sum[:])
-}
-
-func generatedWorkContentPtr(parts []interfaces.WorkContentPart) *factoryapi.WorkContent {
-	if len(parts) == 0 {
-		return nil
-	}
-	generated := make([]factoryapi.WorkContentPart, 0, len(parts))
-	for _, part := range parts {
-		item := factoryapi.WorkContentPart{}
-		switch part.Type {
-		case interfaces.WorkContentPartTypeText:
-			text := part.Text
-			if err := item.FromWorkTextContentPart(factoryapi.WorkTextContentPart{
-				Type: factoryapi.WorkContentPartTypeText,
-				Text: text,
-			}); err != nil {
-				continue
-			}
-		case interfaces.WorkContentPartTypeImage:
-			if err := item.FromWorkImageContentPart(factoryapi.WorkImageContentPart{Url: part.URL}); err != nil {
-				continue
-			}
-		default:
-			continue
-		}
-		generated = append(generated, item)
-	}
-	if len(generated) == 0 {
-		return nil
-	}
-	return &generated
 }

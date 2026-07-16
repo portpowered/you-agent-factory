@@ -6,8 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // WorkerRunner is an active goroutine that processes work for a specific worker type.
@@ -17,19 +19,19 @@ type WorkerRunner struct {
 	workerType string
 	executor   WorkerExecutor
 	logger     logging.Logger
-	dispatchCh chan interfaces.WorkDispatch
-	resultCh   chan<- interfaces.WorkResult
+	dispatchCh chan work.WorkDispatch
+	resultCh   chan<- workerexecution.WorkResult
 	stopOnce   sync.Once
 }
 
 // NewWorkerRunner creates a runner for the given worker type. The runner reads
 // dispatches from its own channel and sends results to the shared resultCh.
-func NewWorkerRunner(workerType string, executor WorkerExecutor, resultCh chan<- interfaces.WorkResult, logger logging.Logger) *WorkerRunner {
+func NewWorkerRunner(workerType string, executor WorkerExecutor, resultCh chan<- workerexecution.WorkResult, logger logging.Logger) *WorkerRunner {
 	return &WorkerRunner{
 		workerType: workerType,
 		executor:   executor,
 		logger:     logging.EnsureLogger(logger),
-		dispatchCh: make(chan interfaces.WorkDispatch, 16),
+		dispatchCh: make(chan work.WorkDispatch, 16),
 		resultCh:   resultCh,
 	}
 }
@@ -54,7 +56,7 @@ func (r *WorkerRunner) run() {
 	var wg sync.WaitGroup
 	for dispatch := range r.dispatchCh {
 		wg.Add(1)
-		go func(d interfaces.WorkDispatch) {
+		go func(d work.WorkDispatch) {
 			defer wg.Done()
 			result := r.executeWithTimeout(d)
 			r.resultCh <- result
@@ -73,7 +75,7 @@ func (r *WorkerRunner) run() {
 
 // executeWithTimeout executes a single dispatch. Workstation-specific timeout
 // handling is resolved inside WorkstationExecutor from runtime config.
-func (r *WorkerRunner) executeWithTimeout(dispatch interfaces.WorkDispatch) (result interfaces.WorkResult) {
+func (r *WorkerRunner) executeWithTimeout(dispatch work.WorkDispatch) (result workerexecution.WorkResult) {
 	ctx := context.Background()
 	start := time.Now()
 	defer func() {
@@ -108,12 +110,12 @@ func (r *WorkerRunner) executeWithTimeout(dispatch interfaces.WorkDispatch) (res
 					"transition_id", dispatch.TransitionID,
 					"dispatch_id", dispatch.DispatchID,
 					"elapsed_ms", elapsed.Milliseconds())...)
-			return interfaces.WorkResult{
+			return workerexecution.WorkResult{
 				DispatchID:   dispatch.DispatchID,
 				TransitionID: dispatch.TransitionID,
-				Outcome:      interfaces.OutcomeFailed,
+				Outcome:      workerexecution.OutcomeFailed,
 				Error:        "execution timeout",
-				Metrics:      interfaces.WorkMetrics{Duration: elapsed},
+				Metrics:      workerexecution.WorkMetrics{Duration: elapsed},
 			}
 		}
 		// Other executor errors are system failures.
@@ -123,12 +125,12 @@ func (r *WorkerRunner) executeWithTimeout(dispatch interfaces.WorkDispatch) (res
 				"transition_id", dispatch.TransitionID,
 				"dispatch_id", dispatch.DispatchID,
 				"error", err)...)
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeFailed,
+			Outcome:      workerexecution.OutcomeFailed,
 			Error:        err.Error(),
-			Metrics:      interfaces.WorkMetrics{Duration: elapsed},
+			Metrics:      workerexecution.WorkMetrics{Duration: elapsed},
 		}
 	}
 
@@ -148,12 +150,12 @@ func (r *WorkerRunner) executeWithTimeout(dispatch interfaces.WorkDispatch) (res
 	return result
 }
 
-func PanicAsFailedResult(dispatch interfaces.WorkDispatch, recovered any, duration time.Duration) interfaces.WorkResult {
-	return interfaces.WorkResult{
+func PanicAsFailedResult(dispatch work.WorkDispatch, recovered any, duration time.Duration) workerexecution.WorkResult {
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Error:        fmt.Sprintf("executor panic: %v", recovered),
-		Metrics:      interfaces.WorkMetrics{Duration: duration},
+		Metrics:      workerexecution.WorkMetrics{Duration: duration},
 	}
 }

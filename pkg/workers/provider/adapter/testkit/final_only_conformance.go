@@ -6,8 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
@@ -21,7 +22,7 @@ const (
 // provider without a native semantic stream must produce from them.
 type FinalOnlyFixture struct {
 	NewAdapter          func() adapter.Adapter
-	Request             interfaces.ProviderInferenceRequest
+	Request             workerexecution.ProviderInferenceRequest
 	Success             workerprocess.CommandResult
 	Failures            []FinalOnlyFailureCase
 	Expected            FinalOnlyExpected
@@ -33,14 +34,14 @@ type FinalOnlyFixture struct {
 type FinalOnlyFailureCase struct {
 	Name                    string
 	Result                  workerprocess.CommandResult
-	ExpectedProviderSession *interfaces.ProviderSessionMetadata
+	ExpectedProviderSession *workerexecution.ProviderSessionMetadata
 }
 
 // FinalOnlyExpected identifies the authoritative result expected after a
 // successful final-only command.
 type FinalOnlyExpected struct {
 	Content         string
-	ProviderSession *interfaces.ProviderSessionMetadata
+	ProviderSession *workerexecution.ProviderSessionMetadata
 }
 
 // RunFinalOnly runs the shared conformance contract for an adapter that emits
@@ -66,7 +67,7 @@ func RunFinalOnly(t *testing.T, fixture FinalOnlyFixture) {
 	}
 }
 
-func assertFinalOnlyContract(t *testing.T, providerAdapter adapter.Adapter, request interfaces.ProviderInferenceRequest) {
+func assertFinalOnlyContract(t *testing.T, providerAdapter adapter.Adapter, request workerexecution.ProviderInferenceRequest) {
 	t.Helper()
 	command, err := providerAdapter.BuildCommand(context.Background(), adapter.CommandContext{Request: request})
 	if err != nil {
@@ -163,7 +164,7 @@ func assertFinalOnlyFailure(t *testing.T, fixture FinalOnlyFixture, failureCase 
 		ParseError:    parseErr,
 		FlushReason:   adapter.FlushReasonCompleted,
 	})
-	if result.Failure == nil || result.Failure.Family != interfaces.WorkFailureFamilyTerminal || result.Failure.Type == "" || result.Failure.Retry.Retryable {
+	if result.Failure == nil || result.Failure.Family != workerexecution.WorkFailureFamilyTerminal || result.Failure.Type == "" || result.Failure.Retry.Retryable {
 		t.Fatalf("ClassifyFailure() = %#v", result)
 	}
 	assertSafeText(t, "failure message", result.Failure.Message, fixture.ForbiddenDiagnostic)
@@ -181,7 +182,7 @@ func finalOnlyParseContext(result workerprocess.CommandResult) adapter.FinalPars
 	}
 }
 
-func sameProviderSession(got, want *interfaces.ProviderSessionMetadata) bool {
+func sameProviderSession(got, want *workerexecution.ProviderSessionMetadata) bool {
 	if got == nil || want == nil {
 		return got == nil && want == nil
 	}

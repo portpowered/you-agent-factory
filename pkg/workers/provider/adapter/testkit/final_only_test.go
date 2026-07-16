@@ -7,8 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/testkit"
@@ -20,16 +21,16 @@ const (
 )
 
 type finalOnlyParseError struct {
-	providerSession *interfaces.ProviderSessionMetadata
+	providerSession *workerexecution.ProviderSessionMetadata
 }
 
 func (finalOnlyParseError) Error() string { return "fixture final response was unusable" }
 
 func TestFinalOnlyAdapterConformance(t *testing.T) {
-	session := interfaces.ProviderSessionMetadata{Provider: "fixture", Kind: "session_id", ID: "session-final-9"}
+	session := workerexecution.ProviderSessionMetadata{Provider: "fixture", Kind: "session_id", ID: "session-final-9"}
 	testkit.RunFinalOnly(t, testkit.FinalOnlyFixture{
 		NewAdapter: func() adapter.Adapter { return finalOnlyAdapter{} },
-		Request:    interfaces.ProviderInferenceRequest{Model: "fixture-model", UserMessage: finalOnlyPrompt},
+		Request:    workerexecution.ProviderInferenceRequest{Model: "fixture-model", UserMessage: finalOnlyPrompt},
 		Success:    workerprocess.CommandResult{Stdout: []byte(`{"content":"Complete response","session":"session-final-9"}`)},
 		Failures: []testkit.FinalOnlyFailureCase{
 			{
@@ -70,15 +71,15 @@ func (finalOnlyAdapter) ParseFinal(_ context.Context, input adapter.FinalParseCo
 	if err := json.Unmarshal(input.CommandResult.Stdout, &native); err != nil {
 		return adapter.FinalParseResult{}, finalOnlyParseError{}
 	}
-	var session *interfaces.ProviderSessionMetadata
+	var session *workerexecution.ProviderSessionMetadata
 	if strings.TrimSpace(native.Session) != "" {
-		session = &interfaces.ProviderSessionMetadata{Provider: "fixture", Kind: "session_id", ID: native.Session}
+		session = &workerexecution.ProviderSessionMetadata{Provider: "fixture", Kind: "session_id", ID: native.Session}
 	}
 	if strings.TrimSpace(native.Content) == "" {
 		return adapter.FinalParseResult{}, finalOnlyParseError{providerSession: session}
 	}
 	return adapter.FinalParseResult{
-		Response: interfaces.InferenceResponse{Content: native.Content, ProviderSession: session},
+		Response: workerexecution.InferenceResponse{Content: native.Content, ProviderSession: session},
 		Drafts:   finalOnlyDrafts(input, native.Content, native.Session),
 	}, nil
 }
@@ -93,8 +94,8 @@ func (finalOnlyAdapter) ClassifyFailure(_ context.Context, input adapter.Failure
 		return adapter.FailureResult{}
 	}
 	return adapter.FailureResult{Failure: &adapter.FailureFacts{
-		Family:          interfaces.WorkFailureFamilyTerminal,
-		Type:            interfaces.WorkFailureTypePermanentBadRequest,
+		Family:          workerexecution.WorkFailureFamilyTerminal,
+		Type:            workerexecution.WorkFailureTypePermanentBadRequest,
 		Message:         "fixture provider returned no usable final response",
 		Retry:           adapter.RetryGuidance{Retryable: false},
 		ProviderSession: parseFailure.providerSession,

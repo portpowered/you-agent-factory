@@ -12,14 +12,18 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -85,7 +89,7 @@ func (fs *FunctionalServer) GetDashboard(t *testing.T) DashboardResponse {
 	snapshot := fs.GetEngineStateSnapshot(t)
 	events := fs.GetFactoryEvents(t)
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {
 		t.Fatalf("reconstruct world state: %v", err)
 	}
@@ -207,7 +211,7 @@ func dashboardInferenceAttemptsByDispatchID(input map[string]map[string]interfac
 				Attempt:            attempt.Attempt,
 				DispatchId:         attempt.DispatchID,
 				DurationMillis:     attempt.DurationMillis,
-				FailureDetail:      interfaces.CloneFailureDetail(attempt.FailureDetail),
+				FailureDetail:      workerexecution.CloneFailureDetail(attempt.FailureDetail),
 				ExitCode:           copyIntPtrForFunctionalDashboard(attempt.ExitCode),
 				InferenceRequestId: attempt.InferenceRequestID,
 				Outcome:            attempt.Outcome,
@@ -374,7 +378,7 @@ func dashboardWorkItemRef(item interfaces.FactoryWorldWorkItemRef) DashboardWork
 func dashboardDispatchWorkItems(dispatch interfaces.FactoryWorldDispatchCompletion) []interfaces.FactoryWorldWorkItemRef {
 	seen := map[string]struct{}{}
 	out := make([]interfaces.FactoryWorldWorkItemRef, 0, len(dispatch.InputWorkItems)+len(dispatch.OutputWorkItems)+len(dispatch.WorkItemIDs))
-	appendItem := func(item interfaces.FactoryWorkItem) {
+	appendItem := func(item work.FactoryWorkItem) {
 		if item.ID == "" {
 			return
 		}
@@ -525,7 +529,7 @@ func dashboardTraceMutationsFromCompletion(dispatch interfaces.FactoryWorldDispa
 	return &out
 }
 
-func dashboardTraceMutationFromWorkItem(item interfaces.FactoryWorkItem, fromPlace string, fallbackTime time.Time) TraceMutationView {
+func dashboardTraceMutationFromWorkItem(item work.FactoryWorkItem, fromPlace string, fallbackTime time.Time) TraceMutationView {
 	token := dashboardTraceTokenFromWorkItem(item, item.ID, fallbackTime)
 	return TraceMutationView{
 		FromPlace:      stringPtrIfNotEmptyForFunctionalDashboard(dashboardCompatPlaceID(fromPlace)),
@@ -536,7 +540,7 @@ func dashboardTraceMutationFromWorkItem(item interfaces.FactoryWorkItem, fromPla
 	}
 }
 
-func dashboardTraceTokenFromWorkItem(item interfaces.FactoryWorkItem, tokenID string, fallbackTime time.Time) TraceTokenView {
+func dashboardTraceTokenFromWorkItem(item work.FactoryWorkItem, tokenID string, fallbackTime time.Time) TraceTokenView {
 	return TraceTokenView{
 		CreatedAt:  dashboardTimeString(fallbackTime),
 		EnteredAt:  dashboardTimeString(fallbackTime),
@@ -550,7 +554,7 @@ func dashboardTraceTokenFromWorkItem(item interfaces.FactoryWorkItem, tokenID st
 	}
 }
 
-func dashboardProviderSessionMetadata(session *interfaces.ProviderSessionMetadata) *ProviderSessionMetadata {
+func dashboardProviderSessionMetadata(session *workerexecution.ProviderSessionMetadata) *ProviderSessionMetadata {
 	if session == nil || session.ID == "" {
 		return nil
 	}

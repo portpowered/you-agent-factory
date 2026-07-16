@@ -5,10 +5,12 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 // crossPathPrePersistFixtures are shared JSON fixtures used to prove validate and
@@ -20,12 +22,12 @@ var crossPathPrePersistFixtures = []struct {
 }{
 	{
 		name:     "cross_path_invalid",
-		decode:   factoryvalidation.DecodeCrossPathInvalidFactory,
+		decode:   factoryfixtures.DecodeCrossPathInvalidFactory,
 		wantFail: true,
 	},
 	{
 		name:     "cross_path_valid_alpha",
-		decode:   factoryvalidation.DecodeCrossPathValidAlphaFactory,
+		decode:   factoryfixtures.DecodeCrossPathValidAlphaFactory,
 		wantFail: false,
 	},
 }
@@ -70,7 +72,7 @@ func TestCrossPathFixtures_ValidateFactoryAPIPrePersistMatchesEditableSavePreChe
 			}
 
 			apiSignatures := factoryvalidation.CanonicalTargetSignatures(apiResult.BlockingTargets())
-			saveSignatures := factoryvalidation.CanonicalAPITargetSignatures(topologyErr.Targets)
+			saveSignatures := validationassert.CanonicalAPITargetSignatures(topologyErr.Targets)
 			if !factoryvalidation.EquivalentCanonicalTargetSignatures(apiSignatures, saveSignatures) {
 				t.Fatalf("ValidateFactoryAPI signatures = %#v, save signatures = %#v",
 					apiSignatures, saveSignatures)

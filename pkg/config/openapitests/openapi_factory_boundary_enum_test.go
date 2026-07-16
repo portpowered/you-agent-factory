@@ -1,12 +1,14 @@
 package openapitests
 
 import (
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	. "github.com/portpowered/infinite-you/pkg/config"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestGeneratedFactoryFromOpenAPIJSON_RejectsMisCasedEnumValuesAtBoundary(t *testing.T) {
@@ -345,7 +347,7 @@ func assertRuntimeCanonicalUppercaseWorkerEnums(t *testing.T, cfg interfaces.Fac
 	if got := cfg.Workers[0].ModelProvider; got != "codex" {
 		t.Fatalf("expected runtime worker modelProvider codex, got %q", got)
 	}
-	if got := cfg.Workers[0].ModelLocality; got != interfaces.ModelLocalityLocal {
+	if got := cfg.Workers[0].ModelLocality; got != workerconfig.ModelLocalityLocal {
 		t.Fatalf("expected runtime worker modelLocality LOCAL, got %q", got)
 	}
 	if got := cfg.Workers[0].ExecutorProvider; got != "script_wrap" {

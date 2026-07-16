@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -98,7 +98,7 @@ func TestExecutorReviewManualRepair_BoundedMoveFailedTaskBackToInit(t *testing.T
 	errCh := support.RunGuardsBatchHarness(t, h, ctx)
 
 	injectFailedPostProcessingPattern(t, h, laneName, traceID, taskID)
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:                   "keep-engine-alive",
 		WorkTypeID:             "task",
 		TargetState:            "in-review",
@@ -160,7 +160,7 @@ func injectFailedPostProcessingPattern(
 ) {
 	t.Helper()
 
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{
 		{
 			Name:                   laneName,
 			WorkTypeID:             "plan",

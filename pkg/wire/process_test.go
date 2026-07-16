@@ -13,19 +13,23 @@ import (
 	"time"
 
 	"github.com/jonboulle/clockwork"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
 	"github.com/portpowered/infinite-you/pkg/initializer"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
@@ -365,12 +369,12 @@ func (p *functionalWorkerEdgeProbe) buildRunner(
 
 func (p *functionalWorkerEdgeProbe) executeScript(cfg *service.FactoryServiceConfig) error {
 	script, err := cfg.WorkerApplication.Script.New(
-		&interfaces.WorkerConfig{Command: "functional-script"}, logging.NoopLogger{},
+		&workerconfig.Config{Command: "functional-script"}, logging.NoopLogger{},
 	)
 	if err != nil {
 		return err
 	}
-	result, err := script.Execute(context.Background(), interfaces.WorkstationExecutionRequest{})
+	result, err := script.Execute(context.Background(), workerexecution.WorkstationExecutionRequest{})
 	if err != nil || result.Output != "script functional output" {
 		return errors.New("functional script edge did not reach execution")
 	}
@@ -382,8 +386,8 @@ func (p *functionalWorkerEdgeProbe) executeAgy(cfg *service.FactoryServiceConfig
 	if err != nil {
 		return err
 	}
-	response, err := provider.Execute(context.Background(), interfaces.RunnerExecutionRequest{
-		Dispatch: interfaces.WorkDispatch{DispatchID: "functional-agy"}, ModelProvider: string(interfaces.ModelProviderAgy),
+	response, err := provider.Execute(context.Background(), workerexecution.RunnerExecutionRequest{
+		Dispatch: work.WorkDispatch{DispatchID: "functional-agy"}, ModelProvider: string(factoryapi.WorkerModelProviderAgy),
 		WorkingDirectory: ".", UserMessage: "run through the PTY edge",
 	})
 	if err != nil || response.Content != "agy functional output" || len(p.agyAllocator.launches) != 1 || len(p.providerRunner.requests) != 0 {

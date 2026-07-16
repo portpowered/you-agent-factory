@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type recordingGitCommander struct {
@@ -215,8 +215,8 @@ func TestFailedWorkResultFromPreparation_UsesFailedOutcome(t *testing.T) {
 	start := time.Now().Add(-time.Second)
 	result := FailedWorkResultFromPreparation("dispatch-1", "transition-1", start, errors.New("git unavailable"))
 
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %q, want %q", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %q, want %q", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.DispatchID != "dispatch-1" || result.TransitionID != "transition-1" {
 		t.Fatalf("result = %#v, want dispatch and transition ids preserved", result)

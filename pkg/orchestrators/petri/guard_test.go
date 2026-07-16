@@ -3,23 +3,24 @@ package petri
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestMatchColorGuard_PositiveMatch(t *testing.T) {
 	// Parent token bound as "work"
-	parent := &interfaces.Token{
+	parent := &factorytoken.Token{
 		ID: "parent-1",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID: "req-100",
 		},
 	}
-	bindings := map[string]*interfaces.Token{"work": parent}
+	bindings := map[string]*factorytoken.Token{"work": parent}
 
 	// Candidates — one matches, one doesn't
-	candidates := []interfaces.Token{
-		{ID: "child-1", Color: interfaces.TokenColor{ParentID: "req-100"}},
-		{ID: "child-2", Color: interfaces.TokenColor{ParentID: "req-999"}},
+	candidates := []factorytoken.Token{
+		{ID: "child-1", Color: factorytoken.Color{ParentID: "req-100"}},
+		{ID: "child-2", Color: factorytoken.Color{ParentID: "req-999"}},
 	}
 
 	guard := &MatchColorGuard{
@@ -41,14 +42,14 @@ func TestMatchColorGuard_PositiveMatch(t *testing.T) {
 }
 
 func TestMatchColorGuard_NoMatch(t *testing.T) {
-	parent := &interfaces.Token{
+	parent := &factorytoken.Token{
 		ID:    "parent-1",
-		Color: interfaces.TokenColor{WorkID: "req-100"},
+		Color: factorytoken.Color{WorkID: "req-100"},
 	}
-	bindings := map[string]*interfaces.Token{"work": parent}
+	bindings := map[string]*factorytoken.Token{"work": parent}
 
-	candidates := []interfaces.Token{
-		{ID: "child-1", Color: interfaces.TokenColor{ParentID: "req-999"}},
+	candidates := []factorytoken.Token{
+		{ID: "child-1", Color: factorytoken.Color{ParentID: "req-999"}},
 	}
 
 	guard := &MatchColorGuard{
@@ -67,8 +68,8 @@ func TestMatchColorGuard_NoMatch(t *testing.T) {
 }
 
 func TestMatchColorGuard_MissingBinding(t *testing.T) {
-	candidates := []interfaces.Token{
-		{ID: "child-1", Color: interfaces.TokenColor{ParentID: "req-100"}},
+	candidates := []factorytoken.Token{
+		{ID: "child-1", Color: factorytoken.Color{ParentID: "req-100"}},
 	}
 
 	guard := &MatchColorGuard{
@@ -77,7 +78,7 @@ func TestMatchColorGuard_MissingBinding(t *testing.T) {
 		MatchField:   "work_id",
 	}
 
-	matched, ok := guard.Evaluate(candidates, map[string]*interfaces.Token{}, nil)
+	matched, ok := guard.Evaluate(candidates, map[string]*factorytoken.Token{}, nil)
 	if ok {
 		t.Fatal("expected guard to fail when binding is missing")
 	}
@@ -87,12 +88,12 @@ func TestMatchColorGuard_MissingBinding(t *testing.T) {
 }
 
 func TestSameNameGuard_PositiveMatch(t *testing.T) {
-	bindings := map[string]*interfaces.Token{
-		"plan": {ID: "plan-1", Color: interfaces.TokenColor{Name: "shared-name"}},
+	bindings := map[string]*factorytoken.Token{
+		"plan": {ID: "plan-1", Color: factorytoken.Color{Name: "shared-name"}},
 	}
-	candidates := []interfaces.Token{
-		{ID: "task-1", Color: interfaces.TokenColor{Name: "shared-name"}},
-		{ID: "task-2", Color: interfaces.TokenColor{Name: "other-name"}},
+	candidates := []factorytoken.Token{
+		{ID: "task-1", Color: factorytoken.Color{Name: "shared-name"}},
+		{ID: "task-2", Color: factorytoken.Color{Name: "other-name"}},
 	}
 
 	guard := &SameNameGuard{MatchBinding: "plan"}
@@ -109,11 +110,11 @@ func TestSameNameGuard_PositiveMatch(t *testing.T) {
 }
 
 func TestSameNameGuard_NoMatch(t *testing.T) {
-	bindings := map[string]*interfaces.Token{
-		"plan": {ID: "plan-1", Color: interfaces.TokenColor{Name: "shared-name"}},
+	bindings := map[string]*factorytoken.Token{
+		"plan": {ID: "plan-1", Color: factorytoken.Color{Name: "shared-name"}},
 	}
-	candidates := []interfaces.Token{
-		{ID: "task-1", Color: interfaces.TokenColor{Name: "other-name"}},
+	candidates := []factorytoken.Token{
+		{ID: "task-1", Color: factorytoken.Color{Name: "other-name"}},
 	}
 
 	guard := &SameNameGuard{MatchBinding: "plan"}
@@ -127,12 +128,12 @@ func TestSameNameGuard_NoMatch(t *testing.T) {
 }
 
 func TestSameNameGuard_MissingBinding(t *testing.T) {
-	candidates := []interfaces.Token{
-		{ID: "task-1", Color: interfaces.TokenColor{Name: "shared-name"}},
+	candidates := []factorytoken.Token{
+		{ID: "task-1", Color: factorytoken.Color{Name: "shared-name"}},
 	}
 
 	guard := &SameNameGuard{MatchBinding: "plan"}
-	matched, ok := guard.Evaluate(candidates, map[string]*interfaces.Token{}, nil)
+	matched, ok := guard.Evaluate(candidates, map[string]*factorytoken.Token{}, nil)
 	if ok {
 		t.Fatal("expected guard to fail when binding is missing")
 	}
@@ -144,21 +145,21 @@ func TestSameNameGuard_MissingBinding(t *testing.T) {
 func TestSameNameGuard_MissingNameFailsClosed(t *testing.T) {
 	tests := []struct {
 		name       string
-		binding    *interfaces.Token
-		candidates []interfaces.Token
+		binding    *factorytoken.Token
+		candidates []factorytoken.Token
 	}{
 		{
 			name:    "missing bound name",
-			binding: &interfaces.Token{ID: "plan-1", Color: interfaces.TokenColor{}},
-			candidates: []interfaces.Token{
-				{ID: "task-1", Color: interfaces.TokenColor{Name: "shared-name"}},
+			binding: &factorytoken.Token{ID: "plan-1", Color: factorytoken.Color{}},
+			candidates: []factorytoken.Token{
+				{ID: "task-1", Color: factorytoken.Color{Name: "shared-name"}},
 			},
 		},
 		{
 			name:    "missing candidate name",
-			binding: &interfaces.Token{ID: "plan-1", Color: interfaces.TokenColor{Name: "shared-name"}},
-			candidates: []interfaces.Token{
-				{ID: "task-1", Color: interfaces.TokenColor{}},
+			binding: &factorytoken.Token{ID: "plan-1", Color: factorytoken.Color{Name: "shared-name"}},
+			candidates: []factorytoken.Token{
+				{ID: "task-1", Color: factorytoken.Color{}},
 			},
 		},
 	}
@@ -166,7 +167,7 @@ func TestSameNameGuard_MissingNameFailsClosed(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			guard := &SameNameGuard{MatchBinding: "plan"}
-			matched, ok := guard.Evaluate(tt.candidates, map[string]*interfaces.Token{"plan": tt.binding}, nil)
+			matched, ok := guard.Evaluate(tt.candidates, map[string]*factorytoken.Token{"plan": tt.binding}, nil)
 			if ok {
 				t.Fatal("expected guard to fail")
 			}
@@ -178,18 +179,18 @@ func TestSameNameGuard_MissingNameFailsClosed(t *testing.T) {
 }
 
 func TestSameTraceIDGuard_PositiveMatchUsesCurrentChainingTraceID(t *testing.T) {
-	bindings := map[string]*interfaces.Token{
-		"plan": {ID: "plan-1", Color: interfaces.TokenColor{
+	bindings := map[string]*factorytoken.Token{
+		"plan": {ID: "plan-1", Color: factorytoken.Color{
 			CurrentChainingTraceID: "chain-shared",
 			TraceID:                "trace-legacy-plan",
 		}},
 	}
-	candidates := []interfaces.Token{
-		{ID: "task-1", Color: interfaces.TokenColor{
+	candidates := []factorytoken.Token{
+		{ID: "task-1", Color: factorytoken.Color{
 			CurrentChainingTraceID: "chain-shared",
 			TraceID:                "trace-legacy-task",
 		}},
-		{ID: "task-2", Color: interfaces.TokenColor{
+		{ID: "task-2", Color: factorytoken.Color{
 			CurrentChainingTraceID: "chain-other",
 			TraceID:                "trace-legacy-task",
 		}},
@@ -209,12 +210,12 @@ func TestSameTraceIDGuard_PositiveMatchUsesCurrentChainingTraceID(t *testing.T) 
 }
 
 func TestSameTraceIDGuard_FallsBackToLegacyTraceID(t *testing.T) {
-	bindings := map[string]*interfaces.Token{
-		"plan": {ID: "plan-1", Color: interfaces.TokenColor{TraceID: "trace-shared"}},
+	bindings := map[string]*factorytoken.Token{
+		"plan": {ID: "plan-1", Color: factorytoken.Color{TraceID: "trace-shared"}},
 	}
-	candidates := []interfaces.Token{
-		{ID: "task-1", Color: interfaces.TokenColor{TraceID: "trace-shared"}},
-		{ID: "task-2", Color: interfaces.TokenColor{TraceID: "trace-other"}},
+	candidates := []factorytoken.Token{
+		{ID: "task-1", Color: factorytoken.Color{TraceID: "trace-shared"}},
+		{ID: "task-2", Color: factorytoken.Color{TraceID: "trace-other"}},
 	}
 
 	guard := &SameTraceIDGuard{MatchBinding: "plan"}
@@ -233,21 +234,21 @@ func TestSameTraceIDGuard_FallsBackToLegacyTraceID(t *testing.T) {
 func TestSameTraceIDGuard_MissingTraceIdentityFailsClosed(t *testing.T) {
 	tests := []struct {
 		name       string
-		binding    *interfaces.Token
-		candidates []interfaces.Token
+		binding    *factorytoken.Token
+		candidates []factorytoken.Token
 	}{
 		{
 			name:    "missing bound trace identity",
-			binding: &interfaces.Token{ID: "plan-1", Color: interfaces.TokenColor{}},
-			candidates: []interfaces.Token{
-				{ID: "task-1", Color: interfaces.TokenColor{CurrentChainingTraceID: "chain-shared"}},
+			binding: &factorytoken.Token{ID: "plan-1", Color: factorytoken.Color{}},
+			candidates: []factorytoken.Token{
+				{ID: "task-1", Color: factorytoken.Color{CurrentChainingTraceID: "chain-shared"}},
 			},
 		},
 		{
 			name:    "missing candidate trace identity",
-			binding: &interfaces.Token{ID: "plan-1", Color: interfaces.TokenColor{CurrentChainingTraceID: "chain-shared"}},
-			candidates: []interfaces.Token{
-				{ID: "task-1", Color: interfaces.TokenColor{}},
+			binding: &factorytoken.Token{ID: "plan-1", Color: factorytoken.Color{CurrentChainingTraceID: "chain-shared"}},
+			candidates: []factorytoken.Token{
+				{ID: "task-1", Color: factorytoken.Color{}},
 			},
 		},
 	}
@@ -255,7 +256,7 @@ func TestSameTraceIDGuard_MissingTraceIdentityFailsClosed(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			guard := &SameTraceIDGuard{MatchBinding: "plan"}
-			matched, ok := guard.Evaluate(tt.candidates, map[string]*interfaces.Token{"plan": tt.binding}, nil)
+			matched, ok := guard.Evaluate(tt.candidates, map[string]*factorytoken.Token{"plan": tt.binding}, nil)
 			if ok {
 				t.Fatal("expected guard to fail")
 			}
@@ -267,12 +268,12 @@ func TestSameTraceIDGuard_MissingTraceIdentityFailsClosed(t *testing.T) {
 }
 
 func TestSameTraceIDGuard_MissingBinding(t *testing.T) {
-	candidates := []interfaces.Token{
-		{ID: "task-1", Color: interfaces.TokenColor{CurrentChainingTraceID: "chain-shared"}},
+	candidates := []factorytoken.Token{
+		{ID: "task-1", Color: factorytoken.Color{CurrentChainingTraceID: "chain-shared"}},
 	}
 
 	guard := &SameTraceIDGuard{MatchBinding: "plan"}
-	matched, ok := guard.Evaluate(candidates, map[string]*interfaces.Token{}, nil)
+	matched, ok := guard.Evaluate(candidates, map[string]*factorytoken.Token{}, nil)
 	if ok {
 		t.Fatal("expected guard to fail when binding is missing")
 	}
@@ -286,12 +287,12 @@ func TestMatchesFieldsGuard_DirectFieldSelector(t *testing.T) {
 		InputKey:     ".Name",
 		MatchBinding: "source",
 	}
-	bindings := map[string]*interfaces.Token{
-		"source": {ID: "source-1", Color: interfaces.TokenColor{Name: "alpha"}},
+	bindings := map[string]*factorytoken.Token{
+		"source": {ID: "source-1", Color: factorytoken.Color{Name: "alpha"}},
 	}
-	candidates := []interfaces.Token{
-		{ID: "candidate-1", Color: interfaces.TokenColor{Name: "alpha"}},
-		{ID: "candidate-2", Color: interfaces.TokenColor{Name: "beta"}},
+	candidates := []factorytoken.Token{
+		{ID: "candidate-1", Color: factorytoken.Color{Name: "alpha"}},
+		{ID: "candidate-2", Color: factorytoken.Color{Name: "beta"}},
 	}
 
 	matched, ok := guard.Evaluate(candidates, bindings, nil)
@@ -311,12 +312,12 @@ func TestMatchesFieldsGuard_TagSelector(t *testing.T) {
 		InputKey:     `.Tags["_last_output"]`,
 		MatchBinding: "source",
 	}
-	bindings := map[string]*interfaces.Token{
-		"source": {ID: "source-1", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "shared"}}},
+	bindings := map[string]*factorytoken.Token{
+		"source": {ID: "source-1", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "shared"}}},
 	}
-	candidates := []interfaces.Token{
-		{ID: "candidate-1", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "shared"}}},
-		{ID: "candidate-2", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "different"}}},
+	candidates := []factorytoken.Token{
+		{ID: "candidate-1", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "shared"}}},
+		{ID: "candidate-2", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "different"}}},
 	}
 
 	matched, ok := guard.Evaluate(candidates, bindings, nil)
@@ -335,32 +336,32 @@ func TestMatchesFieldsGuard_MissingRequiredValueFailsClosed(t *testing.T) {
 	tests := []struct {
 		name       string
 		guard      *MatchesFieldsGuard
-		bindings   map[string]*interfaces.Token
-		candidates []interfaces.Token
+		bindings   map[string]*factorytoken.Token
+		candidates []factorytoken.Token
 	}{
 		{
 			name:       "missing bound tag",
 			guard:      &MatchesFieldsGuard{InputKey: `.Tags["_last_output"]`, MatchBinding: "source"},
-			bindings:   map[string]*interfaces.Token{"source": {ID: "source-1", Color: interfaces.TokenColor{}}},
-			candidates: []interfaces.Token{{ID: "candidate-1", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "shared"}}}},
+			bindings:   map[string]*factorytoken.Token{"source": {ID: "source-1", Color: factorytoken.Color{}}},
+			candidates: []factorytoken.Token{{ID: "candidate-1", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "shared"}}}},
 		},
 		{
 			name:       "missing candidate tag",
 			guard:      &MatchesFieldsGuard{InputKey: `.Tags["_last_output"]`, MatchBinding: "source"},
-			bindings:   map[string]*interfaces.Token{"source": {ID: "source-1", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "shared"}}}},
-			candidates: []interfaces.Token{{ID: "candidate-1", Color: interfaces.TokenColor{}}},
+			bindings:   map[string]*factorytoken.Token{"source": {ID: "source-1", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "shared"}}}},
+			candidates: []factorytoken.Token{{ID: "candidate-1", Color: factorytoken.Color{}}},
 		},
 		{
 			name:       "invalid selector",
 			guard:      &MatchesFieldsGuard{InputKey: `.Tags[_last_output]`, MatchBinding: "source"},
-			bindings:   map[string]*interfaces.Token{"source": {ID: "source-1", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "shared"}}}},
-			candidates: []interfaces.Token{{ID: "candidate-1", Color: interfaces.TokenColor{Tags: map[string]string{"_last_output": "shared"}}}},
+			bindings:   map[string]*factorytoken.Token{"source": {ID: "source-1", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "shared"}}}},
+			candidates: []factorytoken.Token{{ID: "candidate-1", Color: factorytoken.Color{Tags: map[string]string{"_last_output": "shared"}}}},
 		},
 		{
 			name:       "single-input selector must resolve",
 			guard:      &MatchesFieldsGuard{InputKey: `.Tags["_last_output"]`},
-			bindings:   map[string]*interfaces.Token{},
-			candidates: []interfaces.Token{{ID: "candidate-1", Color: interfaces.TokenColor{}}},
+			bindings:   map[string]*factorytoken.Token{},
+			candidates: []factorytoken.Token{{ID: "candidate-1", Color: factorytoken.Color{}}},
 		},
 	}
 
@@ -378,16 +379,16 @@ func TestMatchesFieldsGuard_MissingRequiredValueFailsClosed(t *testing.T) {
 }
 
 func TestVisitCountGuard_ExceedsThreshold(t *testing.T) {
-	candidates := []interfaces.Token{
+	candidates := []factorytoken.Token{
 		{
 			ID: "tok-1",
-			History: interfaces.TokenHistory{
+			History: factorytoken.History{
 				TotalVisits: map[string]int{"coding": 5},
 			},
 		},
 		{
 			ID: "tok-2",
-			History: interfaces.TokenHistory{
+			History: factorytoken.History{
 				TotalVisits: map[string]int{"coding": 3},
 			},
 		},
@@ -411,10 +412,10 @@ func TestVisitCountGuard_ExceedsThreshold(t *testing.T) {
 }
 
 func TestVisitCountGuard_BelowThreshold(t *testing.T) {
-	candidates := []interfaces.Token{
+	candidates := []factorytoken.Token{
 		{
 			ID: "tok-1",
-			History: interfaces.TokenHistory{
+			History: factorytoken.History{
 				TotalVisits: map[string]int{"coding": 2},
 			},
 		},
@@ -435,8 +436,8 @@ func TestVisitCountGuard_BelowThreshold(t *testing.T) {
 }
 
 func TestVisitCountGuard_NoVisitHistory(t *testing.T) {
-	candidates := []interfaces.Token{
-		{ID: "tok-1", History: interfaces.TokenHistory{}},
+	candidates := []factorytoken.Token{
+		{ID: "tok-1", History: factorytoken.History{}},
 	}
 
 	guard := &VisitCountGuard{
@@ -454,16 +455,16 @@ func TestVisitCountGuard_NoVisitHistory(t *testing.T) {
 }
 
 func TestAllWithParentGuard_PositiveMatch(t *testing.T) {
-	parent := &interfaces.Token{
+	parent := &factorytoken.Token{
 		ID:    "parent-1",
-		Color: interfaces.TokenColor{WorkID: "req-100"},
+		Color: factorytoken.Color{WorkID: "req-100"},
 	}
-	bindings := map[string]*interfaces.Token{"work": parent}
+	bindings := map[string]*factorytoken.Token{"work": parent}
 
-	candidates := []interfaces.Token{
-		{ID: "child-1", Color: interfaces.TokenColor{ParentID: "req-100", WorkID: "cc-1"}},
-		{ID: "child-2", Color: interfaces.TokenColor{ParentID: "req-100", WorkID: "cc-2"}},
-		{ID: "child-3", Color: interfaces.TokenColor{ParentID: "req-200", WorkID: "cc-3"}},
+	candidates := []factorytoken.Token{
+		{ID: "child-1", Color: factorytoken.Color{ParentID: "req-100", WorkID: "cc-1"}},
+		{ID: "child-2", Color: factorytoken.Color{ParentID: "req-100", WorkID: "cc-2"}},
+		{ID: "child-3", Color: factorytoken.Color{ParentID: "req-200", WorkID: "cc-3"}},
 	}
 
 	guard := &AllWithParentGuard{MatchBinding: "work"}
@@ -481,14 +482,14 @@ func TestAllWithParentGuard_PositiveMatch(t *testing.T) {
 }
 
 func TestAllWithParentGuard_NoMatch(t *testing.T) {
-	parent := &interfaces.Token{
+	parent := &factorytoken.Token{
 		ID:    "parent-1",
-		Color: interfaces.TokenColor{WorkID: "req-100"},
+		Color: factorytoken.Color{WorkID: "req-100"},
 	}
-	bindings := map[string]*interfaces.Token{"work": parent}
+	bindings := map[string]*factorytoken.Token{"work": parent}
 
-	candidates := []interfaces.Token{
-		{ID: "child-1", Color: interfaces.TokenColor{ParentID: "req-200"}},
+	candidates := []factorytoken.Token{
+		{ID: "child-1", Color: factorytoken.Color{ParentID: "req-200"}},
 	}
 
 	guard := &AllWithParentGuard{MatchBinding: "work"}
@@ -503,13 +504,13 @@ func TestAllWithParentGuard_NoMatch(t *testing.T) {
 }
 
 func TestAllWithParentGuard_MissingBinding(t *testing.T) {
-	candidates := []interfaces.Token{
-		{ID: "child-1", Color: interfaces.TokenColor{ParentID: "req-100"}},
+	candidates := []factorytoken.Token{
+		{ID: "child-1", Color: factorytoken.Color{ParentID: "req-100"}},
 	}
 
 	guard := &AllWithParentGuard{MatchBinding: "work"}
 
-	matched, ok := guard.Evaluate(candidates, map[string]*interfaces.Token{}, nil)
+	matched, ok := guard.Evaluate(candidates, map[string]*factorytoken.Token{}, nil)
 	if ok {
 		t.Fatal("expected guard to fail when binding is missing")
 	}
@@ -519,14 +520,14 @@ func TestAllWithParentGuard_MissingBinding(t *testing.T) {
 }
 
 func TestAnyWithParentGuard_PositiveMatch(t *testing.T) {
-	candidates := []interfaces.Token{
-		{ID: "child-1", Color: interfaces.TokenColor{ParentID: "req-100"}},
-		{ID: "child-2", Color: interfaces.TokenColor{ParentID: "req-100"}},
-		{ID: "child-3", Color: interfaces.TokenColor{ParentID: "req-999"}},
+	candidates := []factorytoken.Token{
+		{ID: "child-1", Color: factorytoken.Color{ParentID: "req-100"}},
+		{ID: "child-2", Color: factorytoken.Color{ParentID: "req-100"}},
+		{ID: "child-3", Color: factorytoken.Color{ParentID: "req-999"}},
 	}
 
-	bindings := map[string]*interfaces.Token{
-		"work": {Color: interfaces.TokenColor{WorkID: "req-100"}},
+	bindings := map[string]*factorytoken.Token{
+		"work": {Color: factorytoken.Color{WorkID: "req-100"}},
 	}
 
 	guard := &AnyWithParentGuard{MatchBinding: "work"}
@@ -545,12 +546,12 @@ func TestAnyWithParentGuard_PositiveMatch(t *testing.T) {
 }
 
 func TestAnyWithParentGuard_NoMatch(t *testing.T) {
-	candidates := []interfaces.Token{
-		{ID: "child-1", Color: interfaces.TokenColor{ParentID: "req-999"}},
+	candidates := []factorytoken.Token{
+		{ID: "child-1", Color: factorytoken.Color{ParentID: "req-999"}},
 	}
 
-	bindings := map[string]*interfaces.Token{
-		"work": {Color: interfaces.TokenColor{WorkID: "req-100"}},
+	bindings := map[string]*factorytoken.Token{
+		"work": {Color: factorytoken.Color{WorkID: "req-100"}},
 	}
 
 	guard := &AnyWithParentGuard{MatchBinding: "work"}
@@ -565,13 +566,13 @@ func TestAnyWithParentGuard_NoMatch(t *testing.T) {
 }
 
 func TestAnyWithParentGuard_MissingBinding(t *testing.T) {
-	candidates := []interfaces.Token{
-		{ID: "child-1", Color: interfaces.TokenColor{ParentID: "req-100"}},
+	candidates := []factorytoken.Token{
+		{ID: "child-1", Color: factorytoken.Color{ParentID: "req-100"}},
 	}
 
 	guard := &AnyWithParentGuard{MatchBinding: "work"}
 
-	matched, ok := guard.Evaluate(candidates, map[string]*interfaces.Token{}, nil)
+	matched, ok := guard.Evaluate(candidates, map[string]*factorytoken.Token{}, nil)
 	if ok {
 		t.Fatal("expected guard to fail when binding is missing")
 	}
@@ -582,32 +583,32 @@ func TestAnyWithParentGuard_MissingBinding(t *testing.T) {
 
 func TestDependencyGuard_AllDependenciesMet(t *testing.T) {
 	// Dependency token A is in the required "complete" state.
-	depToken := &interfaces.Token{
+	depToken := &factorytoken.Token{
 		ID:      "tok-a",
 		PlaceID: "task:complete",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "work-a",
 			WorkTypeID: "task",
 		},
 	}
 
 	// Candidate B depends on A being in "complete".
-	candidates := []interfaces.Token{
+	candidates := []factorytoken.Token{
 		{
 			ID:      "tok-b",
 			PlaceID: "task:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-b",
 				WorkTypeID: "task",
-				Relations: []interfaces.Relation{
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
+				Relations: []work.Relation{
+					{Type: work.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
 				},
 			},
 		},
 	}
 
 	marking := &MarkingSnapshot{
-		Tokens: map[string]*interfaces.Token{
+		Tokens: map[string]*factorytoken.Token{
 			"tok-a": depToken,
 			"tok-b": &candidates[0],
 		},
@@ -625,31 +626,31 @@ func TestDependencyGuard_AllDependenciesMet(t *testing.T) {
 
 func TestDependencyGuard_DependencyNotMet(t *testing.T) {
 	// Dependency token A is in "init" — not in "complete".
-	depToken := &interfaces.Token{
+	depToken := &factorytoken.Token{
 		ID:      "tok-a",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "work-a",
 			WorkTypeID: "task",
 		},
 	}
 
-	candidates := []interfaces.Token{
+	candidates := []factorytoken.Token{
 		{
 			ID:      "tok-b",
 			PlaceID: "task:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-b",
 				WorkTypeID: "task",
-				Relations: []interfaces.Relation{
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
+				Relations: []work.Relation{
+					{Type: work.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
 				},
 			},
 		},
 	}
 
 	marking := &MarkingSnapshot{
-		Tokens: map[string]*interfaces.Token{
+		Tokens: map[string]*factorytoken.Token{
 			"tok-a": depToken,
 			"tok-b": &candidates[0],
 		},
@@ -666,22 +667,22 @@ func TestDependencyGuard_DependencyNotMet(t *testing.T) {
 }
 
 func TestDependencyGuard_DependencyNotFound(t *testing.T) {
-	candidates := []interfaces.Token{
+	candidates := []factorytoken.Token{
 		{
 			ID:      "tok-b",
 			PlaceID: "task:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-b",
 				WorkTypeID: "task",
-				Relations: []interfaces.Relation{
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-missing", RequiredState: "complete"},
+				Relations: []work.Relation{
+					{Type: work.RelationDependsOn, TargetWorkID: "work-missing", RequiredState: "complete"},
 				},
 			},
 		},
 	}
 
 	marking := &MarkingSnapshot{
-		Tokens: map[string]*interfaces.Token{
+		Tokens: map[string]*factorytoken.Token{
 			"tok-b": &candidates[0],
 		},
 	}
@@ -697,12 +698,12 @@ func TestDependencyGuard_DependencyNotFound(t *testing.T) {
 }
 
 func TestDependencyGuard_NilMarking(t *testing.T) {
-	candidates := []interfaces.Token{
+	candidates := []factorytoken.Token{
 		{
 			ID: "tok-b",
-			Color: interfaces.TokenColor{
-				Relations: []interfaces.Relation{
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
+			Color: factorytoken.Color{
+				Relations: []work.Relation{
+					{Type: work.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
 				},
 			},
 		},
@@ -720,22 +721,22 @@ func TestDependencyGuard_NilMarking(t *testing.T) {
 
 func TestDependencyGuard_NoDependencies(t *testing.T) {
 	// Token with no DEPENDS_ON relations should pass.
-	candidates := []interfaces.Token{
+	candidates := []factorytoken.Token{
 		{
 			ID:      "tok-b",
 			PlaceID: "task:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-b",
 				WorkTypeID: "task",
-				Relations: []interfaces.Relation{
-					{Type: interfaces.RelationParentChild, TargetWorkID: "work-a"},
+				Relations: []work.Relation{
+					{Type: work.RelationParentChild, TargetWorkID: "work-a"},
 				},
 			},
 		},
 	}
 
 	marking := &MarkingSnapshot{
-		Tokens: map[string]*interfaces.Token{
+		Tokens: map[string]*factorytoken.Token{
 			"tok-b": &candidates[0],
 		},
 	}
@@ -751,34 +752,34 @@ func TestDependencyGuard_NoDependencies(t *testing.T) {
 }
 
 func TestDependencyGuard_MultipleDependencies(t *testing.T) {
-	depA := &interfaces.Token{
+	depA := &factorytoken.Token{
 		ID:      "tok-a",
 		PlaceID: "task:complete",
-		Color:   interfaces.TokenColor{WorkID: "work-a", WorkTypeID: "task"},
+		Color:   factorytoken.Color{WorkID: "work-a", WorkTypeID: "task"},
 	}
-	depC := &interfaces.Token{
+	depC := &factorytoken.Token{
 		ID:      "tok-c",
 		PlaceID: "task:complete",
-		Color:   interfaces.TokenColor{WorkID: "work-c", WorkTypeID: "task"},
+		Color:   factorytoken.Color{WorkID: "work-c", WorkTypeID: "task"},
 	}
 
-	candidates := []interfaces.Token{
+	candidates := []factorytoken.Token{
 		{
 			ID:      "tok-b",
 			PlaceID: "task:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-b",
 				WorkTypeID: "task",
-				Relations: []interfaces.Relation{
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-c", RequiredState: "complete"},
+				Relations: []work.Relation{
+					{Type: work.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
+					{Type: work.RelationDependsOn, TargetWorkID: "work-c", RequiredState: "complete"},
 				},
 			},
 		},
 	}
 
 	marking := &MarkingSnapshot{
-		Tokens: map[string]*interfaces.Token{
+		Tokens: map[string]*factorytoken.Token{
 			"tok-a": depA,
 			"tok-b": &candidates[0],
 			"tok-c": depC,
@@ -796,34 +797,34 @@ func TestDependencyGuard_MultipleDependencies(t *testing.T) {
 }
 
 func TestDependencyGuard_PartialDependenciesMet(t *testing.T) {
-	depA := &interfaces.Token{
+	depA := &factorytoken.Token{
 		ID:      "tok-a",
 		PlaceID: "task:complete",
-		Color:   interfaces.TokenColor{WorkID: "work-a", WorkTypeID: "task"},
+		Color:   factorytoken.Color{WorkID: "work-a", WorkTypeID: "task"},
 	}
-	depC := &interfaces.Token{
+	depC := &factorytoken.Token{
 		ID:      "tok-c",
 		PlaceID: "task:init", // NOT complete
-		Color:   interfaces.TokenColor{WorkID: "work-c", WorkTypeID: "task"},
+		Color:   factorytoken.Color{WorkID: "work-c", WorkTypeID: "task"},
 	}
 
-	candidates := []interfaces.Token{
+	candidates := []factorytoken.Token{
 		{
 			ID:      "tok-b",
 			PlaceID: "task:init",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID:     "work-b",
 				WorkTypeID: "task",
-				Relations: []interfaces.Relation{
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
-					{Type: interfaces.RelationDependsOn, TargetWorkID: "work-c", RequiredState: "complete"},
+				Relations: []work.Relation{
+					{Type: work.RelationDependsOn, TargetWorkID: "work-a", RequiredState: "complete"},
+					{Type: work.RelationDependsOn, TargetWorkID: "work-c", RequiredState: "complete"},
 				},
 			},
 		},
 	}
 
 	marking := &MarkingSnapshot{
-		Tokens: map[string]*interfaces.Token{
+		Tokens: map[string]*factorytoken.Token{
 			"tok-a": depA,
 			"tok-b": &candidates[0],
 			"tok-c": depC,
@@ -841,15 +842,15 @@ func TestDependencyGuard_PartialDependenciesMet(t *testing.T) {
 }
 
 func TestFanoutCountGuard_ExactMatch(t *testing.T) {
-	parent := &interfaces.Token{Color: interfaces.TokenColor{WorkID: "parent-1"}}
-	countToken := &interfaces.Token{Color: interfaces.TokenColor{Tags: map[string]string{"expected_count": "3"}}}
-	bindings := map[string]*interfaces.Token{"parent": parent, "fanout-count": countToken}
+	parent := &factorytoken.Token{Color: factorytoken.Color{WorkID: "parent-1"}}
+	countToken := &factorytoken.Token{Color: factorytoken.Color{Tags: map[string]string{"expected_count": "3"}}}
+	bindings := map[string]*factorytoken.Token{"parent": parent, "fanout-count": countToken}
 
-	candidates := []interfaces.Token{
-		{ID: "c1", Color: interfaces.TokenColor{ParentID: "parent-1"}},
-		{ID: "c2", Color: interfaces.TokenColor{ParentID: "parent-1"}},
-		{ID: "c3", Color: interfaces.TokenColor{ParentID: "parent-1"}},
-		{ID: "c4", Color: interfaces.TokenColor{ParentID: "other"}},
+	candidates := []factorytoken.Token{
+		{ID: "c1", Color: factorytoken.Color{ParentID: "parent-1"}},
+		{ID: "c2", Color: factorytoken.Color{ParentID: "parent-1"}},
+		{ID: "c3", Color: factorytoken.Color{ParentID: "parent-1"}},
+		{ID: "c4", Color: factorytoken.Color{ParentID: "other"}},
 	}
 
 	guard := &FanoutCountGuard{MatchBinding: "parent", CountBinding: "fanout-count"}
@@ -863,14 +864,14 @@ func TestFanoutCountGuard_ExactMatch(t *testing.T) {
 }
 
 func TestFanoutCountGuard_CountMismatch(t *testing.T) {
-	parent := &interfaces.Token{Color: interfaces.TokenColor{WorkID: "parent-1"}}
-	countToken := &interfaces.Token{Color: interfaces.TokenColor{Tags: map[string]string{"expected_count": "3"}}}
-	bindings := map[string]*interfaces.Token{"parent": parent, "fanout-count": countToken}
+	parent := &factorytoken.Token{Color: factorytoken.Color{WorkID: "parent-1"}}
+	countToken := &factorytoken.Token{Color: factorytoken.Color{Tags: map[string]string{"expected_count": "3"}}}
+	bindings := map[string]*factorytoken.Token{"parent": parent, "fanout-count": countToken}
 
 	// Only 2 children — expected 3.
-	candidates := []interfaces.Token{
-		{ID: "c1", Color: interfaces.TokenColor{ParentID: "parent-1"}},
-		{ID: "c2", Color: interfaces.TokenColor{ParentID: "parent-1"}},
+	candidates := []factorytoken.Token{
+		{ID: "c1", Color: factorytoken.Color{ParentID: "parent-1"}},
+		{ID: "c2", Color: factorytoken.Color{ParentID: "parent-1"}},
 	}
 
 	guard := &FanoutCountGuard{MatchBinding: "parent", CountBinding: "fanout-count"}
@@ -881,9 +882,9 @@ func TestFanoutCountGuard_CountMismatch(t *testing.T) {
 }
 
 func TestFanoutCountGuard_ZeroChildren(t *testing.T) {
-	parent := &interfaces.Token{Color: interfaces.TokenColor{WorkID: "parent-1"}}
-	countToken := &interfaces.Token{Color: interfaces.TokenColor{Tags: map[string]string{"expected_count": "0"}}}
-	bindings := map[string]*interfaces.Token{"parent": parent, "fanout-count": countToken}
+	parent := &factorytoken.Token{Color: factorytoken.Color{WorkID: "parent-1"}}
+	countToken := &factorytoken.Token{Color: factorytoken.Color{Tags: map[string]string{"expected_count": "0"}}}
+	bindings := map[string]*factorytoken.Token{"parent": parent, "fanout-count": countToken}
 
 	guard := &FanoutCountGuard{MatchBinding: "parent", CountBinding: "fanout-count"}
 	matched, ok := guard.Evaluate(nil, bindings, nil)
@@ -896,8 +897,8 @@ func TestFanoutCountGuard_ZeroChildren(t *testing.T) {
 }
 
 func TestFanoutCountGuard_MissingParentBinding(t *testing.T) {
-	countToken := &interfaces.Token{Color: interfaces.TokenColor{Tags: map[string]string{"expected_count": "1"}}}
-	bindings := map[string]*interfaces.Token{"fanout-count": countToken}
+	countToken := &factorytoken.Token{Color: factorytoken.Color{Tags: map[string]string{"expected_count": "1"}}}
+	bindings := map[string]*factorytoken.Token{"fanout-count": countToken}
 
 	guard := &FanoutCountGuard{MatchBinding: "parent", CountBinding: "fanout-count"}
 	_, ok := guard.Evaluate(nil, bindings, nil)
@@ -907,8 +908,8 @@ func TestFanoutCountGuard_MissingParentBinding(t *testing.T) {
 }
 
 func TestFanoutCountGuard_MissingCountBinding(t *testing.T) {
-	parent := &interfaces.Token{Color: interfaces.TokenColor{WorkID: "parent-1"}}
-	bindings := map[string]*interfaces.Token{"parent": parent}
+	parent := &factorytoken.Token{Color: factorytoken.Color{WorkID: "parent-1"}}
+	bindings := map[string]*factorytoken.Token{"parent": parent}
 
 	guard := &FanoutCountGuard{MatchBinding: "parent", CountBinding: "fanout-count"}
 	_, ok := guard.Evaluate(nil, bindings, nil)
@@ -918,9 +919,9 @@ func TestFanoutCountGuard_MissingCountBinding(t *testing.T) {
 }
 
 func TestFanoutCountGuard_InvalidCountTag(t *testing.T) {
-	parent := &interfaces.Token{Color: interfaces.TokenColor{WorkID: "parent-1"}}
-	countToken := &interfaces.Token{Color: interfaces.TokenColor{Tags: map[string]string{"expected_count": "not-a-number"}}}
-	bindings := map[string]*interfaces.Token{"parent": parent, "fanout-count": countToken}
+	parent := &factorytoken.Token{Color: factorytoken.Color{WorkID: "parent-1"}}
+	countToken := &factorytoken.Token{Color: factorytoken.Color{Tags: map[string]string{"expected_count": "not-a-number"}}}
+	bindings := map[string]*factorytoken.Token{"parent": parent, "fanout-count": countToken}
 
 	guard := &FanoutCountGuard{MatchBinding: "parent", CountBinding: "fanout-count"}
 	_, ok := guard.Evaluate(nil, bindings, nil)
@@ -930,7 +931,7 @@ func TestFanoutCountGuard_InvalidCountTag(t *testing.T) {
 }
 
 func TestTokenColorField(t *testing.T) {
-	color := interfaces.TokenColor{
+	color := factorytoken.Color{
 		WorkID:     "w-1",
 		WorkTypeID: "wt-1",
 		TraceID:    "t-1",

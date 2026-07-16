@@ -5,17 +5,18 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
-	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIPrePersist(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
+	factory, err := factoryfixtures.DecodeCrossPathInvalidFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 	}
@@ -34,7 +35,7 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIPrePersist(t *
 	}
 
 	apiSignatures := factoryvalidation.CanonicalTargetSignatures(apiResult.BlockingTargets())
-	saveSignatures := factoryvalidation.CanonicalAPITargetSignatures(topologyErr.Targets)
+	saveSignatures := validationassert.CanonicalAPITargetSignatures(topologyErr.Targets)
 	if !factoryvalidation.EquivalentCanonicalTargetSignatures(apiSignatures, saveSignatures) {
 		t.Fatalf("ValidateFactoryAPI signatures = %#v, save signatures = %#v",
 			apiSignatures, saveSignatures)
@@ -69,7 +70,7 @@ func TestValidateEditableFactoryTopology_ReturnsTargetsForResourceSlotRoutes(t *
 func TestValidateEditableFactoryTopology_ValidFactory_NoError(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
@@ -82,7 +83,7 @@ func TestValidateEditableFactoryTopology_ValidFactory_NoError(t *testing.T) {
 func TestValidateEditableFactoryTopology_RejectsDuplicateDefaultHandlingWorkTypes(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
@@ -107,7 +108,7 @@ func TestValidateEditableFactoryTopology_RejectsDuplicateDefaultHandlingWorkType
 func TestValidateEditableFactoryTopology_AllowsSingleDefaultHandlingWorkType(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
@@ -136,7 +137,7 @@ func TestValidateUpsertNamedFactoryRequest_RejectsInvalidFactoryName(t *testing.
 func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIForInvocationReturnFinding(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
@@ -161,7 +162,7 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIForInvocationR
 	}
 
 	apiSignatures := factoryvalidation.CanonicalTargetSignatures(apiResult.Targets)
-	saveSignatures := factoryvalidation.CanonicalAPITargetSignatures(topologyErr.Targets)
+	saveSignatures := validationassert.CanonicalAPITargetSignatures(topologyErr.Targets)
 	if !factoryvalidation.EquivalentCanonicalTargetSignatures(apiSignatures, saveSignatures) {
 		t.Fatalf("ValidateFactoryAPI signatures = %#v, save signatures = %#v",
 			apiSignatures, saveSignatures)
@@ -172,7 +173,7 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIForInvocationR
 func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIForWorkPropagationFinding(t *testing.T) {
 	t.Parallel()
 
-	factory, err := factoryvalidation.DecodeCrossPathValidAlphaFactory()
+	factory, err := factoryfixtures.DecodeCrossPathValidAlphaFactory()
 	if err != nil {
 		t.Fatalf("DecodeCrossPathValidAlphaFactory: %v", err)
 	}
@@ -195,7 +196,7 @@ func TestValidateEditableFactoryTopology_MatchesValidateFactoryAPIForWorkPropaga
 	}
 
 	apiSignatures := factoryvalidation.CanonicalTargetSignatures(apiResult.Targets)
-	saveSignatures := factoryvalidation.CanonicalAPITargetSignatures(topologyErr.Targets)
+	saveSignatures := validationassert.CanonicalAPITargetSignatures(topologyErr.Targets)
 	if !factoryvalidation.EquivalentCanonicalTargetSignatures(apiSignatures, saveSignatures) {
 		t.Fatalf("ValidateFactoryAPI signatures = %#v, save signatures = %#v",
 			apiSignatures, saveSignatures)

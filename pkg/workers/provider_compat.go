@@ -1,7 +1,7 @@
 package workers
 
 import (
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/pkg/workers/mockworker"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
@@ -25,10 +25,10 @@ const (
 	codexWindowsProcessFailureExitCode = 4294967295
 )
 
-func NewProviderError(errorType interfaces.WorkFailureType, message string, cause error) *ProviderError {
+func NewProviderError(errorType workerexecution.WorkFailureType, message string, cause error) *ProviderError {
 	return workerprovider.NewProviderError(errorType, message, cause)
 }
 
-func NewProviderErrorWithSession(errorType interfaces.WorkFailureType, message string, cause error, session *interfaces.ProviderSessionMetadata) *ProviderError {
+func NewProviderErrorWithSession(errorType workerexecution.WorkFailureType, message string, cause error, session *workerexecution.ProviderSessionMetadata) *ProviderError {
 	return workerprovider.NewProviderErrorWithSession(errorType, message, cause, session)
 }

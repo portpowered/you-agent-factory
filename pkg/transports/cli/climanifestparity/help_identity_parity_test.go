@@ -3,7 +3,7 @@ package climanifestparity_test
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/baseline"
 	"github.com/portpowered/infinite-you/pkg/transports/cli/climanifest"

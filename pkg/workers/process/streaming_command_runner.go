@@ -7,7 +7,7 @@ import (
 	"io"
 	"os/exec"
 
-	"github.com/portpowered/infinite-you/pkg/logging"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 )
 
 const (

@@ -12,10 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/transports/cli"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -116,7 +117,7 @@ Complete {{ (index .Inputs 0).WorkID }} from split config.`)
 	testutil.WriteSeedFile(t, standaloneDir, "task", []byte(`{"title":"flattened split factory"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Finished from flattened split config. DONE COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Finished from flattened split config. DONE COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, standaloneDir,
 		testutil.WithProvider(provider),
@@ -176,7 +177,7 @@ func TestFatFactory_StandaloneCanonicalFileExecutesWithInlineDefinitions(t *test
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"standalone fat factory"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Finished from inline config. DONE COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Finished from inline config. DONE COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),

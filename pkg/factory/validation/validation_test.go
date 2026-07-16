@@ -6,11 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
+	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
 	"github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestValidate_MissingOutcomeRoutesUseCanonicalWorkstationLocations(t *testing.T) {
@@ -24,7 +27,7 @@ func TestValidate_MissingOutcomeRoutesUseCanonicalWorkstationLocations(t *testin
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers: []workerconfig.Config{{Name: "worker-a"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "repeater",
 			Kind:           interfaces.WorkstationKindRepeater,
@@ -56,7 +59,7 @@ func TestValidate_RepresentativeCanonicalSubjects(t *testing.T) {
 				{Name: "queued", Type: interfaces.StateTypeInitial},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers: []workerconfig.Config{{Name: "worker-a"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "process",
 			Kind:           interfaces.WorkstationKindRepeater,
@@ -88,7 +91,7 @@ func TestValidate_MissingWorkTypeOutcomeStates(t *testing.T) {
 				{Name: "queued", Type: interfaces.StateTypeInitial},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "worker-a"}},
+		Workers: []workerconfig.Config{{Name: "worker-a"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "process",
 			WorkerTypeName: "worker-a",
@@ -226,7 +229,7 @@ func TestValidate_MissingOutputRoutesVsMissingFailureRoute(t *testing.T) {
 			{Name: "failed", Type: interfaces.StateTypeFailed},
 		},
 	}}
-	baseWorkers := []interfaces.WorkerConfig{{Name: "worker-a"}}
+	baseWorkers := []workerconfig.Config{{Name: "worker-a"}}
 
 	for _, tt := range missingOutputRoutesVsFailureRouteCases() {
 		t.Run(tt.name, func(t *testing.T) {
@@ -360,7 +363,7 @@ func TestValidate_WorkerBackedKindsPreserveMissingFailureRouteWhenOutputsExist(t
 		},
 	}}
 	outputRoute := []interfaces.IOConfig{{WorkTypeName: "task", StateName: "in-review"}}
-	workers := []interfaces.WorkerConfig{{Name: "worker-a"}}
+	workers := []workerconfig.Config{{Name: "worker-a"}}
 
 	cases := []struct {
 		name        string
@@ -519,7 +522,7 @@ func TestValidate_LogicalMoveOutcomeRouteExemption(t *testing.T) {
 
 func TestValidate_CanonicalFindingsAndStableIdentity(t *testing.T) {
 	t.Run("canonical findings match config validation", func(t *testing.T) {
-		apiFactory, err := factoryvalidation.DecodeCrossPathInvalidFactory()
+		apiFactory, err := factoryfixtures.DecodeCrossPathInvalidFactory()
 		if err != nil {
 			t.Fatalf("DecodeCrossPathInvalidFactory: %v", err)
 		}
@@ -550,10 +553,10 @@ func TestValidate_CanonicalFindingsAndStableIdentity(t *testing.T) {
 			mutate            func(*interfaces.FactoryConfig)
 		}{
 			{"resources", "resource-agent-slot", `duplicate resource id "resource-agent-slot"`, factoryvalidation.SubjectTypeResource, []string{"factory.resources[0].id", "factory.resources[1].id"}, func(c *interfaces.FactoryConfig) {
-				c.Resources = append(c.Resources, interfaces.ResourceConfig{ID: "resource-agent-slot", Name: "review-slot", Capacity: 1})
+				c.Resources = append(c.Resources, factoryresource.Config{ID: "resource-agent-slot", Name: "review-slot", Capacity: 1})
 			}},
 			{"workers", "worker-executor", `duplicate worker id "worker-executor"`, factoryvalidation.SubjectTypeWorker, []string{"factory.workers[0].id", "factory.workers[1].id"}, func(c *interfaces.FactoryConfig) {
-				c.Workers = append(c.Workers, interfaces.WorkerConfig{ID: "worker-executor", Name: "reviewer"})
+				c.Workers = append(c.Workers, workerconfig.Config{ID: "worker-executor", Name: "reviewer"})
 			}},
 			{"work types", "work-type-story", `duplicate work type id "work-type-story"`, factoryvalidation.SubjectTypeWorkType, []string{"factory.workTypes[0].id", "factory.workTypes[1].id"}, func(c *interfaces.FactoryConfig) {
 				c.WorkTypes = append(c.WorkTypes, interfaces.WorkTypeConfig{ID: "work-type-story", Name: "bug"})
@@ -727,12 +730,12 @@ func TestValidate_OrchestratorCompatibilityAndWorkPropagation(t *testing.T) {
 func stableIDConfig() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{Name: "stable-id-factory",
 		WorkTypes: []interfaces.WorkTypeConfig{{ID: "work-type-story", Name: "story", States: []interfaces.StateConfig{{ID: "state-ready", Name: "ready", Type: interfaces.StateTypeInitial}, {ID: "state-done", Name: "done", Type: interfaces.StateTypeTerminal}, {ID: "state-failed", Name: "failed", Type: interfaces.StateTypeFailed}}}},
-		Resources: []interfaces.ResourceConfig{{ID: "resource-agent-slot", Name: "agent-slot", Capacity: 1}}, Workers: []interfaces.WorkerConfig{{ID: "worker-executor", Name: "executor"}},
+		Resources: []factoryresource.Config{{ID: "resource-agent-slot", Name: "agent-slot", Capacity: 1}}, Workers: []workerconfig.Config{{ID: "worker-executor", Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{ID: "workstation-execute-story", Name: "execute-story", WorkerTypeName: "executor", Inputs: []interfaces.IOConfig{{WorkTypeName: "story", StateName: "ready"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "story", StateName: "done"}}, OnFailure: []interfaces.IOConfig{{WorkTypeName: "story", StateName: "failed"}}}}}
 }
 
 func invocationConfig() *interfaces.FactoryConfig {
-	return &interfaces.FactoryConfig{Name: "invocation-validation", WorkTypes: []interfaces.WorkTypeConfig{{Name: "task", States: []interfaces.StateConfig{{Name: "queued", Type: interfaces.StateTypeInitial}, {Name: "done", Type: interfaces.StateTypeTerminal}, {Name: "failed", Type: interfaces.StateTypeFailed}}}}, Workers: []interfaces.WorkerConfig{{Name: "worker-a", Type: interfaces.WorkerTypeInference}}, Workstations: []interfaces.FactoryWorkstationConfig{{Name: "process", WorkerTypeName: "worker-a", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "queued"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}, OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}}}}
+	return &interfaces.FactoryConfig{Name: "invocation-validation", WorkTypes: []interfaces.WorkTypeConfig{{Name: "task", States: []interfaces.StateConfig{{Name: "queued", Type: interfaces.StateTypeInitial}, {Name: "done", Type: interfaces.StateTypeTerminal}, {Name: "failed", Type: interfaces.StateTypeFailed}}}}, Workers: []workerconfig.Config{{Name: "worker-a", Type: interfaces.WorkerTypeInference}}, Workstations: []interfaces.FactoryWorkstationConfig{{Name: "process", WorkerTypeName: "worker-a", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "queued"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}}, OnFailure: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "failed"}}}}}
 }
 
 func assertTargetDetails(t *testing.T, targets []factoryvalidation.Target, code string, subjectType factoryvalidation.SubjectType, id string, location factoryvalidation.SubjectLocation, message string, paths ...string) {

@@ -4,7 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
@@ -123,8 +124,8 @@ func engineStateSnapshotFixture() interfaces.EngineStateSnapshot[petri.MarkingSn
 	return interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *Net]{
 		RuntimeStatus: interfaces.RuntimeStatusActive,
 		Marking: petri.MarkingSnapshot{
-			Tokens: map[string]*interfaces.Token{
-				"tok-1": {ID: "tok-1", PlaceID: "task:init", Color: interfaces.TokenColor{WorkTypeID: "task"}},
+			Tokens: map[string]*factorytoken.Token{
+				"tok-1": {ID: "tok-1", PlaceID: "task:init", Color: factorytoken.Color{WorkTypeID: "task"}},
 			},
 		},
 		Dispatches: map[string]*interfaces.DispatchEntry{
@@ -133,11 +134,11 @@ func engineStateSnapshotFixture() interfaces.EngineStateSnapshot[petri.MarkingSn
 				TransitionID:    "t1",
 				WorkstationName: "review",
 				StartTime:       now,
-				ConsumedTokens: []interfaces.Token{{
+				ConsumedTokens: []factorytoken.Token{{
 					ID:        "tok-2",
 					PlaceID:   "task:processing",
 					CreatedAt: now.Add(-time.Minute),
-					Color:     interfaces.TokenColor{WorkID: "work-1", WorkTypeID: "task", TraceID: "trace-1"},
+					Color:     factorytoken.Color{WorkID: "work-1", WorkTypeID: "task", TraceID: "trace-1"},
 				}},
 				HeldMutations: []interfaces.MarkingMutation{{
 					Type: interfaces.MutationConsume, TokenID: "tok-2", FromPlace: "task:processing",
@@ -151,8 +152,8 @@ func engineStateSnapshotFixture() interfaces.EngineStateSnapshot[petri.MarkingSn
 			WorkstationName: "plan",
 			Outcome:         "ACCEPTED",
 			Duration:        5 * time.Second,
-			ConsumedTokens: []interfaces.Token{{
-				ID: "tok-0", PlaceID: "task:init", Color: interfaces.TokenColor{WorkID: "work-0", WorkTypeID: "task", TraceID: "trace-1"},
+			ConsumedTokens: []factorytoken.Token{{
+				ID: "tok-0", PlaceID: "task:init", Color: factorytoken.Color{WorkID: "work-0", WorkTypeID: "task", TraceID: "trace-1"},
 			}},
 			OutputMutations: []interfaces.TokenMutationRecord{{
 				DispatchID:   "dispatch-0",
@@ -161,10 +162,10 @@ func engineStateSnapshotFixture() interfaces.EngineStateSnapshot[petri.MarkingSn
 				Type:         interfaces.MutationCreate,
 				TokenID:      "work-0",
 				ToPlace:      "task:complete",
-				Token: &interfaces.Token{
+				Token: &factorytoken.Token{
 					ID:      "work-0",
 					PlaceID: "task:complete",
-					Color:   interfaces.TokenColor{WorkID: "work-0", WorkTypeID: "task", TraceID: "trace-1"},
+					Color:   factorytoken.Color{WorkID: "work-0", WorkTypeID: "task", TraceID: "trace-1"},
 				},
 			}},
 		}},

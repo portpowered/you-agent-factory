@@ -4,34 +4,38 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workdomain "github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestFactoryEventHistory_RecordWorkRequest_PreservesGeneratedWorkChainingTraceLineage(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 18, 0, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
-	history.RecordWorkRequest(7, interfaces.WorkRequestRecord{
+	history.RecordWorkRequest(7, work.WorkRequestRecord{
 		RequestID: "request-generated-lineage",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      workdomain.WorkRequestTypeFactoryRequestBatch,
 		TraceID:   "trace-generated-current",
-		WorkItems: []interfaces.FactoryWorkItem{{
+		WorkItems: []workdomain.FactoryWorkItem{{
 			ID:                       "work-generated-lineage",
 			WorkTypeID:               "task",
 			DisplayName:              "generated-lineage",
 			CurrentChainingTraceID:   "trace-generated-current",
 			PreviousChainingTraceIDs: []string{"trace-a", "trace-z"},
 			TraceID:                  "trace-generated-current",
-			Content: []interfaces.WorkContentPart{
-				{Type: interfaces.WorkContentPartTypeText, Text: "review image"},
-				{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/review.png"},
+			Content: []workdomain.WorkContentPart{
+				{Type: workdomain.WorkContentPartTypeText, Text: "review image"},
+				{Type: workdomain.WorkContentPartTypeImage, URL: "file://fixtures/review.png"},
 			},
 		}},
 	}, eventTime)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -49,30 +53,89 @@ func TestFactoryEventHistory_RecordWorkRequest_PreservesGeneratedWorkChainingTra
 	if got := stringSliceValueForEventHistoryTest(work.PreviousChainingTraceIds); len(got) != 2 || got[0] != "trace-a" || got[1] != "trace-z" {
 		t.Fatalf("work previous chaining trace IDs = %#v, want [trace-a trace-z]", got)
 	}
-	assertEventHistoryWorkContent(t, work.Content, []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "review image"},
-		{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/review.png"},
+	assertEventHistoryWorkContent(t, work.Content, []workdomain.WorkContentPart{
+		{Type: workdomain.WorkContentPartTypeText, Text: "review image"},
+		{Type: workdomain.WorkContentPartTypeImage, URL: "file://fixtures/review.png"},
 	})
+}
+
+func TestFactoryEventHistory_RecordWorkRequest_AppendsWorkOwnedCanonicalPayloads(t *testing.T) {
+	eventTime := time.Date(2026, 7, 15, 22, 45, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+	var recorded []interfaces.FactoryEvent
+	history.AddEventRecorder(func(event interfaces.FactoryEvent) {
+		recorded = append(recorded, event)
+	})
+
+	history.RecordWorkRequest(7, work.WorkRequestRecord{
+		RequestID:     "request-domain-owned",
+		Type:          work.WorkRequestTypeFactoryRequestBatch,
+		TraceID:       "trace-domain-owned",
+		Source:        "api",
+		ParentLineage: []string{"trace-parent"},
+		WorkItems: []work.FactoryWorkItem{{
+			ID:          "work-domain-owned",
+			WorkTypeID:  "task",
+			DisplayName: "domain-owned",
+			State:       "queued",
+			TraceID:     "trace-domain-owned",
+		}},
+		Relations: []work.FactoryRelation{{
+			Type:           string(work.WorkRelationDependsOn),
+			SourceWorkName: "domain-owned",
+			TargetWorkID:   "work-parent",
+			RequiredState:  "done",
+		}},
+	}, eventTime)
+
+	if len(recorded) != 2 {
+		t.Fatalf("canonical event count = %d, want request plus relationship", len(recorded))
+	}
+	var requestPayload work.WorkRequestEventPayload
+	if err := recorded[0].DecodePayload(&requestPayload); err != nil {
+		t.Fatalf("decode canonical work request payload: %v", err)
+	}
+	if requestPayload.Source != "api" || len(requestPayload.Works) != 1 || requestPayload.Works[0].WorkID != "work-domain-owned" {
+		t.Fatalf("canonical work request payload = %#v, want Work-owned request fields", requestPayload)
+	}
+	if len(requestPayload.Relations) != 1 || requestPayload.Relations[0].TargetWorkID != "work-parent" {
+		t.Fatalf("canonical request relations = %#v, want target work-parent", requestPayload.Relations)
+	}
+	var relationshipPayload work.RelationshipChangeRequestEventPayload
+	if err := recorded[1].DecodePayload(&relationshipPayload); err != nil {
+		t.Fatalf("decode canonical relationship payload: %v", err)
+	}
+	if relationshipPayload.Relation.TargetWorkID != "work-parent" || relationshipPayload.Relation.RequiredState != "done" {
+		t.Fatalf("canonical relationship payload = %#v, want Work-owned relationship", relationshipPayload)
+	}
+
+	generated := generatedHistoryEvents(t, history)
+	if _, err := generated[0].Payload.AsWorkRequestEventPayload(); err != nil {
+		t.Fatalf("decode generated work request boundary: %v", err)
+	}
+	if _, err := generated[1].Payload.AsRelationshipChangeRequestEventPayload(); err != nil {
+		t.Fatalf("decode generated relationship boundary: %v", err)
+	}
 }
 
 func TestFactoryEventHistory_RecordWorkRequest_UsesCanonicalGeneratedWorkContentTranslation(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 18, 1, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
-	history.RecordWorkRequest(7, interfaces.WorkRequestRecord{
+	history.RecordWorkRequest(7, work.WorkRequestRecord{
 		RequestID: "request-generated-content",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      workdomain.WorkRequestTypeFactoryRequestBatch,
 		TraceID:   "trace-generated-content",
-		WorkItems: []interfaces.FactoryWorkItem{
+		WorkItems: []workdomain.FactoryWorkItem{
 			{
 				ID:          "work-generated-content",
 				WorkTypeID:  "task",
 				DisplayName: "generated-content",
 				TraceID:     "trace-generated-content",
-				Content: []interfaces.WorkContentPart{
-					{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
-					{Type: interfaces.WorkContentPartType("audio"), File: "fixtures/ignored.wav"},
-					{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/diagram.png"},
+				Content: []workdomain.WorkContentPart{
+					{Type: workdomain.WorkContentPartTypeText, Text: "alpha"},
+					{Type: workdomain.WorkContentPartType("audio"), File: "fixtures/ignored.wav"},
+					{Type: workdomain.WorkContentPartTypeImage, URL: "file://fixtures/diagram.png"},
 				},
 			},
 			{
@@ -84,7 +147,7 @@ func TestFactoryEventHistory_RecordWorkRequest_UsesCanonicalGeneratedWorkContent
 		},
 	}, eventTime)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 1 {
 		t.Fatalf("event count = %d, want 1", len(events))
 	}
@@ -95,9 +158,9 @@ func TestFactoryEventHistory_RecordWorkRequest_UsesCanonicalGeneratedWorkContent
 	if payload.Works == nil || len(*payload.Works) != 2 {
 		t.Fatalf("payload works = %#v, want two generated work items", payload.Works)
 	}
-	assertEventHistoryWorkContent(t, (*payload.Works)[0].Content, []interfaces.WorkContentPart{
-		{Type: interfaces.WorkContentPartTypeText, Text: "alpha"},
-		{Type: interfaces.WorkContentPartTypeImage, URL: "file://fixtures/diagram.png"},
+	assertEventHistoryWorkContent(t, (*payload.Works)[0].Content, []workdomain.WorkContentPart{
+		{Type: workdomain.WorkContentPartTypeText, Text: "alpha"},
+		{Type: workdomain.WorkContentPartTypeImage, URL: "file://fixtures/diagram.png"},
 	})
 	if (*payload.Works)[1].Content != nil {
 		t.Fatalf("work content = %#v, want nil for empty content", (*payload.Works)[1].Content)
@@ -111,7 +174,7 @@ func TestFactoryEventHistory_RecordWorkstationEvents_PreserveChainingTraceLineag
 	history.RecordWorkstationRequest(8, chainingTraceLineageDispatchRecord(consumed), eventTime)
 	history.RecordWorkstationResponse(9, chainingTraceLineageResult(), chainingTraceLineageCompletion(eventTime, consumed))
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 2 {
 		t.Fatalf("event count = %d, want 2", len(events))
 	}
@@ -128,7 +191,7 @@ func TestFactoryEventHistory_RecordWorkstationEvents_CanonicalizesFanInLineageAn
 	history.RecordWorkstationRequest(12, record, eventTime)
 	history.RecordWorkstationResponse(13, chainingTraceLineageResult(), completion)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 2 {
 		t.Fatalf("event count = %d, want 2", len(events))
 	}
@@ -136,7 +199,7 @@ func TestFactoryEventHistory_RecordWorkstationEvents_CanonicalizesFanInLineageAn
 	assertFanInLineageResponse(t, events[1])
 }
 
-func assertEventHistoryWorkContent(t *testing.T, content *factoryapi.WorkContent, want []interfaces.WorkContentPart) {
+func assertEventHistoryWorkContent(t *testing.T, content *factoryapi.WorkContent, want []workdomain.WorkContentPart) {
 	t.Helper()
 	if content == nil {
 		t.Fatalf("work content = nil, want %#v", want)
@@ -169,14 +232,14 @@ func fanInLineageFixture(eventTime time.Time) (interfaces.FactoryDispatchRecord,
 	return record, fanInLineageCompletion(eventTime, consumed)
 }
 
-func fanInLineageConsumedTokens() []interfaces.Token {
-	return []interfaces.Token{
+func fanInLineageConsumedTokens() []factorytoken.Token {
+	return []factorytoken.Token{
 		newFanInWorkToken("tok-z", "work-z", "source-z", "request-z", "trace-z", []string{"trace-root-z"}),
 		{
 			ID:      "tok-resource",
 			PlaceID: "resource:available",
-			Color: interfaces.TokenColor{
-				DataType:                 interfaces.DataTypeResource,
+			Color: factorytoken.Color{
+				DataType:                 factorytoken.DataTypeResource,
 				WorkTypeID:               "gpu",
 				Name:                     "gpu",
 				CurrentChainingTraceID:   "trace-resource-ignored",
@@ -189,12 +252,12 @@ func fanInLineageConsumedTokens() []interfaces.Token {
 	}
 }
 
-func newFanInWorkToken(id, workID, name, requestID, traceID string, previous []string) interfaces.Token {
-	return interfaces.Token{
+func newFanInWorkToken(id, workID, name, requestID, traceID string, previous []string) factorytoken.Token {
+	return factorytoken.Token{
 		ID:      id,
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
-			DataType:                 interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:                 factorytoken.DataTypeWork,
 			WorkID:                   workID,
 			WorkTypeID:               "task",
 			Name:                     name,
@@ -206,12 +269,12 @@ func newFanInWorkToken(id, workID, name, requestID, traceID string, previous []s
 	}
 }
 
-func fanInLineageCompletion(eventTime time.Time, consumed []interfaces.Token) interfaces.CompletedDispatch {
+func fanInLineageCompletion(eventTime time.Time, consumed []factorytoken.Token) interfaces.CompletedDispatch {
 	return interfaces.CompletedDispatch{
 		DispatchID:      "dispatch-lineage",
 		TransitionID:    "build",
 		WorkstationName: "Build",
-		Outcome:         interfaces.OutcomeAccepted,
+		Outcome:         workerexecution.OutcomeAccepted,
 		EndTime:         eventTime,
 		Duration:        2 * time.Second,
 		ConsumedTokens:  consumed,
@@ -220,11 +283,11 @@ func fanInLineageCompletion(eventTime time.Time, consumed []interfaces.Token) in
 			newFanOutWorkMutation("tok-output-b", "task:done", "work-output-b", "fan-out-b", "trace-output-b", nil),
 			{
 				Type: interfaces.MutationCreate,
-				Token: &interfaces.Token{
+				Token: &factorytoken.Token{
 					ID:      "tok-resource-out",
 					PlaceID: "gpu:available",
-					Color: interfaces.TokenColor{
-						DataType:   interfaces.DataTypeResource,
+					Color: factorytoken.Color{
+						DataType:   factorytoken.DataTypeResource,
 						WorkTypeID: "gpu",
 						Name:       "gpu",
 					},
@@ -237,11 +300,11 @@ func fanInLineageCompletion(eventTime time.Time, consumed []interfaces.Token) in
 func newFanOutWorkMutation(id, placeID, workID, name, traceID string, previous []string) interfaces.TokenMutationRecord {
 	return interfaces.TokenMutationRecord{
 		Type: interfaces.MutationCreate,
-		Token: &interfaces.Token{
+		Token: &factorytoken.Token{
 			ID:      id,
 			PlaceID: placeID,
-			Color: interfaces.TokenColor{
-				DataType:                 interfaces.DataTypeWork,
+			Color: factorytoken.Color{
+				DataType:                 factorytoken.DataTypeWork,
 				WorkID:                   workID,
 				WorkTypeID:               "task",
 				Name:                     name,
@@ -253,25 +316,25 @@ func newFanOutWorkMutation(id, placeID, workID, name, traceID string, previous [
 	}
 }
 
-func chainingTraceLineageConsumedTokens() []interfaces.Token {
-	return []interfaces.Token{
+func chainingTraceLineageConsumedTokens() []factorytoken.Token {
+	return []factorytoken.Token{
 		newFanInWorkToken("tok-z", "work-z", "source-z", "request-z", "trace-z", []string{"trace-origin-z"}),
 		newFanInWorkToken("tok-a", "work-a", "source-a", "request-a", "trace-a", []string{"trace-origin-a-1", "trace-origin-a-2"}),
 	}
 }
 
-func chainingTraceLineageDispatchRecord(consumed []interfaces.Token) interfaces.FactoryDispatchRecord {
+func chainingTraceLineageDispatchRecord(consumed []factorytoken.Token) interfaces.FactoryDispatchRecord {
 	return interfaces.FactoryDispatchRecord{
 		DispatchID:  "dispatch-lineage",
 		CreatedTick: 8,
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID:               "dispatch-lineage",
 			TransitionID:             "build",
 			WorkstationName:          "Build",
 			CurrentChainingTraceID:   "trace-z",
 			PreviousChainingTraceIDs: []string{"trace-a", "trace-z"},
 			InputTokens:              workers.InputTokens(consumed...),
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				RequestID: "request-z",
 				TraceID:   "trace-z",
 				WorkIDs:   []string{"work-z", "work-a"},
@@ -280,31 +343,31 @@ func chainingTraceLineageDispatchRecord(consumed []interfaces.Token) interfaces.
 	}
 }
 
-func chainingTraceLineageResult() interfaces.WorkResult {
-	return interfaces.WorkResult{
+func chainingTraceLineageResult() workerexecution.WorkResult {
+	return workerexecution.WorkResult{
 		DispatchID:   "dispatch-lineage",
 		TransitionID: "build",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "merged output",
 	}
 }
 
-func chainingTraceLineageCompletion(eventTime time.Time, consumed []interfaces.Token) interfaces.CompletedDispatch {
+func chainingTraceLineageCompletion(eventTime time.Time, consumed []factorytoken.Token) interfaces.CompletedDispatch {
 	return interfaces.CompletedDispatch{
 		DispatchID:      "dispatch-lineage",
 		TransitionID:    "build",
 		WorkstationName: "Build",
-		Outcome:         interfaces.OutcomeAccepted,
+		Outcome:         workerexecution.OutcomeAccepted,
 		EndTime:         eventTime,
 		Duration:        1500 * time.Millisecond,
 		ConsumedTokens:  consumed,
 		OutputMutations: []interfaces.TokenMutationRecord{{
 			Type: interfaces.MutationCreate,
-			Token: &interfaces.Token{
+			Token: &factorytoken.Token{
 				ID:      "tok-output",
 				PlaceID: "task:done",
-				Color: interfaces.TokenColor{
-					DataType:   interfaces.DataTypeWork,
+				Color: factorytoken.Color{
+					DataType:   factorytoken.DataTypeWork,
 					WorkID:     "work-output",
 					WorkTypeID: "task",
 					Name:       "merged-output",
@@ -421,34 +484,34 @@ func TestFactoryEventHistory_RecordWorkstationResponse_PreserveInputExposesConsu
 	eventTime := time.Date(2026, time.June, 20, 12, 0, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
-	consumed := []interfaces.Token{{
+	consumed := []factorytoken.Token{{
 		ID:      "tok-input",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
 			TraceID:    "trace-input",
 			Payload:    []byte("input-payload"),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []workdomain.WorkContentPart{{
+				Type: workdomain.WorkContentPartTypeText,
 				Text: "input-content",
 			}},
 		},
 	}}
-	outputToken := interfaces.Token{
+	outputToken := factorytoken.Token{
 		ID:      "work-input",
 		PlaceID: "task:done",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
 			TraceID:    "trace-input",
 			Payload:    []byte("input-payload"),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []workdomain.WorkContentPart{{
+				Type: workdomain.WorkContentPartTypeText,
 				Text: "input-content",
 			}},
 		},
@@ -456,25 +519,25 @@ func TestFactoryEventHistory_RecordWorkstationResponse_PreserveInputExposesConsu
 
 	history.RecordWorkstationRequest(1, interfaces.FactoryDispatchRecord{
 		DispatchID: "dispatch-preserve",
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      "dispatch-preserve",
 			TransitionID:    "execute",
 			WorkstationName: "Execute",
 			InputTokens:     workers.InputTokens(consumed...),
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				WorkIDs: []string{"work-input"},
 			},
 		},
 	}, eventTime)
-	history.RecordWorkstationResponse(2, interfaces.WorkResult{
+	history.RecordWorkstationResponse(2, workerexecution.WorkResult{
 		DispatchID:   "dispatch-preserve",
 		TransitionID: "execute",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "worker-output",
 	}, interfaces.CompletedDispatch{
 		DispatchID:     "dispatch-preserve",
 		TransitionID:   "execute",
-		Outcome:        interfaces.OutcomeAccepted,
+		Outcome:        workerexecution.OutcomeAccepted,
 		EndTime:        eventTime,
 		Duration:       time.Second,
 		ConsumedTokens: consumed,
@@ -484,7 +547,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_PreserveInputExposesConsu
 		}},
 	})
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 2 {
 		t.Fatalf("event count = %d, want 2", len(events))
 	}
@@ -515,34 +578,34 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesRes
 	eventTime := time.Date(2026, time.July, 12, 18, 0, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
-	consumed := []interfaces.Token{{
+	consumed := []factorytoken.Token{{
 		ID:      "tok-input",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
 			TraceID:    "trace-input",
 			Payload:    []byte("input-payload"),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []workdomain.WorkContentPart{{
+				Type: workdomain.WorkContentPartTypeText,
 				Text: "input-content",
 			}},
 		},
 	}}
-	outputToken := interfaces.Token{
+	outputToken := factorytoken.Token{
 		ID:      "work-input",
 		PlaceID: "task:done",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
 			TraceID:    "trace-input",
 			Payload:    []byte("worker-response"),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []workdomain.WorkContentPart{{
+				Type: workdomain.WorkContentPartTypeText,
 				Text: "worker-response",
 			}},
 		},
@@ -550,25 +613,25 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesRes
 
 	history.RecordWorkstationRequest(1, interfaces.FactoryDispatchRecord{
 		DispatchID: "dispatch-response",
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      "dispatch-response",
 			TransitionID:    "execute",
 			WorkstationName: "Execute",
 			InputTokens:     workers.InputTokens(consumed...),
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				WorkIDs: []string{"work-input"},
 			},
 		},
 	}, eventTime)
-	history.RecordWorkstationResponse(2, interfaces.WorkResult{
+	history.RecordWorkstationResponse(2, workerexecution.WorkResult{
 		DispatchID:   "dispatch-response",
 		TransitionID: "execute",
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "worker-response",
 	}, interfaces.CompletedDispatch{
 		DispatchID:     "dispatch-response",
 		TransitionID:   "execute",
-		Outcome:        interfaces.OutcomeAccepted,
+		Outcome:        workerexecution.OutcomeAccepted,
 		EndTime:        eventTime,
 		Duration:       time.Second,
 		ConsumedTokens: consumed,
@@ -578,7 +641,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesRes
 		}},
 	})
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 2 {
 		t.Fatalf("event count = %d, want 2", len(events))
 	}
@@ -609,34 +672,34 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesNex
 	eventTime := time.Date(2026, time.July, 12, 19, 0, 0, 0, time.UTC)
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
-	consumed := []interfaces.Token{{
+	consumed := []factorytoken.Token{{
 		ID:      "tok-input",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
 			TraceID:    "trace-input",
 			Payload:    []byte("input-payload"),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []workdomain.WorkContentPart{{
+				Type: workdomain.WorkContentPartTypeText,
 				Text: "input-content",
 			}},
 		},
 	}}
-	outputToken := interfaces.Token{
+	outputToken := factorytoken.Token{
 		ID:      "work-input",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
 			TraceID:    "trace-input",
 			Payload:    []byte("next-turn-output"),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []workdomain.WorkContentPart{{
+				Type: workdomain.WorkContentPartTypeText,
 				Text: "next-turn-output",
 			}},
 			Tags: map[string]string{"continue_feedback": "needs revision"},
@@ -645,26 +708,26 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesNex
 
 	history.RecordWorkstationRequest(1, interfaces.FactoryDispatchRecord{
 		DispatchID: "dispatch-continue",
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      "dispatch-continue",
 			TransitionID:    "review",
 			WorkstationName: "Review",
 			InputTokens:     workers.InputTokens(consumed...),
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				WorkIDs: []string{"work-input"},
 			},
 		},
 	}, eventTime)
-	history.RecordWorkstationResponse(2, interfaces.WorkResult{
+	history.RecordWorkstationResponse(2, workerexecution.WorkResult{
 		DispatchID:   "dispatch-continue",
 		TransitionID: "review",
-		Outcome:      interfaces.OutcomeContinue,
+		Outcome:      workerexecution.OutcomeContinue,
 		Output:       "next-turn-output",
 		Feedback:     "needs revision",
 	}, interfaces.CompletedDispatch{
 		DispatchID:     "dispatch-continue",
 		TransitionID:   "review",
-		Outcome:        interfaces.OutcomeContinue,
+		Outcome:        workerexecution.OutcomeContinue,
 		EndTime:        eventTime,
 		Duration:       time.Second,
 		ConsumedTokens: consumed,
@@ -674,7 +737,7 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesNex
 		}},
 	})
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 2 {
 		t.Fatalf("event count = %d, want 2", len(events))
 	}
@@ -701,41 +764,41 @@ func TestFactoryEventHistory_RecordWorkstationResponse_OutputAsPayloadExposesNex
 	}
 }
 
-func failedPreservesRequestContentFixture(eventTime time.Time) (consumed []interfaces.Token, outputToken interfaces.Token) {
-	consumed = []interfaces.Token{{
+func failedPreservesRequestContentFixture(eventTime time.Time) (consumed []factorytoken.Token, outputToken factorytoken.Token) {
+	consumed = []factorytoken.Token{{
 		ID:      "tok-input",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
 			TraceID:    "trace-input",
 			Payload:    []byte("input-payload"),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []workdomain.WorkContentPart{{
+				Type: workdomain.WorkContentPartTypeText,
 				Text: "input-content",
 			}},
 		},
 	}}
-	outputToken = interfaces.Token{
+	outputToken = factorytoken.Token{
 		ID:      "work-input",
 		PlaceID: "task:failed",
-		Color: interfaces.TokenColor{
-			DataType:   interfaces.DataTypeWork,
+		Color: factorytoken.Color{
+			DataType:   factorytoken.DataTypeWork,
 			WorkID:     "work-input",
 			WorkTypeID: "task",
 			Name:       "Input",
 			TraceID:    "trace-input",
 			Payload:    []byte("input-payload"),
-			Content: []interfaces.WorkContentPart{{
-				Type: interfaces.WorkContentPartTypeText,
+			Content: []workdomain.WorkContentPart{{
+				Type: workdomain.WorkContentPartTypeText,
 				Text: "input-content",
 			}},
 		},
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			LastError: "agent crashed",
-			FailureLog: []interfaces.FailureRecord{{
+			FailureLog: []factorytoken.Failure{{
 				TransitionID: "execute",
 				Error:        "agent crashed",
 				Timestamp:    eventTime,
@@ -786,26 +849,26 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedPreservesRequestCon
 
 	history.RecordWorkstationRequest(1, interfaces.FactoryDispatchRecord{
 		DispatchID: "dispatch-failed",
-		Dispatch: interfaces.WorkDispatch{
+		Dispatch: work.WorkDispatch{
 			DispatchID:      "dispatch-failed",
 			TransitionID:    "execute",
 			WorkstationName: "Execute",
 			InputTokens:     workers.InputTokens(consumed...),
-			Execution: interfaces.ExecutionMetadata{
+			Execution: work.ExecutionMetadata{
 				WorkIDs: []string{"work-input"},
 			},
 		},
 	}, eventTime)
-	history.RecordWorkstationResponse(2, interfaces.WorkResult{
+	history.RecordWorkstationResponse(2, workerexecution.WorkResult{
 		DispatchID:   "dispatch-failed",
 		TransitionID: "execute",
-		Outcome:      interfaces.OutcomeFailed,
+		Outcome:      workerexecution.OutcomeFailed,
 		Output:       "worker-output",
 		Error:        "agent crashed",
 	}, interfaces.CompletedDispatch{
 		DispatchID:     "dispatch-failed",
 		TransitionID:   "execute",
-		Outcome:        interfaces.OutcomeFailed,
+		Outcome:        workerexecution.OutcomeFailed,
 		EndTime:        eventTime,
 		Duration:       time.Second,
 		ConsumedTokens: consumed,
@@ -815,5 +878,5 @@ func TestFactoryEventHistory_RecordWorkstationResponse_FailedPreservesRequestCon
 		}},
 	})
 
-	assertFailedPreservesRequestContentResponse(t, history.Events())
+	assertFailedPreservesRequestContentResponse(t, generatedHistoryEvents(t, history))
 }

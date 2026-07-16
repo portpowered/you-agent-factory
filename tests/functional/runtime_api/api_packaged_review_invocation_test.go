@@ -6,13 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/review"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -56,10 +57,10 @@ func TestSessionInvocationAPI_PackagedReviewRejectsThenApprovesRevision(t *testi
 	if len(completed) != 4 {
 		t.Fatalf("completed dispatches = %#v, want four ordered work and review outcomes", completed)
 	}
-	if completed[0].WorkstationName != review.PackagedExecuteWorkstationName || completed[0].Outcome != interfaces.OutcomeAccepted ||
-		completed[1].WorkstationName != review.PackagedReviewWorkstationName || completed[1].Outcome != interfaces.OutcomeRejected ||
-		completed[2].WorkstationName != review.PackagedExecuteWorkstationName || completed[2].Outcome != interfaces.OutcomeAccepted ||
-		completed[3].WorkstationName != review.PackagedReviewWorkstationName || completed[3].Outcome != interfaces.OutcomeAccepted {
+	if completed[0].WorkstationName != review.PackagedExecuteWorkstationName || completed[0].Outcome != workerexecution.OutcomeAccepted ||
+		completed[1].WorkstationName != review.PackagedReviewWorkstationName || completed[1].Outcome != workerexecution.OutcomeRejected ||
+		completed[2].WorkstationName != review.PackagedExecuteWorkstationName || completed[2].Outcome != workerexecution.OutcomeAccepted ||
+		completed[3].WorkstationName != review.PackagedReviewWorkstationName || completed[3].Outcome != workerexecution.OutcomeAccepted {
 		t.Fatalf("completed dispatches = %#v, want work accepted, review rejected, work accepted, review accepted", completed)
 	}
 }
