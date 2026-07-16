@@ -1595,6 +1595,19 @@ func (b *InvocationBootstrap) GetCurrentFactoryForSession(ctx context.Context, s
 	return b.Service.GetCurrentFactoryForSession(ctx, sessionID)
 }
 
+// InvokeModel forwards one-shot model invocation through the bootstrap-owned
+// FactoryService model collaborator.
+func (b *InvocationBootstrap) InvokeModel(
+	ctx context.Context,
+	modelName string,
+	request factoryapi.ModelInvocationRequest,
+) (apisurface.ModelInvocationResult, error) {
+	if b == nil || b.Service == nil {
+		return apisurface.ModelInvocationResult{}, fmt.Errorf("invocation bootstrap is required")
+	}
+	return b.Service.InvokeModel(ctx, modelName, request)
+}
+
 // InvokeFactorySession forwards one-shot invocation through the bootstrap-owned
 // FactoryService session invoker.
 func (b *InvocationBootstrap) InvokeFactorySession(

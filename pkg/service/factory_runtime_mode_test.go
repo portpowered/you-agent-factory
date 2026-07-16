@@ -1999,7 +1999,7 @@ func assertModelCatalogCallsForwardedOnce(t *testing.T, stub *stubModelService, 
 	}
 }
 
-func TestFactoryService_InvokeModelForwardsContextRequestResultAndErrorUnchanged(t *testing.T) {
+func TestInvocationBootstrap_InvokeModelForwardsContextRequestResultAndErrorUnchanged(t *testing.T) {
 	t.Parallel()
 
 	type contextKey string
@@ -2015,7 +2015,8 @@ func TestFactoryService_InvokeModelForwardsContextRequestResultAndErrorUnchanged
 		invokeErr:    invokeErr,
 	}
 
-	result, err := (&FactoryService{modelService: stub}).InvokeModel(ctx, "invoke-model", request)
+	bootstrap := &InvocationBootstrap{Service: &FactoryService{modelService: stub}}
+	result, err := bootstrap.InvokeModel(ctx, "invoke-model", request)
 	if result.ModelName != "invoke-result" || result.Operation != "TTS" || err != invokeErr {
 		t.Fatalf("InvokeModel = (%#v, %v), want exact result and sentinel error", result, err)
 	}
