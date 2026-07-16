@@ -115,6 +115,10 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   `tests/functional/smoke/cli_docs_smoke_test.go` (`run` topic)
 - End-to-end response-stream boundary with real CLI and API:
   `tests/functional/smoke/cli_named_goal_response_stream_smoke_test.go`
+- Live in-process CLI-session coverage for package-owned invocation arguments:
+  `tests/functional/cli/session/ralph_invocation_test.go`. Reuse
+  `root.Run` for successful CLI output and `root.ExecuteWithDependencies` when
+  asserting the pre-dispatch diagnostic returned by invalid argument validation.
 
 **Maintainer verification commands**
 
