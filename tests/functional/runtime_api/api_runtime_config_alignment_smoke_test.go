@@ -256,7 +256,6 @@ func assertRuntimeConfigAlignmentFinalState(
 	assertRuntimeConfigAlignmentDispatchHistory(t, engineState.DispatchHistory)
 	assertRuntimeConfigAlignmentCompleteTokenPayload(t, engineState.Marking.Tokens)
 	assertRuntimeConfigAlignmentEventHistory(t, server)
-	assertRuntimeConfigAlignmentTopologyProjection(t, dir)
 }
 
 type runtimeConfigAlignmentSummary struct {

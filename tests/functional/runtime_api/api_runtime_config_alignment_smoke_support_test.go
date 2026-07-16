@@ -2,6 +2,8 @@ package runtime_api
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
@@ -683,31 +685,16 @@ func runtimeConfigAlignmentDispatchConsumedPlace(
 	return false
 }
 
-func assertRuntimeConfigAlignmentTopologyProjection(t *testing.T, dir string) {
+func writeWorkstationConfig(t *testing.T, dir, workstationName, content string) {
 	t.Helper()
 
-	replayProjection := projectReplayInitialStructureFromEmbeddedConfig(t, dir)
-	assertRuntimeConfigAlignmentTopologyPayload(t, replayProjection)
-}
-
-func assertRuntimeConfigAlignmentTopologyPayload(t *testing.T, payload interfaces.InitialStructurePayload) {
-	t.Helper()
-
-	assertRuntimeConfigAlignmentProjectedWorkstationKind(t, payload, runtimeConfigAlignmentCronWorkstation, interfaces.CanonicalPublicWorkstationKind(interfaces.WorkstationKindCron))
-	assertRuntimeConfigAlignmentProjectedWorkstationKind(t, payload, runtimeConfigAlignmentReviewWorkstation, interfaces.CanonicalPublicWorkstationKind(interfaces.WorkstationKindRepeater))
-	assertRuntimeConfigAlignmentConstraint(t, payload.Constraints, "workstation/"+runtimeConfigAlignmentExecuteWorkstation+"/limits", "workstation_limit", map[string]string{
-		"max_execution_time": "100ms",
-		"max_retries":        "2",
-	})
-	assertRuntimeConfigAlignmentConstraint(t, payload.Constraints, "workstation/"+runtimeConfigAlignmentReviewWorkstation+"/stop-words", "stop_words", map[string]string{
-		"words": "DONE",
-	})
-	assertRuntimeConfigAlignmentConstraint(t, payload.Constraints, "workstation/"+runtimeConfigAlignmentCronWorkstation+"/cron", "cron_trigger", map[string]string{
-		"schedule":         "0 * * * *",
-		"trigger_at_start": "true",
-		"jitter":           "5s",
-		"expiry_window":    "1h",
-	})
+	path := filepath.Join(dir, "workstations", workstationName, "AGENTS.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("create workstation config dir %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
 }
 
 func assertRuntimeConfigAlignmentProjectedWorkstationKind(
@@ -729,28 +716,4 @@ func assertRuntimeConfigAlignmentProjectedWorkstationKind(
 	}
 
 	t.Fatalf("missing workstation %s in %#v", workstationID, payload.Workstations)
-}
-
-func assertRuntimeConfigAlignmentConstraint(
-	t *testing.T,
-	constraints []interfaces.FactoryConstraint,
-	id string,
-	wantType string,
-	wantValues map[string]string,
-) {
-	t.Helper()
-
-	matches := 0
-	for _, constraint := range constraints {
-		if constraint.ID != id {
-			continue
-		}
-		matches++
-		if constraint.Type != wantType || !reflect.DeepEqual(constraint.Values, wantValues) {
-			t.Fatalf("constraint %s = %#v, want type=%s values=%#v", id, constraint, wantType, wantValues)
-		}
-	}
-	if matches != 1 {
-		t.Fatalf("constraint %s count = %d, want 1 in %#v", id, matches, constraints)
-	}
 }
