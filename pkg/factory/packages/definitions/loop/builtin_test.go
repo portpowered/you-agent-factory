@@ -63,6 +63,17 @@ func TestBuiltInLoopFactory_NormalizesHourlyPeriodAndWorktree(t *testing.T) {
 	if got := arguments.Arguments["worktree"].Values; !reflect.DeepEqual(got, []string{"release-dashboard"}) {
 		t.Fatalf("worktree = %#v, want configured worktree", got)
 	}
+	run, err := invocations.InterpolateWorkstationConfig(
+		workstation(t, cfg, "run-loop-iteration"),
+		invocations.RuntimeInvocationArguments(cfg.InvocationSignature, &arguments),
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("InterpolateWorkstationConfig: %v", err)
+	}
+	if run.Worktree != "release-dashboard" {
+		t.Fatalf("interpolated run worktree = %q, want configured worktree", run.Worktree)
+	}
 	if _, err := invocations.NormalizeArguments(invocations.NormalizeArgumentsInput{
 		Signature:      cfg.InvocationSignature,
 		PositionalArgs: []string{"Check the release dashboard"},
