@@ -9,12 +9,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	provider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
-	"github.com/portpowered/infinite-you/pkg/workers/provider/commandenv"
 	claudeexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/claude/exitfailure"
+	"github.com/portpowered/infinite-you/pkg/workers/provider/commandenv"
 )
 
 const (
@@ -29,7 +32,7 @@ type Adapter struct{}
 // allocated separately for every invocation.
 func NewAdapter() *Adapter { return &Adapter{} }
 
-func (*Adapter) Identity() adapter.Identity { return adapter.Identity(interfaces.ModelProviderClaude) }
+func (*Adapter) Identity() adapter.Identity { return adapter.Identity(modelprovider.Claude) }
 
 func (*Adapter) BuildCommand(_ context.Context, input adapter.CommandContext) (adapter.CommandBuildResult, error) {
 	req := input.Request
@@ -52,7 +55,7 @@ func (*Adapter) BuildCommand(_ context.Context, input adapter.CommandContext) (a
 	args = append(args, "--output-format", outputFormatStreamJSON, "--include-partial-messages", req.UserMessage)
 
 	command := workerprocess.SubprocessRequestBase(req.Dispatch)
-	command.Command = string(interfaces.ModelProviderClaude)
+	command.Command = string(modelprovider.Claude)
 	command.Args = args
 	command.Env = commandenv.Build(req.EnvVars)
 	command.WorkDir = req.WorkingDirectory
@@ -95,7 +98,7 @@ func (*Adapter) ParseFinal(_ context.Context, input adapter.FinalParseContext) (
 		if record.Subtype != "success" || record.IsError {
 			return adapter.FinalParseResult{}, errors.New("Claude returned a terminal failure")
 		}
-		return adapter.FinalParseResult{Response: interfaces.InferenceResponse{
+		return adapter.FinalParseResult{Response: workerexecution.InferenceResponse{
 			Content:         record.Result,
 			ProviderSession: providerSession(record.SessionID),
 		}}, nil
@@ -140,13 +143,13 @@ func (*Adapter) ClassifyFailure(_ context.Context, input adapter.FailureContext)
 	}}
 }
 
-func providerSession(sessionID string) *interfaces.ProviderSessionMetadata {
+func providerSession(sessionID string) *workerexecution.ProviderSessionMetadata {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil
 	}
-	return &interfaces.ProviderSessionMetadata{
-		Provider: string(interfaces.ModelProviderClaude), Kind: providerSessionKind, ID: sessionID,
+	return &workerexecution.ProviderSessionMetadata{
+		Provider: string(modelprovider.Claude), Kind: providerSessionKind, ID: sessionID,
 	}
 }
 

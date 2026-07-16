@@ -13,14 +13,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	replay "github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/runtimepersist"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
-	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -175,7 +175,7 @@ func composeRuntimeCore(
 		true,
 		filepath.Base(runtimeBundle.FolderPath),
 	)
-	factorysessions.BindResponseEventCompletion(defaultSession, runtimeBundle.EventHistory.AddGeneratedRecorder)
+	factorysessions.BindResponseEventCompletion(defaultSession, runtimeBundle.EventHistory.AddEventTypeRecorder)
 	collaborators.sessions.Upsert(defaultSession, true)
 
 	modelAssets := collaborators.localModels.Assets

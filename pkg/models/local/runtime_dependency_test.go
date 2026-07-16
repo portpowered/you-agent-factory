@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 func TestManagedRuntimeReadinessForFactory_MatchesCatalogProjection(t *testing.T) {
@@ -20,8 +20,8 @@ func TestManagedRuntimeReadinessForFactory_MatchesCatalogProjection(t *testing.T
 	catalog := BuildCatalog(loaded)
 	entry := catalog[CanonicalModelName("OMNIVOICE_Q4_K_M")]
 	if readiness.Identity != entry.Summary.ManagedRuntime.Identity ||
-		readiness.ReadinessState != entry.Summary.ManagedRuntime.ReadinessState ||
-		readiness.LifecycleState != entry.Summary.ManagedRuntime.LifecycleState {
+		string(readiness.ReadinessState) != string(entry.Summary.ManagedRuntime.ReadinessState) ||
+		string(readiness.LifecycleState) != string(entry.Summary.ManagedRuntime.LifecycleState) {
 		t.Fatalf("readiness = %#v, want catalog summary %#v", readiness, entry.Summary.ManagedRuntime)
 	}
 }
@@ -54,7 +54,7 @@ func TestManagedRuntimeReadinessForFactory_PackagedAndAuthoredFactoriesMatch(t *
 		authoredReadiness.Locality != packagedReadiness.Locality {
 		t.Fatalf("authored = %#v, packaged = %#v, want identical managed runtime readiness", authoredReadiness, packagedReadiness)
 	}
-	if authoredReadiness.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+	if authoredReadiness.ReadinessState != managedruntime.ReadinessStateReady {
 		t.Fatalf("readinessState = %s, want READY when dependency is declared", authoredReadiness.ReadinessState)
 	}
 }
@@ -76,7 +76,7 @@ func TestManagedRuntimeReadinessForFactory_ReportsLoadingAndFailedStates(t *test
 	if err != nil {
 		t.Fatalf("loading readiness: %v", err)
 	}
-	if loading.ReadinessState != factoryapi.ManagedRuntimeReadinessStateLOADING {
+	if loading.ReadinessState != managedruntime.ReadinessStateLoading {
 		t.Fatalf("loading readiness = %s, want LOADING", loading.ReadinessState)
 	}
 
@@ -92,7 +92,7 @@ func TestManagedRuntimeReadinessForFactory_ReportsLoadingAndFailedStates(t *test
 	if err != nil {
 		t.Fatalf("failed readiness: %v", err)
 	}
-	if failed.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED {
+	if failed.ReadinessState != managedruntime.ReadinessStateFailed {
 		t.Fatalf("failed readiness = %s, want FAILED", failed.ReadinessState)
 	}
 }
@@ -126,7 +126,7 @@ func TestManagedRuntimeReadinessForFactory_PackagedAndAuthoredFactoriesShareLoad
 		authoredReadiness.LifecycleState != packagedReadiness.LifecycleState {
 		t.Fatalf("authored = %#v, packaged = %#v, want identical loading readiness", authoredReadiness, packagedReadiness)
 	}
-	if authoredReadiness.ReadinessState != factoryapi.ManagedRuntimeReadinessStateLOADING {
+	if authoredReadiness.ReadinessState != managedruntime.ReadinessStateLoading {
 		t.Fatalf("readinessState = %s, want LOADING", authoredReadiness.ReadinessState)
 	}
 }
@@ -146,8 +146,8 @@ func TestManagedRuntimeReadinessForFactory_UsesCacheInspectionWhenProvided(t *te
 	if err != nil {
 		t.Fatalf("ManagedRuntimeReadinessForFactory: %v", err)
 	}
-	if readiness.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY ||
-		readiness.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
+	if readiness.ReadinessState != managedruntime.ReadinessStateReady ||
+		readiness.LifecycleState != managedruntime.LifecycleStateInstalled {
 		t.Fatalf("readiness = %#v, want READY/INSTALLED", readiness)
 	}
 }

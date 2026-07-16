@@ -4,23 +4,25 @@ import (
 	"context"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/factory/subsystems"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type testPipeline struct {
 	transitioner *subsystems.TransitionerSubsystem
-	results      *buffers.TypedBuffer[interfaces.WorkResult]
+	results      *buffers.TypedBuffer[workerexecution.WorkResult]
 }
 
 func newTestPipeline(n *state.Net) *testPipeline {
 	return &testPipeline{
 		transitioner: subsystems.NewTransitioner(n, nil),
-		results:      buffers.NewTypedBuffer[interfaces.WorkResult](16),
+		results:      buffers.NewTypedBuffer[workerexecution.WorkResult](16),
 	}
 }
 
@@ -46,7 +48,7 @@ func TestNoOpDispatcher_NoEnabledTransitions(t *testing.T) {
 	tp := newTestPipeline(n)
 	noopDisp := subsystems.NewNoOpDispatcher(n, sched, tp.results)
 
-	markingSnap := makeDispatcherSnapshot(map[string]*interfaces.Token{})
+	markingSnap := makeDispatcherSnapshot(map[string]*factorytoken.Token{})
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: markingSnap}
 
 	result, err := noopDisp.Execute(context.Background(), &snapshot)
@@ -103,9 +105,9 @@ func TestNoOpDispatcher_MultipleTransitions(t *testing.T) {
 	tp := newTestPipeline(n)
 	noopDisp := subsystems.NewNoOpDispatcher(n, sched, tp.results)
 
-	markingSnap := makeDispatcherSnapshot(map[string]*interfaces.Token{
-		"tok1": {ID: "tok1", PlaceID: "p-init-a", Color: interfaces.TokenColor{WorkID: "w1"}},
-		"tok2": {ID: "tok2", PlaceID: "p-init-b", Color: interfaces.TokenColor{WorkID: "w2"}},
+	markingSnap := makeDispatcherSnapshot(map[string]*factorytoken.Token{
+		"tok1": {ID: "tok1", PlaceID: "p-init-a", Color: factorytoken.Color{WorkID: "w1"}},
+		"tok2": {ID: "tok2", PlaceID: "p-init-b", Color: factorytoken.Color{WorkID: "w2"}},
 	})
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{Marking: markingSnap}
 
@@ -187,12 +189,12 @@ func TestNoOpDispatcher_PreservesInputHistory(t *testing.T) {
 	noopDisp := subsystems.NewNoOpDispatcher(n, sched, tp.results)
 
 	// Input token with existing history.
-	markingSnap := makeDispatcherSnapshot(map[string]*interfaces.Token{
+	markingSnap := makeDispatcherSnapshot(map[string]*factorytoken.Token{
 		"tok1": {
 			ID:      "tok1",
 			PlaceID: "p-init",
-			Color:   interfaces.TokenColor{WorkID: "w1"},
-			History: interfaces.TokenHistory{
+			Color:   factorytoken.Color{WorkID: "w1"},
+			History: factorytoken.History{
 				TotalVisits:         map[string]int{"t0": 1},
 				ConsecutiveFailures: map[string]int{},
 				PlaceVisits:         map[string]int{"p-start": 1},
@@ -276,14 +278,14 @@ func TestNoOpDispatcher_PreservesCanonicalChainingLineageWhenLegacyTraceDiffers(
 	tp := newTestPipeline(n)
 	noopDisp := subsystems.NewNoOpDispatcher(n, sched, tp.results)
 	snapshot := interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-		Marking: makeDispatcherSnapshot(map[string]*interfaces.Token{
+		Marking: makeDispatcherSnapshot(map[string]*factorytoken.Token{
 			"tok1": {
 				ID:      "tok1",
 				PlaceID: "p-init",
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					WorkID:                 "w1",
 					WorkTypeID:             "task",
-					DataType:               interfaces.DataTypeWork,
+					DataType:               factorytoken.DataTypeWork,
 					CurrentChainingTraceID: "chain-1",
 					TraceID:                "trace-1",
 				},
@@ -315,7 +317,7 @@ func TestNoOpDispatcher_PreservesCanonicalChainingLineageWhenLegacyTraceDiffers(
 func TestNoOpDispatcher_ImplementsSubsystem(t *testing.T) {
 	var _ subsystems.Subsystem = (*subsystems.NoOpDispatcherSubsystem)(nil)
 	// Also verify the outcome type used.
-	if interfaces.OutcomeAccepted != "ACCEPTED" {
-		t.Errorf("unexpected OutcomeAccepted value: %s", interfaces.OutcomeAccepted)
+	if workerexecution.OutcomeAccepted != "ACCEPTED" {
+		t.Errorf("unexpected OutcomeAccepted value: %s", workerexecution.OutcomeAccepted)
 	}
 }

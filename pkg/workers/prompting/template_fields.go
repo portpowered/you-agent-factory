@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"text/template"
 
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 // ResolvedFields holds the resolved values of parameterized workstation fields.
@@ -21,7 +22,7 @@ type ResolvedFields struct {
 func ResolveTemplateFields(
 	workingDirTemplate string,
 	envTemplates map[string]string,
-	tokens []interfaces.Token,
+	tokens []factorytoken.Token,
 	wfCtx *factory_context.FactoryContext,
 	worktreeTemplate string,
 ) (*ResolvedFields, error) {

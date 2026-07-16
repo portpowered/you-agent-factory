@@ -3,7 +3,8 @@ package state
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
@@ -104,8 +105,8 @@ func TestGenerateResourcePlaces(t *testing.T) {
 		if tok.Color.WorkTypeID != "gpu" {
 			t.Errorf("token[%d].Color.WorkTypeID = %q, want %q", i, tok.Color.WorkTypeID, "gpu")
 		}
-		if tok.Color.DataType != interfaces.DataTypeResource {
-			t.Errorf("token[%d].Color.DataType = %q, want %q", i, tok.Color.DataType, interfaces.DataTypeResource)
+		if tok.Color.DataType != factorytoken.DataTypeResource {
+			t.Errorf("token[%d].Color.DataType = %q, want %q", i, tok.Color.DataType, factorytoken.DataTypeResource)
 		}
 		if tok.CreatedAt.IsZero() {
 			t.Errorf("token[%d].CreatedAt should not be zero", i)

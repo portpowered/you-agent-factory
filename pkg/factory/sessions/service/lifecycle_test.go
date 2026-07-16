@@ -4,13 +4,13 @@ import (
 	"context"
 	"testing"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factory/sessions/service"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
@@ -48,7 +48,7 @@ func (f *gatewayLifecycleFactory) Pause(context.Context) error { return nil }
 
 func (f *gatewayLifecycleFactory) Resume(context.Context) error { return nil }
 
-func (f *gatewayLifecycleFactory) GetFactoryEvents(context.Context) ([]factoryapi.FactoryEvent, error) {
+func (f *gatewayLifecycleFactory) GetFactoryEvents(context.Context) ([]interfaces.FactoryEvent, error) {
 	return nil, nil
 }
 
@@ -58,8 +58,8 @@ func (f *gatewayLifecycleFactory) WaitToComplete() <-chan struct{} {
 	return ch
 }
 
-func (f *gatewayLifecycleFactory) SubmitWorkRequest(context.Context, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
-	return interfaces.WorkRequestSubmitResult{}, nil
+func (f *gatewayLifecycleFactory) SubmitWorkRequest(context.Context, work.WorkRequest) (work.WorkRequestSubmitResult, error) {
+	return work.WorkRequestSubmitResult{}, nil
 }
 
 func (f *gatewayLifecycleFactory) SubscribeFactoryEvents(context.Context, *interfaces.FactoryEventReconnectCursor, interfaces.FactoryEventReconnectScope) (*interfaces.FactoryEventStream, error) {
@@ -72,8 +72,8 @@ func (f *gatewayLifecycleFactory) GetEngineStateSnapshot(context.Context) (*inte
 	}, nil
 }
 
-func (f *gatewayLifecycleFactory) MoveWork(context.Context, string, string, interfaces.WorkStateChangeSource, string) (interfaces.OperatorMoveResult, error) {
-	return interfaces.OperatorMoveResult{}, nil
+func (f *gatewayLifecycleFactory) MoveWork(context.Context, string, string, work.WorkStateChangeSource, string) (work.OperatorMoveResult, error) {
+	return work.OperatorMoveResult{}, nil
 }
 
 func TestService_PauseLiveFactorySession_DelegatesToDataplane(t *testing.T) {
@@ -87,12 +87,12 @@ func TestService_PauseLiveFactorySession_DelegatesToDataplane(t *testing.T) {
 	response, err := gateway.PauseLiveFactorySession(
 		context.Background(),
 		"sess-1",
-		factoryapi.FactorySessionLifecycleControlRequest{},
+		factorysessionexecution.ControlRequest{},
 	)
 	if err != nil {
 		t.Fatalf("PauseLiveFactorySession: %v", err)
 	}
-	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+	if response.Outcome != factorysessionexecution.LifecycleControlOutcomeAccepted {
 		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
 	}
 }
@@ -108,15 +108,15 @@ func TestService_ResumeLiveFactorySession_DelegatesToDataplane(t *testing.T) {
 	response, err := gateway.ResumeLiveFactorySession(
 		context.Background(),
 		"sess-1",
-		factoryapi.FactorySessionLifecycleControlRequest{},
+		factorysessionexecution.ControlRequest{},
 	)
 	if err != nil {
 		t.Fatalf("ResumeLiveFactorySession: %v", err)
 	}
-	if response.Outcome != factoryapi.FactorySessionLifecycleControlOutcomeAccepted {
+	if response.Outcome != factorysessionexecution.LifecycleControlOutcomeAccepted {
 		t.Fatalf("outcome = %q, want ACCEPTED", response.Outcome)
 	}
-	if response.Status != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+	if response.Status != factorysessionexecution.LifecycleStatusRunning {
 		t.Fatalf("status = %q, want RUNNING", response.Status)
 	}
 }
@@ -136,7 +136,7 @@ func TestService_LifecycleGatewayRoutesLiveAndDurableSessions(t *testing.T) {
 	live, err := gateway.PauseLiveFactorySession(
 		context.Background(),
 		"live-session-001",
-		factoryapi.FactorySessionLifecycleControlRequest{},
+		factorysessionexecution.ControlRequest{},
 	)
 	if err != nil {
 		t.Fatalf("PauseLiveFactorySession: %v", err)
@@ -144,16 +144,16 @@ func TestService_LifecycleGatewayRoutesLiveAndDurableSessions(t *testing.T) {
 	durable, err := gateway.PauseDurableFactorySession(
 		context.Background(),
 		"dur-sess-js-run-n-001",
-		factoryapi.FactorySessionLifecycleControlRequest{},
+		factorysessionexecution.ControlRequest{},
 	)
 	if err != nil {
 		t.Fatalf("PauseDurableFactorySession: %v", err)
 	}
 
-	if live.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+	if live.Status != factorysessionexecution.LifecycleStatusPaused {
 		t.Fatalf("live status = %q, want PAUSED", live.Status)
 	}
-	if durable.Status != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+	if durable.Status != factorysessionexecution.LifecycleStatusPaused {
 		t.Fatalf("durable status = %q, want PAUSED", durable.Status)
 	}
 }
@@ -185,7 +185,7 @@ func TestService_PauseLiveFactorySession_RejectsNilGateway(t *testing.T) {
 	t.Parallel()
 
 	var gateway *factorysessionservice.Service
-	_, err := gateway.PauseLiveFactorySession(context.Background(), "sess-1", factoryapi.FactorySessionLifecycleControlRequest{})
+	_, err := gateway.PauseLiveFactorySession(context.Background(), "sess-1", factorysessionexecution.ControlRequest{})
 	if err == nil {
 		t.Fatal("PauseLiveFactorySession = nil, want gateway required")
 	}

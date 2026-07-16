@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	. "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/globalconfiginventory"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
@@ -285,19 +285,19 @@ var productionBoundarySources = []struct {
 }{
 	{
 		relativePath: "pkg/config/openapi_factory.go",
-		sha256Hex:    "d517e8da204ec2560109d9e44277f378a49c21ca6557862152885eaba93bff4c",
+		sha256Hex:    "2e2709e8a15fcd509889e1b788d14b4ca7ab59904485c87069695417eaea6e8b",
 	},
 	{
 		relativePath: "pkg/config/factory_config_mapping.go",
-		sha256Hex:    "b14d69bfe0fd74d9a6416d55a8f6b549af14235bf74a84eea2a1dc5da105846e",
+		sha256Hex:    "8fa4c2db6c5d5d20c5a75070b8cc8ef4c87918d8ec6502eed1ec71ec83753aca",
 	},
 	{
 		relativePath: "pkg/config/factory_config_mapping_internal.go",
-		sha256Hex:    "38b97f4f824a182428c51b9cfad1da4d61d5a709a6ba70fc96cd086d1bbf7ab0",
+		sha256Hex:    "5898021e142108a34e4c6b2699b20fc882b26fbc44db10c9f03f866e8b6393f4",
 	},
 	{
-		relativePath: "pkg/interfaces/factory_config.go",
-		sha256Hex:    "6914cce0577c4e105d0259e1366456542e460780de6ffdc4582b2c0e416952e9",
+		relativePath: "pkg/factory/contracts/factory_config.go",
+		sha256Hex:    "24ec73a57af547860e0f9042f03a63c78e746a3bce6e5883d4b30300aca58fbb",
 	},
 	{
 		relativePath: "api/components/schemas/data-models/Factory.yaml",

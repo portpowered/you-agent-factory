@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -13,7 +13,7 @@ func TestArchiveTerminal_NoFurtherFiring(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "code_review"))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"feature": "settings page"}`))
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"swe":      {{Content: "Done. COMPLETE"}},
 		"reviewer": {{Content: "Approved. COMPLETE"}},
 	})
@@ -44,7 +44,7 @@ func TestArchiveTerminal_MultipleTokensAllTerminate(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"feature": "A"}`))
 	testutil.WriteSeedFile(t, dir, "code-change", []byte(`{"feature": "B"}`))
 
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"swe":      {{Content: "Done. COMPLETE"}, {Content: "Done. COMPLETE"}},
 		"reviewer": {{Content: "Approved. COMPLETE"}, {Content: "Approved. COMPLETE"}},
 	})

@@ -7,16 +7,17 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
-func normalizeSubmitRequestsForFunctionalTest(requests []interfaces.SubmitRequest) []interfaces.SubmitRequest {
+func normalizeSubmitRequestsForFunctionalTest(requests []work.SubmitRequest) []work.SubmitRequest {
 	if len(requests) == 0 {
 		return nil
 	}
-	normalized := make([]interfaces.SubmitRequest, len(requests))
+	normalized := make([]work.SubmitRequest, len(requests))
 	copy(normalized, requests)
 	traceID := ""
 	for _, request := range normalized {
@@ -42,12 +43,12 @@ type blockingExecutor struct {
 	calls     *int
 }
 
-func (e *blockingExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *blockingExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.mu.Lock()
 	*e.calls++
 	e.mu.Unlock()
 	<-e.releaseCh
-	return interfaces.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: interfaces.OutcomeAccepted}, nil
+	return workerexecution.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: workerexecution.OutcomeAccepted}, nil
 }
 
 func tokenPlaces(snap petri.MarkingSnapshot) map[string]int {

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -20,8 +20,8 @@ func TestStatelessExecutionSmoke_LoadedConfigDrivesExecution(t *testing.T) {
 	testutil.WriteSeedFile(t, originalDir, "task", []byte(`{"item":"original-config"}`))
 
 	originalProvider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Stage 1 done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Stage 2 done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Stage 1 done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Stage 2 done. COMPLETE"},
 	)
 	originalHarness := testutil.NewServiceTestHarness(t, originalDir,
 		testutil.WithProvider(originalProvider),
@@ -58,8 +58,8 @@ Updated Step 2 workstation.
 	testutil.WriteSeedFile(t, updatedDir, "task", []byte(`{"item":"updated-config"}`))
 
 	updatedProvider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Stage 1 approved. APPROVED"},
-		interfaces.InferenceResponse{Content: "Stage 2 approved. APPROVED"},
+		workerexecution.InferenceResponse{Content: "Stage 1 approved. APPROVED"},
+		workerexecution.InferenceResponse{Content: "Stage 2 approved. APPROVED"},
 	)
 	updatedHarness := testutil.NewServiceTestHarness(t, updatedDir,
 		testutil.WithProvider(updatedProvider),

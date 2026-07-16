@@ -258,7 +258,7 @@ func composeModelService(
 	if core.Clock() != nil {
 		now = core.Clock().Now
 	}
-	return modelsservice.NewService(modelsservice.Dependencies{
+	models, err := modelsservice.NewService(modelsservice.Dependencies{
 		RuntimeConfig:           host.CurrentModelRuntimeConfig,
 		ModelHost:               core.ModelHost(),
 		ModelAssetPuller:        core.ModelAssetPuller(),
@@ -268,6 +268,10 @@ func composeModelService(
 		ModelInvocationExecutor: host.BuildModelInvocationExecutor,
 		FactoryRunnerID:         runnerID,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return service.AdaptModelService(models), nil
 }
 
 func buildProductionSidecars(

@@ -1,4 +1,4 @@
-package factorysessions
+package factorysessions_test
 
 import (
 	"encoding/json"
@@ -6,19 +6,31 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
+
+func ProjectRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
+	return factorysessionmapping.RuntimeFromContextToAPI(ctx)
+}
+
+func SessionResponse(ctx ProjectionContext) factoryapi.FactorySession {
+	return factorysessionmapping.SessionResponseToAPI(ctx)
+}
 
 func TestProjectRuntime_LegacyPetriSessionIncludesMarkingAndEnabledTransitions(t *testing.T) {
 	now := time.Date(2026, 6, 8, 14, 0, 0, 0, time.UTC)
-	token := &interfaces.Token{
+	token := &factorytoken.Token{
 		ID:      "tok-init",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "work-1",
 			WorkTypeID: "task",
 			TraceID:    "trace-1",
@@ -32,7 +44,7 @@ func TestProjectRuntime_LegacyPetriSessionIncludesMarkingAndEnabledTransitions(t
 		InFlightCount: 0,
 		Uptime:        2 * time.Minute,
 		Marking: petri.MarkingSnapshot{
-			Tokens: map[string]*interfaces.Token{"tok-init": token},
+			Tokens: map[string]*factorytoken.Token{"tok-init": token},
 		},
 		Topology: &state.Net{
 			Places: map[string]*petri.Place{
@@ -80,14 +92,52 @@ func TestProjectRuntime_LegacyPetriSessionIncludesMarkingAndEnabledTransitions(t
 	}
 }
 
+func TestProjectRuntimeContract_OwnsDetachedJavaScriptStatusAndPublicMapping(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 7, 16, 3, 30, 0, 0, time.UTC)
+	state := &interfaces.FactorySessionJavaScriptRuntimeState{
+		Phase:               "review",
+		Phases:              []string{"plan", "review"},
+		ScriptStatus:        "RUNNING",
+		CompletedDispatches: 2,
+	}
+	ctx := ProjectionContext{
+		Session: &LiveSession{ID: "session-domain-projection"},
+		FactoryCfg: &interfaces.FactoryConfig{Orchestrator: &interfaces.FactoryOrchestratorConfig{
+			Kind:       interfaces.OrchestratorKindJavaScript,
+			JavaScript: &interfaces.FactoryOrchestratorJavaScriptConfig{},
+		}},
+		JavaScript: state,
+		Now:        now,
+	}
+
+	domain := ProjectRuntimeContract(ctx)
+	state.Phases[0] = "mutated"
+	if domain.Status != string(interfaces.RuntimeStatusIdle) || domain.JavaScript == nil {
+		t.Fatalf("domain runtime = %#v, want idle JavaScript projection", domain)
+	}
+	if domain.JavaScript.ScriptStatus != interfaces.FactorySessionJavaScriptScriptStatusRunning ||
+		domain.JavaScript.Phases[0] != "plan" || domain.JavaScript.ChildDispatchCounts.Completed != 2 {
+		t.Fatalf("domain JavaScript projection = %#v, want detached owner-defined values", domain.JavaScript)
+	}
+
+	public := ProjectRuntime(ctx)
+	if public.Status != factoryapi.FactorySessionStatusIDLE || public.Javascript == nil ||
+		public.Javascript.ScriptStatus != factoryapi.FactorySessionJavaScriptScriptStatusRUNNING ||
+		public.Javascript.ChildDispatchCounts.Completed != 2 {
+		t.Fatalf("public runtime = %#v, want compatible mapped values", public)
+	}
+}
+
 func TestProjectRuntime_JavaScriptWorkflowSessionIncludesPhaseAndCheckpointRefs(t *testing.T) {
 	now := time.Date(2026, 6, 8, 14, 5, 0, 0, time.UTC)
 	startedAt := now.Add(-5 * time.Minute)
 	argsSchema := json.RawMessage(`{"type":"object","properties":{"topic":{"type":"string"}}}`)
 	defaultPolicy := json.RawMessage(`{"maxAgents":3}`)
 	folderPath := t.TempDir()
-	logicalTarget := factoryapi.FactorySessionLogicalTarget{
-		Kind:       factoryapi.FactorySessionLogicalTargetKindDefault,
+	logicalTarget := RuntimeLogicalTarget{
+		Kind:       "default",
 		FolderPath: folderPath,
 	}
 	runtime := ProjectRuntime(ProjectionContext{
@@ -155,8 +205,8 @@ func TestProjectRuntime_JavaScriptWorkflowSessionPrefersSnapshotStreamGeneration
 	now := time.Date(2026, 6, 27, 7, 30, 0, 0, time.UTC)
 	startedAt := now.Add(-10 * time.Minute)
 	folderPath := t.TempDir()
-	logicalTarget := factoryapi.FactorySessionLogicalTarget{
-		Kind:       factoryapi.FactorySessionLogicalTargetKindDefault,
+	logicalTarget := RuntimeLogicalTarget{
+		Kind:       "default",
 		FolderPath: folderPath,
 	}
 	runtime := ProjectRuntime(ProjectionContext{
@@ -203,10 +253,10 @@ func TestProjectRuntime_JavaScriptWorkflowSessionPrefersSnapshotStreamGeneration
 
 func TestProjectRuntime_PausedSessionIncludesStopSummary(t *testing.T) {
 	now := time.Date(2026, 6, 27, 8, 15, 0, 0, time.UTC)
-	token := &interfaces.Token{
+	token := &factorytoken.Token{
 		ID:      "tok-goal-review",
 		PlaceID: "goal:review",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			Name:       "Resume draft",
 			WorkID:     "work-goal-1",
 			WorkTypeID: "goal",
@@ -224,7 +274,7 @@ func TestProjectRuntime_PausedSessionIncludesStopSummary(t *testing.T) {
 			RuntimeStatus:          interfaces.RuntimeStatusIdle,
 			FactoryState:           "PAUSED",
 			LifecycleControlStatus: string(factoryapi.FactorySessionDurableLifecycleStatusPaused),
-			Marking:                petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{"tok-goal-review": token}},
+			Marking:                petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{"tok-goal-review": token}},
 			Topology:               &state.Net{Places: map[string]*petri.Place{"goal:review": {ID: "goal:review", TypeID: "goal", State: "review"}}},
 		},
 		Now: now,
@@ -263,10 +313,10 @@ func TestProjectRuntime_BlockedAndNeedsHumanSessionsIncludeStopSummary(t *testin
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			token := &interfaces.Token{
+			token := &factorytoken.Token{
 				ID:      "tok-goal-stop",
 				PlaceID: tc.placeID,
-				Color: interfaces.TokenColor{
+				Color: factorytoken.Color{
 					Name:       "Recover goal",
 					WorkID:     "work-goal-stop",
 					WorkTypeID: "goal",
@@ -274,7 +324,7 @@ func TestProjectRuntime_BlockedAndNeedsHumanSessionsIncludeStopSummary(t *testin
 				},
 				CreatedAt: now.Add(-2 * time.Minute),
 				EnteredAt: now.Add(-1 * time.Minute),
-				History: interfaces.TokenHistory{
+				History: factorytoken.History{
 					LastError: tc.lastError,
 				},
 			}
@@ -286,16 +336,16 @@ func TestProjectRuntime_BlockedAndNeedsHumanSessionsIncludeStopSummary(t *testin
 				Snapshot: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
 					RuntimeStatus: interfaces.RuntimeStatusIdle,
 					FactoryState:  "RUNNING",
-					Marking:       petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{"tok-goal-stop": token}},
+					Marking:       petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{"tok-goal-stop": token}},
 					Topology:      &state.Net{Places: map[string]*petri.Place{tc.placeID: {ID: tc.placeID, TypeID: "goal", State: tc.stateName}}},
 					DispatchHistory: []interfaces.CompletedDispatch{{
 						DispatchID:      "dispatch-stop-1",
 						TransitionID:    "execute-goal",
 						WorkstationName: "execute-goal",
-						Outcome:         interfaces.OutcomeFailed,
+						Outcome:         workerexecution.OutcomeFailed,
 						Reason:          tc.wantSummary,
 						EndTime:         now,
-						ConsumedTokens:  []interfaces.Token{{Color: interfaces.TokenColor{WorkID: "work-goal-stop"}}},
+						ConsumedTokens:  []factorytoken.Token{{Color: factorytoken.Color{WorkID: "work-goal-stop"}}},
 					}},
 				},
 				Now: now,
@@ -343,10 +393,10 @@ func assertWorkStateStopSummary(
 
 func TestProjectRuntime_InterruptedSessionIncludesStopSummary(t *testing.T) {
 	now := time.Date(2026, 6, 27, 8, 45, 0, 0, time.UTC)
-	token := &interfaces.Token{
+	token := &factorytoken.Token{
 		ID:      "tok-goal-interrupted",
 		PlaceID: "goal:review",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			Name:       "Interrupted goal",
 			WorkID:     "work-goal-interrupted",
 			WorkTypeID: "goal",
@@ -367,7 +417,7 @@ func TestProjectRuntime_InterruptedSessionIncludesStopSummary(t *testing.T) {
 			},
 		},
 		Snapshot: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			Marking:  petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{"tok-goal-interrupted": token}},
+			Marking:  petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{"tok-goal-interrupted": token}},
 			Topology: &state.Net{Places: map[string]*petri.Place{"goal:review": {ID: "goal:review", TypeID: "goal", State: "review"}}},
 		},
 		JavaScript: &interfaces.FactorySessionJavaScriptRuntimeState{
@@ -402,10 +452,10 @@ func TestProjectRuntime_InterruptedSessionIncludesStopSummary(t *testing.T) {
 
 func TestProjectRuntime_InterruptedSessionWithoutMatchingRelatedWorkLeavesWorkContextEmpty(t *testing.T) {
 	now := time.Date(2026, 6, 27, 9, 0, 0, 0, time.UTC)
-	token := &interfaces.Token{
+	token := &factorytoken.Token{
 		ID:      "tok-goal-review",
 		PlaceID: "goal:review",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			Name:       "Nearby goal",
 			WorkID:     "work-goal-review",
 			WorkTypeID: "goal",
@@ -426,7 +476,7 @@ func TestProjectRuntime_InterruptedSessionWithoutMatchingRelatedWorkLeavesWorkCo
 			},
 		},
 		Snapshot: &interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net]{
-			Marking:  petri.MarkingSnapshot{Tokens: map[string]*interfaces.Token{"tok-goal-review": token}},
+			Marking:  petri.MarkingSnapshot{Tokens: map[string]*factorytoken.Token{"tok-goal-review": token}},
 			Topology: &state.Net{Places: map[string]*petri.Place{"goal:review": {ID: "goal:review", TypeID: "goal", State: "review"}}},
 		},
 		JavaScript: &interfaces.FactorySessionJavaScriptRuntimeState{
@@ -510,10 +560,10 @@ func assertJavaScriptSessionRuntimeFields(t *testing.T, javascript *factoryapi.F
 }
 func TestSessionResponse_PetriRuntimeOmitsDispatchesWhenCanonicalStateExists(t *testing.T) {
 	now := time.Date(2026, 6, 8, 16, 0, 0, 0, time.UTC)
-	token := &interfaces.Token{
+	token := &factorytoken.Token{
 		ID:      "tok-1",
 		PlaceID: "task:init",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "work-1",
 			WorkTypeID: "task",
 			TraceID:    "trace-1",
@@ -529,7 +579,7 @@ func TestSessionResponse_PetriRuntimeOmitsDispatchesWhenCanonicalStateExists(t *
 				TransitionID:    "tr-process",
 				WorkstationName: "process",
 				StartTime:       now,
-				ConsumedTokens:  []interfaces.Token{*token},
+				ConsumedTokens:  []factorytoken.Token{*token},
 			},
 		},
 		Topology: &state.Net{
@@ -599,8 +649,11 @@ func TestSessionResponse_JavaScriptRuntimeOmitsDispatchesAndPreservesArtifacts(t
 				RedactionCounts: map[string]int{
 					"secrets": 1,
 				},
-				CaptureMetadata: artifactCaptureMetadata(now, "dispatch-agent-1", "application/json"),
-				CapturedAt:      now,
+				CaptureMetadata: map[string]string{
+					"capturedAt": now.UTC().Format(time.RFC3339), "sourceDispatchId": "dispatch-agent-1",
+					"mimeType": "application/json",
+				},
+				CapturedAt: now,
 			}},
 		},
 		Now: now,
@@ -726,11 +779,11 @@ func TestProjectSessionResultAndPartialResult_ReferenceCheckpointArtifactsOnly(t
 	}
 
 	result := ProjectSessionResult("session-js", ctx, store)
-	if result.ResultArtifactRef == nil || result.ResultArtifactRef.Id != "artifact-ckpt-1" {
+	if result.ResultArtifactRef == nil || result.ResultArtifactRef.ID != "artifact-ckpt-1" {
 		t.Fatalf("result artifact ref = %#v", result.ResultArtifactRef)
 	}
 	partial := ProjectSessionPartialResult("session-js", ctx, store)
-	if partial.PartialResultArtifactRef == nil || partial.PartialResultArtifactRef.Id != "artifact-ckpt-1" {
+	if partial.PartialResultArtifactRef == nil || partial.PartialResultArtifactRef.ID != "artifact-ckpt-1" {
 		t.Fatalf("partial result artifact ref = %#v", partial.PartialResultArtifactRef)
 	}
 	if partial.Phase != "review" {

@@ -3,43 +3,43 @@ package projections
 import (
 	"strings"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
-func (r *factoryWorldReducer) applySessionLifecycleEvent(event factoryapi.FactoryEvent) (bool, error) {
+func (r *factoryWorldReducer) applySessionLifecycleEvent(event interfaces.FactoryEvent) (bool, error) {
 	switch event.Type {
-	case factoryapi.FactoryEventTypeSessionStarted:
+	case interfaces.FactoryEventTypeSessionStarted:
 		return true, r.applySessionStartedEvent(event)
-	case factoryapi.FactoryEventTypeSessionPaused:
+	case interfaces.FactoryEventTypeSessionPaused:
 		return true, r.applySessionPausedEvent(event)
-	case factoryapi.FactoryEventTypeSessionResumed:
+	case interfaces.FactoryEventTypeSessionResumed:
 		return true, r.applySessionResumedEvent(event)
-	case factoryapi.FactoryEventTypeSessionResultUpdated:
+	case interfaces.FactoryEventTypeSessionResultUpdated:
 		return true, r.applySessionResultUpdatedEvent(event)
-	case factoryapi.FactoryEventTypeSessionCompleted:
+	case interfaces.FactoryEventTypeSessionCompleted:
 		return true, r.applySessionCompletedEvent(event)
 	default:
 		return false, nil
 	}
 }
 
-func (r *factoryWorldReducer) applySessionStartedEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsSessionStartedEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applySessionStartedEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.FactorySessionStartedEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	bracket := r.ensureSessionBracket()
-	if sessionID := stringValue(event.Context.SessionId); sessionID != "" {
+	if sessionID := stringValue(event.Context.SessionID); sessionID != "" {
 		bracket.SessionID = sessionID
 	}
 	if kind := event.Context.OrchestratorKind; kind != nil {
 		bracket.OrchestratorKind = string(*kind)
 	}
 	bracket.OrchestratorDialect = stringValue(event.Context.OrchestratorDialect)
-	bracket.FactoryID = stringValue(payload.FactoryId)
+	bracket.FactoryID = stringValue(payload.FactoryID)
 	bracket.SourceRef = stringValue(payload.SourceRef)
 	bracket.SourceHash = stringValue(payload.SourceHash)
 	bracket.PolicyHash = stringValue(payload.PolicyHash)
@@ -48,9 +48,9 @@ func (r *factoryWorldReducer) applySessionStartedEvent(event factoryapi.FactoryE
 	return nil
 }
 
-func (r *factoryWorldReducer) applySessionPausedEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsSessionPausedEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applySessionPausedEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.FactorySessionPausedEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	bracket := r.ensureSessionBracket()
@@ -60,9 +60,9 @@ func (r *factoryWorldReducer) applySessionPausedEvent(event factoryapi.FactoryEv
 	return nil
 }
 
-func (r *factoryWorldReducer) applySessionResumedEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsSessionResumedEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applySessionResumedEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.FactorySessionResumedEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	bracket := r.ensureSessionBracket()
@@ -72,16 +72,16 @@ func (r *factoryWorldReducer) applySessionResumedEvent(event factoryapi.FactoryE
 	return nil
 }
 
-func (r *factoryWorldReducer) applySessionResultUpdatedEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsSessionResultUpdatedEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applySessionResultUpdatedEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.FactorySessionResultUpdatedEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	bracket := r.ensureSessionBracket()
 	mergeSessionBracketIdentity(bracket, event.Context)
 	bracket.ResultStatus = string(payload.ResultStatus)
-	bracket.ResultSummary = contentcontract.PartsFromGenerated(payload.ResultSummary)
-	bracket.ArtifactIDs = cloneStringSlice(sliceValue(payload.ArtifactIds))
+	bracket.ResultSummary = cloneWorkContentParts(payload.ResultSummary)
+	bracket.ArtifactIDs = cloneStringSlice(payload.ArtifactIDs)
 	if runtime := r.ensureJavaScriptRuntime(); runtime != nil {
 		runtime.PrimaryResult = cloneWorkContentParts(bracket.ResultSummary)
 		runtime.ResultStatus = bracket.ResultStatus
@@ -116,9 +116,9 @@ func appendUniqueArtifactState(artifacts *[]interfaces.FactorySessionArtifactSta
 	*artifacts = append(*artifacts, artifact)
 }
 
-func (r *factoryWorldReducer) applySessionCompletedEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsSessionCompletedEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applySessionCompletedEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.FactorySessionCompletedEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	bracket := r.ensureSessionBracket()
@@ -132,7 +132,7 @@ func (r *factoryWorldReducer) applySessionCompletedEvent(event factoryapi.Factor
 	if payload.ResultStatus != nil {
 		bracket.ResultStatus = string(*payload.ResultStatus)
 	}
-	bracket.ArtifactIDs = cloneStringSlice(sliceValue(payload.ArtifactIds))
+	bracket.ArtifactIDs = cloneStringSlice(payload.ArtifactIDs)
 	if payload.DispatchCounts != nil {
 		bracket.DispatchCounts = &interfaces.FactoryWorldJavaScriptChildDispatchCounts{
 			Queued:    payload.DispatchCounts.Queued,
@@ -141,8 +141,8 @@ func (r *factoryWorldReducer) applySessionCompletedEvent(event factoryapi.Factor
 		}
 	}
 	if payload.FailureDetail != nil {
-		bracket.FailureDetail = &interfaces.FailureDetail{
-			Reason:  interfaces.WorkFailureType(payload.FailureDetail.Reason),
+		bracket.FailureDetail = &workerexecution.FailureDetail{
+			Reason:  workerexecution.WorkFailureType(payload.FailureDetail.Reason),
 			Message: payload.FailureDetail.Message,
 		}
 	}
@@ -156,11 +156,11 @@ func (r *factoryWorldReducer) ensureSessionBracket() *interfaces.FactoryWorldSes
 	return r.stateValue.SessionBracket
 }
 
-func mergeSessionBracketIdentity(bracket *interfaces.FactoryWorldSessionBracketState, context factoryapi.FactoryEventContext) {
+func mergeSessionBracketIdentity(bracket *interfaces.FactoryWorldSessionBracketState, context interfaces.FactoryEventContext) {
 	if bracket == nil {
 		return
 	}
-	if sessionID := stringValue(context.SessionId); sessionID != "" {
+	if sessionID := stringValue(context.SessionID); sessionID != "" {
 		bracket.SessionID = sessionID
 	}
 	if kind := context.OrchestratorKind; kind != nil && bracket.OrchestratorKind == "" {
@@ -198,59 +198,59 @@ func buildFactoryWorldSessionBracketProjection(
 		FinalStatus:            bracket.FinalStatus,
 		CompletedAt:            bracket.CompletedAt,
 		DurationMillis:         bracket.DurationMillis,
-		FailureDetail:          interfaces.CloneFailureDetail(bracket.FailureDetail),
+		FailureDetail:          workerexecution.CloneFailureDetail(bracket.FailureDetail),
 	}
 }
 
-func cloneWorkContentParts(parts []interfaces.WorkContentPart) []interfaces.WorkContentPart {
+func cloneWorkContentParts(parts []work.WorkContentPart) []work.WorkContentPart {
 	if len(parts) == 0 {
 		return nil
 	}
-	cloned := make([]interfaces.WorkContentPart, len(parts))
+	cloned := make([]work.WorkContentPart, len(parts))
 	copy(cloned, parts)
 	return cloned
 }
 
-func (r *factoryWorldReducer) applyOrchestratorProgressEvent(event factoryapi.FactoryEvent) (bool, error) {
+func (r *factoryWorldReducer) applyOrchestratorProgressEvent(event interfaces.FactoryEvent) (bool, error) {
 	switch event.Type {
-	case factoryapi.FactoryEventTypeOrchestratorPhaseChanged:
+	case interfaces.FactoryEventTypeOrchestratorPhaseChanged:
 		return true, r.applyOrchestratorPhaseChangedEvent(event)
-	case factoryapi.FactoryEventTypeOrchestratorCheckpointWritten:
+	case interfaces.FactoryEventTypeOrchestratorCheckpointWritten:
 		return true, r.applyOrchestratorCheckpointWrittenEvent(event)
 	default:
 		return false, nil
 	}
 }
 
-func (r *factoryWorldReducer) applyOrchestratorPhaseChangedEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsOrchestratorPhaseChangedEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyOrchestratorPhaseChangedEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.OrchestratorPhaseChangedEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
 	runtime := r.ensureJavaScriptRuntime()
 	currentPhase := stringValue(event.Context.PhaseName)
 	if currentPhase == "" {
-		currentPhase = stringValue(event.Context.PhaseId)
+		currentPhase = stringValue(event.Context.PhaseID)
 	}
 	runtime.Phase = currentPhase
 	runtime.Phases = appendOrchestratorPhaseHistory(
 		runtime.Phases,
 		stringValue(payload.PreviousPhaseName),
-		stringValue(payload.PreviousPhaseId),
+		stringValue(payload.PreviousPhaseID),
 		currentPhase,
 	)
 	runtime.ScriptStatus = orchestratorPhaseStatusToScriptStatus(payload.PhaseStatus)
 	return nil
 }
 
-func (r *factoryWorldReducer) applyOrchestratorCheckpointWrittenEvent(event factoryapi.FactoryEvent) error {
-	payload, err := event.Payload.AsOrchestratorCheckpointWrittenEventPayload()
-	if err != nil {
+func (r *factoryWorldReducer) applyOrchestratorCheckpointWrittenEvent(event interfaces.FactoryEvent) error {
+	var payload interfaces.OrchestratorCheckpointWrittenEventPayload
+	if err := event.DecodePayload(&payload); err != nil {
 		return err
 	}
-	checkpointID := stringValue(event.Context.CheckpointId)
+	checkpointID := stringValue(event.Context.CheckpointID)
 	if checkpointID == "" && payload.ArtifactRef != nil {
-		checkpointID = payload.ArtifactRef.Id
+		checkpointID = payload.ArtifactRef.ID
 	}
 	checkpoint := interfaces.FactorySessionJavaScriptCheckpointRef{
 		ID:                 checkpointID,
@@ -263,9 +263,9 @@ func (r *factoryWorldReducer) applyOrchestratorCheckpointWrittenEvent(event fact
 	}
 	if payload.ArtifactRef != nil {
 		checkpoint.ArtifactRef = &interfaces.JavaScriptCheckpointArtifactRef{
-			ID:         payload.ArtifactRef.Id,
-			Kind:       string(payload.ArtifactRef.Kind),
-			Visibility: string(payload.ArtifactRef.Visibility),
+			ID:         payload.ArtifactRef.ID,
+			Kind:       payload.ArtifactRef.Kind,
+			Visibility: payload.ArtifactRef.Visibility,
 		}
 		if payload.ArtifactRef.ContentHash != nil {
 			checkpoint.ArtifactRef.ContentHash = *payload.ArtifactRef.ContentHash
@@ -308,13 +308,13 @@ func appendPhaseHistoryEntry(phases []string, phase string) []string {
 	return append(phases, phase)
 }
 
-func orchestratorPhaseStatusToScriptStatus(status factoryapi.OrchestratorPhaseStatus) string {
+func orchestratorPhaseStatusToScriptStatus(status interfaces.OrchestratorPhaseStatus) string {
 	switch status {
-	case factoryapi.ACTIVE:
-		return string(factoryapi.FactorySessionJavaScriptScriptStatusRUNNING)
-	case factoryapi.COMPLETED:
-		return string(factoryapi.FactorySessionJavaScriptScriptStatusFINISHED)
-	case factoryapi.SKIPPED:
+	case interfaces.OrchestratorPhaseStatusActive:
+		return "RUNNING"
+	case interfaces.OrchestratorPhaseStatusCompleted:
+		return "FINISHED"
+	case interfaces.OrchestratorPhaseStatusSkipped:
 		return "SKIPPED"
 	default:
 		return string(status)
@@ -322,13 +322,13 @@ func orchestratorPhaseStatusToScriptStatus(status factoryapi.OrchestratorPhaseSt
 }
 
 func projectOrchestratorCheckpointWarnings(
-	warnings *[]factoryapi.FactoryDispatchWarning,
+	warnings []interfaces.FactoryDispatchWarning,
 ) []interfaces.FactorySessionDispatchWarning {
-	if warnings == nil || len(*warnings) == 0 {
+	if len(warnings) == 0 {
 		return nil
 	}
-	projected := make([]interfaces.FactorySessionDispatchWarning, 0, len(*warnings))
-	for _, warning := range *warnings {
+	projected := make([]interfaces.FactorySessionDispatchWarning, 0, len(warnings))
+	for _, warning := range warnings {
 		projected = append(projected, interfaces.FactorySessionDispatchWarning{
 			Code:    warning.Code,
 			Message: warning.Message,

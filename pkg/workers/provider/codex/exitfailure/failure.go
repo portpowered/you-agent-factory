@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const (
-	errorLineScanBytes            = 64 * 1024
-	failureMessageBytes            = 1024
-	WindowsProcessFailureExitCode  = 4294967295
+	errorLineScanBytes              = 64 * 1024
+	failureMessageBytes             = 1024
+	WindowsProcessFailureExitCode   = 4294967295
 	HighDemandTemporaryErrorsNeedle = "we're currently experiencing high demand, which may cause temporary errors."
 )
 
@@ -22,7 +22,7 @@ type ExitFailureInput struct {
 }
 
 type ExitFailureResult struct {
-	Reason  interfaces.WorkFailureType
+	Reason  workerexecution.WorkFailureType
 	Message string
 }
 
@@ -127,9 +127,9 @@ func lastCodexStructuredFailure(streams []string) (ExitFailureResult, bool) {
 // codexStructuredFailureMessage publishes only positively audited text. Other
 // structured messages can contain prompts, transcripts, cleanup paths, or
 // credentials, so recognized reasons use fixed customer-visible messages.
-func codexStructuredFailureMessage(message string, reason interfaces.WorkFailureType) string {
+func codexStructuredFailureMessage(message string, reason workerexecution.WorkFailureType) string {
 	message = strings.Join(strings.Fields(message), " ")
-	if reason == interfaces.WorkFailureTypePermanentBadRequest && message == codexGPT56SolUpgradeMessage {
+	if reason == workerexecution.WorkFailureTypePermanentBadRequest && message == codexGPT56SolUpgradeMessage {
 		return message
 	}
 	return codexTextFailureMessage(reason)
@@ -216,7 +216,7 @@ func lastCodexTextFailure(streams []string, exitCode int) (ExitFailureResult, bo
 func recognizedCodexTextFailure(message string, exitCode int) (ExitFailureResult, bool) {
 	normalized := strings.ToLower(strings.TrimSpace(message))
 	reason := classifyRecognizedCodexTextFailure(normalized, exitCode)
-	if reason == interfaces.WorkFailureTypeUnknown {
+	if reason == workerexecution.WorkFailureTypeUnknown {
 		return ExitFailureResult{}, false
 	}
 	return ExitFailureResult{
@@ -225,7 +225,7 @@ func recognizedCodexTextFailure(message string, exitCode int) (ExitFailureResult
 	}, true
 }
 
-func classifyRecognizedCodexTextFailure(message string, exitCode int) interfaces.WorkFailureType {
+func classifyRecognizedCodexTextFailure(message string, exitCode int) workerexecution.WorkFailureType {
 	switch {
 	case exitCode == 124,
 		strings.HasPrefix(message, "context deadline exceeded"),
@@ -233,86 +233,86 @@ func classifyRecognizedCodexTextFailure(message string, exitCode int) interfaces
 		strings.HasPrefix(message, "request timed out"),
 		strings.HasPrefix(message, "provider timeout"),
 		strings.HasPrefix(message, "context canceled after command timed out"):
-		return interfaces.WorkFailureTypeTimeout
+		return workerexecution.WorkFailureTypeTimeout
 	case strings.HasPrefix(message, "unexpected status 401"),
 		strings.HasPrefix(message, "unexpected status 403"):
-		return interfaces.WorkFailureTypeAuthFailure
+		return workerexecution.WorkFailureTypeAuthFailure
 	case strings.HasPrefix(message, "unexpected status 400"):
-		return interfaces.WorkFailureTypePermanentBadRequest
+		return workerexecution.WorkFailureTypePermanentBadRequest
 	case strings.HasPrefix(message, "unexpected status 429"),
 		strings.HasPrefix(message, "you've hit your usage limit"),
 		strings.HasPrefix(message, "selected model is at capacity"):
-		return interfaces.WorkFailureTypeThrottled
+		return workerexecution.WorkFailureTypeThrottled
 	case strings.HasPrefix(message, "unexpected status 500"),
 		strings.HasPrefix(message, "unexpected status 502"),
 		strings.HasPrefix(message, "unexpected status 503"),
 		strings.HasPrefix(message, "unexpected status 504"),
 		message == HighDemandTemporaryErrorsNeedle:
-		return interfaces.WorkFailureTypeInternalServerError
+		return workerexecution.WorkFailureTypeInternalServerError
 	default:
-		return interfaces.WorkFailureTypeUnknown
+		return workerexecution.WorkFailureTypeUnknown
 	}
 }
 
-func codexTextFailureMessage(reason interfaces.WorkFailureType) string {
+func codexTextFailureMessage(reason workerexecution.WorkFailureType) string {
 	switch reason {
-	case interfaces.WorkFailureTypeAuthFailure:
+	case workerexecution.WorkFailureTypeAuthFailure:
 		return codexAuthFailureMessage
-	case interfaces.WorkFailureTypePermanentBadRequest:
+	case workerexecution.WorkFailureTypePermanentBadRequest:
 		return codexBadRequestFailureMessage
-	case interfaces.WorkFailureTypeThrottled:
+	case workerexecution.WorkFailureTypeThrottled:
 		return codexThrottleFailureMessage
-	case interfaces.WorkFailureTypeInternalServerError:
+	case workerexecution.WorkFailureTypeInternalServerError:
 		return codexServerFailureMessage
-	case interfaces.WorkFailureTypeTimeout:
+	case workerexecution.WorkFailureTypeTimeout:
 		return codexTimeoutFailureMessage
 	default:
 		return ""
 	}
 }
 
-func classifyCodexExitFailure(exitCode int) interfaces.WorkFailureType {
+func classifyCodexExitFailure(exitCode int) workerexecution.WorkFailureType {
 	if exitCode == 124 {
-		return interfaces.WorkFailureTypeTimeout
+		return workerexecution.WorkFailureTypeTimeout
 	}
 	if exitCode == WindowsProcessFailureExitCode {
-		return interfaces.WorkFailureTypeInternalServerError
+		return workerexecution.WorkFailureTypeInternalServerError
 	}
-	return interfaces.WorkFailureTypeUnknown
+	return workerexecution.WorkFailureTypeUnknown
 }
 
-func classifyCodexStructuredSignal(errorType string, status int) (interfaces.WorkFailureType, bool) {
+func classifyCodexStructuredSignal(errorType string, status int) (workerexecution.WorkFailureType, bool) {
 	normalizedType := strings.ToLower(strings.TrimSpace(errorType))
 	switch normalizedType {
 	case "authentication_error", "permission_error":
-		return interfaces.WorkFailureTypeAuthFailure, true
+		return workerexecution.WorkFailureTypeAuthFailure, true
 	case "invalid_request_error":
-		return interfaces.WorkFailureTypePermanentBadRequest, true
+		return workerexecution.WorkFailureTypePermanentBadRequest, true
 	case "rate_limit_error", "overloaded_error":
-		return interfaces.WorkFailureTypeThrottled, true
+		return workerexecution.WorkFailureTypeThrottled, true
 	case "api_error", "server_error":
-		return interfaces.WorkFailureTypeInternalServerError, true
+		return workerexecution.WorkFailureTypeInternalServerError, true
 	case "", "error":
 		// Generic Codex envelopes carry the provider classification in status.
 	default:
 		// An explicit unknown type can identify cleanup or diagnostic records;
 		// its status must not let it override a recognized provider failure.
-		return interfaces.WorkFailureTypeUnknown, false
+		return workerexecution.WorkFailureTypeUnknown, false
 	}
 
 	switch {
 	case status == 401 || status == 403:
-		return interfaces.WorkFailureTypeAuthFailure, true
+		return workerexecution.WorkFailureTypeAuthFailure, true
 	case status == 400:
-		return interfaces.WorkFailureTypePermanentBadRequest, true
+		return workerexecution.WorkFailureTypePermanentBadRequest, true
 	case status == 429:
-		return interfaces.WorkFailureTypeThrottled, true
+		return workerexecution.WorkFailureTypeThrottled, true
 	case status >= 500 && status <= 599:
-		return interfaces.WorkFailureTypeInternalServerError, true
+		return workerexecution.WorkFailureTypeInternalServerError, true
 	case status == 408:
-		return interfaces.WorkFailureTypeTimeout, true
+		return workerexecution.WorkFailureTypeTimeout, true
 	default:
-		return interfaces.WorkFailureTypeUnknown, false
+		return workerexecution.WorkFailureTypeUnknown, false
 	}
 }
 func codexExitFailureMessage(exitCode int) string {
@@ -327,8 +327,8 @@ func processExitFallback(exitCode int) ExitFailureResult {
 	return ExitFailureResult{Reason: reason, Message: UnknownFailureMessage}
 }
 
-func isRecognizedFailureType(failureType interfaces.WorkFailureType) bool {
-	return failureType != "" && failureType != interfaces.WorkFailureTypeUnknown
+func isRecognizedFailureType(failureType workerexecution.WorkFailureType) bool {
+	return failureType != "" && failureType != workerexecution.WorkFailureTypeUnknown
 }
 
 // ProcessExitFailureLayers exposes structured ERROR-record, stderr-classified,

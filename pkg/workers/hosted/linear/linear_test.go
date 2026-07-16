@@ -11,10 +11,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/requests"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	"go.uber.org/zap"
+
+	"github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestRunPollCycle_SubmitsFilteredIssuesAndPersistsCheckpoint(t *testing.T) {
@@ -68,24 +74,24 @@ func TestRunPollCycle_SubmitsFilteredIssuesAndPersistsCheckpoint(t *testing.T) {
 	defer server.Close()
 
 	worker := linearWorkerConfigForTest(
-		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
-		func(cfg *interfaces.HostedLinearWorkerConfig) {
+		workerconfig.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		func(cfg *workerconfig.HostedLinearWorkerConfig) {
 			cfg.TeamIDs = []string{"team-1"}
 			cfg.StateIDs = []string{"state-1"}
-			cfg.Claim = &interfaces.HostedLinearWorkerClaimConfig{AssigneeField: "ownerEmail"}
+			cfg.Claim = &workerconfig.HostedLinearWorkerClaimConfig{AssigneeField: "ownerEmail"}
 		},
 	)
 	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
 	checkpointPath := filepath.Join(t.TempDir(), "checkpoint.json")
 
-	var submitted []interfaces.WorkRequest
+	var submitted []work.WorkRequest
 	result, err := RunPollCycle(
 		context.Background(),
 		Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
 		nil,
 		workstation,
 		worker,
-		func(_ context.Context, request interfaces.WorkRequest) error {
+		func(_ context.Context, request work.WorkRequest) error {
 			submitted = append(submitted, request)
 			return nil
 		},
@@ -152,7 +158,7 @@ func TestRunPollCycle_StopsAtCheckpointAndSkipsResubmission(t *testing.T) {
 	defer server.Close()
 
 	worker := linearWorkerConfigForTest(
-		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		workerconfig.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
 		nil,
 	)
 	workstation := interfaces.FactoryWorkstationConfig{Name: "linear-ingress"}
@@ -169,7 +175,7 @@ func TestRunPollCycle_StopsAtCheckpointAndSkipsResubmission(t *testing.T) {
 		nil,
 		workstation,
 		worker,
-		func(_ context.Context, request interfaces.WorkRequest) error {
+		func(_ context.Context, request work.WorkRequest) error {
 			submitCalls++
 			if len(request.Works) != 1 || request.Works[0].WorkID != "linear:issue-new" {
 				t.Fatalf("submitted request = %#v, want only newest issue above checkpoint", request)
@@ -193,7 +199,7 @@ func TestRunPollCycle_StopsAtCheckpointAndSkipsResubmission(t *testing.T) {
 		nil,
 		workstation,
 		worker,
-		func(_ context.Context, request interfaces.WorkRequest) error {
+		func(_ context.Context, request work.WorkRequest) error {
 			t.Fatalf("unexpected resubmission: %#v", request)
 			return nil
 		},
@@ -249,8 +255,8 @@ func TestRunPollCycle_PushesFiltersIntoProviderQueryForBoundedResume(t *testing.
 	defer server.Close()
 
 	worker := linearWorkerConfigForTest(
-		interfaces.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
-		func(cfg *interfaces.HostedLinearWorkerConfig) {
+		workerconfig.HostedLinearWorkerMappingConfig{WorkType: "story", State: "init"},
+		func(cfg *workerconfig.HostedLinearWorkerConfig) {
 			cfg.TeamIDs = []string{"team-match"}
 			cfg.StateIDs = []string{"state-match"}
 		},
@@ -262,14 +268,14 @@ func TestRunPollCycle_PushesFiltersIntoProviderQueryForBoundedResume(t *testing.
 		UpdatedAt: "2026-05-22T07:00:00Z",
 	})
 
-	var submitted []interfaces.WorkRequest
+	var submitted []work.WorkRequest
 	result, err := RunPollCycle(
 		context.Background(),
 		Client{Endpoint: server.URL, HTTPClient: server.Client(), Logger: zap.NewNop()},
 		nil,
 		workstation,
 		worker,
-		func(_ context.Context, request interfaces.WorkRequest) error {
+		func(_ context.Context, request work.WorkRequest) error {
 			submitted = append(submitted, request)
 			return nil
 		},
@@ -339,14 +345,14 @@ func TestResolveSecretRef_PrefersEnvThenRuntimeFile(t *testing.T) {
 }
 
 func linearWorkerConfigForTest(
-	mapping interfaces.HostedLinearWorkerMappingConfig,
-	mutate func(*interfaces.HostedLinearWorkerConfig),
-) *interfaces.WorkerConfig {
-	worker := &interfaces.WorkerConfig{
+	mapping workerconfig.HostedLinearWorkerMappingConfig,
+	mutate func(*workerconfig.HostedLinearWorkerConfig),
+) *workerconfig.Config {
+	worker := &workerconfig.Config{
 		Name:     "linear-poller",
-		Type:     interfaces.WorkerTypeHosted,
-		Provider: interfaces.HostedWorkerProviderLinear,
-		Linear: &interfaces.HostedLinearWorkerConfig{
+		Type:     workertaxonomy.WorkerTypeHosted,
+		Provider: workertaxonomy.HostedWorkerProviderLinear,
+		Linear: &workerconfig.HostedLinearWorkerConfig{
 			Mapping: mapping,
 		},
 	}
@@ -356,17 +362,17 @@ func linearWorkerConfigForTest(
 	return worker
 }
 
-func normalizeSubmittedLinearWorkRequest(t *testing.T, request interfaces.WorkRequest) []interfaces.SubmitRequest {
+func normalizeSubmittedLinearWorkRequest(t *testing.T, request work.WorkRequest) []work.SubmitRequest {
 	t.Helper()
 
-	normalized, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
+	normalized, err := requests.NormalizeWorkRequest(request, work.WorkRequestNormalizeOptions{})
 	if err != nil {
 		t.Fatalf("NormalizeWorkRequest: %v", err)
 	}
 	return normalized
 }
 
-func assertNormalizedHostedLinearIssues(t *testing.T, normalized []interfaces.SubmitRequest) {
+func assertNormalizedHostedLinearIssues(t *testing.T, normalized []work.SubmitRequest) {
 	t.Helper()
 
 	if len(normalized) != 2 {

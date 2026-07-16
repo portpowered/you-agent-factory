@@ -3,17 +3,17 @@ package providers
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 func TestSelectFailureByPrecedence_Table(t *testing.T) {
-	auth := provider.ProviderFailureResult{Reason: interfaces.WorkFailureTypeAuthFailure, Message: "auth"}
-	throttle := provider.ProviderFailureResult{Reason: interfaces.WorkFailureTypeThrottled, Message: "throttle"}
-	timeout := provider.ProviderFailureResult{Reason: interfaces.WorkFailureTypeTimeout, Message: "timeout"}
-	canceled := provider.ProviderFailureResult{Reason: interfaces.WorkFailureTypeUnknown, Message: "canceled"}
-	structuredUnknown := provider.ProviderFailureResult{Reason: interfaces.WorkFailureTypeUnknown, Message: "structured unknown"}
-	exit := provider.ProviderFailureResult{Reason: interfaces.WorkFailureTypeUnknown, Message: "exit fallback"}
+	auth := provider.ProviderFailureResult{Reason: workerexecution.WorkFailureTypeAuthFailure, Message: "auth"}
+	throttle := provider.ProviderFailureResult{Reason: workerexecution.WorkFailureTypeThrottled, Message: "throttle"}
+	timeout := provider.ProviderFailureResult{Reason: workerexecution.WorkFailureTypeTimeout, Message: "timeout"}
+	canceled := provider.ProviderFailureResult{Reason: workerexecution.WorkFailureTypeUnknown, Message: "canceled"}
+	structuredUnknown := provider.ProviderFailureResult{Reason: workerexecution.WorkFailureTypeUnknown, Message: "structured unknown"}
+	exit := provider.ProviderFailureResult{Reason: workerexecution.WorkFailureTypeUnknown, Message: "exit fallback"}
 
 	testCases := []struct {
 		name   string

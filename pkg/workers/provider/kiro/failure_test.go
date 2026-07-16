@@ -4,9 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	providertestdata "github.com/portpowered/infinite-you/pkg/workers/provider/testdata"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	kiropkg "github.com/portpowered/infinite-you/pkg/workers/provider/kiro"
+	providertestdata "github.com/portpowered/infinite-you/pkg/workers/provider/testdata"
 )
 
 func parseFailure(input providertestdata.FailureInput) kiropkg.FailureResult {
@@ -15,17 +16,17 @@ func parseFailure(input providertestdata.FailureInput) kiropkg.FailureResult {
 	})
 }
 
-func knownKiroMessage(reason interfaces.WorkFailureType) string {
+func knownKiroMessage(reason workerexecution.WorkFailureType) string {
 	switch reason {
-	case interfaces.WorkFailureTypeAuthFailure:
+	case workerexecution.WorkFailureTypeAuthFailure:
 		return "Kiro authentication failed. Sign in again and retry."
-	case interfaces.WorkFailureTypePermanentBadRequest:
+	case workerexecution.WorkFailureTypePermanentBadRequest:
 		return "Kiro rejected the request as invalid."
-	case interfaces.WorkFailureTypeThrottled:
+	case workerexecution.WorkFailureTypeThrottled:
 		return "Kiro is temporarily unavailable due to usage or capacity limits."
-	case interfaces.WorkFailureTypeTimeout:
+	case workerexecution.WorkFailureTypeTimeout:
 		return kiropkg.TimeoutFailureMessage
-	case interfaces.WorkFailureTypeInternalServerError:
+	case workerexecution.WorkFailureTypeInternalServerError:
 		return "Kiro encountered a temporary service error."
 	default:
 		return ""
@@ -71,7 +72,7 @@ func TestParseProviderFailure_UnknownFailuresUseBoundedParserMessages(t *testing
 		entry := providertestdata.MustEntry(t, name)
 		t.Run(name, func(t *testing.T) {
 			got := parseFailure(entry.FailureInput())
-			if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != wantMessage {
+			if got.Reason != workerexecution.WorkFailureTypeUnknown || got.Message != wantMessage {
 				t.Fatalf("ParseProviderFailure() = %#v, want unknown message %q", got, wantMessage)
 			}
 			for _, rejected := range entry.RejectMessageContains {
@@ -87,22 +88,22 @@ func TestParseProviderFailure_StructuredStatusAndPrefixSignals(t *testing.T) {
 	testCases := []struct {
 		name       string
 		stderr     string
-		wantReason interfaces.WorkFailureType
+		wantReason workerexecution.WorkFailureType
 	}{
 		{
 			name:       "Status422",
 			stderr:     `KIRO_ERROR: {"status":422,"message":"field missing"}`,
-			wantReason: interfaces.WorkFailureTypePermanentBadRequest,
+			wantReason: workerexecution.WorkFailureTypePermanentBadRequest,
 		},
 		{
 			name:       "Status408",
 			stderr:     `Error: {"status_code":408}`,
-			wantReason: interfaces.WorkFailureTypeTimeout,
+			wantReason: workerexecution.WorkFailureTypeTimeout,
 		},
 		{
 			name:       "Status503",
 			stderr:     `ERROR: {"statusCode":"503","name":"service_unavailable"}`,
-			wantReason: interfaces.WorkFailureTypeInternalServerError,
+			wantReason: workerexecution.WorkFailureTypeInternalServerError,
 		},
 	}
 
@@ -118,14 +119,14 @@ func TestParseProviderFailure_StructuredStatusAndPrefixSignals(t *testing.T) {
 
 func TestParseProviderFailure_ExitCode124MapsToTimeout(t *testing.T) {
 	got := parseFailure(providertestdata.FailureInput{ExitCode: 124})
-	if got.Reason != interfaces.WorkFailureTypeTimeout || got.Message != kiropkg.TimeoutFailureMessage {
+	if got.Reason != workerexecution.WorkFailureTypeTimeout || got.Message != kiropkg.TimeoutFailureMessage {
 		t.Fatalf("ParseProviderFailure() = %#v, want timeout", got)
 	}
 }
 
 func TestParseProviderFailure_MissingOutputFallsBackToExitCode(t *testing.T) {
 	got := parseFailure(providertestdata.FailureInput{ExitCode: 9})
-	if got.Reason != interfaces.WorkFailureTypeUnknown || got.Message != "kiro-cli exited with code 9" {
+	if got.Reason != workerexecution.WorkFailureTypeUnknown || got.Message != "kiro-cli exited with code 9" {
 		t.Fatalf("ParseProviderFailure() = %#v, want exit fallback", got)
 	}
 }

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
@@ -27,7 +27,7 @@ func TestResolveCodexProviderFailure_PrecedenceTable(t *testing.T) {
 				Stderr: []byte("ERROR: unexpected status 401\n"),
 			},
 			want: provider.ProviderFailureResult{
-				Reason:  interfaces.WorkFailureTypeThrottled,
+				Reason:  workerexecution.WorkFailureTypeThrottled,
 				Message: codexThrottleFailureMessage,
 			},
 		},
@@ -39,7 +39,7 @@ func TestResolveCodexProviderFailure_PrecedenceTable(t *testing.T) {
 				Stderr:   []byte("ERROR: unexpected status 401\n"),
 			},
 			want: provider.ProviderFailureResult{
-				Reason:  interfaces.WorkFailureTypeAuthFailure,
+				Reason:  workerexecution.WorkFailureTypeAuthFailure,
 				Message: codexAuthFailureMessage,
 			},
 		},
@@ -51,7 +51,7 @@ func TestResolveCodexProviderFailure_PrecedenceTable(t *testing.T) {
 				Stderr:   []byte("cleanup finished\n"),
 			},
 			want: provider.ProviderFailureResult{
-				Reason:  interfaces.WorkFailureTypeUnknown,
+				Reason:  workerexecution.WorkFailureTypeUnknown,
 				Message: codexUnknownFailureMessage,
 			},
 		},
@@ -68,7 +68,7 @@ func TestResolveCodexProviderFailure_PrecedenceTable(t *testing.T) {
 				CommandError: context.DeadlineExceeded,
 			},
 			want: provider.ProviderFailureResult{
-				Reason:  interfaces.WorkFailureTypeTimeout,
+				Reason:  workerexecution.WorkFailureTypeTimeout,
 				Message: "Codex execution timed out.",
 			},
 		},
@@ -83,7 +83,7 @@ func TestResolveCodexProviderFailure_PrecedenceTable(t *testing.T) {
 				FlushReason: provider.CodexFlushReasonCanceled,
 			},
 			want: provider.ProviderFailureResult{
-				Reason:  interfaces.WorkFailureTypeUnknown,
+				Reason:  workerexecution.WorkFailureTypeUnknown,
 				Message: "Codex execution was canceled.",
 			},
 		},

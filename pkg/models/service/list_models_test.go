@@ -6,11 +6,17 @@ import (
 	"strings"
 	"testing"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelcatalog "github.com/portpowered/infinite-you/pkg/models/catalog"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestService_ListModels_SummarizesConfiguredModelCapabilities(t *testing.T) {
@@ -30,10 +36,10 @@ func TestService_ListModels_SummarizesConfiguredModelCapabilities(t *testing.T) 
 		t.Fatalf("models count = %d, want 1", len(models.Results))
 	}
 	model := models.Results[0]
-	if model.Name != "OMNIVOICE_Q4_K_M" || model.ProviderLocality != factoryapi.WorkerModelLocalityLocal {
+	if model.Name != "OMNIVOICE_Q4_K_M" || model.ProviderLocality != managedruntime.LocalityLocal {
 		t.Fatalf("model summary = %#v, want OMNIVOICE local model", model)
 	}
-	if model.Status != factoryapi.ModelStatusREADY || model.LoadState != factoryapi.UNLOADED {
+	if model.Status != modelcatalog.StatusReady || model.LoadState != modelcatalog.LoadStateUnloaded {
 		t.Fatalf("model readiness = (%s, %s), want (READY, UNLOADED)", model.Status, model.LoadState)
 	}
 	if len(model.Operations) != 1 || model.Operations[0].Name != "TTS" {
@@ -90,7 +96,7 @@ func TestService_ListModels_ProjectsManagedRuntimeFromModelHost(t *testing.T) {
 	if len(models.Results) != 1 {
 		t.Fatalf("models count = %d, want 1", len(models.Results))
 	}
-	if models.Results[0].ManagedRuntime.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING {
+	if models.Results[0].ManagedRuntime.ReadinessState != managedruntime.ReadinessStateMissing {
 		t.Fatalf("managed readiness = %s, want MISSING", models.Results[0].ManagedRuntime.ReadinessState)
 	}
 }
@@ -131,33 +137,33 @@ func mustLoadedCatalogConfig(t *testing.T, factoryCfg *interfaces.FactoryConfig)
 }
 
 func catalogFactoryConfig(includeResource bool) *interfaces.FactoryConfig {
-	worker := interfaces.WorkerConfig{
+	worker := workerconfig.Config{
 		Name:          "voice-local",
-		Type:          interfaces.WorkerTypeModel,
+		Type:          workertaxonomy.WorkerTypeModel,
 		Model:         "OMNIVOICE_Q4_K_M",
-		ModelLocality: interfaces.ModelLocalityLocal,
-		Operations: []interfaces.ModelOperation{{
+		ModelLocality: workerconfig.ModelLocalityLocal,
+		Operations: []workerconfig.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{
+			Inputs: []workerconfig.ModelOperationSlot{{
 				Name:         "text",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 				Required:     true,
 			}},
-			Outputs: []interfaces.ModelOperationSlot{{
+			Outputs: []workerconfig.ModelOperationSlot{{
 				Name:         "audio",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}
 	cfg := &interfaces.FactoryConfig{
 		Name:    "factory",
-		Workers: []interfaces.WorkerConfig{worker},
+		Workers: []workerconfig.Config{worker},
 	}
 	if includeResource {
-		worker.Resources = []interfaces.ResourceConfig{{Name: "omnivoice-cache", Capacity: 1}}
-		cfg.Resources = []interfaces.ResourceConfig{{
+		worker.Resources = []factoryresource.Config{{Name: "omnivoice-cache", Capacity: 1}}
+		cfg.Resources = []factoryresource.Config{{
 			Name:       "omnivoice-cache",
-			Type:       interfaces.ResourceTypeModel,
+			Type:       factoryresource.TypeModel,
 			Capacity:   1,
 			Model:      "OMNIVOICE_Q4_K_M",
 			Backend:    "GGUF",

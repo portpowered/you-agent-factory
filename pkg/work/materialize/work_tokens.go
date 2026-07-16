@@ -1,14 +1,15 @@
 package materialize
 
 import (
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
 // PublicWorkTokens is the deduplicated public work token set from marking and
 // active dispatch consumed inputs.
 type PublicWorkTokens struct {
-	Tokens           []*interfaces.Token
+	Tokens           []*factorytoken.Token
 	InFlightOnlyByID map[string]struct{}
 }
 
@@ -21,7 +22,7 @@ func CollectPublicWorkTokens(
 	dispatches map[string]*interfaces.DispatchEntry,
 ) PublicWorkTokens {
 	result := PublicWorkTokens{
-		Tokens:           make([]*interfaces.Token, 0),
+		Tokens:           make([]*factorytoken.Token, 0),
 		InFlightOnlyByID: make(map[string]struct{}),
 	}
 
@@ -73,13 +74,13 @@ func CollectPublicWorkTokens(
 
 // IsPublicWorkToken reports whether a token should appear in work list/show
 // materialization. Resource and system-time tokens are excluded.
-func IsPublicWorkToken(token *interfaces.Token) bool {
+func IsPublicWorkToken(token *factorytoken.Token) bool {
 	return token != nil &&
-		token.Color.DataType != interfaces.DataTypeResource &&
+		token.Color.DataType != factorytoken.DataTypeResource &&
 		!interfaces.IsSystemTimeToken(token)
 }
 
-func markingTokensMap(marking *petri.MarkingSnapshot) map[string]*interfaces.Token {
+func markingTokensMap(marking *petri.MarkingSnapshot) map[string]*factorytoken.Token {
 	if marking == nil || marking.Tokens == nil {
 		return nil
 	}

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 var retiredInitFactoryContractFields = []string{`"work_types"`, `"work_type"`, `"on_failure"`}
@@ -249,7 +249,7 @@ func TestInitFactory_Idempotent(t *testing.T) {
 	}
 }
 
-func assertInitProviderRequest(t *testing.T, req interfaces.ProviderInferenceRequest, wantModel, wantProvider string) {
+func assertInitProviderRequest(t *testing.T, req workerexecution.ProviderInferenceRequest, wantModel, wantProvider string) {
 	t.Helper()
 
 	if req.Model != wantModel {

@@ -6,7 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 )
 
@@ -42,6 +45,25 @@ func (*recordingWorkerSidecarOwner) SubmitCronTick(
 	return nil
 }
 
+func TestNewLiveSessionStateBuildsOptionalRuntimeHandle(t *testing.T) {
+	t.Parallel()
+
+	spec := &runtimebuild.SessionBuildSpec{}
+	empty := NewLiveSessionState(nil, spec)
+	if empty == nil || empty.bundle != nil || empty.handle != nil || empty.spec != spec {
+		t.Fatalf("empty live session state = %#v, want detached spec without handle", empty)
+	}
+	bundle := &factoryRuntimeBundle{}
+	bound := NewLiveSessionState(bundle, spec)
+	if bound.bundle != bundle || bound.handle == nil || bound.handle.Bundle != bundle || bound.spec != spec {
+		t.Fatalf("bound live session state = %#v, want runtime handle", bound)
+	}
+	policy := CoordinatorPolicyFromConfig(nil)
+	if policy.FactoryDir() != "" || policy.MockWorkersConfig() != nil {
+		t.Fatalf("nil coordinator policy = %#v, want zero value", policy)
+	}
+}
+
 func TestHostStartSchedulerSidecarsForRuntimeDelegatesCompleteSessionInput(t *testing.T) {
 	owner := &recordingWorkerSidecarOwner{}
 	host := &Host{
@@ -56,7 +78,7 @@ func TestHostStartSchedulerSidecarsForRuntimeDelegatesCompleteSessionInput(t *te
 		{Name: "cron", Kind: interfaces.WorkstationKindCron},
 	}}
 	runtimeCfg := &sidecarRuntimeConfig{factoryCfg: factoryCfg}
-	submitter := workRequestSubmitter(func(context.Context, interfaces.WorkRequest) error { return nil })
+	submitter := workRequestSubmitter(func(context.Context, work.WorkRequest) error { return nil })
 
 	err := host.startSchedulerSidecarsForRuntime(ctx, group, "/factory", factoryCfg, runtimeCfg, submitter)
 	if err != nil {
@@ -85,7 +107,7 @@ func TestHostStartSchedulerSidecarsForRuntimeSkipsNonServiceRuntime(t *testing.T
 		"/factory",
 		factoryCfg,
 		runtimeCfg,
-		func(context.Context, interfaces.WorkRequest) error { return nil },
+		func(context.Context, work.WorkRequest) error { return nil },
 	)
 	if err != nil {
 		t.Fatalf("startSchedulerSidecarsForRuntime: %v", err)
@@ -99,10 +121,10 @@ type sidecarRuntimeConfig struct {
 	factoryCfg *interfaces.FactoryConfig
 }
 
-func (c *sidecarRuntimeConfig) FactoryConfig() *interfaces.FactoryConfig     { return c.factoryCfg }
-func (*sidecarRuntimeConfig) FactoryDir() string                             { return "/factory" }
-func (*sidecarRuntimeConfig) RuntimeBaseDir() string                         { return "/factory" }
-func (*sidecarRuntimeConfig) Worker(string) (*interfaces.WorkerConfig, bool) { return nil, false }
+func (c *sidecarRuntimeConfig) FactoryConfig() *interfaces.FactoryConfig { return c.factoryCfg }
+func (*sidecarRuntimeConfig) FactoryDir() string                         { return "/factory" }
+func (*sidecarRuntimeConfig) RuntimeBaseDir() string                     { return "/factory" }
+func (*sidecarRuntimeConfig) Worker(string) (*workerconfig.Config, bool) { return nil, false }
 func (*sidecarRuntimeConfig) Workstation(string) (*interfaces.FactoryWorkstationConfig, bool) {
 	return nil, false
 }

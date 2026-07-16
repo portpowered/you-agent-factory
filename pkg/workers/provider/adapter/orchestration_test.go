@@ -8,8 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 )
@@ -49,7 +50,7 @@ func TestExecuteKeepsNativeSyntaxInsideSelectedAdapter(t *testing.T) {
 	}}
 	result, err := adapter.Execute(context.Background(), registry, runner, adapter.ExecuteInput{
 		Provider: "opaque-fixture",
-		Command: adapter.CommandContext{Request: interfaces.ProviderInferenceRequest{
+		Command: adapter.CommandContext{Request: workerexecution.ProviderInferenceRequest{
 			Model: "fixture-model", UserMessage: "private prompt",
 		}},
 		Decoder: adapter.DecoderContext{RunID: "run-1", DispatchID: "dispatch-1"},
@@ -82,16 +83,16 @@ func TestExecuteFlushesBeforeReturningEveryCommandOutcome(t *testing.T) {
 		prepare    func() (context.Context, *kernelRunner)
 		outcome    adapter.CommandOutcome
 		flush      adapter.FlushReason
-		failureTyp interfaces.WorkFailureType
+		failureTyp workerexecution.WorkFailureType
 	}{
 		{name: "process failure", prepare: func() (context.Context, *kernelRunner) {
 			return context.Background(), &kernelRunner{result: workerprocess.CommandResult{ExitCode: 7}}
-		}, outcome: adapter.CommandOutcomeProcessFailed, flush: adapter.FlushReasonTerminated, failureTyp: interfaces.WorkFailureTypeInternalServerError},
+		}, outcome: adapter.CommandOutcomeProcessFailed, flush: adapter.FlushReasonTerminated, failureTyp: workerexecution.WorkFailureTypeInternalServerError},
 		{name: "canceled", prepare: func() (context.Context, *kernelRunner) {
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
 			return ctx, &kernelRunner{err: context.Canceled}
-		}, outcome: adapter.CommandOutcomeCanceled, flush: adapter.FlushReasonCanceled, failureTyp: interfaces.WorkFailureTypeTimeout},
+		}, outcome: adapter.CommandOutcomeCanceled, flush: adapter.FlushReasonCanceled, failureTyp: workerexecution.WorkFailureTypeTimeout},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -218,7 +219,7 @@ func (a *kernelAdapter) NewDecoder(context.Context, adapter.DecoderContext) (ada
 
 func (a *kernelAdapter) ParseFinal(_ context.Context, input adapter.FinalParseContext) (adapter.FinalParseResult, error) {
 	a.parseAfterFlush = a.decoder != nil && a.decoder.flushed
-	return adapter.FinalParseResult{Response: interfaces.InferenceResponse{Content: string(input.CommandResult.Stdout)}}, nil
+	return adapter.FinalParseResult{Response: workerexecution.InferenceResponse{Content: string(input.CommandResult.Stdout)}}, nil
 }
 
 func (*kernelAdapter) Capabilities(context.Context, adapter.CapabilityContext) (adapter.CapabilityResult, error) {
@@ -229,12 +230,12 @@ func (*kernelAdapter) ClassifyFailure(_ context.Context, input adapter.FailureCo
 	if input.FlushReason == adapter.FlushReasonCompleted {
 		return adapter.FailureResult{}
 	}
-	failureType := interfaces.WorkFailureTypeInternalServerError
+	failureType := workerexecution.WorkFailureTypeInternalServerError
 	if input.FlushReason == adapter.FlushReasonCanceled {
-		failureType = interfaces.WorkFailureTypeTimeout
+		failureType = workerexecution.WorkFailureTypeTimeout
 	}
 	return adapter.FailureResult{Failure: &adapter.FailureFacts{
-		Family: interfaces.WorkFailureFamilyRetryable, Type: failureType,
+		Family: workerexecution.WorkFailureFamilyRetryable, Type: failureType,
 		Message: "opaque provider did not complete", Retry: adapter.RetryGuidance{Retryable: true},
 	}}
 }

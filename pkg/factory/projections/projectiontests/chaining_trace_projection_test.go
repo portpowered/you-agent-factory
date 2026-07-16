@@ -4,13 +4,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func chainingTraceProjectionEvents() []factoryapi.FactoryEvent {
 	t0 := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
-	inputZ := interfaces.FactoryWorkItem{
+	inputZ := work.FactoryWorkItem{
 		ID:                     "work-z",
 		WorkTypeID:             "task",
 		DisplayName:            "Input Z",
@@ -18,7 +19,7 @@ func chainingTraceProjectionEvents() []factoryapi.FactoryEvent {
 		TraceID:                "chain-z",
 		PlaceID:                "task:init",
 	}
-	inputA := interfaces.FactoryWorkItem{
+	inputA := work.FactoryWorkItem{
 		ID:                     "work-a",
 		WorkTypeID:             "task",
 		DisplayName:            "Input A",
@@ -26,7 +27,7 @@ func chainingTraceProjectionEvents() []factoryapi.FactoryEvent {
 		TraceID:                "chain-a",
 		PlaceID:                "task:init",
 	}
-	output := interfaces.FactoryWorkItem{
+	output := work.FactoryWorkItem{
 		ID:                       "work-out",
 		WorkTypeID:               "task",
 		DisplayName:              "Merged output",

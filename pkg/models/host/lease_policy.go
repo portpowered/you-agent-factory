@@ -6,7 +6,7 @@ import (
 	"time"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 )
 
 func normalizeLeasePolicyOptions(opts Options) (idleUnloadAfter time.Duration, maxLoadedRuntimes int) {
@@ -41,8 +41,8 @@ func leaseCapacityError(modelName string) error {
 	return &ReadinessError{
 		Snapshot: ReadinessSnapshot{
 			Identity:       Identity{Name: name},
-			ReadinessState: factoryapi.ManagedRuntimeReadinessStateFAILED,
-			LifecycleState: factoryapi.ManagedRuntimeLifecycleStateLOADED,
+			ReadinessState: managedruntime.ReadinessStateFailed,
+			LifecycleState: managedruntime.LifecycleStateLoaded,
 			FailureClass:   FailureClassCapacityExhausted,
 		},
 		Cause: ErrCapacityExhausted,

@@ -12,10 +12,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	fse "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/fixtures"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	sessioncli "github.com/portpowered/infinite-you/pkg/transports/cli/session"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"

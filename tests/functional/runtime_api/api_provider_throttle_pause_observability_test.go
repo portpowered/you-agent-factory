@@ -4,13 +4,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	workdomain "github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -28,7 +31,7 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 				support.HasWorkTokenInPlace(snapshot.Marking, fixture.throttledWork.WorkTypeID+":init", fixture.throttledWork.WorkID)
 		},
 	)
-	assertActiveThrottlePause(t, activeEngineState, interfaces.ModelProviderClaude, "claude-sonnet-4-5-20250514")
+	assertActiveThrottlePause(t, activeEngineState, modelprovider.Claude, "claude-sonnet-4-5-20250514")
 	assertDashboardThrottlePausesMatchEngineState(t, "active pause dashboard", activeEngineState, fixture.server.GetDashboard(t))
 	submitThrottlePauseWork(t, fixture.server, fixture.unaffectedWork)
 
@@ -81,14 +84,14 @@ func TestProviderErrorSmoke_ThrottlePauseObservabilityFlowsThroughRuntimeSnapsho
 	if len(unaffectedDispatches) != 1 {
 		t.Fatalf("unaffected lane dispatch count = %d, want 1", len(unaffectedDispatches))
 	}
-	if throttledDispatches[0].Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("first throttled dispatch outcome = %s, want %s", throttledDispatches[0].Outcome, interfaces.OutcomeFailed)
+	if throttledDispatches[0].Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("first throttled dispatch outcome = %s, want %s", throttledDispatches[0].Outcome, workerexecution.OutcomeFailed)
 	}
-	if len(throttledDispatches) > 1 && throttledDispatches[1].Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("second throttled dispatch outcome = %s, want %s", throttledDispatches[1].Outcome, interfaces.OutcomeAccepted)
+	if len(throttledDispatches) > 1 && throttledDispatches[1].Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("second throttled dispatch outcome = %s, want %s", throttledDispatches[1].Outcome, workerexecution.OutcomeAccepted)
 	}
-	if unaffectedDispatches[0].Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("unaffected dispatch outcome = %s, want %s", unaffectedDispatches[0].Outcome, interfaces.OutcomeAccepted)
+	if unaffectedDispatches[0].Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("unaffected dispatch outcome = %s, want %s", unaffectedDispatches[0].Outcome, workerexecution.OutcomeAccepted)
 	}
 	assertDashboardThrottlePausesMatchEngineState(t, "recovered dashboard", recoveredEngineState, recoveredDashboard)
 }
@@ -111,7 +114,7 @@ func newThrottlePauseObservabilityFixture(t *testing.T) throttlePauseObservabili
 			WorkTypeID:      "claude-task",
 			WorkerName:      "claude-worker",
 			WorkstationName: "process-claude",
-			Provider:        interfaces.ModelProviderClaude,
+			Provider:        modelprovider.Claude,
 			Model:           "claude-sonnet-4-5-20250514",
 			PromptBody:      "Process the Claude lane task.\n",
 		},
@@ -119,7 +122,7 @@ func newThrottlePauseObservabilityFixture(t *testing.T) throttlePauseObservabili
 			WorkTypeID:      "codex-task",
 			WorkerName:      "codex-worker",
 			WorkstationName: "process-codex",
-			Provider:        interfaces.ModelProviderCodex,
+			Provider:        modelprovider.Codex,
 			Model:           "gpt-5-codex",
 			PromptBody:      "Process the Codex lane task.\n",
 		},
@@ -162,7 +165,7 @@ func newThrottlePauseObservabilityFixture(t *testing.T) throttlePauseObservabili
 	testutil.AppendFactoryInferenceThrottleGuard(
 		t,
 		pauseHarness.Dir,
-		interfaces.ModelProviderClaude,
+		modelprovider.Claude,
 		"claude-sonnet-4-5-20250514",
 		pauseDuration,
 	)
@@ -181,7 +184,7 @@ func newThrottlePauseObservabilityFixture(t *testing.T) throttlePauseObservabili
 func submitThrottlePauseWork(t *testing.T, server *functionalAPIServer, work testutil.ProviderErrorSmokeWork) {
 	t.Helper()
 
-	server.SubmitRuntimeWork(t, interfaces.SubmitRequest{
+	server.SubmitRuntimeWork(t, workdomain.SubmitRequest{
 		Name:       work.Name,
 		WorkID:     work.WorkID,
 		WorkTypeID: work.WorkTypeID,
@@ -197,12 +200,12 @@ func assertThrottlePauseRequestSequence(t *testing.T, requests []workers.Command
 		t.Fatalf("provider command count = %d, want at least 4", len(requests))
 	}
 	for i := 0; i < 3; i++ {
-		if requests[i].Command != string(interfaces.ModelProviderClaude) {
-			t.Fatalf("request %d command = %q, want %q", i, requests[i].Command, interfaces.ModelProviderClaude)
+		if requests[i].Command != string(modelprovider.Claude) {
+			t.Fatalf("request %d command = %q, want %q", i, requests[i].Command, modelprovider.Claude)
 		}
 	}
-	if requests[3].Command != string(interfaces.ModelProviderCodex) {
-		t.Fatalf("request 3 command = %q, want %q", requests[3].Command, interfaces.ModelProviderCodex)
+	if requests[3].Command != string(modelprovider.Codex) {
+		t.Fatalf("request 3 command = %q, want %q", requests[3].Command, modelprovider.Codex)
 	}
 }
 
@@ -252,7 +255,7 @@ func waitForRuntimeAPIDashboardSnapshot(
 func assertActiveThrottlePause(
 	t *testing.T,
 	engineState *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
-	provider interfaces.ModelProvider,
+	provider modelprovider.ID,
 	model string,
 ) {
 	t.Helper()

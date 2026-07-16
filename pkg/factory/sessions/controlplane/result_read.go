@@ -4,10 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 )
 
 // ResultReadHost exposes live session projection and checkpoint seams for result reads.
@@ -21,22 +20,23 @@ func GetLiveFactorySessionResult(
 	ctx context.Context,
 	host ResultReadHost,
 	sessionID string,
-) (factoryapi.FactorySessionLiveResult, error) {
+) (workflowresult.LiveSessionResult, error) {
 	if host == nil {
-		return factoryapi.FactorySessionLiveResult{}, fmt.Errorf("factory session gateway is required")
+		return workflowresult.LiveSessionResult{}, fmt.Errorf("factory session gateway is required")
 	}
 	session, err := host.RequireSession(sessionID)
 	if err != nil {
-		return factoryapi.FactorySessionLiveResult{}, err
+		return workflowresult.LiveSessionResult{}, err
 	}
 	projectionCtx, err := host.BuildSessionProjectionContext(ctx, session)
 	if err != nil {
-		return factoryapi.FactorySessionLiveResult{}, err
+		return workflowresult.LiveSessionResult{}, err
 	}
 	if !interfaces.IsJavaScriptOrchestratorFactory(projectionCtx.FactoryCfg) {
-		return factoryapi.FactorySessionLiveResult{}, fmt.Errorf("%w", apisurface.ErrFactorySessionResultUnavailable)
+		return workflowresult.LiveSessionResult{}, fmt.Errorf("%w", factorysessions.ErrResultUnavailable)
 	}
-	return factorysessions.ProjectSessionResult(sessionID, projectionCtx, host.JavaScriptCheckpointStore(session)), nil
+	result := factorysessions.ProjectSessionResult(sessionID, projectionCtx, host.JavaScriptCheckpointStore(session))
+	return result, nil
 }
 
 // GetLiveFactorySessionPartialResult returns checkpoint-backed partial JavaScript results.
@@ -44,20 +44,21 @@ func GetLiveFactorySessionPartialResult(
 	ctx context.Context,
 	host ResultReadHost,
 	sessionID string,
-) (factoryapi.FactorySessionPartialResult, error) {
+) (workflowresult.PartialSessionResult, error) {
 	if host == nil {
-		return factoryapi.FactorySessionPartialResult{}, fmt.Errorf("factory session gateway is required")
+		return workflowresult.PartialSessionResult{}, fmt.Errorf("factory session gateway is required")
 	}
 	session, err := host.RequireSession(sessionID)
 	if err != nil {
-		return factoryapi.FactorySessionPartialResult{}, err
+		return workflowresult.PartialSessionResult{}, err
 	}
 	projectionCtx, err := host.BuildSessionProjectionContext(ctx, session)
 	if err != nil {
-		return factoryapi.FactorySessionPartialResult{}, err
+		return workflowresult.PartialSessionResult{}, err
 	}
 	if !interfaces.IsJavaScriptOrchestratorFactory(projectionCtx.FactoryCfg) {
-		return factoryapi.FactorySessionPartialResult{}, fmt.Errorf("%w", apisurface.ErrFactorySessionResultUnavailable)
+		return workflowresult.PartialSessionResult{}, fmt.Errorf("%w", factorysessions.ErrResultUnavailable)
 	}
-	return factorysessions.ProjectSessionPartialResult(sessionID, projectionCtx, host.JavaScriptCheckpointStore(session)), nil
+	result := factorysessions.ProjectSessionPartialResult(sessionID, projectionCtx, host.JavaScriptCheckpointStore(session))
+	return result, nil
 }

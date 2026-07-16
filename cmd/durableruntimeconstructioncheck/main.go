@@ -20,7 +20,7 @@ const (
 	persistenceBooleanName = "PersistSessions"
 	providerInferenceName  = "Infer"
 	providerPackagePath    = "github.com/portpowered/infinite-you/pkg/workers/provider"
-	sessionPersistencePath = "github.com/portpowered/infinite-you/pkg/sessionpersistence"
+	sessionPersistencePath = "github.com/portpowered/infinite-you/pkg/platform/cursors/session"
 )
 
 var canonicalEventOwnerCalls = map[string]struct{}{

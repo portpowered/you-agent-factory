@@ -7,9 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // ---------------------------------------------------------------------------
@@ -32,14 +36,14 @@ func TestBarrierAllSucceed(t *testing.T) {
 
 	// processor: 5 successes.
 	h.MockWorker("processor",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 	h.MockWorker("completer",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	h.SubmitWork("parent", []byte("barrier test"))
@@ -85,10 +89,10 @@ func TestBarrierPartialFailure(t *testing.T) {
 	h.SetCustomExecutor("processor", failExec)
 
 	completer := h.MockWorker("completer",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 	failureHandler := h.MockWorker("failure-handler",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	h.SubmitWork("parent", []byte("partial failure"))
@@ -129,14 +133,14 @@ func TestBarrierDelayedArrival(t *testing.T) {
 	h.SetCustomExecutor("spawner", spawner)
 
 	h.MockWorker("processor",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 	h.MockWorker("completer",
-		interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted},
+		workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted},
 	)
 
 	// Submit spawns children (1 tick in Submit).
@@ -249,7 +253,7 @@ var barrierWorkTypes = []interfaces.WorkTypeConfig{
 func barrierConfig() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
 		WorkTypes: barrierWorkTypes,
-		Workers:   []interfaces.WorkerConfig{{Name: "spawner"}, {Name: "processor"}, {Name: "completer"}},
+		Workers:   []workerconfig.Config{{Name: "spawner"}, {Name: "processor"}, {Name: "completer"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "spawn-children", WorkerTypeName: "spawner",
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "parent", StateName: "init"}},
@@ -277,7 +281,7 @@ func barrierConfig() *interfaces.FactoryConfig {
 func barrierConfigWithFailureDetection() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
 		WorkTypes: barrierWorkTypes,
-		Workers:   []interfaces.WorkerConfig{{Name: "spawner"}, {Name: "processor"}, {Name: "completer"}, {Name: "failure-handler"}},
+		Workers:   []workerconfig.Config{{Name: "spawner"}, {Name: "processor"}, {Name: "completer"}, {Name: "failure-handler"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "spawn-children", WorkerTypeName: "spawner",
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "parent", StateName: "init"}},
@@ -316,7 +320,7 @@ func barrierConfigWithFailureDetection() *interfaces.FactoryConfig {
 func barrierConfigObserveAll() *interfaces.FactoryConfig {
 	return &interfaces.FactoryConfig{
 		WorkTypes: barrierWorkTypes,
-		Workers:   []interfaces.WorkerConfig{{Name: "spawner"}, {Name: "processor"}, {Name: "completer"}},
+		Workers:   []workerconfig.Config{{Name: "spawner"}, {Name: "processor"}, {Name: "completer"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "spawn-children", WorkerTypeName: "spawner",
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "parent", StateName: "init"}},
@@ -349,7 +353,7 @@ type barrierSpawnerExecutor struct {
 	childCount int
 }
 
-func (e *barrierSpawnerExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *barrierSpawnerExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.mu.Lock()
 	e.calls++
 	e.mu.Unlock()
@@ -359,19 +363,19 @@ func (e *barrierSpawnerExecutor) Execute(_ context.Context, dispatch interfaces.
 		parentWorkID = firstInputToken(dispatch.InputTokens).Color.WorkID
 	}
 
-	spawned := make([]interfaces.TokenColor, e.childCount)
+	spawned := make([]factorytoken.Color, e.childCount)
 	for i := range spawned {
-		spawned[i] = interfaces.TokenColor{
+		spawned[i] = factorytoken.Color{
 			WorkTypeID: "child",
 			WorkID:     fmt.Sprintf("child-%d", i+1),
 			ParentID:   parentWorkID,
 		}
 	}
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		SpawnedWork:  spawned,
 	}, nil
 }
@@ -404,18 +408,18 @@ type failOnNthBarrierExecutor struct {
 	failOn int // 1-indexed
 }
 
-func (e *failOnNthBarrierExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *failOnNthBarrierExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.mu.Lock()
 	e.calls++
 	n := e.calls
 	e.mu.Unlock()
 
-	outcome := interfaces.OutcomeAccepted
+	outcome := workerexecution.OutcomeAccepted
 	if n == e.failOn {
-		outcome = interfaces.OutcomeFailed
+		outcome = workerexecution.OutcomeFailed
 	}
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
 		Outcome:      outcome,

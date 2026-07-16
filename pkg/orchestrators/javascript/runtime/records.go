@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const (
@@ -126,28 +126,28 @@ type CheckpointRecord struct {
 // status transition. Multiple records per child prove queued/running/completed
 // ordering without starting real provider sessions.
 type ChildDispatchRecord struct {
-	DispatchID            string                     `json:"dispatchId"`
-	ChildIndex            int                        `json:"childIndex"`
-	Attempt               int                        `json:"attempt,omitempty"`
-	Status                string                     `json:"status"`
-	Label                 string                     `json:"label,omitempty"`
-	PromptDigest          string                     `json:"promptDigest,omitempty"`
-	Preset                string                     `json:"preset,omitempty"`
-	ModelProvider         string                     `json:"modelProvider,omitempty"`
-	Model                 string                     `json:"model,omitempty"`
-	ReasoningEffort       string                     `json:"reasoningEffort,omitempty"`
-	Command               string                     `json:"command,omitempty"`
-	Sandbox               string                     `json:"sandbox,omitempty"`
-	SchemaDigest          string                     `json:"schemaDigest,omitempty"`
-	RunnerID              string                     `json:"runnerId,omitempty"`
-	ExecutionMode         string                     `json:"executionMode,omitempty"`
-	Provider              string                     `json:"provider,omitempty"`
-	ProviderSessionRef    string                     `json:"providerSessionRef,omitempty"`
-	ArtifactRef           string                     `json:"artifactRef,omitempty"`
-	Output                map[string]any             `json:"output,omitempty"`
-	FailureDetail         *interfaces.FailureDetail  `json:"failureDetail,omitempty"`
-	Retryable             *bool                      `json:"retryable,omitempty"`
-	FailureClassification interfaces.WorkFailureType `json:"failureClassification,omitempty"`
+	DispatchID            string                          `json:"dispatchId"`
+	ChildIndex            int                             `json:"childIndex"`
+	Attempt               int                             `json:"attempt,omitempty"`
+	Status                string                          `json:"status"`
+	Label                 string                          `json:"label,omitempty"`
+	PromptDigest          string                          `json:"promptDigest,omitempty"`
+	Preset                string                          `json:"preset,omitempty"`
+	ModelProvider         string                          `json:"modelProvider,omitempty"`
+	Model                 string                          `json:"model,omitempty"`
+	ReasoningEffort       string                          `json:"reasoningEffort,omitempty"`
+	Command               string                          `json:"command,omitempty"`
+	Sandbox               string                          `json:"sandbox,omitempty"`
+	SchemaDigest          string                          `json:"schemaDigest,omitempty"`
+	RunnerID              string                          `json:"runnerId,omitempty"`
+	ExecutionMode         string                          `json:"executionMode,omitempty"`
+	Provider              string                          `json:"provider,omitempty"`
+	ProviderSessionRef    string                          `json:"providerSessionRef,omitempty"`
+	ArtifactRef           string                          `json:"artifactRef,omitempty"`
+	Output                map[string]any                  `json:"output,omitempty"`
+	FailureDetail         *workerexecution.FailureDetail  `json:"failureDetail,omitempty"`
+	Retryable             *bool                           `json:"retryable,omitempty"`
+	FailureClassification workerexecution.WorkFailureType `json:"failureClassification,omitempty"`
 }
 
 // BudgetRecord captures effective policy budget values observed by the runtime.

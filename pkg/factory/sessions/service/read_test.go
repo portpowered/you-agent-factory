@@ -7,7 +7,6 @@ import (
 
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionservice "github.com/portpowered/infinite-you/pkg/factory/sessions/service"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestService_GetFactorySessionSyncPreflight_DelegatesToControlPlane(t *testing.T) {
@@ -21,11 +20,11 @@ func TestService_GetFactorySessionSyncPreflight_DelegatesToControlPlane(t *testi
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight: %v", err)
 	}
-	if response.ReasonCode != factoryapi.Ok {
-		t.Fatalf("reasonCode = %q, want ok", response.ReasonCode)
+	if response.Reason != factorysessions.SyncPreflightReasonOK {
+		t.Fatalf("reason = %q, want ok", response.Reason)
 	}
-	if response.BackendScopeId == nil || *response.BackendScopeId != "runtime-test" {
-		t.Fatalf("backendScopeId = %#v, want runtime-test", response.BackendScopeId)
+	if response.BackendScopeID == nil || *response.BackendScopeID != "runtime-test" {
+		t.Fatalf("backend scope ID = %#v, want runtime-test", response.BackendScopeID)
 	}
 }
 
@@ -38,8 +37,8 @@ func TestService_GetFactorySessionSyncPreflight_RejectsDurableSessionID(t *testi
 	if err != nil {
 		t.Fatalf("GetFactorySessionSyncPreflight: %v", err)
 	}
-	if response.ReasonCode != factoryapi.SessionNotFound {
-		t.Fatalf("reasonCode = %q, want session_not_found", response.ReasonCode)
+	if response.Reason != factorysessions.SyncPreflightReasonSessionNotFound {
+		t.Fatalf("reason = %q, want session_not_found", response.Reason)
 	}
 }
 
@@ -86,8 +85,8 @@ func TestService_ListFactorySessions_DelegatesToControlPlane(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListFactorySessions: %v", err)
 	}
-	if len(response.Sessions) != 1 || response.Sessions[0].Id != "~default" {
-		t.Fatalf("sessions = %#v, want one default session", response.Sessions)
+	if len(response) != 1 || response[0].Context.Session.ID != "~default" {
+		t.Fatalf("sessions = %#v, want one default session", response)
 	}
 }
 
@@ -103,8 +102,8 @@ func TestService_GetFactorySession_DelegatesToControlPlane(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFactorySession: %v", err)
 	}
-	if session.Id != "sess-get" {
-		t.Fatalf("session id = %q, want sess-get", session.Id)
+	if session.Session.ID != "sess-get" {
+		t.Fatalf("session id = %q, want sess-get", session.Session.ID)
 	}
 }
 
@@ -131,14 +130,14 @@ func TestService_OpenFactorySession_MapsInitNewFactoryHint(t *testing.T) {
 	gateway := factorysessionservice.New(host)
 	validateOnly := true
 
-	response, err := gateway.OpenFactorySession(context.Background(), factoryapi.OpenFactorySessionRequest{
+	response, err := gateway.OpenFactorySession(context.Background(), factorysessions.OpenRequest{
 		FolderPath:   t.TempDir(),
-		ValidateOnly: &validateOnly,
+		ValidateOnly: validateOnly,
 	})
 	if err != nil {
 		t.Fatalf("OpenFactorySession: %v", err)
 	}
-	if response.InitsNewFactory == nil || !*response.InitsNewFactory {
+	if response == nil || !response.InitsNewFactory {
 		t.Fatalf("initsNewFactory = %#v, want true", response.InitsNewFactory)
 	}
 }

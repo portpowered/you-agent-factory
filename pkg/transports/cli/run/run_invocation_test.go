@@ -18,15 +18,16 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/configinit"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/goal"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/subagent"
 	"github.com/portpowered/infinite-you/pkg/factory/packages/tts"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseeventstore"
 	"github.com/portpowered/infinite-you/pkg/initializer"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"go.uber.org/zap"
@@ -58,9 +59,9 @@ func TestBuildApplication_ConstructsInvocationBootstrapOnceBeforeInitializer(t *
 			},
 			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 				return apisurface.FactoryInvocationResult{
-					Status: factoryapi.InvocationTerminalStatusCompleted,
-					PrimaryResult: []interfaces.WorkContentPart{{
-						Type: interfaces.WorkContentPartTypeText,
+					Status: interfaces.InvocationTerminalStatusCompleted,
+					PrimaryResult: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText,
 						Text: "done",
 					}},
 				}, nil
@@ -154,9 +155,9 @@ func TestRun_FactoryInvocationUsesNoServerBootstrapConfig(t *testing.T) {
 			},
 			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 				return apisurface.FactoryInvocationResult{
-					Status: factoryapi.InvocationTerminalStatusCompleted,
-					PrimaryResult: []interfaces.WorkContentPart{{
-						Type: interfaces.WorkContentPartTypeText,
+					Status: interfaces.InvocationTerminalStatusCompleted,
+					PrimaryResult: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText,
 						Text: "done",
 					}},
 				}, nil
@@ -198,9 +199,9 @@ func TestRun_FactoryInvocationReleasesSessionThroughFactoryServiceOwnership(t *t
 			},
 			invoke: func(context.Context, string, factoryapi.InvocationRequest) (apisurface.FactoryInvocationResult, error) {
 				return apisurface.FactoryInvocationResult{
-					Status: factoryapi.InvocationTerminalStatusCompleted,
-					PrimaryResult: []interfaces.WorkContentPart{{
-						Type: interfaces.WorkContentPartTypeText,
+					Status: interfaces.InvocationTerminalStatusCompleted,
+					PrimaryResult: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText,
 						Text: "done",
 					}},
 				}, nil
@@ -445,7 +446,7 @@ func TestRun_NamedFactoryModelNotReadyKeepsStdoutEmpty(t *testing.T) {
 				return apisurface.FactoryInvocationResult{
 					RequestID: "request-tts-not-ready",
 					TraceID:   "trace-tts-not-ready",
-					Status:    factoryapi.InvocationTerminalStatusFailed,
+					Status:    interfaces.InvocationTerminalStatusFailed,
 					ErrorCode: tts.InvocationErrorCodeModelNotReady,
 					Message:   "model not available: required assets missing",
 				}, nil
@@ -497,7 +498,7 @@ func TestRun_NamedFactoryGenerationFailureKeepsStdoutEmpty(t *testing.T) {
 				return apisurface.FactoryInvocationResult{
 					RequestID: "request-tts-failed",
 					TraceID:   "trace-tts-failed",
-					Status:    factoryapi.InvocationTerminalStatusFailed,
+					Status:    interfaces.InvocationTerminalStatusFailed,
 					ErrorCode: tts.InvocationErrorCodeGenerationFailed,
 					Message:   "omnivoice invoke failed: exit status 1",
 				}, nil
@@ -547,9 +548,9 @@ func TestRun_NamedFactoryStdinInvocationWritesMetadataPrimaryResult(t *testing.T
 				return apisurface.FactoryInvocationResult{
 					RequestID: "request-tts-stdin",
 					TraceID:   "trace-tts-stdin",
-					Status:    factoryapi.InvocationTerminalStatusCompleted,
-					PrimaryResult: []interfaces.WorkContentPart{{
-						Type: interfaces.WorkContentPartTypeText,
+					Status:    interfaces.InvocationTerminalStatusCompleted,
+					PrimaryResult: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText,
 						Text: metadataJSON,
 					}},
 				}, nil
@@ -605,9 +606,9 @@ func TestRun_FactoryInvocationWritesPrimaryTextOnly(t *testing.T) {
 				return apisurface.FactoryInvocationResult{
 					RequestID: "request-123",
 					TraceID:   "trace-123",
-					Status:    factoryapi.InvocationTerminalStatusCompleted,
-					PrimaryResult: []interfaces.WorkContentPart{{
-						Type: interfaces.WorkContentPartTypeText,
+					Status:    interfaces.InvocationTerminalStatusCompleted,
+					PrimaryResult: []work.WorkContentPart{{
+						Type: work.WorkContentPartTypeText,
 						Text: "final output",
 					}},
 				}, nil
@@ -658,7 +659,7 @@ func TestRun_FactoryInvocationFailureKeepsStdoutEmpty(t *testing.T) {
 				return apisurface.FactoryInvocationResult{
 					RequestID: "request-123",
 					TraceID:   "trace-123",
-					Status:    factoryapi.InvocationTerminalStatusFailed,
+					Status:    interfaces.InvocationTerminalStatusFailed,
 					ErrorCode: "INVOCATION_PRIMARY_RESULT_UNRESOLVED",
 					Message:   "primary result could not be resolved",
 				}, nil
@@ -810,9 +811,9 @@ func TestRun_NamedGoalInvocationWritesPrimaryResult(t *testing.T) {
 						return apisurface.FactoryInvocationResult{
 							RequestID: "request-goal-" + tc.name,
 							TraceID:   "trace-goal-" + tc.name,
-							Status:    factoryapi.InvocationTerminalStatusCompleted,
-							PrimaryResult: []interfaces.WorkContentPart{{
-								Type: interfaces.WorkContentPartTypeText,
+							Status:    interfaces.InvocationTerminalStatusCompleted,
+							PrimaryResult: []work.WorkContentPart{{
+								Type: work.WorkContentPartTypeText,
 								Text: tc.wantOutput,
 							}},
 						}, nil
@@ -975,9 +976,9 @@ func TestRun_NamedGoalInvocationSuccessParityAcrossCLIAndAPIEnvelope(t *testing.
 	sharedResult := apisurface.FactoryInvocationResult{
 		RequestID: "request-goal-parity-success",
 		TraceID:   "trace-goal-parity-success",
-		Status:    factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		Status:    interfaces.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
 			Text: "goal parity completed",
 		}},
 	}
@@ -1040,7 +1041,7 @@ func TestRun_NamedGoalInvocationBlockedFailureParityAcrossCLIAndAPIEnvelope(t *t
 	sharedResult := apisurface.FactoryInvocationResult{
 		RequestID: "request-goal-blocked",
 		TraceID:   "trace-goal-blocked",
-		Status:    factoryapi.InvocationTerminalStatusFailed,
+		Status:    interfaces.InvocationTerminalStatusFailed,
 		ErrorCode: "INVOCATION_BLOCKED",
 		Message:   "goal invocation blocked while work \"Review plan\" is in state goal:blocked",
 		SessionID: defaultFactorySessionID,
@@ -1120,15 +1121,15 @@ func TestFactoryInvocationCLIAndAPIEquivalenceMatrix(t *testing.T) {
 		{name: "fallback return", result: invocationParityCompletedResult("request-fallback", "fallback output")},
 		{name: "explicit return", result: invocationParityCompletedResult("request-explicit", "explicit output")},
 		{name: "timeout", result: apisurface.FactoryInvocationResult{
-			RequestID: "request-timeout", TraceID: "trace-timeout", Status: factoryapi.InvocationTerminalStatusTimedOut,
+			RequestID: "request-timeout", TraceID: "trace-timeout", Status: interfaces.InvocationTerminalStatusTimedOut,
 			ErrorCode: string(factoryapi.INVOCATIONTIMEDOUT), Message: "invocation timed out while waiting for primary result",
 		}},
 		{name: "cancellation", result: apisurface.FactoryInvocationResult{
-			RequestID: "request-canceled", TraceID: "trace-canceled", Status: factoryapi.InvocationTerminalStatusCanceled,
+			RequestID: "request-canceled", TraceID: "trace-canceled", Status: interfaces.InvocationTerminalStatusCanceled,
 			ErrorCode: string(factoryapi.INVOCATIONCANCELED), Message: "invocation was canceled while waiting for primary result",
 		}},
 		{name: "packaged TTS failure", result: apisurface.FactoryInvocationResult{
-			RequestID: "request-tts", TraceID: "trace-tts", Status: factoryapi.InvocationTerminalStatusFailed,
+			RequestID: "request-tts", TraceID: "trace-tts", Status: interfaces.InvocationTerminalStatusFailed,
 			ErrorCode: string(factoryapi.INVOCATIONTTSGENERATIONFAILED), Message: "packaged TTS generation failed",
 			SessionID: defaultFactorySessionID, WorkID: "work-tts", WorkName: "Generate speech", WorkState: "tts:failed",
 		}},
@@ -1154,8 +1155,8 @@ func TestFactoryInvocationCLIAndAPIEquivalenceMatrix(t *testing.T) {
 
 func invocationParityCompletedResult(requestID, text string) apisurface.FactoryInvocationResult {
 	return apisurface.FactoryInvocationResult{
-		RequestID: requestID, TraceID: requestID + "-trace", Status: factoryapi.InvocationTerminalStatusCompleted,
-		PrimaryResult: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: text}},
+		RequestID: requestID, TraceID: requestID + "-trace", Status: interfaces.InvocationTerminalStatusCompleted,
+		PrimaryResult: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: text}},
 	}
 }
 
@@ -1175,7 +1176,7 @@ func TestRun_FactoryInvocationPausedFailureIncludesCLIContext(t *testing.T) {
 				return apisurface.FactoryInvocationResult{
 					RequestID: "request-paused",
 					TraceID:   "trace-paused",
-					Status:    factoryapi.InvocationTerminalStatusFailed,
+					Status:    interfaces.InvocationTerminalStatusFailed,
 					ErrorCode: "INVOCATION_PAUSED",
 					Message:   "factory session is paused; resume the session to continue waiting for the primary result",
 					SessionID: defaultFactorySessionID,
@@ -1421,8 +1422,8 @@ func assertCapturedResultMatchesCLIJSONOutput(t *testing.T, capture *capturingBo
 	if capture.lastResult == nil {
 		t.Fatal("expected InvokeFactorySession result capture on real no-server bootstrap")
 	}
-	if capture.lastResult.Status != factoryapi.InvocationTerminalStatusCompleted {
-		t.Fatalf("status = %q, want %q", capture.lastResult.Status, factoryapi.InvocationTerminalStatusCompleted)
+	if capture.lastResult.Status != interfaces.InvocationTerminalStatusCompleted {
+		t.Fatalf("status = %q, want %q", capture.lastResult.Status, interfaces.InvocationTerminalStatusCompleted)
 	}
 
 	var cliResponse factoryapi.InvocationResponse

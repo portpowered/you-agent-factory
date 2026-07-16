@@ -4,19 +4,27 @@ import (
 	"context"
 	"testing"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
 type sessionCapturingExecutor struct {
-	dispatch interfaces.WorkstationExecutionRequest
+	dispatch workerexecution.WorkstationExecutionRequest
 }
 
-func (m *sessionCapturingExecutor) Execute(_ context.Context, d interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (m *sessionCapturingExecutor) Execute(_ context.Context, d workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	m.dispatch = d
-	return interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}, nil
+	return workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}, nil
 }
 
 func TestWorkstationExecutor_PromptRendersFactorySessionID(t *testing.T) {
@@ -38,12 +46,12 @@ func TestWorkstationExecutor_PromptRendersFactorySessionID(t *testing.T) {
 			mock := &sessionCapturingExecutor{}
 			we := &executor.WorkstationExecutor{
 				RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
-					Workers: map[string]*interfaces.WorkerConfig{
-						"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system"},
+					Workers: map[string]*workerconfig.Config{
+						"worker-a": {Type: workertaxonomy.WorkerTypeModel, Body: "system"},
 					},
 					Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 						"standard": {
-							Type:           interfaces.WorkstationTypeModel,
+							Type:           workertaxonomy.WorkstationTypeModel,
 							PromptTemplate: `submit --session {{ .Context.SessionID }}`,
 						},
 					},
@@ -53,14 +61,14 @@ func TestWorkstationExecutor_PromptRendersFactorySessionID(t *testing.T) {
 				Renderer:        &executor.DefaultPromptRenderer{},
 			}
 
-			_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+			_, err := we.Execute(context.Background(), work.WorkDispatch{
 				DispatchID:      "d-session",
 				TransitionID:    "t-session",
 				WorkerType:      "worker-a",
 				WorkstationName: "standard",
-				InputTokens: executor.InputTokens(interfaces.Token{
+				InputTokens: executor.InputTokens(factorytoken.Token{
 					ID:    "tok-1",
-					Color: interfaces.TokenColor{WorkID: "work-1"},
+					Color: factorytoken.Color{WorkID: "work-1"},
 				}),
 			})
 			if err != nil {

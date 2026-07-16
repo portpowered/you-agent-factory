@@ -9,7 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/robfig/cron/v3"
 )
 
@@ -225,10 +226,10 @@ func (m CronTimeMetadata) Payload() ([]byte, error) {
 }
 
 // CronTimeWorkRequest creates the canonical internal work request for one cron tick.
-func CronTimeWorkRequest(workflowIdentity string, ws interfaces.FactoryWorkstationConfig, nominalAt time.Time) (interfaces.WorkRequest, CronTimeMetadata, error) {
+func CronTimeWorkRequest(workflowIdentity string, ws interfaces.FactoryWorkstationConfig, nominalAt time.Time) (work.WorkRequest, CronTimeMetadata, error) {
 	timing, err := ParseCronTiming(ws.Cron, nominalAt)
 	if err != nil {
-		return interfaces.WorkRequest{}, CronTimeMetadata{}, err
+		return work.WorkRequest{}, CronTimeMetadata{}, err
 	}
 	metadata, err := BuildCronTimeMetadata(CronTimeInput{
 		WorkflowIdentity: workflowIdentity,
@@ -238,18 +239,18 @@ func CronTimeWorkRequest(workflowIdentity string, ws interfaces.FactoryWorkstati
 		ExpiryWindow:     timing.ExpiryWindow,
 	})
 	if err != nil {
-		return interfaces.WorkRequest{}, CronTimeMetadata{}, err
+		return work.WorkRequest{}, CronTimeMetadata{}, err
 	}
 	payload, err := metadata.Payload()
 	if err != nil {
-		return interfaces.WorkRequest{}, CronTimeMetadata{}, err
+		return work.WorkRequest{}, CronTimeMetadata{}, err
 	}
 
 	workID := CronTimeWorkID(workflowIdentity, ws.Name, nominalAt)
-	request := interfaces.WorkRequest{
+	request := work.WorkRequest{
 		RequestID: "request-" + workID,
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
 			WorkID:     workID,
 			Name:       cronSubmissionNamePrefix + ws.Name,
 			WorkTypeID: interfaces.SystemTimeWorkTypeID,

@@ -10,8 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter/testkit"
@@ -31,11 +33,11 @@ var errFixtureRetry = errors.New("fixture provider requested retry")
 func TestFullStreamAdapterConformance(t *testing.T) {
 	t.Parallel()
 
-	session := interfaces.ProviderSessionMetadata{Provider: "fixture", Kind: "session_id", ID: fixtureProviderRef}
+	session := workerexecution.ProviderSessionMetadata{Provider: "fixture", Kind: "session_id", ID: fixtureProviderRef}
 	testkit.RunFullStream(t, testkit.FullStreamFixture{
 		NewAdapter: func() adapter.Adapter { return fullStreamAdapter{} },
-		Request: interfaces.ProviderInferenceRequest{
-			Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-conformance"},
+		Request: workerexecution.ProviderInferenceRequest{
+			Dispatch: work.WorkDispatch{DispatchID: "dispatch-conformance"},
 			Model:    "fixture-model", UserMessage: privatePrompt,
 		},
 		ContentAndTools: observations(
@@ -126,11 +128,11 @@ func TestFullStreamAdapterConformance(t *testing.T) {
 func TestFullStreamAdapterConformanceSupportsSnapshotOnlyNativeStreams(t *testing.T) {
 	t.Parallel()
 
-	session := interfaces.ProviderSessionMetadata{Provider: "fixture", Kind: "session_id", ID: fixtureProviderRef}
+	session := workerexecution.ProviderSessionMetadata{Provider: "fixture", Kind: "session_id", ID: fixtureProviderRef}
 	testkit.RunFullStream(t, testkit.FullStreamFixture{
 		NewAdapter: func() adapter.Adapter { return snapshotStreamAdapter{} },
-		Request: interfaces.ProviderInferenceRequest{
-			Dispatch: interfaces.WorkDispatch{DispatchID: "dispatch-snapshot-conformance"},
+		Request: workerexecution.ProviderInferenceRequest{
+			Dispatch: work.WorkDispatch{DispatchID: "dispatch-snapshot-conformance"},
 			Model:    "fixture-model", UserMessage: privatePrompt,
 		},
 		ContentAndTools: observations(
@@ -196,9 +198,9 @@ func (fullStreamAdapter) ParseFinal(_ context.Context, input adapter.FinalParseC
 	if err := json.Unmarshal(input.CommandResult.Stdout, &result); err != nil {
 		return adapter.FinalParseResult{}, errors.New("fixture final response was malformed")
 	}
-	return adapter.FinalParseResult{Response: interfaces.InferenceResponse{
+	return adapter.FinalParseResult{Response: workerexecution.InferenceResponse{
 		Content:         result.Content,
-		ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "fixture", Kind: "session_id", ID: result.Session},
+		ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "fixture", Kind: "session_id", ID: result.Session},
 	}}, nil
 }
 
@@ -215,10 +217,10 @@ func (fullStreamAdapter) ClassifyFailure(_ context.Context, input adapter.Failur
 	}
 	retryAfter := 2 * time.Second
 	return adapter.FailureResult{Failure: &adapter.FailureFacts{
-		Family: interfaces.WorkFailureFamilyThrottle, Type: interfaces.WorkFailureTypeThrottled,
+		Family: workerexecution.WorkFailureFamilyThrottle, Type: workerexecution.WorkFailureTypeThrottled,
 		Message:         "fixture provider is temporarily busy",
 		Retry:           adapter.RetryGuidance{Retryable: true, RetryAfter: &retryAfter},
-		ProviderSession: &interfaces.ProviderSessionMetadata{Provider: "fixture", Kind: "session_id", ID: fixtureProviderRef},
+		ProviderSession: &workerexecution.ProviderSessionMetadata{Provider: "fixture", Kind: "session_id", ID: fixtureProviderRef},
 	}}
 }
 

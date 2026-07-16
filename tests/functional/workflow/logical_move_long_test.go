@@ -7,9 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
@@ -74,13 +76,13 @@ type capturePayloadExecutor struct {
 	capturedPayload []byte
 }
 
-func (c *capturePayloadExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (c *capturePayloadExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 	if len(d.InputTokens) > 0 {
 		c.capturedPayload = firstInputToken(d.InputTokens).Color.Payload
 	}
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   d.DispatchID,
 		TransitionID: d.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 	}, nil
 }

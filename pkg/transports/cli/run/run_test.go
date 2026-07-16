@@ -15,15 +15,17 @@ import (
 	initcmd "github.com/portpowered/infinite-you/pkg/transports/cli/init"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
@@ -95,15 +97,15 @@ func setUserHomeForTest(t *testing.T, homeDir string) {
 func TestCountTokenStates(t *testing.T) {
 	tests := []struct {
 		name     string
-		tokens   map[string]*interfaces.Token
+		tokens   map[string]*factorytoken.Token
 		wantWIP  int
 		wantDone int
 		wantFail int
 	}{
-		{name: "empty marking", tokens: map[string]*interfaces.Token{}},
+		{name: "empty marking", tokens: map[string]*factorytoken.Token{}},
 		{
 			name: "mixed states",
-			tokens: map[string]*interfaces.Token{
+			tokens: map[string]*factorytoken.Token{
 				"t1": {ID: "t1", PlaceID: "task:todo"},
 				"t2": {ID: "t2", PlaceID: "task:in-progress"},
 				"t3": {ID: "t3", PlaceID: "task:completed"},
@@ -116,7 +118,7 @@ func TestCountTokenStates(t *testing.T) {
 		},
 		{
 			name: "all completed",
-			tokens: map[string]*interfaces.Token{
+			tokens: map[string]*factorytoken.Token{
 				"t1": {ID: "t1", PlaceID: "page:completed"},
 				"t2": {ID: "t2", PlaceID: "page:completed"},
 			},
@@ -124,7 +126,7 @@ func TestCountTokenStates(t *testing.T) {
 		},
 		{
 			name: "all failed",
-			tokens: map[string]*interfaces.Token{
+			tokens: map[string]*factorytoken.Token{
 				"t1": {ID: "t1", PlaceID: "task:failed"},
 				"t2": {ID: "t2", PlaceID: "task:failed"},
 				"t3": {ID: "t3", PlaceID: "task:failed"},
@@ -133,7 +135,7 @@ func TestCountTokenStates(t *testing.T) {
 		},
 		{
 			name: "work type prefix stays local to suffix classification",
-			tokens: map[string]*interfaces.Token{
+			tokens: map[string]*factorytoken.Token{
 				"t1": {ID: "t1", PlaceID: "story:phase:completed"},
 				"t2": {ID: "t2", PlaceID: "story:phase:failed"},
 				"t3": {ID: "t3", PlaceID: "story:phase:queued"},
@@ -192,8 +194,8 @@ func TestDocsExampleStartupWorkFile(t *testing.T) {
 	if got.RequestID != "docs-example-story-001" {
 		t.Fatalf("request ID = %q, want docs-example-story-001", got.RequestID)
 	}
-	if got.Type != interfaces.WorkRequestTypeFactoryRequestBatch {
-		t.Fatalf("type = %q, want %q", got.Type, interfaces.WorkRequestTypeFactoryRequestBatch)
+	if got.Type != work.WorkRequestTypeFactoryRequestBatch {
+		t.Fatalf("type = %q, want %q", got.Type, work.WorkRequestTypeFactoryRequestBatch)
 	}
 	if len(got.Works) != 1 {
 		t.Fatalf("work count = %d, want 1", len(got.Works))
@@ -700,8 +702,8 @@ func assertStableInvocationSourceConflictMessage(t *testing.T, got string, wantM
 }
 
 func invocationRequestFromLogicalAPIText(text string) (*factoryapi.InvocationRequest, error) {
-	resolved, err := invocations.ResolveAPITextInputContent([]interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	resolved, err := invocations.ResolveAPITextInputContent([]work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: text,
 	}})
 	if err != nil {
@@ -741,7 +743,7 @@ func assertInvocationResponseMatchesFactoryResult(
 	if response.TraceId != result.TraceID {
 		t.Fatalf("traceId = %q, want %q", response.TraceId, result.TraceID)
 	}
-	if response.Status != result.Status {
+	if response.Status != factoryapi.InvocationTerminalStatus(result.Status) {
 		t.Fatalf("status = %q, want %q", response.Status, result.Status)
 	}
 	if len(result.PrimaryResult) == 0 {
@@ -779,7 +781,7 @@ func assertOptionalStringPointerEquals[T ~string](t *testing.T, field string, go
 func assertGeneratedWorkContentPartsFromResponse(
 	t *testing.T,
 	content *factoryapi.WorkContent,
-	want []interfaces.WorkContentPart,
+	want []work.WorkContentPart,
 ) {
 	t.Helper()
 

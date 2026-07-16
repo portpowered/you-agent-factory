@@ -7,8 +7,10 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorydefinition "github.com/portpowered/infinite-you/pkg/factory/definition"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 )
 
 type validationDefinitionHost struct {
@@ -39,8 +41,12 @@ func (validationDefinitionHost) SessionFactoryPersistRoot(*factorysessions.LiveS
 	return ""
 }
 
-func (validationDefinitionHost) GetCurrentFactoryForSession(context.Context, string) (factoryapi.Factory, error) {
-	return factoryapi.Factory{}, nil
+func (h validationDefinitionHost) ValidateEditableFactorySnapshot(snapshot *interfaces.FactorySnapshot) error {
+	return validationentry.ValidateEditableFactorySnapshot(snapshot, h.WorkstationLoader())
+}
+
+func (validationDefinitionHost) GetCurrentFactorySnapshotForSession(context.Context, string) (*interfaces.FactorySnapshot, error) {
+	return mustFactorySnapshot(factoryapi.Factory{}), nil
 }
 
 func (validationDefinitionHost) WithActivationLock(fn func() error) error { return fn() }
@@ -49,7 +55,7 @@ func (validationDefinitionHost) RequireIdleRuntimeForSession(context.Context, st
 	return nil
 }
 
-func (validationDefinitionHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, factoryapi.FactoryName, string) error {
+func (validationDefinitionHost) ActivateSessionEditableFactory(context.Context, *factorysessions.LiveSession, string, string, string, string, string) error {
 	return nil
 }
 
@@ -78,16 +84,18 @@ func (validationDefinitionHost) SwapPersistedNamedFactoryRuntime(context.Context
 }
 
 func validateEditableFactoryTopology(submitted factoryapi.Factory, workstationLoader factoryconfig.WorkstationLoader) error {
+	snapshot := mustFactorySnapshot(submitted)
 	return factorydefinition.New(validationDefinitionHost{
 		workstationLoader: workstationLoader,
-	}).ValidateEditableFactoryTopology(submitted)
+	}).ValidateEditableFactoryTopology(snapshot)
 }
 
 func validateUpsertNamedFactoryRequest(
 	request factoryapi.Factory,
 	workstationLoader factoryconfig.WorkstationLoader,
 ) error {
+	snapshot := mustFactorySnapshot(request)
 	return factorydefinition.New(validationDefinitionHost{
 		workstationLoader: workstationLoader,
-	}).ValidateUpsertNamedFactoryRequest(request)
+	}).ValidateUpsertNamedFactoryRequest(string(request.Name), snapshot)
 }

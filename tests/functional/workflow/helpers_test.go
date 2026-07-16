@@ -4,7 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func assertDispatchHistoryContainsWorkstationRoute(
@@ -79,34 +82,34 @@ func assertDispatchHistoryContainsWorkstation(
 	)
 }
 
-func firstInputToken(rawTokens any) interfaces.Token {
+func firstInputToken(rawTokens any) factorytoken.Token {
 	switch tokens := rawTokens.(type) {
 	case []any:
 		if len(tokens) == 0 {
-			return interfaces.Token{}
+			return factorytoken.Token{}
 		}
-		tok, ok := tokens[0].(interfaces.Token)
+		tok, ok := tokens[0].(factorytoken.Token)
 		if !ok {
-			return interfaces.Token{}
+			return factorytoken.Token{}
 		}
 		return tok
-	case []interfaces.Token:
+	case []factorytoken.Token:
 		if len(tokens) == 0 {
-			return interfaces.Token{}
+			return factorytoken.Token{}
 		}
 		return tokens[0]
 	default:
-		return interfaces.Token{}
+		return factorytoken.Token{}
 	}
 }
 
 type capturingExecutor struct {
-	result       interfaces.WorkResult
-	lastDispatch interfaces.WorkDispatch
+	result       workerexecution.WorkResult
+	lastDispatch work.WorkDispatch
 	callCount    int
 }
 
-func (e *capturingExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *capturingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	e.lastDispatch = dispatch
 	e.callCount++
 	result := e.result

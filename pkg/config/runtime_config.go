@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/config/factoryerrors"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 // LoadedFactoryConfig is the effective runtime configuration assembled from
@@ -199,7 +201,7 @@ func (c *LoadedFactoryConfig) WorkstationConfigs() map[string]*interfaces.Factor
 }
 
 // Worker returns the loaded worker definition for the given configured worker name.
-func (c *LoadedFactoryConfig) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (c *LoadedFactoryConfig) Worker(name string) (*workerconfig.Config, bool) {
 	if c == nil {
 		return nil, false
 	}
@@ -208,7 +210,7 @@ func (c *LoadedFactoryConfig) Worker(name string) (*interfaces.WorkerConfig, boo
 
 // MutateWorkers invokes mutate for each worker in the effective factory config and
 // lookup maps so in-memory runtime mutations stay consistent across both views.
-func (c *LoadedFactoryConfig) MutateWorkers(mutate func(worker *interfaces.WorkerConfig) error) error {
+func (c *LoadedFactoryConfig) MutateWorkers(mutate func(worker *workerconfig.Config) error) error {
 	if c == nil || c.factory == nil {
 		return nil
 	}
@@ -239,11 +241,11 @@ func (c *LoadedFactoryConfig) Workstation(name string) (*interfaces.FactoryWorks
 }
 
 type runtimeDefinitionLookupMaps struct {
-	workers      map[string]*interfaces.WorkerConfig
+	workers      map[string]*workerconfig.Config
 	workstations map[string]*interfaces.FactoryWorkstationConfig
 }
 
-func (c *runtimeDefinitionLookupMaps) Worker(name string) (*interfaces.WorkerConfig, bool) {
+func (c *runtimeDefinitionLookupMaps) Worker(name string) (*workerconfig.Config, bool) {
 	if c == nil {
 		return nil, false
 	}
@@ -263,7 +265,7 @@ var _ interfaces.RuntimeDefinitionLookup = (*runtimeDefinitionLookupMaps)(nil)
 
 func newRuntimeDefinitionLookupMaps(workerCount, workstationCount int) *runtimeDefinitionLookupMaps {
 	return &runtimeDefinitionLookupMaps{
-		workers:      make(map[string]*interfaces.WorkerConfig, workerCount),
+		workers:      make(map[string]*workerconfig.Config, workerCount),
 		workstations: make(map[string]*interfaces.FactoryWorkstationConfig, workstationCount),
 	}
 }
@@ -302,7 +304,7 @@ func hasInlineRuntimeDefinitions(cfg *interfaces.FactoryConfig) bool {
 	return false
 }
 
-func workerHasInlineRuntimeDefinitionFields(worker interfaces.WorkerConfig) bool {
+func workerHasInlineRuntimeDefinitionFields(worker workerconfig.Config) bool {
 	if hasNonEmptyWorkerRuntimeStrings(worker) {
 		return true
 	}
@@ -314,7 +316,7 @@ func workerHasInlineRuntimeDefinitionFields(worker interfaces.WorkerConfig) bool
 		worker.Linear != nil
 }
 
-func hasNonEmptyWorkerRuntimeStrings(worker interfaces.WorkerConfig) bool {
+func hasNonEmptyWorkerRuntimeStrings(worker workerconfig.Config) bool {
 	for _, value := range []string{
 		string(worker.Type),
 		worker.Provider,
@@ -335,7 +337,7 @@ func hasNonEmptyWorkerRuntimeStrings(worker interfaces.WorkerConfig) bool {
 	return false
 }
 
-func workerConfigFromInlineConfig(def *interfaces.WorkerConfig) (*interfaces.WorkerConfig, error) {
+func workerConfigFromInlineConfig(def *workerconfig.Config) (*workerconfig.Config, error) {
 	if def == nil {
 		return nil, nil
 	}
@@ -478,7 +480,7 @@ func applyWorkstationRuntimeTopology(workstation *interfaces.FactoryWorkstationC
 		workstation.OnFailure = cloneIOConfigs(runtimeDef.OnFailure)
 	}
 	if len(runtimeDef.Resources) > 0 {
-		workstation.Resources = append([]interfaces.ResourceConfig(nil), runtimeDef.Resources...)
+		workstation.Resources = append([]factoryresource.Config(nil), runtimeDef.Resources...)
 	}
 	if len(runtimeDef.Guards) > 0 {
 		workstation.Guards = append([]interfaces.GuardConfig(nil), runtimeDef.Guards...)

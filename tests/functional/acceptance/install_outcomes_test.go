@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/internal/builtcliacceptance"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/config/defaultpaths"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	factorypackages "github.com/portpowered/infinite-you/pkg/factory/packages"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 )
 
 func TestFreshInstall_EmptyHomeProducesDocumentedCustomerOutcome(t *testing.T) {

@@ -6,27 +6,32 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/work"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 )
 
 type agentMockProvider struct {
-	response  interfaces.InferenceResponse
+	response  workerexecution.InferenceResponse
 	err       error
-	responses []interfaces.InferenceResponse
+	responses []workerexecution.InferenceResponse
 	errors    []error
 	callCount int
-	lastReq   interfaces.ProviderInferenceRequest
+	lastReq   workerexecution.ProviderInferenceRequest
 }
 
 type staticRuntimeConfig = runtimefixtures.RuntimeConfigLookupFixture
 
-func (m *agentMockProvider) Infer(_ context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (m *agentMockProvider) Infer(_ context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	m.lastReq = req
 	m.callCount++
 	if idx := m.callCount - 1; idx < len(m.responses) || idx < len(m.errors) {
-		var response interfaces.InferenceResponse
+		var response workerexecution.InferenceResponse
 		if idx < len(m.responses) {
 			response = m.responses[idx]
 		}
@@ -39,9 +44,9 @@ func (m *agentMockProvider) Infer(_ context.Context, req interfaces.ProviderInfe
 	return m.response, m.err
 }
 
-func testAgentRequest(dispatch interfaces.WorkDispatch, opts ...func(*interfaces.WorkstationExecutionRequest)) interfaces.WorkstationExecutionRequest {
-	req := interfaces.WorkstationExecutionRequest{
-		Dispatch:        interfaces.CloneWorkDispatch(dispatch),
+func testAgentRequest(dispatch work.WorkDispatch, opts ...func(*workerexecution.WorkstationExecutionRequest)) workerexecution.WorkstationExecutionRequest {
+	req := workerexecution.WorkstationExecutionRequest{
+		Dispatch:        work.CloneWorkDispatch(dispatch),
 		WorkerType:      dispatch.WorkerType,
 		WorkstationType: dispatch.WorkstationName,
 		ProjectID:       dispatch.ProjectID,
@@ -53,45 +58,45 @@ func testAgentRequest(dispatch interfaces.WorkDispatch, opts ...func(*interfaces
 	return req
 }
 
-func withAgentPrompts(systemPrompt, userMessage string) func(*interfaces.WorkstationExecutionRequest) {
-	return func(req *interfaces.WorkstationExecutionRequest) {
+func withAgentPrompts(systemPrompt, userMessage string) func(*workerexecution.WorkstationExecutionRequest) {
+	return func(req *workerexecution.WorkstationExecutionRequest) {
 		req.SystemPrompt = systemPrompt
 		req.UserMessage = userMessage
 	}
 }
 
-func withAgentOutputSchema(schema string) func(*interfaces.WorkstationExecutionRequest) {
-	return func(req *interfaces.WorkstationExecutionRequest) {
+func withAgentOutputSchema(schema string) func(*workerexecution.WorkstationExecutionRequest) {
+	return func(req *workerexecution.WorkstationExecutionRequest) {
 		req.OutputSchema = schema
 	}
 }
 
-func withAgentEnvVars(envVars map[string]string) func(*interfaces.WorkstationExecutionRequest) {
-	return func(req *interfaces.WorkstationExecutionRequest) {
+func withAgentEnvVars(envVars map[string]string) func(*workerexecution.WorkstationExecutionRequest) {
+	return func(req *workerexecution.WorkstationExecutionRequest) {
 		req.EnvVars = envVars
 	}
 }
 
-func withAgentWorktree(worktree string) func(*interfaces.WorkstationExecutionRequest) {
-	return func(req *interfaces.WorkstationExecutionRequest) {
+func withAgentWorktree(worktree string) func(*workerexecution.WorkstationExecutionRequest) {
+	return func(req *workerexecution.WorkstationExecutionRequest) {
 		req.Worktree = worktree
 	}
 }
 
-func withAgentWorkingDirectory(workingDirectory string) func(*interfaces.WorkstationExecutionRequest) {
-	return func(req *interfaces.WorkstationExecutionRequest) {
+func withAgentWorkingDirectory(workingDirectory string) func(*workerexecution.WorkstationExecutionRequest) {
+	return func(req *workerexecution.WorkstationExecutionRequest) {
 		req.WorkingDirectory = workingDirectory
 	}
 }
 
-func withAgentModelOperation(operation string, bindings []interfaces.ResolvedModelOperationBinding) func(*interfaces.WorkstationExecutionRequest) {
-	return func(req *interfaces.WorkstationExecutionRequest) {
+func withAgentModelOperation(operation string, bindings []workerexecution.ResolvedModelOperationBinding) func(*workerexecution.WorkstationExecutionRequest) {
+	return func(req *workerexecution.WorkstationExecutionRequest) {
 		req.ModelOperation = operation
 		req.ModelBindings = bindings
 	}
 }
 
-func assertExecutionMetadataEqual(t *testing.T, want, got interfaces.ExecutionMetadata) {
+func assertExecutionMetadataEqual(t *testing.T, want, got work.ExecutionMetadata) {
 	t.Helper()
 	if want.RequestID != got.RequestID {
 		t.Fatalf("RequestID = %q, want %q", got.RequestID, want.RequestID)
@@ -110,15 +115,15 @@ func assertExecutionMetadataEqual(t *testing.T, want, got interfaces.ExecutionMe
 }
 
 func TestAgentExecutor_SuccessfulResponse_PopulatesOutput(t *testing.T) {
-	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "The answer is 42."}}
+	provider := &agentMockProvider{response: workerexecution.InferenceResponse{Content: "The answer is 42."}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {Model: "claude-sonnet-4-20250514"},
 		},
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -129,8 +134,8 @@ func TestAgentExecutor_SuccessfulResponse_PopulatesOutput(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if result.Output != "The answer is 42." {
 		t.Fatalf("Output = %q, want %q", result.Output, "The answer is 42.")
@@ -142,23 +147,23 @@ func TestAgentExecutor_SuccessfulResponse_PopulatesOutput(t *testing.T) {
 
 func TestAgentExecutor_AttachesProviderDiagnosticsToWorkResult(t *testing.T) {
 	provider := &agentMockProvider{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: "diagnosed response",
-			Diagnostics: &interfaces.WorkDiagnostics{
-				Provider: &interfaces.ProviderDiagnostic{
+			Diagnostics: &workerexecution.WorkDiagnostics{
+				Provider: &workerexecution.ProviderDiagnostic{
 					ResponseMetadata: map[string]string{"request_id": "provider-request-1"},
 				},
 			},
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {Model: "claude-sonnet-4-20250514", ModelProvider: "claude"},
 		},
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:      "d-1",
 			TransitionID:    "t-1",
 			WorkerType:      "worker-a",
@@ -193,35 +198,35 @@ func TestAgentExecutor_AttachesProviderDiagnosticsToWorkResult(t *testing.T) {
 }
 
 func TestAgentExecutor_SuccessResponseDiagnosticsStayDetachedFromProviderMutation(t *testing.T) {
-	responseDiagnostics := &interfaces.WorkDiagnostics{
-		Provider: &interfaces.ProviderDiagnostic{
+	responseDiagnostics := &workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
 			ResponseMetadata: map[string]string{"request_id": "provider-request-1"},
 		},
-		Command: &interfaces.CommandDiagnostic{
+		Command: &workerexecution.CommandDiagnostic{
 			Command: "provider-cli",
 			Args:    []string{"--prompt", "story"},
 			Env:     map[string]string{"API_KEY": "redacted"},
 		},
-		Panic: &interfaces.PanicDiagnostic{
+		Panic: &workerexecution.PanicDiagnostic{
 			Message: "panic message",
 			Stack:   "panic stack",
 		},
 		Metadata: map[string]string{"phase": "initial"},
 	}
 	provider := &agentMockProvider{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content:     "diagnosed response",
 			Diagnostics: responseDiagnostics,
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {Model: "claude-sonnet-4-20250514", ModelProvider: "claude"},
 		},
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:      "d-1",
 			TransitionID:    "t-1",
 			WorkerType:      "worker-a",
@@ -257,23 +262,23 @@ func TestAgentExecutor_SuccessResponseDiagnosticsStayDetachedFromProviderMutatio
 }
 
 func TestAgentExecutor_ErrorDiagnosticsStayDetachedFromProviderMutation(t *testing.T) {
-	errorDiagnostics := &interfaces.WorkDiagnostics{
-		Provider: &interfaces.ProviderDiagnostic{
+	errorDiagnostics := &workerexecution.WorkDiagnostics{
+		Provider: &workerexecution.ProviderDiagnostic{
 			ResponseMetadata: map[string]string{"request_id": "provider-request-1"},
 		},
-		Command: &interfaces.CommandDiagnostic{
+		Command: &workerexecution.CommandDiagnostic{
 			Command: "provider-cli",
 			Args:    []string{"--prompt", "story"},
 			Env:     map[string]string{"API_KEY": "redacted"},
 		},
-		Panic: &interfaces.PanicDiagnostic{
+		Panic: &workerexecution.PanicDiagnostic{
 			Message: "panic message",
 			Stack:   "panic stack",
 		},
 		Metadata: map[string]string{"phase": "initial"},
 	}
 	provider := &agentMockProvider{
-		err: workerprovider.NewProviderError(interfaces.WorkFailureTypeInternalServerError, "provider 500", nil),
+		err: workerprovider.NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "provider 500", nil),
 	}
 	var providerErr *ProviderError
 	if !errors.As(provider.err, &providerErr) {
@@ -282,13 +287,13 @@ func TestAgentExecutor_ErrorDiagnosticsStayDetachedFromProviderMutation(t *testi
 	providerErr.Diagnostics = errorDiagnostics
 
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {Model: "claude-sonnet-4-20250514", ModelProvider: "claude"},
 		},
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:      "d-1",
 			TransitionID:    "t-1",
 			WorkerType:      "worker-a",
@@ -324,21 +329,21 @@ func TestAgentExecutor_ErrorDiagnosticsStayDetachedFromProviderMutation(t *testi
 }
 
 func TestAgentExecutor_PropagatesExecutionMetadataToProviderRequest(t *testing.T) {
-	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "done"}}
+	provider := &agentMockProvider{response: workerexecution.InferenceResponse{Content: "done"}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {Model: "claude-sonnet-4-20250514", ModelProvider: "claude"},
 		},
 	}, provider)
 
-	want := interfaces.ExecutionMetadata{
+	want := work.ExecutionMetadata{
 		DispatchCreatedTick: 7,
 		CurrentTick:         8,
 		TraceID:             "trace-1",
 		WorkIDs:             []string{"work-1", "work-2"},
 		ReplayKey:           "transition-1/trace-1/work-1/work-2",
 	}
-	_, err := executor.Execute(context.Background(), testAgentRequest(interfaces.WorkDispatch{
+	_, err := executor.Execute(context.Background(), testAgentRequest(work.WorkDispatch{
 		DispatchID:      "d-1",
 		TransitionID:    "transition-1",
 		WorkerType:      "worker-a",
@@ -353,19 +358,19 @@ func TestAgentExecutor_PropagatesExecutionMetadataToProviderRequest(t *testing.T
 }
 
 func TestAgentExecutor_ClaudeSessionIDFromRuntimeConfigFlowsIntoProviderRequest(t *testing.T) {
-	provider := &agentMockProvider{response: interfaces.InferenceResponse{Content: "The answer is 42."}}
+	provider := &agentMockProvider{response: workerexecution.InferenceResponse{Content: "The answer is 42."}}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {
 				Model:         "claude-sonnet-4-20250514",
-				ModelProvider: string(interfaces.ModelProviderClaude),
+				ModelProvider: string(modelprovider.Claude),
 				SessionID:     "claude-session-123",
 			},
 		},
 	}, provider)
 
 	_, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -382,27 +387,27 @@ func TestAgentExecutor_ClaudeSessionIDFromRuntimeConfigFlowsIntoProviderRequest(
 
 func TestAgentExecutor_SuccessfulClaudeResponse_PreservesConfiguredSessionID(t *testing.T) {
 	provider := &agentMockProvider{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: "The answer is 42.",
-			ProviderSession: &interfaces.ProviderSessionMetadata{
-				Provider: string(interfaces.ModelProviderClaude),
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
+				Provider: string(modelprovider.Claude),
 				Kind:     providerSessionKindSessionID,
 				ID:       "claude-session-123",
 			},
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {
 				Model:         "claude-sonnet-4-20250514",
-				ModelProvider: string(interfaces.ModelProviderClaude),
+				ModelProvider: string(modelprovider.Claude),
 				SessionID:     "claude-session-123",
 			},
 		},
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -415,8 +420,8 @@ func TestAgentExecutor_SuccessfulClaudeResponse_PreservesConfiguredSessionID(t *
 	if result.ProviderSession == nil {
 		t.Fatal("expected provider session metadata on successful result")
 	}
-	if result.ProviderSession.Provider != string(interfaces.ModelProviderClaude) {
-		t.Fatalf("provider session provider = %q, want %q", result.ProviderSession.Provider, interfaces.ModelProviderClaude)
+	if result.ProviderSession.Provider != string(modelprovider.Claude) {
+		t.Fatalf("provider session provider = %q, want %q", result.ProviderSession.Provider, modelprovider.Claude)
 	}
 	if result.ProviderSession.ID != "claude-session-123" {
 		t.Fatalf("provider session id = %q, want %q", result.ProviderSession.ID, "claude-session-123")
@@ -426,13 +431,13 @@ func TestAgentExecutor_SuccessfulClaudeResponse_PreservesConfiguredSessionID(t *
 func TestAgentExecutor_ProviderError_ReturnsFailedResult(t *testing.T) {
 	provider := &agentMockProvider{err: errors.New("connection refused")}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {Model: "test-model"},
 		},
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -443,8 +448,8 @@ func TestAgentExecutor_ProviderError_ReturnsFailedResult(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.Error != "provider error: connection refused" {
 		t.Fatalf("Error = %q, want %q", result.Error, "provider error: connection refused")
@@ -456,23 +461,23 @@ func TestAgentExecutor_ProviderError_ReturnsFailedResult(t *testing.T) {
 
 func TestAgentExecutor_SuccessfulResponse_PreservesProviderSession(t *testing.T) {
 	provider := &agentMockProvider{
-		response: interfaces.InferenceResponse{
+		response: workerexecution.InferenceResponse{
 			Content: "The answer is 42.",
-			ProviderSession: &interfaces.ProviderSessionMetadata{
-				Provider: string(interfaces.ModelProviderCodex),
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
+				Provider: string(modelprovider.Codex),
 				Kind:     providerSessionKindSessionID,
 				ID:       "sess_codex_123",
 			},
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {Model: "gpt-5-codex", ModelProvider: "codex"},
 		},
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -493,18 +498,18 @@ func TestAgentExecutor_SuccessfulResponse_PreservesProviderSession(t *testing.T)
 func TestAgentExecutor_RetryableProviderError_RetriesTwiceBeforeSuccess(t *testing.T) {
 	provider := &agentMockProvider{
 		errors: []error{
-			workerprovider.NewProviderError(interfaces.WorkFailureTypeInternalServerError, "provider 500", nil),
-			workerprovider.NewProviderError(interfaces.WorkFailureTypeTimeout, "provider timeout", nil),
+			workerprovider.NewProviderError(workerexecution.WorkFailureTypeInternalServerError, "provider 500", nil),
+			workerprovider.NewProviderError(workerexecution.WorkFailureTypeTimeout, "provider timeout", nil),
 			nil,
 		},
-		responses: []interfaces.InferenceResponse{
+		responses: []workerexecution.InferenceResponse{
 			{},
 			{},
 			{Content: "Recovered. COMPLETE"},
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {Model: "test-model"},
 		},
 	}, provider)
@@ -518,7 +523,7 @@ func TestAgentExecutor_RetryableProviderError_RetriesTwiceBeforeSuccess(t *testi
 	}
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -529,8 +534,8 @@ func TestAgentExecutor_RetryableProviderError_RetriesTwiceBeforeSuccess(t *testi
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if result.Output != "Recovered. COMPLETE" {
 		t.Fatalf("Output = %q, want %q", result.Output, "Recovered. COMPLETE")
@@ -555,13 +560,13 @@ func TestAgentExecutor_RetryableProviderError_RetriesTwiceBeforeSuccess(t *testi
 func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryableProviderMetadata(t *testing.T) {
 	provider := &agentMockProvider{
 		err: workerprovider.NormalizeProviderExitFailure(
-			string(interfaces.ModelProviderCodex),
+			string(modelprovider.Codex),
 			CommandResult{
 				ExitCode: codexWindowsProcessFailureExitCode,
 				Stderr:   []byte("OpenAI Codex v0.118.0 (research preview)\n--------\nERROR: Windows provider subprocess exited unexpectedly"),
 			},
-			&interfaces.ProviderSessionMetadata{
-				Provider: string(interfaces.ModelProviderCodex),
+			&workerexecution.ProviderSessionMetadata{
+				Provider: string(modelprovider.Codex),
 				Kind:     providerSessionKindSessionID,
 				ID:       "sess-codex-windows-4294967295",
 			},
@@ -569,8 +574,8 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryable
 		),
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
-			"worker-a": {Model: "gpt-5.3-codex-spark", ModelProvider: string(interfaces.ModelProviderCodex)},
+		Workers: map[string]*workerconfig.Config{
+			"worker-a": {Model: "gpt-5.3-codex-spark", ModelProvider: string(modelprovider.Codex)},
 		},
 	}, provider)
 	var sleeps []time.Duration
@@ -581,7 +586,7 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryable
 	executor.retryConfig.jitter = func(time.Duration) time.Duration { return 0 }
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -592,8 +597,8 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryable
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if provider.callCount != 3 {
 		t.Fatalf("provider call count = %d, want 3", provider.callCount)
@@ -607,11 +612,11 @@ func TestAgentExecutor_CodexWindowsExitCode4294967295_RetriesAndReturnsRetryable
 	if result.FailureMetadata == nil {
 		t.Fatal("expected failure metadata on failed result")
 	}
-	if result.FailureMetadata.Type != interfaces.WorkFailureTypeInternalServerError {
-		t.Fatalf("failure metadata type = %q, want %q", result.FailureMetadata.Type, interfaces.WorkFailureTypeInternalServerError)
+	if result.FailureMetadata.Type != workerexecution.WorkFailureTypeInternalServerError {
+		t.Fatalf("failure metadata type = %q, want %q", result.FailureMetadata.Type, workerexecution.WorkFailureTypeInternalServerError)
 	}
-	if result.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("failure metadata family = %q, want %q", result.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
+	if result.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable {
+		t.Fatalf("failure metadata family = %q, want %q", result.FailureMetadata.Family, workerexecution.WorkFailureFamilyRetryable)
 	}
 	decision := workerprovider.WorkFailureDecisionFromMetadata(result.FailureMetadata)
 	if !decision.Retryable || decision.Terminal || decision.TriggersThrottlePause {
@@ -629,11 +634,11 @@ func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 	provider := &agentMockProvider{
 		errors: []error{
 			workerprovider.NewProviderErrorWithSession(
-				interfaces.WorkFailureTypeAuthFailure,
+				workerexecution.WorkFailureTypeAuthFailure,
 				"auth failed",
 				nil,
-				&interfaces.ProviderSessionMetadata{
-					Provider: string(interfaces.ModelProviderCodex),
+				&workerexecution.ProviderSessionMetadata{
+					Provider: string(modelprovider.Codex),
 					Kind:     providerSessionKindSessionID,
 					ID:       "sess_codex_error_123",
 				},
@@ -641,7 +646,7 @@ func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {Model: "test-model"},
 		},
 	}, provider)
@@ -653,7 +658,7 @@ func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 	executor.retryConfig.jitter = func(time.Duration) time.Duration { return 0 }
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -664,8 +669,8 @@ func TestAgentExecutor_TerminalProviderError_DoesNotRetry(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.Error != "provider error: auth_failure: auth failed" {
 		t.Fatalf("Error = %q, want %q", result.Error, "provider error: auth_failure: auth failed")
@@ -691,11 +696,11 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 	provider := &agentMockProvider{
 		errors: []error{
 			workerprovider.NewProviderErrorWithSession(
-				interfaces.WorkFailureTypeAuthFailure,
+				workerexecution.WorkFailureTypeAuthFailure,
 				"auth failed",
 				nil,
-				&interfaces.ProviderSessionMetadata{
-					Provider: string(interfaces.ModelProviderClaude),
+				&workerexecution.ProviderSessionMetadata{
+					Provider: string(modelprovider.Claude),
 					Kind:     providerSessionKindSessionID,
 					ID:       "claude-session-123",
 				},
@@ -703,17 +708,17 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {
 				Model:         "claude-sonnet-4-20250514",
-				ModelProvider: string(interfaces.ModelProviderClaude),
+				ModelProvider: string(modelprovider.Claude),
 				SessionID:     "claude-session-123",
 			},
 		},
 	}, provider)
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-1",
 			TransitionID: "t-1",
 			WorkerType:   "worker-a",
@@ -726,8 +731,8 @@ func TestAgentExecutor_ClaudeProviderError_PreservesConfiguredSessionID(t *testi
 	if result.ProviderSession == nil {
 		t.Fatal("expected provider session metadata on failed result")
 	}
-	if result.ProviderSession.Provider != string(interfaces.ModelProviderClaude) {
-		t.Fatalf("provider session provider = %q, want %q", result.ProviderSession.Provider, interfaces.ModelProviderClaude)
+	if result.ProviderSession.Provider != string(modelprovider.Claude) {
+		t.Fatalf("provider session provider = %q, want %q", result.ProviderSession.Provider, modelprovider.Claude)
 	}
 	if result.ProviderSession.ID != "claude-session-123" {
 		t.Fatalf("provider session id = %q, want %q", result.ProviderSession.ID, "claude-session-123")
@@ -741,14 +746,14 @@ func TestAgentExecutor_RawDeadlineExceeded_RetriesBeforeSuccess(t *testing.T) {
 			context.DeadlineExceeded,
 			nil,
 		},
-		responses: []interfaces.InferenceResponse{
+		responses: []workerexecution.InferenceResponse{
 			{},
 			{},
 			{Content: "Recovered. COMPLETE"},
 		},
 	}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {Model: "test-model"},
 		},
 	}, provider)
@@ -762,7 +767,7 @@ func TestAgentExecutor_RawDeadlineExceeded_RetriesBeforeSuccess(t *testing.T) {
 	}
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-raw-timeout-success",
 			TransitionID: "t-raw-timeout-success",
 			WorkerType:   "worker-a",
@@ -773,8 +778,8 @@ func TestAgentExecutor_RawDeadlineExceeded_RetriesBeforeSuccess(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeAccepted)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeAccepted)
 	}
 	if result.Output != "Recovered. COMPLETE" {
 		t.Fatalf("Output = %q, want %q", result.Output, "Recovered. COMPLETE")
@@ -793,7 +798,7 @@ func TestAgentExecutor_RawDeadlineExceeded_RetriesBeforeSuccess(t *testing.T) {
 func TestAgentExecutor_RawDeadlineExceeded_ExhaustsRetriesIntoStructuredTimeoutFailure(t *testing.T) {
 	provider := &agentMockProvider{err: context.DeadlineExceeded}
 	executor := NewAgentExecutor(staticRuntimeConfig{
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"worker-a": {Model: "test-model"},
 		},
 	}, provider)
@@ -805,7 +810,7 @@ func TestAgentExecutor_RawDeadlineExceeded_ExhaustsRetriesIntoStructuredTimeoutF
 	executor.retryConfig.jitter = func(time.Duration) time.Duration { return 0 }
 
 	result, err := executor.Execute(context.Background(), testAgentRequest(
-		interfaces.WorkDispatch{
+		work.WorkDispatch{
 			DispatchID:   "d-raw-timeout-fail",
 			TransitionID: "t-raw-timeout-fail",
 			WorkerType:   "worker-a",
@@ -816,8 +821,8 @@ func TestAgentExecutor_RawDeadlineExceeded_ExhaustsRetriesIntoStructuredTimeoutF
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.Error != "execution timeout" {
 		t.Fatalf("Error = %q, want %q", result.Error, "execution timeout")
@@ -834,10 +839,10 @@ func TestAgentExecutor_RawDeadlineExceeded_ExhaustsRetriesIntoStructuredTimeoutF
 	if result.FailureMetadata == nil {
 		t.Fatal("FailureMetadata = nil, want timeout metadata")
 	}
-	if result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
-		t.Fatalf("FailureMetadata.Type = %q, want %q", result.FailureMetadata.Type, interfaces.WorkFailureTypeTimeout)
+	if result.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
+		t.Fatalf("FailureMetadata.Type = %q, want %q", result.FailureMetadata.Type, workerexecution.WorkFailureTypeTimeout)
 	}
-	if result.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("FailureMetadata.Family = %q, want %q", result.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
+	if result.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable {
+		t.Fatalf("FailureMetadata.Family = %q, want %q", result.FailureMetadata.Family, workerexecution.WorkFailureFamilyRetryable)
 	}
 }

@@ -19,11 +19,16 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -46,6 +51,30 @@ func initializeWorkersSchedulerForTest(svc *FactoryService) {
 		cfg, _ = ConfigWithWorkerApplication(cfg)
 	}
 	svc.workersScheduler = workersservice.NewWorkersSchedulerService(workersSchedulerServiceConfig(cfg, svc.clock, svc.logger, svc.hostedWorkers))
+}
+
+func TestWorkersSchedulerServiceConfigAppliesDefaultsAndExplicitInputs(t *testing.T) {
+	t.Parallel()
+
+	defaults := workersSchedulerServiceConfig(nil, nil, nil, hostedworkers.Config{})
+	if defaults.Logger == nil || defaults.CommandRunner == nil || defaults.WorkflowID != "" || defaults.DefaultFactoryDir != "" {
+		t.Fatalf("default worker scheduler config = %#v, want usable defaults", defaults)
+	}
+
+	runner := workers.ExecCommandRunner{}
+	cfg := &FactoryServiceConfig{
+		Dir:        "/factory",
+		WorkflowID: "workflow-a",
+		WorkerApplication: workerapplication.Components{
+			ScriptCommandRunner: runner,
+		},
+	}
+	logger := zap.NewNop()
+	explicit := workersSchedulerServiceConfig(cfg, factory.EnsureClock(nil), logger, hostedworkers.Config{})
+	if explicit.Logger != logger || explicit.CommandRunner != runner ||
+		explicit.WorkflowID != "workflow-a" || explicit.DefaultFactoryDir != "/factory" {
+		t.Fatalf("explicit worker scheduler config = %#v, want supplied inputs", explicit)
+	}
 }
 
 func TestFactoryService_StartLiveRuntimeSidecars_RequiresInitializedWorkerSidecarOwner(t *testing.T) {
@@ -151,7 +180,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsOnlyScriptPollersAndResta
 		scriptPollerRuntimeConfigOptions{
 			poller:       poller,
 			pollerWorker: newCanonicalScriptPollerWorker("--mode", "watch"),
-			additionalWorkers: []*interfaces.WorkerConfig{
+			additionalWorkers: []*workerconfig.Config{
 				{
 					Name:    "non-poller-script",
 					Type:    interfaces.WorkerTypeScript,
@@ -290,18 +319,18 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 		t,
 		factoryDir,
 		&interfaces.FactoryConfig{
-			Workers:      []interfaces.WorkerConfig{{Name: "linear-poller"}},
+			Workers:      []workerconfig.Config{{Name: "linear-poller"}},
 			Workstations: []interfaces.FactoryWorkstationConfig{poller},
 		},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"linear-poller": {
 				Name:     "linear-poller",
 				Type:     interfaces.WorkerTypeHosted,
 				Provider: interfaces.HostedWorkerProviderLinear,
-				Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
-				Linear: &interfaces.HostedLinearWorkerConfig{
+				Auth:     &workerconfig.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+				Linear: &workerconfig.HostedLinearWorkerConfig{
 					PollInterval: "1h",
-					Mapping: interfaces.HostedLinearWorkerMappingConfig{
+					Mapping: workerconfig.HostedLinearWorkerMappingConfig{
 						WorkType: "story",
 						State:    "init",
 					},
@@ -346,7 +375,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_SubmitsMultipleHostedLinearIssu
 	)
 	defer server.Close()
 
-	fixture := newHostedLinearPollerServiceFixture(t, server, func(linear *interfaces.HostedLinearWorkerConfig) {
+	fixture := newHostedLinearPollerServiceFixture(t, server, func(linear *workerconfig.HostedLinearWorkerConfig) {
 		linear.TeamIDs = []string{"team-1"}
 		linear.StateIDs = []string{"state-1"}
 	})
@@ -415,18 +444,18 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLi
 		t,
 		factoryDir,
 		&interfaces.FactoryConfig{
-			Workers:      []interfaces.WorkerConfig{{Name: "linear-poller"}},
+			Workers:      []workerconfig.Config{{Name: "linear-poller"}},
 			Workstations: []interfaces.FactoryWorkstationConfig{poller},
 		},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"linear-poller": {
 				Name:     "linear-poller",
 				Type:     interfaces.WorkerTypeHosted,
 				Provider: interfaces.HostedWorkerProviderLinear,
-				Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
-				Linear: &interfaces.HostedLinearWorkerConfig{
+				Auth:     &workerconfig.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+				Linear: &workerconfig.HostedLinearWorkerConfig{
 					PollInterval: "1h",
-					Mapping: interfaces.HostedLinearWorkerMappingConfig{
+					Mapping: workerconfig.HostedLinearWorkerMappingConfig{
 						WorkType: "story",
 						State:    "init",
 					},
@@ -476,10 +505,10 @@ func TestFactoryService_StartLiveRuntimeSidecars_DisablesUnsupportedHostedProvid
 		t,
 		t.TempDir(),
 		&interfaces.FactoryConfig{
-			Workers:      []interfaces.WorkerConfig{{Name: "custom-hosted"}},
+			Workers:      []workerconfig.Config{{Name: "custom-hosted"}},
 			Workstations: []interfaces.FactoryWorkstationConfig{poller},
 		},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"custom-hosted": {
 				Name:     "custom-hosted",
 				Type:     interfaces.WorkerTypeHosted,
@@ -682,7 +711,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_WaitsForScriptPollerSubmitBefore
 	submitStarted := make(chan struct{})
 	releaseSubmit := make(chan struct{})
 	oldFactory := &aggregateSnapshotFactory{
-		submitFunc: func(context.Context, interfaces.WorkRequest) error {
+		submitFunc: func(context.Context, work.WorkRequest) error {
 			close(submitStarted)
 			<-releaseSubmit
 			return nil
@@ -785,8 +814,8 @@ func newCanonicalScriptPollerWorkstation() interfaces.FactoryWorkstationConfig {
 	}
 }
 
-func newCanonicalScriptPollerWorker(args ...string) *interfaces.WorkerConfig {
-	return &interfaces.WorkerConfig{
+func newCanonicalScriptPollerWorker(args ...string) *workerconfig.Config {
+	return &workerconfig.Config{
 		Name:    canonicalScriptPollerWorkerName,
 		Type:    interfaces.WorkerTypeScript,
 		Command: canonicalScriptPollerCommand,
@@ -796,8 +825,8 @@ func newCanonicalScriptPollerWorker(args ...string) *interfaces.WorkerConfig {
 
 type scriptPollerRuntimeConfigOptions struct {
 	poller                 interfaces.FactoryWorkstationConfig
-	pollerWorker           *interfaces.WorkerConfig
-	additionalWorkers      []*interfaces.WorkerConfig
+	pollerWorker           *workerconfig.Config
+	additionalWorkers      []*workerconfig.Config
 	additionalWorkstations []interfaces.FactoryWorkstationConfig
 }
 
@@ -818,10 +847,10 @@ func newScriptPollerLoadedRuntimeConfigForServiceTest(
 	}
 
 	factoryCfg := &interfaces.FactoryConfig{
-		Workers:      []interfaces.WorkerConfig{{Name: pollerWorker.Name}},
+		Workers:      []workerconfig.Config{{Name: pollerWorker.Name}},
 		Workstations: []interfaces.FactoryWorkstationConfig{poller},
 	}
-	workerConfigs := map[string]*interfaces.WorkerConfig{
+	workerConfigs := map[string]*workerconfig.Config{
 		pollerWorker.Name: pollerWorker,
 	}
 	workstationConfigs := map[string]*interfaces.FactoryWorkstationConfig{
@@ -832,7 +861,7 @@ func newScriptPollerLoadedRuntimeConfigForServiceTest(
 		if worker == nil {
 			continue
 		}
-		factoryCfg.Workers = append(factoryCfg.Workers, interfaces.WorkerConfig{Name: worker.Name})
+		factoryCfg.Workers = append(factoryCfg.Workers, workerconfig.Config{Name: worker.Name})
 		workerConfigs[worker.Name] = worker
 	}
 	for i := range options.additionalWorkstations {
@@ -980,7 +1009,7 @@ func writeHostedLinearSecretForServiceTest(t *testing.T, factoryDir string) {
 func newHostedLinearPollerServiceFixture(
 	t *testing.T,
 	server *httptest.Server,
-	mutateLinear func(*interfaces.HostedLinearWorkerConfig),
+	mutateLinear func(*workerconfig.HostedLinearWorkerConfig),
 ) hostedLinearPollerServiceFixture {
 	t.Helper()
 
@@ -989,10 +1018,13 @@ func newHostedLinearPollerServiceFixture(
 	submitted := &aggregateSnapshotFactory{}
 	svcCfg := serviceTestConfigWithWorkerEdges(t, &FactoryServiceConfig{
 		RuntimeMode: interfaces.RuntimeModeService,
-	}, workerapplication.Edges{HostedHTTPClient: server.Client(), HostedLinearEndpoint: server.URL})
-	linearCfg := &interfaces.HostedLinearWorkerConfig{
+	}, workerapplication.Edges{
+		HostedHTTPClient:     server.Client(),
+		HostedLinearEndpoint: server.URL,
+	})
+	linearCfg := &workerconfig.HostedLinearWorkerConfig{
 		PollInterval: "1h",
-		Mapping: interfaces.HostedLinearWorkerMappingConfig{
+		Mapping: workerconfig.HostedLinearWorkerMappingConfig{
 			WorkType: "story",
 			State:    "init",
 		},
@@ -1009,15 +1041,15 @@ func newHostedLinearPollerServiceFixture(
 		t,
 		factoryDir,
 		&interfaces.FactoryConfig{
-			Workers:      []interfaces.WorkerConfig{{Name: "linear-poller"}},
+			Workers:      []workerconfig.Config{{Name: "linear-poller"}},
 			Workstations: []interfaces.FactoryWorkstationConfig{poller},
 		},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"linear-poller": {
 				Name:     "linear-poller",
 				Type:     interfaces.WorkerTypeHosted,
 				Provider: interfaces.HostedWorkerProviderLinear,
-				Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+				Auth:     &workerconfig.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
 				Linear:   linearCfg,
 			},
 		},
@@ -1070,21 +1102,21 @@ func newConcurrentHostedAndScriptPollerFixture(t *testing.T, server *httptest.Se
 		t,
 		factoryDir,
 		&interfaces.FactoryConfig{
-			Workers: []interfaces.WorkerConfig{
+			Workers: []workerconfig.Config{
 				{Name: "linear-poller"},
 				{Name: canonicalScriptPollerWorkerName},
 			},
 			Workstations: []interfaces.FactoryWorkstationConfig{hostedPoller, scriptPoller},
 		},
-		map[string]*interfaces.WorkerConfig{
+		map[string]*workerconfig.Config{
 			"linear-poller": {
 				Name:     "linear-poller",
 				Type:     interfaces.WorkerTypeHosted,
 				Provider: interfaces.HostedWorkerProviderLinear,
-				Auth:     &interfaces.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
-				Linear: &interfaces.HostedLinearWorkerConfig{
+				Auth:     &workerconfig.HostedWorkerAuthConfig{SecretRef: "secrets/linear-api-key"},
+				Linear: &workerconfig.HostedLinearWorkerConfig{
 					PollInterval: "1h",
-					Mapping: interfaces.HostedLinearWorkerMappingConfig{
+					Mapping: workerconfig.HostedLinearWorkerMappingConfig{
 						WorkType: "story",
 						State:    "init",
 					},
@@ -1179,7 +1211,7 @@ func waitForConcurrentHostedAndScriptPollerSubmissions(t *testing.T, submitted *
 	t.Fatalf("timed out waiting for both hosted linear:issue-hosted and script-issue outputs; submitted works = %#v", submissions)
 }
 
-func hasConcurrentHostedAndScriptPollerSubmissions(submissions []interfaces.WorkRequest) bool {
+func hasConcurrentHostedAndScriptPollerSubmissions(submissions []work.WorkRequest) bool {
 	var hostedSubmitted, scriptSubmitted bool
 	for _, request := range submissions {
 		for _, work := range request.Works {
@@ -1219,7 +1251,7 @@ func waitForObservedLogMessage(t *testing.T, logs *observer.ObservedLogs, messag
 func TestFactoryService_RequiredInputCronKeepsTimeWorkPendingWhenInputMissing(t *testing.T) {
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 16)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 16)
 	svc, runCtx, errCh, cancelRun := buildCronServiceForIngressTest(
 		t,
 		fakeClock,
@@ -1281,13 +1313,13 @@ func TestFactoryService_BatchModeDoesNotStartCronWatchers(t *testing.T) {
 		t.Fatalf("create inputs dir: %v", err)
 	}
 
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 1)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 1)
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:               dir,
 		MockWorkersConfig: config.NewEmptyMockWorkersConfig(),
 		Logger:            zap.NewNop(),
 		ExtraOptions: []factory.FactoryOption{
-			factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
+			factory.WithSubmissionRecorder(func(record work.FactorySubmissionRecord) {
 				observedSubmissions <- record
 			}),
 		},
@@ -1513,8 +1545,8 @@ func TestFactoryService_StartLiveRuntimeSidecars_SkipsNonCronAndTriggersOnlyCron
 			validCron.Name: &validCron,
 		},
 	)
-	observedRequests := make(chan interfaces.WorkRequest, 8)
-	replacementFactory.submitFunc = func(_ context.Context, request interfaces.WorkRequest) error {
+	observedRequests := make(chan work.WorkRequest, 8)
+	replacementFactory.submitFunc = func(_ context.Context, request work.WorkRequest) error {
 		select {
 		case observedRequests <- request:
 		default:
@@ -1576,7 +1608,7 @@ func TestFactoryService_ServiceModeCronSchedulerUsesFakeClockAndStopsOnCancel(t 
 		t.Fatalf("create inputs dir: %v", err)
 	}
 
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 8)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 8)
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:               dir,
 		RuntimeMode:       interfaces.RuntimeModeService,
@@ -1635,7 +1667,7 @@ func TestFactoryService_ServiceModeCronTriggerAtStartSubmitsOnceAndKeepsSchedule
 		t.Fatalf("create inputs dir: %v", err)
 	}
 
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 8)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 8)
 	svc, err := BuildFactoryService(context.Background(), &FactoryServiceConfig{
 		Dir:               dir,
 		RuntimeMode:       interfaces.RuntimeModeService,
@@ -1718,7 +1750,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_BindsCronTriggerAtStartToReplac
 func TestFactoryService_CronTickSubmitsThroughEngineIngressAndAppearsInSnapshot(t *testing.T) {
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 16)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 16)
 	svc, runCtx, errCh, cancelRun := buildCronServiceForIngressTest(t, fakeClock, cronFactoryConfig("* * * * *"), observedSubmissions)
 	defer cancelRun()
 
@@ -1759,7 +1791,7 @@ func buildCronServiceForIngressTest(
 	t *testing.T,
 	fakeClock *clockwork.FakeClock,
 	cfg map[string]any,
-	observedSubmissions chan interfaces.FactorySubmissionRecord,
+	observedSubmissions chan work.FactorySubmissionRecord,
 ) (*FactoryService, context.Context, <-chan error, context.CancelFunc) {
 	t.Helper()
 
@@ -1806,7 +1838,7 @@ func buildCronServiceForIngressTest(
 	return svc, runCtx, errCh, cancelRun
 }
 
-func assertCronSubmissionRecord(t *testing.T, record interfaces.FactorySubmissionRecord, workstation string) {
+func assertCronSubmissionRecord(t *testing.T, record work.FactorySubmissionRecord, workstation string) {
 	t.Helper()
 	if record.Source != "external-submit" {
 		t.Fatalf("cron submission source = %q, want external-submit", record.Source)
@@ -1876,7 +1908,7 @@ func waitForFakeClockWaiters(t *testing.T, fakeClock *clockwork.FakeClock, waite
 	}
 }
 
-func waitForCronSubmission(t *testing.T, submissions <-chan interfaces.FactorySubmissionRecord, timeout time.Duration) interfaces.FactorySubmissionRecord {
+func waitForCronSubmission(t *testing.T, submissions <-chan work.FactorySubmissionRecord, timeout time.Duration) work.FactorySubmissionRecord {
 	t.Helper()
 	select {
 	case record := <-submissions:
@@ -1887,14 +1919,14 @@ func waitForCronSubmission(t *testing.T, submissions <-chan interfaces.FactorySu
 	case <-time.After(timeout):
 		t.Fatal("timed out waiting for cron submission")
 	}
-	return interfaces.FactorySubmissionRecord{}
+	return work.FactorySubmissionRecord{}
 }
 
-func assertCronSubmissionNominalAt(t *testing.T, record interfaces.FactorySubmissionRecord, want time.Time) {
+func assertCronSubmissionNominalAt(t *testing.T, record work.FactorySubmissionRecord, want time.Time) {
 	assertCronSubmissionNominalAtForWorkstation(t, record, want, "poll-for-work")
 }
 
-func assertCronSubmissionNominalAtForWorkstation(t *testing.T, record interfaces.FactorySubmissionRecord, want time.Time, workstation string) {
+func assertCronSubmissionNominalAtForWorkstation(t *testing.T, record work.FactorySubmissionRecord, want time.Time, workstation string) {
 	t.Helper()
 	got := record.Request.Tags[interfaces.TimeWorkTagKeyNominalAt]
 	if got != want.Format(time.RFC3339Nano) {
@@ -1905,7 +1937,7 @@ func assertCronSubmissionNominalAtForWorkstation(t *testing.T, record interfaces
 	}
 }
 
-func assertNoCronSubmissionQueued(t *testing.T, submissions <-chan interfaces.FactorySubmissionRecord) {
+func assertNoCronSubmissionQueued(t *testing.T, submissions <-chan work.FactorySubmissionRecord) {
 	t.Helper()
 	select {
 	case record := <-submissions:
@@ -1914,7 +1946,7 @@ func assertNoCronSubmissionQueued(t *testing.T, submissions <-chan interfaces.Fa
 	}
 }
 
-func waitForCronWorkRequest(t *testing.T, requests <-chan interfaces.WorkRequest, timeout time.Duration) interfaces.WorkRequest {
+func waitForCronWorkRequest(t *testing.T, requests <-chan work.WorkRequest, timeout time.Duration) work.WorkRequest {
 	t.Helper()
 	select {
 	case request := <-requests:
@@ -1925,17 +1957,17 @@ func waitForCronWorkRequest(t *testing.T, requests <-chan interfaces.WorkRequest
 	case <-time.After(timeout):
 		t.Fatal("timed out waiting for cron work request")
 	}
-	return interfaces.WorkRequest{}
+	return work.WorkRequest{}
 }
 
-func assertCronWorkRequestNominalAt(t *testing.T, request interfaces.WorkRequest, want time.Time) {
+func assertCronWorkRequestNominalAt(t *testing.T, request work.WorkRequest, want time.Time) {
 	t.Helper()
 	if got := request.Works[0].Tags[interfaces.TimeWorkTagKeyNominalAt]; got != want.Format(time.RFC3339Nano) {
 		t.Fatalf("cron nominal_at tag = %q, want %q", got, want.Format(time.RFC3339Nano))
 	}
 }
 
-func assertNoCronWorkRequestQueued(t *testing.T, requests <-chan interfaces.WorkRequest) {
+func assertNoCronWorkRequestQueued(t *testing.T, requests <-chan work.WorkRequest) {
 	t.Helper()
 	select {
 	case request := <-requests:
@@ -1944,7 +1976,7 @@ func assertNoCronWorkRequestQueued(t *testing.T, requests <-chan interfaces.Work
 	}
 }
 
-func matchedTokenSnapshotTokensInPlace(t *testing.T, svc *FactoryService, placeID string) []interfaces.Token {
+func matchedTokenSnapshotTokensInPlace(t *testing.T, svc *FactoryService, placeID string) []factorytoken.Token {
 	t.Helper()
 	snap, err := svc.GetEngineStateSnapshot(context.Background())
 	if err != nil {
@@ -1985,7 +2017,7 @@ func waitForCompletedDispatchConsumingWorkID(t *testing.T, svc *FactoryService, 
 	return interfaces.CompletedDispatch{}
 }
 
-func consumedTokenWithWorkID(tokens []interfaces.Token, workID string) *interfaces.Token {
+func consumedTokenWithWorkID(tokens []factorytoken.Token, workID string) *factorytoken.Token {
 	for i := range tokens {
 		if tokens[i].Color.WorkID == workID {
 			return &tokens[i]
@@ -1994,8 +2026,8 @@ func consumedTokenWithWorkID(tokens []interfaces.Token, workID string) *interfac
 	return nil
 }
 
-func nonBlockingSubmissionRecorder(records chan<- interfaces.FactorySubmissionRecord) func(interfaces.FactorySubmissionRecord) {
-	return func(record interfaces.FactorySubmissionRecord) {
+func nonBlockingSubmissionRecorder(records chan<- work.FactorySubmissionRecord) func(work.FactorySubmissionRecord) {
+	return func(record work.FactorySubmissionRecord) {
 		select {
 		case records <- record:
 		default:
@@ -2003,7 +2035,7 @@ func nonBlockingSubmissionRecorder(records chan<- interfaces.FactorySubmissionRe
 	}
 }
 
-func waitForTokenInPlaceByParent(t *testing.T, svc *FactoryService, placeID string, parentID string, timeout time.Duration) interfaces.Token {
+func waitForTokenInPlaceByParent(t *testing.T, svc *FactoryService, placeID string, parentID string, timeout time.Duration) factorytoken.Token {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -2019,13 +2051,13 @@ func waitForTokenInPlaceByParent(t *testing.T, svc *FactoryService, placeID stri
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("timed out waiting for token in %s with parent %q", placeID, parentID)
-	return interfaces.Token{}
+	return factorytoken.Token{}
 }
 
 func TestFactoryService_CronTickTargetsInternalTimePlaceDespiteConfiguredOutputState(t *testing.T) {
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 16)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 16)
 	svc, runCtx, errCh, cancelRun := buildCronServiceForIngressTest(t, fakeClock, cronFactoryConfigWithOutputState("* * * * *", "ready"), observedSubmissions)
 	defer cancelRun()
 
@@ -2050,14 +2082,14 @@ func TestFactoryService_CronTickTargetsInternalTimePlaceDespiteConfiguredOutputS
 
 type rejectingWorkerExecutor struct{}
 
-func (rejectingWorkerExecutor) Execute(context.Context, interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{}, errors.New("worker executor must not be invoked for workerless cron logical move")
+func (rejectingWorkerExecutor) Execute(context.Context, work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{}, errors.New("worker executor must not be invoked for workerless cron logical move")
 }
 
 func TestFactoryService_LogicalMoveCronTickConsumesTimeWorkWithoutWorkerExecutor(t *testing.T) {
 	start := time.Date(2026, time.June, 3, 12, 0, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 16)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 16)
 
 	dir := t.TempDir()
 	writeFactoryJSON(t, dir, logicalMoveCronFactoryConfig("* * * * *"))

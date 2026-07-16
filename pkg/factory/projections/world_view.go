@@ -4,8 +4,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // BuildFactoryWorldView projects generic reconstructed world state into a thin
@@ -20,15 +20,8 @@ func BuildFactoryWorldView(state interfaces.FactoryWorldState) interfaces.Factor
 	}
 }
 
-func factoryWorldViewFactory(factory *factoryapi.Factory) *factoryapi.Factory {
-	if factory == nil {
-		return nil
-	}
-	clone, err := cloneGeneratedFactory(*factory)
-	if err != nil {
-		return nil
-	}
-	return &clone
+func factoryWorldViewFactory(factory *interfaces.FactorySnapshot) *interfaces.FactorySnapshot {
+	return factory.Clone()
 }
 
 func customerActiveDispatchIDs(state interfaces.FactoryWorldState) []string {
@@ -42,11 +35,11 @@ func customerActiveDispatchIDs(state interfaces.FactoryWorldState) []string {
 	return activeIDs
 }
 
-func dispatchHasCustomerWork(ids []string, items map[string]interfaces.FactoryWorkItem) bool {
-	return len(workItemRefsForIDs(interfaces.WorkPayloadLineageProjection{}, ids, items)) > 0
+func dispatchHasCustomerWork(ids []string, items map[string]work.FactoryWorkItem) bool {
+	return len(workItemRefsForIDs(work.WorkPayloadLineageProjection{}, ids, items)) > 0
 }
 
-func hasCustomerWorkItems(items map[string]interfaces.FactoryWorkItem) bool {
+func hasCustomerWorkItems(items map[string]work.FactoryWorkItem) bool {
 	for _, item := range items {
 		if !interfaces.IsSystemTimeWorkType(item.WorkTypeID) {
 			return true
@@ -69,7 +62,7 @@ func countTerminalByWorkType(terminal map[string]interfaces.FactoryTerminalWork)
 	return nilIfEmpty(counts)
 }
 
-func countFailedByWorkType(failed map[string]interfaces.FactoryWorkItem) map[string]int {
+func countFailedByWorkType(failed map[string]work.FactoryWorkItem) map[string]int {
 	counts := make(map[string]int)
 	for _, work := range failed {
 		if interfaces.IsSystemTimeWorkType(work.WorkTypeID) {
@@ -81,9 +74,9 @@ func countFailedByWorkType(failed map[string]interfaces.FactoryWorkItem) map[str
 }
 
 func workRefsForActiveIDs(
-	lineage interfaces.WorkPayloadLineageProjection,
+	lineage work.WorkPayloadLineageProjection,
 	ids []string,
-	items map[string]interfaces.FactoryWorkItem,
+	items map[string]work.FactoryWorkItem,
 ) []interfaces.FactoryWorldWorkItemRef {
 	refs := workItemRefsForIDs(lineage, ids, items)
 	if refs == nil {
@@ -289,9 +282,9 @@ func workstationMatchesPause(
 }
 
 func workItemRefsForIDs(
-	lineage interfaces.WorkPayloadLineageProjection,
+	lineage work.WorkPayloadLineageProjection,
 	ids []string,
-	items map[string]interfaces.FactoryWorkItem,
+	items map[string]work.FactoryWorkItem,
 ) []interfaces.FactoryWorldWorkItemRef {
 	refs := make([]interfaces.FactoryWorldWorkItemRef, 0, len(ids))
 	for _, id := range sortedStrings(ids) {
@@ -305,8 +298,8 @@ func workItemRefsForIDs(
 }
 
 func workItemRefsForItems(
-	lineage interfaces.WorkPayloadLineageProjection,
-	items []interfaces.FactoryWorkItem,
+	lineage work.WorkPayloadLineageProjection,
+	items []work.FactoryWorkItem,
 ) []interfaces.FactoryWorldWorkItemRef {
 	refs := make([]interfaces.FactoryWorldWorkItemRef, 0, len(items))
 	seen := make(map[string]struct{}, len(items))
@@ -324,7 +317,7 @@ func workItemRefsForItems(
 }
 
 func workItemRefsForInputs(
-	lineage interfaces.WorkPayloadLineageProjection,
+	lineage work.WorkPayloadLineageProjection,
 	inputs []interfaces.WorkstationInput,
 ) []interfaces.FactoryWorldWorkItemRef {
 	refs := make([]interfaces.FactoryWorldWorkItemRef, 0, len(inputs))
@@ -343,7 +336,7 @@ func workItemRefsForInputs(
 }
 
 func providerSessionWorkItemRefs(
-	lineage interfaces.WorkPayloadLineageProjection,
+	lineage work.WorkPayloadLineageProjection,
 	session interfaces.FactoryWorldProviderSessionRecord,
 ) []interfaces.FactoryWorldWorkItemRef {
 	refs := make([]interfaces.FactoryWorldWorkItemRef, 0, len(session.ConsumedInputs)+len(session.WorkItemIDs))
@@ -374,7 +367,7 @@ func providerSessionWorkItemRefs(
 	return refs
 }
 
-func workItemRef(item interfaces.FactoryWorkItem) interfaces.FactoryWorldWorkItemRef {
+func workItemRef(item work.FactoryWorkItem) interfaces.FactoryWorldWorkItemRef {
 	currentChainingTraceID := item.CurrentChainingTraceID
 	if currentChainingTraceID == "" {
 		currentChainingTraceID = item.TraceID
@@ -391,23 +384,23 @@ func workItemRef(item interfaces.FactoryWorkItem) interfaces.FactoryWorldWorkIte
 }
 
 func workItemRefWithSelectedPayload(
-	lineage interfaces.WorkPayloadLineageProjection,
-	item interfaces.FactoryWorkItem,
+	lineage work.WorkPayloadLineageProjection,
+	item work.FactoryWorkItem,
 ) interfaces.FactoryWorldWorkItemRef {
 	return selectedWorkItemRefForID(lineage, item.ID, &item)
 }
 
 func selectedWorkItemRefForID(
-	lineage interfaces.WorkPayloadLineageProjection,
+	lineage work.WorkPayloadLineageProjection,
 	workID string,
-	fallback *interfaces.FactoryWorkItem,
+	fallback *work.FactoryWorkItem,
 ) interfaces.FactoryWorldWorkItemRef {
 	resolution := lineage.ResolveSelectedWorkSnapshot(workID)
-	if resolution.Status == interfaces.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
+	if resolution.Status == work.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
 		return lineageResolvedWorkItemRef(resolution.Snapshot, string(resolution.Status))
 	}
 
-	item := interfaces.FactoryWorkItem{ID: workID}
+	item := work.FactoryWorkItem{ID: workID}
 	if fallback != nil {
 		item = *fallback
 	}
@@ -422,12 +415,12 @@ func selectedWorkItemRefForID(
 }
 
 func lineageResolvedWorkItemRef(
-	snapshot *interfaces.WorkPayloadSnapshot,
+	snapshot *work.WorkPayloadSnapshot,
 	payloadStatus string,
 ) interfaces.FactoryWorldWorkItemRef {
 	ref := workItemRef(snapshot.WorkItem)
 	ref.State = snapshot.WorkItem.State
-	ref.Content = interfaces.CloneWorkContentParts(snapshot.WorkItem.Content)
+	ref.Content = work.CloneWorkContentParts(snapshot.WorkItem.Content)
 	ref.PayloadStatus = payloadStatus
 	ref.LineageLogicalWorkID = snapshot.LogicalWorkID
 	ref.LineageSourceKind = string(snapshot.SourceKind)

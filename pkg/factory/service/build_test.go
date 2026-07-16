@@ -6,12 +6,12 @@ import (
 	"testing"
 
 	"github.com/jonboulle/clockwork"
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryevents "github.com/portpowered/infinite-you/pkg/factory/events"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	"go.uber.org/zap"
 )
 
@@ -31,7 +31,7 @@ func TestBuild_ConstructsRunnableBundleWithoutRootService(t *testing.T) {
 		Config:           factoryservice.Config{RuntimeMode: interfaces.RuntimeModeBatch, RuntimeFileLoggingPolicy: factoryservice.RuntimeFileLoggingPolicyDisabled},
 		LoadedFactoryCfg: loaded,
 		BaseLogger:       zap.NewNop(),
-		Clock:              factory.EnsureClock(clockwork.NewFakeClock()),
+		Clock:            factory.EnsureClock(clockwork.NewFakeClock()),
 		LoadWorkerOpts: func(*factoryevents.FactoryEventHistory, *zap.Logger) ([]factory.FactoryOption, error) {
 			return nil, nil
 		},
@@ -65,9 +65,9 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 	}
 
 	bundle, err := factoryservice.Build(context.Background(), factoryservice.BuildInput{
-		Dir:              dir,
-		FolderPath:       dir,
-		SessionID:        "~default",
+		Dir:        dir,
+		FolderPath: dir,
+		SessionID:  "~default",
 		Config: factoryservice.Config{
 			RuntimeMode:       interfaces.RuntimeModeBatch,
 			RuntimeLogDir:     logDir,
@@ -106,9 +106,9 @@ func TestBuild_ProductionObservabilityPoliciesEnableRuntimeSinksByDefault(t *tes
 	}
 
 	disabledBundle, err := factoryservice.Build(context.Background(), factoryservice.BuildInput{
-		Dir:              dir,
-		FolderPath:       dir,
-		SessionID:        "~default",
+		Dir:        dir,
+		FolderPath: dir,
+		SessionID:  "~default",
 		Config: factoryservice.Config{
 			RuntimeMode:              interfaces.RuntimeModeBatch,
 			RuntimeLogDir:            logDir,

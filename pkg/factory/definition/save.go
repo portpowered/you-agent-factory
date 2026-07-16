@@ -4,47 +4,61 @@ import (
 	"context"
 	"fmt"
 
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
-
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 )
 
-// SaveReplaceCurrentForSession replaces the current factory definition for one
-// live session using REPLACE_CURRENT semantics.
-func (s *Service) SaveReplaceCurrentForSession(
+// EditableFactory carries one detached Factory definition and the optimistic-
+// concurrency version supplied with it. Definition policy consumes this
+// domain-owned value; transport adapters are responsible for capturing and
+// decoding generated API values.
+type EditableFactory struct {
+	Name     string
+	Snapshot *interfaces.FactorySnapshot
+	Version  *interfaces.FactoryVersion
+}
+
+// SaveReplaceCurrentSnapshotForSession replaces the current Factory definition
+// for one live session using replace-current semantics.
+func (s *Service) SaveReplaceCurrentSnapshotForSession(
 	ctx context.Context,
 	sessionID string,
-	request factoryapi.Factory,
-) (factoryapi.Factory, error) {
+	request EditableFactory,
+) (*interfaces.FactorySnapshot, error) {
 	if s == nil || s.host == nil {
-		return factoryapi.Factory{}, fmt.Errorf("factory definition service is required")
+		return nil, fmt.Errorf("factory definition service is required")
+	}
+	if request.Snapshot == nil {
+		return nil, fmt.Errorf("editable factory snapshot is required")
 	}
 
 	session, err := s.host.RequireSession(sessionID)
 	if err != nil {
-		return factoryapi.Factory{}, err
+		return nil, err
 	}
-	current, err := s.host.GetCurrentFactoryForSession(ctx, sessionID)
+	currentSnapshot, err := s.host.GetCurrentFactorySnapshotForSession(ctx, sessionID)
 	if err != nil {
-		return factoryapi.Factory{}, err
+		return nil, err
+	}
+	currentName, err := factorySnapshotName(currentSnapshot)
+	if err != nil {
+		return nil, fmt.Errorf("read current factory snapshot identity: %w", err)
 	}
 	sessionRootDir := factorysessions.SessionFactoryRootDir(s.host.PersistRootDir(), session)
-	sessionRootDir, sanitized, err := s.prepareEditableFactoryDefinitionSave(sessionRootDir, current, request)
+	sessionRootDir, sanitized, err := s.prepareEditableFactoryDefinitionSave(sessionRootDir, currentName, request.Snapshot)
 	if err != nil {
-		return factoryapi.Factory{}, err
+		return nil, err
 	}
-	targetDir, activateFactoryDir, err := resolveReplaceCurrentLayoutTarget(sessionRootDir, current.Name)
+	targetDir, activateFactoryDir, err := resolveReplaceCurrentLayoutTarget(sessionRootDir, currentName)
 	if err != nil {
-		return factoryapi.Factory{}, err
+		return nil, err
 	}
 
 	return s.replaceCurrentFactoryLayoutLocked(
 		ctx,
 		sessionID,
 		session,
-		current,
 		request,
 		sessionRootDir,
 		targetDir,
@@ -55,19 +69,20 @@ func (s *Service) SaveReplaceCurrentForSession(
 
 func (s *Service) prepareEditableFactoryDefinitionSave(
 	sessionRootDir string,
-	current factoryapi.Factory,
-	request factoryapi.Factory,
-) (string, factoryapi.Factory, error) {
-	if current.Name != apisurface.DefaultCurrentFactoryName {
-		if err := apisurface.ValidateWritableNamedFactoryName(current.Name); err != nil {
-			return "", factoryapi.Factory{}, err
+	currentName string,
+	request *interfaces.FactorySnapshot,
+) (string, *interfaces.FactorySnapshot, error) {
+	if currentName != interfaces.DefaultCurrentFactoryName {
+		if err := factoryconfig.ValidateNamedFactoryName(currentName); err != nil {
+			return "", nil, fmt.Errorf("%w: %w", factoryconfig.ErrInvalidNamedFactoryName, err)
 		}
 	}
-	sanitized := request
-	sanitized.Name = current.Name
-	sanitized.Version = nil
+	sanitized, err := request.WithName(currentName)
+	if err != nil {
+		return "", nil, fmt.Errorf("name editable factory snapshot: %w", err)
+	}
 	if err := s.ValidateEditableFactoryTopology(sanitized); err != nil {
-		return "", factoryapi.Factory{}, err
+		return "", nil, err
 	}
 	return sessionRootDir, sanitized, nil
 }
@@ -76,19 +91,22 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 	ctx context.Context,
 	sessionID string,
 	session *factorysessions.LiveSession,
-	current factoryapi.Factory,
-	request factoryapi.Factory,
+	request EditableFactory,
 	sessionRootDir string,
 	targetDir string,
 	activateFactoryDir string,
-	sanitized factoryapi.Factory,
-) (factoryapi.Factory, error) {
-	var saved factoryapi.Factory
-	err := s.host.WithActivationLock(func() error {
+	sanitized *interfaces.FactorySnapshot,
+) (*interfaces.FactorySnapshot, error) {
+	currentName, err := factorySnapshotName(sanitized)
+	if err != nil {
+		return nil, fmt.Errorf("read editable factory snapshot identity: %w", err)
+	}
+	var saved *interfaces.FactorySnapshot
+	err = s.host.WithActivationLock(func() error {
 		if err := s.host.RequireIdleRuntimeForSession(ctx, sessionID); err != nil {
 			return err
 		}
-		currentVersion, err := s.CurrentFactoryDefinitionVersionAtRoot(sessionRootDir, current.Name)
+		currentVersion, err := s.currentFactoryDefinitionVersionAtRoot(sessionRootDir, currentName)
 		if err != nil {
 			return err
 		}
@@ -96,7 +114,7 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 			return err
 		}
 		nextVersion := s.NextEditableFactoryVersion(&currentVersion, s.host.SaveNow())
-		prepared, err := s.PreparePersistedFactoryPayload(string(current.Name), sanitized, nextVersion)
+		prepared, err := s.PreparePersistedFactoryPayload(currentName, sanitized, nextVersion)
 		if err != nil {
 			return err
 		}
@@ -112,8 +130,8 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 			sessionID,
 			sessionRootDir,
 			activateFactoryDir,
-			current.Name,
-			string(current.Name),
+			currentName,
+			currentName,
 		); err != nil {
 			if replaceResult != nil && replaceResult.Restore != nil {
 				replaceResult.Restore()
@@ -125,25 +143,42 @@ func (s *Service) replaceCurrentFactoryLayoutLocked(
 		}
 
 		var readbackErr error
-		saved, readbackErr = s.host.GetCurrentFactoryForSession(ctx, sessionID)
-		return readbackErr
+		savedSnapshot, readbackErr := s.host.GetCurrentFactorySnapshotForSession(ctx, sessionID)
+		if readbackErr != nil {
+			return readbackErr
+		}
+		saved = savedSnapshot.Clone()
+		return nil
 	})
 	if err != nil {
-		return factoryapi.Factory{}, err
+		return nil, err
 	}
 	return saved, nil
 }
 
 func resolveReplaceCurrentLayoutTarget(
 	sessionRootDir string,
-	name factoryapi.FactoryName,
+	name string,
 ) (targetDir string, activateFactoryDir string, err error) {
-	if name == apisurface.DefaultCurrentFactoryName {
+	if name == interfaces.DefaultCurrentFactoryName {
 		return sessionRootDir, sessionRootDir, nil
 	}
-	factoryDir, err := factoryconfig.ResolveNamedFactoryDir(sessionRootDir, string(name))
+	factoryDir, err := factoryconfig.ResolveNamedFactoryDir(sessionRootDir, name)
 	if err != nil {
 		return "", "", err
 	}
 	return factoryDir, factoryDir, nil
+}
+
+func factorySnapshotName(snapshot *interfaces.FactorySnapshot) (string, error) {
+	if snapshot == nil {
+		return "", fmt.Errorf("factory snapshot is required")
+	}
+	var identity struct {
+		Name string `json:"name"`
+	}
+	if err := snapshot.Decode(&identity); err != nil {
+		return "", err
+	}
+	return identity.Name, nil
 }

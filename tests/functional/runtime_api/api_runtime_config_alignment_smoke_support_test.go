@@ -8,11 +8,17 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func runtimeConfigAlignmentSummaryFromRuntime(
@@ -38,7 +44,7 @@ func runtimeConfigAlignmentSummaryFromRuntime(
 
 func runtimeConfigAlignmentWorkerSummaryFromLookup(
 	t *testing.T,
-	lookup func(string) (*interfaces.WorkerConfig, bool),
+	lookup func(string) (*workerconfig.Config, bool),
 	name string,
 ) runtimeConfigAlignmentWorkerSummary {
 	t.Helper()
@@ -49,7 +55,7 @@ func runtimeConfigAlignmentWorkerSummaryFromLookup(
 	}
 	return runtimeConfigAlignmentWorkerSummary{
 		Type:      worker.Type,
-		Resources: append([]interfaces.ResourceConfig(nil), worker.Resources...),
+		Resources: append([]factoryresource.Config(nil), worker.Resources...),
 		StopToken: worker.StopToken,
 	}
 }
@@ -70,7 +76,7 @@ func runtimeConfigAlignmentWorkstationSummaryFromLookup(
 		Kind:           workstation.Kind,
 		Type:           workstation.Type,
 		Limits:         workstation.Limits,
-		Resources:      append([]interfaces.ResourceConfig(nil), workstation.Resources...),
+		Resources:      append([]factoryresource.Config(nil), workstation.Resources...),
 		StopWords:      append([]string(nil), workstation.StopWords...),
 	}
 	if workstation.Cron != nil {
@@ -220,7 +226,7 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 	if cron.Worker != "cron-worker" {
 		t.Fatalf("%s worker = %q, want cron-worker", runtimeConfigAlignmentCronWorkstation, cron.Worker)
 	}
-	if cron.Behavior == nil || *cron.Behavior != interfaces.GeneratedPublicWorkstationKind(interfaces.WorkstationKindCron) {
+	if cron.Behavior == nil || string(*cron.Behavior) != interfaces.CanonicalPublicWorkstationKind(interfaces.WorkstationKindCron) {
 		t.Fatalf("%s kind = %#v, want CRON", runtimeConfigAlignmentCronWorkstation, cron.Behavior)
 	}
 	if cron.Cron == nil || cron.Cron.Schedule != "0 * * * *" {
@@ -242,7 +248,7 @@ func assertRuntimeConfigAlignmentGeneratedBoundary(t *testing.T, generated facto
 	if stringValueFromFunctionalPtr(review.Type) != interfaces.WorkstationTypeModel {
 		t.Fatalf("%s type = %q, want %q", runtimeConfigAlignmentReviewWorkstation, stringValueFromFunctionalPtr(review.Type), interfaces.WorkstationTypeModel)
 	}
-	if review.Behavior == nil || *review.Behavior != interfaces.GeneratedPublicWorkstationKind(interfaces.WorkstationKindRepeater) {
+	if review.Behavior == nil || string(*review.Behavior) != interfaces.CanonicalPublicWorkstationKind(interfaces.WorkstationKindRepeater) {
 		t.Fatalf("%s kind = %#v, want REPEATER", runtimeConfigAlignmentReviewWorkstation, review.Behavior)
 	}
 	if !reflect.DeepEqual(stringSliceValue(review.StopWords), []string{"DONE"}) {
@@ -418,7 +424,7 @@ func waitForRuntimeConfigAlignmentStopWordDispatch(
 	for time.Now().Before(deadline) {
 		snapshot := server.GetEngineStateSnapshot(t)
 		for _, dispatch := range snapshot.DispatchHistory {
-			if dispatch.WorkstationName == runtimeConfigAlignmentReviewWorkstation && dispatch.Outcome == interfaces.OutcomeAccepted {
+			if dispatch.WorkstationName == runtimeConfigAlignmentReviewWorkstation && dispatch.Outcome == workerexecution.OutcomeAccepted {
 				return
 			}
 		}
@@ -490,7 +496,7 @@ func waitForRuntimeConfigAlignmentTimeoutAndRequeue(
 	deadline := time.Now().Add(runtimeConfigAlignmentSignalTimeout)
 	for time.Now().Before(deadline) {
 		snapshot := server.GetEngineStateSnapshot(t)
-		if dispatch, ok := runtimeConfigAlignmentFindDispatch(snapshot.DispatchHistory, runtimeConfigAlignmentExecuteWorkstation, interfaces.OutcomeFailed, "execution timeout"); ok {
+		if dispatch, ok := runtimeConfigAlignmentFindDispatch(snapshot.DispatchHistory, runtimeConfigAlignmentExecuteWorkstation, workerexecution.OutcomeFailed, "execution timeout"); ok {
 			if runtimeConfigAlignmentHasMutationToPlace(dispatch.OutputMutations, "task:reviewed") &&
 				runtimeConfigAlignmentHasMutationToPlace(dispatch.OutputMutations, "agent-slot:available") {
 				return
@@ -511,7 +517,7 @@ func waitForRuntimeConfigAlignmentTimeoutAndRequeue(
 func runtimeConfigAlignmentFindDispatch(
 	history []interfaces.CompletedDispatch,
 	workstation string,
-	outcome interfaces.WorkOutcome,
+	outcome workerexecution.WorkOutcome,
 	reason string,
 ) (interfaces.CompletedDispatch, bool) {
 	for _, dispatch := range history {
@@ -532,7 +538,7 @@ func runtimeConfigAlignmentFindDispatch(
 func runtimeConfigAlignmentHasDispatch(
 	history []interfaces.CompletedDispatch,
 	workstation string,
-	outcome interfaces.WorkOutcome,
+	outcome workerexecution.WorkOutcome,
 	reason string,
 ) bool {
 	_, ok := runtimeConfigAlignmentFindDispatch(history, workstation, outcome, reason)
@@ -554,26 +560,26 @@ func assertRuntimeConfigAlignmentDispatchHistory(t *testing.T, history []interfa
 	if len(history) < 4 {
 		t.Fatalf("dispatch history length = %d, want at least 4", len(history))
 	}
-	if !runtimeConfigAlignmentHasDispatch(history, runtimeConfigAlignmentReviewWorkstation, interfaces.OutcomeAccepted, "") {
+	if !runtimeConfigAlignmentHasDispatch(history, runtimeConfigAlignmentReviewWorkstation, workerexecution.OutcomeAccepted, "") {
 		t.Fatalf("dispatch history missing accepted %s: %#v", runtimeConfigAlignmentReviewWorkstation, history)
 	}
-	timeoutDispatch, ok := runtimeConfigAlignmentFindDispatch(history, runtimeConfigAlignmentExecuteWorkstation, interfaces.OutcomeFailed, "execution timeout")
+	timeoutDispatch, ok := runtimeConfigAlignmentFindDispatch(history, runtimeConfigAlignmentExecuteWorkstation, workerexecution.OutcomeFailed, "execution timeout")
 	if !ok {
 		t.Fatalf("dispatch history missing execution-timeout failure for %s: %#v", runtimeConfigAlignmentExecuteWorkstation, history)
 	}
 	if timeoutDispatch.FailureMetadata == nil {
 		t.Fatalf("%s failed dispatch FailureMetadata = nil, want timeout metadata", runtimeConfigAlignmentExecuteWorkstation)
 	}
-	if timeoutDispatch.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
-		t.Fatalf("%s failed dispatch FailureMetadata.Type = %q, want %q", runtimeConfigAlignmentExecuteWorkstation, timeoutDispatch.FailureMetadata.Type, interfaces.WorkFailureTypeTimeout)
+	if timeoutDispatch.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
+		t.Fatalf("%s failed dispatch FailureMetadata.Type = %q, want %q", runtimeConfigAlignmentExecuteWorkstation, timeoutDispatch.FailureMetadata.Type, workerexecution.WorkFailureTypeTimeout)
 	}
-	if timeoutDispatch.FailureMetadata.Family != interfaces.WorkFailureFamilyRetryable {
-		t.Fatalf("%s failed dispatch FailureMetadata.Family = %q, want %q", runtimeConfigAlignmentExecuteWorkstation, timeoutDispatch.FailureMetadata.Family, interfaces.WorkFailureFamilyRetryable)
+	if timeoutDispatch.FailureMetadata.Family != workerexecution.WorkFailureFamilyRetryable {
+		t.Fatalf("%s failed dispatch FailureMetadata.Family = %q, want %q", runtimeConfigAlignmentExecuteWorkstation, timeoutDispatch.FailureMetadata.Family, workerexecution.WorkFailureFamilyRetryable)
 	}
-	if !runtimeConfigAlignmentHasDispatch(history, runtimeConfigAlignmentExecuteWorkstation, interfaces.OutcomeAccepted, "") {
+	if !runtimeConfigAlignmentHasDispatch(history, runtimeConfigAlignmentExecuteWorkstation, workerexecution.OutcomeAccepted, "") {
 		t.Fatalf("dispatch history missing accepted retry for %s: %#v", runtimeConfigAlignmentExecuteWorkstation, history)
 	}
-	if !runtimeConfigAlignmentHasDispatch(history, runtimeConfigAlignmentCronWorkstation, interfaces.OutcomeAccepted, "") {
+	if !runtimeConfigAlignmentHasDispatch(history, runtimeConfigAlignmentCronWorkstation, workerexecution.OutcomeAccepted, "") {
 		t.Fatalf("dispatch history missing accepted %s: %#v", runtimeConfigAlignmentCronWorkstation, history)
 	}
 	if !runtimeConfigAlignmentDispatchConsumedPlace(history, runtimeConfigAlignmentCronWorkstation, interfaces.SystemTimePendingPlaceID) {
@@ -600,7 +606,7 @@ func assertRuntimeConfigAlignmentEventHistory(t *testing.T, server *functionalAP
 		t.Fatalf("DISPATCH_RESPONSE events = %d, want at least 4", got)
 	}
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, runtimeConfigAlignmentMaxTick(events))
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, runtimeConfigAlignmentMaxTick(events))
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -626,7 +632,7 @@ func assertRuntimeConfigAlignmentEventHistory(t *testing.T, server *functionalAP
 	}
 }
 
-func assertRuntimeConfigAlignmentCompleteTokenPayload(t *testing.T, tokens map[string]*interfaces.Token) {
+func assertRuntimeConfigAlignmentCompleteTokenPayload(t *testing.T, tokens map[string]*factorytoken.Token) {
 	t.Helper()
 
 	for _, token := range tokens {

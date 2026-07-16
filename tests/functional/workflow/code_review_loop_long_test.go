@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -18,7 +18,7 @@ func TestCodeReviewLoop(t *testing.T) {
 
 	testutil.WriteSeedFile(t, dir, "code-change", []byte("implement feature X"))
 
-	work := map[string][]interfaces.InferenceResponse{
+	work := map[string][]workerexecution.InferenceResponse{
 		"swe": {
 			{Content: "code with missing error handling <COMPLETE>"},
 			{Content: "code with proper error handling <COMPLETE>"},

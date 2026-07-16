@@ -1,14 +1,17 @@
 package executor
 
 import (
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerinference "github.com/portpowered/infinite-you/pkg/workers/inference"
 )
 
 func resolveModelOperationBindings(
 	workstationDef *interfaces.FactoryWorkstationConfig,
-	workerDef *interfaces.WorkerConfig,
-	inputTokens []interfaces.Token,
-) ([]interfaces.ResolvedModelOperationBinding, error) {
+	workerDef *workerconfig.Config,
+	inputTokens []factorytoken.Token,
+) ([]workerexecution.ResolvedModelOperationBinding, error) {
 	return workerinference.ResolveInferenceOperationBindings(workstationDef, workerDef, inputTokens)
 }

@@ -6,8 +6,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
@@ -18,7 +19,7 @@ type Identity string
 // CommandContext contains invocation facts used to construct one subprocess
 // request. Command execution remains owned by orchestration.
 type CommandContext struct {
-	Request            interfaces.ProviderInferenceRequest
+	Request            workerexecution.ProviderInferenceRequest
 	SkipPermissions    bool
 	MaterializeOptions *materialize.Options
 }
@@ -96,13 +97,13 @@ type FinalParseContext struct {
 // FinalParseResult is the authoritative provider result and any semantic drafts
 // that can only be produced after command completion.
 type FinalParseResult struct {
-	Response interfaces.InferenceResponse
+	Response workerexecution.InferenceResponse
 	Drafts   []responseevents.Draft
 }
 
 // CapabilityContext permits model- or invocation-specific capability reports.
 type CapabilityContext struct {
-	Request interfaces.ProviderInferenceRequest
+	Request workerexecution.ProviderInferenceRequest
 }
 
 // Capabilities describes observed semantic fidelity without exposing native
@@ -142,11 +143,11 @@ type RetryGuidance struct {
 
 // FailureFacts is the bounded normalized failure returned by an adapter.
 type FailureFacts struct {
-	Family          interfaces.WorkFailureFamily
-	Type            interfaces.WorkFailureType
+	Family          workerexecution.WorkFailureFamily
+	Type            workerexecution.WorkFailureType
 	Message         string
 	Retry           RetryGuidance
-	ProviderSession *interfaces.ProviderSessionMetadata
+	ProviderSession *workerexecution.ProviderSessionMetadata
 }
 
 // FailureResult reports whether the invocation failed and, when it did, the

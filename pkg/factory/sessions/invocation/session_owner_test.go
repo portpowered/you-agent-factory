@@ -7,8 +7,11 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workdomain "github.com/portpowered/infinite-you/pkg/work"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	workinvocation "github.com/portpowered/infinite-you/pkg/work/invocation"
 )
 
@@ -21,22 +24,22 @@ func TestSessionOwner_SubmitsOneNormalizedWorkAndWaitsWithSubmissionIdentity(t *
 	ctx, cancel := context.WithDeadline(context.Background(), deadline)
 	defer cancel()
 
-	var submitted []interfaces.SubmitRequest
+	var submitted []workdomain.SubmitRequest
 	var waitInput SessionInvocationWaitInput
-	wantResult := FactoryInvocationResult{RequestID: "runtime-request", TraceID: "trace-1", Status: factoryapi.InvocationTerminalStatusCompleted}
+	wantResult := FactoryInvocationResult{RequestID: "runtime-request", TraceID: "trace-1", Status: interfaces.InvocationTerminalStatusCompleted}
 	owner := NewSessionOwner(SessionOwnerDependencies{
 		FactoryConfig: func(sessionID string) (*interfaces.FactoryConfig, error) {
 			assertSessionOwnerEqual(t, "sessionID", sessionID, "session-1")
 			return cfg, nil
 		},
-		SubmitWork: func(gotCtx context.Context, sessionID string, request interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+		SubmitWork: func(gotCtx context.Context, sessionID string, request workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
 			gotDeadline, ok := gotCtx.Deadline()
 			if !ok {
 				t.Fatalf("submit deadline = %v, %v; want %v", gotDeadline, ok, deadline)
 			}
 			assertSessionOwnerEqual(t, "submit deadline", gotDeadline, deadline)
 			submitted = append(submitted, request)
-			return interfaces.WorkRequestSubmitResult{RequestID: "runtime-request", TraceID: "trace-1"}, nil
+			return workdomain.WorkRequestSubmitResult{RequestID: "runtime-request", TraceID: "trace-1"}, nil
 		},
 		Observe: func(gotCtx context.Context, sessionID string, input SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			assertSessionOwnerEqual(t, "wait context", gotCtx, ctx)
@@ -45,11 +48,11 @@ func TestSessionOwner_SubmitsOneNormalizedWorkAndWaitsWithSubmissionIdentity(t *
 		},
 	})
 
-	got, err := owner.InvokeFactorySession(ctx, "session-1", factoryapi.InvocationRequest{
+	got, err := owner.InvokeFactorySession(ctx, "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{
 		RequestId:  &requestID,
 		SourceKind: &sourceKind,
 		Content:    &content,
-	})
+	}))
 	if err != nil {
 		t.Fatalf("InvokeFactorySession: %v", err)
 	}
@@ -74,10 +77,10 @@ func TestSessionOwner_StructuredArgumentsPreserveCanonicalNamesAndSources(t *tes
 		Name: "input", Required: true,
 		Bindings: []interfaces.InvocationParameterBindingConfig{{Kind: string(factoryapi.FactoryInvocationParameterBindingKindPositional), Position: 1}},
 	}}}
-	var submitted interfaces.SubmitRequest
-	owner := successfulSessionOwner(cfg, func(request interfaces.SubmitRequest) { submitted = request })
+	var submitted workdomain.SubmitRequest
+	owner := successfulSessionOwner(cfg, func(request workdomain.SubmitRequest) { submitted = request })
 
-	_, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{Args: &map[string]any{"input": "hello"}})
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{Args: &map[string]any{"input": "hello"}}))
 	if err != nil {
 		t.Fatalf("InvokeFactorySession: %v", err)
 	}
@@ -110,15 +113,15 @@ func TestSessionOwner_RejectsInvalidInputsBeforeSubmittingWork(t *testing.T) {
 			submitCalls := 0
 			owner := NewSessionOwner(SessionOwnerDependencies{
 				FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return tt.cfg, nil },
-				SubmitWork: func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+				SubmitWork: func(context.Context, string, workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
 					submitCalls++
-					return interfaces.WorkRequestSubmitResult{}, nil
+					return workdomain.WorkRequestSubmitResult{}, nil
 				},
 				Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 					return SessionInvocationObservation{}, nil
 				},
 			})
-			if _, err := owner.InvokeFactorySession(context.Background(), "session-1", tt.request); err == nil {
+			if _, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(tt.request)); err == nil {
 				t.Fatal("InvokeFactorySession error = nil, want validation failure")
 			}
 			if submitCalls != 0 {
@@ -137,16 +140,16 @@ func TestSessionOwner_RejectsInterpolationFailureBeforeSubmittingWork(t *testing
 	submitCalls := 0
 	owner := NewSessionOwner(SessionOwnerDependencies{
 		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
-		SubmitWork: func(context.Context, string, interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+		SubmitWork: func(context.Context, string, workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
 			submitCalls++
-			return interfaces.WorkRequestSubmitResult{}, nil
+			return workdomain.WorkRequestSubmitResult{}, nil
 		},
 		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			return SessionInvocationObservation{}, nil
 		},
 	})
 
-	_, err := owner.InvokeFactorySession(context.Background(), "session-1", factoryapi.InvocationRequest{Args: &map[string]any{"input": "hello"}})
+	_, err := owner.InvokeFactorySession(context.Background(), "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{Args: &map[string]any{"input": "hello"}}))
 	var argumentErr *workinvocation.ArgumentError
 	if !errors.As(err, &argumentErr) || argumentErr.Code != workinvocation.ArgumentErrorCodeInvalidInterpolation {
 		t.Fatalf("error = %v, want INVALID_INTERPOLATION", err)
@@ -162,8 +165,8 @@ func TestSessionOwner_PreservesCallerCancellationAtSubmission(t *testing.T) {
 	waitCalls := 0
 	owner := NewSessionOwner(SessionOwnerDependencies{
 		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return sessionOwnerFactoryConfig(), nil },
-		SubmitWork: func(ctx context.Context, _ string, _ interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
-			return interfaces.WorkRequestSubmitResult{}, ctx.Err()
+		SubmitWork: func(ctx context.Context, _ string, _ workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
+			return workdomain.WorkRequestSubmitResult{}, ctx.Err()
 		},
 		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			waitCalls++
@@ -172,7 +175,7 @@ func TestSessionOwner_PreservesCallerCancellationAtSubmission(t *testing.T) {
 	})
 	sourceKind := factoryapi.InvocationInputSourceKindText
 	content := sessionOwnerTextContent(t, "hello")
-	_, err := owner.InvokeFactorySession(ctx, "session-1", factoryapi.InvocationRequest{SourceKind: &sourceKind, Content: &content})
+	_, err := owner.InvokeFactorySession(ctx, "session-1", sessionOwnerInvocationRequest(factoryapi.InvocationRequest{SourceKind: &sourceKind, Content: &content}))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error = %v, want context.Canceled", err)
 	}
@@ -181,12 +184,12 @@ func TestSessionOwner_PreservesCallerCancellationAtSubmission(t *testing.T) {
 	}
 }
 
-func successfulSessionOwner(cfg *interfaces.FactoryConfig, capture func(interfaces.SubmitRequest)) *SessionOwner {
+func successfulSessionOwner(cfg *interfaces.FactoryConfig, capture func(workdomain.SubmitRequest)) *SessionOwner {
 	return NewSessionOwner(SessionOwnerDependencies{
 		FactoryConfig: func(string) (*interfaces.FactoryConfig, error) { return cfg, nil },
-		SubmitWork: func(_ context.Context, _ string, request interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+		SubmitWork: func(_ context.Context, _ string, request workdomain.SubmitRequest) (workdomain.WorkRequestSubmitResult, error) {
 			capture(request)
-			return interfaces.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, nil
+			return workdomain.WorkRequestSubmitResult{RequestID: "request-1", TraceID: "trace-1"}, nil
 		},
 		Observe: func(context.Context, string, SessionInvocationWaitInput) (SessionInvocationObservation, error) {
 			return completedSessionInvocationObservation("request-1", "trace-1", "done"), nil
@@ -195,13 +198,13 @@ func successfulSessionOwner(cfg *interfaces.FactoryConfig, capture func(interfac
 }
 
 func completedSessionInvocationObservation(requestID, traceID, text string) SessionInvocationObservation {
-	work := interfaces.FactoryWorkItem{
+	work := workdomain.FactoryWorkItem{
 		ID: "work-1", WorkTypeID: "task", State: "done", TraceID: traceID,
-		Content: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: text}},
+		Content: []workdomain.WorkContentPart{{Type: workdomain.WorkContentPartTypeText, Text: text}},
 	}
 	return SessionInvocationObservation{WorldState: interfaces.FactoryWorldState{
 		WorkRequestsByID: map[string]interfaces.WorkRequestPayload{requestID: {
-			RequestID: requestID, TraceID: traceID, WorkItems: []interfaces.FactoryWorkItem{work},
+			RequestID: requestID, TraceID: traceID, WorkItems: []workdomain.FactoryWorkItem{work},
 		}},
 		TerminalWorkByID: map[string]interfaces.FactoryTerminalWork{work.ID: {WorkItem: work, Status: "done"}},
 	}}
@@ -231,6 +234,21 @@ func sessionOwnerTextContent(t *testing.T, text string) factoryapi.WorkContent {
 	return factoryapi.WorkContent{part}
 }
 
+func sessionOwnerInvocationRequest(request factoryapi.InvocationRequest) InvocationRequest {
+	result := InvocationRequest{
+		Args:            request.Args,
+		Content:         contentcontract.PartsFromGenerated(request.Content),
+		ContentProvided: request.Content != nil,
+		RequestID:       request.RequestId,
+		TimeoutMillis:   request.TimeoutMillis,
+	}
+	if request.SourceKind != nil {
+		sourceKind := InvocationInputSourceKind(*request.SourceKind)
+		result.SourceKind = &sourceKind
+	}
+	return result
+}
+
 func assertSessionOwnerEqual[T comparable](t *testing.T, field string, got, want T) {
 	t.Helper()
 	if got != want {
@@ -242,7 +260,7 @@ func TestSessionOwnerWait_ReturnsSubmittedTerminalContent(t *testing.T) {
 	observation := completedSessionInvocationObservation("request-1", "trace-1", "completed output")
 	result := waitForSessionOwnerObservation(t, observation, nil)
 
-	assertSessionOwnerEqual(t, "status", result.Status, factoryapi.InvocationTerminalStatusCompleted)
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusCompleted)
 	assertSessionOwnerEqual(t, "request ID", result.RequestID, "request-1")
 	assertSessionOwnerEqual(t, "trace ID", result.TraceID, "trace-1")
 	assertSessionOwnerEqual(t, "primary result", result.PrimaryResult[0].Text, "completed output")
@@ -254,7 +272,7 @@ func TestSessionOwnerWait_ExplicitPolicyIgnoresUnrelatedMatchingWork(t *testing.
 	summary := invocationWorkItem("work-summary", "summary", "complete", "wanted", "summary:complete")
 	unrelated := invocationWorkItem("work-unrelated", "summary", "complete", "unrelated", "summary:complete")
 	recordInvocationSubmittedWork(&state, 1, "request-1", root)
-	recordInvocationDispatchOutput(&state, 2, "dispatch-1", []interfaces.FactoryWorkItem{root}, summary)
+	recordInvocationDispatchOutput(&state, 2, "dispatch-1", []workdomain.FactoryWorkItem{root}, summary)
 	state.TerminalWorkByID[summary.ID] = interfaces.FactoryTerminalWork{WorkItem: summary, Status: "TERMINAL"}
 	state.TerminalWorkByID[unrelated.ID] = interfaces.FactoryTerminalWork{WorkItem: unrelated, Status: "TERMINAL"}
 
@@ -262,7 +280,7 @@ func TestSessionOwnerWait_ExplicitPolicyIgnoresUnrelatedMatchingWork(t *testing.
 		Policy: workinvocation.ReturnPolicyExplicit, WorkTypeName: "summary", TerminalState: "complete",
 	})
 
-	assertSessionOwnerEqual(t, "status", result.Status, factoryapi.InvocationTerminalStatusCompleted)
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusCompleted)
 	assertSessionOwnerEqual(t, "primary result", result.PrimaryResult[0].Text, summary.Content[0].Text)
 }
 
@@ -270,11 +288,11 @@ func TestSessionOwnerWait_MapsTimeoutAndCancellation(t *testing.T) {
 	tests := []struct {
 		name       string
 		waitErr    error
-		wantStatus factoryapi.InvocationTerminalStatus
+		wantStatus interfaces.InvocationTerminalStatus
 		wantCode   string
 	}{
-		{name: "timeout", waitErr: context.DeadlineExceeded, wantStatus: factoryapi.InvocationTerminalStatusTimedOut, wantCode: string(factoryapi.INVOCATIONTIMEDOUT)},
-		{name: "cancellation", waitErr: context.Canceled, wantStatus: factoryapi.InvocationTerminalStatusCanceled, wantCode: string(factoryapi.INVOCATIONCANCELED)},
+		{name: "timeout", waitErr: context.DeadlineExceeded, wantStatus: interfaces.InvocationTerminalStatusTimedOut, wantCode: string(interfaces.InvocationErrorCodeTimedOut)},
+		{name: "cancellation", waitErr: context.Canceled, wantStatus: interfaces.InvocationTerminalStatusCanceled, wantCode: string(interfaces.InvocationErrorCodeCanceled)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -315,7 +333,7 @@ func TestSessionOwnerWait_ConfiguredTimeoutReachesInjectedWaitBoundary(t *testin
 	if err != nil {
 		t.Fatalf("waitForResult: %v", err)
 	}
-	assertSessionOwnerEqual(t, "status", result.Status, factoryapi.InvocationTerminalStatusTimedOut)
+	assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusTimedOut)
 }
 
 func TestSessionOwnerWait_PreservesTerminalFailureClassifications(t *testing.T) {
@@ -359,7 +377,7 @@ func TestSessionOwnerWait_PreservesTerminalFailureClassifications(t *testing.T) 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := waitForSessionOwnerObservation(t, tt.observation, nil)
-			assertSessionOwnerEqual(t, "status", result.Status, factoryapi.InvocationTerminalStatusFailed)
+			assertSessionOwnerEqual(t, "status", result.Status, interfaces.InvocationTerminalStatusFailed)
 			assertSessionOwnerEqual(t, "error code", result.ErrorCode, string(tt.wantCode))
 			assertSessionOwnerEqual(t, "message", result.Message, tt.wantMessage)
 			assertSessionOwnerEqual(t, "session ID", result.SessionID, tt.wantContext.SessionID)
@@ -435,35 +453,35 @@ func failedSessionInvocationObservation() SessionInvocationObservation {
 
 func invocationWorldStateFixture() interfaces.FactoryWorldState {
 	return interfaces.FactoryWorldState{
-		PayloadLineage:           interfaces.WorkPayloadLineageProjection{},
-		WorkItemsByID:            make(map[string]interfaces.FactoryWorkItem),
+		PayloadLineage:           work.WorkPayloadLineageProjection{},
+		WorkItemsByID:            make(map[string]workdomain.FactoryWorkItem),
 		WorkRequestsByID:         make(map[string]interfaces.WorkRequestPayload),
 		TerminalWorkByID:         make(map[string]interfaces.FactoryTerminalWork),
-		FailedWorkItemsByID:      make(map[string]interfaces.FactoryWorkItem),
+		FailedWorkItemsByID:      make(map[string]workdomain.FactoryWorkItem),
 		WorkStateChangesByWorkID: make(map[string][]interfaces.FactoryWorldWorkStateChangeRecord),
 	}
 }
 
-func invocationWorkItem(workID, workTypeName, stateName, name, placeID string) interfaces.FactoryWorkItem {
-	return interfaces.FactoryWorkItem{
+func invocationWorkItem(workID, workTypeName, stateName, name, placeID string) workdomain.FactoryWorkItem {
+	return workdomain.FactoryWorkItem{
 		ID:          workID,
 		WorkTypeID:  workTypeName,
 		State:       stateName,
 		DisplayName: name,
 		TraceID:     workID + "-trace",
 		PlaceID:     placeID,
-		Content: []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		Content: []workdomain.WorkContentPart{{
+			Type: workdomain.WorkContentPartTypeText,
 			Text: workID + "-content",
 		}},
 	}
 }
 
-func recordInvocationSubmittedWork(state *interfaces.FactoryWorldState, tick int, requestID string, items ...interfaces.FactoryWorkItem) {
+func recordInvocationSubmittedWork(state *interfaces.FactoryWorldState, tick int, requestID string, items ...workdomain.FactoryWorkItem) {
 	request := interfaces.WorkRequestPayload{
 		RequestID: requestID,
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		WorkItems: append([]interfaces.FactoryWorkItem(nil), items...),
+		Type:      workdomain.WorkRequestTypeFactoryRequestBatch,
+		WorkItems: append([]workdomain.FactoryWorkItem(nil), items...),
 	}
 	state.WorkRequestsByID[requestID] = request
 	for _, item := range items {
@@ -471,7 +489,7 @@ func recordInvocationSubmittedWork(state *interfaces.FactoryWorldState, tick int
 	}
 }
 
-func recordInvocationDispatchOutput(state *interfaces.FactoryWorldState, tick int, dispatchID string, consumed []interfaces.FactoryWorkItem, outputs ...interfaces.FactoryWorkItem) {
+func recordInvocationDispatchOutput(state *interfaces.FactoryWorldState, tick int, dispatchID string, consumed []workdomain.FactoryWorkItem, outputs ...workdomain.FactoryWorkItem) {
 	for _, item := range consumed {
 		state.PayloadLineage.RecordConsumedInputSnapshot(dispatchID, item)
 	}

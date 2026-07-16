@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -32,18 +32,18 @@ Process the input task.
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-codex-images",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
 			Name:       "mixed-image-work",
 			WorkTypeID: "task",
 			TraceID:    "trace-codex-images",
-			Content: []interfaces.WorkContentPart{
-				{Type: interfaces.WorkContentPartTypeText, Text: "first caption"},
-				{Type: interfaces.WorkContentPartTypeImage, File: firstImage},
-				{Type: interfaces.WorkContentPartTypeText, Text: "second caption"},
-				{Type: interfaces.WorkContentPartTypeImage, File: secondImage},
+			Content: []work.WorkContentPart{
+				{Type: work.WorkContentPartTypeText, Text: "first caption"},
+				{Type: work.WorkContentPartTypeImage, File: firstImage},
+				{Type: work.WorkContentPartTypeText, Text: "second caption"},
+				{Type: work.WorkContentPartTypeImage, File: secondImage},
 			},
 		}},
 	})
@@ -83,15 +83,15 @@ Process the input task.
 		testutil.WithFullWorkerPoolAndScriptWrap(),
 	)
 
-	h.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+	h.SubmitWorkRequest(context.Background(), work.WorkRequest{
 		RequestID: "request-codex-text",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
 			Name:       "text-only-work",
 			WorkTypeID: "task",
 			TraceID:    "trace-codex-text",
-			Content: []interfaces.WorkContentPart{
-				{Type: interfaces.WorkContentPartTypeText, Text: "text only"},
+			Content: []work.WorkContentPart{
+				{Type: work.WorkContentPartTypeText, Text: "text only"},
 			},
 		}},
 	})

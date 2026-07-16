@@ -8,10 +8,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func ScaffoldFactory(t *testing.T, cfg map[string]any) string {
@@ -136,7 +137,7 @@ func AssertArgsContainSequence(t *testing.T, args, want []string) {
 	t.Fatalf("expected args %v to contain sequence %v", args, want)
 }
 
-func WriteWorkRequestFile(t *testing.T, path string, request interfaces.SubmitRequest) {
+func WriteWorkRequestFile(t *testing.T, path string, request work.SubmitRequest) {
 	t.Helper()
 
 	workName := request.Name
@@ -146,10 +147,10 @@ func WriteWorkRequestFile(t *testing.T, path string, request interfaces.SubmitRe
 	if workName == "" {
 		workName = "work-1"
 	}
-	data, err := json.Marshal(interfaces.WorkRequest{
+	data, err := json.Marshal(work.WorkRequest{
 		RequestID: request.RequestID,
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		Works: []interfaces.Work{{
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		Works: []work.Work{{
 			Name:       workName,
 			WorkID:     request.WorkID,
 			RequestID:  request.RequestID,

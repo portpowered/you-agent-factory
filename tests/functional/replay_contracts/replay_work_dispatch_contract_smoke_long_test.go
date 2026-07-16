@@ -9,9 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -22,10 +24,10 @@ func TestReplayWorkDispatchContractSmoke_CanonicalWorkRequestPreservesPayload(t 
 	req, dir := runWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "canonical dispatch output",
 		submit: func(harness *testutil.ServiceTestHarness) {
-			harness.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+			harness.SubmitWorkRequest(context.Background(), work.WorkRequest{
 				RequestID: "request-dispatch-smoke-001",
-				Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-				Works: []interfaces.Work{{
+				Type:      work.WorkRequestTypeFactoryRequestBatch,
+				Works: []work.Work{{
 					Name:       "canonical-dispatch-smoke",
 					WorkID:     "work-dispatch-smoke-001",
 					WorkTypeID: "task",
@@ -57,7 +59,7 @@ func TestReplayWorkDispatchContractSmoke_LegacySubmitRequestAdapterPreservesPayl
 	req, dir := runWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "legacy dispatch output",
 		submit: func(harness *testutil.ServiceTestHarness) {
-			harness.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+			harness.SubmitFull(context.Background(), []work.SubmitRequest{{
 				RequestID:  "request-legacy-smoke-001",
 				Name:       "legacy-dispatch-smoke",
 				WorkID:     "work-legacy-smoke-001",
@@ -92,10 +94,10 @@ func TestReplayWorkDispatchContractSmoke_RecordReplayKeepsSplitContractCorrelati
 	run := runRecordedWorkDispatchContractSmoke(t, dispatchContractScenario{
 		commandOutput: "recorded dispatch output",
 		submit: func(harness *testutil.ServiceTestHarness) {
-			harness.SubmitWorkRequest(context.Background(), interfaces.WorkRequest{
+			harness.SubmitWorkRequest(context.Background(), work.WorkRequest{
 				RequestID: "request-recorded-smoke-001",
-				Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-				Works: []interfaces.Work{{
+				Type:      work.WorkRequestTypeFactoryRequestBatch,
+				Works: []work.Work{{
 					Name:       "recorded-dispatch-smoke",
 					WorkID:     "work-recorded-smoke-001",
 					WorkTypeID: "task",
@@ -329,7 +331,7 @@ func assertCommandInputToken(t *testing.T, req workers.CommandRequest, want expe
 	}
 }
 
-func firstCommandRequestInputToken(t *testing.T, req workers.CommandRequest) interfaces.Token {
+func firstCommandRequestInputToken(t *testing.T, req workers.CommandRequest) factorytoken.Token {
 	t.Helper()
 
 	tokens := commandRequestInputTokens(req)
@@ -337,21 +339,21 @@ func firstCommandRequestInputToken(t *testing.T, req workers.CommandRequest) int
 		t.Fatal("command request has no input tokens")
 	}
 	for _, token := range tokens {
-		if token.Color.DataType != interfaces.DataTypeResource {
+		if token.Color.DataType != factorytoken.DataTypeResource {
 			return token
 		}
 	}
 	t.Fatal("command request has no work input token")
-	return interfaces.Token{}
+	return factorytoken.Token{}
 }
 
-func commandRequestInputTokens(req workers.CommandRequest) []interfaces.Token {
+func commandRequestInputTokens(req workers.CommandRequest) []factorytoken.Token {
 	if len(req.InputTokens) == 0 {
 		return nil
 	}
-	tokens := make([]interfaces.Token, 0, len(req.InputTokens))
+	tokens := make([]factorytoken.Token, 0, len(req.InputTokens))
 	for _, raw := range req.InputTokens {
-		if token, ok := raw.(interfaces.Token); ok {
+		if token, ok := raw.(factorytoken.Token); ok {
 			tokens = append(tokens, token)
 			continue
 		}
@@ -359,7 +361,7 @@ func commandRequestInputTokens(req workers.CommandRequest) []interfaces.Token {
 		if err != nil {
 			continue
 		}
-		var token interfaces.Token
+		var token factorytoken.Token
 		if err := json.Unmarshal(encoded, &token); err == nil {
 			tokens = append(tokens, token)
 		}

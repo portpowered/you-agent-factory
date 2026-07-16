@@ -10,11 +10,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysnapshot"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -23,7 +26,7 @@ func TestReplayRuntimeConfigSmoke_CanonicalWorkstationsDriveDispatchAndReplay(t 
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "service_simple"))
 	artifactPath := filepath.Join(t.TempDir(), "canonical-workstations.replay.json")
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		WorkID:     "canonical-workstation-work",
 		TraceID:    "canonical-workstation-trace",
@@ -37,8 +40,8 @@ func TestReplayRuntimeConfigSmoke_CanonicalWorkstationsDriveDispatchAndReplay(t 
 	assertCanonicalSmokeWorkstation(t, loaded.Workstation, "step-one", "worker-a")
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Step one done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Step two done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
 	h := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -57,7 +60,7 @@ func TestReplayRuntimeConfigSmoke_CanonicalWorkstationsDriveDispatchAndReplay(t 
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
 	assertCanonicalReplayWorkstationMap(t, artifactPath, artifact)
-	replayRuntime, err := replay.RuntimeConfigFromGeneratedFactory(artifact.Factory)
+	replayRuntime, err := replay.RuntimeConfigFromFactorySnapshot(artifact.Factory)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}
@@ -136,18 +139,22 @@ func assertCanonicalReplayWorkstationMap(t *testing.T, artifactPath string, arti
 	if strings.Contains(string(data), "workstation_configs") {
 		t.Fatalf("replay artifact contains legacy workstation_configs map")
 	}
-	if artifact.Factory.Workstations == nil || len(*artifact.Factory.Workstations) != 2 {
-		t.Fatalf("factory workstations = %#v, want 2", artifact.Factory.Workstations)
+	generatedFactory, err := factorysnapshot.ToAPI(artifact.Factory)
+	if err != nil {
+		t.Fatalf("map replay Factory snapshot: %v", err)
+	}
+	if generatedFactory.Workstations == nil || len(*generatedFactory.Workstations) != 2 {
+		t.Fatalf("factory workstations = %#v, want 2", generatedFactory.Workstations)
 	}
 	found := false
-	for _, workstation := range *artifact.Factory.Workstations {
+	for _, workstation := range *generatedFactory.Workstations {
 		if workstation.Name == "step-one" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatalf("factory payload missing step-one workstation: %#v", artifact.Factory.Workstations)
+		t.Fatalf("factory payload missing step-one workstation: %#v", generatedFactory.Workstations)
 	}
 }
 

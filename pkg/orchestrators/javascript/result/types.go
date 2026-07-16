@@ -3,8 +3,8 @@ package workflowresult
 import (
 	"encoding/json"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 const (
@@ -45,9 +45,55 @@ type TypedValue struct {
 // SessionResultInput supplies one terminal session result projection.
 type SessionResultInput struct {
 	SessionID      string
-	Status         factoryapi.FactorySessionStatus
+	Status         interfaces.RuntimeStatus
 	PrimaryValue   TypedValue
 	Artifacts      []interfaces.FactorySessionArtifactState
-	CheckpointRefs []factoryapi.FactorySessionJavaScriptCheckpointRef
-	ResultArtifact *factoryapi.FactoryArtifactRef
+	CheckpointRefs []interfaces.FactorySessionJavaScriptCheckpointEventRef
+	ResultArtifact *interfaces.FactoryArtifactRef
+}
+
+// LiveSessionResult is the transport-independent terminal read projection for
+// one live JavaScript Factory Session.
+type LiveSessionResult struct {
+	SessionID         string
+	Status            interfaces.RuntimeStatus
+	CheckpointRefs    []interfaces.FactorySessionJavaScriptCheckpointEventRef
+	ResultArtifactRef *interfaces.FactoryArtifactRef
+}
+
+// PartialSessionResult is the transport-independent checkpoint-backed read
+// projection for one live JavaScript Factory Session.
+type PartialSessionResult struct {
+	SessionID                string
+	Phase                    string
+	CheckpointRefs           []interfaces.FactorySessionJavaScriptCheckpointEventRef
+	PartialResultArtifactRef *interfaces.FactoryArtifactRef
+}
+
+// ResultStatus describes customer-visible result availability for one
+// JavaScript Factory Session projection.
+type ResultStatus string
+
+const (
+	ResultStatusFinal    ResultStatus = "FINAL"
+	ResultStatusNotReady ResultStatus = "NOT_READY"
+	ResultStatusPartial  ResultStatus = "PARTIAL"
+)
+
+// SessionResult is the transport-independent durable result projection shared
+// by result reads and Factory event payload construction.
+type SessionResult struct {
+	SessionID     string
+	ResultStatus  ResultStatus
+	PrimaryResult []work.WorkContentPart
+	ArtifactIDs   []string
+	ArtifactRefs  []interfaces.FactoryArtifactRef
+}
+
+// SessionResultUpdatedPayload is the Factory-owned result fact emitted when a
+// JavaScript session's observable result changes.
+type SessionResultUpdatedPayload struct {
+	ResultStatus  interfaces.FactorySessionResultStatus
+	ResultSummary []work.WorkContentPart
+	ArtifactIDs   []string
 }

@@ -13,11 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	workflowresult "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/result"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	workflowsource "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/source"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func contractFixturesPath(t *testing.T) string {
@@ -1033,13 +1033,13 @@ func TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail(t 
 				Status:        workflowruntime.ChildDispatchStatusFailed,
 				Label:         "child-1",
 				ExecutionMode: ChildExecutorModeLive,
-				FailureDetail: &interfaces.FailureDetail{
-					Reason:  interfaces.WorkFailureTypeUnknown,
+				FailureDetail: &workerexecution.FailureDetail{
+					Reason:  workerexecution.WorkFailureTypeUnknown,
 					Message: "live child failed: simulated child error",
 				},
 				Attempt:               3,
 				Retryable:             &retryable,
-				FailureClassification: interfaces.WorkFailureTypeTimeout,
+				FailureClassification: workerexecution.WorkFailureTypeTimeout,
 			},
 		},
 	}
@@ -1053,13 +1053,13 @@ func TestProjectRuntimeExecutionRecords_FailedLiveChild_ProjectsFailureDetail(t 
 	if dispatch.Status != DispatchStatusFailed {
 		t.Fatalf("dispatch status = %q, want FAILED", dispatch.Status)
 	}
-	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Reason != string(interfaces.WorkFailureTypeUnknown) {
+	if dispatch.FailureDetail == nil || dispatch.FailureDetail.Reason != string(workerexecution.WorkFailureTypeUnknown) {
 		t.Fatalf("failureDetail = %#v", dispatch.FailureDetail)
 	}
 	if dispatch.FailureDetail.Message != "live child failed: simulated child error" {
 		t.Fatalf("failure message = %q", dispatch.FailureDetail.Message)
 	}
-	if dispatch.Attempt != 3 || dispatch.Retryable == nil || !*dispatch.Retryable || dispatch.FailureClassification != string(interfaces.WorkFailureTypeTimeout) {
+	if dispatch.Attempt != 3 || dispatch.Retryable == nil || !*dispatch.Retryable || dispatch.FailureClassification != string(workerexecution.WorkFailureTypeTimeout) {
 		t.Fatalf("retry diagnostics = attempt:%d retryable:%v classification:%q", dispatch.Attempt, dispatch.Retryable, dispatch.FailureClassification)
 	}
 	encoded, err := json.Marshal(records)

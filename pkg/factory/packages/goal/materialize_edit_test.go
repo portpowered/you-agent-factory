@@ -7,7 +7,8 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func TestEditedMaterializedPackagedGoalFactoryChangesNextLoad(t *testing.T) {
@@ -76,7 +77,7 @@ func loadPackagedGoalRuntimeConfig(t *testing.T, factoryDir string) *factoryconf
 	return loaded
 }
 
-func loadPackagedGoalWorker(t *testing.T, factoryDir, workerName string) *interfaces.WorkerConfig {
+func loadPackagedGoalWorker(t *testing.T, factoryDir, workerName string) *workerconfig.Config {
 	t.Helper()
 	loaded := loadPackagedGoalRuntimeConfig(t, factoryDir)
 	worker, ok := loaded.Worker(workerName)

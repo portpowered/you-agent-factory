@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 )
 
 func projectReplayInitialStructureFromEmbeddedConfig(t *testing.T, dir string) interfaces.InitialStructurePayload {
@@ -21,11 +21,11 @@ func projectReplayInitialStructureFromEmbeddedConfig(t *testing.T, dir string) i
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
-	generatedFactory, err := replay.GeneratedFactoryFromLoadedConfig(loaded, replay.WithGeneratedFactorySourceDirectory(loaded.FactoryDir()))
+	factorySnapshot, err := replay.FactorySnapshotFromLoadedConfig(loaded, replay.WithFactorySnapshotSourceDirectory(loaded.FactoryDir()))
 	if err != nil {
-		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
+		t.Fatalf("FactorySnapshotFromLoadedConfig: %v", err)
 	}
-	replayRuntimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generatedFactory)
+	replayRuntimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(factorySnapshot)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}

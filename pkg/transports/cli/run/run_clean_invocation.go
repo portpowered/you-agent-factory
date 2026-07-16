@@ -14,13 +14,16 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func emitCleanInvocationOutcome(ctx context.Context, cfg RunConfig, runner factoryServiceRunner, runErr error, startedAt time.Time) error {
@@ -173,7 +176,7 @@ func cleanInvocationTimeoutFromSnapshot(
 	}
 	for i := len(snapshot.DispatchHistory) - 1; i >= 0; i-- {
 		failure := snapshot.DispatchHistory[i].FailureMetadata
-		if failure != nil && failure.Type == interfaces.WorkFailureTypeTimeout {
+		if failure != nil && failure.Type == workerexecution.WorkFailureTypeTimeout {
 			return &InvocationError{
 				Code:    InvocationErrorCodeTimeout,
 				Message: "clean invocation timed out",
@@ -195,7 +198,7 @@ func cleanInvocationTimeoutForTarget(
 		if !cleanInvocationCompletionMatchesTarget(completion, target) {
 			continue
 		}
-		if completion.FailureMetadata != nil && completion.FailureMetadata.Type == interfaces.WorkFailureTypeTimeout {
+		if completion.FailureMetadata != nil && completion.FailureMetadata.Type == workerexecution.WorkFailureTypeTimeout {
 			return &InvocationError{
 				Code:    InvocationErrorCodeTimeout,
 				Message: "clean invocation timed out",
@@ -214,7 +217,7 @@ func cleanInvocationFailedForTarget(
 	}
 	for i := len(snapshot.DispatchHistory) - 1; i >= 0; i-- {
 		completion := snapshot.DispatchHistory[i]
-		if completion.Outcome != interfaces.OutcomeFailed {
+		if completion.Outcome != workerexecution.OutcomeFailed {
 			continue
 		}
 		if !cleanInvocationCompletionMatchesTarget(completion, target) {
@@ -244,7 +247,7 @@ func cleanInvocationWorkTargetFromFile(workFile string) (cleanInvocationWorkTarg
 	if err != nil {
 		return cleanInvocationWorkTarget{}, err
 	}
-	normalized, err := requests.NormalizeWorkRequest(request, interfaces.WorkRequestNormalizeOptions{})
+	normalized, err := requests.NormalizeWorkRequest(request, work.WorkRequestNormalizeOptions{})
 	if err != nil {
 		return cleanInvocationWorkTarget{}, err
 	}
@@ -274,7 +277,7 @@ func cleanInvocationSuccessFromTerminalTokens(
 	snapshot *interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net],
 	target cleanInvocationWorkTarget,
 ) (cleanInvocationSuccess, bool) {
-	tokens := make([]*interfaces.Token, 0, len(snapshot.Marking.Tokens))
+	tokens := make([]*factorytoken.Token, 0, len(snapshot.Marking.Tokens))
 	for _, token := range snapshot.Marking.Tokens {
 		if token != nil {
 			tokens = append(tokens, token)
@@ -297,7 +300,7 @@ func cleanInvocationSuccessFromDispatchHistory(
 ) (cleanInvocationSuccess, bool) {
 	for i := len(snapshot.DispatchHistory) - 1; i >= 0; i-- {
 		completion := snapshot.DispatchHistory[i]
-		if completion.Outcome != interfaces.OutcomeAccepted {
+		if completion.Outcome != workerexecution.OutcomeAccepted {
 			continue
 		}
 		for _, mutation := range completion.OutputMutations {
@@ -309,11 +312,11 @@ func cleanInvocationSuccessFromDispatchHistory(
 	return cleanInvocationSuccess{}, false
 }
 
-func cleanInvocationTokenMatches(net *state.Net, token *interfaces.Token, target cleanInvocationWorkTarget) bool {
+func cleanInvocationTokenMatches(net *state.Net, token *factorytoken.Token, target cleanInvocationWorkTarget) bool {
 	if net == nil || token == nil {
 		return false
 	}
-	if token.Color.DataType == interfaces.DataTypeResource {
+	if token.Color.DataType == factorytoken.DataTypeResource {
 		return false
 	}
 	if token.Color.WorkID != target.WorkID || token.Color.WorkTypeID != target.WorkTypeName {
@@ -322,7 +325,7 @@ func cleanInvocationTokenMatches(net *state.Net, token *interfaces.Token, target
 	return net.StateCategoryForPlace(token.PlaceID) == state.StateCategoryTerminal
 }
 
-func cleanInvocationSuccessFromToken(token *interfaces.Token) cleanInvocationSuccess {
+func cleanInvocationSuccessFromToken(token *factorytoken.Token) cleanInvocationSuccess {
 	return cleanInvocationSuccess{
 		Output:       string(token.Color.Payload),
 		WorkID:       token.Color.WorkID,
@@ -434,7 +437,7 @@ func (r *humanResponseStreamRenderer) writeFinalInvocationResultOnce(
 	r.stopProgressRendering()
 	r.progress.acquireOutputExclusive()
 	defer r.progress.releaseOutputExclusive()
-	if result.Status == factoryapi.InvocationTerminalStatusCompleted {
+	if result.Status == interfaces.InvocationTerminalStatusCompleted {
 		text, err := invocationPrimaryResultText(result.PrimaryResult)
 		if err != nil {
 			return err

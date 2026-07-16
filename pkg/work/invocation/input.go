@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 type InputSourceLabel string
@@ -43,7 +43,7 @@ type TextInputSources struct {
 type ResolvedInput struct {
 	Source  InputSourceLabel
 	Text    string
-	Content []interfaces.WorkContentPart
+	Content []work.WorkContentPart
 }
 
 // InputError describes a stable invocation input resolution failure.
@@ -135,7 +135,7 @@ func (e *TextContentValidationError) Error() string {
 
 // ResolveAPITextInputContent applies canonical text-first invocation rules to
 // API text content parts joined with newlines.
-func ResolveAPITextInputContent(parts []interfaces.WorkContentPart) (ResolvedInput, error) {
+func ResolveAPITextInputContent(parts []work.WorkContentPart) (ResolvedInput, error) {
 	if len(parts) == 0 {
 		return ResolvedInput{}, &InputError{
 			Code:    InputErrorCodeEmpty,
@@ -145,7 +145,7 @@ func ResolveAPITextInputContent(parts []interfaces.WorkContentPart) (ResolvedInp
 
 	textParts := make([]string, 0, len(parts))
 	for _, part := range parts {
-		if part.Type.Normalized() != interfaces.WorkContentPartTypeText {
+		if part.Type.Normalized() != work.WorkContentPartTypeText {
 			return ResolvedInput{}, &TextContentValidationError{
 				Message: "content must contain only text parts when sourceKind is text",
 			}
@@ -163,8 +163,8 @@ func resolvedTextInput(source InputSourceLabel, text string) ResolvedInput {
 	return ResolvedInput{
 		Source: source,
 		Text:   text,
-		Content: []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
 			Text: text,
 		}},
 	}

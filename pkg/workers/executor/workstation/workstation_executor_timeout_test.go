@@ -5,14 +5,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
 type wsMockExecutor struct {
 	called bool
-	result interfaces.WorkResult
+	result workerexecution.WorkResult
 	err    error
 }
 
@@ -23,19 +31,19 @@ type deadlineCapturingExecutor struct {
 
 type contextBlockingExecutor struct{}
 
-func (m *wsMockExecutor) Execute(_ context.Context, _ interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (m *wsMockExecutor) Execute(_ context.Context, _ workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	m.called = true
 	return m.result, m.err
 }
 
-func (m *deadlineCapturingExecutor) Execute(ctx context.Context, _ interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (m *deadlineCapturingExecutor) Execute(ctx context.Context, _ workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	m.deadline, m.hasDeadline = ctx.Deadline()
-	return interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted}, nil
+	return workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted}, nil
 }
 
-func (m *contextBlockingExecutor) Execute(ctx context.Context, _ interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (m *contextBlockingExecutor) Execute(ctx context.Context, _ workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	<-ctx.Done()
-	return interfaces.WorkResult{}, ctx.Err()
+	return workerexecution.WorkResult{}, ctx.Err()
 }
 
 func TestWorkstationExecutor_AppliesWorkstationExecutionTimeout(t *testing.T) {
@@ -44,12 +52,12 @@ func TestWorkstationExecutor_AppliesWorkstationExecutionTimeout(t *testing.T) {
 	}
 	we := &executor.WorkstationExecutor{
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
+			Workers: map[string]*workerconfig.Config{
 				"worker-a": {Body: "system"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"timed": {
-					Type:           interfaces.WorkstationTypeModel,
+					Type:           workertaxonomy.WorkstationTypeModel,
 					PromptTemplate: "do work",
 					Limits:         interfaces.WorkstationLimits{MaxExecutionTime: "50ms"},
 				},
@@ -59,23 +67,23 @@ func TestWorkstationExecutor_AppliesWorkstationExecutionTimeout(t *testing.T) {
 		Renderer: &executor.DefaultPromptRenderer{},
 	}
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-timeout",
 		TransitionID:    "t-timeout",
 		WorkerType:      "worker-a",
 		WorkstationName: "timed",
-		InputTokens:     executor.InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     executor.InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.Error != "execution timeout" {
 		t.Fatalf("Error = %q, want %q", result.Error, "execution timeout")
 	}
-	if result.FailureMetadata == nil || result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+	if result.FailureMetadata == nil || result.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("FailureMetadata = %#v, want timeout metadata", result.FailureMetadata)
 	}
 }
@@ -84,12 +92,12 @@ func TestWorkstationExecutor_InvalidWorkstationExecutionLimitReturnsActionableFa
 	mock := &wsMockExecutor{}
 	we := &executor.WorkstationExecutor{
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system", Timeout: "75ms"},
+			Workers: map[string]*workerconfig.Config{
+				"worker-a": {Type: workertaxonomy.WorkerTypeModel, Body: "system", Timeout: "75ms"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"timed": {
-					Type:           interfaces.WorkstationTypeModel,
+					Type:           workertaxonomy.WorkstationTypeModel,
 					PromptTemplate: "do work",
 					Limits:         interfaces.WorkstationLimits{MaxExecutionTime: "not-a-duration"},
 				},
@@ -99,12 +107,12 @@ func TestWorkstationExecutor_InvalidWorkstationExecutionLimitReturnsActionableFa
 		Renderer: &executor.DefaultPromptRenderer{},
 	}
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-timeout",
 		TransitionID:    "t-timeout",
 		WorkerType:      "worker-a",
 		WorkstationName: "timed",
-		InputTokens:     executor.InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     executor.InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -112,8 +120,8 @@ func TestWorkstationExecutor_InvalidWorkstationExecutionLimitReturnsActionableFa
 	if mock.called {
 		t.Fatal("executor should not be called when workstation execution limit is invalid")
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if got, want := result.Error, `invalid workstation limits.maxExecutionTime "not-a-duration": time: invalid duration "not-a-duration"`; got != want {
 		t.Fatalf("Error = %q, want %q", got, want)
@@ -124,12 +132,12 @@ func TestWorkstationExecutor_WorkstationExecutionLimitSetsTimeout(t *testing.T) 
 	mock := &deadlineCapturingExecutor{}
 	we := &executor.WorkstationExecutor{
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"worker-a": {Type: interfaces.WorkerTypeModel, Body: "system"},
+			Workers: map[string]*workerconfig.Config{
+				"worker-a": {Type: workertaxonomy.WorkerTypeModel, Body: "system"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"timed": {
-					Type:           interfaces.WorkstationTypeModel,
+					Type:           workertaxonomy.WorkstationTypeModel,
 					PromptTemplate: "do work",
 					Limits:         interfaces.WorkstationLimits{MaxExecutionTime: "50ms"},
 				},
@@ -140,12 +148,12 @@ func TestWorkstationExecutor_WorkstationExecutionLimitSetsTimeout(t *testing.T) 
 	}
 
 	start := time.Now()
-	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	_, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-timeout",
 		TransitionID:    "t-timeout",
 		WorkerType:      "worker-a",
 		WorkstationName: "timed",
-		InputTokens:     executor.InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     executor.InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -165,12 +173,12 @@ func TestWorkstationExecutor_ScriptWorkerTimeoutPrefersWorkstationLimit(t *testi
 	mock := &deadlineCapturingExecutor{}
 	we := &executor.WorkstationExecutor{
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"script-worker": {Type: interfaces.WorkerTypeScript, Timeout: "90m"},
+			Workers: map[string]*workerconfig.Config{
+				"script-worker": {Type: workertaxonomy.WorkerTypeScript, Timeout: "90m"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 				"timed": {
-					Type:           interfaces.WorkstationTypeModel,
+					Type:           workertaxonomy.WorkstationTypeModel,
 					PromptTemplate: "do work",
 					Limits:         interfaces.WorkstationLimits{MaxExecutionTime: "50ms"},
 				},
@@ -181,12 +189,12 @@ func TestWorkstationExecutor_ScriptWorkerTimeoutPrefersWorkstationLimit(t *testi
 	}
 
 	start := time.Now()
-	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	_, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-timeout",
 		TransitionID:    "t-timeout",
 		WorkerType:      "script-worker",
 		WorkstationName: "timed",
-		InputTokens:     executor.InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     executor.InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -206,11 +214,11 @@ func TestWorkstationExecutor_ScriptWorkerTimeoutFallsBackToWorkerTimeout(t *test
 	mock := &deadlineCapturingExecutor{}
 	we := &executor.WorkstationExecutor{
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"script-worker": {Type: interfaces.WorkerTypeScript, Timeout: "75ms"},
+			Workers: map[string]*workerconfig.Config{
+				"script-worker": {Type: workertaxonomy.WorkerTypeScript, Timeout: "75ms"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"timed": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work"},
+				"timed": {Type: workertaxonomy.WorkstationTypeModel, PromptTemplate: "do work"},
 			},
 		},
 		Executor: mock,
@@ -218,12 +226,12 @@ func TestWorkstationExecutor_ScriptWorkerTimeoutFallsBackToWorkerTimeout(t *test
 	}
 
 	start := time.Now()
-	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	_, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-timeout",
 		TransitionID:    "t-timeout",
 		WorkerType:      "script-worker",
 		WorkstationName: "timed",
-		InputTokens:     executor.InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     executor.InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -243,11 +251,11 @@ func TestWorkstationExecutor_ExplicitPositiveTimeoutOverridesDefaults(t *testing
 	mock := &deadlineCapturingExecutor{}
 	we := &executor.WorkstationExecutor{
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"script-worker": {Type: interfaces.WorkerTypeScript, Timeout: "1h"},
+			Workers: map[string]*workerconfig.Config{
+				"script-worker": {Type: workertaxonomy.WorkerTypeScript, Timeout: "1h"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"timed": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work", Limits: interfaces.WorkstationLimits{MaxExecutionTime: "75ms"}},
+				"timed": {Type: workertaxonomy.WorkstationTypeModel, PromptTemplate: "do work", Limits: interfaces.WorkstationLimits{MaxExecutionTime: "75ms"}},
 			},
 		},
 		Executor: mock,
@@ -255,12 +263,12 @@ func TestWorkstationExecutor_ExplicitPositiveTimeoutOverridesDefaults(t *testing
 	}
 
 	start := time.Now()
-	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	_, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-timeout",
 		TransitionID:    "t-timeout",
 		WorkerType:      "script-worker",
 		WorkstationName: "timed",
-		InputTokens:     executor.InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     executor.InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -280,11 +288,11 @@ func TestWorkstationExecutor_ScriptWorkerTimeoutDefaultsToTwoHours(t *testing.T)
 	mock := &deadlineCapturingExecutor{}
 	we := &executor.WorkstationExecutor{
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"script-worker": {Type: interfaces.WorkerTypeScript},
+			Workers: map[string]*workerconfig.Config{
+				"script-worker": {Type: workertaxonomy.WorkerTypeScript},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"timed": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work"},
+				"timed": {Type: workertaxonomy.WorkstationTypeModel, PromptTemplate: "do work"},
 			},
 		},
 		Executor: mock,
@@ -292,12 +300,12 @@ func TestWorkstationExecutor_ScriptWorkerTimeoutDefaultsToTwoHours(t *testing.T)
 	}
 
 	start := time.Now()
-	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	_, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-timeout",
 		TransitionID:    "t-timeout",
 		WorkerType:      "script-worker",
 		WorkstationName: "timed",
-		InputTokens:     executor.InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     executor.InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -316,18 +324,18 @@ func TestWorkstationExecutor_ScriptWorkerTimeoutDefaultsToTwoHours(t *testing.T)
 func TestWorkstationExecutor_ZeroTimeoutDefaultsToTwoHours(t *testing.T) {
 	tests := []struct {
 		name              string
-		workerDef         *interfaces.WorkerConfig
+		workerDef         *workerconfig.Config
 		workstationConfig *interfaces.FactoryWorkstationConfig
 	}{
 		{
 			name:              "worker_zero",
-			workerDef:         &interfaces.WorkerConfig{Type: interfaces.WorkerTypeScript, Timeout: "0s"},
-			workstationConfig: &interfaces.FactoryWorkstationConfig{Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work"},
+			workerDef:         &workerconfig.Config{Type: workertaxonomy.WorkerTypeScript, Timeout: "0s"},
+			workstationConfig: &interfaces.FactoryWorkstationConfig{Type: workertaxonomy.WorkstationTypeModel, PromptTemplate: "do work"},
 		},
 		{
 			name:              "workstation_zero",
-			workerDef:         &interfaces.WorkerConfig{Type: interfaces.WorkerTypeScript},
-			workstationConfig: &interfaces.FactoryWorkstationConfig{Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work", Limits: interfaces.WorkstationLimits{MaxExecutionTime: "0s"}},
+			workerDef:         &workerconfig.Config{Type: workertaxonomy.WorkerTypeScript},
+			workstationConfig: &interfaces.FactoryWorkstationConfig{Type: workertaxonomy.WorkstationTypeModel, PromptTemplate: "do work", Limits: interfaces.WorkstationLimits{MaxExecutionTime: "0s"}},
 		},
 	}
 
@@ -336,7 +344,7 @@ func TestWorkstationExecutor_ZeroTimeoutDefaultsToTwoHours(t *testing.T) {
 			mock := &deadlineCapturingExecutor{}
 			we := &executor.WorkstationExecutor{
 				RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
-					Workers: map[string]*interfaces.WorkerConfig{
+					Workers: map[string]*workerconfig.Config{
 						"script-worker": tt.workerDef,
 					},
 					Workstations: map[string]*interfaces.FactoryWorkstationConfig{
@@ -348,12 +356,12 @@ func TestWorkstationExecutor_ZeroTimeoutDefaultsToTwoHours(t *testing.T) {
 			}
 
 			start := time.Now()
-			_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+			_, err := we.Execute(context.Background(), work.WorkDispatch{
 				DispatchID:      "d-timeout",
 				TransitionID:    "t-timeout",
 				WorkerType:      "script-worker",
 				WorkstationName: "timed",
-				InputTokens:     executor.InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+				InputTokens:     executor.InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 			})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -375,11 +383,11 @@ func TestWorkstationExecutor_ModelWorkerTimeoutFallsBackToWorkerTimeout(t *testi
 	mock := &deadlineCapturingExecutor{}
 	we := &executor.WorkstationExecutor{
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"model-worker": {Type: interfaces.WorkerTypeModel, Timeout: "75ms"},
+			Workers: map[string]*workerconfig.Config{
+				"model-worker": {Type: workertaxonomy.WorkerTypeModel, Timeout: "75ms"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"standard": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work"},
+				"standard": {Type: workertaxonomy.WorkstationTypeModel, PromptTemplate: "do work"},
 			},
 		},
 		Executor: mock,
@@ -387,12 +395,12 @@ func TestWorkstationExecutor_ModelWorkerTimeoutFallsBackToWorkerTimeout(t *testi
 	}
 
 	start := time.Now()
-	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	_, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-model-timeout",
 		TransitionID:    "t-model-timeout",
 		WorkerType:      "model-worker",
 		WorkstationName: "standard",
-		InputTokens:     executor.InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     executor.InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -411,11 +419,11 @@ func TestWorkstationExecutor_ModelWorkerTimeoutFallsBackToWorkerTimeout(t *testi
 func TestWorkstationExecutor_ModelWorkerTimeoutCancelsLongRunningExecutor(t *testing.T) {
 	we := &executor.WorkstationExecutor{
 		RuntimeConfig: runtimefixtures.RuntimeConfigLookupFixture{
-			Workers: map[string]*interfaces.WorkerConfig{
-				"model-worker": {Type: interfaces.WorkerTypeModel, Timeout: "20ms"},
+			Workers: map[string]*workerconfig.Config{
+				"model-worker": {Type: workertaxonomy.WorkerTypeModel, Timeout: "20ms"},
 			},
 			Workstations: map[string]*interfaces.FactoryWorkstationConfig{
-				"standard": {Type: interfaces.WorkstationTypeModel, PromptTemplate: "do work"},
+				"standard": {Type: workertaxonomy.WorkstationTypeModel, PromptTemplate: "do work"},
 			},
 		},
 		Executor: &contextBlockingExecutor{},
@@ -423,12 +431,12 @@ func TestWorkstationExecutor_ModelWorkerTimeoutCancelsLongRunningExecutor(t *tes
 	}
 
 	start := time.Now()
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-model-timeout",
 		TransitionID:    "t-model-timeout",
 		WorkerType:      "model-worker",
 		WorkstationName: "standard",
-		InputTokens:     executor.InputTokens(interfaces.Token{ID: "tok-1", Color: interfaces.TokenColor{WorkID: "work-1"}}),
+		InputTokens:     executor.InputTokens(factorytoken.Token{ID: "tok-1", Color: factorytoken.Color{WorkID: "work-1"}}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -438,13 +446,13 @@ func TestWorkstationExecutor_ModelWorkerTimeoutCancelsLongRunningExecutor(t *tes
 	if elapsed > time.Second {
 		t.Fatalf("execution elapsed = %v, want cancellation before 1s", elapsed)
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("Outcome = %s, want %s", result.Outcome, interfaces.OutcomeFailed)
+	if result.Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("Outcome = %s, want %s", result.Outcome, workerexecution.OutcomeFailed)
 	}
 	if result.Error != "execution timeout" {
 		t.Fatalf("Error = %q, want execution timeout", result.Error)
 	}
-	if result.FailureMetadata == nil || result.FailureMetadata.Type != interfaces.WorkFailureTypeTimeout {
+	if result.FailureMetadata == nil || result.FailureMetadata.Type != workerexecution.WorkFailureTypeTimeout {
 		t.Fatalf("FailureMetadata = %#v, want timeout metadata", result.FailureMetadata)
 	}
 }

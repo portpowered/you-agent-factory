@@ -1,6 +1,6 @@
 package validation
 
-import "github.com/portpowered/infinite-you/pkg/interfaces"
+import interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 
 // Profile selects which validation rules run for one OpenAPI factory payload.
 type Profile string

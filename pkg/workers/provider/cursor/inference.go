@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const (
@@ -24,10 +24,10 @@ const (
 	ResponseMetadataStderrExcerpt = "stderr_excerpt"
 
 	ResponseMetadataRequestID        = "request_id"
-	ResponseMetadataDurationMS       = interfaces.ProviderResponseMetadataDurationMS
-	ResponseMetadataDurationAPIMS    = interfaces.ProviderResponseMetadataDurationAPIMS
-	ResponseMetadataInputTokens      = interfaces.ProviderResponseMetadataInputTokens
-	ResponseMetadataOutputTokens     = interfaces.ProviderResponseMetadataOutputTokens
+	ResponseMetadataDurationMS       = workerexecution.ProviderResponseMetadataDurationMS
+	ResponseMetadataDurationAPIMS    = workerexecution.ProviderResponseMetadataDurationAPIMS
+	ResponseMetadataInputTokens      = workerexecution.ProviderResponseMetadataInputTokens
+	ResponseMetadataOutputTokens     = workerexecution.ProviderResponseMetadataOutputTokens
 	ResponseMetadataCacheReadTokens  = "cache_read_tokens"
 	ResponseMetadataCacheWriteTokens = "cache_write_tokens"
 
@@ -58,15 +58,15 @@ type resultUsage struct {
 // InferenceResult is the parsed Cursor CLI success payload.
 type InferenceResult struct {
 	Content          string
-	ProviderSession  *interfaces.ProviderSessionMetadata
+	ProviderSession  *workerexecution.ProviderSessionMetadata
 	ResponseMetadata map[string]string
 }
 
 // ParseFailure classifies Cursor JSON parse failures for the provider layer.
 type ParseFailure struct {
-	Type            interfaces.WorkFailureType
+	Type            workerexecution.WorkFailureType
 	Message         string
-	ProviderSession *interfaces.ProviderSessionMetadata
+	ProviderSession *workerexecution.ProviderSessionMetadata
 	Cause           error
 	canonicalResult *FailureResult
 }
@@ -142,19 +142,19 @@ func resultErrorSubtype(provider string, payload resultPayload) *ParseFailure {
 func resultParseFailure(provider, message string, cause error) *ParseFailure {
 	_ = provider
 	return &ParseFailure{
-		Type:    interfaces.WorkFailureTypeUnknown,
+		Type:    workerexecution.WorkFailureTypeUnknown,
 		Message: message,
 		Cause:   cause,
 	}
 }
 
-func canonicalProviderSession(provider, sessionID string) *interfaces.ProviderSessionMetadata {
+func canonicalProviderSession(provider, sessionID string) *workerexecution.ProviderSessionMetadata {
 	normalized := strings.TrimSpace(sessionID)
 	if normalized == "" || !safeCursorProviderSessionIDPattern.MatchString(normalized) {
 		return nil
 	}
-	return &interfaces.ProviderSessionMetadata{
-		Provider: interfaces.CanonicalProviderSessionProvider(provider),
+	return &workerexecution.ProviderSessionMetadata{
+		Provider: workerexecution.CanonicalProviderSessionProvider(provider),
 		Kind:     ProviderSessionKindSessionID,
 		ID:       normalized,
 	}
@@ -218,7 +218,7 @@ func boundedText(value string, limit int) string {
 }
 
 // WithCommandOutputExcerpts attaches bounded stdout/stderr excerpts to provider diagnostics.
-func WithCommandOutputExcerpts(diagnostics *interfaces.WorkDiagnostics, stdout, stderr []byte) *interfaces.WorkDiagnostics {
+func WithCommandOutputExcerpts(diagnostics *workerexecution.WorkDiagnostics, stdout, stderr []byte) *workerexecution.WorkDiagnostics {
 	excerpts := make(map[string]string, 2)
 	if excerpt := BoundedCommandOutputExcerpt(stdout, CommandOutputExcerptLimit); excerpt != "" {
 		excerpts[ResponseMetadataStdoutExcerpt] = excerpt
@@ -233,16 +233,16 @@ func WithCommandOutputExcerpts(diagnostics *interfaces.WorkDiagnostics, stdout, 
 }
 
 // WithResponseMetadata merges Cursor response metadata into provider diagnostics.
-func WithResponseMetadata(diagnostics *interfaces.WorkDiagnostics, metadata map[string]string) *interfaces.WorkDiagnostics {
+func WithResponseMetadata(diagnostics *workerexecution.WorkDiagnostics, metadata map[string]string) *workerexecution.WorkDiagnostics {
 	if len(metadata) == 0 {
 		return diagnostics
 	}
-	diagnostics = interfaces.CloneWorkDiagnostics(diagnostics)
+	diagnostics = workerexecution.CloneWorkDiagnostics(diagnostics)
 	if diagnostics == nil {
-		diagnostics = &interfaces.WorkDiagnostics{}
+		diagnostics = &workerexecution.WorkDiagnostics{}
 	}
 	if diagnostics.Provider == nil {
-		diagnostics.Provider = &interfaces.ProviderDiagnostic{}
+		diagnostics.Provider = &workerexecution.ProviderDiagnostic{}
 	}
 	if diagnostics.Provider.ResponseMetadata == nil {
 		diagnostics.Provider.ResponseMetadata = make(map[string]string, len(metadata))

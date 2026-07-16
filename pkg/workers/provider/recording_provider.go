@@ -2,14 +2,18 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerdiagnostics "github.com/portpowered/infinite-you/pkg/workers/diagnostics"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 const (
@@ -17,8 +21,8 @@ const (
 	inferenceResponseEventIDPrefix = "factory-event/inference-response"
 )
 
-// InferenceEventRecorder receives generated provider-boundary inference events.
-type InferenceEventRecorder func(factoryapi.FactoryEvent)
+// InferenceEventRecorder receives provider-boundary inference facts.
+type InferenceEventRecorder func(workerexecution.InferenceEvent)
 
 // RecordingProvider wraps a Provider and emits inference request/response events
 // around each delegated provider call.
@@ -44,8 +48,8 @@ func WithRecordingProviderClock(now func() time.Time) RecordingProviderOption {
 	}
 }
 
-// NewRecordingProvider creates a Provider wrapper that records generated
-// inference events before and after calls to inner.
+// NewRecordingProvider creates a Provider wrapper that records inference facts
+// before and after calls to inner.
 func NewRecordingProvider(inner Provider, recorder InferenceEventRecorder, opts ...RecordingProviderOption) *RecordingProvider {
 	provider := &RecordingProvider{
 		inner:    inner,
@@ -61,7 +65,7 @@ func NewRecordingProvider(inner Provider, recorder InferenceEventRecorder, opts 
 
 // Infer records a request event, delegates to the wrapped provider, then records
 // the matching response event with success or failure details.
-func (p *RecordingProvider) Infer(ctx context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *RecordingProvider) Infer(ctx context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	attempt := p.nextAttempt(req.Dispatch.DispatchID)
 	inferenceRequestID := inferenceRequestID(req.Dispatch.DispatchID, attempt)
 	started := p.now()
@@ -77,10 +81,10 @@ func (p *RecordingProvider) Infer(ctx context.Context, req interfaces.ProviderIn
 	return resp, err
 }
 
-func (p *RecordingProvider) inferInner(ctx context.Context, req interfaces.ProviderInferenceRequest) (interfaces.InferenceResponse, error) {
+func (p *RecordingProvider) inferInner(ctx context.Context, req workerexecution.ProviderInferenceRequest) (workerexecution.InferenceResponse, error) {
 	if p.inner == nil {
-		return interfaces.InferenceResponse{}, NewProviderError(
-			interfaces.WorkFailureTypeMisconfigured,
+		return workerexecution.InferenceResponse{}, NewProviderError(
+			workerexecution.WorkFailureTypeMisconfigured,
 			"recording provider requires an inner provider",
 			nil,
 		)
@@ -88,7 +92,7 @@ func (p *RecordingProvider) inferInner(ctx context.Context, req interfaces.Provi
 	return p.inner.Infer(ctx, req)
 }
 
-func (p *RecordingProvider) record(event factoryapi.FactoryEvent) {
+func (p *RecordingProvider) record(event workerexecution.InferenceEvent) {
 	if p.recorder != nil {
 		p.recorder(event)
 	}
@@ -115,74 +119,86 @@ func inferenceRequestID(dispatchID string, attempt int) string {
 	return fmt.Sprintf("%s/inference-request/%d", dispatchID, attempt)
 }
 
-func inferenceRequestEvent(req interfaces.ProviderInferenceRequest, attempt int, inferenceRequestID string, eventTime time.Time) factoryapi.FactoryEvent {
-	payload := factoryapi.InferenceRequestEventPayload{
-		InferenceRequestId: inferenceRequestID,
+func inferenceRequestEvent(req workerexecution.ProviderInferenceRequest, attempt int, inferenceRequestID string, eventTime time.Time) workerexecution.InferenceEvent {
+	payload := workerexecution.InferenceRequestEventPayload{
+		InferenceRequestID: inferenceRequestID,
 		Attempt:            attempt,
 		WorkingDirectory:   req.WorkingDirectory,
 		Worktree:           req.Worktree,
 		Prompt:             req.UserMessage,
 	}
-	return factoryapi.FactoryEvent{
-		SchemaVersion: factoryapi.AgentFactoryEventV1,
-		Type:          factoryapi.FactoryEventTypeInferenceRequest,
-		Id:            fmt.Sprintf("%s/%s", inferenceRequestEventIDPrefix, inferenceRequestID),
-		Context:       inferenceEventContext(req, eventTime),
-		Payload:       inferenceRequestFactoryEventPayload(payload),
+	return inferenceEvent(req, eventTime, workerexecution.InferenceEventKindRequest,
+		fmt.Sprintf("%s/%s", inferenceRequestEventIDPrefix, inferenceRequestID), &payload, nil)
+}
+
+func inferenceEvent(
+	req workerexecution.ProviderInferenceRequest,
+	eventTime time.Time,
+	kind workerexecution.InferenceEventKind,
+	id string,
+	request *workerexecution.InferenceRequestEventPayload,
+	response *workerexecution.InferenceResponseEventPayload,
+) workerexecution.InferenceEvent {
+	return workerexecution.InferenceEvent{
+		ID:         id,
+		Kind:       kind,
+		EventTime:  eventTime.UTC(),
+		Tick:       inferenceEventTick(req.Dispatch.Execution),
+		DispatchID: req.Dispatch.DispatchID,
+		RequestID:  req.Dispatch.Execution.RequestID,
+		TraceIDs:   stringSlice(req.Dispatch.Execution.TraceID),
+		WorkIDs:    stringSlice(req.Dispatch.Execution.WorkIDs...),
+		Request:    request,
+		Response:   response,
 	}
 }
 
-func inferenceResponseEvent(req interfaces.ProviderInferenceRequest, resp interfaces.InferenceResponse, err error, attempt int, inferenceRequestID string, duration time.Duration, eventTime time.Time) factoryapi.FactoryEvent {
-	payload := factoryapi.InferenceResponseEventPayload{
-		InferenceRequestId: inferenceRequestID,
+func inferenceResponseEvent(req workerexecution.ProviderInferenceRequest, resp workerexecution.InferenceResponse, err error, attempt int, inferenceRequestID string, duration time.Duration, eventTime time.Time) workerexecution.InferenceEvent {
+	payload := workerexecution.InferenceResponseEventPayload{
+		InferenceRequestID: inferenceRequestID,
 		Attempt:            attempt,
 		DurationMillis:     duration.Milliseconds(),
 	}
 	baseDiagnostics := workDiagnosticsForInferenceRequest(req)
 	if err != nil {
-		payload.Outcome = factoryapi.InferenceOutcomeFailed
+		payload.Outcome = workerexecution.InferenceOutcomeFailed
 		payload.FailureDetail = providerFailureDetail(err)
 		payload.ExitCode = providerErrorExitCode(err)
-		payload.ProviderSession = interfaces.GeneratedProviderSessionMetadata(providerSessionFromInferenceError(err))
-		payload.Diagnostics = interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(
+		payload.ProviderSession = canonicalProviderSession(providerSessionFromInferenceError(err))
+		payload.Diagnostics = safeInferenceDiagnosticsEventPayload(
 			mergeWorkDiagnostics(
 				withInferenceErrorDiagnostics(baseDiagnostics, err, attempt-1),
 				diagnosticsFromInferenceError(err),
 			),
 		)
 	} else {
-		payload.Outcome = factoryapi.InferenceOutcomeSucceeded
+		payload.Outcome = workerexecution.InferenceOutcomeSucceeded
 		payload.Response = stringPtr(resp.Content)
-		payload.ProviderSession = interfaces.GeneratedProviderSessionMetadata(resp.ProviderSession)
-		payload.Diagnostics = interfaces.GeneratedSafeWorkDiagnosticsFromWorkDiagnostics(
+		payload.ProviderSession = canonicalProviderSession(resp.ProviderSession)
+		payload.Diagnostics = safeInferenceDiagnosticsEventPayload(
 			withInferenceResponseDiagnostics(baseDiagnostics, resp, attempt-1),
 		)
 	}
-	return factoryapi.FactoryEvent{
-		SchemaVersion: factoryapi.AgentFactoryEventV1,
-		Type:          factoryapi.FactoryEventTypeInferenceResponse,
-		Id:            fmt.Sprintf("%s/%s", inferenceResponseEventIDPrefix, inferenceRequestID),
-		Context:       inferenceEventContext(req, eventTime),
-		Payload:       inferenceResponseFactoryEventPayload(payload),
-	}
+	return inferenceEvent(req, eventTime, workerexecution.InferenceEventKindResponse,
+		fmt.Sprintf("%s/%s", inferenceResponseEventIDPrefix, inferenceRequestID), nil, &payload)
 }
 
-func providerFailureDetail(err error) *factoryapi.FailureDetail {
+func providerFailureDetail(err error) *workerexecution.InferenceResponseFailureDetail {
 	var providerErr *ProviderError
 	if errors.As(err, &providerErr) {
 		message := strings.TrimSpace(providerErr.Message)
 		if message == "" {
 			message = "The provider request failed without an available explanation."
 		}
-		return &factoryapi.FailureDetail{Reason: factoryapi.WorkFailureType(providerErrorClass(err)), Message: message}
+		return &workerexecution.InferenceResponseFailureDetail{Reason: workerexecution.WorkFailureType(providerErrorClass(err)), Message: message}
 	}
-	return &factoryapi.FailureDetail{
-		Reason:  factoryapi.WorkFailureTypeUnknown,
+	return &workerexecution.InferenceResponseFailureDetail{
+		Reason:  workerexecution.WorkFailureTypeUnknown,
 		Message: "The provider request failed without an available explanation.",
 	}
 }
 
-func providerSessionFromInferenceError(err error) *interfaces.ProviderSessionMetadata {
+func providerSessionFromInferenceError(err error) *workerexecution.ProviderSessionMetadata {
 	var providerErr *ProviderError
 	if !errors.As(err, &providerErr) {
 		return nil
@@ -190,7 +206,7 @@ func providerSessionFromInferenceError(err error) *interfaces.ProviderSessionMet
 	return providerErr.ProviderSession
 }
 
-func diagnosticsFromInferenceError(err error) *interfaces.WorkDiagnostics {
+func diagnosticsFromInferenceError(err error) *workerexecution.WorkDiagnostics {
 	var providerErr *ProviderError
 	if !errors.As(err, &providerErr) {
 		return nil
@@ -198,18 +214,7 @@ func diagnosticsFromInferenceError(err error) *interfaces.WorkDiagnostics {
 	return providerErr.Diagnostics
 }
 
-func inferenceEventContext(req interfaces.ProviderInferenceRequest, eventTime time.Time) factoryapi.FactoryEventContext {
-	return factoryapi.FactoryEventContext{
-		Tick:       inferenceEventTick(req.Dispatch.Execution),
-		EventTime:  interfaces.CanonicalEventTime(eventTime),
-		DispatchId: stringPtrIfNotEmpty(req.Dispatch.DispatchID),
-		RequestId:  stringPtrIfNotEmpty(req.Dispatch.Execution.RequestID),
-		TraceIds:   stringSlicePtr(req.Dispatch.Execution.TraceID),
-		WorkIds:    stringSlicePtr(req.Dispatch.Execution.WorkIDs...),
-	}
-}
-
-func inferenceEventTick(metadata interfaces.ExecutionMetadata) int {
+func inferenceEventTick(metadata work.ExecutionMetadata) int {
 	if metadata.CurrentTick != 0 {
 		return metadata.CurrentTick
 	}
@@ -229,7 +234,7 @@ func providerErrorClass(err error) string {
 	if errors.As(err, &providerErr) && providerErr.Type != "" {
 		return string(providerErr.Type)
 	}
-	return string(interfaces.WorkFailureTypeUnknown)
+	return string(workerexecution.WorkFailureTypeUnknown)
 }
 
 func providerErrorExitCode(err error) *int {
@@ -244,34 +249,29 @@ func providerErrorExitCode(err error) *int {
 	)
 }
 
-func inferenceRequestFactoryEventPayload(payload factoryapi.InferenceRequestEventPayload) factoryapi.FactoryEvent_Payload {
-	var out factoryapi.FactoryEvent_Payload
-	if err := out.FromInferenceRequestEventPayload(payload); err != nil {
-		panic(fmt.Sprintf("inference request event payload: %v", err))
+func safeInferenceDiagnosticsEventPayload(diagnostics *workerexecution.WorkDiagnostics) json.RawMessage {
+	payload, err := workerdiagnostics.SafeWorkDiagnosticsEventPayload(
+		workerdiagnostics.SafeWorkDiagnosticsFromWorkDiagnostics(diagnostics),
+	)
+	if err != nil {
+		panic(fmt.Sprintf("encode safe inference event diagnostics: %v", err))
 	}
-	return out
+	return payload
 }
 
-func inferenceResponseFactoryEventPayload(payload factoryapi.InferenceResponseEventPayload) factoryapi.FactoryEvent_Payload {
-	var out factoryapi.FactoryEvent_Payload
-	if err := out.FromInferenceResponseEventPayload(payload); err != nil {
-		panic(fmt.Sprintf("inference response event payload: %v", err))
+func canonicalProviderSession(session *workerexecution.ProviderSessionMetadata) *workerexecution.ProviderSessionMetadata {
+	cloned := workerexecution.CloneProviderSessionMetadata(session)
+	if cloned != nil {
+		cloned.Provider = workerexecution.CanonicalProviderSessionProvider(cloned.Provider)
 	}
-	return out
+	return cloned
 }
 
 func stringPtr(value string) *string {
 	return &value
 }
 
-func stringPtrIfNotEmpty(value string) *string {
-	if value == "" {
-		return nil
-	}
-	return &value
-}
-
-func stringSlicePtr(values ...string) *[]string {
+func stringSlice(values ...string) []string {
 	out := make([]string, 0, len(values))
 	for _, value := range values {
 		if value == "" {
@@ -282,7 +282,7 @@ func stringSlicePtr(values ...string) *[]string {
 	if len(out) == 0 {
 		return nil
 	}
-	return &out
+	return out
 }
 
 var _ Provider = (*RecordingProvider)(nil)

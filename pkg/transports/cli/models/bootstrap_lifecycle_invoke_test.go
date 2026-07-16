@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	"github.com/portpowered/infinite-you/pkg/service"
-	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	"go.uber.org/zap"
 )
 
@@ -25,11 +25,11 @@ func (p offlineNonReadyAssetPuller) PullModel(_ context.Context, _ *factoryconfi
 	return apisurface.ModelPullResult{}, nil
 }
 
-func (p offlineNonReadyAssetPuller) EnsureModelAvailable(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *interfaces.WorkerConfig) error {
+func (p offlineNonReadyAssetPuller) EnsureModelAvailable(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *workerconfig.Config) error {
 	return nil
 }
 
-func (p offlineNonReadyAssetPuller) ResolveModelCache(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *interfaces.WorkerConfig) (localmodels.CacheLayout, error) {
+func (p offlineNonReadyAssetPuller) ResolveModelCache(_ context.Context, _ *factoryconfig.LoadedFactoryConfig, _ *workerconfig.Config) (localmodels.CacheLayout, error) {
 	return localmodels.CacheLayout{}, nil
 }
 
@@ -131,7 +131,7 @@ func TestInvoke_OfflineNonReadyLifecycle_ReadinessGatedFailuresWithoutHTTPServer
 			if !errors.As(err, &readinessErr) {
 				t.Fatalf("error = %T, want *ManagedRuntimeInvocationError", err)
 			}
-			if readinessErr.ReadinessState == factoryapi.ManagedRuntimeReadinessStateREADY {
+			if readinessErr.ReadinessState == managedruntime.ReadinessStateReady {
 				t.Fatalf("readiness = READY, want non-ready managed runtime state")
 			}
 		})

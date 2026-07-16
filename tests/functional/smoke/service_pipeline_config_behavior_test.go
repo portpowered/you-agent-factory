@@ -4,8 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -15,7 +17,7 @@ func TestServicePipelineConfigBehavior_SimplePipelineCompletesOneTask(t *testing
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"simple service smoke"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Simple pipeline done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Simple pipeline done. COMPLETE"},
 	)
 	harness := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -42,8 +44,8 @@ func TestServicePipelineConfigBehavior_TwoStagePipelineCompletesAcrossBothWorker
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title":"two-stage service smoke"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Step one done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Step two done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
 	harness := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -67,7 +69,7 @@ func TestServicePipelineConfigBehavior_TwoStagePipelineCompletesAcrossBothWorker
 func writeSharedServicePipelineWorkerConfig(t *testing.T, dir, workerName string) {
 	t.Helper()
 
-	support.WriteAgentConfig(t, dir, workerName, support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, workerName, support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
 }
 
 func assertCompletedFactoryState(t *testing.T, harness *testutil.ServiceTestHarness) {

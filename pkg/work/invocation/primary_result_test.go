@@ -4,7 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestResolvePrimaryResult_SubmittedWorkTerminalFallbackReturnsSubmittedTerminalContent(t *testing.T) {
@@ -12,7 +13,7 @@ func TestResolvePrimaryResult_SubmittedWorkTerminalFallbackReturnsSubmittedTermi
 	rootInitial := invocationWorkItem("work-root", "task", "draft", "root", "task:init")
 	rootTerminal := invocationWorkItem("work-root", "task", "complete", "root", "task:complete")
 	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
-	recordInvocationDispatchOutput(&state, 2, "dispatch-root", []interfaces.FactoryWorkItem{rootInitial}, rootTerminal)
+	recordInvocationDispatchOutput(&state, 2, "dispatch-root", []work.FactoryWorkItem{rootInitial}, rootTerminal)
 	state.TerminalWorkByID[rootTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: rootTerminal, Status: "TERMINAL"}
 
 	got, err := ResolvePrimaryResult(PrimaryResultSelectionInput{
@@ -28,12 +29,12 @@ func TestResolvePrimaryResult_SubmittedWorkTerminalFallbackReturnsSubmittedTermi
 
 func TestResolvePrimaryResult_SubmittedWorkTerminalReturnsAcceptedResponseContent(t *testing.T) {
 	state := invocationWorldStateFixture()
-	requestContent := []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	requestContent := []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: "submitted request text",
 	}}
-	responseContent := []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	responseContent := []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: "accepted workstation response",
 	}}
 	rootInitial := invocationWorkItem("work-root", "task", "draft", "root", "task:init")
@@ -41,7 +42,7 @@ func TestResolvePrimaryResult_SubmittedWorkTerminalReturnsAcceptedResponseConten
 	rootTerminal := invocationWorkItem("work-root", "task", "complete", "root", "task:complete")
 	rootTerminal.Content = responseContent
 	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
-	recordInvocationDispatchOutput(&state, 2, "dispatch-root", []interfaces.FactoryWorkItem{rootInitial}, rootTerminal)
+	recordInvocationDispatchOutput(&state, 2, "dispatch-root", []work.FactoryWorkItem{rootInitial}, rootTerminal)
 	state.TerminalWorkByID[rootTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: rootTerminal, Status: "TERMINAL"}
 
 	got, err := ResolvePrimaryResult(PrimaryResultSelectionInput{
@@ -65,7 +66,7 @@ func TestResolvePrimaryResult_ExplicitPolicyReturnsConfiguredTerminalContentInIn
 	rootTerminal := invocationWorkItem("work-root", "task", "complete", "root", "task:complete")
 	summaryTerminal := invocationWorkItem("work-summary", "summary", "complete", "summary", "summary:complete")
 	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
-	recordInvocationDispatchOutput(&state, 2, "dispatch-root", []interfaces.FactoryWorkItem{rootInitial}, rootTerminal, summaryTerminal)
+	recordInvocationDispatchOutput(&state, 2, "dispatch-root", []work.FactoryWorkItem{rootInitial}, rootTerminal, summaryTerminal)
 	state.TerminalWorkByID[rootTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: rootTerminal, Status: "TERMINAL"}
 	state.TerminalWorkByID[summaryTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: summaryTerminal, Status: "TERMINAL"}
 
@@ -96,9 +97,9 @@ func TestResolvePrimaryResult_ExplicitPolicyFallsBackToInvocationTraceWhenScopeW
 	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
 	state.WorkRequestsByID["request-1"] = interfaces.WorkRequestPayload{
 		RequestID: "request-1",
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
 		TraceID:   traceID,
-		WorkItems: []interfaces.FactoryWorkItem{rootInitial},
+		WorkItems: []work.FactoryWorkItem{rootInitial},
 	}
 	state.TerminalWorkByID[goalComplete.ID] = interfaces.FactoryTerminalWork{WorkItem: goalComplete, Status: "TERMINAL"}
 
@@ -126,8 +127,8 @@ func TestResolvePrimaryResult_FallbackDoesNotCrossTalkAcrossInvocationScopes(t *
 	requestTwoTerminal := invocationWorkItem("work-root-2", "task", "complete", "root-2", "task:complete")
 	recordInvocationSubmittedWork(&state, 1, "request-1", requestOneRoot)
 	recordInvocationSubmittedWork(&state, 2, "request-2", requestTwoRoot)
-	recordInvocationDispatchOutput(&state, 3, "dispatch-root-1", []interfaces.FactoryWorkItem{requestOneRoot}, requestOneTerminal)
-	recordInvocationDispatchOutput(&state, 4, "dispatch-root-2", []interfaces.FactoryWorkItem{requestTwoRoot}, requestTwoTerminal)
+	recordInvocationDispatchOutput(&state, 3, "dispatch-root-1", []work.FactoryWorkItem{requestOneRoot}, requestOneTerminal)
+	recordInvocationDispatchOutput(&state, 4, "dispatch-root-2", []work.FactoryWorkItem{requestTwoRoot}, requestTwoTerminal)
 	state.TerminalWorkByID[requestOneTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: requestOneTerminal, Status: "TERMINAL"}
 	state.TerminalWorkByID[requestTwoTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: requestTwoTerminal, Status: "TERMINAL"}
 
@@ -148,7 +149,7 @@ func TestResolvePrimaryResult_FallbackPrefersSubmittedLogicalWorkOverFanoutSibli
 	rootTerminal := invocationWorkItem("work-root", "task", "complete", "root", "task:complete")
 	fanoutTerminal := invocationWorkItem("work-fanout", "summary", "complete", "fanout", "summary:complete")
 	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
-	recordInvocationDispatchOutput(&state, 2, "dispatch-root", []interfaces.FactoryWorkItem{rootInitial}, rootTerminal, fanoutTerminal)
+	recordInvocationDispatchOutput(&state, 2, "dispatch-root", []work.FactoryWorkItem{rootInitial}, rootTerminal, fanoutTerminal)
 	state.TerminalWorkByID[rootTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: rootTerminal, Status: "TERMINAL"}
 	state.TerminalWorkByID[fanoutTerminal.ID] = interfaces.FactoryTerminalWork{WorkItem: fanoutTerminal, Status: "TERMINAL"}
 
@@ -244,8 +245,8 @@ func TestResolvePrimaryResult_PartialTimeoutLikeFailedWorkDoesNotResolvePrimaryR
 	partialText := "partial answer before timeout"
 	rootInitial := invocationWorkItem("work-root", "task", "draft", "root", "task:init")
 	rootFailed := invocationWorkItem("work-root", "task", "failed", "root", "task:failed")
-	rootFailed.Content = []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	rootFailed.Content = []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: partialText,
 	}}
 	recordInvocationSubmittedWork(&state, 1, "request-1", rootInitial)
@@ -281,12 +282,12 @@ func TestResolvePrimaryResult_PartialTimeoutLikeFailedWorkDoesNotResolvePrimaryR
 
 func TestResolvePrimaryResult_FailedTerminalDoesNotReturnResponseShapedContent(t *testing.T) {
 	state := invocationWorldStateFixture()
-	requestContent := []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	requestContent := []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: "submitted request text",
 	}}
-	responseContent := []interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	responseContent := []work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: "worker response that must not become primary result",
 	}}
 	rootInitial := invocationWorkItem("work-root", "task", "draft", "root", "task:init")
@@ -530,25 +531,25 @@ func TestClassifyInvocationControlState_PrefersPausedOverInterrupted(t *testing.
 
 func invocationWorldStateFixture() interfaces.FactoryWorldState {
 	return interfaces.FactoryWorldState{
-		PayloadLineage:           interfaces.WorkPayloadLineageProjection{},
-		WorkItemsByID:            make(map[string]interfaces.FactoryWorkItem),
+		PayloadLineage:           work.WorkPayloadLineageProjection{},
+		WorkItemsByID:            make(map[string]work.FactoryWorkItem),
 		WorkRequestsByID:         make(map[string]interfaces.WorkRequestPayload),
 		TerminalWorkByID:         make(map[string]interfaces.FactoryTerminalWork),
-		FailedWorkItemsByID:      make(map[string]interfaces.FactoryWorkItem),
+		FailedWorkItemsByID:      make(map[string]work.FactoryWorkItem),
 		WorkStateChangesByWorkID: make(map[string][]interfaces.FactoryWorldWorkStateChangeRecord),
 	}
 }
 
-func invocationWorkItem(workID, workTypeName, stateName, name, placeID string) interfaces.FactoryWorkItem {
-	return interfaces.FactoryWorkItem{
+func invocationWorkItem(workID, workTypeName, stateName, name, placeID string) work.FactoryWorkItem {
+	return work.FactoryWorkItem{
 		ID:          workID,
 		WorkTypeID:  workTypeName,
 		State:       stateName,
 		DisplayName: name,
 		TraceID:     workID + "-trace",
 		PlaceID:     placeID,
-		Content: []interfaces.WorkContentPart{{
-			Type: interfaces.WorkContentPartTypeText,
+		Content: []work.WorkContentPart{{
+			Type: work.WorkContentPartTypeText,
 			Text: workID + "-content",
 		}},
 	}
@@ -575,15 +576,15 @@ func recordInvocationSubmittedWork(
 	state *interfaces.FactoryWorldState,
 	tick int,
 	requestID string,
-	items ...interfaces.FactoryWorkItem,
+	items ...work.FactoryWorkItem,
 ) {
 	if state == nil {
 		return
 	}
 	request := interfaces.WorkRequestPayload{
 		RequestID: requestID,
-		Type:      interfaces.WorkRequestTypeFactoryRequestBatch,
-		WorkItems: append([]interfaces.FactoryWorkItem(nil), items...),
+		Type:      work.WorkRequestTypeFactoryRequestBatch,
+		WorkItems: append([]work.FactoryWorkItem(nil), items...),
 	}
 	state.WorkRequestsByID[requestID] = request
 	for _, item := range items {
@@ -595,8 +596,8 @@ func recordInvocationDispatchOutput(
 	state *interfaces.FactoryWorldState,
 	tick int,
 	dispatchID string,
-	consumed []interfaces.FactoryWorkItem,
-	outputs ...interfaces.FactoryWorkItem,
+	consumed []work.FactoryWorkItem,
+	outputs ...work.FactoryWorkItem,
 ) {
 	if state == nil {
 		return
@@ -613,7 +614,7 @@ func assertPrimaryResultSelection(
 	t *testing.T,
 	got PrimaryResultSelection,
 	wantPolicy string,
-	want interfaces.FactoryWorkItem,
+	want work.FactoryWorkItem,
 ) {
 	t.Helper()
 

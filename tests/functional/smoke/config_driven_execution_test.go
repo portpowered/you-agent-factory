@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -16,8 +16,8 @@ func TestConfigDrivenExecution_HappyPath(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Config-driven happy path"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Step one done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Step two done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,
@@ -45,7 +45,7 @@ func TestConfigDrivenExecution_HappyPathFailureRouting(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "task", []byte(`{"title": "Will fail"}`))
 
 	provider := testutil.NewMockProviderWithErrors(
-		[]interfaces.InferenceResponse{{Content: ""}},
+		[]workerexecution.InferenceResponse{{Content: ""}},
 		[]error{fmt.Errorf("something went wrong")},
 	)
 
@@ -70,8 +70,8 @@ func TestConfigDrivenExecution_AddWorkType(t *testing.T) {
 	testutil.WriteSeedFile(t, dir, "review", []byte(`{"title": "New review"}`))
 
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Request handled. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Review handled. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Request handled. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Review handled. COMPLETE"},
 	)
 
 	h := testutil.NewServiceTestHarness(t, dir,

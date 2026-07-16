@@ -1,12 +1,131 @@
 package events
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
+
+func TestFactoryEventHistory_RecordInferenceEvent_OwnsEnvelopeAndPreservesPublicPayload(t *testing.T) {
+	eventTime := time.Date(2026, 7, 15, 16, 30, 0, 123456789, time.FixedZone("offset", 3*60*60))
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+
+	history.RecordInferenceEvent(workerexecution.InferenceEvent{
+		ID:         "factory-event/inference-response/dispatch-inference/1",
+		Kind:       workerexecution.InferenceEventKindResponse,
+		EventTime:  eventTime,
+		Tick:       14,
+		DispatchID: "dispatch-inference",
+		RequestID:  "request-inference",
+		TraceIDs:   []string{"trace-inference"},
+		WorkIDs:    []string{"work-inference"},
+		Response: &workerexecution.InferenceResponseEventPayload{
+			Attempt:            1,
+			Diagnostics:        json.RawMessage(`{"provider":{"provider":"mock","model":"fixture-model"}}`),
+			DurationMillis:     125,
+			InferenceRequestID: "dispatch-inference/inference-request/1",
+			Outcome:            workerexecution.InferenceOutcomeSucceeded,
+			ProviderSession: &workerexecution.ProviderSessionMetadata{
+				Provider: "mock", Kind: "session_id", ID: "provider-session-1",
+			},
+			Response: stringPtr("provider response"),
+		},
+	})
+	assertCanonicalInferenceResponseEvent(t, history.CanonicalEvents(), eventTime)
+	assertPublicInferenceResponseEvent(t, generatedHistoryEvents(t, history))
+}
+
+func assertCanonicalInferenceResponseEvent(t *testing.T, canonical []interfaces.FactoryEvent, eventTime time.Time) {
+	t.Helper()
+	if len(canonical) != 1 || canonical[0].Type != interfaces.FactoryEventTypeInferenceResponse {
+		t.Fatalf("canonical events = %#v, want one inference response", canonical)
+	}
+	if canonical[0].Context.EventTime.Location() != time.UTC || !canonical[0].Context.EventTime.Equal(eventTime) {
+		t.Fatalf("event time = %s (%s), want same instant normalized to UTC", canonical[0].Context.EventTime, canonical[0].Context.EventTime.Location())
+	}
+	if canonical[0].Context.DispatchID == nil || *canonical[0].Context.DispatchID != "dispatch-inference" ||
+		canonical[0].Context.RequestID == nil || *canonical[0].Context.RequestID != "request-inference" {
+		t.Fatalf("canonical context = %#v, want inference correlation", canonical[0].Context)
+	}
+}
+
+func assertPublicInferenceResponseEvent(t *testing.T, publicEvents []factoryapi.FactoryEvent) {
+	t.Helper()
+	payload, err := publicEvents[0].Payload.AsInferenceResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode public inference payload: %v", err)
+	}
+	if payload.InferenceRequestId != "dispatch-inference/inference-request/1" || payload.Attempt != 1 ||
+		payload.Outcome != factoryapi.InferenceOutcomeSucceeded || payload.DurationMillis != 125 ||
+		payload.Response == nil || *payload.Response != "provider response" {
+		t.Fatalf("public payload = %#v, want preserved inference result", payload)
+	}
+	if payload.Diagnostics == nil || payload.Diagnostics.Provider == nil || payload.ProviderSession == nil {
+		t.Fatalf("public diagnostics/session = %#v / %#v, want preserved safe metadata", payload.Diagnostics, payload.ProviderSession)
+	}
+}
+
+func TestFactoryEventHistory_RecordInferenceEvent_IgnoresMalformedFacts(t *testing.T) {
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+
+	history.RecordInferenceEvent(workerexecution.InferenceEvent{
+		ID:         "factory-event/inference-request/invalid",
+		Kind:       workerexecution.InferenceEventKindRequest,
+		EventTime:  time.Unix(0, 0).UTC(),
+		DispatchID: "dispatch-inference",
+		Response:   &workerexecution.InferenceResponseEventPayload{},
+	})
+
+	if events := generatedHistoryEvents(t, history); len(events) != 0 {
+		t.Fatalf("event count = %d, want 0 for mismatched inference fact", len(events))
+	}
+}
+
+func TestFactoryEventHistory_RecordAgentRunEvent_OwnsEnvelopeAndPreservesPublicPayload(t *testing.T) {
+	eventTime := time.Date(2026, 7, 15, 22, 30, 0, 123456789, time.FixedZone("offset", -7*60*60))
+	diagnostics := json.RawMessage(`{"agentRun":{"executionBehavior":"agent_loop","transcript":[{"role":"assistant","summary":"done"}]}}`)
+	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
+
+	history.RecordAgentRunEvent(workerexecution.AgentRunResponseEvent{
+		ID:         "factory-event/agent-run-response/dispatch-agent",
+		DispatchID: "dispatch-agent",
+		EventTime:  eventTime,
+		Payload: workerexecution.AgentRunResponseEventPayload{
+			AgentRunID:     "dispatch-agent/agent-run/1",
+			Diagnostics:    diagnostics,
+			DurationMillis: 1250,
+			Outcome:        string(workerexecution.OutcomeAccepted),
+		},
+	})
+
+	canonical := history.CanonicalEvents()
+	if len(canonical) != 1 || canonical[0].Type != interfaces.FactoryEventTypeAgentRunResponse {
+		t.Fatalf("canonical events = %#v, want one agent-run response", canonical)
+	}
+	if canonical[0].Context.EventTime.Location() != time.UTC || !canonical[0].Context.EventTime.Equal(eventTime) {
+		t.Fatalf("event time = %s (%s), want same instant normalized to UTC", canonical[0].Context.EventTime, canonical[0].Context.EventTime.Location())
+	}
+	if canonical[0].Context.DispatchID == nil || *canonical[0].Context.DispatchID != "dispatch-agent" {
+		t.Fatalf("dispatch ID = %#v, want dispatch-agent", canonical[0].Context.DispatchID)
+	}
+
+	publicEvents := generatedHistoryEvents(t, history)
+	payload, err := publicEvents[0].Payload.AsAgentRunResponseEventPayload()
+	if err != nil {
+		t.Fatalf("decode public agent-run payload: %v", err)
+	}
+	if payload.AgentRunId != "dispatch-agent/agent-run/1" || payload.DurationMillis != 1250 || payload.Outcome != factoryapi.WorkOutcomeAccepted {
+		t.Fatalf("public payload = %#v, want preserved agent-run result", payload)
+	}
+	if payload.Diagnostics == nil || payload.Diagnostics.AgentRun == nil || len(*payload.Diagnostics.AgentRun.Transcript) != 1 {
+		t.Fatalf("public diagnostics = %#v, want bounded agent-run transcript", payload.Diagnostics)
+	}
+}
 
 func TestFactoryEventHistory_RecordScriptEvent_AppendsScriptBoundaryEvents(t *testing.T) {
 	eventTime := time.Date(2026, 4, 22, 14, 5, 0, 0, time.UTC)
@@ -15,7 +134,7 @@ func TestFactoryEventHistory_RecordScriptEvent_AppendsScriptBoundaryEvents(t *te
 
 	recordScriptBoundaryEvents(history, eventTime, scriptRequestID)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	assertRecordedScriptBoundaryEvents(t, events)
 	assertRecordedScriptRequestPayload(t, events[0], scriptRequestID)
 	assertRecordedScriptResponsePayload(t, events[1], scriptRequestID)
@@ -24,66 +143,55 @@ func TestFactoryEventHistory_RecordScriptEvent_AppendsScriptBoundaryEvents(t *te
 func TestFactoryEventHistory_RecordScriptEvent_IgnoresNonScriptEvents(t *testing.T) {
 	history := NewFactoryEventHistory(eventHistoryProjectionNet(), func() time.Time { return time.Unix(0, 0).UTC() })
 
-	history.RecordScriptEvent(factoryEvent(
-		factoryapi.FactoryEventTypeInferenceRequest,
-		"factory-event/inference-request/dispatch-script/1",
-		factoryapi.FactoryEventContext{
-			Tick:       1,
-			EventTime:  time.Unix(0, 0).UTC(),
-			DispatchId: stringPtr("dispatch-script"),
-		},
-		factoryapi.InferenceRequestEventPayload{
-			InferenceRequestId: "dispatch-script/inference-request/1",
-			Attempt:            1,
-			WorkingDirectory:   "/tmp/ignored",
-			Worktree:           "/tmp/ignored/worktree",
-			Prompt:             "ignored",
-		},
-	))
+	history.RecordScriptEvent(workerexecution.ScriptEvent{
+		ID:         "factory-event/script-request/invalid",
+		Kind:       workerexecution.ScriptEventKindRequest,
+		EventTime:  time.Unix(0, 0).UTC(),
+		DispatchID: "dispatch-script",
+		Response:   &workerexecution.ScriptResponseEventPayload{},
+	})
 
-	if events := history.Events(); len(events) != 0 {
+	if events := generatedHistoryEvents(t, history); len(events) != 0 {
 		t.Fatalf("event count = %d, want 0 when script recorder receives non-script event", len(events))
 	}
 }
 
 func recordScriptBoundaryEvents(history *FactoryEventHistory, eventTime time.Time, scriptRequestID string) {
-	context := factoryapi.FactoryEventContext{
-		Tick:       14,
+	base := workerexecution.ScriptEvent{
 		EventTime:  eventTime,
-		DispatchId: stringPtr("dispatch-script"),
-		RequestId:  stringPtr("request-script"),
-		TraceIds:   stringSlicePtr([]string{"trace-script"}),
-		WorkIds:    stringSlicePtr([]string{"work-script-1", "work-script-2"}),
+		Tick:       14,
+		DispatchID: "dispatch-script",
+		RequestID:  "request-script",
+		TraceIDs:   []string{"trace-script"},
+		WorkIDs:    []string{"work-script-1", "work-script-2"},
 	}
+	request := base
+	request.ID = "factory-event/script-request/dispatch-script/1"
+	request.Kind = workerexecution.ScriptEventKindRequest
+	request.Request = &workerexecution.ScriptRequestEventPayload{
+		ScriptRequestID: scriptRequestID,
+		DispatchID:      "dispatch-script",
+		TransitionID:    "build",
+		Attempt:         1,
+		Command:         "python",
+		Args:            []string{"main.py", "--mode", "review"},
+	}
+	history.RecordScriptEvent(request)
 
-	history.RecordScriptEvent(factoryEvent(
-		factoryapi.FactoryEventTypeScriptRequest,
-		"factory-event/script-request/dispatch-script/1",
-		context,
-		factoryapi.ScriptRequestEventPayload{
-			ScriptRequestId: scriptRequestID,
-			DispatchId:      "dispatch-script",
-			TransitionId:    "build",
-			Attempt:         1,
-			Command:         "python",
-			Args:            []string{"main.py", "--mode", "review"},
-		},
-	))
-	history.RecordScriptEvent(factoryEvent(
-		factoryapi.FactoryEventTypeScriptResponse,
-		"factory-event/script-response/dispatch-script/1",
-		context,
-		factoryapi.ScriptResponseEventPayload{
-			ScriptRequestId: scriptRequestID,
-			DispatchId:      "dispatch-script",
-			TransitionId:    "build",
-			Attempt:         1,
-			Outcome:         factoryapi.ScriptExecutionOutcomeSucceeded,
-			Stdout:          "ok",
-			Stderr:          "",
-			DurationMillis:  1250,
-		},
-	))
+	response := base
+	response.ID = "factory-event/script-response/dispatch-script/1"
+	response.Kind = workerexecution.ScriptEventKindResponse
+	response.Response = &workerexecution.ScriptResponseEventPayload{
+		ScriptRequestID: scriptRequestID,
+		DispatchID:      "dispatch-script",
+		TransitionID:    "build",
+		Attempt:         1,
+		Outcome:         workerexecution.ScriptExecutionOutcomeSucceeded,
+		Stdout:          "ok",
+		Stderr:          "",
+		DurationMillis:  1250,
+	}
+	history.RecordScriptEvent(response)
 }
 
 func assertRecordedScriptBoundaryEvents(t *testing.T, events []factoryapi.FactoryEvent) {

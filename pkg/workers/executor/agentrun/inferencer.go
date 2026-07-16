@@ -4,21 +4,21 @@ import (
 	"context"
 	"strings"
 
-	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/go-agent-harness/go-agent-loop/pkg/messages"
 )
 
 type runnerInferencer struct {
 	runner  runnerContract
-	baseReq interfaces.ProviderInferenceRequest
+	baseReq workerexecution.ProviderInferenceRequest
 }
 
 type runnerContract interface {
-	Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error)
+	Execute(ctx context.Context, request workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error)
 }
 
-func newRunnerInferencer(runner runnerContract, baseReq interfaces.ProviderInferenceRequest) messages.Inferencer {
+func newRunnerInferencer(runner runnerContract, baseReq workerexecution.ProviderInferenceRequest) messages.Inferencer {
 	return &runnerInferencer{runner: runner, baseReq: baseReq}
 }
 

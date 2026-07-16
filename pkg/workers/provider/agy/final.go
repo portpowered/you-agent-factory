@@ -7,8 +7,11 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
@@ -39,20 +42,20 @@ func parseFinalOnly(_ context.Context, input adapter.FinalParseContext) (adapter
 		return adapter.FinalParseResult{}, unusableFinalOnlyOutput()
 	}
 	return adapter.FinalParseResult{
-		Response: interfaces.InferenceResponse{Content: content},
+		Response: workerexecution.InferenceResponse{Content: content},
 		Drafts:   finalOnlyDrafts(input, content),
 	}, nil
 }
 
 func unusableFinalOnlyOutput() *terminalError {
 	return &terminalError{
-		failureType: interfaces.WorkFailureTypeUnknown,
+		failureType: workerexecution.WorkFailureTypeUnknown,
 		message:     "Agy final-only output did not contain an authoritative response.",
 	}
 }
 
 func timeoutFailureDrafts(input adapter.FinalParseContext, terminal *terminalError) []responseevents.Draft {
-	if terminal == nil || terminal.failureType != interfaces.WorkFailureTypeTimeout {
+	if terminal == nil || terminal.failureType != workerexecution.WorkFailureTypeTimeout {
 		return nil
 	}
 	var drafts []responseevents.Draft
@@ -75,7 +78,7 @@ func timeoutErrorDraft(input adapter.FinalParseContext, terminal *terminalError)
 		RunID: input.RunID, DispatchID: input.DispatchID,
 		Kind: responseevents.KindError, Phase: responseevents.PhaseUpdated,
 		Provenance: responseevents.Provenance{
-			Provider: string(interfaces.ModelProviderAgy), NativeEventType: "session_timeout",
+			Provider: string(modelprovider.Agy), NativeEventType: "session_timeout",
 			Delivery: responseevents.DeliverySynthesized, Representation: responseevents.RepresentationNotification,
 			Fidelity: responseevents.FidelityLifecycleOnly,
 		},
@@ -126,7 +129,7 @@ func partialTimeoutMessageDraft(input adapter.FinalParseContext, content string)
 		RunID: input.RunID, DispatchID: input.DispatchID,
 		Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted,
 		Provenance: responseevents.Provenance{
-			Provider: string(interfaces.ModelProviderAgy), NativeEventType: "timeout_partial_response",
+			Provider: string(modelprovider.Agy), NativeEventType: "timeout_partial_response",
 			Delivery: responseevents.DeliverySynthesized, Representation: responseevents.RepresentationSnapshot,
 			Fidelity: responseevents.FidelityLossy,
 		},
@@ -149,7 +152,7 @@ func finalOnlyDrafts(input adapter.FinalParseContext, content string) []response
 		correlate(responseevents.Draft{
 			Kind: responseevents.KindMessage, Phase: responseevents.PhaseCompleted,
 			Provenance: responseevents.Provenance{
-				Provider: string(interfaces.ModelProviderAgy), NativeEventType: "final_response",
+				Provider: string(modelprovider.Agy), NativeEventType: "final_response",
 				Delivery: responseevents.DeliveryNativeFinal, Representation: responseevents.RepresentationSnapshot,
 				Fidelity: responseevents.FidelityFinalOnly,
 			},
@@ -165,7 +168,7 @@ func finalOnlyRunDraft(phase responseevents.Phase, status string) responseevents
 	return responseevents.Draft{
 		Kind: responseevents.KindRun, Phase: phase,
 		Provenance: responseevents.Provenance{
-			Provider: string(interfaces.ModelProviderAgy), NativeEventType: "command_completion",
+			Provider: string(modelprovider.Agy), NativeEventType: "command_completion",
 			Delivery: responseevents.DeliverySynthesized, Representation: responseevents.RepresentationNotification,
 			Fidelity: responseevents.FidelityLifecycleOnly,
 		},

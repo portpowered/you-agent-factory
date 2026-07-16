@@ -11,15 +11,17 @@ import (
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workdomain "github.com/portpowered/infinite-you/pkg/work"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/engine"
 	factoryrequests "github.com/portpowered/infinite-you/pkg/factory/requests"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	"github.com/portpowered/infinite-you/pkg/work/content"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	invocations "github.com/portpowered/infinite-you/pkg/work/invocation"
 	"github.com/portpowered/infinite-you/pkg/work/materialize"
 	"go.uber.org/zap"
@@ -69,19 +71,19 @@ func decodeInvocationRequestBody(body io.Reader) (factoryapi.InvokeFactorySessio
 	return decodeStrictJSON[factoryapi.InvokeFactorySessionBySessionIdJSONRequestBody](body)
 }
 
-func submitWorkContent(req factoryapi.SubmitWorkRequest) ([]interfaces.WorkContentPart, error) {
+func submitWorkContent(req factoryapi.SubmitWorkRequest) ([]work.WorkContentPart, error) {
 	if req.Items == nil {
 		return contentcontract.PartsFromGenerated(req.Content), nil
 	}
 	return submitWorkItemsToContent(*req.Items)
 }
 
-func submitWorkItemsToContent(items []factoryapi.SubmitWorkItem) ([]interfaces.WorkContentPart, error) {
+func submitWorkItemsToContent(items []factoryapi.SubmitWorkItem) ([]work.WorkContentPart, error) {
 	if len(items) == 0 {
-		return []interfaces.WorkContentPart{}, nil
+		return []work.WorkContentPart{}, nil
 	}
 
-	content := make([]interfaces.WorkContentPart, 0, len(items))
+	content := make([]work.WorkContentPart, 0, len(items))
 	hasMeaningfulItem := false
 	for i, item := range items {
 		part, meaningful, err := submitWorkItemToContentPart(item)
@@ -98,11 +100,11 @@ func submitWorkItemsToContent(items []factoryapi.SubmitWorkItem) ([]interfaces.W
 	return content, nil
 }
 
-func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.WorkContentPart, bool, error) {
+func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (work.WorkContentPart, bool, error) {
 	textItem, textErr := item.AsSubmitWorkTextItem()
 	if textErr == nil && textItem.Type == factoryapi.SubmitWorkItemTypeText {
-		return interfaces.WorkContentPart{
-			Type: interfaces.WorkContentPartTypeText,
+		return work.WorkContentPart{
+			Type: work.WorkContentPartTypeText,
 			Text: textItem.Text,
 		}, strings.TrimSpace(textItem.Text) != "", nil
 	}
@@ -111,10 +113,10 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 	if imageErr == nil && imageItem.Type == factoryapi.SubmitWorkItemTypeImage {
 		stagedFilePath, err := resolveSubmitWorkStagedFileRef(imageItem.StagedFileRef)
 		if err != nil {
-			return interfaces.WorkContentPart{}, false, err
+			return work.WorkContentPart{}, false, err
 		}
 		part, err := submitWorkStagedFileItemContentPart(
-			interfaces.WorkContentPartTypeImage,
+			work.WorkContentPartTypeImage,
 			string(imageItem.Type),
 			stagedFilePath,
 			imageItem.FileName,
@@ -127,10 +129,10 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 	if videoErr == nil && videoItem.Type == factoryapi.SubmitWorkItemTypeVideo {
 		stagedFilePath, err := resolveSubmitWorkStagedFileRef(videoItem.StagedFileRef)
 		if err != nil {
-			return interfaces.WorkContentPart{}, false, err
+			return work.WorkContentPart{}, false, err
 		}
 		part, err := submitWorkStagedFileItemContentPart(
-			interfaces.WorkContentPartTypeBinary,
+			work.WorkContentPartTypeBinary,
 			string(videoItem.Type),
 			stagedFilePath,
 			videoItem.FileName,
@@ -143,10 +145,10 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 	if audioErr == nil && audioItem.Type == factoryapi.SubmitWorkItemTypeAudio {
 		stagedFilePath, err := resolveSubmitWorkStagedFileRef(audioItem.StagedFileRef)
 		if err != nil {
-			return interfaces.WorkContentPart{}, false, err
+			return work.WorkContentPart{}, false, err
 		}
 		part, err := submitWorkStagedFileItemContentPart(
-			interfaces.WorkContentPartTypeAudio,
+			work.WorkContentPartTypeAudio,
 			string(audioItem.Type),
 			stagedFilePath,
 			audioItem.FileName,
@@ -159,10 +161,10 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 	if documentErr == nil && documentItem.Type == factoryapi.SubmitWorkItemTypeDocument {
 		stagedFilePath, err := resolveSubmitWorkStagedFileRef(documentItem.StagedFileRef)
 		if err != nil {
-			return interfaces.WorkContentPart{}, false, err
+			return work.WorkContentPart{}, false, err
 		}
 		part, err := submitWorkStagedFileItemContentPart(
-			interfaces.WorkContentPartTypeBinary,
+			work.WorkContentPartTypeBinary,
 			string(documentItem.Type),
 			stagedFilePath,
 			documentItem.FileName,
@@ -171,21 +173,21 @@ func submitWorkItemToContentPart(item factoryapi.SubmitWorkItem) (interfaces.Wor
 		return part, true, err
 	}
 
-	return interfaces.WorkContentPart{}, false, fmt.Errorf("unsupported item type")
+	return work.WorkContentPart{}, false, fmt.Errorf("unsupported item type")
 }
 
 func submitWorkStagedFileItemContentPart(
-	partType interfaces.WorkContentPartType,
+	partType work.WorkContentPartType,
 	itemType string,
 	stagedFilePath string,
 	fileName string,
 	mediaType string,
-) (interfaces.WorkContentPart, error) {
+) (work.WorkContentPart, error) {
 	contentURL, err := content.FilesystemPathToContentURL(stagedFilePath)
 	if err != nil {
-		return interfaces.WorkContentPart{}, err
+		return work.WorkContentPart{}, err
 	}
-	return interfaces.WorkContentPart{
+	return work.WorkContentPart{
 		Type:        partType,
 		URL:         contentURL,
 		ContentType: mediaType,
@@ -307,7 +309,7 @@ func requiredSubmitWorkItemType(fields map[string]json.RawMessage, prefix string
 	}
 }
 
-func submitWorkResponseFromResult(result interfaces.WorkRequestSubmitResult, sessionID string) factoryapi.SubmitWorkResponse {
+func submitWorkResponseFromResult(result work.WorkRequestSubmitResult, sessionID string) factoryapi.SubmitWorkResponse {
 	resp := factoryapi.SubmitWorkResponse{
 		TraceId:   result.TraceID,
 		RequestId: result.RequestID,
@@ -349,22 +351,22 @@ func (s *Server) SubmitWorkBySessionId(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
-	s.submitWorkCore(w, r, req, string(sessionID), func(ctx context.Context, workRequest interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+	s.submitWorkCore(w, r, req, string(sessionID), func(ctx context.Context, workRequest workdomain.WorkRequest) (work.WorkRequestSubmitResult, error) {
 		return sessionRuntime.SubmitWorkRequestForSession(ctx, string(sessionID), workRequest)
 	})
 }
 
-func submitWorkRequestFromDecoded(req factoryapi.SubmitWorkBySessionIdJSONRequestBody) (interfaces.WorkRequest, error) {
+func submitWorkRequestFromDecoded(req factoryapi.SubmitWorkBySessionIdJSONRequestBody) (workdomain.WorkRequest, error) {
 	payload, err := generatedPayloadToRawMessage(req.Payload)
 	if err != nil {
-		return interfaces.WorkRequest{}, err
+		return workdomain.WorkRequest{}, err
 	}
 	content, err := submitWorkContent(req)
 	if err != nil {
-		return interfaces.WorkRequest{}, err
+		return workdomain.WorkRequest{}, err
 	}
 
-	submitReq := interfaces.SubmitRequest{
+	submitReq := workdomain.SubmitRequest{
 		Name:                   strings.TrimSpace(req.Name),
 		WorkTypeID:             req.WorkTypeName,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
@@ -374,7 +376,7 @@ func submitWorkRequestFromDecoded(req factoryapi.SubmitWorkBySessionIdJSONReques
 		Tags:                   generatedStringMap(req.Tags),
 		Relations:              generatedSubmitRelations(req.Relations),
 	}
-	return factoryrequests.WorkRequestFromSubmitRequests([]interfaces.SubmitRequest{submitReq}), nil
+	return factoryrequests.WorkRequestFromSubmitRequests([]workdomain.SubmitRequest{submitReq}), nil
 }
 
 func (s *Server) submitWorkCore(
@@ -382,7 +384,7 @@ func (s *Server) submitWorkCore(
 	r *http.Request,
 	req factoryapi.SubmitWorkBySessionIdJSONRequestBody,
 	sessionID string,
-	submit func(context.Context, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error),
+	submit func(context.Context, workdomain.WorkRequest) (work.WorkRequestSubmitResult, error),
 ) {
 	workRequest, err := submitWorkRequestFromDecoded(req)
 	if err != nil {
@@ -445,7 +447,7 @@ func (s *Server) UpsertWorkRequestBySessionId(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	s.upsertWorkRequestCore(w, r, req, string(sessionID), func(ctx context.Context, workRequest interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+	s.upsertWorkRequestCore(w, r, req, string(sessionID), func(ctx context.Context, workRequest workdomain.WorkRequest) (work.WorkRequestSubmitResult, error) {
 		return sessionRuntime.SubmitWorkRequestForSession(ctx, string(sessionID), workRequest)
 	})
 }
@@ -455,7 +457,7 @@ func (s *Server) upsertWorkRequestCore(
 	r *http.Request,
 	req factoryapi.UpsertWorkRequestBySessionIdJSONRequestBody,
 	sessionID string,
-	submit func(context.Context, interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error),
+	submit func(context.Context, workdomain.WorkRequest) (work.WorkRequestSubmitResult, error),
 ) {
 	workRequest, err := generatedWorkRequestToDomain(req)
 	if err != nil {
@@ -490,7 +492,7 @@ func (s *Server) upsertWorkRequestCore(
 	s.writeJSON(w, http.StatusCreated, upsertWorkRequestResponse(result))
 }
 
-func upsertWorkRequestResponse(result interfaces.WorkRequestSubmitResult) factoryapi.UpsertWorkRequestResponse {
+func upsertWorkRequestResponse(result work.WorkRequestSubmitResult) factoryapi.UpsertWorkRequestResponse {
 	works := make([]factoryapi.UpsertWorkRequestSubmittedWork, 0, len(result.Works))
 	for _, work := range result.Works {
 		works = append(works, factoryapi.UpsertWorkRequestSubmittedWork{
@@ -512,14 +514,14 @@ func generatedWorkStateName(value *factoryapi.WorkState) string {
 	}
 	return value.Name
 }
-func generatedSubmitRelations(values *[]factoryapi.SubmitRelation) []interfaces.Relation {
+func generatedSubmitRelations(values *[]factoryapi.SubmitRelation) []work.Relation {
 	if values == nil || len(*values) == 0 {
 		return nil
 	}
-	relations := make([]interfaces.Relation, 0, len(*values))
+	relations := make([]work.Relation, 0, len(*values))
 	for _, relation := range *values {
-		relations = append(relations, interfaces.Relation{
-			Type:          interfaces.RelationType(relation.Type),
+		relations = append(relations, work.Relation{
+			Type:          work.RelationType(relation.Type),
 			TargetWorkID:  relation.TargetWorkId,
 			RequiredState: stringValue(relation.RequiredState),
 		})
@@ -527,19 +529,19 @@ func generatedSubmitRelations(values *[]factoryapi.SubmitRelation) []interfaces.
 	return relations
 }
 
-func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRequest, error) {
-	workRequest := interfaces.WorkRequest{
+func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (workdomain.WorkRequest, error) {
+	workRequest := workdomain.WorkRequest{
 		RequestID:              req.RequestId,
 		CurrentChainingTraceID: stringValue(req.CurrentChainingTraceId),
-		Type:                   interfaces.WorkRequestType(req.Type),
+		Type:                   workdomain.WorkRequestType(req.Type),
 	}
 	if req.Works != nil {
-		workRequest.Works = make([]interfaces.Work, 0, len(*req.Works))
+		workRequest.Works = make([]workdomain.Work, 0, len(*req.Works))
 		for i, work := range *req.Works {
 			if err := validateGeneratedWorkContentAtPath(work.Content, fmt.Sprintf("works[%d].content", i)); err != nil {
-				return interfaces.WorkRequest{}, err
+				return workdomain.WorkRequest{}, err
 			}
-			workRequest.Works = append(workRequest.Works, interfaces.Work{
+			workRequest.Works = append(workRequest.Works, workdomain.Work{
 				Name:                     work.Name,
 				WorkID:                   stringValue(work.WorkId),
 				RequestID:                stringValue(work.RequestId),
@@ -556,10 +558,10 @@ func generatedWorkRequestToDomain(req factoryapi.WorkRequest) (interfaces.WorkRe
 		}
 	}
 	if req.Relations != nil {
-		workRequest.Relations = make([]interfaces.WorkRelation, 0, len(*req.Relations))
+		workRequest.Relations = make([]work.WorkRelation, 0, len(*req.Relations))
 		for _, relation := range *req.Relations {
-			workRequest.Relations = append(workRequest.Relations, interfaces.WorkRelation{
-				Type:           interfaces.WorkRelationType(relation.Type),
+			workRequest.Relations = append(workRequest.Relations, work.WorkRelation{
+				Type:           work.WorkRelationType(relation.Type),
 				SourceWorkName: relation.SourceWorkName,
 				TargetWorkName: relation.TargetWorkName,
 				RequiredState:  stringValue(relation.RequiredState),
@@ -703,7 +705,7 @@ func normalizeWorkRequestStateJSON(data []byte) ([]byte, error) {
 	return json.Marshal(request)
 }
 
-func applyStableTraceToWorkRequest(req *interfaces.WorkRequest) {
+func applyStableTraceToWorkRequest(req *workdomain.WorkRequest) {
 	if req == nil || len(req.Works) == 0 {
 		return
 	}
@@ -782,7 +784,7 @@ func (s *Server) MoveWorkBySessionId(w http.ResponseWriter, r *http.Request, ses
 		w,
 		r,
 		string(id),
-		func(ctx context.Context, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error) {
+		func(ctx context.Context, workID, stateName, requestID string) (work.OperatorMoveResult, error) {
 			return sessionRuntime.MoveWorkForSession(ctx, string(sessionID), workID, stateName, requestID)
 		},
 		func(ctx context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error) {
@@ -791,7 +793,7 @@ func (s *Server) MoveWorkBySessionId(w http.ResponseWriter, r *http.Request, ses
 	)
 }
 
-type moveWorkInvoker func(ctx context.Context, workID, stateName, requestID string) (interfaces.OperatorMoveResult, error)
+type moveWorkInvoker func(ctx context.Context, workID, stateName, requestID string) (work.OperatorMoveResult, error)
 
 type moveWorkSnapshotLoader func(context.Context) (*interfaces.EngineStateSnapshot[petri.MarkingSnapshot, *state.Net], error)
 
@@ -878,7 +880,7 @@ func moveWorkHTTPError(err error) (status int, message, code string, ok bool) {
 		return http.StatusBadRequest, "work is in an active dispatch", "BAD_REQUEST", true
 	case errors.Is(err, engine.ErrMoveWorkEngineTerminated):
 		return http.StatusBadRequest, "engine has terminated", "BAD_REQUEST", true
-	case errors.Is(err, interfaces.ErrMoveWorkRequestAlreadyApplied):
+	case errors.Is(err, work.ErrMoveWorkRequestAlreadyApplied):
 		return http.StatusConflict, "Operator move request was already applied.", "MOVE_WORK_REQUEST_ALREADY_APPLIED", true
 	default:
 		return 0, "", "", false

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/internal/mcpcontractcheck"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/transports/mcp/discoverygen"
 )
 

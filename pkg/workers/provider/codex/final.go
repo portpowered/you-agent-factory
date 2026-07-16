@@ -6,14 +6,14 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 const ProviderSessionKindSessionID = "session_id"
 
 type FinalResult struct {
 	Content         string
-	ProviderSession *interfaces.ProviderSessionMetadata
+	ProviderSession *workerexecution.ProviderSessionMetadata
 }
 
 // ParseFinalOutput derives the authoritative response independently from any
@@ -28,7 +28,7 @@ func ParseFinalOutput(stdout []byte) (FinalResult, error) {
 		switch record.Type {
 		case "thread.started":
 			if id := strings.TrimSpace(record.ThreadID); id != "" {
-				result.ProviderSession = &interfaces.ProviderSessionMetadata{Provider: "codex", Kind: ProviderSessionKindSessionID, ID: id}
+				result.ProviderSession = &workerexecution.ProviderSessionMetadata{Provider: "codex", Kind: ProviderSessionKindSessionID, ID: id}
 			}
 		case "item.completed":
 			var item itemEnvelope

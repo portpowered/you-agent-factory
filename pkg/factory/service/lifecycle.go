@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
@@ -43,6 +43,8 @@ func Start(ctx context.Context, bundle *Bundle) *Handle {
 	if bundle.Recording != nil {
 		bundle.Recording.Start(runCtx)
 		if err := bundle.Recording.Flush(); err != nil {
+			runCancel()
+			bundle.Recording.Stop()
 			handle.setRunResult(err)
 			return handle
 		}
@@ -193,6 +195,7 @@ func FinalizeArtifacts(bundle *Bundle, clock factory.Clock) error {
 	}
 	var errs []error
 	if bundle.Recording != nil {
+		bundle.Recording.Stop()
 		bundle.Recording.Finish(factory.EnsureClock(clock).Now().UTC())
 		if err := bundle.Recording.Flush(); err != nil {
 			errs = append(errs, err)

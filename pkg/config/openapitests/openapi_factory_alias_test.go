@@ -2,13 +2,16 @@ package openapitests
 
 import (
 	"encoding/json"
-	. "github.com/portpowered/infinite-you/pkg/config"
 	"reflect"
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	. "github.com/portpowered/infinite-you/pkg/config"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 type generatedFactoryRetiredAliasCase struct {
@@ -304,8 +307,8 @@ func TestMarshalCanonicalFactoryConfig_EmitsCamelCaseConfigKeys(t *testing.T) {
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Resources: []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 2}},
-		Workers:   []interfaces.WorkerConfig{{Name: "executor"}},
+		Resources: []factoryresource.Config{{Name: "agent-slot", Capacity: 2}},
+		Workers:   []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "execute-story",
 			WorkerTypeName: "executor",
@@ -317,7 +320,7 @@ func TestMarshalCanonicalFactoryConfig_EmitsCamelCaseConfigKeys(t *testing.T) {
 				WorkTypeName: "story",
 				StateName:    "complete",
 			}},
-			Resources: []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 2}},
+			Resources: []factoryresource.Config{{Name: "agent-slot", Capacity: 2}},
 			StopWords: []string{"legacy", "retry"},
 			Cron:      nil,
 		}},
@@ -367,23 +370,23 @@ func TestFactoryConfigFromOpenAPI_ExplicitMapperMatchesJSONBoundary(t *testing.T
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Resources: []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 2}},
-		Workers: []interfaces.WorkerConfig{{
+		Resources: []factoryresource.Config{{Name: "agent-slot", Capacity: 2}},
+		Workers: []workerconfig.Config{{
 			Name:          "executor",
 			Type:          interfaces.WorkerTypeModel,
 			ModelProvider: "openai",
-			ModelLocality: interfaces.ModelLocalityCloud,
+			ModelLocality: workerconfig.ModelLocalityCloud,
 			Model:         "gpt-5.4",
-			Operations: []interfaces.ModelOperation{{
+			Operations: []workerconfig.ModelOperation{{
 				Name: "TTS",
-				Inputs: []interfaces.ModelOperationSlot{{
+				Inputs: []workerconfig.ModelOperationSlot{{
 					Name:         "text",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+					ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 					Required:     true,
 				}},
-				Outputs: []interfaces.ModelOperationSlot{{
+				Outputs: []workerconfig.ModelOperationSlot{{
 					Name:         "audio",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+					ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 				}},
 			}},
 			Timeout:         "30m",
@@ -405,7 +408,7 @@ func TestFactoryConfigFromOpenAPI_ExplicitMapperMatchesJSONBoundary(t *testing.T
 				WorkTypeName: "story",
 				StateName:    "complete",
 			}},
-			Resources: []interfaces.ResourceConfig{{Name: "agent-slot", Capacity: 2}},
+			Resources: []factoryresource.Config{{Name: "agent-slot", Capacity: 2}},
 			Env:       map[string]string{"TEAM": `{{ index .Tags "team" }}`},
 		}},
 	}
@@ -482,7 +485,7 @@ func TestFactoryConfigToOpenAPI_PreservesAndDetachesWorkstationEnv(t *testing.T)
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workers: []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "execute-story",
 			WorkerTypeName: "executor",
@@ -521,7 +524,7 @@ func TestFactoryConfigToOpenAPI_OmitsEmptyWorkstationEnv(t *testing.T) {
 				{Name: "complete", Type: interfaces.StateTypeTerminal},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workers: []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			Name:           "execute-story",
 			WorkerTypeName: "executor",

@@ -4,9 +4,10 @@ import (
 	"testing"
 	"time"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	. "github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestReconstructFactoryWorldState_SuccessfulSessionBracketReconstructsLifecycle(t *testing.T) {
@@ -144,7 +145,7 @@ func TestReconstructFactoryWorldState_FailedWithPartialSessionBracketReconstruct
 	if len(bracket.ResultSummary) != 1 || bracket.ResultSummary[0].Text != "Partial findings before failure" {
 		t.Fatalf("result summary = %#v, want partial text summary", bracket.ResultSummary)
 	}
-	if !bracket.Terminal || bracket.FailureDetail == nil || bracket.FailureDetail.Reason != interfaces.WorkFailureTypeUnknown {
+	if !bracket.Terminal || bracket.FailureDetail == nil || bracket.FailureDetail.Reason != workerexecution.WorkFailureTypeUnknown {
 		t.Fatalf("terminal failure = %#v, want terminal with normalized unknown reason", bracket)
 	}
 }

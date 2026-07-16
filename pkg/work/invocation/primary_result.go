@@ -5,7 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 const (
@@ -46,7 +47,7 @@ type PrimaryResultSelection struct {
 	WorkTypeName  string
 	WorkName      string
 	TerminalState string
-	PrimaryResult []interfaces.WorkContentPart
+	PrimaryResult []work.WorkContentPart
 }
 
 // InvocationFailureContext carries sanitized session and work identifiers that
@@ -104,7 +105,7 @@ func ResolvePrimaryResult(input PrimaryResultSelectionInput) (PrimaryResultSelec
 func resolveSubmittedWorkTerminalPrimaryResult(
 	requestID string,
 	state interfaces.FactoryWorldState,
-	submitted []interfaces.FactoryWorkItem,
+	submitted []work.FactoryWorkItem,
 ) (PrimaryResultSelection, error) {
 	for _, item := range submitted {
 		logicalWorkID := logicalWorkIDForSubmittedItem(state.PayloadLineage, item.ID)
@@ -138,7 +139,7 @@ func resolveSubmittedWorkTerminalPrimaryResult(
 func resolveExplicitPrimaryResult(
 	requestID string,
 	state interfaces.FactoryWorldState,
-	submitted []interfaces.FactoryWorkItem,
+	submitted []work.FactoryWorkItem,
 	cfg *interfaces.InvocationReturnConfig,
 ) (PrimaryResultSelection, error) {
 	scope := invocationScopeWorkIDs(state.PayloadLineage, submitted)
@@ -172,8 +173,8 @@ func collectExplicitPrimaryResultMatches(
 	state interfaces.FactoryWorldState,
 	scope map[string]struct{},
 	cfg *interfaces.InvocationReturnConfig,
-) []interfaces.FactoryWorkItem {
-	matches := make([]interfaces.FactoryWorkItem, 0, len(state.TerminalWorkByID))
+) []work.FactoryWorkItem {
+	matches := make([]work.FactoryWorkItem, 0, len(state.TerminalWorkByID))
 	for _, terminalWorkID := range sortedTerminalWorkIDs(state.TerminalWorkByID) {
 		terminal := state.TerminalWorkByID[terminalWorkID]
 		if isFailedTerminalWork(terminal) {
@@ -193,15 +194,15 @@ func collectExplicitPrimaryResultMatches(
 func collectExplicitPrimaryResultMatchesForInvocationTrace(
 	state interfaces.FactoryWorldState,
 	requestID string,
-	submitted []interfaces.FactoryWorkItem,
+	submitted []work.FactoryWorkItem,
 	cfg *interfaces.InvocationReturnConfig,
-) []interfaces.FactoryWorkItem {
+) []work.FactoryWorkItem {
 	traceIDs := invocationTraceIDs(state, requestID, submitted)
 	if len(traceIDs) == 0 {
 		return nil
 	}
 
-	matches := make([]interfaces.FactoryWorkItem, 0, 1)
+	matches := make([]work.FactoryWorkItem, 0, 1)
 	for _, terminalWorkID := range sortedTerminalWorkIDs(state.TerminalWorkByID) {
 		terminal := state.TerminalWorkByID[terminalWorkID]
 		if isFailedTerminalWork(terminal) {
@@ -221,7 +222,7 @@ func collectExplicitPrimaryResultMatchesForInvocationTrace(
 func invocationTraceIDs(
 	state interfaces.FactoryWorldState,
 	requestID string,
-	submitted []interfaces.FactoryWorkItem,
+	submitted []work.FactoryWorkItem,
 ) map[string]struct{} {
 	traceIDs := make(map[string]struct{})
 	if request, ok := state.WorkRequestsByID[requestID]; ok {
@@ -240,8 +241,8 @@ func invocationTraceIDs(
 func collectUniqueExplicitTerminalMatches(
 	state interfaces.FactoryWorldState,
 	cfg *interfaces.InvocationReturnConfig,
-) []interfaces.FactoryWorkItem {
-	matches := make([]interfaces.FactoryWorkItem, 0, 1)
+) []work.FactoryWorkItem {
+	matches := make([]work.FactoryWorkItem, 0, 1)
 	for _, terminalWorkID := range sortedTerminalWorkIDs(state.TerminalWorkByID) {
 		terminal := state.TerminalWorkByID[terminalWorkID]
 		if isFailedTerminalWork(terminal) {
@@ -259,7 +260,7 @@ func isFailedTerminalWork(terminal interfaces.FactoryTerminalWork) bool {
 	return strings.TrimSpace(terminal.Status) == "FAILED"
 }
 
-func selectedPrimaryResult(requestID, policy string, item interfaces.FactoryWorkItem) PrimaryResultSelection {
+func selectedPrimaryResult(requestID, policy string, item work.FactoryWorkItem) PrimaryResultSelection {
 	return PrimaryResultSelection{
 		RequestID:     requestID,
 		Policy:        policy,
@@ -267,7 +268,7 @@ func selectedPrimaryResult(requestID, policy string, item interfaces.FactoryWork
 		WorkTypeName:  item.WorkTypeID,
 		WorkName:      item.DisplayName,
 		TerminalState: terminalStateName(item),
-		PrimaryResult: interfaces.CloneWorkContentParts(item.Content),
+		PrimaryResult: work.CloneWorkContentParts(item.Content),
 	}
 }
 
@@ -326,7 +327,7 @@ func ClassifyMissingPrimaryResult(input PrimaryResultSelectionInput) (*PrimaryRe
 func ClassifyMissingPrimaryResultWorkItem(
 	requestID string,
 	invocationReturn *interfaces.InvocationReturnConfig,
-	item interfaces.FactoryWorkItem,
+	item work.FactoryWorkItem,
 	sessionID string,
 ) *PrimaryResultError {
 	result := classifiedPrimaryResultError(requestID, resolvedInvocationReturnPolicy(invocationReturn), item)
@@ -394,7 +395,7 @@ func ClassifyFailedInvocation(
 func classifiedPrimaryResultError(
 	requestID string,
 	policy string,
-	item interfaces.FactoryWorkItem,
+	item work.FactoryWorkItem,
 ) *PrimaryResultError {
 	stateName := currentWorkStateName(item)
 	stateLabel := workStateLabel(item)
@@ -425,7 +426,7 @@ func classifiedPrimaryResultError(
 func failedPrimaryResultError(
 	requestID string,
 	policy string,
-	item interfaces.FactoryWorkItem,
+	item work.FactoryWorkItem,
 ) *PrimaryResultError {
 	return &PrimaryResultError{
 		Code:      PrimaryResultErrorCodeFailed,
@@ -519,7 +520,7 @@ func classifyInterruptedInvocation(
 func interruptedPrimaryResultError(
 	sessionLabel string,
 	dispatchID string,
-	work interfaces.FactoryWorkItem,
+	work work.FactoryWorkItem,
 	workLabel string,
 	sessionID string,
 	requestID string,
@@ -571,9 +572,9 @@ func dispatchMatchesInvocationScope(dispatch interfaces.FactorySessionDispatchSt
 
 func interruptedDispatchWorkItem(
 	dispatch interfaces.FactorySessionDispatchState,
-	workItems map[string]interfaces.FactoryWorkItem,
+	workItems map[string]work.FactoryWorkItem,
 	scope map[string]struct{},
-) (interfaces.FactoryWorkItem, string) {
+) (work.FactoryWorkItem, string) {
 	for _, workID := range dispatch.RelatedWorkIDs {
 		trimmed := strings.TrimSpace(workID)
 		if _, ok := scope[trimmed]; !ok {
@@ -581,11 +582,11 @@ func interruptedDispatchWorkItem(
 		}
 		item, ok := workItems[trimmed]
 		if !ok {
-			return interfaces.FactoryWorkItem{ID: trimmed}, trimmed
+			return work.FactoryWorkItem{ID: trimmed}, trimmed
 		}
 		return item, workDisplayLabel(item)
 	}
-	return interfaces.FactoryWorkItem{}, ""
+	return work.FactoryWorkItem{}, ""
 }
 
 func invocationFailureContextFromScopedWork(
@@ -609,7 +610,7 @@ func invocationFailureContextFromScopedWork(
 	return invocationFailureContextFromWorkItem(sessionID, request.WorkItems[0])
 }
 
-func invocationFailureContextFromWorkItem(sessionID string, item interfaces.FactoryWorkItem) InvocationFailureContext {
+func invocationFailureContextFromWorkItem(sessionID string, item work.FactoryWorkItem) InvocationFailureContext {
 	return InvocationFailureContext{
 		SessionID: strings.TrimSpace(sessionID),
 		WorkID:    strings.TrimSpace(item.ID),
@@ -619,11 +620,11 @@ func invocationFailureContextFromWorkItem(sessionID string, item interfaces.Fact
 }
 
 func scopedCurrentWorkItem(
-	workItems map[string]interfaces.FactoryWorkItem,
+	workItems map[string]work.FactoryWorkItem,
 	scope map[string]struct{},
-) (interfaces.FactoryWorkItem, bool) {
+) (work.FactoryWorkItem, bool) {
 	if len(workItems) == 0 || len(scope) == 0 {
-		return interfaces.FactoryWorkItem{}, false
+		return work.FactoryWorkItem{}, false
 	}
 	workIDs := make([]string, 0, len(workItems))
 	for workID := range workItems {
@@ -639,7 +640,7 @@ func scopedCurrentWorkItem(
 		}
 		return item, true
 	}
-	return interfaces.FactoryWorkItem{}, false
+	return work.FactoryWorkItem{}, false
 }
 
 func resolvedInvocationReturnPolicy(cfg *interfaces.InvocationReturnConfig) string {
@@ -649,23 +650,23 @@ func resolvedInvocationReturnPolicy(cfg *interfaces.InvocationReturnConfig) stri
 	return strings.TrimSpace(cfg.Policy)
 }
 
-func logicalWorkIDForSubmittedItem(lineage interfaces.WorkPayloadLineageProjection, workID string) string {
+func logicalWorkIDForSubmittedItem(lineage work.WorkPayloadLineageProjection, workID string) string {
 	resolution := lineage.ResolveInitialSubmittedSnapshot(workID)
-	if resolution.Status == interfaces.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
+	if resolution.Status == work.WorkPayloadResolutionResolved && resolution.Snapshot != nil {
 		return resolution.Snapshot.LogicalWorkID
 	}
 	return workID
 }
 
-func logicalWorkIDForSelectedItem(lineage interfaces.WorkPayloadLineageProjection, workID string) string {
+func logicalWorkIDForSelectedItem(lineage work.WorkPayloadLineageProjection, workID string) string {
 	resolution := lineage.ResolveSelectedWorkSnapshot(workID)
-	if resolution.Status == interfaces.WorkPayloadResolutionResolved && resolution.Snapshot != nil && resolution.Snapshot.LogicalWorkID != "" {
+	if resolution.Status == work.WorkPayloadResolutionResolved && resolution.Snapshot != nil && resolution.Snapshot.LogicalWorkID != "" {
 		return resolution.Snapshot.LogicalWorkID
 	}
 	return workID
 }
 
-func explicitPrimaryResultMatches(item interfaces.FactoryWorkItem, cfg *interfaces.InvocationReturnConfig) bool {
+func explicitPrimaryResultMatches(item work.FactoryWorkItem, cfg *interfaces.InvocationReturnConfig) bool {
 	if cfg == nil {
 		return false
 	}
@@ -681,7 +682,7 @@ func explicitPrimaryResultMatches(item interfaces.FactoryWorkItem, cfg *interfac
 	return true
 }
 
-func terminalStateName(item interfaces.FactoryWorkItem) string {
+func terminalStateName(item work.FactoryWorkItem) string {
 	if state := strings.TrimSpace(item.State); state != "" {
 		return state
 	}
@@ -705,12 +706,12 @@ func sortedTerminalWorkIDs(terminal map[string]interfaces.FactoryTerminalWork) [
 }
 
 func scopedWorkItemInState(
-	workItems map[string]interfaces.FactoryWorkItem,
+	workItems map[string]work.FactoryWorkItem,
 	scope map[string]struct{},
 	wantState string,
-) (interfaces.FactoryWorkItem, bool) {
+) (work.FactoryWorkItem, bool) {
 	if len(workItems) == 0 || len(scope) == 0 {
-		return interfaces.FactoryWorkItem{}, false
+		return work.FactoryWorkItem{}, false
 	}
 	ids := make([]string, 0, len(workItems))
 	for workID := range workItems {
@@ -725,14 +726,14 @@ func scopedWorkItemInState(
 			return item, true
 		}
 	}
-	return interfaces.FactoryWorkItem{}, false
+	return work.FactoryWorkItem{}, false
 }
 
 func scopedFailedWorkItem(
 	state interfaces.FactoryWorldState,
 	scope map[string]struct{},
-	submitted []interfaces.FactoryWorkItem,
-) (interfaces.FactoryWorkItem, bool) {
+	submitted []work.FactoryWorkItem,
+) (work.FactoryWorkItem, bool) {
 	if item, ok := scopedWorkItemInState(state.FailedWorkItemsByID, scope, "failed"); ok {
 		return item, true
 	}
@@ -749,12 +750,12 @@ func scopedFailedWorkItem(
 	}
 	traceIDs := submittedTraceIDs(submitted)
 	if len(traceIDs) == 0 {
-		return interfaces.FactoryWorkItem{}, false
+		return work.FactoryWorkItem{}, false
 	}
 	return traceMatchedFailedWorkItem(state.FailedWorkItemsByID, traceIDs)
 }
 
-func submittedTraceIDs(submitted []interfaces.FactoryWorkItem) map[string]struct{} {
+func submittedTraceIDs(submitted []work.FactoryWorkItem) map[string]struct{} {
 	traceIDs := make(map[string]struct{}, len(submitted))
 	for _, item := range submitted {
 		traceID := strings.TrimSpace(item.TraceID)
@@ -767,11 +768,11 @@ func submittedTraceIDs(submitted []interfaces.FactoryWorkItem) map[string]struct
 }
 
 func traceMatchedFailedWorkItem(
-	workItems map[string]interfaces.FactoryWorkItem,
+	workItems map[string]work.FactoryWorkItem,
 	traceIDs map[string]struct{},
-) (interfaces.FactoryWorkItem, bool) {
+) (work.FactoryWorkItem, bool) {
 	if len(workItems) == 0 || len(traceIDs) == 0 {
-		return interfaces.FactoryWorkItem{}, false
+		return work.FactoryWorkItem{}, false
 	}
 	ids := make([]string, 0, len(workItems))
 	for workID := range workItems {
@@ -784,16 +785,16 @@ func traceMatchedFailedWorkItem(
 			return item, true
 		}
 	}
-	return interfaces.FactoryWorkItem{}, false
+	return work.FactoryWorkItem{}, false
 }
 
 func requestMatchedFailedWorkItem(
 	state interfaces.FactoryWorldState,
 	requestID string,
-) (interfaces.FactoryWorkItem, bool) {
+) (work.FactoryWorkItem, bool) {
 	trimmedRequestID := strings.TrimSpace(requestID)
 	if trimmedRequestID == "" || len(state.WorkStateChangesByWorkID) == 0 {
-		return interfaces.FactoryWorkItem{}, false
+		return work.FactoryWorkItem{}, false
 	}
 	workIDs := make([]string, 0, len(state.WorkStateChangesByWorkID))
 	for workID := range state.WorkStateChangesByWorkID {
@@ -815,7 +816,7 @@ func requestMatchedFailedWorkItem(
 			if item, ok := state.WorkItemsByID[workID]; ok {
 				return item, true
 			}
-			return interfaces.FactoryWorkItem{
+			return work.FactoryWorkItem{
 				ID:         workID,
 				WorkTypeID: strings.TrimSpace(record.WorkTypeName),
 				State:      "failed",
@@ -823,7 +824,7 @@ func requestMatchedFailedWorkItem(
 			}, true
 		}
 	}
-	return interfaces.FactoryWorkItem{}, false
+	return work.FactoryWorkItem{}, false
 }
 
 func placeStateName(placeID string) string {
@@ -837,7 +838,7 @@ func placeStateName(placeID string) string {
 	return trimmed
 }
 
-func workDisplayLabel(item interfaces.FactoryWorkItem) string {
+func workDisplayLabel(item work.FactoryWorkItem) string {
 	if label := strings.TrimSpace(item.DisplayName); label != "" {
 		return label
 	}
@@ -847,7 +848,7 @@ func workDisplayLabel(item interfaces.FactoryWorkItem) string {
 	return "submitted work"
 }
 
-func workStateLabel(item interfaces.FactoryWorkItem) string {
+func workStateLabel(item work.FactoryWorkItem) string {
 	if placeID := strings.TrimSpace(item.PlaceID); placeID != "" {
 		return placeID
 	}
@@ -858,7 +859,7 @@ func workStateLabel(item interfaces.FactoryWorkItem) string {
 	return stateName
 }
 
-func currentWorkStateName(item interfaces.FactoryWorkItem) string {
+func currentWorkStateName(item work.FactoryWorkItem) string {
 	if placeID := strings.TrimSpace(item.PlaceID); placeID != "" {
 		if _, suffix, ok := strings.Cut(placeID, ":"); ok {
 			return suffix
@@ -869,8 +870,8 @@ func currentWorkStateName(item interfaces.FactoryWorkItem) string {
 }
 
 func invocationScopeWorkIDs(
-	lineage interfaces.WorkPayloadLineageProjection,
-	submitted []interfaces.FactoryWorkItem,
+	lineage work.WorkPayloadLineageProjection,
+	submitted []work.FactoryWorkItem,
 ) map[string]struct{} {
 	scopeWorkIDs := make(map[string]struct{}, len(submitted))
 	scopeLogicalIDs := make(map[string]struct{}, len(submitted))
@@ -901,11 +902,11 @@ func invocationScopeWorkIDs(
 	return scopeWorkIDs
 }
 
-func sortedLineageSnapshots(lineage interfaces.WorkPayloadLineageProjection) []interfaces.WorkPayloadSnapshot {
+func sortedLineageSnapshots(lineage work.WorkPayloadLineageProjection) []work.WorkPayloadSnapshot {
 	if len(lineage.SnapshotsByID) == 0 {
 		return nil
 	}
-	snapshots := make([]interfaces.WorkPayloadSnapshot, 0, len(lineage.SnapshotsByID))
+	snapshots := make([]work.WorkPayloadSnapshot, 0, len(lineage.SnapshotsByID))
 	for _, snapshot := range lineage.SnapshotsByID {
 		snapshots = append(snapshots, snapshot)
 	}
@@ -919,7 +920,7 @@ func sortedLineageSnapshots(lineage interfaces.WorkPayloadLineageProjection) []i
 }
 
 func hasScopedParent(
-	snapshot interfaces.WorkPayloadSnapshot,
+	snapshot work.WorkPayloadSnapshot,
 	scopeWorkIDs map[string]struct{},
 	scopeLogicalIDs map[string]struct{},
 ) bool {

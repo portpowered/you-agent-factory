@@ -9,13 +9,13 @@ import (
 	"strings"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
+	"github.com/portpowered/infinite-you/pkg/transports/mapping/validationentry"
 	workerprompting "github.com/portpowered/infinite-you/pkg/workers/prompting"
 	"go.uber.org/zap"
 )
@@ -45,7 +45,7 @@ func (s *Server) ValidateFactory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.writeJSON(w, http.StatusOK, result.FactoryValidationResult())
+	s.writeJSON(w, http.StatusOK, apisurface.FactoryValidationResultToAPI(result))
 }
 
 // PreviewFactory handles POST /factories/preview using canonical Factory preview semantics.
@@ -345,13 +345,17 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(req.FolderPath) == "" {
 		s.writeErrorWithTargets(w, http.StatusBadRequest, "folderPath is required", "BAD_REQUEST", []factoryapi.FactoryValidationTarget{
-			factoryvalidation.FactorySessionFieldTarget("required", "folderPath", "folderPath is required"),
+			apisurface.FactoryValidationTargetToAPI(factoryvalidation.FactorySessionFieldTarget("required", "folderPath", "folderPath is required")),
 		})
 		return
 	}
 	response, err := sessionRuntime.OpenFactorySession(r.Context(), req)
 	if err != nil {
 		s.logger.Debug("open factory session rejected", zap.Error(err))
+		var domainTargetedErr interface {
+			error
+			ErrorTargets() []factoryvalidation.Target
+		}
 		var targetedErr interface {
 			error
 			ErrorTargets() []factoryapi.FactoryValidationTarget
@@ -362,6 +366,16 @@ func (s *Server) OpenFactorySession(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.As(err, &codedErr) {
 			code = codedErr.ErrorCode()
+		}
+		if errors.As(err, &domainTargetedErr) {
+			s.writeErrorWithTargets(
+				w,
+				http.StatusBadRequest,
+				err.Error(),
+				code,
+				apisurface.FactoryValidationTargetsToAPI(domainTargetedErr.ErrorTargets()),
+			)
+			return
 		}
 		if errors.As(err, &targetedErr) {
 			s.writeErrorWithTargets(w, http.StatusBadRequest, err.Error(), code, targetedErr.ErrorTargets())
@@ -519,10 +533,10 @@ func (s *Server) SaveCurrentFactoryBySessionId(
 	req, err := decodeSaveCurrentFactoryBody(r.Body)
 	if err != nil {
 		if message, ok := requestFieldValidationMessage(err); ok {
-			s.writeErrorWithTargets(w, http.StatusBadRequest, message, "BAD_REQUEST", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
+			s.writeErrorWithTargets(w, http.StatusBadRequest, message, "BAD_REQUEST", []factoryapi.FactoryValidationTarget{apisurface.FactoryValidationTargetToAPI(factoryvalidation.FormFactoryPayloadTarget())})
 			return
 		}
-		s.writeErrorWithTargets(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
+		s.writeErrorWithTargets(w, http.StatusBadRequest, "invalid request payload", "BAD_REQUEST", []factoryapi.FactoryValidationTarget{apisurface.FactoryValidationTargetToAPI(factoryvalidation.FormFactoryPayloadTarget())})
 		return
 	}
 
@@ -554,23 +568,23 @@ func (s *Server) writeCurrentFactoryError(
 		s.writeError(w, http.StatusNotFound, "Current factory not found.", "NOT_FOUND")
 		return
 	case errors.Is(err, apisurface.ErrInvalidNamedFactoryName):
-		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME", []factoryapi.FactoryValidationTarget{factoryvalidation.InvalidFactoryNameTarget()})
+		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.", "INVALID_FACTORY_NAME", []factoryapi.FactoryValidationTarget{apisurface.FactoryValidationTargetToAPI(factoryvalidation.InvalidFactoryNameTarget())})
 		return
 	case errors.Is(err, apisurface.ErrFactoryVersionStale):
-		s.writeErrorWithTargets(w, http.StatusConflict, "Current factory definition is stale. Refresh the graph before saving.", "STALE_FACTORY_VERSION", []factoryapi.FactoryValidationTarget{factoryvalidation.StaleFactoryVersionTarget()})
+		s.writeErrorWithTargets(w, http.StatusConflict, "Current factory definition is stale. Refresh the graph before saving.", "STALE_FACTORY_VERSION", []factoryapi.FactoryValidationTarget{apisurface.FactoryValidationTargetToAPI(factoryvalidation.StaleFactoryVersionTarget())})
 		return
 	case errors.As(err, &topologyErr):
 		targets := topologyErr.Targets
 		if len(targets) == 0 {
-			targets = []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()}
+			targets = []factoryapi.FactoryValidationTarget{apisurface.FactoryValidationTargetToAPI(factoryvalidation.FormFactoryPayloadTarget())}
 		}
 		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", targets)
 		return
 	case errors.Is(err, apisurface.ErrInvalidNamedFactory):
-		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", []factoryapi.FactoryValidationTarget{factoryvalidation.FormFactoryPayloadTarget()})
+		s.writeErrorWithTargets(w, http.StatusBadRequest, "Factory payload is not a valid Agent Factory definition.", "INVALID_FACTORY", []factoryapi.FactoryValidationTarget{apisurface.FactoryValidationTargetToAPI(factoryvalidation.FormFactoryPayloadTarget())})
 		return
 	case errors.Is(err, apisurface.ErrFactoryActivationRequiresIdle):
-		s.writeErrorWithTargets(w, http.StatusConflict, "Current factory runtime must be idle before activation.", "FACTORY_NOT_IDLE", []factoryapi.FactoryValidationTarget{factoryvalidation.FactoryRuntimeNotIdleTarget()})
+		s.writeErrorWithTargets(w, http.StatusConflict, "Current factory runtime must be idle before activation.", "FACTORY_NOT_IDLE", []factoryapi.FactoryValidationTarget{apisurface.FactoryValidationTargetToAPI(factoryvalidation.FactoryRuntimeNotIdleTarget())})
 		return
 	case errors.Is(err, factoryconfig.ErrNamedFactoryAlreadyExists):
 		s.writeError(w, http.StatusConflict, "Named factory already exists.", "FACTORY_ALREADY_EXISTS")

@@ -14,8 +14,16 @@ import (
 	"sync"
 	"time"
 
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
 
@@ -27,8 +35,8 @@ type CacheLayout struct {
 }
 
 type LoadRequest struct {
-	Resource        interfaces.ResourceConfig
-	Worker          *interfaces.WorkerConfig
+	Resource        factoryresource.Config
+	Worker          *workerconfig.Config
 	ModelName       string
 	CachePath       string
 	Revision        string
@@ -37,17 +45,17 @@ type LoadRequest struct {
 }
 
 type InvocationRequest struct {
-	Resource interfaces.ResourceConfig
-	Worker   *interfaces.WorkerConfig
-	Request  interfaces.RunnerExecutionRequest
+	Resource factoryresource.Config
+	Worker   *workerconfig.Config
+	Request  workerexecution.RunnerExecutionRequest
 }
 
 type Handle interface {
-	Invoke(context.Context, InvocationRequest) (interfaces.InferenceResponse, error)
+	Invoke(context.Context, InvocationRequest) (workerexecution.InferenceResponse, error)
 }
 
 type Runtime interface {
-	Supports(resource interfaces.ResourceConfig, worker *interfaces.WorkerConfig) bool
+	Supports(resource factoryresource.Config, worker *workerconfig.Config) bool
 	Load(context.Context, LoadRequest) (Handle, error)
 }
 
@@ -101,7 +109,7 @@ type localModelRunner struct {
 	manager    *Manager
 	runtimeCfg interfaces.RuntimeConfigLookup
 	factoryCfg *interfaces.FactoryConfig
-	workerDef  *interfaces.WorkerConfig
+	workerDef  *workerconfig.Config
 }
 
 func newManager(assetPuller AssetPuller, runtime Runtime, hooks Hooks) *Manager {
@@ -134,12 +142,12 @@ func (m *Manager) WrapRunner(
 	inner workers.Runner,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 ) workers.Runner {
 	if inner == nil || m == nil || runtimeCfg == nil || factoryCfg == nil || workerDef == nil {
 		return inner
 	}
-	if !interfaces.UsesModelhostLease(workerDef.Type, workerDef.ModelLocality) {
+	if !workertaxonomy.UsesModelhostLease(workerDef.Type, workerDef.ModelLocality) {
 		return inner
 	}
 	return &localModelRunner{
@@ -151,7 +159,7 @@ func (m *Manager) WrapRunner(
 	}
 }
 
-func (r *localModelRunner) Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
+func (r *localModelRunner) Execute(ctx context.Context, request workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	if r == nil || r.manager == nil {
 		return r.inner.Execute(ctx, request)
 	}
@@ -166,23 +174,23 @@ func (m *Manager) execute(
 	ctx context.Context,
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.WorkerConfig,
-	request interfaces.RunnerExecutionRequest,
-) (interfaces.InferenceResponse, bool, error) {
+	workerDef *workerconfig.Config,
+	request workerexecution.RunnerExecutionRequest,
+) (workerexecution.InferenceResponse, bool, error) {
 	resource, resourceKey, ok := RuntimeResource(factoryCfg, workerDef)
 	if !ok || !m.runtime.Supports(resource, workerDef) {
-		return interfaces.InferenceResponse{}, false, nil
+		return workerexecution.InferenceResponse{}, false, nil
 	}
 	loaded, err := runtimeCfgForLocalModel(runtimeCfg)
 	if err != nil {
-		return interfaces.InferenceResponse{}, true, err
+		return workerexecution.InferenceResponse{}, true, err
 	}
 	if _, err := EnsureManagedRuntimeReadyForInvocation(loaded, workerDef.Model, m.catalogOptions()); err != nil {
-		return interfaces.InferenceResponse{}, true, err
+		return workerexecution.InferenceResponse{}, true, err
 	}
 	cacheLayout, err := m.assetPuller.ResolveModelCache(ctx, loaded, workerDef)
 	if err != nil {
-		return interfaces.InferenceResponse{}, true, err
+		return workerexecution.InferenceResponse{}, true, err
 	}
 	loadWorker := factoryconfig.CloneWorkerConfig(*workerDef)
 	handle, err := m.loadHandle(ctx, resourceKey, LoadRequest{
@@ -194,13 +202,13 @@ func (m *Manager) execute(
 		Files:     append([]string(nil), cacheLayout.Files...),
 	})
 	if err != nil {
-		return interfaces.InferenceResponse{}, true, err
+		return workerexecution.InferenceResponse{}, true, err
 	}
 	invokeWorker := factoryconfig.CloneWorkerConfig(*workerDef)
 	response, err := handle.Invoke(ctx, InvocationRequest{
 		Resource: resource,
 		Worker:   &invokeWorker,
-		Request:  interfaces.CloneProviderInferenceRequest(request),
+		Request:  workerexecution.CloneProviderInferenceRequest(request),
 	})
 	return response, true, err
 }
@@ -261,14 +269,14 @@ func (m *Manager) entry(key string) *managedLocalModelEntry {
 	return entry
 }
 
-func RuntimeResource(factoryCfg *interfaces.FactoryConfig, workerDef *interfaces.WorkerConfig) (interfaces.ResourceConfig, string, bool) {
-	if factoryCfg == nil || workerDef == nil || workerDef.ModelLocality != interfaces.ModelLocalityLocal {
-		return interfaces.ResourceConfig{}, "", false
+func RuntimeResource(factoryCfg *interfaces.FactoryConfig, workerDef *workerconfig.Config) (factoryresource.Config, string, bool) {
+	if factoryCfg == nil || workerDef == nil || workerDef.ModelLocality != workerconfig.ModelLocalityLocal {
+		return factoryresource.Config{}, "", false
 	}
 	if len(workerDef.Resources) == 0 {
-		return interfaces.ResourceConfig{}, "", false
+		return factoryresource.Config{}, "", false
 	}
-	resourcesByName := make(map[string]interfaces.ResourceConfig, len(factoryCfg.Resources))
+	resourcesByName := make(map[string]factoryresource.Config, len(factoryCfg.Resources))
 	for _, resource := range factoryCfg.Resources {
 		resourcesByName[resource.Name] = resource
 	}
@@ -286,7 +294,7 @@ func RuntimeResource(factoryCfg *interfaces.FactoryConfig, workerDef *interfaces
 		}
 		return resource, key, true
 	}
-	return interfaces.ResourceConfig{}, "", false
+	return factoryresource.Config{}, "", false
 }
 
 func CanonicalBackendName(value string) string {
@@ -319,12 +327,12 @@ type omniVoiceLocalHandle struct {
 }
 
 type OmniVoiceInvocationPayload struct {
-	Operation  string                                     `json:"operation"`
-	ModelName  string                                     `json:"modelName"`
-	Revision   string                                     `json:"revision,omitempty"`
-	OutputFile string                                     `json:"outputFile"`
-	Text       string                                     `json:"text"`
-	Bindings   []interfaces.ResolvedModelOperationBinding `json:"bindings,omitempty"`
+	Operation  string                                          `json:"operation"`
+	ModelName  string                                          `json:"modelName"`
+	Revision   string                                          `json:"revision,omitempty"`
+	OutputFile string                                          `json:"outputFile"`
+	Text       string                                          `json:"text"`
+	Bindings   []workerexecution.ResolvedModelOperationBinding `json:"bindings,omitempty"`
 }
 
 func NewOmniVoiceRuntime(runner workers.CommandRunner) Runtime {
@@ -334,17 +342,11 @@ func NewOmniVoiceRuntime(runner workers.CommandRunner) Runtime {
 	return &omniVoiceLocalRuntime{runner: runner}
 }
 
-// DefaultRuntime returns the package-owned local invocation runtime. Selecting
-// it is inert; construction does not load model assets or start a process.
-func DefaultRuntime() Runtime {
-	return NewOmniVoiceRuntime(nil)
-}
-
-func (r *omniVoiceLocalRuntime) Supports(resource interfaces.ResourceConfig, worker *interfaces.WorkerConfig) bool {
+func (r *omniVoiceLocalRuntime) Supports(resource factoryresource.Config, worker *workerconfig.Config) bool {
 	if worker == nil {
 		return false
 	}
-	return strings.TrimSpace(worker.ModelLocality) == interfaces.ModelLocalityLocal &&
+	return strings.TrimSpace(worker.ModelLocality) == workerconfig.ModelLocalityLocal &&
 		CanonicalBackendName(resource.Backend) == "LLAMACPP" &&
 		canonicalModelName(worker.Model) == canonicalModelName("OMNIVOICE_Q4_K_M")
 }
@@ -381,21 +383,21 @@ func (r *omniVoiceLocalRuntime) Load(_ context.Context, request LoadRequest) (Ha
 	}, nil
 }
 
-func (h *omniVoiceLocalHandle) Invoke(ctx context.Context, request InvocationRequest) (interfaces.InferenceResponse, error) {
+func (h *omniVoiceLocalHandle) Invoke(ctx context.Context, request InvocationRequest) (workerexecution.InferenceResponse, error) {
 	if h == nil {
-		return interfaces.InferenceResponse{}, fmt.Errorf("local model handle is required")
+		return workerexecution.InferenceResponse{}, fmt.Errorf("local model handle is required")
 	}
 	operation := strings.TrimSpace(request.Request.ModelOperation)
 	if operation != "TTS" {
-		return interfaces.InferenceResponse{}, fmt.Errorf("local OMNIVOICE runtime only supports TTS, got %q", operation)
+		return workerexecution.InferenceResponse{}, fmt.Errorf("local OMNIVOICE runtime only supports TTS, got %q", operation)
 	}
 	text, err := omniVoiceBoundText(request.Request.ModelBindings)
 	if err != nil {
-		return interfaces.InferenceResponse{}, err
+		return workerexecution.InferenceResponse{}, err
 	}
 	outputFile, err := omniVoiceOutputPath(h.cachePath)
 	if err != nil {
-		return interfaces.InferenceResponse{}, err
+		return workerexecution.InferenceResponse{}, err
 	}
 
 	payload := OmniVoiceInvocationPayload{
@@ -404,30 +406,30 @@ func (h *omniVoiceLocalHandle) Invoke(ctx context.Context, request InvocationReq
 		Revision:   h.revision,
 		OutputFile: outputFile,
 		Text:       text,
-		Bindings:   interfaces.CloneResolvedModelOperationBindings(request.Request.ModelBindings),
+		Bindings:   workerexecution.CloneResolvedModelOperationBindings(request.Request.ModelBindings),
 	}
 	stdin, err := json.Marshal(payload)
 	if err != nil {
-		return interfaces.InferenceResponse{}, fmt.Errorf("encode local OMNIVOICE invocation payload: %w", err)
+		return workerexecution.InferenceResponse{}, fmt.Errorf("encode local OMNIVOICE invocation payload: %w", err)
 	}
 
 	result, err := h.runner.Run(ctx, omniVoiceCommandRequest(request.Request, h, outputFile, stdin))
 	if err != nil {
-		return interfaces.InferenceResponse{}, fmt.Errorf("run local OMNIVOICE runtime: %w", err)
+		return workerexecution.InferenceResponse{}, fmt.Errorf("run local OMNIVOICE runtime: %w", err)
 	}
 	if result.ExitCode != 0 {
-		return interfaces.InferenceResponse{}, fmt.Errorf("local OMNIVOICE runtime exited with code %d: %s", result.ExitCode, omniVoiceCombinedOutput(result))
+		return workerexecution.InferenceResponse{}, fmt.Errorf("local OMNIVOICE runtime exited with code %d: %s", result.ExitCode, omniVoiceCombinedOutput(result))
 	}
 
 	content, err := omniVoiceResponseContent(strings.TrimSpace(string(result.Stdout)), outputFile)
 	if err != nil {
-		return interfaces.InferenceResponse{}, err
+		return workerexecution.InferenceResponse{}, err
 	}
 	encoded, err := json.Marshal(content)
 	if err != nil {
-		return interfaces.InferenceResponse{}, fmt.Errorf("encode local OMNIVOICE response content: %w", err)
+		return workerexecution.InferenceResponse{}, fmt.Errorf("encode local OMNIVOICE response content: %w", err)
 	}
-	return interfaces.InferenceResponse{Content: string(encoded)}, nil
+	return workerexecution.InferenceResponse{Content: string(encoded)}, nil
 }
 
 type omniVoiceSupervisedHandle struct {
@@ -440,21 +442,21 @@ type omniVoiceSupervisedHandle struct {
 	tokenizerPath   string
 }
 
-func (h *omniVoiceSupervisedHandle) Invoke(ctx context.Context, request InvocationRequest) (interfaces.InferenceResponse, error) {
+func (h *omniVoiceSupervisedHandle) Invoke(ctx context.Context, request InvocationRequest) (workerexecution.InferenceResponse, error) {
 	if h == nil {
-		return interfaces.InferenceResponse{}, fmt.Errorf("supervised local model handle is required")
+		return workerexecution.InferenceResponse{}, fmt.Errorf("supervised local model handle is required")
 	}
 	operation := strings.TrimSpace(request.Request.ModelOperation)
 	if operation != "TTS" {
-		return interfaces.InferenceResponse{}, fmt.Errorf("local OMNIVOICE runtime only supports TTS, got %q", operation)
+		return workerexecution.InferenceResponse{}, fmt.Errorf("local OMNIVOICE runtime only supports TTS, got %q", operation)
 	}
 	text, err := omniVoiceBoundText(request.Request.ModelBindings)
 	if err != nil {
-		return interfaces.InferenceResponse{}, err
+		return workerexecution.InferenceResponse{}, err
 	}
 	outputFile, err := omniVoiceOutputPath(h.cachePath)
 	if err != nil {
-		return interfaces.InferenceResponse{}, err
+		return workerexecution.InferenceResponse{}, err
 	}
 
 	payload := OmniVoiceInvocationPayload{
@@ -463,17 +465,17 @@ func (h *omniVoiceSupervisedHandle) Invoke(ctx context.Context, request Invocati
 		Revision:   h.revision,
 		OutputFile: outputFile,
 		Text:       text,
-		Bindings:   interfaces.CloneResolvedModelOperationBindings(request.Request.ModelBindings),
+		Bindings:   workerexecution.CloneResolvedModelOperationBindings(request.Request.ModelBindings),
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return interfaces.InferenceResponse{}, fmt.Errorf("encode local OMNIVOICE invocation payload: %w", err)
+		return workerexecution.InferenceResponse{}, fmt.Errorf("encode local OMNIVOICE invocation payload: %w", err)
 	}
 
 	invokeURL := SupervisedInvokeURL(h.servingEndpoint)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, invokeURL, strings.NewReader(string(body)))
 	if err != nil {
-		return interfaces.InferenceResponse{}, fmt.Errorf("build supervised OMNIVOICE invocation request: %w", err)
+		return workerexecution.InferenceResponse{}, fmt.Errorf("build supervised OMNIVOICE invocation request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
@@ -483,28 +485,28 @@ func (h *omniVoiceSupervisedHandle) Invoke(ctx context.Context, request Invocati
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return interfaces.InferenceResponse{}, fmt.Errorf("invoke supervised OMNIVOICE runtime at %q: %w", invokeURL, err)
+		return workerexecution.InferenceResponse{}, fmt.Errorf("invoke supervised OMNIVOICE runtime at %q: %w", invokeURL, err)
 	}
 	defer func() {
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 	}()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return interfaces.InferenceResponse{}, fmt.Errorf("supervised OMNIVOICE runtime at %q returned status %d", invokeURL, resp.StatusCode)
+		return workerexecution.InferenceResponse{}, fmt.Errorf("supervised OMNIVOICE runtime at %q returned status %d", invokeURL, resp.StatusCode)
 	}
 	stdout, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return interfaces.InferenceResponse{}, fmt.Errorf("read supervised OMNIVOICE response: %w", err)
+		return workerexecution.InferenceResponse{}, fmt.Errorf("read supervised OMNIVOICE response: %w", err)
 	}
 	content, err := omniVoiceResponseContent(strings.TrimSpace(string(stdout)), outputFile)
 	if err != nil {
-		return interfaces.InferenceResponse{}, err
+		return workerexecution.InferenceResponse{}, err
 	}
 	encoded, err := json.Marshal(content)
 	if err != nil {
-		return interfaces.InferenceResponse{}, fmt.Errorf("encode local OMNIVOICE response content: %w", err)
+		return workerexecution.InferenceResponse{}, fmt.Errorf("encode local OMNIVOICE response content: %w", err)
 	}
-	return interfaces.InferenceResponse{Content: string(encoded)}, nil
+	return workerexecution.InferenceResponse{Content: string(encoded)}, nil
 }
 
 // SupervisedInvokeURL derives the supervised model-server invoke URL from a health or serving endpoint.
@@ -555,7 +557,7 @@ func omniVoiceCacheFiles(files []string) (string, string, error) {
 	return modelPath, tokenizerPath, nil
 }
 
-func omniVoiceCommandForWorker(worker *interfaces.WorkerConfig) (string, []string) {
+func omniVoiceCommandForWorker(worker *workerconfig.Config) (string, []string) {
 	if worker == nil {
 		return DefaultOmniVoiceCommand, nil
 	}
@@ -566,14 +568,14 @@ func omniVoiceCommandForWorker(worker *interfaces.WorkerConfig) (string, []strin
 	return command, append([]string(nil), worker.Args...)
 }
 
-func omniVoiceBoundText(bindings []interfaces.ResolvedModelOperationBinding) (string, error) {
+func omniVoiceBoundText(bindings []workerexecution.ResolvedModelOperationBinding) (string, error) {
 	for _, binding := range bindings {
 		if !strings.EqualFold(strings.TrimSpace(binding.Slot), omniVoiceModelSlotNameText) {
 			continue
 		}
 		var parts []string
 		for _, content := range binding.Content {
-			if content.Type.Normalized() != interfaces.WorkContentPartTypeText {
+			if content.Type.Normalized() != work.WorkContentPartTypeText {
 				continue
 			}
 			text := strings.TrimSpace(content.Text)
@@ -604,8 +606,8 @@ func omniVoiceOutputPath(cachePath string) (string, error) {
 	return file.Name(), nil
 }
 
-func omniVoiceCommandRequest(request interfaces.RunnerExecutionRequest, handle *omniVoiceLocalHandle, outputFile string, stdin []byte) workers.CommandRequest {
-	dispatch := interfaces.CloneWorkDispatch(request.Dispatch)
+func omniVoiceCommandRequest(request workerexecution.RunnerExecutionRequest, handle *omniVoiceLocalHandle, outputFile string, stdin []byte) workers.CommandRequest {
+	dispatch := work.CloneWorkDispatch(request.Dispatch)
 	args := append([]string(nil), handle.baseArgs...)
 	args = append(args,
 		omniVoiceInvokeSubcommand,
@@ -645,15 +647,15 @@ func omniVoiceCombinedOutput(result workers.CommandResult) string {
 	return strings.Join(parts, "; ")
 }
 
-func omniVoiceResponseContent(stdout string, outputFile string) ([]interfaces.WorkContentPart, error) {
-	content := make([]interfaces.WorkContentPart, 0, 1)
+func omniVoiceResponseContent(stdout string, outputFile string) ([]work.WorkContentPart, error) {
+	content := make([]work.WorkContentPart, 0, 1)
 	if stdout != "" {
-		var direct []interfaces.WorkContentPart
+		var direct []work.WorkContentPart
 		if err := json.Unmarshal([]byte(stdout), &direct); err == nil {
 			content = direct
 		} else {
 			var envelope struct {
-				Content []interfaces.WorkContentPart `json:"content"`
+				Content []work.WorkContentPart `json:"content"`
 			}
 			if envelopeErr := json.Unmarshal([]byte(stdout), &envelope); envelopeErr != nil {
 				return nil, fmt.Errorf("decode local OMNIVOICE response: %w", err)
@@ -662,8 +664,8 @@ func omniVoiceResponseContent(stdout string, outputFile string) ([]interfaces.Wo
 		}
 	}
 	if len(content) == 0 {
-		content = []interfaces.WorkContentPart{{
-			Type:        interfaces.WorkContentPartTypeAudio,
+		content = []work.WorkContentPart{{
+			Type:        work.WorkContentPartTypeAudio,
 			Slot:        omniVoiceModelSlotNameAudio,
 			File:        outputFile,
 			ContentType: OmniVoiceAudioContentType,
@@ -671,7 +673,7 @@ func omniVoiceResponseContent(stdout string, outputFile string) ([]interfaces.Wo
 	}
 	audioFound := false
 	for i := range content {
-		if content[i].Type.Normalized() != interfaces.WorkContentPartTypeAudio {
+		if content[i].Type.Normalized() != work.WorkContentPartTypeAudio {
 			continue
 		}
 		audioFound = true
@@ -686,8 +688,8 @@ func omniVoiceResponseContent(stdout string, outputFile string) ([]interfaces.Wo
 		}
 	}
 	if !audioFound {
-		content = append(content, interfaces.WorkContentPart{
-			Type:        interfaces.WorkContentPartTypeAudio,
+		content = append(content, work.WorkContentPart{
+			Type:        work.WorkContentPartTypeAudio,
 			Slot:        omniVoiceModelSlotNameAudio,
 			File:        outputFile,
 			ContentType: OmniVoiceAudioContentType,
@@ -740,7 +742,7 @@ func newLocalModelResourceLimiterEntry(capacity int) *ResourceLimiterEntry {
 func (l *ResourceLimiter) WrapRunner(
 	inner workers.Runner,
 	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 ) workers.Runner {
 	if inner == nil || l == nil || factoryCfg == nil || workerDef == nil {
 		return inner
@@ -756,12 +758,12 @@ func (l *ResourceLimiter) WrapRunner(
 	}
 }
 
-func localModelResourceReservations(factoryCfg *interfaces.FactoryConfig, workerDef *interfaces.WorkerConfig) []localModelResourceReservation {
-	if factoryCfg == nil || workerDef == nil || workerDef.ModelLocality != interfaces.ModelLocalityLocal {
+func localModelResourceReservations(factoryCfg *interfaces.FactoryConfig, workerDef *workerconfig.Config) []localModelResourceReservation {
+	if factoryCfg == nil || workerDef == nil || workerDef.ModelLocality != workerconfig.ModelLocalityLocal {
 		return nil
 	}
 
-	resourcesByName := make(map[string]interfaces.ResourceConfig, len(factoryCfg.Resources))
+	resourcesByName := make(map[string]factoryresource.Config, len(factoryCfg.Resources))
 	for _, resource := range factoryCfg.Resources {
 		resourcesByName[resource.Name] = resource
 	}
@@ -800,14 +802,14 @@ func localModelResourceReservations(factoryCfg *interfaces.FactoryConfig, worker
 	return out
 }
 
-func isProcessScopedLocalModelResource(resource interfaces.ResourceConfig) bool {
-	return resource.Type == interfaces.ResourceTypeModel &&
+func isProcessScopedLocalModelResource(resource factoryresource.Config) bool {
+	return resource.Type == factoryresource.TypeModel &&
 		strings.TrimSpace(resource.Model) != "" &&
 		strings.TrimSpace(resource.Backend) != "" &&
 		strings.TrimSpace(resource.LoadPolicy) != ""
 }
 
-func localModelResourceKey(resource interfaces.ResourceConfig) string {
+func localModelResourceKey(resource factoryresource.Config) string {
 	model := strings.ToUpper(strings.TrimSpace(resource.Model))
 	backend := strings.ToUpper(strings.TrimSpace(resource.Backend))
 	loadPolicy := strings.ToUpper(strings.TrimSpace(resource.LoadPolicy))
@@ -913,9 +915,9 @@ func (e *ResourceLimiterEntry) release(count int) {
 	e.cond.Broadcast()
 }
 
-func (r *localModelLimitedRunner) Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
+func (r *localModelLimitedRunner) Execute(ctx context.Context, request workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	if err := r.limiter.acquire(ctx, r.reservations); err != nil {
-		return interfaces.RunnerExecutionResult{}, err
+		return workerexecution.RunnerExecutionResult{}, err
 	}
 	defer r.limiter.release(r.reservations)
 	return r.inner.Execute(ctx, request)

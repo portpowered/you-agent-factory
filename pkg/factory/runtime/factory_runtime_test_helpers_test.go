@@ -7,26 +7,29 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryboundary "github.com/portpowered/infinite-you/pkg/transports/http"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/logging"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type passExecutor struct{}
 
-func (e *passExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
-	return interfaces.WorkResult{
+func (e *passExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "done",
 	}, nil
 }
@@ -36,51 +39,51 @@ type blockingExecutor struct {
 	release chan struct{}
 }
 
-func (e *blockingExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *blockingExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	close(e.started)
 	<-e.release
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
+		Outcome:      workerexecution.OutcomeAccepted,
 		Output:       "done",
 	}, nil
 }
 
 type safeDiagnosticsBoundaryExecutor struct{}
 
-func (e *safeDiagnosticsBoundaryExecutor) Execute(_ context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *safeDiagnosticsBoundaryExecutor) Execute(_ context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	workID := safeBoundaryWorkID(dispatch)
 	switch workID {
 	case "work-safe-success":
-		return safeBoundaryResult(dispatch, workID, interfaces.OutcomeAccepted, "", nil, &interfaces.ProviderSessionMetadata{
+		return safeBoundaryResult(dispatch, workID, workerexecution.OutcomeAccepted, "", nil, &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "response_id",
 			ID:       "resp-safe-success",
 		}, "1"), nil
 	case "work-safe-failure":
-		return safeBoundaryResult(dispatch, workID, interfaces.OutcomeFailed, "provider timed out", &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyRetryable,
-			Type:   interfaces.WorkFailureTypeTimeout,
-		}, &interfaces.ProviderSessionMetadata{
+		return safeBoundaryResult(dispatch, workID, workerexecution.OutcomeFailed, "provider timed out", &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyRetryable,
+			Type:   workerexecution.WorkFailureTypeTimeout,
+		}, &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-safe-failure",
 		}, "2"), nil
 	case "work-safe-windows-process-failure":
-		return safeBoundaryResult(dispatch, workID, interfaces.OutcomeFailed, "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)", &interfaces.WorkFailureMetadata{
-			Family: interfaces.WorkFailureFamilyRetryable,
-			Type:   interfaces.WorkFailureTypeInternalServerError,
-		}, &interfaces.ProviderSessionMetadata{
+		return safeBoundaryResult(dispatch, workID, workerexecution.OutcomeFailed, "provider error: internal_server_error: codex exited with code 4294967295: stderr: OpenAI Codex v0.118.0 (research preview)", &workerexecution.WorkFailureMetadata{
+			Family: workerexecution.WorkFailureFamilyRetryable,
+			Type:   workerexecution.WorkFailureTypeInternalServerError,
+		}, &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-safe-windows-4294967295",
 		}, "2"), nil
 	default:
-		return interfaces.WorkResult{
+		return workerexecution.WorkResult{
 			DispatchID:   dispatch.DispatchID,
 			TransitionID: dispatch.TransitionID,
-			Outcome:      interfaces.OutcomeAccepted,
+			Outcome:      workerexecution.OutcomeAccepted,
 			Output:       "done",
 		}, nil
 	}
@@ -88,16 +91,16 @@ func (e *safeDiagnosticsBoundaryExecutor) Execute(_ context.Context, dispatch in
 
 type fixedCompletionDeliveryPlanner struct {
 	tick          int
-	plannedResult interfaces.WorkResult
+	plannedResult workerexecution.WorkResult
 }
 
-func (p fixedCompletionDeliveryPlanner) DeliveryTickForDispatch(interfaces.WorkDispatch) (int, bool, error) {
+func (p fixedCompletionDeliveryPlanner) DeliveryTickForDispatch(work.WorkDispatch) (int, bool, error) {
 	return p.tick, true, nil
 }
 
-func (p fixedCompletionDeliveryPlanner) PlannedResultForDispatch(dispatch interfaces.WorkDispatch) (interfaces.WorkResult, bool, error) {
+func (p fixedCompletionDeliveryPlanner) PlannedResultForDispatch(dispatch work.WorkDispatch) (workerexecution.WorkResult, bool, error) {
 	if p.plannedResult.DispatchID == "" && p.plannedResult.TransitionID == "" && p.plannedResult.Output == "" && p.plannedResult.Outcome == "" {
-		return interfaces.WorkResult{}, false, nil
+		return workerexecution.WorkResult{}, false, nil
 	}
 	result := p.plannedResult
 	result.DispatchID = dispatch.DispatchID
@@ -105,7 +108,7 @@ func (p fixedCompletionDeliveryPlanner) PlannedResultForDispatch(dispatch interf
 	return result, true, nil
 }
 
-func submitWorkRequests(ctx context.Context, f factory.Factory, reqs []interfaces.SubmitRequest) (interfaces.WorkRequestSubmitResult, error) {
+func submitWorkRequests(ctx context.Context, f factory.Factory, reqs []work.SubmitRequest) (work.WorkRequestSubmitResult, error) {
 	return f.SubmitWorkRequest(ctx, requests.WorkRequestFromSubmitRequests(reqs))
 }
 
@@ -125,7 +128,7 @@ func (s *runtimeAwareScheduler) SetRuntimeConfig(runtimeConfig interfaces.Runtim
 }
 
 type generatedBatchHook struct {
-	batch   interfaces.GeneratedSubmissionBatch
+	batch   work.GeneratedSubmissionBatch
 	emitted bool
 }
 
@@ -143,7 +146,7 @@ func (h *generatedBatchHook) OnTick(context.Context, interfaces.SubmissionHookCo
 	}
 	h.emitted = true
 	return interfaces.SubmissionHookResult{
-		GeneratedBatches: []interfaces.GeneratedSubmissionBatch{h.batch},
+		GeneratedBatches: []work.GeneratedSubmissionBatch{h.batch},
 	}, nil
 }
 
@@ -233,7 +236,20 @@ func runtimeGeneratedEvents(t *testing.T, f factory.Factory) []factoryapi.Factor
 	if err != nil {
 		t.Fatalf("GetFactoryEvents: %v", err)
 	}
-	return events
+	mapped := make([]factoryapi.FactoryEvent, len(events))
+	for index, event := range events {
+		mapped[index] = runtimeGeneratedFactoryEvent(t, event)
+	}
+	return mapped
+}
+
+func runtimeGeneratedFactoryEvent(t testing.TB, event interfaces.FactoryEvent) factoryapi.FactoryEvent {
+	t.Helper()
+	var mapped factoryapi.FactoryEvent
+	if err := event.Decode(&mapped); err != nil {
+		t.Fatalf("map Factory event %q: %v", event.Id, err)
+	}
+	return mapped
 }
 
 func factoryEventTypes(events []factoryapi.FactoryEvent) []factoryapi.FactoryEventType {
@@ -474,9 +490,9 @@ func assertSafeBoundaryRequestView(
 	}
 }
 
-func safeBoundaryWorkID(dispatch interfaces.WorkDispatch) string {
+func safeBoundaryWorkID(dispatch work.WorkDispatch) string {
 	for _, token := range workers.WorkDispatchInputTokens(dispatch) {
-		if token.Color.DataType == interfaces.DataTypeResource {
+		if token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		if token.Color.WorkID != "" {
@@ -495,15 +511,15 @@ func safeBoundaryWorkID(dispatch interfaces.WorkDispatch) string {
 }
 
 func safeBoundaryResult(
-	dispatch interfaces.WorkDispatch,
+	dispatch work.WorkDispatch,
 	workID string,
-	outcome interfaces.WorkOutcome,
+	outcome workerexecution.WorkOutcome,
 	errText string,
-	providerFailure *interfaces.WorkFailureMetadata,
-	providerSession *interfaces.ProviderSessionMetadata,
+	providerFailure *workerexecution.WorkFailureMetadata,
+	providerSession *workerexecution.ProviderSessionMetadata,
 	retryCount string,
-) interfaces.WorkResult {
-	return interfaces.WorkResult{
+) workerexecution.WorkResult {
+	return workerexecution.WorkResult{
 		DispatchID:      dispatch.DispatchID,
 		TransitionID:    dispatch.TransitionID,
 		Outcome:         outcome,
@@ -511,8 +527,8 @@ func safeBoundaryResult(
 		Error:           errText,
 		FailureMetadata: providerFailure,
 		ProviderSession: providerSession,
-		Diagnostics: &interfaces.WorkDiagnostics{
-			RenderedPrompt: &interfaces.RenderedPromptDiagnostic{
+		Diagnostics: &workerexecution.WorkDiagnostics{
+			RenderedPrompt: &workerexecution.RenderedPromptDiagnostic{
 				SystemPromptHash: "system-hash-" + workID,
 				UserMessageHash:  "user-hash-" + workID,
 				Variables: map[string]string{
@@ -524,7 +540,7 @@ func safeBoundaryResult(
 					"env":            "raw rendered environment must stay private",
 				},
 			},
-			Provider: &interfaces.ProviderDiagnostic{
+			Provider: &workerexecution.ProviderDiagnostic{
 				Provider: "codex",
 				Model:    "gpt-5.4",
 				RequestMetadata: map[string]string{
@@ -544,14 +560,14 @@ func safeBoundaryResult(
 					"env_secret":          "raw response env secret must stay private",
 				},
 			},
-			Command: &interfaces.CommandDiagnostic{
+			Command: &workerexecution.CommandDiagnostic{
 				Command: "echo",
 				Stdin:   "raw command stdin must stay private",
 				Env: map[string]string{
 					"AGENT_FACTORY_AUTH_TOKEN": "raw environment value must stay private",
 				},
 			},
-			Panic: &interfaces.PanicDiagnostic{Stack: "panic stack should not be stored"},
+			Panic: &workerexecution.PanicDiagnostic{Stack: "panic stack should not be stored"},
 		},
 	}
 }
@@ -715,7 +731,7 @@ func (h *serviceModeRunHarness) stop() {
 
 func submitPausedBufferTask(t *testing.T, f factory.Factory, requestID, traceID string) {
 	t.Helper()
-	result, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	result, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		RequestID:  requestID,
 		WorkTypeID: "task",
 		TraceID:    traceID,
@@ -880,7 +896,7 @@ func countTokensAtPlace(snap *interfaces.EngineStateSnapshot[petri.MarkingSnapsh
 
 func submitTaskWithWorkID(t *testing.T, f factory.Factory, workID, traceID string) {
 	t.Helper()
-	if _, err := submitWorkRequests(context.Background(), f, []interfaces.SubmitRequest{{
+	if _, err := submitWorkRequests(context.Background(), f, []work.SubmitRequest{{
 		WorkID:     workID,
 		WorkTypeID: "task",
 		TraceID:    traceID,

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -31,7 +31,7 @@ func TestReplayScriptBoundaryEvents_CanonicalHistoryIncludesScriptRequestBoundar
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
 	writeScriptWorkerArgsFixture(t, dir)
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-script-request-event",
 		WorkTypeID: "task",
 		TraceID:    "trace-script-request-event",
@@ -55,7 +55,7 @@ func TestReplayScriptBoundaryEvents_CanonicalHistoryAndArtifactIncludeScriptResp
 	recordPath := filepath.Join(t.TempDir(), "script-events-success.replay.json")
 	t.Setenv(scriptEventsSecretEnv, scriptEventsSecretValue)
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-script-response-event",
 		WorkTypeID: "task",
 		TraceID:    "trace-script-response-event",
@@ -82,7 +82,7 @@ func TestReplayScriptBoundaryEvents_CanonicalHistoryAndArtifactIncludeScriptResp
 	})
 
 	artifact := testutil.LoadReplayArtifact(t, recordPath)
-	assertScriptEventsRecordedInArtifact(t, events, artifact.Events)
+	assertScriptEventsRecordedInArtifact(t, events, testutil.GeneratedFactoryEvents(t, artifact.Events))
 	assertReplayArtifactDoesNotContainRawValue(t, recordPath, scriptEventsSecretValue)
 }
 
@@ -91,7 +91,7 @@ func TestReplayScriptBoundaryEvents_ProcessFailureBoundaryPersistsInCanonicalHis
 	recordPath := filepath.Join(t.TempDir(), "script-events-process-error.replay.json")
 	t.Setenv(scriptEventsSecretEnv, scriptEventsSecretValue)
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-script-process-error-event",
 		WorkTypeID: "task",
 		TraceID:    "trace-script-process-error-event",
@@ -118,7 +118,7 @@ func TestReplayScriptBoundaryEvents_ProcessFailureBoundaryPersistsInCanonicalHis
 	})
 
 	artifact := testutil.LoadReplayArtifact(t, recordPath)
-	assertScriptEventsRecordedInArtifact(t, events, artifact.Events)
+	assertScriptEventsRecordedInArtifact(t, events, testutil.GeneratedFactoryEvents(t, artifact.Events))
 	assertReplayArtifactDoesNotContainRawValue(t, recordPath, scriptEventsSecretValue)
 }
 

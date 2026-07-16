@@ -4,9 +4,9 @@ import (
 	"context"
 
 	"github.com/portpowered/infinite-you/pkg/config"
-	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 )
 
 type testConfigMapper struct {

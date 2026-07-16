@@ -6,8 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestValidationResult_HasErrors_FalseWithOnlyWarningsAndHints(t *testing.T) {
@@ -17,7 +21,9 @@ func TestValidationResult_HasErrors_FalseWithOnlyWarningsAndHints(t *testing.T) 
 			{Severity: SeverityHint, Path: "b", Message: "hint", Rule: "r2"},
 		},
 	}
-	if vr.HasErrors() { t.Fatal("HasErrors() should be false when only warnings and hints present") }
+	if vr.HasErrors() {
+		t.Fatal("HasErrors() should be false when only warnings and hints present")
+	}
 }
 
 func TestValidationResult_HasErrors_TrueWithErrors(t *testing.T) {
@@ -27,7 +33,9 @@ func TestValidationResult_HasErrors_TrueWithErrors(t *testing.T) {
 			{Severity: SeverityError, Path: "b", Message: "err", Rule: "r2"},
 		},
 	}
-	if !vr.HasErrors() { t.Fatal("HasErrors() should be true when error findings present") }
+	if !vr.HasErrors() {
+		t.Fatal("HasErrors() should be true when error findings present")
+	}
 }
 
 func TestValidationResult_Errors_ReturnsOnlyErrors(t *testing.T) {
@@ -147,7 +155,7 @@ func testBaseConfig() *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "w1"}},
+		Workers: []workerconfig.Config{{Name: "w1"}},
 	}
 }
 
@@ -192,19 +200,19 @@ func assertFindingMatch(t *testing.T, findings []Finding, rule string, pathSubst
 
 func TestRuleModelInvokeWorkstations_AcceptsCompatibleModelInvokeWorkstation(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name: "tts-worker",
 		Type: interfaces.WorkerTypeModel,
-		Operations: []interfaces.ModelOperation{{
+		Operations: []workerconfig.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{
+			Inputs: []workerconfig.ModelOperationSlot{{
 				Name:         "text",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 				Required:     true,
 			}},
-			Outputs: []interfaces.ModelOperationSlot{{
+			Outputs: []workerconfig.ModelOperationSlot{{
 				Name:         "audio",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}}
@@ -234,41 +242,41 @@ func TestRuleModelInvokeWorkstations_AcceptsCompatibleModelInvokeWorkstationAcro
 
 	testCases := []struct {
 		name   string
-		worker interfaces.WorkerConfig
+		worker workerconfig.Config
 	}{
 		{
 			name: "local worker",
-			worker: interfaces.WorkerConfig{
+			worker: workerconfig.Config{
 				Name:          "tts-worker",
 				Type:          interfaces.WorkerTypeModel,
 				Model:         "OMNIVOICE_Q4_K_M",
-				ModelProvider: interfaces.RunnerIDCodex,
-				ModelLocality: interfaces.ModelLocalityLocal,
-				Operations: []interfaces.ModelOperation{{
+				ModelProvider: workerexecution.RunnerIDCodex,
+				ModelLocality: workerconfig.ModelLocalityLocal,
+				Operations: []workerconfig.ModelOperation{{
 					Name: "TTS",
-					Inputs: []interfaces.ModelOperationSlot{
-						{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}, Required: true},
-						{Name: "voice", ContentTypes: []string{interfaces.ModelOperationContentTypeJSON}},
+					Inputs: []workerconfig.ModelOperationSlot{
+						{Name: "text", ContentTypes: []string{workerconfig.ModelOperationContentTypeText}, Required: true},
+						{Name: "voice", ContentTypes: []string{workerconfig.ModelOperationContentTypeJSON}},
 					},
-					Outputs: []interfaces.ModelOperationSlot{{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}}},
+					Outputs: []workerconfig.ModelOperationSlot{{Name: "audio", ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio}}},
 				}},
 			},
 		},
 		{
 			name: "cloud worker",
-			worker: interfaces.WorkerConfig{
+			worker: workerconfig.Config{
 				Name:          "tts-worker",
 				Type:          interfaces.WorkerTypeModel,
 				Model:         "gpt-4o-mini-tts",
-				ModelProvider: interfaces.RunnerIDCodex,
-				ModelLocality: interfaces.ModelLocalityCloud,
-				Operations: []interfaces.ModelOperation{{
+				ModelProvider: workerexecution.RunnerIDCodex,
+				ModelLocality: workerconfig.ModelLocalityCloud,
+				Operations: []workerconfig.ModelOperation{{
 					Name: "TTS",
-					Inputs: []interfaces.ModelOperationSlot{
-						{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}, Required: true},
-						{Name: "voice", ContentTypes: []string{interfaces.ModelOperationContentTypeJSON}},
+					Inputs: []workerconfig.ModelOperationSlot{
+						{Name: "text", ContentTypes: []string{workerconfig.ModelOperationContentTypeText}, Required: true},
+						{Name: "voice", ContentTypes: []string{workerconfig.ModelOperationContentTypeJSON}},
 					},
-					Outputs: []interfaces.ModelOperationSlot{{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}}},
+					Outputs: []workerconfig.ModelOperationSlot{{Name: "audio", ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio}}},
 				}},
 			},
 		},
@@ -277,7 +285,7 @@ func TestRuleModelInvokeWorkstations_AcceptsCompatibleModelInvokeWorkstationAcro
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := testBaseConfig()
-			cfg.Workers = []interfaces.WorkerConfig{tt.worker}
+			cfg.Workers = []workerconfig.Config{tt.worker}
 			cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 				Name:           "speak",
 				Type:           interfaces.WorkstationTypeInvoke,
@@ -285,7 +293,7 @@ func TestRuleModelInvokeWorkstations_AcceptsCompatibleModelInvokeWorkstationAcro
 				WorkerTypeName: "tts-worker",
 				OperationBindings: []interfaces.ModelOperationBinding{
 					{Slot: "text", Selector: &interfaces.ModelOperationBindingSelector{Label: "utterance"}},
-					{Slot: "voice", Config: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeJSON, JSON: []byte(`{"name":"alloy"}`)}}},
+					{Slot: "voice", Config: []work.WorkContentPart{{Type: work.WorkContentPartTypeJSON, JSON: []byte(`{"name":"alloy"}`)}}},
 				},
 				Inputs:  []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}},
 				Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "done"}},
@@ -314,7 +322,7 @@ func TestRuleModelInvokeWorkstations_RejectsOperationOnNonModelInvokeType(t *tes
 
 func TestRuleModelInvokeWorkstations_RejectsWorkerCompatibilityAndOperationMismatch(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{
+	cfg.Workers = []workerconfig.Config{
 		{
 			Name: "scripted",
 			Type: interfaces.WorkerTypeScript,
@@ -322,15 +330,15 @@ func TestRuleModelInvokeWorkstations_RejectsWorkerCompatibilityAndOperationMisma
 		{
 			Name: "tts-worker",
 			Type: interfaces.WorkerTypeModel,
-			Operations: []interfaces.ModelOperation{{
+			Operations: []workerconfig.ModelOperation{{
 				Name: "EMBED",
-				Inputs: []interfaces.ModelOperationSlot{{
+				Inputs: []workerconfig.ModelOperationSlot{{
 					Name:         "text",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+					ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 				}},
-				Outputs: []interfaces.ModelOperationSlot{{
+				Outputs: []workerconfig.ModelOperationSlot{{
 					Name:         "vector",
-					ContentTypes: []string{interfaces.ModelOperationContentTypeJSON},
+					ContentTypes: []string{workerconfig.ModelOperationContentTypeJSON},
 				}},
 			}},
 		},
@@ -357,14 +365,14 @@ func TestRuleModelInvokeWorkstations_RejectsWorkerCompatibilityAndOperationMisma
 
 func TestRuleModelInvokeWorkstations_RejectsIncompleteContentContract(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name: "tts-worker",
 		Type: interfaces.WorkerTypeModel,
-		Operations: []interfaces.ModelOperation{{
+		Operations: []workerconfig.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{
+			Inputs: []workerconfig.ModelOperationSlot{{
 				Name:         "text",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 			}},
 		}},
 	}}
@@ -381,19 +389,19 @@ func TestRuleModelInvokeWorkstations_RejectsIncompleteContentContract(t *testing
 
 func TestRuleModelInvokeWorkstations_RejectsDuplicateUnknownAndEmptyOperationBindings(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name: "tts-worker",
 		Type: interfaces.WorkerTypeModel,
-		Operations: []interfaces.ModelOperation{{
+		Operations: []workerconfig.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{
+			Inputs: []workerconfig.ModelOperationSlot{{
 				Name:         "text",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 				Required:     true,
 			}},
-			Outputs: []interfaces.ModelOperationSlot{{
+			Outputs: []workerconfig.ModelOperationSlot{{
 				Name:         "audio",
-				ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+				ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 			}},
 		}},
 	}}
@@ -404,7 +412,7 @@ func TestRuleModelInvokeWorkstations_RejectsDuplicateUnknownAndEmptyOperationBin
 		WorkerTypeName: "tts-worker",
 		OperationBindings: []interfaces.ModelOperationBinding{
 			{Slot: "text", Selector: &interfaces.ModelOperationBindingSelector{Label: "utterance"}},
-			{Slot: "text", Config: []interfaces.WorkContentPart{{Type: interfaces.WorkContentPartTypeText, Text: "fallback"}}},
+			{Slot: "text", Config: []work.WorkContentPart{{Type: work.WorkContentPartTypeText, Text: "fallback"}}},
 			{Slot: "voice", Selector: &interfaces.ModelOperationBindingSelector{Role: "system"}},
 			{Slot: "style"},
 		},
@@ -418,20 +426,20 @@ func TestRuleModelInvokeWorkstations_RejectsDuplicateUnknownAndEmptyOperationBin
 
 func TestRuleWorkerModelOperations_RejectsDuplicateOperationAndSlotNames(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name:          "tts-worker",
 		Type:          interfaces.WorkerTypeModel,
-		ModelLocality: interfaces.ModelLocalityLocal,
-		Operations: []interfaces.ModelOperation{{
+		ModelLocality: workerconfig.ModelLocalityLocal,
+		Operations: []workerconfig.ModelOperation{{
 			Name: "TTS",
-			Inputs: []interfaces.ModelOperationSlot{
-				{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}},
-				{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeJSON}},
+			Inputs: []workerconfig.ModelOperationSlot{
+				{Name: "text", ContentTypes: []string{workerconfig.ModelOperationContentTypeText}},
+				{Name: "text", ContentTypes: []string{workerconfig.ModelOperationContentTypeJSON}},
 			},
-			Outputs: []interfaces.ModelOperationSlot{{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}}},
+			Outputs: []workerconfig.ModelOperationSlot{{Name: "audio", ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio}}},
 		}, {
 			Name:    "TTS",
-			Outputs: []interfaces.ModelOperationSlot{{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}}},
+			Outputs: []workerconfig.ModelOperationSlot{{Name: "audio", ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio}}},
 		}},
 	}}
 
@@ -443,11 +451,11 @@ func TestRuleWorkerModelOperations_RejectsDuplicateOperationAndSlotNames(t *test
 
 func TestRuleWorkerModelOperations_RejectsCapabilityDeclarationsOnScriptWorkers(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name:          "scripted",
 		Type:          interfaces.WorkerTypeScript,
-		ModelLocality: interfaces.ModelLocalityCloud,
-		Operations:    []interfaces.ModelOperation{{Name: "TTS"}},
+		ModelLocality: workerconfig.ModelLocalityCloud,
+		Operations:    []workerconfig.ModelOperation{{Name: "TTS"}},
 	}}
 
 	findings := ruleWorkerModelOperations(cfg)
@@ -457,13 +465,13 @@ func TestRuleWorkerModelOperations_RejectsCapabilityDeclarationsOnScriptWorkers(
 
 func TestRuleWorkerModelOperations_RejectsCapabilityDeclarationsOnAgentWorkers(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name: "executor",
 		Type: interfaces.WorkerTypeAgent,
-		Operations: []interfaces.ModelOperation{{
+		Operations: []workerconfig.ModelOperation{{
 			Name:    "TTS",
-			Inputs:  []interfaces.ModelOperationSlot{{Name: "text", ContentTypes: []string{interfaces.ModelOperationContentTypeText}}},
-			Outputs: []interfaces.ModelOperationSlot{{Name: "audio", ContentTypes: []string{interfaces.ModelOperationContentTypeAudio}}},
+			Inputs:  []workerconfig.ModelOperationSlot{{Name: "text", ContentTypes: []string{workerconfig.ModelOperationContentTypeText}}},
+			Outputs: []workerconfig.ModelOperationSlot{{Name: "audio", ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio}}},
 		}},
 	}}
 
@@ -474,12 +482,12 @@ func TestRuleWorkerModelOperations_RejectsCapabilityDeclarationsOnAgentWorkers(t
 
 func TestRuleWorkerModelOperations_RejectsMissingSlotContentTypes(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name: "tts-worker",
 		Type: interfaces.WorkerTypeModel,
-		Operations: []interfaces.ModelOperation{{
+		Operations: []workerconfig.ModelOperation{{
 			Name:   "TTS",
-			Inputs: []interfaces.ModelOperationSlot{{Name: "text"}},
+			Inputs: []workerconfig.ModelOperationSlot{{Name: "text"}},
 		}},
 	}}
 
@@ -492,7 +500,7 @@ func TestRuleResourceUsage_NonexistentResource(t *testing.T) {
 	cfg := testBaseConfig()
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 		Name:      "ws",
-		Resources: []interfaces.ResourceConfig{{Name: "bogus", Capacity: 1}},
+		Resources: []factoryresource.Config{{Name: "bogus", Capacity: 1}},
 	}}
 	findings := ruleResourceUsage(cfg)
 	assertFindingExists(t, findings, "resource-usage-ref")
@@ -500,10 +508,10 @@ func TestRuleResourceUsage_NonexistentResource(t *testing.T) {
 
 func TestRuleResourceUsage_ZeroCapacity(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Resources = []interfaces.ResourceConfig{{Name: "gpu", Capacity: 4}}
+	cfg.Resources = []factoryresource.Config{{Name: "gpu", Capacity: 4}}
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 		Name:      "ws",
-		Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: 0}},
+		Resources: []factoryresource.Config{{Name: "gpu", Capacity: 0}},
 	}}
 	findings := ruleResourceUsage(cfg)
 	assertFindingExists(t, findings, "resource-usage-capacity")
@@ -511,10 +519,10 @@ func TestRuleResourceUsage_ZeroCapacity(t *testing.T) {
 
 func TestRuleResourceUsage_ValidConfig(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Resources = []interfaces.ResourceConfig{{Name: "gpu", Capacity: 4}}
+	cfg.Resources = []factoryresource.Config{{Name: "gpu", Capacity: 4}}
 	cfg.Workstations = []interfaces.FactoryWorkstationConfig{{
 		Name:      "ws",
-		Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: 2}},
+		Resources: []factoryresource.Config{{Name: "gpu", Capacity: 2}},
 	}}
 	findings := ruleResourceUsage(cfg)
 	if len(findings) != 0 {
@@ -524,10 +532,10 @@ func TestRuleResourceUsage_ValidConfig(t *testing.T) {
 
 func TestRuleResourceUsage_ValidatesWorkerRequirements(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Resources = []interfaces.ResourceConfig{{Name: "gpu", Capacity: 4}}
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Resources = []factoryresource.Config{{Name: "gpu", Capacity: 4}}
+	cfg.Workers = []workerconfig.Config{{
 		Name:      "worker-a",
-		Resources: []interfaces.ResourceConfig{{Name: "gpu", Capacity: 0}, {Name: "missing", Capacity: 1}},
+		Resources: []factoryresource.Config{{Name: "gpu", Capacity: 0}, {Name: "missing", Capacity: 1}},
 	}}
 
 	findings := ruleResourceUsage(cfg)
@@ -537,9 +545,9 @@ func TestRuleResourceUsage_ValidatesWorkerRequirements(t *testing.T) {
 
 func TestRuleResourceDefinitions_RequiresModelMetadata(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Resources = []interfaces.ResourceConfig{{
+	cfg.Resources = []factoryresource.Config{{
 		Name:     "omnivoice-cache",
-		Type:     interfaces.ResourceTypeModel,
+		Type:     factoryresource.TypeModel,
 		Capacity: 1,
 	}}
 
@@ -551,9 +559,9 @@ func TestRuleResourceDefinitions_RequiresModelMetadata(t *testing.T) {
 
 func TestRuleResourceDefinitions_RequiresProviderQuotaMetadata(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Resources = []interfaces.ResourceConfig{{
+	cfg.Resources = []factoryresource.Config{{
 		Name:     "codex-tts-quota",
-		Type:     interfaces.ResourceTypeProviderQuota,
+		Type:     factoryresource.TypeProviderQuota,
 		Capacity: 2,
 	}}
 
@@ -564,9 +572,9 @@ func TestRuleResourceDefinitions_RequiresProviderQuotaMetadata(t *testing.T) {
 
 func TestRuleResourceDefinitions_AcceptsModelResourceMetadata(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Resources = []interfaces.ResourceConfig{{
+	cfg.Resources = []factoryresource.Config{{
 		Name:       "omnivoice-cache",
-		Type:       interfaces.ResourceTypeModel,
+		Type:       factoryresource.TypeModel,
 		Capacity:   1,
 		Model:      "OMNIVOICE_Q4_K_M",
 		Backend:    "LLAMACPP",
@@ -834,7 +842,7 @@ func rollbackContainsAll(value string, substrings ...string) bool {
 
 func TestRuleWorkerWorkstationBehaviorCompatibility_AcceptsCompatiblePairings(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{
+	cfg.Workers = []workerconfig.Config{
 		{Name: "infer", Type: interfaces.WorkerTypeInference, Operations: inferenceOperationFixture()},
 		{Name: "legacy-infer", Type: interfaces.WorkerTypeModel, Operations: inferenceOperationFixture()},
 		{Name: "agent", Type: interfaces.WorkerTypeAgent},
@@ -899,7 +907,7 @@ func TestRuleWorkerWorkstationBehaviorCompatibility_AcceptsCompatiblePairings(t 
 
 func TestRuleWorkerWorkstationBehaviorCompatibility_RejectsIncompatiblePairings(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{
+	cfg.Workers = []workerconfig.Config{
 		{Name: "infer", Type: interfaces.WorkerTypeInference, Operations: inferenceOperationFixture()},
 		{Name: "agent", Type: interfaces.WorkerTypeAgent},
 		{Name: "script", Type: interfaces.WorkerTypeScript},
@@ -937,7 +945,7 @@ func TestRuleWorkerWorkstationBehaviorCompatibility_RejectsIncompatiblePairings(
 
 func TestConfigValidator_LegacyModelWorkstationPairingRemainsValid(t *testing.T) {
 	cfg := testBaseConfig()
-	cfg.Workers = []interfaces.WorkerConfig{{
+	cfg.Workers = []workerconfig.Config{{
 		Name:             "planner",
 		Type:             interfaces.WorkerTypeModel,
 		ModelProvider:    "CLAUDE",
@@ -959,16 +967,16 @@ func TestConfigValidator_LegacyModelWorkstationPairingRemainsValid(t *testing.T)
 	}
 }
 
-func inferenceOperationFixture() []interfaces.ModelOperation {
-	return []interfaces.ModelOperation{{
+func inferenceOperationFixture() []workerconfig.ModelOperation {
+	return []workerconfig.ModelOperation{{
 		Name: "TTS",
-		Inputs: []interfaces.ModelOperationSlot{{
+		Inputs: []workerconfig.ModelOperationSlot{{
 			Name:         "text",
-			ContentTypes: []string{interfaces.ModelOperationContentTypeText},
+			ContentTypes: []string{workerconfig.ModelOperationContentTypeText},
 		}},
-		Outputs: []interfaces.ModelOperationSlot{{
+		Outputs: []workerconfig.ModelOperationSlot{{
 			Name:         "audio",
-			ContentTypes: []string{interfaces.ModelOperationContentTypeAudio},
+			ContentTypes: []string{workerconfig.ModelOperationContentTypeAudio},
 		}},
 	}}
 }

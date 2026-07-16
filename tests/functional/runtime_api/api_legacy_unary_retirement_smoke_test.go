@@ -10,9 +10,10 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 	"go.uber.org/zap"
 )
@@ -79,7 +80,7 @@ func assertLegacyUnaryStartupWorkFileBatch(t *testing.T) {
 
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
 	workFile := filepath.Join(dir, "startup-work.json")
-	support.WriteWorkRequestFile(t, workFile, interfaces.SubmitRequest{
+	support.WriteWorkRequestFile(t, workFile, work.SubmitRequest{
 		RequestID:  "request-retired-unary-work-file",
 		Name:       "startup-file",
 		WorkID:     "work-retired-unary-work-file",
@@ -135,11 +136,11 @@ func assertLegacyUnaryCronSubmitPath(t *testing.T) {
 	start := time.Date(2026, time.April, 18, 12, 30, 0, 0, time.UTC)
 	fakeClock := clockwork.NewFakeClockAt(start)
 	dir := support.ScaffoldFactory(t, retiredUnaryCronFactoryConfig("* * * * *"))
-	observedSubmissions := make(chan interfaces.FactorySubmissionRecord, 16)
+	observedSubmissions := make(chan work.FactorySubmissionRecord, 16)
 	server := startFunctionalServerWithConfig(t, dir, true, func(cfg *service.FactoryServiceConfig) {
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		cfg.Clock = fakeClock
-	}, factory.WithSubmissionRecorder(func(record interfaces.FactorySubmissionRecord) {
+	}, factory.WithSubmissionRecorder(func(record work.FactorySubmissionRecord) {
 		observedSubmissions <- record
 	}))
 
@@ -216,11 +217,11 @@ func waitForFakeClockWaiters(t *testing.T, fakeClock *clockwork.FakeClock, waite
 
 func waitForCronSubmissionRecord(
 	t *testing.T,
-	submissions <-chan interfaces.FactorySubmissionRecord,
+	submissions <-chan work.FactorySubmissionRecord,
 	workstation string,
 	nominalAt time.Time,
 	timeout time.Duration,
-) interfaces.FactorySubmissionRecord {
+) work.FactorySubmissionRecord {
 	t.Helper()
 
 	deadline := time.After(timeout)

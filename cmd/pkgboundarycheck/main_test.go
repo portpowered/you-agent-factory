@@ -46,7 +46,7 @@ func TestRunAllowsOnlyStartupOwnersToImportApplicationGraph(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/wire/graph.go", "wire", "github.com/portpowered/infinite-you/pkg/interfaces")
+	writeGoImportFile(t, repoRoot, "pkg/wire/graph.go", "wire", "github.com/portpowered/infinite-you/pkg/factory/contracts")
 	writeGoImportFile(t, repoRoot, "pkg/root/root.go", "root", applicationGraphImportPath)
 	writeGoImportFile(t, repoRoot, "pkg/initializer/core.go", "initializer", applicationGraphImportPath)
 
@@ -64,17 +64,47 @@ func TestRunAllowsOnlyStartupOwnersToImportApplicationGraph(t *testing.T) {
 	}
 }
 
-func TestRunAllowsCanonicalTransportImports(t *testing.T) {
+func TestRunAllowsPlatformObservabilityAndRejectsRetiredImports(t *testing.T) {
 	t.Parallel()
 
 	repoRoot := t.TempDir()
-	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/transport.go", "runtime", "github.com/portpowered/infinite-you/pkg/transports/mapping")
-	writeGoImportFile(t, repoRoot, "pkg/root/cli.go", "root", "github.com/portpowered/infinite-you/pkg/transports/cli")
+	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/canonical.go", "runtime", "github.com/portpowered/infinite-you/pkg/platform/logging")
+	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/metrics.go", "runtime", "github.com/portpowered/infinite-you/pkg/factory/metrics")
+	writeGoImportFile(t, repoRoot, "pkg/wire/metrics.go", "wire", "github.com/portpowered/infinite-you/pkg/platform/metrics")
 
 	stderr := &bytes.Buffer{}
+	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err != nil {
+		t.Fatalf("run() error = %v, want canonical platform logging import allowed; stderr=%q", err, stderr.String())
+	}
+
+	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/retired.go", "runtime", "github.com/portpowered/infinite-you/pkg/logging")
+	stderr.Reset()
 	err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
-	if err != nil {
-		t.Fatalf("run() error = %v, want canonical transport imports allowed; stderr=%q", err, stderr.String())
+	if err == nil {
+		t.Fatal("run() error = nil, want retired logging import rejected")
+	}
+	for _, want := range []string{
+		"prohibited retired package import: github.com/portpowered/infinite-you/pkg/logging",
+		"canonical owner: pkg/platform/logging",
+	} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
+		}
+	}
+
+	writeGoImportFile(t, repoRoot, "pkg/factory/runtime/retired_metrics.go", "runtime", "github.com/portpowered/infinite-you/pkg/internal/metrics")
+	stderr.Reset()
+	err = run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr)
+	if err == nil {
+		t.Fatal("run() error = nil, want retired metrics import rejected")
+	}
+	for _, want := range []string{
+		"prohibited retired package import: github.com/portpowered/infinite-you/pkg/internal/metrics",
+		"canonical owner: pkg/factory/metrics for domain contracts and pkg/platform/metrics for file-backed recording",
+	} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("run() stderr = %q, want %q", stderr.String(), want)
+		}
 	}
 }
 
@@ -179,6 +209,9 @@ func TestRunRejectsRetiredPackageRootsWithCanonicalOwners(t *testing.T) {
 		{packagePath: "pkg/workcontent", canonicalOwner: "pkg/work/content"},
 		{packagePath: "pkg/workgraph", canonicalOwner: "pkg/work/graph"},
 		{packagePath: "pkg/workquery", canonicalOwner: "pkg/work/query"},
+		{packagePath: "pkg/interfaces", canonicalOwner: "the defining domain under pkg/factory, pkg/work, pkg/workers, or pkg/models"},
+		{packagePath: "pkg/replay", canonicalOwner: "pkg/factory/replay for Factory-event replay policy and pkg/platform/replay for artifact filesystem mechanics"},
+		{packagePath: "pkg/testutil", canonicalOwner: "internal/testutil or package-local test helpers"},
 	} {
 		t.Run(tt.packagePath, func(t *testing.T) {
 			t.Parallel()
@@ -260,6 +293,21 @@ func TestRunRejectsRetiredPackageImportsWithCanonicalOwners(t *testing.T) {
 			importPath:     "github.com/portpowered/infinite-you/pkg/workquery",
 			retiredRoot:    "pkg/workquery",
 			canonicalOwner: "pkg/work/query",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/interfaces",
+			retiredRoot:    "pkg/interfaces",
+			canonicalOwner: "the defining domain under pkg/factory, pkg/work, pkg/workers, or pkg/models",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/replay",
+			retiredRoot:    "pkg/replay",
+			canonicalOwner: "pkg/factory/replay for Factory-event replay policy and pkg/platform/replay for artifact filesystem mechanics",
+		},
+		{
+			importPath:     "github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures",
+			retiredRoot:    "pkg/testutil",
+			canonicalOwner: "internal/testutil or package-local test helpers",
 		},
 	} {
 		t.Run(tt.retiredRoot, func(t *testing.T) {

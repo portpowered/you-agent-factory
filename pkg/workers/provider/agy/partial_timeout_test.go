@@ -6,8 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/interfaces/responseevents"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/factory/sessions/responseevents"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
@@ -59,8 +61,8 @@ func TestAdapterExecuteTimeoutEmitsPartialMessageBeforeFailure(t *testing.T) {
 	}
 	result, executeErr := adapter.Execute(context.Background(), registry, runner, adapter.ExecuteInput{
 		Provider: providerAdapter.Identity(),
-		Command: adapter.CommandContext{Request: interfaces.ProviderInferenceRequest{
-			Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-agy-timeout"},
+		Command: adapter.CommandContext{Request: workerexecution.ProviderInferenceRequest{
+			Dispatch:         work.WorkDispatch{DispatchID: "dispatch-agy-timeout"},
 			WorkingDirectory: ".",
 			UserMessage:      "plan the goal",
 		}},
@@ -76,7 +78,7 @@ func TestAdapterExecuteTimeoutEmitsPartialMessageBeforeFailure(t *testing.T) {
 		t.Fatal("failure = nil, want classified timeout failure")
 	}
 	assertFailureFacts(t, adapter.FailureResult{Failure: result.Failure},
-		interfaces.WorkFailureTypeTimeout, "Agy request timed out.", true)
+		workerexecution.WorkFailureTypeTimeout, "Agy request timed out.", true)
 
 	partialDrafts := filterMessageDrafts(result.Drafts)
 	if len(partialDrafts) != 1 {

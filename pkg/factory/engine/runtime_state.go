@@ -1,23 +1,25 @@
 package engine
 
 import (
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/runtime/buffers"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 // RuntimeState is the unified mutable state container for the engine loop.
 // All per-tick state lives here so it can be snapshotted atomically.
 type RuntimeState struct {
-	Marking              *petri.Marking                              `json:"marking"`
-	Dispatches           map[string]*interfaces.DispatchEntry        `json:"dispatches"`
-	InFlightCount        int                                         `json:"in_flight_count"` // accurate count even when Dispatches map has key collisions
-	Results              []interfaces.WorkResult                     `json:"results"`
-	ResultBuffer         *buffers.TypedBuffer[interfaces.WorkResult] `json:"-"`
-	DispatchHistory      []interfaces.CompletedDispatch              `json:"dispatch_history"`
-	ActiveThrottlePauses []interfaces.ActiveThrottlePause            `json:"active_throttle_pauses,omitempty"`
-	TickCount            int                                         `json:"tick_count"`
+	Marking              *petri.Marking                                   `json:"marking"`
+	Dispatches           map[string]*interfaces.DispatchEntry             `json:"dispatches"`
+	InFlightCount        int                                              `json:"in_flight_count"` // accurate count even when Dispatches map has key collisions
+	Results              []workerexecution.WorkResult                     `json:"results"`
+	ResultBuffer         *buffers.TypedBuffer[workerexecution.WorkResult] `json:"-"`
+	DispatchHistory      []interfaces.CompletedDispatch                   `json:"dispatch_history"`
+	ActiveThrottlePauses []interfaces.ActiveThrottlePause                 `json:"active_throttle_pauses,omitempty"`
+	TickCount            int                                              `json:"tick_count"`
 }
 
 // Snapshot produces an immutable deep copy of the RuntimeState.
@@ -37,7 +39,7 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 		snap.Dispatches = make(map[string]*interfaces.DispatchEntry, len(rs.Dispatches))
 		for k, v := range rs.Dispatches {
 			cp := *v
-			cp.ConsumedTokens = interfaces.CloneTokens(v.ConsumedTokens)
+			cp.ConsumedTokens = factorytoken.CloneSlice(v.ConsumedTokens)
 			if v.HeldMutations != nil {
 				cp.HeldMutations = make([]interfaces.MarkingMutation, len(v.HeldMutations))
 				copy(cp.HeldMutations, v.HeldMutations)
@@ -48,7 +50,7 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 
 	// Deep copy results.
 	if rs.Results != nil {
-		snap.Results = make([]interfaces.WorkResult, len(rs.Results))
+		snap.Results = make([]workerexecution.WorkResult, len(rs.Results))
 		for i := range rs.Results {
 			snap.Results[i] = deepCopyWorkResult(rs.Results[i])
 		}
@@ -72,8 +74,8 @@ func (rs *RuntimeState) Snapshot() interfaces.EngineStateSnapshot[petri.MarkingS
 
 func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.CompletedDispatch {
 	cp := d
-	cp.ProviderSession = interfaces.CloneProviderSessionMetadata(d.ProviderSession)
-	cp.ConsumedTokens = interfaces.CloneTokens(d.ConsumedTokens)
+	cp.ProviderSession = workerexecution.CloneProviderSessionMetadata(d.ProviderSession)
+	cp.ConsumedTokens = factorytoken.CloneSlice(d.ConsumedTokens)
 	if d.OutputMutations != nil {
 		cp.OutputMutations = make([]interfaces.TokenMutationRecord, len(d.OutputMutations))
 		for i := range d.OutputMutations {
@@ -83,16 +85,16 @@ func deepCopyCompletedDispatch(d interfaces.CompletedDispatch) interfaces.Comple
 	return cp
 }
 
-func deepCopyWorkResult(result interfaces.WorkResult) interfaces.WorkResult {
+func deepCopyWorkResult(result workerexecution.WorkResult) workerexecution.WorkResult {
 	cp := result
-	cp.ProviderSession = interfaces.CloneProviderSessionMetadata(result.ProviderSession)
+	cp.ProviderSession = workerexecution.CloneProviderSessionMetadata(result.ProviderSession)
 	return cp
 }
 
 func deepCopyTokenMutationRecord(m interfaces.TokenMutationRecord) interfaces.TokenMutationRecord {
 	cp := m
 	if m.Token != nil {
-		tokenCopy := interfaces.CloneToken(*m.Token)
+		tokenCopy := factorytoken.Clone(*m.Token)
 		cp.Token = &tokenCopy
 	}
 	return cp

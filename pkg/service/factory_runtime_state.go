@@ -11,25 +11,29 @@ import (
 	"time"
 
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configload "github.com/portpowered/infinite-you/pkg/config/load"
 	"github.com/portpowered/infinite-you/pkg/config/operatordefaultsruntime"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
+	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution/recording"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
-	contentcontract "github.com/portpowered/infinite-you/pkg/work/content/contract"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"go.uber.org/zap"
 )
 
@@ -39,12 +43,12 @@ const (
 	modelExecutionOutputPreviewMax = 200
 )
 
-type modelEventRecorder func(factoryapi.FactoryEvent)
+type modelEventRecorder func(workerexecution.ModelEvent)
 
 type recordingModelRunner struct {
 	inner      workers.Runner
 	factoryCfg *interfaces.FactoryConfig
-	workerDef  *interfaces.WorkerConfig
+	workerDef  *workerconfig.Config
 	recorder   modelEventRecorder
 	now        func() time.Time
 
@@ -70,7 +74,7 @@ type modelExecutionEventTraceKey struct{}
 func newRecordingModelRunner(
 	inner workers.Runner,
 	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	recorder modelEventRecorder,
 	now func() time.Time,
 ) workers.Runner {
@@ -83,7 +87,7 @@ func newRecordingModelRunner(
 	return &recordingModelRunner{
 		inner:      inner,
 		factoryCfg: factoryCfg,
-		workerDef: func() *interfaces.WorkerConfig {
+		workerDef: func() *workerconfig.Config {
 			cloned := factoryconfig.CloneWorkerConfig(*workerDef)
 			return &cloned
 		}(),
@@ -93,9 +97,9 @@ func newRecordingModelRunner(
 	}
 }
 
-func (r *recordingModelRunner) Execute(ctx context.Context, request interfaces.RunnerExecutionRequest) (interfaces.RunnerExecutionResult, error) {
+func (r *recordingModelRunner) Execute(ctx context.Context, request workerexecution.RunnerExecutionRequest) (workerexecution.RunnerExecutionResult, error) {
 	if r == nil || r.inner == nil {
-		return interfaces.RunnerExecutionResult{}, fmt.Errorf("model event recorder requires an inner runner")
+		return workerexecution.RunnerExecutionResult{}, fmt.Errorf("model event recorder requires an inner runner")
 	}
 
 	attempt := r.nextAttempt(request.Dispatch.DispatchID)
@@ -131,7 +135,7 @@ func (r *recordingModelRunner) Execute(ctx context.Context, request interfaces.R
 	return response, err
 }
 
-func (r *recordingModelRunner) record(event factoryapi.FactoryEvent) {
+func (r *recordingModelRunner) record(event workerexecution.ModelEvent) {
 	if r != nil && r.recorder != nil {
 		r.recorder(event)
 	}
@@ -158,15 +162,15 @@ func modelRequestID(dispatchID string, attempt int) string {
 }
 
 func modelRequestEvent(
-	request interfaces.RunnerExecutionRequest,
+	request workerexecution.RunnerExecutionRequest,
 	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	attempt int,
 	modelRequestID string,
 	eventTime time.Time,
-) factoryapi.FactoryEvent {
-	payload := factoryapi.ModelRequestEventPayload{
-		ModelRequestId: modelRequestID,
+) workerexecution.ModelEvent {
+	payload := workerexecution.ModelRequestEventPayload{
+		ModelRequestID: modelRequestID,
 		Attempt:        attempt,
 		Operation:      strings.TrimSpace(request.ModelOperation),
 		Worker:         modelEventFirstNonEmpty(request.WorkerType, workerNameForModelEvents(workerDef)),
@@ -181,33 +185,23 @@ func modelRequestEvent(
 		Worktree:         modelEventStringPtr(request.Worktree),
 	}
 
-	var union factoryapi.FactoryEvent_Payload
-	if err := union.FromModelRequestEventPayload(payload); err != nil {
-		panic(fmt.Sprintf("model request event payload: %v", err))
-	}
-	return factoryapi.FactoryEvent{
-		SchemaVersion: factoryapi.AgentFactoryEventV1,
-		Type:          factoryapi.FactoryEventTypeModelRequest,
-		Id:            fmt.Sprintf("%s/%s", modelRequestEventIDPrefix, modelRequestID),
-		Context:       modelEventContext(request, eventTime),
-		Payload:       union,
-	}
+	return modelEvent(request, workerexecution.ModelEventKindRequest, fmt.Sprintf("%s/%s", modelRequestEventIDPrefix, modelRequestID), eventTime, &payload, nil)
 }
 
 func modelResponseEvent(
-	request interfaces.RunnerExecutionRequest,
-	response interfaces.RunnerExecutionResult,
+	request workerexecution.RunnerExecutionRequest,
+	response workerexecution.RunnerExecutionResult,
 	err error,
 	factoryCfg *interfaces.FactoryConfig,
-	workerDef *interfaces.WorkerConfig,
+	workerDef *workerconfig.Config,
 	trace *modelExecutionEventTrace,
 	attempt int,
 	modelRequestID string,
 	duration time.Duration,
 	eventTime time.Time,
-) factoryapi.FactoryEvent {
-	payload := factoryapi.ModelResponseEventPayload{
-		ModelRequestId: modelRequestID,
+) workerexecution.ModelEvent {
+	payload := workerexecution.ModelResponseEventPayload{
+		ModelRequestID: modelRequestID,
 		Attempt:        attempt,
 		Operation:      strings.TrimSpace(request.ModelOperation),
 		Worker:         modelEventFirstNonEmpty(request.WorkerType, workerNameForModelEvents(workerDef)),
@@ -222,14 +216,14 @@ func modelResponseEvent(
 	}
 
 	if err != nil {
-		payload.Outcome = factoryapi.InferenceOutcomeFailed
-		payload.FailureDetail = &factoryapi.FailureDetail{
-			Reason:  factoryapi.WorkFailureTypeUnknown,
+		payload.Outcome = workerexecution.InferenceOutcomeFailed
+		payload.FailureDetail = &workerexecution.FailureDetail{
+			Reason:  workerexecution.WorkFailureTypeUnknown,
 			Message: "The model request failed without an available explanation.",
 		}
 		payload.Diagnostics = modelEventDiagnostics(nil, err)
 	} else {
-		payload.Outcome = factoryapi.InferenceOutcomeSucceeded
+		payload.Outcome = workerexecution.InferenceOutcomeSucceeded
 		payload.Diagnostics = modelEventDiagnostics(response.Diagnostics, nil)
 	}
 	if trace != nil {
@@ -247,27 +241,17 @@ func modelResponseEvent(
 		payload.OutputPreview = modelEventStringPtr(truncate(strings.TrimSpace(response.Content), modelExecutionOutputPreviewMax))
 	}
 
-	var union factoryapi.FactoryEvent_Payload
-	if err := union.FromModelResponseEventPayload(payload); err != nil {
-		panic(fmt.Sprintf("model response event payload: %v", err))
-	}
-	return factoryapi.FactoryEvent{
-		SchemaVersion: factoryapi.AgentFactoryEventV1,
-		Type:          factoryapi.FactoryEventTypeModelResponse,
-		Id:            fmt.Sprintf("%s/%s", modelResponseEventIDPrefix, modelRequestID),
-		Context:       modelEventContext(request, eventTime),
-		Payload:       union,
-	}
+	return modelEvent(request, workerexecution.ModelEventKindResponse, fmt.Sprintf("%s/%s", modelResponseEventIDPrefix, modelRequestID), eventTime, nil, &payload)
 }
 
-func modelEventContext(request interfaces.RunnerExecutionRequest, eventTime time.Time) factoryapi.FactoryEventContext {
-	return factoryapi.FactoryEventContext{
-		Tick:       workersExecutionTick(request.Dispatch.Execution),
-		EventTime:  interfaces.CanonicalEventTime(eventTime),
-		DispatchId: modelEventStringPtr(request.Dispatch.DispatchID),
-		RequestId:  modelEventStringPtr(request.Dispatch.Execution.RequestID),
-		TraceIds:   modelEventStringSlicePtr(request.Dispatch.Execution.TraceID),
-		WorkIds:    modelEventStringSlicePtr(request.Dispatch.Execution.WorkIDs...),
+func modelEvent(request workerexecution.RunnerExecutionRequest, kind workerexecution.ModelEventKind, id string, eventTime time.Time, requestPayload *workerexecution.ModelRequestEventPayload, responsePayload *workerexecution.ModelResponseEventPayload) workerexecution.ModelEvent {
+	return workerexecution.ModelEvent{
+		ID: id, Kind: kind, EventTime: interfaces.CanonicalEventTime(eventTime),
+		Tick: workersExecutionTick(request.Dispatch.Execution), DispatchID: request.Dispatch.DispatchID,
+		RequestID: request.Dispatch.Execution.RequestID,
+		TraceIDs:  modelEventStrings(request.Dispatch.Execution.TraceID),
+		WorkIDs:   modelEventStrings(request.Dispatch.Execution.WorkIDs...),
+		Request:   requestPayload, Response: responsePayload,
 	}
 }
 
@@ -279,7 +263,7 @@ func snapshotHasActiveWork(snapshot *interfaces.EngineStateSnapshot[petri.Markin
 		return true
 	}
 	for _, token := range snapshot.Marking.Tokens {
-		if token == nil || token.Color.DataType == interfaces.DataTypeResource {
+		if token == nil || token.Color.DataType == factorytoken.DataTypeResource {
 			continue
 		}
 		if snapshot.Topology == nil {
@@ -293,76 +277,69 @@ func snapshotHasActiveWork(snapshot *interfaces.EngineStateSnapshot[petri.Markin
 	return false
 }
 
-func replacementFactoryChangePayload(events []factoryapi.FactoryEvent) (factoryapi.FactoryChangeEventPayload, bool) {
+func replacementFactoryChangePayload(events []interfaces.FactoryEvent) (interfaces.FactoryChangeEventPayload, bool) {
 	for _, event := range events {
-		if event.Type != factoryapi.FactoryEventTypeInitialStructureRequest {
+		if event.Type != interfaces.FactoryEventTypeInitialStructureRequest {
 			continue
 		}
-		payload, err := event.Payload.AsInitialStructureRequestEventPayload()
-		if err != nil {
-			return factoryapi.FactoryChangeEventPayload{}, false
+		var payload interfaces.InitialStructureRequestEventPayload
+		if err := event.DecodePayload(&payload); err != nil {
+			return interfaces.FactoryChangeEventPayload{}, false
 		}
-		return factoryapi.FactoryChangeEventPayload{
+		return interfaces.FactoryChangeEventPayload{
 			Factory:         payload.Factory,
 			Metadata:        payload.Metadata,
 			SourceDirectory: payload.SourceDirectory,
 		}, true
 	}
-	return factoryapi.FactoryChangeEventPayload{}, false
+	return interfaces.FactoryChangeEventPayload{}, false
 }
 
-func workersExecutionTick(metadata interfaces.ExecutionMetadata) int {
+func workersExecutionTick(metadata work.ExecutionMetadata) int {
 	if metadata.CurrentTick != 0 {
 		return metadata.CurrentTick
 	}
 	return metadata.DispatchCreatedTick
 }
 
-func workerNameForModelEvents(workerDef *interfaces.WorkerConfig) string {
+func workerNameForModelEvents(workerDef *workerconfig.Config) string {
 	if workerDef == nil {
 		return ""
 	}
 	return strings.TrimSpace(workerDef.Name)
 }
 
-func modelNameForModelEvents(workerDef *interfaces.WorkerConfig) string {
+func modelNameForModelEvents(workerDef *workerconfig.Config) string {
 	if workerDef == nil {
 		return ""
 	}
 	return strings.TrimSpace(workerDef.Model)
 }
 
-func modelLocalityForModelEvents(workerDef *interfaces.WorkerConfig) string {
+func modelLocalityForModelEvents(workerDef *workerconfig.Config) string {
 	if workerDef == nil {
 		return ""
 	}
 	return strings.TrimSpace(workerDef.ModelLocality)
 }
 
-func modelEventResolvedBindings(bindings []interfaces.ResolvedModelOperationBinding) *[]factoryapi.ResolvedModelOperationBinding {
+func modelEventResolvedBindings(bindings []workerexecution.ResolvedModelOperationBinding) *[]workerexecution.ResolvedModelOperationBinding {
 	if len(bindings) == 0 {
 		return nil
 	}
-	generated := make([]factoryapi.ResolvedModelOperationBinding, 0, len(bindings))
-	for _, binding := range bindings {
-		generated = append(generated, factoryapi.ResolvedModelOperationBinding{
-			Slot:    binding.Slot,
-			Source:  factoryapi.ResolvedModelOperationBindingSource(binding.Source),
-			Content: modelEventGeneratedWorkContent(binding.Content),
-		})
-	}
-	return &generated
+	cloned := workerexecution.CloneResolvedModelOperationBindings(bindings)
+	return &cloned
 }
 
-func modelEventResourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef *interfaces.WorkerConfig) *[]factoryapi.ModelResourceSummary {
+func modelEventResourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef *workerconfig.Config) *[]workerexecution.ModelResourceSummary {
 	if factoryCfg == nil || workerDef == nil || len(workerDef.Resources) == 0 {
 		return nil
 	}
-	resourcesByName := make(map[string]interfaces.ResourceConfig, len(factoryCfg.Resources))
+	resourcesByName := make(map[string]factoryresource.Config, len(factoryCfg.Resources))
 	for _, resource := range factoryCfg.Resources {
 		resourcesByName[resource.Name] = resource
 	}
-	summaries := make([]factoryapi.ModelResourceSummary, 0, len(workerDef.Resources))
+	summaries := make([]workerexecution.ModelResourceSummary, 0, len(workerDef.Resources))
 	seen := make(map[string]struct{}, len(workerDef.Resources))
 	for _, requirement := range workerDef.Resources {
 		resource, ok := resourcesByName[requirement.Name]
@@ -372,7 +349,11 @@ func modelEventResourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef
 		if _, ok := seen[resource.Name]; ok {
 			continue
 		}
-		summaries = append(summaries, localmodels.ResourceSummary(resource))
+		summaries = append(summaries, workerexecution.ModelResourceSummary{
+			Name: resource.Name, Type: strings.TrimSpace(resource.Type), Capacity: resource.Capacity,
+			Model: modelEventStringPtr(resource.Model), Backend: modelEventStringPtr(resource.Backend),
+			LoadPolicy: modelEventStringPtr(resource.LoadPolicy), Provider: modelEventStringPtr(resource.Provider),
+		})
 		seen[resource.Name] = struct{}{}
 	}
 	if len(summaries) == 0 {
@@ -381,26 +362,26 @@ func modelEventResourceSummaries(factoryCfg *interfaces.FactoryConfig, workerDef
 	return &summaries
 }
 
-func modelEventOutputContent(raw string) *factoryapi.WorkContent {
+func modelEventOutputContent(raw string) *[]work.WorkContentPart {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return nil
 	}
 
-	var content factoryapi.WorkContent
+	var content []work.WorkContentPart
 	if err := json.Unmarshal([]byte(trimmed), &content); err == nil && len(content) != 0 {
 		return &content
 	}
 	var envelope struct {
-		Content factoryapi.WorkContent `json:"content"`
+		Content []work.WorkContentPart `json:"content"`
 	}
 	if err := json.Unmarshal([]byte(trimmed), &envelope); err == nil && len(envelope.Content) != 0 {
 		return &envelope.Content
 	}
-	return contentcontract.GeneratedPtrFromParts([]interfaces.WorkContentPart{{
-		Type: interfaces.WorkContentPartTypeText,
+	return &[]work.WorkContentPart{{
+		Type: work.WorkContentPartTypeText,
 		Text: raw,
-	}})
+	}}
 }
 
 func truncate(value string, limit int) string {
@@ -486,14 +467,6 @@ func int64PtrIfPositive(value int64) *int64 {
 	return &value
 }
 
-func modelEventGeneratedWorkContent(parts []interfaces.WorkContentPart) factoryapi.WorkContent {
-	content := contentcontract.GeneratedPtrFromParts(parts)
-	if content == nil {
-		return nil
-	}
-	return *content
-}
-
 func modelEventStringPtr(value string) *string {
 	if strings.TrimSpace(value) == "" {
 		return nil
@@ -501,7 +474,7 @@ func modelEventStringPtr(value string) *string {
 	return &value
 }
 
-func modelEventStringSlicePtr(values ...string) *[]string {
+func modelEventStrings(values ...string) []string {
 	out := make([]string, 0, len(values))
 	for _, value := range values {
 		if strings.TrimSpace(value) == "" {
@@ -512,7 +485,7 @@ func modelEventStringSlicePtr(values ...string) *[]string {
 	if len(out) == 0 {
 		return nil
 	}
-	return &out
+	return out
 }
 
 func modelEventFirstNonEmpty(values ...string) string {
@@ -528,7 +501,7 @@ func submitWorkRequestWithFactory(activeFactory factory.Factory) workRequestSubm
 	if activeFactory == nil {
 		return nil
 	}
-	return func(ctx context.Context, request interfaces.WorkRequest) error {
+	return func(ctx context.Context, request work.WorkRequest) error {
 		_, err := activeFactory.SubmitWorkRequest(ctx, request)
 		return err
 	}
@@ -627,7 +600,7 @@ func (fs *FactoryService) clearRunState() {
 }
 
 // SubmitWorkRequest submits a canonical work request batch to the factory.
-func (fs *FactoryService) SubmitWorkRequest(ctx context.Context, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func (fs *FactoryService) SubmitWorkRequest(ctx context.Context, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	fs.activationMu.RLock()
 	defer fs.activationMu.RUnlock()
 
@@ -687,7 +660,11 @@ func (fs *FactoryService) GetFactoryEvents(ctx context.Context) ([]factoryapi.Fa
 	if err != nil {
 		return nil, fmt.Errorf("get factory events: %w", err)
 	}
-	return events, nil
+	mapped, err := apisurface.FactoryEventsToAPI(events)
+	if err != nil {
+		return nil, fmt.Errorf("map factory events to public contract: %w", err)
+	}
+	return mapped, nil
 }
 
 func (fs *FactoryService) submitWorkFile(ctx context.Context) error {
@@ -731,7 +708,7 @@ func (fs *FactoryService) currentRuntimeConfig() *factoryconfig.LoadedFactoryCon
 }
 
 // StartupWorkerConfig returns the named worker from the built startup runtime config.
-func (fs *FactoryService) StartupWorkerConfig(name string) (*interfaces.WorkerConfig, bool) {
+func (fs *FactoryService) StartupWorkerConfig(name string) (*workerconfig.Config, bool) {
 	runtimeCfg := fs.currentRuntimeConfig()
 	if runtimeCfg == nil {
 		return nil, false
@@ -786,7 +763,7 @@ func loadFactoryConfigForMode(cfg *FactoryServiceConfig) (*factoryconfig.LoadedF
 	if err != nil {
 		return nil, nil, fmt.Errorf("load replay artifact: %w", err)
 	}
-	runtimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(artifact.Factory)
+	runtimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(artifact.Factory)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load embedded replay config: %w", err)
 	}
@@ -806,17 +783,17 @@ func warnReplayMetadataMismatches(cfg *FactoryServiceConfig, artifact *interface
 	if err != nil {
 		return
 	}
-	currentFactory, err := replay.GeneratedFactoryFromRuntimeConfig(
+	currentSnapshot, err := replay.FactorySnapshotFromRuntimeConfig(
 		current.FactoryDir(),
 		current.FactoryConfig(),
 		current,
-		replay.WithGeneratedFactorySourceDirectory(current.FactoryDir()),
-		replay.WithGeneratedFactoryWorkflowID(cfg.WorkflowID),
+		replay.WithFactorySnapshotSourceDirectory(current.FactoryDir()),
+		replay.WithFactorySnapshotWorkflowID(cfg.WorkflowID),
 	)
 	if err != nil {
 		return
 	}
-	for _, warning := range replay.FactoryMetadataWarnings(artifact.Factory, currentFactory) {
+	for _, warning := range replay.FactoryMetadataWarnings(artifact.Factory, currentSnapshot) {
 		logger.Warn("replay artifact metadata differs from current checkout",
 			zap.String("category", replay.DivergenceCategoryConfigMismatch),
 			zap.String("metadata_key", warning.Key),

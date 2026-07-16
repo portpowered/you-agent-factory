@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/scheduler"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 )
@@ -151,7 +152,7 @@ func hasEarlierDispatchForTrace(dispatches []interfaces.FactoryDispatchRecord, t
 
 func traceIDFromDispatch(dispatch interfaces.FactoryDispatchRecord) string {
 	for _, token := range workers.WorkDispatchInputTokens(dispatch.Dispatch) {
-		if token.Color.DataType != interfaces.DataTypeResource && token.Color.TraceID != "" {
+		if token.Color.DataType != factorytoken.DataTypeResource && token.Color.TraceID != "" {
 			return token.Color.TraceID
 		}
 	}
@@ -199,7 +200,7 @@ func nonTerminalWorkItemsInSnapshot(snapshot *interfaces.EngineStateSnapshot[pet
 
 	var items []string
 	for _, token := range snapshot.Marking.Tokens {
-		if token == nil || token.Color.DataType != interfaces.DataTypeWork || token.Color.WorkID == "" {
+		if token == nil || token.Color.DataType != factorytoken.DataTypeWork || token.Color.WorkID == "" {
 			continue
 		}
 		category := snapshot.Topology.StateCategoryForPlace(token.PlaceID)

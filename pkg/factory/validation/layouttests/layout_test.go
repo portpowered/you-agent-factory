@@ -5,9 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/portpowered/infinite-you/internal/testutil/validationassert"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 )
 
 func validLayoutFactoryConfig() *interfaces.FactoryConfig {
@@ -26,7 +27,7 @@ func validLayoutFactoryConfig() *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "executor"}},
+		Workers: []workerconfig.Config{{Name: "executor"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{{
 			ID:             "plan-task",
 			Name:           "plan-task",

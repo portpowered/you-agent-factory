@@ -13,7 +13,7 @@ func TestScanRejectsProductionLoggerFallbacks(t *testing.T) {
 import (
   standardlog "log"
   "log/slog"
-  factorylogging "github.com/portpowered/infinite-you/pkg/logging"
+  factorylogging "github.com/portpowered/infinite-you/pkg/platform/logging"
   "go.uber.org/zap"
 )
 func fallback() {
@@ -58,7 +58,7 @@ func TestScanAllowsInjectedAndExplicitNoopLoggers(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
 		"pkg/runtime/injected.go": `package runtime
 import (
-  "github.com/portpowered/infinite-you/pkg/logging"
+  "github.com/portpowered/infinite-you/pkg/platform/logging"
   "go.uber.org/zap"
 )
 type runtime struct { logger logging.Logger }
@@ -81,12 +81,12 @@ func disabledZap() *zap.Logger { return zap.NewNop() }`,
 func TestScanAllowsNarrowCompositionOwners(t *testing.T) {
 	root := fixtureRepository(t, map[string]string{
 		"pkg/transports/cli/root.go": `package cli
-import "github.com/portpowered/infinite-you/pkg/logging"
+import "github.com/portpowered/infinite-you/pkg/platform/logging"
 func compose() { _, _ = logging.BuildLogger(false, false) }`,
 		"pkg/transports/cli/terminalpolicy/policy.go": `package terminalpolicy
-import "github.com/portpowered/infinite-you/pkg/logging"
+import "github.com/portpowered/infinite-you/pkg/platform/logging"
 func compose() { _, _ = logging.BuildLogger(false, false) }`,
-		"pkg/logging/logger.go": `package logging
+		"pkg/platform/logging/logger.go": `package logging
 import "go.uber.org/zap"
 func build() { _, _ = zap.NewProduction() }`,
 	})

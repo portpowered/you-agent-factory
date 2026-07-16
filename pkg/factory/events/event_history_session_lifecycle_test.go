@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
@@ -36,7 +37,7 @@ func TestFactoryEventHistory_RecordSessionLifecycle_EmitsReconstructableBracketS
 		t0.Add(2*time.Second),
 	)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 3 {
 		t.Fatalf("events = %d, want started, result-updated, completed", len(events))
 	}
@@ -53,12 +54,47 @@ func TestFactoryEventHistory_RecordSessionLifecycle_EmitsReconstructableBracketS
 		}
 	}
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, 2)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, 2)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
 	if worldState.SessionBracket == nil || !worldState.SessionBracket.Terminal {
 		t.Fatalf("session bracket = %#v, want terminal reconstructed lifecycle", worldState.SessionBracket)
+	}
+}
+
+func TestFactoryEventHistory_AddEventTypeRecorder_ReplaysHistoryThenObservesCompletion(t *testing.T) {
+	t0 := time.Date(2026, 6, 9, 12, 10, 0, 0, time.UTC)
+	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })
+	history.RecordSessionLifecycleFromFactoryConfig("session-alpha", &interfaces.FactoryConfig{
+		Name: "factory-alpha",
+	}, 0, t0)
+
+	var eventTypes []interfaces.FactoryEventType
+	history.AddEventTypeRecorder(func(eventType interfaces.FactoryEventType) {
+		eventTypes = append(eventTypes, eventType)
+	})
+	history.RecordSessionLifecycleCompletion(
+		"session-alpha",
+		&interfaces.FactoryConfig{},
+		1,
+		interfaces.FactoryStateCompleted,
+		"",
+		t0.Add(time.Second),
+	)
+
+	want := []interfaces.FactoryEventType{
+		interfaces.FactoryEventTypeSessionStarted,
+		interfaces.FactoryEventTypeSessionResultUpdated,
+		interfaces.FactoryEventTypeSessionCompleted,
+	}
+	if len(eventTypes) != len(want) {
+		t.Fatalf("event types = %v, want %v", eventTypes, want)
+	}
+	for index := range want {
+		if eventTypes[index] != want[index] {
+			t.Fatalf("event types[%d] = %q, want %q", index, eventTypes[index], want[index])
+		}
 	}
 }
 
@@ -77,7 +113,7 @@ func TestFactoryEventHistory_RecordSessionLifecycle_FailedRunEmitsFailedWithPart
 		t0.Add(time.Second),
 	)
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 3 {
 		t.Fatalf("events = %d, want started, failed-with-partial result, completed", len(events))
 	}
@@ -102,28 +138,28 @@ func TestFactoryEventHistory_RecordSessionLifecycleControl_EmitsPauseAndResume(t
 	history := NewFactoryEventHistory(nil, func() time.Time { return t0 })
 	history.RecordSessionLifecycleControl(SessionLifecycleControlInput{
 		SessionID:        "session-live",
-		OrchestratorKind: factoryapi.JAVASCRIPT,
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
 		Source:           "runtime",
 		Tick:             3,
-		Operation:        factoryapi.FactorySessionLifecycleControlKindPause,
-		Outcome:          factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
-		PreviousStatus:   factoryapi.FactorySessionDurableLifecycleStatusRunning,
-		NewStatus:        factoryapi.FactorySessionDurableLifecycleStatusPaused,
+		Operation:        interfaces.FactorySessionLifecycleControlPause,
+		Outcome:          interfaces.FactorySessionLifecycleControlOutcomeAccepted,
+		PreviousStatus:   interfaces.FactorySessionLifecycleStatusRunning,
+		NewStatus:        interfaces.FactorySessionLifecycleStatusPaused,
 		Reason:           "pause requested",
 	}, t0)
 	history.RecordSessionLifecycleControl(SessionLifecycleControlInput{
 		SessionID:        "session-live",
-		OrchestratorKind: factoryapi.JAVASCRIPT,
+		OrchestratorKind: interfaces.OrchestratorKindJavaScript,
 		Source:           "runtime",
 		Tick:             4,
-		Operation:        factoryapi.FactorySessionLifecycleControlKindResume,
-		Outcome:          factoryapi.FactorySessionLifecycleControlOutcomeAccepted,
-		PreviousStatus:   factoryapi.FactorySessionDurableLifecycleStatusPaused,
-		NewStatus:        factoryapi.FactorySessionDurableLifecycleStatusRunning,
+		Operation:        interfaces.FactorySessionLifecycleControlResume,
+		Outcome:          interfaces.FactorySessionLifecycleControlOutcomeAccepted,
+		PreviousStatus:   interfaces.FactorySessionLifecycleStatusPaused,
+		NewStatus:        interfaces.FactorySessionLifecycleStatusRunning,
 		Reason:           "resume requested",
 	}, t0.Add(time.Second))
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 2 {
 		t.Fatalf("events = %d, want pause and resume lifecycle controls", len(events))
 	}
@@ -142,10 +178,10 @@ func TestFactoryEventHistory_RecordSessionLifecycleControl_EmitsPauseAndResume(t
 }
 
 func TestFactoryStateToDurableLifecycleStatus_MapsLiveFactoryStates(t *testing.T) {
-	if got := FactoryStateToDurableLifecycleStatus(interfaces.FactoryStatePaused); got != factoryapi.FactorySessionDurableLifecycleStatusPaused {
+	if got := FactoryStateToDurableLifecycleStatus(interfaces.FactoryStatePaused); got != interfaces.FactorySessionLifecycleStatusPaused {
 		t.Fatalf("paused = %q, want PAUSED", got)
 	}
-	if got := FactoryStateToDurableLifecycleStatus(interfaces.FactoryStateRunning); got != factoryapi.FactorySessionDurableLifecycleStatusRunning {
+	if got := FactoryStateToDurableLifecycleStatus(interfaces.FactoryStateRunning); got != interfaces.FactorySessionLifecycleStatusRunning {
 		t.Fatalf("running = %q, want RUNNING", got)
 	}
 }
@@ -176,25 +212,25 @@ func TestFactoryEventHistory_RecordSessionPauseResume_EmitsReconstructableContro
 	}, 0, t0)
 	history.RecordSessionPaused(SessionLifecycleControlInput{
 		SessionID:        "session-live",
-		OrchestratorKind: factoryapi.PETRI,
+		OrchestratorKind: interfaces.OrchestratorKindPetri,
 		Source:           "runtime",
 		Tick:             1,
 	}, t0.Add(time.Second))
 	history.RecordSessionResumed(SessionLifecycleControlInput{
 		SessionID:        "session-live",
-		OrchestratorKind: factoryapi.PETRI,
+		OrchestratorKind: interfaces.OrchestratorKindPetri,
 		Source:           "runtime",
 		Tick:             2,
 	}, t0.Add(2*time.Second))
 
-	events := history.Events()
+	events := generatedHistoryEvents(t, history)
 	if len(events) != 3 {
 		t.Fatalf("events = %d, want started, paused, resumed", len(events))
 	}
 	assertSessionLifecycleEventType(t, events[1], factoryapi.FactoryEventTypeSessionPaused, "factory-event/session-paused/1")
 	assertSessionLifecycleEventType(t, events[2], factoryapi.FactoryEventTypeSessionResumed, "factory-event/session-resumed/2")
 
-	worldState, err := projections.ReconstructFactoryWorldState(events, 2)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, 2)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}

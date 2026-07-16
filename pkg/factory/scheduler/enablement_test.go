@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 )
 
@@ -30,8 +30,8 @@ func TestEnablementEvaluator_LogsEnabledTransition(t *testing.T) {
 		},
 	}
 
-	marking := makeTestSnapshot(map[string]*interfaces.Token{
-		"tok1": {ID: "tok1", PlaceID: "p1", Color: interfaces.TokenColor{WorkID: "w1"}},
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"tok1": {ID: "tok1", PlaceID: "p1", Color: factorytoken.Color{WorkID: "w1"}},
 	})
 
 	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
@@ -66,7 +66,7 @@ func TestEnablementEvaluator_LogsDisabledInsufficientTokens(t *testing.T) {
 		},
 	}
 
-	marking := makeTestSnapshot(map[string]*interfaces.Token{})
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{})
 	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
 		t.Fatalf("expected 0 enabled transitions, got %d", len(enabled))
 	}
@@ -104,9 +104,9 @@ func TestEnablementEvaluator_LogsDisabledGuardFailed(t *testing.T) {
 		},
 	}
 
-	marking := makeTestSnapshot(map[string]*interfaces.Token{
-		"tok-work":   {ID: "tok-work", PlaceID: "p-work", Color: interfaces.TokenColor{WorkID: "w1"}},
-		"tok-review": {ID: "tok-review", PlaceID: "p-review", Color: interfaces.TokenColor{WorkID: "r1", ParentID: "WRONG"}},
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"tok-work":   {ID: "tok-work", PlaceID: "p-work", Color: factorytoken.Color{WorkID: "w1"}},
+		"tok-review": {ID: "tok-review", PlaceID: "p-review", Color: factorytoken.Color{WorkID: "r1", ParentID: "WRONG"}},
 	})
 
 	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
@@ -152,12 +152,12 @@ func TestEnablementEvaluator_BindsMultipleNamedGuardedInputs(t *testing.T) {
 			},
 		},
 	}
-	marking := makeTestSnapshot(map[string]*interfaces.Token{
-		"tok-req":          {ID: "tok-req", PlaceID: "p-req", Color: interfaces.TokenColor{WorkID: "w1"}},
-		"tok-design-match": {ID: "tok-design-match", PlaceID: "p-design", Color: interfaces.TokenColor{WorkID: "d1", ParentID: "w1"}},
-		"tok-design-other": {ID: "tok-design-other", PlaceID: "p-design", Color: interfaces.TokenColor{WorkID: "d2", ParentID: "other"}},
-		"tok-code-match":   {ID: "tok-code-match", PlaceID: "p-code", Color: interfaces.TokenColor{WorkID: "c1", ParentID: "w1"}},
-		"tok-code-other":   {ID: "tok-code-other", PlaceID: "p-code", Color: interfaces.TokenColor{WorkID: "c2", ParentID: "other"}},
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"tok-req":          {ID: "tok-req", PlaceID: "p-req", Color: factorytoken.Color{WorkID: "w1"}},
+		"tok-design-match": {ID: "tok-design-match", PlaceID: "p-design", Color: factorytoken.Color{WorkID: "d1", ParentID: "w1"}},
+		"tok-design-other": {ID: "tok-design-other", PlaceID: "p-design", Color: factorytoken.Color{WorkID: "d2", ParentID: "other"}},
+		"tok-code-match":   {ID: "tok-code-match", PlaceID: "p-code", Color: factorytoken.Color{WorkID: "c1", ParentID: "w1"}},
+		"tok-code-other":   {ID: "tok-code-other", PlaceID: "p-code", Color: factorytoken.Color{WorkID: "c2", ParentID: "other"}},
 	})
 
 	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
@@ -206,11 +206,11 @@ func TestEnablementEvaluator_BindsAllTokensForMatchingParentGuard(t *testing.T) 
 			},
 		},
 	}
-	marking := makeTestSnapshot(map[string]*interfaces.Token{
-		"tok-parent":      {ID: "tok-parent", PlaceID: "p-parent", Color: interfaces.TokenColor{WorkID: "w1"}},
-		"tok-child-a":     {ID: "tok-child-a", PlaceID: "p-children", Color: interfaces.TokenColor{WorkID: "c1", ParentID: "w1"}},
-		"tok-child-b":     {ID: "tok-child-b", PlaceID: "p-children", Color: interfaces.TokenColor{WorkID: "c2", ParentID: "w1"}},
-		"tok-child-other": {ID: "tok-child-other", PlaceID: "p-children", Color: interfaces.TokenColor{WorkID: "c3", ParentID: "other"}},
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"tok-parent":      {ID: "tok-parent", PlaceID: "p-parent", Color: factorytoken.Color{WorkID: "w1"}},
+		"tok-child-a":     {ID: "tok-child-a", PlaceID: "p-children", Color: factorytoken.Color{WorkID: "c1", ParentID: "w1"}},
+		"tok-child-b":     {ID: "tok-child-b", PlaceID: "p-children", Color: factorytoken.Color{WorkID: "c2", ParentID: "w1"}},
+		"tok-child-other": {ID: "tok-child-other", PlaceID: "p-children", Color: factorytoken.Color{WorkID: "c3", ParentID: "other"}},
 	})
 
 	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
@@ -228,10 +228,10 @@ func TestEnablementEvaluator_BindsAllTokensForMatchingParentGuard(t *testing.T) 
 func TestEnablementEvaluator_SameNameGuardEnablesOnMatchingNames(t *testing.T) {
 	eval := NewEnablementEvaluator(nil)
 	n := sameNameGuardNet()
-	marking := makeTestSnapshot(map[string]*interfaces.Token{
-		"plan-alpha": {ID: "plan-alpha", PlaceID: "plan:ready", Color: interfaces.TokenColor{Name: "alpha"}},
-		"task-alpha": {ID: "task-alpha", PlaceID: "task:ready", Color: interfaces.TokenColor{Name: "alpha"}},
-		"task-beta":  {ID: "task-beta", PlaceID: "task:ready", Color: interfaces.TokenColor{Name: "beta"}},
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"plan-alpha": {ID: "plan-alpha", PlaceID: "plan:ready", Color: factorytoken.Color{Name: "alpha"}},
+		"task-alpha": {ID: "task-alpha", PlaceID: "task:ready", Color: factorytoken.Color{Name: "alpha"}},
+		"task-beta":  {ID: "task-beta", PlaceID: "task:ready", Color: factorytoken.Color{Name: "beta"}},
 	})
 
 	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
@@ -249,9 +249,9 @@ func TestEnablementEvaluator_SameNameGuardEnablesOnMatchingNames(t *testing.T) {
 func TestEnablementEvaluator_SameNameGuardBlocksNonMatchingNames(t *testing.T) {
 	eval := NewEnablementEvaluator(nil)
 	n := sameNameGuardNet()
-	marking := makeTestSnapshot(map[string]*interfaces.Token{
-		"plan-alpha": {ID: "plan-alpha", PlaceID: "plan:ready", Color: interfaces.TokenColor{Name: "alpha"}},
-		"task-beta":  {ID: "task-beta", PlaceID: "task:ready", Color: interfaces.TokenColor{Name: "beta"}},
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"plan-alpha": {ID: "plan-alpha", PlaceID: "plan:ready", Color: factorytoken.Color{Name: "alpha"}},
+		"task-beta":  {ID: "task-beta", PlaceID: "task:ready", Color: factorytoken.Color{Name: "beta"}},
 	})
 
 	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
@@ -285,10 +285,10 @@ func TestEnablementEvaluator_SameNameGuardFindsLaterMatchingBinding(t *testing.T
 			},
 		},
 	}
-	marking := makeTestSnapshot(map[string]*interfaces.Token{
-		"task-alpha": {ID: "task-alpha", PlaceID: "task:to-complete", Color: interfaces.TokenColor{Name: "alpha"}},
-		"task-zeta":  {ID: "task-zeta", PlaceID: "task:to-complete", Color: interfaces.TokenColor{Name: "zeta"}},
-		"idea-zeta":  {ID: "idea-zeta", PlaceID: "idea:to-complete", Color: interfaces.TokenColor{Name: "zeta"}},
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"task-alpha": {ID: "task-alpha", PlaceID: "task:to-complete", Color: factorytoken.Color{Name: "alpha"}},
+		"task-zeta":  {ID: "task-zeta", PlaceID: "task:to-complete", Color: factorytoken.Color{Name: "zeta"}},
+		"idea-zeta":  {ID: "idea-zeta", PlaceID: "idea:to-complete", Color: factorytoken.Color{Name: "zeta"}},
 	})
 
 	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
@@ -336,9 +336,9 @@ func TestEnablementEvaluator_SameNameGuardFactoryConsumeInputOrder(t *testing.T)
 			},
 		},
 	}
-	marking := makeTestSnapshot(map[string]*interfaces.Token{
-		"idea-cell": {ID: "idea-cell", PlaceID: "idea:to-complete", Color: interfaces.TokenColor{Name: "dynamic-workflows-cell-cli-validate-list"}},
-		"task-cell": {ID: "task-cell", PlaceID: "task:to-complete", Color: interfaces.TokenColor{Name: "dynamic-workflows-cell-cli-validate-list"}},
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
+		"idea-cell": {ID: "idea-cell", PlaceID: "idea:to-complete", Color: factorytoken.Color{Name: "dynamic-workflows-cell-cli-validate-list"}},
+		"task-cell": {ID: "task-cell", PlaceID: "task:to-complete", Color: factorytoken.Color{Name: "dynamic-workflows-cell-cli-validate-list"}},
 	})
 
 	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
@@ -377,22 +377,22 @@ func TestEnablementEvaluator_VisitCountGuardEnablesAtThreshold(t *testing.T) {
 		},
 	}
 
-	belowThreshold := makeTestSnapshot(map[string]*interfaces.Token{
+	belowThreshold := makeTestSnapshot(map[string]*factorytoken.Token{
 		"tok-work": {
 			ID:      "tok-work",
 			PlaceID: "p-init",
-			History: interfaces.TokenHistory{TotalVisits: map[string]int{"review": 2}},
+			History: factorytoken.History{TotalVisits: map[string]int{"review": 2}},
 		},
 	})
 	if enabled := eval.FindEnabledTransitions(context.Background(), n, &belowThreshold); len(enabled) != 0 {
 		t.Fatalf("enabled transitions below threshold = %d, want 0", len(enabled))
 	}
 
-	atThreshold := makeTestSnapshot(map[string]*interfaces.Token{
+	atThreshold := makeTestSnapshot(map[string]*factorytoken.Token{
 		"tok-work": {
 			ID:      "tok-work",
 			PlaceID: "p-init",
-			History: interfaces.TokenHistory{TotalVisits: map[string]int{"review": 3}},
+			History: factorytoken.History{TotalVisits: map[string]int{"review": 3}},
 		},
 	})
 	enabled := eval.FindEnabledTransitions(context.Background(), n, &atThreshold)
@@ -414,7 +414,7 @@ func TestEnablementEvaluator_LogsNoInputArcs(t *testing.T) {
 		},
 	}
 
-	marking := makeTestSnapshot(map[string]*interfaces.Token{})
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{})
 	if enabled := eval.FindEnabledTransitions(context.Background(), n, &marking); len(enabled) != 0 {
 		t.Fatalf("expected 0 enabled transitions, got %d", len(enabled))
 	}
@@ -440,7 +440,7 @@ func TestEnablementEvaluator_NilLoggerDoesNotPanic(t *testing.T) {
 		},
 	}
 
-	marking := makeTestSnapshot(map[string]*interfaces.Token{
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
 		"tok1": {ID: "tok1", PlaceID: "p1"},
 	})
 	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)
@@ -476,7 +476,7 @@ func TestEnablementEvaluator_MultipleTransitions_LogsEach(t *testing.T) {
 		},
 	}
 
-	marking := makeTestSnapshot(map[string]*interfaces.Token{
+	marking := makeTestSnapshot(map[string]*factorytoken.Token{
 		"tok1": {ID: "tok1", PlaceID: "p1"},
 	})
 	enabled := eval.FindEnabledTransitions(context.Background(), n, &marking)

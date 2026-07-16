@@ -6,9 +6,10 @@ import (
 	"strings"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 // ErrRuntimeNotAvailable reports that no hosted runtime bundle is available for an operation.
@@ -22,10 +23,10 @@ func hostedFactory(bundle *Bundle) (factory.Factory, error) {
 }
 
 // SubmitWorkRequest submits a canonical work request batch to the hosted runtime.
-func SubmitWorkRequest(ctx context.Context, bundle *Bundle, request interfaces.WorkRequest) (interfaces.WorkRequestSubmitResult, error) {
+func SubmitWorkRequest(ctx context.Context, bundle *Bundle, request work.WorkRequest) (work.WorkRequestSubmitResult, error) {
 	activeFactory, err := hostedFactory(bundle)
 	if err != nil {
-		return interfaces.WorkRequestSubmitResult{}, err
+		return work.WorkRequestSubmitResult{}, err
 	}
 	return activeFactory.SubmitWorkRequest(ctx, request)
 }
@@ -35,12 +36,12 @@ func MoveWork(
 	ctx context.Context,
 	bundle *Bundle,
 	workID, stateName string,
-	source interfaces.WorkStateChangeSource,
+	source work.WorkStateChangeSource,
 	requestID string,
-) (interfaces.OperatorMoveResult, error) {
+) (work.OperatorMoveResult, error) {
 	activeFactory, err := hostedFactory(bundle)
 	if err != nil {
-		return interfaces.OperatorMoveResult{}, err
+		return work.OperatorMoveResult{}, err
 	}
 	return activeFactory.MoveWork(ctx, workID, stateName, source, requestID)
 }

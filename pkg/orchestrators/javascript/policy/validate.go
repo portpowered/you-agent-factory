@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerrunner "github.com/portpowered/infinite-you/pkg/workers/runner"
 )
 
 var (
@@ -221,8 +222,8 @@ func validateStringAllowlist(field string, values []string, validate allowlistVa
 }
 
 func validateRunner(value string) *Issue {
-	runner := interfaces.NormalizeRunnerID(value)
-	if runner == "" || !interfaces.IsBuiltInRunnerID(runner) {
+	runner := workerrunner.NormalizeRunnerID(value)
+	if runner == "" || !workerrunner.IsBuiltInRunnerID(runner) {
 		return &Issue{
 			Code:    CodeUnsupportedRunner,
 			Message: fmt.Sprintf("unsupported runner %q", value),

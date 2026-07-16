@@ -3,10 +3,11 @@ package scheduler
 import (
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
 )
 
 var baseTokenTime = time.Date(2026, 4, 17, 9, 0, 0, 0, time.UTC)
@@ -86,12 +87,12 @@ func priorityEnabledTransition(transitionID, placeID, tokenID string, enteredAt 
 	return interfaces.EnabledTransition{
 		TransitionID: transitionID,
 		WorkerType:   "agent",
-		Bindings: map[string][]interfaces.Token{
+		Bindings: map[string][]factorytoken.Token{
 			"input": {{
 				ID:        tokenID,
 				PlaceID:   placeID,
 				EnteredAt: enteredAt,
-				Color:     interfaces.TokenColor{WorkID: "work-" + tokenID, TraceID: "trace-" + tokenID, WorkTypeID: "task"},
+				Color:     factorytoken.Color{WorkID: "work-" + tokenID, TraceID: "trace-" + tokenID, WorkTypeID: "task"},
 			}},
 		},
 	}

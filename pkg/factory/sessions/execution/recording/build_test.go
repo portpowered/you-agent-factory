@@ -10,7 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 )
 
 func TestBuildRetainsCanonicalSummariesAndOmitsRuntimeDetails(t *testing.T) {
@@ -110,9 +111,9 @@ func TestApplyJavaScriptProjectionFactsRetainsPublicCheckpointAndPartialResult(t
 			ArtifactRef: &interfaces.JavaScriptCheckpointArtifactRef{ID: "artifact-checkpoint"},
 		}},
 		ResultStatus: "FAILED_WITH_PARTIAL",
-		PrimaryResult: []interfaces.WorkContentPart{
-			{Type: interfaces.WorkContentPartTypeText, Text: "partial"},
-			{Type: interfaces.WorkContentPartTypeBinary, ArtifactID: "artifact-result"},
+		PrimaryResult: []work.WorkContentPart{
+			{Type: work.WorkContentPartTypeText, Text: "partial"},
+			{Type: work.WorkContentPartTypeBinary, ArtifactID: "artifact-result"},
 		},
 	})
 

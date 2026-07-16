@@ -9,12 +9,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/replay"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -71,7 +74,7 @@ func generatedSchemaRuntimeSummaryFromLoadedConfig(t *testing.T, loaded *config.
 
 func generatedSchemaTransportSummaryFromRuntimeConfig(
 	t *testing.T,
-	workerLookup func(string) (*interfaces.WorkerConfig, bool),
+	workerLookup func(string) (*workerconfig.Config, bool),
 	workstationLookup func(string) (*interfaces.FactoryWorkstationConfig, bool),
 ) generatedSchemaTransportSummary {
 	t.Helper()
@@ -90,7 +93,7 @@ func generatedSchemaTransportSummaryFromRuntimeConfig(
 
 func generatedSchemaRuntimeSummaryFromRuntimeConfig(
 	t *testing.T,
-	workerLookup func(string) (*interfaces.WorkerConfig, bool),
+	workerLookup func(string) (*workerconfig.Config, bool),
 	workstationLookup func(string) (*interfaces.FactoryWorkstationConfig, bool),
 ) generatedSchemaRuntimeSummary {
 	t.Helper()
@@ -118,7 +121,11 @@ func generatedSchemaTransportSummaryFromHTTPBoundary(t *testing.T, dir string) g
 		t.Fatalf("decode initial-structure payload: %v", err)
 	}
 	assertGeneratedSmokeTransportBoundary(t, initialStructurePayload.Factory)
-	httpRuntime, err := replay.RuntimeConfigFromGeneratedFactory(initialStructurePayload.Factory)
+	httpSnapshot, err := interfaces.NewFactorySnapshot(initialStructurePayload.Factory)
+	if err != nil {
+		t.Fatalf("capture initial structure Factory: %v", err)
+	}
+	httpRuntime, err := replay.RuntimeConfigFromFactorySnapshot(httpSnapshot)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory(initial structure HTTP payload): %v", err)
 	}
@@ -133,15 +140,15 @@ func generatedSchemaTransportAndRuntimeSummaryFromRecordedReplay(
 ) (generatedSchemaTransportSummary, generatedSchemaRuntimeSummary) {
 	t.Helper()
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "task",
 		WorkID:     "generated-schema-runtime-work",
 		TraceID:    "generated-schema-runtime-trace",
 		Payload:    []byte(`{"title":"generated schema deserialization smoke"}`),
 	})
 	provider := testutil.NewMockProvider(
-		interfaces.InferenceResponse{Content: "Step one done. COMPLETE"},
-		interfaces.InferenceResponse{Content: "Step two done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step one done. COMPLETE"},
+		workerexecution.InferenceResponse{Content: "Step two done. COMPLETE"},
 	)
 	harness := testutil.NewServiceTestHarness(t, dir,
 		testutil.WithProvider(provider),
@@ -151,10 +158,14 @@ func generatedSchemaTransportAndRuntimeSummaryFromRecordedReplay(
 	harness.RunUntilComplete(t, 10*time.Second)
 
 	artifact := testutil.LoadReplayArtifact(t, artifactPath)
-	runStarted := requireGeneratedSchemaRunStartedPayload(t, artifact.Events)
+	runStarted := requireGeneratedSchemaRunStartedPayload(t, testutil.GeneratedFactoryEvents(t, artifact.Events))
 	assertGeneratedSmokeTransportBoundary(t, runStarted.Factory)
 	assertGeneratedSmokeRuntimeDefinitions(t, runStarted.Factory)
-	replayRuntime, err := replay.RuntimeConfigFromGeneratedFactory(runStarted.Factory)
+	replaySnapshot, err := interfaces.NewFactorySnapshot(runStarted.Factory)
+	if err != nil {
+		t.Fatalf("capture run-started Factory: %v", err)
+	}
+	replayRuntime, err := replay.RuntimeConfigFromFactorySnapshot(replaySnapshot)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory(run started): %v", err)
 	}
@@ -317,7 +328,7 @@ func assertGeneratedSmokeSerializedWorkstationBoundary(t *testing.T, generated f
 
 func requireGeneratedSchemaWorkerSummary(
 	t *testing.T,
-	workerLookup func(string) (*interfaces.WorkerConfig, bool),
+	workerLookup func(string) (*workerconfig.Config, bool),
 	name string,
 ) generatedSchemaWorkerSummary {
 	t.Helper()

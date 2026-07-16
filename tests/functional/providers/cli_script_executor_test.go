@@ -8,8 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -81,7 +82,7 @@ func TestScriptExecutor_PreservesTokenColor(t *testing.T) {
 
 func TestScriptExecutor_SuccessWithColorMetadata(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-seed-001",
 		WorkTypeID: "task",
 		TraceID:    "trace-seed-001",
@@ -172,7 +173,7 @@ func TestScriptExecutor_ArgTemplating(t *testing.T) {
 		t.Fatalf("write AGENTS.md: %v", err)
 	}
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "prd-my-feature",
 		WorkID:     "work-abc-123",
 		WorkTypeID: "task",
@@ -197,7 +198,7 @@ func TestScriptExecutor_ArgTemplating(t *testing.T) {
 
 func TestScriptExecutor_WorkTypeIDFromTargetPlace(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "script_executor_dir"))
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "type-stamp-test",
 		WorkID:     "work-type-stamp",
 		WorkTypeID: "task",
@@ -236,7 +237,7 @@ func TestScriptExecutor_ArgTemplatingWithTags(t *testing.T) {
 		t.Fatalf("write AGENTS.md: %v", err)
 	}
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "work-tag-test",
 		WorkTypeID: "task",
 		TraceID:    "trace-tag-test",
@@ -271,7 +272,7 @@ func TestScriptExecutor_RuntimeWorkstationConfigResolvesWorkingDirectoryAndEnv(t
 		}
 	})
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkID:     "script-runtime-fields",
 		WorkTypeID: "task",
 		TraceID:    "trace-script-runtime-fields",
@@ -346,7 +347,7 @@ func TestScriptExecutor_RuntimeConfigMergePreservesCanonicalTopologyAndPromptTem
 		`env_branch={{ index .Context.Env "RUNTIME_BRANCH" }}`,
 	})
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "runtime-template-name",
 		WorkID:     "work-runtime-config",
 		WorkTypeID: "task",
@@ -419,14 +420,14 @@ func TestScriptExecutor_RuntimeWorkstationTimeoutRequeuesAndRetriesOnLaterTick(t
 	if len(engineState.DispatchHistory) < 2 {
 		t.Fatalf("DispatchHistory length = %d, want at least 2", len(engineState.DispatchHistory))
 	}
-	if engineState.DispatchHistory[0].Outcome != interfaces.OutcomeFailed {
-		t.Fatalf("first DispatchHistory outcome = %s, want %s", engineState.DispatchHistory[0].Outcome, interfaces.OutcomeFailed)
+	if engineState.DispatchHistory[0].Outcome != workerexecution.OutcomeFailed {
+		t.Fatalf("first DispatchHistory outcome = %s, want %s", engineState.DispatchHistory[0].Outcome, workerexecution.OutcomeFailed)
 	}
 	if engineState.DispatchHistory[0].Reason != "execution timeout" {
 		t.Fatalf("first DispatchHistory reason = %q, want %q", engineState.DispatchHistory[0].Reason, "execution timeout")
 	}
-	if engineState.DispatchHistory[len(engineState.DispatchHistory)-1].Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("last DispatchHistory outcome = %s, want %s", engineState.DispatchHistory[len(engineState.DispatchHistory)-1].Outcome, interfaces.OutcomeAccepted)
+	if engineState.DispatchHistory[len(engineState.DispatchHistory)-1].Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("last DispatchHistory outcome = %s, want %s", engineState.DispatchHistory[len(engineState.DispatchHistory)-1].Outcome, workerexecution.OutcomeAccepted)
 	}
 }
 
@@ -480,7 +481,7 @@ func TestScriptExecutor_AsyncWorkerPoolTemplateFallbackScenarios(t *testing.T) {
 			testutil.WithCommandRunner(support.NewStaticSuccessCommandRunner("empty-input-ok")),
 		)
 
-		if err := h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+		if err := h.SubmitFull(context.Background(), []work.SubmitRequest{{
 			WorkID:     "work-no-template-no-payload",
 			WorkTypeID: "task",
 			TraceID:    "trace-no-template-no-payload",

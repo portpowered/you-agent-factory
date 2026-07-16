@@ -6,12 +6,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 type sleepyExecutor struct{ sleep time.Duration }
 
-func (e *sleepyExecutor) Execute(_ context.Context, d interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *sleepyExecutor) Execute(_ context.Context, d work.WorkDispatch) (workerexecution.WorkResult, error) {
 	time.Sleep(e.sleep)
-	return interfaces.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: interfaces.OutcomeAccepted}, nil
+	return workerexecution.WorkResult{DispatchID: d.DispatchID, TransitionID: d.TransitionID, Outcome: workerexecution.OutcomeAccepted}, nil
 }

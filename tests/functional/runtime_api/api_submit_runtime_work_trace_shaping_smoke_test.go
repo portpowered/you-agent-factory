@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -18,7 +19,7 @@ func TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent(t *testing.T) {
 	const requestID = "request-functional-runtime-trace-batch"
 	server.SubmitRuntimeWork(
 		t,
-		interfaces.SubmitRequest{
+		work.SubmitRequest{
 			RequestID:              requestID,
 			Name:                   "explicit-current",
 			WorkID:                 "work-runtime-explicit-current",
@@ -27,7 +28,7 @@ func TestSubmitRuntimeWork_EmitsCanonicalTraceAwareBatchEvent(t *testing.T) {
 			TraceID:                "trace-request-legacy",
 			Payload:                []byte(`{"title":"explicit current"}`),
 		},
-		interfaces.SubmitRequest{
+		work.SubmitRequest{
 			Name:       "legacy-fallback",
 			WorkID:     "work-runtime-legacy-fallback",
 			WorkTypeID: "task",
@@ -128,9 +129,9 @@ func waitForRuntimeAPIWorkRequestEvent(
 
 func requireRuntimeAPITokenByWorkID(
 	t *testing.T,
-	tokens map[string]*interfaces.Token,
+	tokens map[string]*factorytoken.Token,
 	workID string,
-) *interfaces.Token {
+) *factorytoken.Token {
 	t.Helper()
 
 	for _, token := range tokens {

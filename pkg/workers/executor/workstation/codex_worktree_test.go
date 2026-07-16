@@ -8,18 +8,27 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil/runtimefixtures"
+	workertaxonomy "github.com/portpowered/infinite-you/pkg/workers/taxonomy"
+
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
+
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/internal/testutil/runtimefixtures"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
 type dispatchCapturingExecutor struct {
-	dispatch interfaces.WorkstationExecutionRequest
+	dispatch workerexecution.WorkstationExecutionRequest
 	called   bool
-	result   interfaces.WorkResult
+	result   workerexecution.WorkResult
 }
 
-func (m *dispatchCapturingExecutor) Execute(_ context.Context, d interfaces.WorkstationExecutionRequest) (interfaces.WorkResult, error) {
+func (m *dispatchCapturingExecutor) Execute(_ context.Context, d workerexecution.WorkstationExecutionRequest) (workerexecution.WorkResult, error) {
 	m.dispatch = d
 	m.called = true
 	return m.result, nil
@@ -43,35 +52,35 @@ func TestWorkstationExecutor_CodexWorktreePreparation_SetsMaterializedWorkingDir
 		t.Fatalf("MkdirAll(factory): %v", err)
 	}
 
-	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	mock := &dispatchCapturingExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
 	we := newCodexWorktreeTestWorkstationExecutor(runtimefixtures.RuntimeConfigLookupFixture{
 		FactoryPath: factoryRoot,
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"codex-worker": {
-				Type:          interfaces.WorkerTypeModel,
+				Type:          workertaxonomy.WorkerTypeModel,
 				Body:          "system",
-				ModelProvider: string(interfaces.ModelProviderCodex),
+				ModelProvider: string(modelprovider.Codex),
 			},
 		},
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"process": {
-				Type:           interfaces.WorkstationTypeModel,
+				Type:           workertaxonomy.WorkstationTypeModel,
 				WorkerTypeName: "codex-worker",
-				Runner:         interfaces.RunnerIDCodex,
+				Runner:         workerexecution.RunnerIDCodex,
 				PromptTemplate: "Process {{ (index .Inputs 0).WorkID }}",
 				Worktree:       `{{ index (index .Inputs 0).Tags "branch" }}`,
 			},
 		},
 	}, mock)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-codex-worktree",
 		TransitionID:    "t-codex-worktree",
 		WorkerType:      "codex-worker",
 		WorkstationName: "process",
-		InputTokens: executor.InputTokens(interfaces.Token{
+		InputTokens: executor.InputTokens(factorytoken.Token{
 			ID: "tok-1",
-			Color: interfaces.TokenColor{
+			Color: factorytoken.Color{
 				WorkID: "work-1",
 				Tags:   map[string]string{"branch": "feature-a"},
 			},
@@ -80,8 +89,8 @@ func TestWorkstationExecutor_CodexWorktreePreparation_SetsMaterializedWorkingDir
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s (%s)", result.Outcome, interfaces.OutcomeAccepted, result.Error)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s (%s)", result.Outcome, workerexecution.OutcomeAccepted, result.Error)
 	}
 	if !mock.called {
 		t.Fatal("executor was not called")
@@ -94,7 +103,7 @@ func TestWorkstationExecutor_CodexWorktreePreparation_SetsMaterializedWorkingDir
 	if mock.dispatch.Worktree != "feature-a" {
 		t.Fatalf("worktree = %q, want feature-a", mock.dispatch.Worktree)
 	}
-	if mock.dispatch.RunnerID != interfaces.RunnerIDCodex {
+	if mock.dispatch.RunnerID != workerexecution.RunnerIDCodex {
 		t.Fatalf("runner = %q, want codex", mock.dispatch.RunnerID)
 	}
 }
@@ -106,19 +115,19 @@ func TestWorkstationExecutor_LegacyClaudeWorktree_SkipsCodexFactoryPreparation(t
 		t.Fatalf("MkdirAll(factory): %v", err)
 	}
 
-	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	mock := &dispatchCapturingExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
 	we := newCodexWorktreeTestWorkstationExecutor(runtimefixtures.RuntimeConfigLookupFixture{
 		FactoryPath: factoryRoot,
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"claude-worker": {
-				Type:          interfaces.WorkerTypeModel,
+				Type:          workertaxonomy.WorkerTypeModel,
 				Body:          "system",
-				ModelProvider: string(interfaces.ModelProviderClaude),
+				ModelProvider: string(modelprovider.Claude),
 			},
 		},
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"process": {
-				Type:           interfaces.WorkstationTypeModel,
+				Type:           workertaxonomy.WorkstationTypeModel,
 				WorkerTypeName: "claude-worker",
 				PromptTemplate: "Process {{ (index .Inputs 0).WorkID }}",
 				Worktree:       `{{ index (index .Inputs 0).Tags "branch" }}`,
@@ -126,21 +135,21 @@ func TestWorkstationExecutor_LegacyClaudeWorktree_SkipsCodexFactoryPreparation(t
 		},
 	}, mock)
 
-	result, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	result, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-claude-worktree",
 		TransitionID:    "t-claude-worktree",
 		WorkerType:      "claude-worker",
 		WorkstationName: "process",
-		InputTokens: executor.InputTokens(interfaces.Token{
+		InputTokens: executor.InputTokens(factorytoken.Token{
 			ID:    "tok-1",
-			Color: interfaces.TokenColor{WorkID: "work-1", Tags: map[string]string{"branch": "my-feature-branch"}},
+			Color: factorytoken.Color{WorkID: "work-1", Tags: map[string]string{"branch": "my-feature-branch"}},
 		}),
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
-		t.Fatalf("Outcome = %s, want %s (%s)", result.Outcome, interfaces.OutcomeAccepted, result.Error)
+	if result.Outcome != workerexecution.OutcomeAccepted {
+		t.Fatalf("Outcome = %s, want %s (%s)", result.Outcome, workerexecution.OutcomeAccepted, result.Error)
 	}
 	if !mock.called {
 		t.Fatal("executor was not called")
@@ -151,7 +160,7 @@ func TestWorkstationExecutor_LegacyClaudeWorktree_SkipsCodexFactoryPreparation(t
 	if mock.dispatch.Worktree != "my-feature-branch" {
 		t.Fatalf("worktree = %q, want my-feature-branch", mock.dispatch.Worktree)
 	}
-	if mock.dispatch.RunnerID != interfaces.RunnerIDCodex {
+	if mock.dispatch.RunnerID != workerexecution.RunnerIDCodex {
 		t.Fatalf("runner = %q, want default codex runner id", mock.dispatch.RunnerID)
 	}
 	if _, err := os.Stat(filepath.Join(factoryRoot, ".worktrees", "my-feature-branch")); !os.IsNotExist(err) {
@@ -166,22 +175,22 @@ func TestWorkstationExecutor_CodexWorktreePreparation_SkipsWhenWorkingDirectoryA
 		t.Fatalf("MkdirAll(factory): %v", err)
 	}
 
-	mock := &dispatchCapturingExecutor{result: interfaces.WorkResult{Outcome: interfaces.OutcomeAccepted, Output: "done"}}
+	mock := &dispatchCapturingExecutor{result: workerexecution.WorkResult{Outcome: workerexecution.OutcomeAccepted, Output: "done"}}
 	we := newCodexWorktreeTestWorkstationExecutor(runtimefixtures.RuntimeConfigLookupFixture{
 		FactoryPath:     factoryRoot,
 		RuntimeBasePath: repoRoot,
-		Workers: map[string]*interfaces.WorkerConfig{
+		Workers: map[string]*workerconfig.Config{
 			"codex-worker": {
-				Type:          interfaces.WorkerTypeModel,
+				Type:          workertaxonomy.WorkerTypeModel,
 				Body:          "system",
-				ModelProvider: string(interfaces.ModelProviderCodex),
+				ModelProvider: string(modelprovider.Codex),
 			},
 		},
 		Workstations: map[string]*interfaces.FactoryWorkstationConfig{
 			"process": {
-				Type:             interfaces.WorkstationTypeModel,
+				Type:             workertaxonomy.WorkstationTypeModel,
 				WorkerTypeName:   "codex-worker",
-				Runner:           interfaces.RunnerIDCodex,
+				Runner:           workerexecution.RunnerIDCodex,
 				PromptTemplate:   "Process {{ (index .Inputs 0).WorkID }}",
 				WorkingDirectory: `/repo/{{ index (index .Inputs 0).Tags "branch" }}`,
 				Worktree:         `{{ index (index .Inputs 0).Tags "branch" }}`,
@@ -189,14 +198,14 @@ func TestWorkstationExecutor_CodexWorktreePreparation_SkipsWhenWorkingDirectoryA
 		},
 	}, mock)
 
-	_, err := we.Execute(context.Background(), interfaces.WorkDispatch{
+	_, err := we.Execute(context.Background(), work.WorkDispatch{
 		DispatchID:      "d-codex-conflict",
 		TransitionID:    "t-codex-conflict",
 		WorkerType:      "codex-worker",
 		WorkstationName: "process",
-		InputTokens: executor.InputTokens(interfaces.Token{
+		InputTokens: executor.InputTokens(factorytoken.Token{
 			ID:    "tok-1",
-			Color: interfaces.TokenColor{WorkID: "work-1", Tags: map[string]string{"branch": "feature-a"}},
+			Color: factorytoken.Color{WorkID: "work-1", Tags: map[string]string{"branch": "feature-a"}},
 		}),
 	})
 	if err != nil {

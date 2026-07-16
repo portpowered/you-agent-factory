@@ -4,17 +4,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestNtoN_TypeMatching(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "n_to_n_type_matching"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "cool-idea",
 		WorkID:     "work-idea-100",
 		WorkTypeID: "idea",
@@ -22,7 +23,7 @@ func TestNtoN_TypeMatching(t *testing.T) {
 		Payload:    []byte("idea content"),
 		Tags:       map[string]string{"source": "brainstorm"},
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "cool-design",
 		WorkID:     "work-design-200",
 		WorkTypeID: "design",
@@ -187,7 +188,7 @@ command: echo
 type: SCRIPT_WORKER
 ---
 `)
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "source-doc-alpha",
 		WorkID:     "work-document-1",
 		WorkTypeID: "document",
@@ -259,7 +260,7 @@ func assertReviewerFanoutTerminalNames(t *testing.T, marking *petri.MarkingSnaps
 func TestDocReviewerExamplePNGFanoutPreservesSharedNameDownstream(t *testing.T) {
 	dir := support.ScaffoldFactoryFromExamplePNG(t, "examples/factories/doc-reviewer.png")
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		Name:       "source-doc-from-png",
 		WorkID:     "work-document-png-1",
 		WorkTypeID: "document",

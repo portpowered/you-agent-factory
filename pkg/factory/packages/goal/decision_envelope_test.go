@@ -5,7 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
 
 func TestUsesDecisionEnvelopeOutcome_IdentifiesConfiguredWorkstation(t *testing.T) {
@@ -79,7 +80,7 @@ func TestWorkResultFromGoalRoutingDecisionEnvelopeJSON_PreservesMappedFields(t *
 	if err != nil {
 		t.Fatalf("WorkResultFromGoalRoutingDecisionEnvelopeJSON: %v", err)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
+	if result.Outcome != workerexecution.OutcomeAccepted {
 		t.Fatalf("Outcome = %q, want ACCEPTED for routing envelope", result.Outcome)
 	}
 	if result.SelectedClassificationLabel != GoalRoutingDecisionNeedsChanges {
@@ -97,11 +98,11 @@ func TestWorkResultFromGoalRoutingDecisionEnvelopeJSON_PreservesMappedFields(t *
 }
 
 func TestSupportedDecisions_MatchesWorkOutcomeVocabulary(t *testing.T) {
-	want := []interfaces.WorkOutcome{
-		interfaces.OutcomeAccepted,
-		interfaces.OutcomeContinue,
-		interfaces.OutcomeRejected,
-		interfaces.OutcomeFailed,
+	want := []workerexecution.WorkOutcome{
+		workerexecution.OutcomeAccepted,
+		workerexecution.OutcomeContinue,
+		workerexecution.OutcomeRejected,
+		workerexecution.OutcomeFailed,
 	}
 	got := SupportedDecisions()
 	if len(got) != len(want) {
@@ -117,12 +118,12 @@ func TestSupportedDecisions_MatchesWorkOutcomeVocabulary(t *testing.T) {
 func TestOutcomeFromDecision_MapsAcceptedVocabulary(t *testing.T) {
 	cases := []struct {
 		decision string
-		want     interfaces.WorkOutcome
+		want     workerexecution.WorkOutcome
 	}{
-		{DecisionAccepted, interfaces.OutcomeAccepted},
-		{DecisionContinue, interfaces.OutcomeContinue},
-		{DecisionRejected, interfaces.OutcomeRejected},
-		{DecisionFailed, interfaces.OutcomeFailed},
+		{DecisionAccepted, workerexecution.OutcomeAccepted},
+		{DecisionContinue, workerexecution.OutcomeContinue},
+		{DecisionRejected, workerexecution.OutcomeRejected},
+		{DecisionFailed, workerexecution.OutcomeFailed},
 	}
 	for _, tc := range cases {
 		got, err := OutcomeFromDecision(tc.decision)
@@ -157,7 +158,7 @@ func TestWorkResultFromDecisionEnvelopeJSON_MapsRequiredAndOptionalFields(t *tes
 	if result.DispatchID != "dispatch-1" || result.TransitionID != "review" {
 		t.Fatalf("dispatch metadata = %#v, want dispatch-1/review", result)
 	}
-	if result.Outcome != interfaces.OutcomeAccepted {
+	if result.Outcome != workerexecution.OutcomeAccepted {
 		t.Fatalf("Outcome = %q, want ACCEPTED", result.Outcome)
 	}
 	if result.Feedback != "Looks good." {
@@ -177,12 +178,12 @@ func TestWorkResultFromDecisionEnvelopeJSON_MapsRequiredAndOptionalFields(t *tes
 func TestWorkResultFromDecisionEnvelopeJSON_MapsEachDecisionOutcome(t *testing.T) {
 	cases := []struct {
 		decision string
-		want     interfaces.WorkOutcome
+		want     workerexecution.WorkOutcome
 	}{
-		{DecisionAccepted, interfaces.OutcomeAccepted},
-		{DecisionContinue, interfaces.OutcomeContinue},
-		{DecisionRejected, interfaces.OutcomeRejected},
-		{DecisionFailed, interfaces.OutcomeFailed},
+		{DecisionAccepted, workerexecution.OutcomeAccepted},
+		{DecisionContinue, workerexecution.OutcomeContinue},
+		{DecisionRejected, workerexecution.OutcomeRejected},
+		{DecisionFailed, workerexecution.OutcomeFailed},
 	}
 	for _, tc := range cases {
 		raw := `{"decision":"` + tc.decision + `","feedback":"notes"}`
@@ -309,7 +310,7 @@ func TestFailedWorkResultFromDecisionEnvelopeError_MapsToWorkResultFailedOutcome
 	if result.DispatchID != "dispatch-5" || result.TransitionID != "check" {
 		t.Fatalf("dispatch metadata = %#v, want dispatch-5/check", result)
 	}
-	if result.Outcome != interfaces.OutcomeFailed {
+	if result.Outcome != workerexecution.OutcomeFailed {
 		t.Fatalf("Outcome = %q, want FAILED", result.Outcome)
 	}
 	if !strings.Contains(result.Error, "invalid JSON") {

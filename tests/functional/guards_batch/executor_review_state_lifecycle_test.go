@@ -6,15 +6,19 @@ import (
 	"testing"
 	"time"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
+	"github.com/portpowered/infinite-you/internal/testutil"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
 func TestExecutorReviewStateLifecycle_ProcessCompletionLeavesSingleReviewInit(t *testing.T) {
 	dir := scaffoldExecutorReviewProcessOnlyFactory(t)
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "<COMPLETE>\n"}},
 	})
 	h := support.NewGuardsBatchHarness(t, dir,
@@ -57,7 +61,7 @@ func TestExecutorReviewStateLifecycle_ProcessCompletionLeavesSingleReviewInit(t 
 
 func TestExecutorReviewStateLifecycle_CompletedReviewClearsResidueAndReplayMatches(t *testing.T) {
 	dir := scaffoldExecutorReviewReconcileFactory(t)
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "<COMPLETE>\n"}},
 	})
 	h := support.NewGuardsBatchHarness(t, dir,
@@ -94,7 +98,7 @@ func TestExecutorReviewStateLifecycle_CompletedReviewClearsResidueAndReplayMatch
 
 func TestExecutorReviewStateLifecycle_CompletedExecutorAndReviewConvergeToTerminalOutcome(t *testing.T) {
 	dir := scaffoldExecutorReviewLifecycleFactory(t)
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {
 			{Content: "<COMPLETE>\n"},
 			{Content: "<COMPLETE>\n"},
@@ -113,7 +117,7 @@ func TestExecutorReviewStateLifecycle_CompletedExecutorAndReviewConvergeToTermin
 
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
-	h.SubmitFull(context.Background(), []interfaces.SubmitRequest{{
+	h.SubmitFull(context.Background(), []work.SubmitRequest{{
 		Name:                   laneName,
 		WorkTypeID:             "task",
 		TargetState:            "init",
@@ -158,7 +162,7 @@ func TestExecutorReviewStateLifecycle_DuplicateReviewRegressionMatchesLaneThreeS
 	}
 
 	dir := scaffoldExecutorReviewReconcileFactory(t)
-	provider := testutil.NewMockWorkerMapProvider(map[string][]interfaces.InferenceResponse{
+	provider := testutil.NewMockWorkerMapProvider(map[string][]workerexecution.InferenceResponse{
 		"processor": {{Content: "<COMPLETE>\n"}},
 	})
 	h := support.NewGuardsBatchHarness(t, dir,
@@ -197,12 +201,12 @@ func TestExecutorReviewStateLifecycle_DuplicateReviewRegressionMatchesLaneThreeS
 
 func TestExecutorReviewStateLifecycle_ThreeNamedLanesExposePlannerClassificationEvidence(t *testing.T) {
 	cases := []struct {
-		laneName         string
-		items            []queueWorkSnapshot
-		wantCause        executorReviewMismatchCause
-		wantDisp         executorReviewPlannerDisposition
-		requireSpawned   bool
-		requireReviews   bool
+		laneName          string
+		items             []queueWorkSnapshot
+		wantCause         executorReviewMismatchCause
+		wantDisp          executorReviewPlannerDisposition
+		requireSpawned    bool
+		requireReviews    bool
 		requireFailedTask bool
 	}{
 		{
@@ -410,7 +414,7 @@ func submitExecutorReviewProcessResiduePattern(
 ) {
 	t.Helper()
 
-	requests := []interfaces.SubmitRequest{
+	requests := []work.SubmitRequest{
 		{
 			Name:                   laneName,
 			WorkTypeID:             "task",
@@ -439,7 +443,7 @@ func submitExecutorReviewProcessResiduePattern(
 		},
 	}
 	for _, req := range requests {
-		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
+		h.SubmitFull(context.Background(), []work.SubmitRequest{req})
 	}
 }
 
@@ -455,7 +459,7 @@ func executorReviewProjectionView(t *testing.T, h *testutil.ServiceTestHarness) 
 	if err != nil {
 		return interfaces.FactoryWorldView{}, interfaces.FactoryWorldState{}, err
 	}
-	worldState, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	worldState, err := factoryeventprojection.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {
 		return interfaces.FactoryWorldView{}, interfaces.FactoryWorldState{}, err
 	}
@@ -501,11 +505,11 @@ func assertExecutorReviewReplayProjectionIdempotent(t *testing.T, h *testutil.Se
 		t.Fatalf("GetEngineStateSnapshot: %v", err)
 	}
 
-	first, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	first, err := factoryeventprojection.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState first: %v", err)
 	}
-	second, err := projections.ReconstructFactoryWorldState(events, snapshot.TickCount)
+	second, err := factoryeventprojection.ReconstructFactoryWorldState(events, snapshot.TickCount)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState second: %v", err)
 	}

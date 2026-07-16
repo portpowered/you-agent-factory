@@ -9,11 +9,13 @@ import (
 	"reflect"
 	"testing"
 
+	factoryeventprojection "github.com/portpowered/infinite-you/pkg/transports/mapping/factoryeventprojection"
+
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/projections"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/replay"
+	"github.com/portpowered/infinite-you/pkg/factory/replay"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -72,7 +74,7 @@ Process {{ (index .Inputs 0).WorkID }}.
 	if len(events) == 0 {
 		t.Fatal("expected at least one factory event")
 	}
-	liveWorld, err := projections.ReconstructFactoryWorldState(events, 0)
+	liveWorld, err := factoryeventprojection.ReconstructFactoryWorldState(events, 0)
 	if err != nil {
 		t.Fatalf("ReconstructFactoryWorldState: %v", err)
 	}
@@ -94,11 +96,11 @@ func projectReplayInitialStructureFromEmbeddedConfig(t *testing.T, dir string) i
 	if err != nil {
 		t.Fatalf("LoadRuntimeConfig: %v", err)
 	}
-	generatedFactory, err := replay.GeneratedFactoryFromLoadedConfig(loaded, replay.WithGeneratedFactorySourceDirectory(loaded.FactoryDir()))
+	factorySnapshot, err := replay.FactorySnapshotFromLoadedConfig(loaded, replay.WithFactorySnapshotSourceDirectory(loaded.FactoryDir()))
 	if err != nil {
 		t.Fatalf("GeneratedFactoryFromLoadedConfig: %v", err)
 	}
-	replayRuntimeCfg, err := replay.RuntimeConfigFromGeneratedFactory(generatedFactory)
+	replayRuntimeCfg, err := replay.RuntimeConfigFromFactorySnapshot(factorySnapshot)
 	if err != nil {
 		t.Fatalf("RuntimeConfigFromGeneratedFactory: %v", err)
 	}

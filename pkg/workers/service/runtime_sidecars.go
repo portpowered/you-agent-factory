@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
 
 // RuntimeSidecarsInput carries explicit runtime-host collaborators for worker-side

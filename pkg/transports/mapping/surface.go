@@ -6,8 +6,13 @@ import (
 	"fmt"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
+
+// ErrInvalidNamedFactoryName retains the public compatibility identity while
+// canonical named-factory validation remains owned by config.
+var ErrInvalidNamedFactoryName = factoryconfig.ErrInvalidNamedFactoryName
 
 // ErrFactoryResponseEventStreamExpired reports that the completed session's
 // ephemeral response-event retention window elapsed before subscription.
@@ -36,6 +41,32 @@ type DurableSessionAPI interface {
 	DurableSessionListingAPI
 	DurableSessionProjectionAPI
 	DurableSessionLifecycleAPI
+}
+
+// FactoryEventToAPI decodes one detached canonical Factory event into the
+// generated OpenAPI union used at public transport boundaries.
+func FactoryEventToAPI(event interfaces.FactoryEvent) (factoryapi.FactoryEvent, error) {
+	var mapped factoryapi.FactoryEvent
+	if err := event.Decode(&mapped); err != nil {
+		return factoryapi.FactoryEvent{}, fmt.Errorf("map canonical Factory event %q to API: %w", event.Id, err)
+	}
+	return mapped, nil
+}
+
+// FactoryEventsToAPI maps canonical Factory events in their existing order.
+func FactoryEventsToAPI(events []interfaces.FactoryEvent) ([]factoryapi.FactoryEvent, error) {
+	if events == nil {
+		return nil, nil
+	}
+	mapped := make([]factoryapi.FactoryEvent, len(events))
+	for index, event := range events {
+		converted, err := FactoryEventToAPI(event)
+		if err != nil {
+			return nil, err
+		}
+		mapped[index] = converted
+	}
+	return mapped, nil
 }
 
 // ValidateWritableNamedFactoryName enforces the public named-factory contract

@@ -3,16 +3,16 @@ package replay_contracts
 import (
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestReplayEventCountCountsMatchingEventTypes(t *testing.T) {
 	artifact := &interfaces.ReplayArtifact{
-		Events: []factoryapi.FactoryEvent{
-			{Type: factoryapi.FactoryEventTypeDispatchRequest},
-			{Type: factoryapi.FactoryEventTypeDispatchResponse},
-			{Type: factoryapi.FactoryEventTypeDispatchRequest},
+		Events: []interfaces.FactoryEvent{
+			{Type: interfaces.FactoryEventTypeDispatchRequest},
+			{Type: interfaces.FactoryEventTypeDispatchResponse},
+			{Type: interfaces.FactoryEventTypeDispatchRequest},
 		},
 	}
 

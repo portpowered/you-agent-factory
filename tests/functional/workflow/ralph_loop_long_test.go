@@ -6,8 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -15,7 +16,7 @@ func TestRalphLoop_TemplateFieldsResolvePerIteration(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "ralph_loop"))
 	support.SetWorkingDirectory(t, dir)
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "story",
 		Payload:    []byte(`{"title": "template test"}`),
 		Tags: map[string]string{
@@ -25,7 +26,7 @@ func TestRalphLoop_TemplateFieldsResolvePerIteration(t *testing.T) {
 		},
 	})
 
-	work := map[string][]interfaces.InferenceResponse{
+	work := map[string][]workerexecution.InferenceResponse{
 		"executor-worker": {
 			{Content: "code with missing error handling <COMPLETE>"},
 			{Content: "code with missing error handling <COMPLETE>"},

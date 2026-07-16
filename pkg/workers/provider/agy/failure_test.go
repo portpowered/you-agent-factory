@@ -8,7 +8,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
+
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 	"github.com/portpowered/infinite-you/pkg/workers/provider/adapter"
@@ -22,7 +24,7 @@ func TestAdapterClassifyFailureMapsDistinctExecutionOutcomes(t *testing.T) {
 	cases := []struct {
 		name        string
 		input       adapter.FailureContext
-		wantType    interfaces.WorkFailureType
+		wantType    workerexecution.WorkFailureType
 		wantMessage string
 		retryable   bool
 	}{
@@ -31,7 +33,7 @@ func TestAdapterClassifyFailureMapsDistinctExecutionOutcomes(t *testing.T) {
 			input: adapter.FailureContext{
 				CommandError: fmt.Errorf("%w: /missing/agy", agy.ErrMissingExecutable),
 			},
-			wantType:    interfaces.WorkFailureTypeMissingExecutable,
+			wantType:    workerexecution.WorkFailureTypeMissingExecutable,
 			wantMessage: "Agy executable could not be found.",
 		},
 		{
@@ -39,7 +41,7 @@ func TestAdapterClassifyFailureMapsDistinctExecutionOutcomes(t *testing.T) {
 			input: adapter.FailureContext{
 				CommandError: fmt.Errorf("start child: %w", exec.ErrNotFound),
 			},
-			wantType:    interfaces.WorkFailureTypeMissingExecutable,
+			wantType:    workerexecution.WorkFailureTypeMissingExecutable,
 			wantMessage: "Agy executable could not be found.",
 		},
 		{
@@ -47,7 +49,7 @@ func TestAdapterClassifyFailureMapsDistinctExecutionOutcomes(t *testing.T) {
 			input: adapter.FailureContext{
 				CommandError: fmt.Errorf("allocate: %w", agypty.ErrPTYAllocationFailed),
 			},
-			wantType:    interfaces.WorkFailureTypeMisconfigured,
+			wantType:    workerexecution.WorkFailureTypeMisconfigured,
 			wantMessage: "Agy PTY allocation failed.",
 		},
 		{
@@ -55,7 +57,7 @@ func TestAdapterClassifyFailureMapsDistinctExecutionOutcomes(t *testing.T) {
 			input: adapter.FailureContext{
 				CommandError: agypty.ErrUnsupportedPlatform,
 			},
-			wantType:    interfaces.WorkFailureTypeMisconfigured,
+			wantType:    workerexecution.WorkFailureTypeMisconfigured,
 			wantMessage: "Agy PTY allocation is not supported on this platform.",
 		},
 		{
@@ -67,7 +69,7 @@ func TestAdapterClassifyFailureMapsDistinctExecutionOutcomes(t *testing.T) {
 				},
 				CommandError: fmt.Errorf("%w: exit code 1", agypty.ErrNonzeroExit),
 			},
-			wantType:    interfaces.WorkFailureTypeAuthFailure,
+			wantType:    workerexecution.WorkFailureTypeAuthFailure,
 			wantMessage: "Agy authentication failed.",
 		},
 		{
@@ -76,7 +78,7 @@ func TestAdapterClassifyFailureMapsDistinctExecutionOutcomes(t *testing.T) {
 				CommandResult: workerprocess.CommandResult{ExitCode: 124, Stdout: []byte("partial spinner output")},
 				CommandError:  agypty.ErrSessionTimedOut,
 			},
-			wantType:    interfaces.WorkFailureTypeTimeout,
+			wantType:    workerexecution.WorkFailureTypeTimeout,
 			wantMessage: "Agy request timed out.",
 			retryable:   true,
 		},
@@ -85,7 +87,7 @@ func TestAdapterClassifyFailureMapsDistinctExecutionOutcomes(t *testing.T) {
 			input: adapter.FailureContext{
 				CommandError: context.DeadlineExceeded,
 			},
-			wantType:    interfaces.WorkFailureTypeTimeout,
+			wantType:    workerexecution.WorkFailureTypeTimeout,
 			wantMessage: "Agy request was canceled or timed out.",
 			retryable:   true,
 		},
@@ -98,7 +100,7 @@ func TestAdapterClassifyFailureMapsDistinctExecutionOutcomes(t *testing.T) {
 				},
 				CommandError: fmt.Errorf("%w: exit code 2", agypty.ErrNonzeroExit),
 			},
-			wantType:    interfaces.WorkFailureTypeUnknown,
+			wantType:    workerexecution.WorkFailureTypeUnknown,
 			wantMessage: "Agy execution exited with code 2.",
 		},
 	}
@@ -130,8 +132,8 @@ func TestAdapterClassifyFailureTimeoutDoesNotTreatPartialOutputAsSuccess(t *test
 	}
 	result, executeErr := adapter.Execute(context.Background(), registry, runner, adapter.ExecuteInput{
 		Provider: providerAdapter.Identity(),
-		Command: adapter.CommandContext{Request: interfaces.ProviderInferenceRequest{
-			Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-agy-timeout"},
+		Command: adapter.CommandContext{Request: workerexecution.ProviderInferenceRequest{
+			Dispatch:         work.WorkDispatch{DispatchID: "dispatch-agy-timeout"},
 			WorkingDirectory: ".",
 			UserMessage:      "plan the goal",
 		}},
@@ -147,7 +149,7 @@ func TestAdapterClassifyFailureTimeoutDoesNotTreatPartialOutputAsSuccess(t *test
 		t.Fatal("failure = nil, want classified timeout failure")
 	}
 	assertFailureFacts(t, adapter.FailureResult{Failure: result.Failure},
-		interfaces.WorkFailureTypeTimeout, "Agy request timed out.", true)
+		workerexecution.WorkFailureTypeTimeout, "Agy request timed out.", true)
 }
 
 func TestAdapterBuildCommandMissingExecutableClassifiesDistinctly(t *testing.T) {
@@ -157,8 +159,8 @@ func TestAdapterBuildCommandMissingExecutableClassifiesDistinctly(t *testing.T) 
 	missingExecutable := filepath.Join(factoryRoot, "missing-agy")
 	providerAdapter := agy.NewAdapter(factoryRoot, agy.WithExecutable(missingExecutable))
 	_, err := providerAdapter.BuildCommand(context.Background(), adapter.CommandContext{
-		Request: interfaces.ProviderInferenceRequest{
-			Dispatch:         interfaces.WorkDispatch{DispatchID: "dispatch-missing"},
+		Request: workerexecution.ProviderInferenceRequest{
+			Dispatch:         work.WorkDispatch{DispatchID: "dispatch-missing"},
 			WorkingDirectory: ".",
 			UserMessage:      "hello",
 		},
@@ -170,7 +172,7 @@ func TestAdapterBuildCommandMissingExecutableClassifiesDistinctly(t *testing.T) 
 		t.Fatalf("BuildCommand() error = %v, want %v", err, agy.ErrMissingExecutable)
 	}
 	failure := agy.ClassifyOrchestrationError(err)
-	assertFailureFacts(t, failure, interfaces.WorkFailureTypeMissingExecutable, "Agy executable could not be found.", false)
+	assertFailureFacts(t, failure, workerexecution.WorkFailureTypeMissingExecutable, "Agy executable could not be found.", false)
 }
 
 type failureStubSession struct {
@@ -194,7 +196,7 @@ func (a *failureStubAllocator) Allocate(_ context.Context, _ agypty.ProcessLaunc
 func assertFailureFacts(
 	t *testing.T,
 	result adapter.FailureResult,
-	wantType interfaces.WorkFailureType,
+	wantType workerexecution.WorkFailureType,
 	wantMessage string,
 	retryable bool,
 ) {

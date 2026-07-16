@@ -18,7 +18,15 @@ const defaultScanRoot = "pkg"
 const batch001MigrationShimMarker = "Batch 001 compatibility shim"
 const javascriptOrchestratorImportPrefix = "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/"
 const applicationGraphImportPath = "github.com/portpowered/infinite-you/pkg/wire"
+const transportImportPrefix = "github.com/portpowered/infinite-you/pkg/transports/"
 const repositoryImportPrefix = "github.com/portpowered/infinite-you/"
+
+var protectedTransportIndependentDomainRoots = []string{
+	"pkg/factory",
+	"pkg/models",
+	"pkg/work",
+	"pkg/workers",
+}
 
 var factoryRetiredPackageRoots = []retiredPackageRoot{
 	{packagePath: "pkg/packagedfactories", canonicalOwner: "pkg/factory/packages"},
@@ -34,11 +42,18 @@ var retiredPackageRoots = append([]retiredPackageRoot{
 	{packagePath: "pkg/cli", canonicalOwner: "pkg/transports/cli"},
 	{packagePath: "pkg/generatedclient", canonicalOwner: "pkg/transports/http/client"},
 	{packagePath: "pkg/hostedworkers", canonicalOwner: "pkg/workers/hosted"},
+	{packagePath: "pkg/internal/cursorstorage", canonicalOwner: "pkg/platform/cursors"},
+	{packagePath: "pkg/internal/metrics", canonicalOwner: "pkg/factory/metrics for domain contracts and pkg/platform/metrics for file-backed recording"},
 	{packagePath: "pkg/invocations", canonicalOwner: "pkg/work/invocation, pkg/factory/sessions/invocation, pkg/workers/inference, or pkg/workers/skippermissions, according to the concern"},
+	{packagePath: "pkg/interfaces", canonicalOwner: "the defining domain under pkg/factory, pkg/work, pkg/workers, or pkg/models"},
 	{packagePath: "pkg/localmodels", canonicalOwner: "pkg/models/local or pkg/models/assets"},
+	{packagePath: "pkg/logging", canonicalOwner: "pkg/platform/logging"},
 	{packagePath: "pkg/materialize", canonicalOwner: "pkg/work/materialize"},
 	{packagePath: "pkg/mcp", canonicalOwner: "pkg/transports/mcp"},
 	{packagePath: "pkg/modelhost", canonicalOwner: "pkg/models/host"},
+	{packagePath: "pkg/replay", canonicalOwner: "pkg/factory/replay for Factory-event replay policy and pkg/platform/replay for artifact filesystem mechanics"},
+	{packagePath: "pkg/sessionpersistence", canonicalOwner: "pkg/platform/cursors"},
+	{packagePath: "pkg/testutil", canonicalOwner: "internal/testutil or package-local test helpers"},
 	{packagePath: "pkg/timework", canonicalOwner: "pkg/work/timework"},
 	{packagePath: "pkg/workcontent", canonicalOwner: "pkg/work/content"},
 	{packagePath: "pkg/workgraph", canonicalOwner: "pkg/work/graph"},
@@ -66,6 +81,7 @@ type boundaryPolicy struct {
 	approvedProductPackageFamilies []string
 	migrationPackageExceptions     []migrationPackageException
 	generatedCodeExceptions        []generatedCodeException
+	domainTransportExceptions      []string
 }
 
 type migrationPackageException struct {
@@ -84,13 +100,11 @@ var approvedProductPackageFamilies = []string{
 	"pkg/config",
 	"pkg/factory",
 	"pkg/initializer",
-	"pkg/interfaces",
 	"pkg/internal",
 	"pkg/models",
 	"pkg/orchestrators",
 	"pkg/platform",
 	"pkg/root",
-	"pkg/testutil",
 	"pkg/transports",
 	"pkg/wire",
 	"pkg/work",
@@ -110,9 +124,6 @@ var documentedMigrationPackageExceptions = []migrationPackageException{
 	{packagePath: "pkg/apisurface", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after boundary mapping and callers move to pkg/transports"},
 	{packagePath: "pkg/cli", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after CLI adapters and callers move to pkg/transports"},
 	{packagePath: "pkg/mcp", targetOwner: "pkg/transports", workItem: batch006TransportFamilyMove, deletionGate: "remove after MCP adapters and callers move to pkg/transports"},
-	{packagePath: "pkg/logging", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after logging infrastructure and callers move to pkg/platform"},
-	{packagePath: "pkg/replay", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after replay and artifact infrastructure and callers move to pkg/platform"},
-	{packagePath: "pkg/sessionpersistence", targetOwner: "pkg/platform", workItem: batch006PlatformFamilyMove, deletionGate: "remove after cursor persistence and callers move to pkg/platform"},
 	{packagePath: "pkg/service", targetOwner: "pkg/wire", workItem: batch007And008ServiceMove, deletionGate: "remove after domain behavior reaches narrow owners and the remaining construction shell moves to pkg/wire"},
 	{packagePath: "pkg/runtimehost", targetOwner: "pkg/wire", workItem: batch008CompositionDeletion, deletionGate: "remove after transports and pkg/initializer consume the explicit graph"},
 }
@@ -127,8 +138,14 @@ func defaultBoundaryPolicy() boundaryPolicy {
 		approvedProductPackageFamilies: slices.Clone(approvedProductPackageFamilies),
 		migrationPackageExceptions:     slices.Clone(documentedMigrationPackageExceptions),
 		generatedCodeExceptions:        slices.Clone(documentedGeneratedCodeExceptions),
+		domainTransportExceptions:      slices.Clone(documentedDomainTransportExceptions),
 	}
 }
+
+// documentedDomainTransportExceptions remains as a deletion-only inventory
+// hook. It is intentionally empty now that every protected domain uses
+// domain-owned inputs and outward transport mapping.
+var documentedDomainTransportExceptions []string
 
 type config struct {
 	root        string
@@ -142,6 +159,7 @@ type scanResult struct {
 	migrationShimFindings          []migrationShimFinding
 	applicationGraphImportFindings []applicationGraphImportFinding
 	handwrittenGeneratedFindings   []handwrittenGeneratedFinding
+	domainTransportFindings        []domainTransportImportFinding
 }
 
 type retiredPackageRoot struct {
@@ -176,6 +194,12 @@ type migrationShimFinding struct {
 
 type applicationGraphImportFinding struct {
 	packagePath string
+	filePath    string
+}
+
+type domainTransportImportFinding struct {
+	packagePath string
+	importPath  string
 	filePath    string
 }
 
@@ -217,7 +241,8 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 		len(findings.retiredPackageImportFindings) +
 		len(findings.migrationShimFindings) +
 		len(findings.applicationGraphImportFindings) +
-		len(findings.handwrittenGeneratedFindings)
+		len(findings.handwrittenGeneratedFindings) +
+		len(findings.domainTransportFindings)
 	if blockingViolationCount == 0 {
 		fmt.Fprintln(stdout, "[agent-factory:pkg-boundary] package boundary passed (no blocking package-boundary violations)")
 		writeGeneratedCodeExceptionSummary(stdout, policy)
@@ -234,6 +259,7 @@ func runWithPolicy(cfg config, policy boundaryPolicy, stdout io.Writer, stderr i
 	writeMigrationShimBlockingFindings(stderr, findings.migrationShimFindings)
 	writeApplicationGraphImportFindings(stderr, findings.applicationGraphImportFindings)
 	writeHandwrittenGeneratedFindings(stderr, findings.handwrittenGeneratedFindings)
+	writeDomainTransportImportFindings(stderr, findings.domainTransportFindings)
 	writeGeneratedCodeExceptionSummary(stderr, policy)
 	return fmt.Errorf("[agent-factory:pkg-boundary] found %d package-boundary violation(s)", blockingViolationCount)
 }
@@ -286,6 +312,25 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 
 		result.rootPackageFindings = append(result.rootPackageFindings, rootPackageFinding{packagePath: packagePath})
 	}
+	for _, retiredRoot := range retiredPackageRoots {
+		parent := filepath.ToSlash(filepath.Dir(retiredRoot.packagePath))
+		if parent == cfg.packageRoot || !strings.HasPrefix(retiredRoot.packagePath, cfg.packageRoot+"/") {
+			continue
+		}
+		info, statErr := os.Stat(filepath.Join(repoRoot, filepath.FromSlash(retiredRoot.packagePath)))
+		if statErr != nil {
+			if os.IsNotExist(statErr) {
+				continue
+			}
+			return scanResult{}, fmt.Errorf("stat retired package root %s: %w", retiredRoot.packagePath, statErr)
+		}
+		if info.IsDir() {
+			result.retiredPackageRootFindings = append(
+				result.retiredPackageRootFindings,
+				retiredPackageRootFinding{retiredRoot},
+			)
+		}
+	}
 
 	result.applicationGraphImportFindings, err = scanApplicationGraphImports(repoRoot, scanRoot, cfg.packageRoot)
 	if err != nil {
@@ -296,6 +341,10 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		return scanResult{}, err
 	}
 	result.handwrittenGeneratedFindings, err = scanHandwrittenGeneratedFiles(repoRoot, policy.generatedCodeExceptions)
+	if err != nil {
+		return scanResult{}, err
+	}
+	result.domainTransportFindings, err = scanDomainTransportImports(repoRoot, policy.domainTransportExceptions)
 	if err != nil {
 		return scanResult{}, err
 	}
@@ -313,6 +362,66 @@ func scanRepo(cfg config, policy boundaryPolicy) (scanResult, error) {
 		return strings.Compare(left.importPath, right.importPath)
 	})
 	return result, nil
+}
+
+func scanDomainTransportImports(repoRoot string, exceptions []string) ([]domainTransportImportFinding, error) {
+	var findings []domainTransportImportFinding
+	for _, domainRoot := range protectedTransportIndependentDomainRoots {
+		absoluteRoot := filepath.Join(repoRoot, filepath.FromSlash(domainRoot))
+		if _, err := os.Stat(absoluteRoot); err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, fmt.Errorf("stat protected domain root %s: %w", domainRoot, err)
+		}
+
+		err := filepath.WalkDir(absoluteRoot, func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" || strings.HasSuffix(entry.Name(), "_test.go") {
+				return nil
+			}
+			filePath, err := filepath.Rel(repoRoot, path)
+			if err != nil {
+				return err
+			}
+			filePath = filepath.ToSlash(filePath)
+			if slices.Contains(exceptions, filePath) {
+				return nil
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			parsedFile, err := parser.ParseFile(token.NewFileSet(), path, content, parser.ImportsOnly)
+			if err != nil {
+				return fmt.Errorf("parse Factory package imports %s: %w", filePath, err)
+			}
+			packagePath := filepath.ToSlash(filepath.Dir(filePath))
+			for _, importSpec := range parsedFile.Imports {
+				importPath, err := strconv.Unquote(importSpec.Path.Value)
+				if err == nil && strings.HasPrefix(importPath, transportImportPrefix) {
+					findings = append(findings, domainTransportImportFinding{
+						packagePath: packagePath,
+						importPath:  importPath,
+						filePath:    filePath,
+					})
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("scan protected domain transport imports under %s: %w", domainRoot, err)
+		}
+	}
+	slices.SortFunc(findings, func(left, right domainTransportImportFinding) int {
+		if comparison := strings.Compare(left.filePath, right.filePath); comparison != 0 {
+			return comparison
+		}
+		return strings.Compare(left.importPath, right.importPath)
+	})
+	return findings, nil
 }
 
 func scanHandwrittenGeneratedFiles(repoRoot string, exceptions []generatedCodeException) ([]handwrittenGeneratedFinding, error) {
@@ -702,6 +811,15 @@ func writeApplicationGraphImportFindings(writer io.Writer, findings []applicatio
 		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited application composition import: %s (%s)\n", finding.packagePath, finding.filePath)
 		fmt.Fprintln(writer, "  reason: pkg/wire is the outward application composition root and must not be imported by domain or transport packages.")
 		fmt.Fprintln(writer, "  remediation: depend on a narrow domain-owned contract and inject the collaborator through pkg/root or pkg/initializer.")
+	}
+}
+
+func writeDomainTransportImportFindings(writer io.Writer, findings []domainTransportImportFinding) {
+	for _, finding := range findings {
+		fmt.Fprintf(writer, "[agent-factory:pkg-boundary] prohibited domain transport import: %s (%s)\n", finding.importPath, finding.filePath)
+		fmt.Fprintf(writer, "  domain owner: %s\n", finding.packagePath)
+		fmt.Fprintln(writer, "  reason: protected domain packages must not consume transport contracts or adapters.")
+		fmt.Fprintln(writer, "  remediation: define the input at its domain owner and map generated values under pkg/transports/mapping.")
 	}
 }
 

@@ -10,11 +10,13 @@ import (
 	"testing"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/requests"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-	"github.com/portpowered/infinite-you/pkg/transports/mapping"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -69,7 +71,7 @@ func persistTestPipelineConfig() *interfaces.FactoryConfig {
 				{Name: "failed", Type: interfaces.StateTypeFailed},
 			},
 		}},
-		Workers: []interfaces.WorkerConfig{{Name: "step-worker"}},
+		Workers: []workerconfig.Config{{Name: "step-worker"}},
 		Workstations: []interfaces.FactoryWorkstationConfig{
 			{Name: "step1", WorkerTypeName: "step-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "init"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage1"}}},
 			{Name: "finish", WorkerTypeName: "step-worker", Inputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "stage1"}}, Outputs: []interfaces.IOConfig{{WorkTypeName: "task", StateName: "complete"}}},
@@ -108,7 +110,7 @@ func startFunctionalServer(t *testing.T, factoryDir string, useMockWorkers bool,
 	return startFunctionalServerWithConfig(t, factoryDir, useMockWorkers, nil, extraOpts...)
 }
 
-func (fs *functionalAPIServer) SubmitRuntimeWork(t *testing.T, submitted ...interfaces.SubmitRequest) []interfaces.SubmitRequest {
+func (fs *functionalAPIServer) SubmitRuntimeWork(t *testing.T, submitted ...work.SubmitRequest) []work.SubmitRequest {
 	t.Helper()
 
 	normalized := normalizeSubmitRequestsForFunctionalTest(submitted)

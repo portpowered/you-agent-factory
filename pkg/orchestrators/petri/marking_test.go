@@ -4,16 +4,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	factorytoken "github.com/portpowered/infinite-you/pkg/factory/token"
 )
 
 func TestMarking_AddToken(t *testing.T) {
 	m := NewMarking("wf-1")
 
-	token := &interfaces.Token{
+	token := &factorytoken.Token{
 		ID:      "t1",
 		PlaceID: "place-a",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "work-1",
 			WorkTypeID: "code-change",
 		},
@@ -36,8 +36,8 @@ func TestMarking_AddToken(t *testing.T) {
 func TestMarking_AddMultipleTokensSamePlace(t *testing.T) {
 	m := NewMarking("wf-1")
 
-	m.AddToken(&interfaces.Token{ID: "t1", PlaceID: "place-a"})
-	m.AddToken(&interfaces.Token{ID: "t2", PlaceID: "place-a"})
+	m.AddToken(&factorytoken.Token{ID: "t1", PlaceID: "place-a"})
+	m.AddToken(&factorytoken.Token{ID: "t2", PlaceID: "place-a"})
 
 	ids := m.PlaceTokens["place-a"]
 	if len(ids) != 2 {
@@ -48,8 +48,8 @@ func TestMarking_AddMultipleTokensSamePlace(t *testing.T) {
 func TestMarking_RemoveToken(t *testing.T) {
 	m := NewMarking("wf-1")
 
-	m.AddToken(&interfaces.Token{ID: "t1", PlaceID: "place-a"})
-	m.AddToken(&interfaces.Token{ID: "t2", PlaceID: "place-a"})
+	m.AddToken(&factorytoken.Token{ID: "t1", PlaceID: "place-a"})
+	m.AddToken(&factorytoken.Token{ID: "t2", PlaceID: "place-a"})
 
 	m.RemoveToken("t1")
 
@@ -66,7 +66,7 @@ func TestMarking_RemoveToken(t *testing.T) {
 func TestMarking_RemoveLastTokenCleansPlaceIndex(t *testing.T) {
 	m := NewMarking("wf-1")
 
-	m.AddToken(&interfaces.Token{ID: "t1", PlaceID: "place-a"})
+	m.AddToken(&factorytoken.Token{ID: "t1", PlaceID: "place-a"})
 	m.RemoveToken("t1")
 
 	if _, ok := m.PlaceTokens["place-a"]; ok {
@@ -83,9 +83,9 @@ func TestMarking_RemoveNonExistentToken(t *testing.T) {
 func TestMarking_TokensInPlace(t *testing.T) {
 	m := NewMarking("wf-1")
 
-	m.AddToken(&interfaces.Token{ID: "t1", PlaceID: "place-a", Color: interfaces.TokenColor{WorkID: "w1"}})
-	m.AddToken(&interfaces.Token{ID: "t2", PlaceID: "place-a", Color: interfaces.TokenColor{WorkID: "w2"}})
-	m.AddToken(&interfaces.Token{ID: "t3", PlaceID: "place-b", Color: interfaces.TokenColor{WorkID: "w3"}})
+	m.AddToken(&factorytoken.Token{ID: "t1", PlaceID: "place-a", Color: factorytoken.Color{WorkID: "w1"}})
+	m.AddToken(&factorytoken.Token{ID: "t2", PlaceID: "place-a", Color: factorytoken.Color{WorkID: "w2"}})
+	m.AddToken(&factorytoken.Token{ID: "t3", PlaceID: "place-b", Color: factorytoken.Color{WorkID: "w3"}})
 
 	tokensA := m.TokensInPlace("place-a")
 	if len(tokensA) != 2 {
@@ -106,20 +106,20 @@ func TestMarking_TokensInPlace(t *testing.T) {
 func TestMarking_SnapshotIsIndependent(t *testing.T) {
 	m := NewMarking("wf-1")
 
-	m.AddToken(&interfaces.Token{
+	m.AddToken(&factorytoken.Token{
 		ID:      "t1",
 		PlaceID: "place-a",
-		Color: interfaces.TokenColor{
+		Color: factorytoken.Color{
 			WorkID:     "work-1",
 			WorkTypeID: "code-change",
 			Tags:       map[string]string{"key": "value"},
 			Payload:    []byte("hello"),
 		},
-		History: interfaces.TokenHistory{
+		History: factorytoken.History{
 			TotalVisits:         map[string]int{"tr1": 3},
 			ConsecutiveFailures: map[string]int{"tr1": 1},
 			PlaceVisits:         map[string]int{"place-a": 2},
-			FailureLog:          []interfaces.FailureRecord{{TransitionID: "tr1", Error: "oops", Attempt: 1}},
+			FailureLog:          []factorytoken.Failure{{TransitionID: "tr1", Error: "oops", Attempt: 1}},
 		},
 	})
 	m.TraceContext["trace"] = "abc"
@@ -127,7 +127,7 @@ func TestMarking_SnapshotIsIndependent(t *testing.T) {
 	snap := m.Snapshot()
 
 	// Mutate the original marking
-	m.AddToken(&interfaces.Token{ID: "t2", PlaceID: "place-b"})
+	m.AddToken(&factorytoken.Token{ID: "t2", PlaceID: "place-b"})
 	m.Tokens["t1"].Color.Tags["key"] = "mutated"
 	m.Tokens["t1"].Color.Payload[0] = 'X'
 	m.Tokens["t1"].History.TotalVisits["tr1"] = 99
@@ -163,8 +163,8 @@ func TestMarking_SnapshotIsIndependent(t *testing.T) {
 
 func TestMarkingSnapshot_TokensInPlace(t *testing.T) {
 	m := NewMarking("wf-1")
-	m.AddToken(&interfaces.Token{ID: "t1", PlaceID: "place-a", Color: interfaces.TokenColor{WorkID: "w1"}})
-	m.AddToken(&interfaces.Token{ID: "t2", PlaceID: "place-a", Color: interfaces.TokenColor{WorkID: "w2"}})
+	m.AddToken(&factorytoken.Token{ID: "t1", PlaceID: "place-a", Color: factorytoken.Color{WorkID: "w1"}})
+	m.AddToken(&factorytoken.Token{ID: "t2", PlaceID: "place-a", Color: factorytoken.Color{WorkID: "w2"}})
 
 	snap := m.Snapshot()
 
@@ -182,9 +182,9 @@ func TestMarkingSnapshot_TokensInPlace(t *testing.T) {
 func TestMarking_PlaceTokensIndexConsistency(t *testing.T) {
 	m := NewMarking("wf-1")
 
-	m.AddToken(&interfaces.Token{ID: "t1", PlaceID: "p1"})
-	m.AddToken(&interfaces.Token{ID: "t2", PlaceID: "p1"})
-	m.AddToken(&interfaces.Token{ID: "t3", PlaceID: "p2"})
+	m.AddToken(&factorytoken.Token{ID: "t1", PlaceID: "p1"})
+	m.AddToken(&factorytoken.Token{ID: "t2", PlaceID: "p1"})
+	m.AddToken(&factorytoken.Token{ID: "t3", PlaceID: "p2"})
 
 	m.RemoveToken("t1")
 

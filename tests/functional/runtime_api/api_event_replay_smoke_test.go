@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/work"
+	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -155,18 +156,18 @@ type eventReplayBlockingExecutor struct {
 	release <-chan struct{}
 }
 
-func (e *eventReplayBlockingExecutor) Execute(ctx context.Context, dispatch interfaces.WorkDispatch) (interfaces.WorkResult, error) {
+func (e *eventReplayBlockingExecutor) Execute(ctx context.Context, dispatch work.WorkDispatch) (workerexecution.WorkResult, error) {
 	select {
 	case <-e.release:
 	case <-ctx.Done():
-		return interfaces.WorkResult{}, ctx.Err()
+		return workerexecution.WorkResult{}, ctx.Err()
 	}
 
-	return interfaces.WorkResult{
+	return workerexecution.WorkResult{
 		DispatchID:   dispatch.DispatchID,
 		TransitionID: dispatch.TransitionID,
-		Outcome:      interfaces.OutcomeAccepted,
-		ProviderSession: &interfaces.ProviderSessionMetadata{
+		Outcome:      workerexecution.OutcomeAccepted,
+		ProviderSession: &workerexecution.ProviderSessionMetadata{
 			Provider: "codex",
 			Kind:     "session_id",
 			ID:       "sess-event-replay-smoke",

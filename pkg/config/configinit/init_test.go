@@ -16,8 +16,8 @@ import (
 	"github.com/portpowered/infinite-you/pkg/config/namedfactorypath"
 	"github.com/portpowered/infinite-you/pkg/config/operatorconfig"
 	"github.com/portpowered/infinite-you/pkg/config/systemconfig"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factorypackages "github.com/portpowered/infinite-you/pkg/factory/packages"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
 )
 
 const legacyEncodedGoalMarkerFile = "legacy-encoded-sentinel.txt"

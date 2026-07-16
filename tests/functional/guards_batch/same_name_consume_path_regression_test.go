@@ -7,8 +7,9 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/config"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
 
@@ -159,11 +160,11 @@ func TestSameNameConsumePathRegression_MismatchedNamesStayAtToComplete(t *testin
 	dir := scaffoldConsumePathFactoryBuiltInOrder(t)
 	h := support.NewGuardsBatchHarness(t, dir)
 
-	for _, req := range []interfaces.SubmitRequest{
+	for _, req := range []work.SubmitRequest{
 		{Name: "idea-alpha", WorkTypeID: "idea", TargetState: "to-complete", TraceID: "trace-idea-alpha"},
 		{Name: "task-beta", WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-task-beta"},
 	} {
-		h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
+		h.SubmitFull(context.Background(), []work.SubmitRequest{req})
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -219,18 +220,18 @@ func TestSameNameConsumePathRegression_ConcurrentPairsCompleteIndependently(t *t
 func TestSameNameConsumePathRegression_StaggeredArrivalCompletesWithoutStranding(t *testing.T) {
 	cases := []struct {
 		name  string
-		order []interfaces.SubmitRequest
+		order []work.SubmitRequest
 	}{
 		{
 			name: "task_before_idea",
-			order: []interfaces.SubmitRequest{
+			order: []work.SubmitRequest{
 				{Name: "dynamic-workflows-cell-cli-validate-list", WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-task-first"},
 				{Name: "dynamic-workflows-cell-cli-validate-list", WorkTypeID: "idea", TargetState: "to-complete", TraceID: "trace-idea-second"},
 			},
 		},
 		{
 			name: "idea_before_task",
-			order: []interfaces.SubmitRequest{
+			order: []work.SubmitRequest{
 				{Name: "dynamic-workflows-cell-cli-run-status-result", WorkTypeID: "idea", TargetState: "to-complete", TraceID: "trace-idea-first"},
 				{Name: "dynamic-workflows-cell-cli-run-status-result", WorkTypeID: "task", TargetState: "to-complete", TraceID: "trace-task-second"},
 			},
@@ -243,7 +244,7 @@ func TestSameNameConsumePathRegression_StaggeredArrivalCompletesWithoutStranding
 			h := support.NewGuardsBatchHarness(t, dir)
 
 			for _, req := range tc.order {
-				h.SubmitFull(context.Background(), []interfaces.SubmitRequest{req})
+				h.SubmitFull(context.Background(), []work.SubmitRequest{req})
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	"github.com/portpowered/infinite-you/pkg/testutil"
+	"github.com/portpowered/infinite-you/internal/testutil"
+	"github.com/portpowered/infinite-you/pkg/work"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
@@ -20,7 +20,7 @@ func TestDispatcherWorkflow_SingleSeedFile(t *testing.T) {
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 
 	originTraceID := "trace-single-seed"
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "idea",
 		Payload:    []byte(`{"title": "add login page"}`),
 		TraceID:    originTraceID,
@@ -59,12 +59,12 @@ func TestDispatcherWorkflow_TwoSeedFiles(t *testing.T) {
 	support.SkipLongFunctional(t, "slow dispatcher two-seed sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "idea",
 		Payload:    []byte(`{"title": "feature-alpha"}`),
 		TraceID:    "trace-alpha",
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "idea",
 		Payload:    []byte(`{"title": "feature-beta"}`),
 		TraceID:    "trace-beta",
@@ -125,12 +125,12 @@ func TestDispatcherWorkflow_ExecutionPoolIsolation(t *testing.T) {
 	support.SkipLongFunctional(t, "slow dispatcher pool-isolation sweep")
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "idea",
 		Payload:    []byte(`{"title": "file-1"}`),
 		TraceID:    "trace-iso-1",
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "idea",
 		Payload:    []byte(`{"title": "file-2"}`),
 		TraceID:    "trace-iso-2",
@@ -168,12 +168,12 @@ func TestDispatcherWorkflow_ReviewFailurePerItem(t *testing.T) {
 
 	dir := testutil.CopyFixtureDir(t, support.LegacyFixtureDir(t, "dispatcher_workflow"))
 
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "idea",
 		Payload:    []byte(`{"title": "will-fail"}`),
 		TraceID:    "trace-will-fail",
 	})
-	testutil.WriteSeedRequest(t, dir, interfaces.SubmitRequest{
+	testutil.WriteSeedRequest(t, dir, work.SubmitRequest{
 		WorkTypeID: "idea",
 		Payload:    []byte(`{"title": "will-pass"}`),
 		TraceID:    "trace-will-pass",

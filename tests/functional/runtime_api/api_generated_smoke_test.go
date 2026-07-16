@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
-	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelprovider "github.com/portpowered/infinite-you/pkg/models/provider"
 	"github.com/portpowered/infinite-you/pkg/service"
 	submitcli "github.com/portpowered/infinite-you/pkg/transports/cli/submit"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
@@ -311,7 +311,7 @@ func TestGeneratedAPIIntegrationSmoke_BatchUpsertAcceptsWorksContent(t *testing.
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubmissionOnSupportedRunner(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Codex, "gpt-5-codex"))
 
 	server := startFunctionalServerWithConfig(
 		t,
@@ -353,7 +353,7 @@ func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsAcceptMixedTextAndImageSubm
 
 func TestGeneratedAPIIntegrationSmoke_SubmitWorkItemsRejectMixedTextAndImageSubmissionOnUnsupportedRunner(t *testing.T) {
 	dir := support.ScaffoldFactory(t, simplePipelineConfig())
-	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderGemini, "gemini-1.5-pro"))
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(modelprovider.Gemini, "gemini-1.5-pro"))
 	runner := support.NewRecordingCommandRunner("unused")
 
 	server := startFunctionalServerWithConfig(

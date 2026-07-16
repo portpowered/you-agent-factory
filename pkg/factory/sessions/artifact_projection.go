@@ -5,9 +5,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/portpowered/infinite-you/pkg/interfaces"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 )
+
+const checkpointArtifactAuditModeFull = "FULL"
 
 func projectedCheckpointArtifactStates(
 	checkpoints []interfaces.JavaScriptCheckpointRecord,
@@ -27,7 +28,7 @@ func projectedCheckpointArtifactStates(
 			Visibility:  interfaces.JavaScriptCheckpointArtifactVisibility,
 			Label:       checkpoint.Label,
 			Summary:     checkpoint.Summary,
-			AuditMode:   string(factoryapi.FactoryArtifactAuditModeFULL),
+			AuditMode:   checkpointArtifactAuditModeFull,
 			ContentHash: checkpoint.ContentHash,
 			SizeBytes:   checkpoint.SizeBytes,
 			CapturedAt:  checkpoint.Timestamp,
@@ -59,28 +60,28 @@ func ArtifactStatesFromJavaScriptRuntime(
 	return artifacts
 }
 
-func projectedArtifacts(states []interfaces.FactorySessionArtifactState) *[]factoryapi.FactoryArtifact {
+func projectedArtifacts(states []interfaces.FactorySessionArtifactState) *[]interfaces.FactoryArtifact {
 	if len(states) == 0 {
 		return nil
 	}
-	projected := make([]factoryapi.FactoryArtifact, 0, len(states))
+	projected := make([]interfaces.FactoryArtifact, 0, len(states))
 	for _, state := range states {
 		projected = append(projected, projectedArtifact(state))
 	}
 	return &projected
 }
 
-func projectedArtifact(state interfaces.FactorySessionArtifactState) factoryapi.FactoryArtifact {
-	kind := factoryapi.FactoryArtifactKind(strings.TrimSpace(state.Kind))
+func projectedArtifact(state interfaces.FactorySessionArtifactState) interfaces.FactoryArtifact {
+	kind := strings.TrimSpace(state.Kind)
 	if kind == "" {
-		kind = factoryapi.FactoryArtifactKindCHILDRESULT
+		kind = "CHILD_RESULT"
 	}
-	visibility := factoryapi.FactoryArtifactVisibility(strings.TrimSpace(state.Visibility))
+	visibility := strings.TrimSpace(state.Visibility)
 	if visibility == "" {
-		visibility = factoryapi.FactoryArtifactVisibilityPUBLIC
+		visibility = "PUBLIC"
 	}
-	artifact := factoryapi.FactoryArtifact{
-		Id:         strings.TrimSpace(state.ID),
+	artifact := interfaces.FactoryArtifact{
+		ID:         strings.TrimSpace(state.ID),
 		Kind:       kind,
 		Visibility: visibility,
 	}
@@ -91,8 +92,7 @@ func projectedArtifact(state interfaces.FactorySessionArtifactState) factoryapi.
 		artifact.Summary = &summary
 	}
 	if auditMode := strings.TrimSpace(state.AuditMode); auditMode != "" {
-		mode := factoryapi.FactoryArtifactAuditMode(auditMode)
-		artifact.AuditMode = &mode
+		artifact.AuditMode = &auditMode
 	}
 	if hash := strings.TrimSpace(state.ContentHash); hash != "" {
 		artifact.ContentHash = &hash
@@ -112,11 +112,11 @@ func projectedArtifact(state interfaces.FactorySessionArtifactState) factoryapi.
 
 func projectedArtifactRedactionCounts(
 	counts map[string]int,
-) *factoryapi.FactoryArtifactRedactionCounts {
+) *interfaces.FactoryArtifactRedactionCounts {
 	if len(counts) == 0 {
 		return nil
 	}
-	projected := &factoryapi.FactoryArtifactRedactionCounts{}
+	projected := &interfaces.FactoryArtifactRedactionCounts{}
 	hasValue := false
 	if value, ok := counts["secrets"]; ok && value > 0 {
 		secrets := int32(value)
@@ -141,12 +141,12 @@ func projectedArtifactRedactionCounts(
 
 func projectedArtifactCaptureMetadata(
 	state interfaces.FactorySessionArtifactState,
-) *factoryapi.FactoryArtifactCaptureMetadata {
+) *interfaces.FactoryArtifactCaptureMetadata {
 	metadata := state.CaptureMetadata
 	if len(metadata) == 0 && state.CapturedAt.IsZero() {
 		return nil
 	}
-	projected := &factoryapi.FactoryArtifactCaptureMetadata{}
+	projected := &interfaces.FactoryArtifactCaptureMetadata{}
 	hasValue := false
 	if !state.CapturedAt.IsZero() {
 		capturedAt := state.CapturedAt.UTC()
@@ -154,36 +154,15 @@ func projectedArtifactCaptureMetadata(
 		hasValue = true
 	}
 	if dispatchID := strings.TrimSpace(metadata["sourceDispatchId"]); dispatchID != "" {
-		projected.SourceDispatchId = &dispatchID
+		projected.SourceDispatchID = &dispatchID
 		hasValue = true
 	}
 	if mimeType := strings.TrimSpace(metadata["mimeType"]); mimeType != "" {
-		projected.MimeType = &mimeType
+		projected.MIMEType = &mimeType
 		hasValue = true
 	}
 	if !hasValue {
 		return nil
 	}
 	return projected
-}
-
-func artifactCaptureMetadata(
-	capturedAt time.Time,
-	sourceDispatchID string,
-	mimeType string,
-) map[string]string {
-	metadata := make(map[string]string)
-	if !capturedAt.IsZero() {
-		metadata["capturedAt"] = capturedAt.UTC().Format(time.RFC3339)
-	}
-	if sourceDispatchID = strings.TrimSpace(sourceDispatchID); sourceDispatchID != "" {
-		metadata["sourceDispatchId"] = sourceDispatchID
-	}
-	if mimeType = strings.TrimSpace(mimeType); mimeType != "" {
-		metadata["mimeType"] = mimeType
-	}
-	if len(metadata) == 0 {
-		return nil
-	}
-	return metadata
 }
