@@ -1,6 +1,7 @@
 package sessionparity
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -33,7 +34,9 @@ func projectionJSONValue(projection Projection) any {
 		panic(fmt.Sprintf("marshal parity projection: %v", err))
 	}
 	var value any
-	if err := json.Unmarshal(encoded, &value); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(encoded))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
 		panic(fmt.Sprintf("unmarshal parity projection: %v", err))
 	}
 	return value

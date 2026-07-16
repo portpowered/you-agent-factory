@@ -1,6 +1,7 @@
 package sessionparity
 
 import (
+	"bytes"
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -83,6 +84,49 @@ func TestNormalizeCLIJSON_PreservesCustomerVisibleCollectionOrder(t *testing.T) 
 	if got, want := projection.EventCursors[0].Sequence, int64(11); got != want {
 		t.Fatalf("first event sequence = %d, want %d", got, want)
 	}
+}
+
+func TestNormalizers_PreserveDistinctLargeIntegerResultValues(t *testing.T) {
+	rest, cli, mcp := representativeObservationBundles(t)
+	for _, test := range []struct {
+		name      string
+		normalize func([]byte) (Projection, error)
+		input     []byte
+	}{
+		{"REST", NormalizeREST, rest},
+		{"CLI JSON", NormalizeCLIJSON, cli},
+		{"MCP", NormalizeMCP, mcp},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			firstInput := replacePrimaryResult(t, test.input, "9007199254740992")
+			secondInput := replacePrimaryResult(t, test.input, "9007199254740993")
+			first := normalizeObservation(t, test.normalize, firstInput)
+			second := normalizeObservation(t, test.normalize, secondInput)
+
+			if got, want := first.Results[0].Value, "[9007199254740992]"; got != want {
+				t.Fatalf("first normalized result = %q, want %q", got, want)
+			}
+			if got, want := second.Results[0].Value, "[9007199254740993]"; got != want {
+				t.Fatalf("second normalized result = %q, want %q", got, want)
+			}
+			if differences := Compare(first, second); !containsDifference(differences, "results[0].value") {
+				t.Fatalf("large integer result change was not reported: %#v", differences)
+			}
+		})
+	}
+}
+
+func replacePrimaryResult(t *testing.T, observation []byte, number string) []byte {
+	t.Helper()
+	old := []byte(`"primaryResult":[{"type":"text","text":"done"}]`)
+	if !bytes.Contains(observation, old) {
+		old = []byte(`"primaryResult":[{"text":"done","type":"text"}]`)
+	}
+	updated := bytes.Replace(observation, old, []byte(`"primaryResult":[`+number+`]`), 1)
+	if bytes.Equal(updated, observation) {
+		t.Fatal("representative observation did not contain the expected primary result")
+	}
+	return updated
 }
 
 func representativeObservationBundles(t *testing.T) ([]byte, []byte, []byte) {

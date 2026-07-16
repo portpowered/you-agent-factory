@@ -58,6 +58,21 @@ func TestCompare_ReportsMissingUnexpectedDuplicateAndReorderedFacts(t *testing.T
 	}
 }
 
+func TestCompare_ReportsAdjacentLargeEventSequences(t *testing.T) {
+	expected := normalizedFixtureProjection(t, TerminalSuccessObservations())
+	actual := normalizedFixtureProjection(t, TerminalSuccessObservations())
+	expected.EventCursors[0].Sequence = 9007199254740992
+	actual.EventCursors[0].Sequence = 9007199254740993
+
+	differences := Compare(expected, actual)
+	want := Difference{
+		Path: "eventCursors[0].sequence", Expected: "9007199254740992", Actual: "9007199254740993",
+	}
+	if len(differences) != 1 || differences[0] != want {
+		t.Fatalf("Compare() = %#v, want %#v", differences, []Difference{want})
+	}
+}
+
 func TestNormalizers_ExcludeTransportDetailsAndRetainSessionFacts(t *testing.T) {
 	observations := TerminalFailureObservations()
 	for _, test := range []struct {

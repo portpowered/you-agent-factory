@@ -412,7 +412,9 @@ func mapFailure(id, sessionID string, order int, dispatchID *string, detail *raw
 
 func compactJSON(raw json.RawMessage) (string, error) {
 	var value any
-	if err := json.Unmarshal(raw, &value); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
 		return "", err
 	}
 	canonical, err := json.Marshal(value)
