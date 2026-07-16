@@ -22,7 +22,7 @@ async function verifyViewport(browser, viewport) {
   try {
     await page.goto(storyURL, {
       timeout: 30_000,
-      waitUntil: "domcontentloaded",
+      waitUntil: "commit",
     });
     const header = page.locator("[data-dashboard-panel-shell='panel']");
     await header.waitFor({ state: "visible" });
@@ -30,6 +30,14 @@ async function verifyViewport(browser, viewport) {
     await page.getByRole("slider", { name: "Timeline tick" }).waitFor({
       state: "visible",
     });
+    const sliderBounds = await page
+      .getByRole("slider", { name: "Timeline tick" })
+      .boundingBox();
+    if (!sliderBounds || sliderBounds.width < 40 || sliderBounds.height < 40) {
+      throw new Error(
+        `Timeline slider did not retain a 40px touch target at ${viewport.width}px.`,
+      );
+    }
 
     const hasPageOverflow = await page.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth,

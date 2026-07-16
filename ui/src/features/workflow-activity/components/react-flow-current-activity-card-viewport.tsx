@@ -39,7 +39,6 @@ import { FactoryGraphEdgeWaypointControls } from "../../factory-graph-editor/com
 import { FactoryGraphEdgeWaypointLayer } from "../../factory-graph-editor/components/flow/factory-graph-edge-waypoint-layer";
 import { FactoryGraphVisualGroupControls } from "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-controls";
 import { FactoryGraphVisualGroupLayer } from "../../factory-graph-editor/components/flow/visual-groups/factory-graph-visual-group-layer";
-import { useFactoryGraphTouchPanePan } from "../../factory-graph-editor/hooks/selection/use-factory-graph-touch-pane-pan";
 import type { FactoryGraphNodeKind } from "../../factory-graph-editor/lib/draft/factory-graph-draft-types";
 import { isValidFactoryGraphConnection } from "../../factory-graph-editor/lib/editor/factory-graph-editor-connections";
 import type {
@@ -55,6 +54,7 @@ import {
 import type { FactoryLayoutGroup } from "../../factory-graph-editor/lib/layout/visual-groups/factory-graph-layout-groups";
 import { FACTORY_GRAPH_EDITOR_REACT_FLOW_GESTURE_PROPS } from "../../factory-graph-editor/lib/selection/factory-graph-editor-react-flow-interaction";
 import { getFactoryGraphEditorMessages } from "../../factory-graph-editor/messages/editor";
+import { useFactoryGraphTouchPanePan } from "../../factory-graph-editor/public";
 import { GraphViewportSurface } from "../../graphs/public";
 import type { CurrentActivityImportController } from "../hooks/current-activity-import-controller";
 import { useCanonicalLayoutViewportSync } from "../lib/layout/use-canonical-layout-viewport-sync";

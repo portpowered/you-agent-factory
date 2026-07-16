@@ -116,7 +116,7 @@ export function TickSliderControl({ locale }: TickSliderControlProps) {
           aria-label={messages.sliderAriaLabel}
           aria-valuetext={sliderValueText}
           className={cn(
-            "h-4 min-w-32 flex-1 cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed",
+            "h-10 min-w-32 flex-1 cursor-pointer appearance-none bg-transparent disabled:cursor-not-allowed",
             // semantic-color-exception: system-integration
             "[&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:[background:linear-gradient(90deg,rgb(from_var(--color-af-foundation-overlay)_r_g_b_/_0.12),rgb(from_var(--color-af-foundation-overlay)_r_g_b_/_0.2))]",
             // semantic-color-exception: system-integration
