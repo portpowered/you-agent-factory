@@ -19,17 +19,8 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	if err := ctx.Err(); err != nil {
 		return contextTerminationOutcome(err), nil
 	}
-	if strings.TrimSpace(req.Source) == "" {
-		return Outcome{
-			OK: false,
-			Failure: Failure{
-				Code:    CodePreExecutionInvalid,
-				Message: "workflow source is required",
-			},
-		}, nil
-	}
-	if issue := validatePreExecution(req); issue != nil {
-		return preExecutionFailure(req, *issue), nil
+	if outcome := preExecutionOutcome(req); outcome != nil {
+		return *outcome, nil
 	}
 	policy := req.Policy
 	if policy.Mode == "" {
@@ -60,11 +51,7 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 	if err != nil {
 		return invalidArgsFailure(err), nil
 	}
-	args, err := argsMapForRequest(req.Args)
-	if err != nil {
-		return invalidArgsFailure(err), nil
-	}
-	if err := workflowvalidation.ValidateArgs(req.ArgsSchema, args); err != nil {
+	if err := validateRequestArgs(req.Args, req.ArgsSchema); err != nil {
 		return invalidArgsFailure(err), nil
 	}
 	globals.bindArgs(argsValue)
@@ -121,6 +108,28 @@ func Run(ctx context.Context, req Request, hooks Hooks) (Outcome, error) {
 		}
 	}
 	return Outcome{OK: true, Value: typed, Records: records.list()}, nil
+}
+
+func preExecutionOutcome(req Request) *Outcome {
+	if strings.TrimSpace(req.Source) == "" {
+		return &Outcome{OK: false, Failure: Failure{
+			Code:    CodePreExecutionInvalid,
+			Message: "workflow source is required",
+		}}
+	}
+	if issue := validatePreExecution(req); issue != nil {
+		outcome := preExecutionFailure(req, *issue)
+		return &outcome
+	}
+	return nil
+}
+
+func validateRequestArgs(rawArgs, schema json.RawMessage) error {
+	args, err := argsMapForRequest(rawArgs)
+	if err != nil {
+		return err
+	}
+	return workflowvalidation.ValidateArgs(schema, args)
 }
 
 func argsMapForRequest(raw json.RawMessage) (map[string]any, error) {
