@@ -279,11 +279,12 @@ This precedence is selection-only: the CLI chooses exactly one matching named
 factory directory and never merges a project-local definition with a global
 definition of the same canonical name.
 
-First-party built-ins such as `@you/goal` and `@you/tts` also use the
+First-party built-ins such as `@you/goal`, `@you/ralph`, and `@you/tts` also use the
 named-factory path:
 
 ```bash
 you run --named @you/goal "Ship the login fix by Friday"
+you run --named @you/ralph "Ship the login fix by Friday"
 you run --named @you/tts --output primary "Read the release summary."
 ```
 
@@ -294,6 +295,15 @@ TTS example. See `you docs run` for named-Factory invocation inputs and stdout
 result modes, `you docs sessions` for stopped-run inspection and recovery, and
 `you docs models` for TTS readiness, direct invocation, and audio or JSON
 result choices.
+
+### Built-in `@you/ralph` plan-then-execute workflow
+
+`@you/ralph` accepts the same positional or standard-input text request as the
+other packaged factories. It first plans that request, then gives the planner's
+output to a repeating execution workstation. The execution worker continues
+while it returns `<CONTINUE>` and completes the invocation by returning
+`<COMPLETE>`. Its explicit `invocationReturn` selects `ralph:complete` as the
+customer-visible result.
 
 ### Built-in `@you/goal` repeater
 

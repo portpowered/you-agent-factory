@@ -1,0 +1,54 @@
+{
+  "name": "@you/ralph",
+  "id": "builtin-ralph",
+  "invocationSignature": {
+    "parameters": [
+      {
+        "name": "input",
+        "description": "Text request that Ralph plans and then executes.",
+        "required": true,
+        "bindings": [{"kind": "POSITIONAL", "position": 1}, {"kind": "STDIN"}]
+      }
+    ]
+  },
+  "invocationReturn": {"policy": "EXPLICIT", "workTypeName": "ralph", "terminalState": "complete"},
+  "workTypes": [{
+    "name": "ralph",
+    "handlingBehavior": ["DEFAULT"],
+    "states": [
+      {"name": "init", "type": "INITIAL"},
+      {"name": "execute", "type": "PROCESSING"},
+      {"name": "complete", "type": "TERMINAL"},
+      {"name": "failed", "type": "FAILED"}
+    ]
+  }],
+  "workers": [
+    {"name": "ralph-planner", "type": "AGENT_WORKER", "promptFile": "prompts/planner.md"},
+    {"name": "ralph-executor", "type": "AGENT_WORKER", "stopToken": "<COMPLETE>", "promptFile": "prompts/executor.md"}
+  ],
+  "workstations": [
+    {
+      "name": "plan-ralph",
+      "type": "AGENT_RUN",
+      "worker": "ralph-planner",
+      "inputs": [{"workType": "ralph", "state": "init"}],
+      "outputs": [{"workType": "ralph", "state": "execute"}],
+      "onFailure": [{"workType": "ralph", "state": "failed"}],
+      "workPropagation": {"mode": "OUTPUT_AS_PAYLOAD"},
+      "promptFile": "prompts/planner.md"
+    },
+    {
+      "name": "execute-ralph",
+      "type": "AGENT_RUN",
+      "behavior": "REPEATER",
+      "worker": "ralph-executor",
+      "inputs": [{"workType": "ralph", "state": "execute"}],
+      "outputs": [{"workType": "ralph", "state": "complete"}],
+      "onContinue": [{"workType": "ralph", "state": "execute"}],
+      "onRejection": [{"workType": "ralph", "state": "execute"}],
+      "onFailure": [{"workType": "ralph", "state": "failed"}],
+      "workPropagation": {"mode": "OUTPUT_AS_PAYLOAD"},
+      "promptFile": "prompts/executor.md"
+    }
+  ]
+}

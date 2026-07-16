@@ -987,6 +987,12 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   text or generated artifact bodies.
 - `pkg/factory/packages/goal/` owns packaged `@you/goal` factory metadata
   constants (`PackagedFactoryName`, `PackagedInvokeWorkstationName`).
+- Packaged plan-then-execute factories belong in
+  `pkg/factory/packages/definitions/<name>/` with embedded declarative prompt
+  assets assembled through `packageassets.Assemble`, and are published through
+  `pkg/factory/packages/catalog.go`. When a stage's output is the next stage's
+  input, set `workPropagation.mode` to `OUTPUT_AS_PAYLOAD` and prove that
+  propagated payload at the transitioner layer.
 - `pkg/transports/cli/run/run_invocation_test.go` proves `@you/goal` CLI invocation input
   sources resolve through `invocations.ResolveTextInput`, reach the shared
   `InvocationRequest` payload shape, fail with stable
