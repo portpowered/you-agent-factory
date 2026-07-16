@@ -994,6 +994,11 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   text or generated artifact bodies.
 - `pkg/factory/packages/goal/` owns packaged `@you/goal` factory metadata
   constants (`PackagedFactoryName`, `PackagedInvokeWorkstationName`).
+- `pkg/factory/packages/catalog.go` is the single registration point for
+  shipped named factories. A new package needs a catalog definition plus a
+  directly-loadable factory payload; `you config init` materializes every
+  catalog entry without separate CLI registration. Customer-facing packaged
+  invocation guidance belongs in `docs/reference/run.md`.
 - `pkg/transports/cli/run/run_invocation_test.go` proves `@you/goal` CLI invocation input
   sources resolve through `invocations.ResolveTextInput`, reach the shared
   `InvocationRequest` payload shape, fail with stable
