@@ -50,6 +50,6 @@ func validateEditableFactoryTopology(submitted factoryapi.Factory, workstationLo
 func topologyValidationErrorFromTargets(targets []factoryvalidation.Target) *apisurface.TopologyValidationError {
 	return apisurface.NewTopologyValidationError(
 		"Factory topology contains invalid graph references.",
-		factoryvalidation.ToValidationTargets(targets),
+		apisurface.FactoryValidationTargetsToAPI(targets),
 	)
 }

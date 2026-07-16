@@ -368,11 +368,12 @@ result shaping consume that value directly. The legacy `ProjectRuntime`
 compatibility entrypoint maps it to the generated response and adds the public
 stop summary; do not add new runtime derivation to that compatibility adapter.
 
-Factory Session validation failures carry `pkg/factory/validation.Target`
-values through service and control-plane boundaries. The HTTP handler maps those
-owner-defined targets to generated `FactoryValidationTarget` values only while
-writing the public error response; do not store generated transport targets in
-Factory Session errors.
+Factory validation results and operational validation failures carry
+`pkg/factory/validation.Target` values through domain, service, and control-plane
+boundaries. `pkg/transports/mapping` maps those owner-defined targets and result
+collections to generated `FactoryValidationTarget` values only while assembling
+CLI or HTTP output. Do not expose generated result helpers from the validation
+owner or store generated transport targets in Factory Session errors.
 
 Live Factory Session summaries and discovered targets retain `LiveSession`,
 `Target`, and `TargetRef` as their owner-defined values. Convert those values,

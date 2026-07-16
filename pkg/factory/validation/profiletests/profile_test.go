@@ -23,7 +23,7 @@ func TestResult_FactoryValidationResultAndTopologyValidationErrorInput(t *testin
 		}},
 	}
 
-	apiResult := result.FactoryValidationResult()
+	apiResult := apisurface.FactoryValidationResultToAPI(result)
 	if len(apiResult.Targets) != 1 {
 		t.Fatalf("api targets = %d, want 1", len(apiResult.Targets))
 	}
@@ -31,7 +31,7 @@ func TestResult_FactoryValidationResultAndTopologyValidationErrorInput(t *testin
 		t.Fatalf("api target code = %q", apiResult.Targets[0].Code)
 	}
 
-	message, targets := result.TopologyValidationErrorInput("custom message")
+	message, targets := apisurface.FactoryTopologyValidationErrorInput(result, "custom message")
 	if message != "custom message" {
 		t.Fatalf("topology message = %q, want custom message", message)
 	}

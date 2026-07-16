@@ -8,6 +8,7 @@ import (
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/factory/validationentry"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
 func TestValidateFactoryAPI_RoutelessCronAndLogicalMove_MissingOutputRoutesAtOutputs(t *testing.T) {
@@ -64,7 +65,7 @@ func TestValidateFactoryAPI_RoutelessCronAndLogicalMove_MissingOutputRoutesAtOut
 				t.Fatal("expected validation targets for routeless workstation")
 			}
 
-			apiResult := result.FactoryValidationResult()
+			apiResult := apisurface.FactoryValidationResultToAPI(result)
 			validationassert.HasTarget(
 				t,
 				apiResult.Targets,

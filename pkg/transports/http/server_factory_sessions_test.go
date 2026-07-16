@@ -790,11 +790,11 @@ func TestFactorySessionsAPI_OpenFactorySession_ConfigLoadFailureTargets(t *testi
 			message: "factory configuration could not be loaded from the selected folder",
 			code:    "FACTORY_SESSION_CONFIG_LOAD_FAILED",
 			targets: []factoryapi.FactoryValidationTarget{
-				factoryvalidation.FactorySessionTargetTarget(
+				apisurface.FactoryValidationTargetToAPI(factoryvalidation.FactorySessionTargetTarget(
 					"config_load_failed",
 					"default",
 					`Factory target "default" at "/workspace/fleet" could not be loaded: unexpected end of JSON input`,
-				),
+				)),
 			},
 		},
 	}

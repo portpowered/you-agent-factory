@@ -5,9 +5,38 @@ import (
 	"strings"
 	"testing"
 
+	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
+
+func TestFactoryValidationTargetToAPI_PreservesOperationalTargetAndSafeDefaults(t *testing.T) {
+	t.Parallel()
+
+	operational := apisurface.FactoryValidationTargetToAPI(
+		factoryvalidation.FactorySessionFieldTarget("required", "folderPath", "folderPath is required"),
+	)
+	if operational.Code != "factory.session.field.required" ||
+		operational.Severity != factoryapi.FactoryValidationSeverityError ||
+		operational.Subject.Type != factoryapi.FactoryValidationSubjectTypeFactory ||
+		operational.Subject.Id != "folderPath" ||
+		operational.Subject.Location != factoryapi.FactoryValidationSubjectLocationReference {
+		t.Fatalf("mapped operational target = %#v", operational)
+	}
+
+	unknown := apisurface.FactoryValidationTargetToAPI(factoryvalidation.Target{
+		Severity: "future-severity",
+		Subject: factoryvalidation.Subject{
+			Type:     "FUTURE_SUBJECT",
+			Location: "FUTURE_LOCATION",
+		},
+	})
+	if unknown.Severity != factoryapi.FactoryValidationSeverityError ||
+		unknown.Subject.Type != factoryapi.FactoryValidationSubjectTypeFactory ||
+		unknown.Subject.Location != factoryapi.FactoryValidationSubjectLocationDefinition {
+		t.Fatalf("mapped unknown target defaults = %#v", unknown)
+	}
+}
 
 func TestFactoryRuntimeTaxonomySummary_PreservesAuthoredAndLegacyValues(t *testing.T) {
 	inference := factoryapi.WorkerTypeInferenceWorker

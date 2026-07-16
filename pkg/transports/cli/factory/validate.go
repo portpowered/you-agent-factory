@@ -43,7 +43,7 @@ func Validate(cfg ValidateConfig) error {
 		return fmt.Errorf("validate factory config: %w", err)
 	}
 
-	apiResult := result.FactoryValidationResult()
+	apiResult := apisurface.FactoryValidationResultToAPI(result)
 	if cfg.JSON {
 		payload := struct {
 			Valid    bool                                     `json:"valid"`

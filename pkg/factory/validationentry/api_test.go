@@ -35,7 +35,7 @@ func TestValidateFactoryAPI_ProfileTopology_CrossPathInvalidFixture(t *testing.T
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeDanglingWorkerReference)
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeDanglingPlaceReference)
 
-	apiResult := result.FactoryValidationResult()
+	apiResult := apisurface.FactoryValidationResultToAPI(result)
 	if len(apiResult.Targets) != len(result.Targets) {
 		t.Fatalf("api targets = %d, canonical targets = %d", len(apiResult.Targets), len(result.Targets))
 	}
@@ -67,7 +67,7 @@ func TestValidateFactoryAPI_ProfilePrePersist_CrossPathInvalidFixture(t *testing
 	}
 	validationassert.HasDomainTargetCode(t, result.Targets, factoryvalidation.CodeDuplicateIdentifier)
 
-	message, targets := result.TopologyValidationErrorInput("")
+	message, targets := apisurface.FactoryTopologyValidationErrorInput(result, "")
 	topologyErr := apisurface.NewTopologyValidationError(message, targets)
 	if len(topologyErr.Targets) != len(result.Targets) {
 		t.Fatalf("topology error targets = %d, canonical targets = %d", len(topologyErr.Targets), len(result.Targets))
@@ -121,8 +121,8 @@ func TestValidateFactoryAPI_ProfileTopology_MatchesValidateEndpointPath(t *testi
 			apiSignatures, handlerSignatures)
 	}
 
-	validationResult := apiResult.FactoryValidationResult()
-	handlerAPI := handlerEquivalent.FactoryValidationResult()
+	validationResult := apisurface.FactoryValidationResultToAPI(apiResult)
+	handlerAPI := apisurface.FactoryValidationResultToAPI(handlerEquivalent)
 	if !factoryvalidation.EquivalentCanonicalTargetSignatures(
 		factoryvalidation.CanonicalAPITargetSignatures(handlerAPI.Targets),
 		factoryvalidation.CanonicalAPITargetSignatures(validationResult.Targets),

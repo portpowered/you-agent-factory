@@ -1,7 +1,5 @@
 package validation
 
-import factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
-
 const (
 	CodeFactoryPayloadInvalid = "factory.payload.invalid"
 	CodeFactoryNameInvalid    = "factory.name.invalid"
@@ -12,87 +10,87 @@ const (
 )
 
 // FormFactoryPayloadTarget reports invalid or unreadable factory request bodies.
-func FormFactoryPayloadTarget() factoryapi.FactoryValidationTarget {
-	return factoryapi.FactoryValidationTarget{
+func FormFactoryPayloadTarget() Target {
+	return Target{
 		Code:     CodeFactoryPayloadInvalid,
-		Severity: factoryapi.FactoryValidationSeverityError,
+		Severity: SeverityError,
 		Message:  "Factory request payload is invalid.",
-		Subject: factoryapi.FactoryValidationSubject{
-			Type:     factoryapi.FactoryValidationSubjectTypeFactory,
-			Id:       "",
-			Location: factoryapi.FactoryValidationSubjectLocationDefinition,
+		Subject: Subject{
+			Type:     SubjectTypeFactory,
+			ID:       "",
+			Location: SubjectLocationDefinition,
 		},
 	}
 }
 
 // InvalidFactoryNameTarget reports invalid named-factory identifiers.
-func InvalidFactoryNameTarget() factoryapi.FactoryValidationTarget {
-	return factoryapi.FactoryValidationTarget{
+func InvalidFactoryNameTarget() Target {
+	return Target{
 		Code:     CodeFactoryNameInvalid,
-		Severity: factoryapi.FactoryValidationSeverityError,
+		Severity: SeverityError,
 		Message:  "Factory name must be a safe directory segment without path separators and cannot be the reserved current-factory identifier.",
-		Subject: factoryapi.FactoryValidationSubject{
-			Type:     factoryapi.FactoryValidationSubjectTypeFactory,
-			Id:       "",
-			Location: factoryapi.FactoryValidationSubjectLocationDefinition,
+		Subject: Subject{
+			Type:     SubjectTypeFactory,
+			ID:       "",
+			Location: SubjectLocationDefinition,
 		},
 	}
 }
 
 // StaleFactoryVersionTarget reports optimistic-concurrency conflicts on editable saves.
-func StaleFactoryVersionTarget() factoryapi.FactoryValidationTarget {
-	return factoryapi.FactoryValidationTarget{
+func StaleFactoryVersionTarget() Target {
+	return Target{
 		Code:     CodeFactoryVersionStale,
-		Severity: factoryapi.FactoryValidationSeverityError,
+		Severity: SeverityError,
 		Message:  "Current factory definition is stale. Refresh the graph before saving.",
-		Subject: factoryapi.FactoryValidationSubject{
-			Type:     factoryapi.FactoryValidationSubjectTypeFactory,
-			Id:       "",
-			Location: factoryapi.FactoryValidationSubjectLocationDefinition,
+		Subject: Subject{
+			Type:     SubjectTypeFactory,
+			ID:       "",
+			Location: SubjectLocationDefinition,
 		},
 	}
 }
 
 // FactoryRuntimeNotIdleTarget reports activation blocked by active runtime work.
-func FactoryRuntimeNotIdleTarget() factoryapi.FactoryValidationTarget {
-	return factoryapi.FactoryValidationTarget{
+func FactoryRuntimeNotIdleTarget() Target {
+	return Target{
 		Code:     CodeFactoryRuntimeNotIdle,
-		Severity: factoryapi.FactoryValidationSeverityError,
+		Severity: SeverityError,
 		Message:  "Current factory runtime must be idle before activation.",
-		Subject: factoryapi.FactoryValidationSubject{
-			Type:     factoryapi.FactoryValidationSubjectTypeFactory,
-			Id:       "",
-			Location: factoryapi.FactoryValidationSubjectLocationDefinition,
+		Subject: Subject{
+			Type:     SubjectTypeFactory,
+			ID:       "",
+			Location: SubjectLocationDefinition,
 		},
 	}
 }
 
 // FactorySessionFieldTarget reports factory-session open validation failures.
-func FactorySessionFieldTarget(reason, field, message string) factoryapi.FactoryValidationTarget {
+func FactorySessionFieldTarget(reason, field, message string) Target {
 	code := CodeFactorySessionField + "." + reason
-	return factoryapi.FactoryValidationTarget{
+	return Target{
 		Code:     code,
-		Severity: factoryapi.FactoryValidationSeverityError,
+		Severity: SeverityError,
 		Message:  message,
-		Subject: factoryapi.FactoryValidationSubject{
-			Type:     factoryapi.FactoryValidationSubjectTypeFactory,
-			Id:       field,
-			Location: factoryapi.FactoryValidationSubjectLocationReference,
+		Subject: Subject{
+			Type:     SubjectTypeFactory,
+			ID:       field,
+			Location: SubjectLocationReference,
 		},
 	}
 }
 
 // FactorySessionTargetTarget reports discovery-time factory target failures.
-func FactorySessionTargetTarget(reason, targetID, message string) factoryapi.FactoryValidationTarget {
+func FactorySessionTargetTarget(reason, targetID, message string) Target {
 	code := CodeFactorySessionTarget + "." + reason
-	return factoryapi.FactoryValidationTarget{
+	return Target{
 		Code:     code,
-		Severity: factoryapi.FactoryValidationSeverityError,
+		Severity: SeverityError,
 		Message:  message,
-		Subject: factoryapi.FactoryValidationSubject{
-			Type:     factoryapi.FactoryValidationSubjectTypeFactory,
-			Id:       targetID,
-			Location: factoryapi.FactoryValidationSubjectLocationReference,
+		Subject: Subject{
+			Type:     SubjectTypeFactory,
+			ID:       targetID,
+			Location: SubjectLocationReference,
 		},
 	}
 }
