@@ -13,7 +13,6 @@
     { "path": "tests/functional/runtime_api/api_runtime_config_alignment_smoke_support_test.go", "sha256": "883c42a4dc4ca96aa21afdcdbe00c3d59e822e0ff25e76ac9c26587ade32b9f3" },
     { "path": "tests/functional/runtime_api/api_runtime_config_alignment_support_test.go", "sha256": "d2cc4ffb6fc73c77ff6d707f0684316a501918a6e1b2e071d6fac2c00bc029ea" },
     { "path": "tests/functional/runtime_api/functional_server_test.go", "sha256": "dba616cbc80b132a95c61e4a7b234d6c70dad89dcc19acdf68a9961400b5bf12" },
-    { "path": "tests/functional/runtime_api/short_helpers_test.go", "sha256": "263cecd1cfce3bc9a21ce427a02401ed7a897fae77fa8d77959a827eb7dbb8f3" },
-    { "path": "tests/functional/smoke/service_lifecycle_smoke_long_test.go", "sha256": "885a0bae3f6e05ef445e119605e40d2da4e87414a3517ebe12f24322dc782dc1" }
+    { "path": "tests/functional/runtime_api/short_helpers_test.go", "sha256": "263cecd1cfce3bc9a21ce427a02401ed7a897fae77fa8d77959a827eb7dbb8f3" }
   ]
 }
