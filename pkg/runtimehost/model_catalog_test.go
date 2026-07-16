@@ -18,6 +18,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -49,9 +50,55 @@ func TestHostDurableOperationsRequireInjectedExecution(t *testing.T) {
 
 func TestHostWithoutAttachedModelServiceReturnsConstructionError(t *testing.T) {
 	var host *Host
-	_, err := host.ListModels(context.Background())
-	if !errors.Is(err, errModelServiceUnavailable) {
-		t.Fatalf("nil Host ListModels error = %v, want unavailable model service", err)
+	ctx := context.Background()
+	_, listErr := host.ListModels(ctx)
+	_, getErr := host.GetModel(ctx, "OMNIVOICE_Q4_K_M")
+	_, pullErr := host.PullModel(ctx, "OMNIVOICE_Q4_K_M")
+	_, invokeErr := host.InvokeModel(ctx, "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{Operation: "TTS"})
+	for operation, err := range map[string]error{
+		"list": listErr, "get": getErr, "pull": pullErr, "invoke": invokeErr,
+	} {
+		if !errors.Is(err, errModelServiceUnavailable) {
+			t.Fatalf("nil Host %s error = %v, want unavailable model service", operation, err)
+		}
+	}
+	if host.factoryRunnerID() != "" || host.providerOverride() != nil || host.invocationSkipPermissionsOverride() != nil {
+		t.Fatal("nil Host returned model invocation policy overrides")
+	}
+}
+
+func TestCoreModelServiceAttachmentIsVisibleToSnapshotsAndHostFacade(t *testing.T) {
+	t.Parallel()
+
+	if NewHostFromCore(nil) != nil {
+		t.Fatal("NewHostFromCore(nil) returned a host")
+	}
+	var nilCore *Core
+	if nilCore.ModelService() != nil {
+		t.Fatal("nil core returned a model service")
+	}
+	stub := &catalogModelServiceStub{}
+	core := NewCore(&Config{}, "", zap.NewNop(), nil, nil, nil,
+		LocalModelDomain{}, hostedworkers.Config{}, nil, nil, zap.NewNop(), nil, nil)
+	AttachModelService(core, stub)
+	if core.ModelService() != stub || !core.ComposeCollaboratorSnapshot().ModelServiceInitialized {
+		t.Fatal("core did not retain the attached model service in its composition snapshot")
+	}
+	host := NewHostFromCore(core)
+	if !host.ComposeCollaboratorSnapshot().ModelServiceInitialized {
+		t.Fatal("host facade snapshot omitted the core-owned model service")
+	}
+	if _, err := host.ListModels(context.Background()); err != nil {
+		t.Fatalf("host ListModels() error = %v", err)
+	}
+	if host.CurrentModelRuntimeConfig() != nil {
+		t.Fatal("empty host returned a model runtime config")
+	}
+	if _, err := host.BuildModelInvocationExecutor(nil, nil, "worker"); err == nil {
+		t.Fatal("host built a model invocation executor without runtime configuration")
+	}
+	if !reflect.DeepEqual(stub.calls, []string{"list"}) {
+		t.Fatalf("forwarded model calls = %v, want ListModels once", stub.calls)
 	}
 }
 

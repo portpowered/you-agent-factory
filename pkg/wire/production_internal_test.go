@@ -18,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
@@ -64,6 +65,63 @@ func TestModelServiceProviderRejectsMissingExplicitClock(t *testing.T) {
 	if depsErr == nil || !strings.Contains(depsErr.Error(), "clock is required") {
 		t.Fatalf("provideFactoryModelServiceDependencies() error = %v, want missing-clock error", depsErr)
 	}
+}
+
+func TestInjectFactoryServiceConstructsCanonicalModelProviderGraph(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	cfg, err := service.ConfigWithWorkerApplication(&service.FactoryServiceConfig{
+		Dir:                                     dir,
+		SystemConfigHomeDir:                     t.TempDir(),
+		Logger:                                  zap.NewNop(),
+		SkipBuiltInRunnerPrerequisiteValidation: true,
+	})
+	if err != nil {
+		t.Fatalf("ConfigWithWorkerApplication() error = %v", err)
+	}
+	svc, err := InjectFactoryService(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("InjectFactoryService() error = %v", err)
+	}
+	if svc == nil {
+		t.Fatal("InjectFactoryService() returned nil service")
+	}
+	if _, err := svc.ListModels(context.Background()); err != nil {
+		t.Fatalf("injected model service ListModels() error = %v", err)
+	}
+}
+
+func TestModelProviderAdaptersPreserveDiagnosticsAndOverrides(t *testing.T) {
+	t.Parallel()
+
+	injected := &injectedModelAPI{}
+	models, err := provideModelService(modelsservice.Dependencies{}, &service.FactoryServiceConfig{ModelAPI: injected})
+	if err != nil || models != injected {
+		t.Fatalf("provideModelService(override) = (%T, %v), want exact injected API", models, err)
+	}
+	if _, err := newModelService(modelsservice.Dependencies{}); err == nil || !strings.Contains(err.Error(), "runtime configuration lookup") {
+		t.Fatalf("newModelService(invalid) error = %v, want wrapped dependency error", err)
+	}
+
+	logCore, logs := observer.New(zap.InfoLevel)
+	recorder := &recordingInvocationMetrics{}
+	diagnostics := modelHostDiagnostics(zap.New(logCore), recorder)
+	diagnostics.Logger.Info("model info", map[string]string{"model": "OMNIVOICE_Q4_K_M"})
+	diagnostics.Logger.Warn("model warning", map[string]string{"state": "missing"})
+	diagnostics.Metrics.RecordMetric("managed_runtime.pull.success", map[string]string{"model": "OMNIVOICE_Q4_K_M"})
+	if logs.Len() != 2 || recorder.metric.Name != "managed_runtime.pull.success" || recorder.metric.Labels["model"] != "OMNIVOICE_Q4_K_M" {
+		t.Fatalf("diagnostic adapter output = logs:%d metric:%+v", logs.Len(), recorder.metric)
+	}
+}
+
+type recordingInvocationMetrics struct {
+	metric service.InvocationMetric
+}
+
+func (r *recordingInvocationMetrics) RecordInvocationMetric(metric service.InvocationMetric) {
+	r.metric = metric
 }
 
 func TestProductionGraphRetainsDefaultModelServiceAndInjectedAssetEdge(t *testing.T) {

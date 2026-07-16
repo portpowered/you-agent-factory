@@ -25,6 +25,7 @@ import (
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/replay"
@@ -41,6 +42,106 @@ import (
 
 const servicePortableBundledScriptBody = "Write-Output 'portable script'\n"
 const serviceStreamedRecordingTimeout = 5 * time.Second
+
+func TestModelServiceCompatibilityBoundaryFailsExplicitlyWhenUnattached(t *testing.T) {
+	t.Parallel()
+
+	var svc *FactoryService
+	ctx := context.Background()
+	_, listErr := svc.ListModels(ctx)
+	_, getErr := svc.GetModel(ctx, "OMNIVOICE_Q4_K_M")
+	_, pullErr := svc.PullModel(ctx, "OMNIVOICE_Q4_K_M")
+	_, invokeErr := svc.InvokeModel(ctx, "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{Operation: "TTS"})
+	for operation, err := range map[string]error{
+		"list": listErr, "get": getErr, "pull": pullErr, "invoke": invokeErr,
+	} {
+		if !errors.Is(err, errModelServiceUnavailable) {
+			t.Fatalf("%s model error = %v, want unavailable boundary", operation, err)
+		}
+	}
+	if svc.CurrentModelRuntimeConfig() != nil {
+		t.Fatal("nil service returned a runtime config")
+	}
+	if _, err := svc.BuildModelInvocationExecutor(nil, nil, "worker"); err == nil {
+		t.Fatal("nil service built a model invocation executor")
+	}
+	if _, err := ModelServiceDependencies(FactoryServiceShell{}); err == nil {
+		t.Fatal("ModelServiceDependencies() accepted a nil service shell")
+	}
+	empty := &FactoryService{}
+	deps, err := ModelServiceDependencies(FactoryServiceShell{Service: empty})
+	if err != nil || deps.Clock != nil || deps.RuntimeConfig == nil || deps.ModelInvocationExecutor == nil {
+		t.Fatalf("ModelServiceDependencies(empty) = (%+v, %v), want callable required adapters and package-owned optional clock default", deps, err)
+	}
+	parts := NewFactoryServiceCollaboratorsFromParts(nil, LocalModelDomain{}, nil, nil)
+	if parts.Sessions != nil || parts.RuntimeBuild != nil || parts.WorkersScheduler != nil {
+		t.Fatalf("NewFactoryServiceCollaboratorsFromParts(nil) = %+v, want exact nil parts", parts)
+	}
+	if AttachModelServiceCollaborator(FactoryServiceShell{}, unavailableModelService{}) != nil {
+		t.Fatal("AttachModelServiceCollaborator() created a service for a nil shell")
+	}
+}
+
+func TestExplicitServiceCollaboratorConstructorsAssembleInertGraph(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := ConfigWithWorkerApplication(&FactoryServiceConfig{})
+	if err != nil {
+		t.Fatalf("ConfigWithWorkerApplication() error = %v", err)
+	}
+	clock := factory.EnsureClock(nil)
+	logger := zap.NewNop()
+	sessions := NewFactorySessionsRegistry()
+	collaborators, err := NewFactoryServiceCollaborators(cfg, clock, logger, sessions, hostedworkers.Config{})
+	if err != nil {
+		t.Fatalf("NewFactoryServiceCollaborators() error = %v", err)
+	}
+	if collaborators.Sessions != sessions || collaborators.LocalModels.Manager == nil ||
+		collaborators.RuntimeBuild == nil || collaborators.WorkersScheduler == nil {
+		t.Fatalf("constructed collaborators = %+v, want complete inert graph", collaborators)
+	}
+	runtimeBuildWithoutSessions := NewRuntimeBuildService(cfg, clock, logger, &collaborators.LocalModels, nil)
+	hosted := NewHostedWorkersConfig(cfg, logger, clock)
+	parts := NewFactoryServiceCollaboratorsFromParts(
+		sessions,
+		collaborators.LocalModels,
+		runtimeBuildWithoutSessions,
+		collaborators.WorkersScheduler,
+	)
+	if parts.RuntimeBuild != runtimeBuildWithoutSessions || parts.Sessions != sessions || hosted.Logger == nil {
+		t.Fatalf("explicit collaborator parts were not retained: parts=%+v hosted=%+v", parts, hosted)
+	}
+}
+
+func TestInvocationBootstrapModelFixtureValidatesAndSuppliesProcessBoundary(t *testing.T) {
+	t.Parallel()
+
+	assets := localmodels.NewAssetPuller(t.TempDir())
+	runtime := localmodels.NewOmniVoiceRuntime(nil)
+	if err := ApplyInvocationBootstrapLocalModelTestFixture(nil, "http://127.0.0.1:1", runtime, assets); err == nil {
+		t.Fatal("ApplyInvocationBootstrapLocalModelTestFixture(nil) succeeded")
+	}
+	cfg := &FactoryServiceConfig{}
+	if err := ApplyInvocationBootstrapLocalModelTestFixture(cfg, " http://127.0.0.1:43210 ", runtime, assets); err != nil {
+		t.Fatalf("ApplyInvocationBootstrapLocalModelTestFixture() error = %v", err)
+	}
+	if cfg.LocalModelRuntimeOverride != runtime || cfg.ModelAssets != assets || cfg.ModelHostOverride == nil ||
+		!cfg.SkipBuiltInRunnerPrerequisiteValidation {
+		t.Fatalf("fixture config = %+v, want exact runtime/assets and supervised host", cfg)
+	}
+
+	launcher := &invocationBootstrapFakeProcessLauncher{healthEndpoint: "http://127.0.0.1:43210"}
+	process, err := launcher.Start(context.Background(), modelhost.ProcessStartSpec{})
+	if err != nil || process.HealthEndpoint() != "http://127.0.0.1:43210" {
+		t.Fatalf("fake process = (%+v, %v), want configured health endpoint", process, err)
+	}
+	if err := process.Stop(context.Background()); err != nil {
+		t.Fatalf("fake process Stop() error = %v", err)
+	}
+	if err := process.Wait(); err != nil {
+		t.Fatalf("fake process Wait() error = %v", err)
+	}
+}
 
 func serviceNamedFactoryPayload(t *testing.T, project string) []byte {
 	t.Helper()

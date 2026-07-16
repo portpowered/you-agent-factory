@@ -7,37 +7,37 @@ import (
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
 	claudeexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/claude/exitfailure"
 	codexexitfailure "github.com/portpowered/infinite-you/pkg/workers/provider/codex/exitfailure"
 	geminipkg "github.com/portpowered/infinite-you/pkg/workers/provider/gemini"
 	kiropkg "github.com/portpowered/infinite-you/pkg/workers/provider/kiro"
-	opencodeadapter "github.com/portpowered/infinite-you/pkg/workers/provider/adapter/opencode"
 )
 
 const (
-	claudeThrottleFailureMessage   = claudeexitfailure.ThrottleFailureMessage
-	claudeTimeoutFailureMessage    = claudeexitfailure.TimeoutFailureMessage
-	claudeAuthFailureMessage       = "Claude authentication failed."
-	claudeBadRequestFailureMessage = "Claude rejected the request as invalid."
-	claudeConfigFailureMessage     = "Claude is not configured correctly."
-	claudeFailureScanBytes         = 64 * 1024
-	geminiThrottleFailureMessage   = "The provider is rate limited; retry after capacity becomes available."
-	geminiTimeoutFailureMessage      = geminipkg.TimeoutFailureMessage
-	codexGPT56SolUpgradeMessage      = codexexitfailure.GPT56SolUpgradeMessage
-	codexUnknownFailureMessage       = codexexitfailure.UnknownFailureMessage
-	codexAuthFailureMessage          = codexexitfailure.AuthFailureMessage
-	codexThrottleFailureMessage      = "Codex is temporarily unavailable due to usage or capacity limits."
-	codexServerFailureMessage        = "Codex encountered a temporary server error."
-	codexTimeoutFailureMessage       = "Codex request timed out."
-	codexWindowsProcessFailureExitCode = 4294967295
-	opencodeThrottleFailureMessage   = opencodeadapter.ThrottleFailureMessage
-	opencodeTimeoutFailureMessage    = opencodeadapter.TimeoutFailureMessage
-	opencodeServerFailureMessage     = "OpenCode encountered a temporary server error."
-	opencodeBadRequestFailureMessage = opencodeadapter.BadRequestFailureMessage
-	opencodeFailureMessageBytes      = 512
-	codexBadRequestFailureMessage    = "Codex rejected the request as invalid."
-	codexErrorLineScanBytes          = 64 * 1024
-	codexFailureMessageBytes         = 1024
+	claudeThrottleFailureMessage         = claudeexitfailure.ThrottleFailureMessage
+	claudeTimeoutFailureMessage          = claudeexitfailure.TimeoutFailureMessage
+	claudeAuthFailureMessage             = "Claude authentication failed."
+	claudeBadRequestFailureMessage       = "Claude rejected the request as invalid."
+	claudeConfigFailureMessage           = "Claude is not configured correctly."
+	claudeFailureScanBytes               = 64 * 1024
+	geminiThrottleFailureMessage         = "The provider is rate limited; retry after capacity becomes available."
+	geminiTimeoutFailureMessage          = geminipkg.TimeoutFailureMessage
+	codexGPT56SolUpgradeMessage          = codexexitfailure.GPT56SolUpgradeMessage
+	codexUnknownFailureMessage           = codexexitfailure.UnknownFailureMessage
+	codexAuthFailureMessage              = codexexitfailure.AuthFailureMessage
+	codexThrottleFailureMessage          = "Codex is temporarily unavailable due to usage or capacity limits."
+	codexServerFailureMessage            = "Codex encountered a temporary server error."
+	codexTimeoutFailureMessage           = "Codex request timed out."
+	codexWindowsProcessFailureExitCode   = 4294967295
+	opencodeThrottleFailureMessage       = opencodeadapter.ThrottleFailureMessage
+	opencodeTimeoutFailureMessage        = opencodeadapter.TimeoutFailureMessage
+	opencodeServerFailureMessage         = "OpenCode encountered a temporary server error."
+	opencodeBadRequestFailureMessage     = opencodeadapter.BadRequestFailureMessage
+	opencodeFailureMessageBytes          = 512
+	codexBadRequestFailureMessage        = "Codex rejected the request as invalid."
+	codexErrorLineScanBytes              = 64 * 1024
+	codexFailureMessageBytes             = 1024
 	codexHighDemandTemporaryErrorsNeedle = codexexitfailure.HighDemandTemporaryErrorsNeedle
 )
 
@@ -106,6 +106,24 @@ func loadProviderErrorCorpusForTest(t *testing.T) ProviderErrorCorpus {
 	return corpus
 }
 
+func TestProviderErrorCorpusReturnsStableCopiesAndRepeatedResults(t *testing.T) {
+	t.Parallel()
+
+	corpus := loadProviderErrorCorpusForTest(t)
+	entries := corpus.Entries()
+	if len(entries) == 0 {
+		t.Fatal("provider error corpus is empty")
+	}
+	repeated := entries[0].RepeatedCommandResults(2)
+	if len(repeated) != 2 || repeated[0].ExitCode != entries[0].ExitCode || repeated[1].ExitCode != entries[0].ExitCode {
+		t.Fatalf("repeated command results = %#v, want two copies of first corpus entry", repeated)
+	}
+	entries[0].Name = "mutated"
+	if corpus.Entries()[0].Name == "mutated" {
+		t.Fatal("Entries() exposed the corpus backing slice")
+	}
+}
+
 func providerErrorCorpusEntryForTest(t *testing.T, name string) ProviderErrorCorpusEntry {
 	t.Helper()
 
@@ -141,7 +159,6 @@ func providerErrorCorpusLastErrorLine(t *testing.T, entry ProviderErrorCorpusEnt
 	return lastMatch
 }
 
-
 func TestNormalizeProviderExitFailure_ClaudeUsesOneParsedReasonAndMessageForPolicy(t *testing.T) {
 	entry := providerErrorCorpusEntryForTest(t, "claude_rate_limit_error")
 	providerErr := normalizeProviderExitFailure(string(entry.Provider), entry.CommandResult(), nil, nil)
@@ -157,7 +174,6 @@ func TestNormalizeProviderExitFailure_ClaudeUsesOneParsedReasonAndMessageForPoli
 		t.Fatalf("decision = %#v, want retryable throttle pause", decision)
 	}
 }
-
 
 func TestParseCodexProviderFailure_GPT56SolReturnsActionableNestedMessage(t *testing.T) {
 	entry := providerErrorCorpusEntryForTest(t, "codex_gpt_5_6_sol_requires_newer_cli")

@@ -10,6 +10,14 @@ import (
 	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 )
 
+func TestServicesFromCoreWithModelsRejectsNilCore(t *testing.T) {
+	t.Parallel()
+
+	if services := servicesFromCoreWithModels(nil, nil); services != nil {
+		t.Fatalf("servicesFromCoreWithModels(nil) = %#v, want nil", services)
+	}
+}
+
 func TestSessionRuntimeHostPropagatesDashboardStartupFailureAndCancelsRuntime(t *testing.T) {
 	t.Parallel()
 

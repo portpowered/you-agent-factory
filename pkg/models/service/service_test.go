@@ -11,6 +11,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"go.uber.org/zap"
 )
@@ -67,6 +68,37 @@ func TestNewServiceAppliesModelLocalDefaults(t *testing.T) {
 	}
 	if got := svc.now(); got.IsZero() {
 		t.Fatal("default clock returned the zero time")
+	}
+	// Exercise the no-op metrics default through the same emission boundary used
+	// by pull operations. Omitted optional collaborators must remain usable, not
+	// merely non-nil.
+	svc.recordModelPullMetric(modelPullMetricAttempts, map[string]string{"model": "test"})
+}
+
+func TestServiceNilReceiverPreservesUnavailableRuntimeErrors(t *testing.T) {
+	t.Parallel()
+
+	var svc *Service
+	assertUnavailable := func(operation string, err error) {
+		t.Helper()
+		if err == nil || !strings.Contains(err.Error(), "runtime is not available") {
+			t.Fatalf("%s error = %v, want runtime unavailable", operation, err)
+		}
+	}
+
+	_, err := svc.ListModels(context.Background())
+	assertUnavailable("ListModels", err)
+	_, err = svc.GetModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	assertUnavailable("GetModel", err)
+	_, err = svc.PullModel(context.Background(), "OMNIVOICE_Q4_K_M")
+	assertUnavailable("PullModel", err)
+	_, err = svc.InvokeModel(context.Background(), "OMNIVOICE_Q4_K_M", factoryapi.ModelInvocationRequest{Operation: "TTS"})
+	assertUnavailable("InvokeModel", err)
+	if _, err := svc.modelInvocationExecutor(nil, nil, "worker"); err == nil {
+		t.Fatal("nil service modelInvocationExecutor() succeeded")
+	}
+	if svc.factoryRunnerID() != "" || svc.logger() != nil || svc.modelHost() != nil {
+		t.Fatal("nil service accessors returned configured collaborators")
 	}
 }
 
