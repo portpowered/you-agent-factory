@@ -2,7 +2,6 @@
   "formatVersion": "functional-boundary-baseline/v1",
   "migrationTask": "https://github.com/portpowered/you-agent-factory/issues/1176",
   "files": [
-    { "path": "tests/functional/bootstrap_portability/short_helpers_test.go", "sha256": "ec3ada776d5ba8456fddd4bc52f8822cb0a6f842a0f7cca36fbd86abe83fcea6" },
     { "path": "tests/functional/bootstrap_portability/watcher_current_factory_activation_long_test.go", "sha256": "0adbdd0406c75b4fac96c89f12e4029cff7100e838b0a731e5a07a8a1d15e3e1" },
     { "path": "tests/functional/guards_batch/executor_review_state_lifecycle_test.go", "sha256": "dabec2c44fa217fd22caabe5b4a8e7a3adb710944b7bff2579c4bc928b13e928" },
     { "path": "tests/functional/guards_batch/factory_request_batch_chaining_trace_test.go", "sha256": "381baa6a2668331f378ebcd76fd4b857bcd25cc61bcffa657053a9ab07a3051c" },

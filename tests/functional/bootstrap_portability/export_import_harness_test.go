@@ -76,7 +76,7 @@ func (h exportImportSmokeHarness) Run(t *testing.T) exportImportSmokeHarnessResu
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		cfg.Logger = zap.NewNop()
 	})
-	waitForCurrentFactoryRuntimeIdle(t, server.service, 5*time.Second)
+	waitForCurrentFactoryRuntimeIdle(t, server.URL(), 5*time.Second)
 
 	exported := getCurrentFactory(t, server.URL())
 	importRequest := exported

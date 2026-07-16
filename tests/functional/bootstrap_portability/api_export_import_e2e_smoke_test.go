@@ -177,7 +177,7 @@ func TestExportImportSmoke_PublicShareImportSurfaceCarriesDetachedStarterWork(t 
 		cfg.RuntimeMode = interfaces.RuntimeModeService
 		cfg.Logger = zap.NewNop()
 	})
-	waitForCurrentFactoryRuntimeIdle(t, importServer.service, 5*time.Second)
+	waitForCurrentFactoryRuntimeIdle(t, importServer.URL(), 5*time.Second)
 
 	imported := createNamedFactory(t, importServer.URL(), importRequest)
 	assertStarterBundledFileTargets(t, imported, sourceSnapshot)
