@@ -30,6 +30,7 @@ import (
 	factoryvalidation "github.com/portpowered/infinite-you/pkg/factory/validation"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	"github.com/portpowered/infinite-you/pkg/platform/logging"
 	platformmetrics "github.com/portpowered/infinite-you/pkg/platform/metrics"
@@ -4608,7 +4609,7 @@ func testModelEventErrorClassBranches(t *testing.T) {
 	t.Helper()
 
 	providerErr := workerprovider.NewProviderError(workerexecution.WorkFailureTypeTimeout, "timeout", errors.New("boom"))
-	readinessErr := &apisurface.ManagedRuntimeInvocationError{ReadinessState: factoryapi.ManagedRuntimeReadinessStateLOADING}
+	readinessErr := &apisurface.ManagedRuntimeInvocationError{ReadinessState: managedruntime.ReadinessStateLoading}
 	if got := modelEventErrorClass(readinessErr); got != "MANAGED_RUNTIME_LOADING" {
 		t.Fatalf("managed runtime error class = %q, want MANAGED_RUNTIME_LOADING", got)
 	}

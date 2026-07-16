@@ -10,8 +10,8 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	"github.com/portpowered/infinite-you/pkg/service"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 	"go.uber.org/zap"
@@ -131,7 +131,7 @@ func TestInvoke_OfflineNonReadyLifecycle_ReadinessGatedFailuresWithoutHTTPServer
 			if !errors.As(err, &readinessErr) {
 				t.Fatalf("error = %T, want *ManagedRuntimeInvocationError", err)
 			}
-			if readinessErr.ReadinessState == factoryapi.ManagedRuntimeReadinessStateREADY {
+			if readinessErr.ReadinessState == managedruntime.ReadinessStateReady {
 				t.Fatalf("readiness = READY, want non-ready managed runtime state")
 			}
 		})

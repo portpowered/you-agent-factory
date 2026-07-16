@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
@@ -57,8 +58,8 @@ func TestInvocationErrorFromManagedRuntime_MissingUsesManagedVocabulary(t *testi
 	if !errors.As(err, &readinessErr) {
 		t.Fatalf("error = %T, want *ManagedRuntimeInvocationError", err)
 	}
-	if readinessErr.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING ||
-		readinessErr.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
+	if readinessErr.ReadinessState != managedruntime.ReadinessStateMissing ||
+		readinessErr.LifecycleState != managedruntime.LifecycleStateNotInstalled {
 		t.Fatalf("readiness = (%s, %s), want MISSING NOT_INSTALLED", readinessErr.ReadinessState, readinessErr.LifecycleState)
 	}
 }

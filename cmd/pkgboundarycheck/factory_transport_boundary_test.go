@@ -73,6 +73,7 @@ func TestRunAllowsOnlyDocumentedDomainTransportMigrationFiles(t *testing.T) {
 	}
 
 	for _, path := range []string{
+		"pkg/models/local/managed_runtime.go",
 		"pkg/models/host/catalog_host.go",
 		"pkg/models/host/contract.go",
 		"pkg/models/host/diagnostics.go",
@@ -84,7 +85,7 @@ func TestRunAllowsOnlyDocumentedDomainTransportMigrationFiles(t *testing.T) {
 	}
 	stderr.Reset()
 	if err := run(config{root: repoRoot, packageRoot: defaultScanRoot}, &bytes.Buffer{}, stderr); err == nil {
-		t.Fatal("run() error = nil, want migrated model host imports rejected")
+		t.Fatal("run() error = nil, want migrated model runtime or host imports rejected")
 	}
 
 	writeGoImportFile(t, repoRoot, "pkg/workers/inference/inference.go", "inference", "github.com/portpowered/infinite-you/pkg/transports/http/generated")

@@ -5,12 +5,12 @@ import (
 	"errors"
 	"testing"
 
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
 
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
@@ -74,7 +74,7 @@ func TestEnsureManagedRuntimeReadyForInvocation_AllowsReadyRuntime(t *testing.T)
 	if err != nil {
 		t.Fatalf("EnsureManagedRuntimeReadyForInvocation: %v", err)
 	}
-	if managed.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+	if managed.ReadinessState != managedruntime.ReadinessStateReady {
 		t.Fatalf("readiness = %s, want READY", managed.ReadinessState)
 	}
 }

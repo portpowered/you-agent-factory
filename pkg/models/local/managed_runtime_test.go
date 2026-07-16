@@ -3,37 +3,38 @@ package local
 import (
 	"testing"
 
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 )
 
 func TestBuildManagedRuntime_MapsCompatibilityFieldsToManagedContract(t *testing.T) {
-	summary := factoryapi.ModelSummary{
-		Name:             "OMNIVOICE_Q4_K_M",
-		ProviderLocality: factoryapi.WorkerModelLocalityLocal,
-		Status:           factoryapi.ModelStatusREADY,
-		LoadState:        factoryapi.UNLOADED,
-		Operations:       []factoryapi.ModelOperation{{Name: "TTS"}},
+	summary := managedRuntimeSummary{
+		name:       "OMNIVOICE_Q4_K_M",
+		locality:   managedruntime.LocalityLocal,
+		readiness:  managedruntime.ReadinessStateReady,
+		lifecycle:  managedruntime.LifecycleStateNotInstalled,
+		operations: []managedruntime.Operation{{Name: "TTS"}},
 	}
-	diagnostics := factoryapi.StringMap{"statusReason": "ready"}
+	diagnostics := map[string]string{"statusReason": "ready"}
 
 	managed := buildManagedRuntime(summary, diagnostics)
 
-	if managed.Identity != summary.Name {
-		t.Fatalf("identity = %q, want %q", managed.Identity, summary.Name)
+	if managed.Identity != summary.name {
+		t.Fatalf("identity = %q, want %q", managed.Identity, summary.name)
 	}
-	if managed.ReadinessState != factoryapi.ManagedRuntimeReadinessStateREADY {
+	if managed.ReadinessState != managedruntime.ReadinessStateReady {
 		t.Fatalf("readiness = %s, want READY", managed.ReadinessState)
 	}
-	if managed.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
+	if managed.LifecycleState != managedruntime.LifecycleStateNotInstalled {
 		t.Fatalf("lifecycle = %s, want NOT_INSTALLED", managed.LifecycleState)
 	}
-	if managed.Locality != summary.ProviderLocality {
-		t.Fatalf("locality = %s, want %s", managed.Locality, summary.ProviderLocality)
+	if managed.Locality != summary.locality {
+		t.Fatalf("locality = %s, want %s", managed.Locality, summary.locality)
 	}
 	if len(managed.SupportedOperations) != 1 || managed.SupportedOperations[0].Name != "TTS" {
 		t.Fatalf("supported operations = %#v, want one TTS operation", managed.SupportedOperations)
 	}
-	if managed.Diagnostics == nil || (*managed.Diagnostics)["readinessState"] != "READY" || (*managed.Diagnostics)["statusReason"] != "ready" {
+	if managed.Diagnostics["readinessState"] != "READY" || managed.Diagnostics["statusReason"] != "ready" {
 		t.Fatalf("diagnostics = %#v, want managed-runtime projections", managed.Diagnostics)
 	}
 }
@@ -59,9 +60,9 @@ func TestListModels_PopulatesManagedRuntimeContract(t *testing.T) {
 
 func TestBuildManagedRuntimeProjection_ReportsLoadingAndFailedCacheStates(t *testing.T) {
 	loading := buildManagedRuntimeProjection(managedRuntimeProjection{
-		summary: factoryapi.ModelSummary{
-			Name:             "OMNIVOICE_Q4_K_M",
-			ProviderLocality: factoryapi.WorkerModelLocalityLocal,
+		summary: managedRuntimeSummary{
+			name:     "OMNIVOICE_Q4_K_M",
+			locality: managedruntime.LocalityLocal,
 		},
 		cacheInspection: &RuntimeCacheInspection{
 			Supported:          true,
@@ -70,15 +71,15 @@ func TestBuildManagedRuntimeProjection_ReportsLoadingAndFailedCacheStates(t *tes
 			MissingAssets:      []string{"omnivoice-tokenizer-Q4_K_M.gguf"},
 		},
 	})
-	if loading.ReadinessState != factoryapi.ManagedRuntimeReadinessStateLOADING ||
-		loading.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLING {
+	if loading.ReadinessState != managedruntime.ReadinessStateLoading ||
+		loading.LifecycleState != managedruntime.LifecycleStateInstalling {
 		t.Fatalf("loading runtime = (%s, %s), want LOADING/INSTALLING", loading.ReadinessState, loading.LifecycleState)
 	}
 
 	failed := buildManagedRuntimeProjection(managedRuntimeProjection{
-		summary: factoryapi.ModelSummary{
-			Name:             "OMNIVOICE_Q4_K_M",
-			ProviderLocality: factoryapi.WorkerModelLocalityLocal,
+		summary: managedRuntimeSummary{
+			name:     "OMNIVOICE_Q4_K_M",
+			locality: managedruntime.LocalityLocal,
 		},
 		cacheInspection: &RuntimeCacheInspection{
 			Supported:        true,
@@ -86,18 +87,18 @@ func TestBuildManagedRuntimeProjection_ReportsLoadingAndFailedCacheStates(t *tes
 			PartialArtifacts: true,
 		},
 	})
-	if failed.ReadinessState != factoryapi.ManagedRuntimeReadinessStateFAILED ||
-		failed.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED {
+	if failed.ReadinessState != managedruntime.ReadinessStateFailed ||
+		failed.LifecycleState != managedruntime.LifecycleStateNotInstalled {
 		t.Fatalf("failed runtime = (%s, %s), want FAILED/NOT_INSTALLED", failed.ReadinessState, failed.LifecycleState)
 	}
 }
 
 func TestBuildManagedRuntimeProjection_ReportsInstalledCacheState(t *testing.T) {
-	summary := factoryapi.ModelSummary{
-		Name:             "OMNIVOICE_Q4_K_M",
-		ProviderLocality: factoryapi.WorkerModelLocalityLocal,
-		Status:           factoryapi.ModelStatusREADY,
-		LoadState:        factoryapi.UNLOADED,
+	summary := managedRuntimeSummary{
+		name:      "OMNIVOICE_Q4_K_M",
+		locality:  managedruntime.LocalityLocal,
+		readiness: managedruntime.ReadinessStateReady,
+		lifecycle: managedruntime.LifecycleStateNotInstalled,
 	}
 	inspection := RuntimeCacheInspection{
 		Supported:          true,
@@ -107,14 +108,14 @@ func TestBuildManagedRuntimeProjection_ReportsInstalledCacheState(t *testing.T) 
 	}
 	managed := buildManagedRuntimeProjection(managedRuntimeProjection{
 		summary:         summary,
-		baseDiagnostics: factoryapi.StringMap{"statusReason": "ready"},
+		baseDiagnostics: map[string]string{"statusReason": "ready"},
 		cacheInspection: &inspection,
 		includeInspect:  true,
 	})
-	if managed.LifecycleState != factoryapi.ManagedRuntimeLifecycleStateINSTALLED {
+	if managed.LifecycleState != managedruntime.LifecycleStateInstalled {
 		t.Fatalf("lifecycle = %s, want INSTALLED", managed.LifecycleState)
 	}
-	if managed.Diagnostics == nil || (*managed.Diagnostics)["revision"] != "rev1" {
+	if managed.Diagnostics["revision"] != "rev1" {
 		t.Fatalf("diagnostics = %#v, want revision detail", managed.Diagnostics)
 	}
 }

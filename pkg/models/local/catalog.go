@@ -15,6 +15,7 @@ import (
 
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
@@ -462,8 +463,15 @@ func buildCatalogManagedRuntime(
 	opts CatalogOptions,
 	forInspect bool,
 ) factoryapi.ManagedRuntime {
+	domainSummary := managedRuntimeSummary{
+		name:       summary.Name,
+		locality:   managedruntime.Locality(summary.ProviderLocality),
+		readiness:  managedRuntimeReadiness(summary.Status),
+		lifecycle:  managedRuntimeLifecycle(summary.LoadState),
+		operations: managedRuntimeOperations(summary.Operations),
+	}
 	projection := managedRuntimeProjection{
-		summary:         summary,
+		summary:         domainSummary,
 		baseDiagnostics: diagnostics,
 		includeInspect:  forInspect,
 	}
@@ -479,7 +487,87 @@ func buildCatalogManagedRuntime(
 			}
 		}
 	}
-	return buildManagedRuntimeProjection(projection)
+	return apisurface.ManagedRuntimeToAPI(buildManagedRuntimeProjection(projection))
+}
+
+func managedRuntimeReadiness(status factoryapi.ModelStatus) managedruntime.ReadinessState {
+	switch status {
+	case factoryapi.ModelStatusREADY:
+		return managedruntime.ReadinessStateReady
+	case factoryapi.ModelStatusUNAVAILABLE:
+		return managedruntime.ReadinessStateMissing
+	default:
+		return managedruntime.ReadinessStateUnsupported
+	}
+}
+
+func managedRuntimeLifecycle(loadState factoryapi.ModelLoadState) managedruntime.LifecycleState {
+	if loadState == factoryapi.UNLOADED {
+		return managedruntime.LifecycleStateNotInstalled
+	}
+	return managedruntime.LifecycleStateNotApplicable
+}
+
+func managedRuntimeOperations(operations []factoryapi.ModelOperation) []managedruntime.Operation {
+	result := make([]managedruntime.Operation, 0, len(operations))
+	for _, operation := range operations {
+		item := managedruntime.Operation{Name: operation.Name}
+		if operation.Inputs != nil {
+			item.Inputs = managedRuntimeOperationSlots(*operation.Inputs)
+		}
+		if operation.Outputs != nil {
+			item.Outputs = managedRuntimeOperationSlots(*operation.Outputs)
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
+func managedRuntimeOperationSlots(slots []factoryapi.ModelOperationSlot) []managedruntime.OperationSlot {
+	result := make([]managedruntime.OperationSlot, 0, len(slots))
+	for _, slot := range slots {
+		contentTypes := make([]string, 0, len(slot.ContentTypes))
+		for _, contentType := range slot.ContentTypes {
+			contentTypes = append(contentTypes, string(contentType))
+		}
+		result = append(result, managedruntime.OperationSlot{
+			Name: slot.Name, ContentTypes: contentTypes, Required: slot.Required,
+		})
+	}
+	return result
+}
+
+func managedRuntimeForCatalog(
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	modelName string,
+	opts CatalogOptions,
+) (managedruntime.Runtime, error) {
+	catalog := BuildCatalogWithOptions(runtimeCfg, opts)
+	key := CanonicalModelName(modelName)
+	entry, ok := catalog[key]
+	if !ok {
+		return managedruntime.Runtime{}, fmt.Errorf("%w: %s", managedruntime.ErrNotFound, modelName)
+	}
+	managed := entry.Summary.ManagedRuntime
+	return managedruntime.Runtime{
+		Identity:            managed.Identity,
+		ReadinessState:      managedruntime.ReadinessState(managed.ReadinessState),
+		LifecycleState:      managedruntime.LifecycleState(managed.LifecycleState),
+		Locality:            managedruntime.Locality(managed.Locality),
+		SupportedOperations: managedRuntimeOperations(managed.SupportedOperations),
+		Diagnostics:         cloneManagedRuntimeDiagnostics(managed.Diagnostics),
+	}, nil
+}
+
+func cloneManagedRuntimeDiagnostics(values *factoryapi.StringMap) map[string]string {
+	result := map[string]string{}
+	if values == nil {
+		return result
+	}
+	for key, value := range *values {
+		result[key] = value
+	}
+	return result
 }
 
 func mergeInspectDiagnostics(base factoryapi.StringMap, managed factoryapi.ManagedRuntime) factoryapi.StringMap {

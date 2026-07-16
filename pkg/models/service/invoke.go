@@ -23,6 +23,7 @@ import (
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	contentcontract "github.com/portpowered/infinite-you/pkg/transports/mapping/workcontent"
 	workerinferencemapping "github.com/portpowered/infinite-you/pkg/transports/mapping/workerinference"
 	"github.com/portpowered/infinite-you/pkg/workers"
@@ -136,9 +137,9 @@ func (s *Service) ensureInvocationReady(
 	ctx context.Context,
 	runtimeCfg *factoryconfig.LoadedFactoryConfig,
 	modelName string,
-) (factoryapi.ManagedRuntime, error) {
+) (managedruntime.Runtime, error) {
 	if runtimeCfg == nil {
-		return factoryapi.ManagedRuntime{}, fmt.Errorf("runtime config is not available")
+		return managedruntime.Runtime{}, fmt.Errorf("runtime config is not available")
 	}
 	host := s.modelHost()
 	if host == nil {
@@ -146,10 +147,10 @@ func (s *Service) ensureInvocationReady(
 	}
 	snapshot, err := host.InspectReadiness(ctx, runtimeCfg, modelName)
 	if err != nil {
-		return factoryapi.ManagedRuntime{}, err
+		return managedruntime.Runtime{}, err
 	}
-	managed := apisurface.ManagedRuntimeToAPI(modelhost.ManagedRuntimeFromSnapshot(snapshot))
-	if invocationErr := apisurface.InvocationErrorFromManagedRuntime(managed); invocationErr != nil {
+	managed := modelhost.ManagedRuntimeFromSnapshot(snapshot)
+	if invocationErr := managedruntime.InvocationErrorForRuntime(managed); invocationErr != nil {
 		return managed, invocationErr
 	}
 	return managed, nil
@@ -221,7 +222,7 @@ func (s *Service) factoryRunnerID() string {
 
 func (s *Service) recordManagedRuntimeInvocationReadiness(
 	modelName string,
-	managed factoryapi.ManagedRuntime,
+	managed managedruntime.Runtime,
 	err error,
 ) {
 	logger := s.logger()

@@ -149,7 +149,6 @@ func defaultBoundaryPolicy() boundaryPolicy {
 // these exact files migrate to domain-owned inputs and outward transport mapping.
 var documentedDomainTransportExceptions = []string{
 	"pkg/models/local/catalog.go",
-	"pkg/models/local/managed_runtime.go",
 	"pkg/models/service/api.go",
 	"pkg/models/service/catalog.go",
 	"pkg/models/service/invoke.go",

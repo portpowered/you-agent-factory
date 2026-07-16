@@ -12,6 +12,7 @@ import (
 	"github.com/portpowered/infinite-you/internal/testutil/factoryfixtures"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	"github.com/portpowered/infinite-you/pkg/service"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
@@ -75,7 +76,7 @@ func TestInvokeModel_ReturnsModelNotAvailableWhenManagedCacheIsMissing(t *testin
 	if !errors.As(err, &readinessErr) && !errors.Is(err, apisurface.ErrManagedRuntimeMissing) {
 		t.Fatalf("InvokeModel error = %v, want managed runtime missing cause", err)
 	}
-	if readinessErr != nil && readinessErr.ReadinessState != factoryapi.ManagedRuntimeReadinessStateMISSING {
+	if readinessErr != nil && readinessErr.ReadinessState != managedruntime.ReadinessStateMissing {
 		t.Fatalf("readinessState = %s, want MISSING", readinessErr.ReadinessState)
 	}
 }

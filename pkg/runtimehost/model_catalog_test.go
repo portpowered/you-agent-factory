@@ -383,7 +383,7 @@ func TestHostInvokeModelForwardsContextRequestResultAndErrorUnchanged(t *testing
 	ctx := context.WithValue(context.Background(), contextKey("request"), "invoke-request")
 	invokeErr := &apisurface.ManagedRuntimeInvocationError{
 		Identity:       "invoke-model",
-		ReadinessState: factoryapi.ManagedRuntimeReadinessStateMISSING,
+		ReadinessState: managedruntime.ReadinessStateMissing,
 		Cause:          apisurface.ErrManagedRuntimeMissing,
 	}
 	request := factoryapi.ModelInvocationRequest{Operation: "TTS"}

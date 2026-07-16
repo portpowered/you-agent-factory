@@ -9,6 +9,7 @@ import (
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	factoryresource "github.com/portpowered/infinite-you/pkg/factory/resource"
+	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	workerconfig "github.com/portpowered/infinite-you/pkg/workers/config"
@@ -122,40 +123,40 @@ func TestInvoke_NonReadyManagedOutcomes_StubBootstrapPreservesManagedRuntimeVoca
 		readiness     factoryapi.ManagedRuntimeReadinessState
 		lifecycle     factoryapi.ManagedRuntimeLifecycleState
 		wantIs        error
-		wantReadiness factoryapi.ManagedRuntimeReadinessState
-		wantLifecycle factoryapi.ManagedRuntimeLifecycleState
+		wantReadiness managedruntime.ReadinessState
+		wantLifecycle managedruntime.LifecycleState
 	}{
 		{
 			name:          "missing",
 			readiness:     factoryapi.ManagedRuntimeReadinessStateMISSING,
 			lifecycle:     factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
 			wantIs:        apisurface.ErrManagedRuntimeMissing,
-			wantReadiness: factoryapi.ManagedRuntimeReadinessStateMISSING,
-			wantLifecycle: factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			wantReadiness: managedruntime.ReadinessStateMissing,
+			wantLifecycle: managedruntime.LifecycleStateNotInstalled,
 		},
 		{
 			name:          "loading",
 			readiness:     factoryapi.ManagedRuntimeReadinessStateLOADING,
 			lifecycle:     factoryapi.ManagedRuntimeLifecycleStateLOADING,
 			wantIs:        apisurface.ErrManagedRuntimeLoading,
-			wantReadiness: factoryapi.ManagedRuntimeReadinessStateLOADING,
-			wantLifecycle: factoryapi.ManagedRuntimeLifecycleStateLOADING,
+			wantReadiness: managedruntime.ReadinessStateLoading,
+			wantLifecycle: managedruntime.LifecycleStateLoading,
 		},
 		{
 			name:          "failed",
 			readiness:     factoryapi.ManagedRuntimeReadinessStateFAILED,
 			lifecycle:     factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
 			wantIs:        apisurface.ErrManagedRuntimeFailed,
-			wantReadiness: factoryapi.ManagedRuntimeReadinessStateFAILED,
-			wantLifecycle: factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			wantReadiness: managedruntime.ReadinessStateFailed,
+			wantLifecycle: managedruntime.LifecycleStateNotInstalled,
 		},
 		{
 			name:          "unsupported",
 			readiness:     factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED,
 			lifecycle:     factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
 			wantIs:        apisurface.ErrManagedRuntimeUnsupported,
-			wantReadiness: factoryapi.ManagedRuntimeReadinessStateUNSUPPORTED,
-			wantLifecycle: factoryapi.ManagedRuntimeLifecycleStateNOTINSTALLED,
+			wantReadiness: managedruntime.ReadinessStateUnsupported,
+			wantLifecycle: managedruntime.LifecycleStateNotInstalled,
 		},
 	}
 

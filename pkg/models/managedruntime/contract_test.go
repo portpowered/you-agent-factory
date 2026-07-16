@@ -3,6 +3,7 @@ package managedruntime_test
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
@@ -54,6 +55,33 @@ func TestErrNotFoundHasStableIdentity(t *testing.T) {
 
 	if managedruntime.ErrNotFound == nil || managedruntime.ErrNotFound.Error() != "model not found" {
 		t.Fatalf("ErrNotFound = %v, want stable model-not-found identity", managedruntime.ErrNotFound)
+	}
+}
+
+func TestInvocationErrorForRuntimePreservesReadinessAndRecoveryGuidance(t *testing.T) {
+	t.Parallel()
+
+	err := managedruntime.InvocationErrorForRuntime(managedruntime.Runtime{
+		Identity:       "OMNIVOICE_Q4_K_M",
+		ReadinessState: managedruntime.ReadinessStateMissing,
+		LifecycleState: managedruntime.LifecycleStateNotInstalled,
+	})
+	if !errors.Is(err, managedruntime.ErrMissing) {
+		t.Fatalf("error = %v, want ErrMissing", err)
+	}
+	var readinessErr *managedruntime.InvocationError
+	if !errors.As(err, &readinessErr) {
+		t.Fatalf("error = %T, want *InvocationError", err)
+	}
+	if readinessErr.Identity != "OMNIVOICE_Q4_K_M" ||
+		readinessErr.ManagedRuntimeReadinessState() != managedruntime.ReadinessStateMissing ||
+		!strings.Contains(readinessErr.Error(), "pull or install") {
+		t.Fatalf("readiness error = %#v (%q), want identity, MISSING, and recovery guidance", readinessErr, readinessErr.Error())
+	}
+	if err := managedruntime.InvocationErrorForRuntime(managedruntime.Runtime{
+		ReadinessState: managedruntime.ReadinessStateReady,
+	}); err != nil {
+		t.Fatalf("ready error = %v, want nil", err)
 	}
 }
 

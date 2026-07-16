@@ -11,7 +11,6 @@ import (
 
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	managedruntime "github.com/portpowered/infinite-you/pkg/models/managedruntime"
-	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 )
 
@@ -68,7 +67,7 @@ func TestFailureClassForError_ManagedRuntimeInvocationMissing(t *testing.T) {
 
 	err := &apisurface.ManagedRuntimeInvocationError{
 		Identity:       "OMNIVOICE_Q4_K_M",
-		ReadinessState: factoryapi.ManagedRuntimeReadinessStateMISSING,
+		ReadinessState: managedruntime.ReadinessStateMissing,
 		Cause:          apisurface.ErrManagedRuntimeMissing,
 	}
 	if got := failureClassForError(err); got != FailureClassModelNotReady {
@@ -81,7 +80,7 @@ func TestFailureClassForError_ManagedRuntimeInvocationWithoutCauseUsesReadiness(
 
 	err := &apisurface.ManagedRuntimeInvocationError{
 		Identity:       "OMNIVOICE_Q4_K_M",
-		ReadinessState: factoryapi.ManagedRuntimeReadinessStateFAILED,
+		ReadinessState: managedruntime.ReadinessStateFailed,
 	}
 	if got := failureClassForError(err); got != FailureClassModelRuntime {
 		t.Fatalf("failureClassForError = %q, want %q", got, FailureClassModelRuntime)

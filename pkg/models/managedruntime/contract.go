@@ -1,7 +1,10 @@
 // Package managedruntime owns provider-neutral managed model runtime contracts.
 package managedruntime
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
 	// ErrNotFound reports that a requested model is absent from configuration.
@@ -83,6 +86,86 @@ type Runtime struct {
 	Locality            Locality
 	SupportedOperations []Operation
 	Diagnostics         map[string]string
+}
+
+// InvocationError carries managed-runtime readiness context without exposing a
+// transport-specific projection or error type.
+type InvocationError struct {
+	Identity       string
+	ReadinessState ReadinessState
+	LifecycleState LifecycleState
+	Cause          error
+}
+
+func (e *InvocationError) Error() string {
+	if e == nil {
+		return ""
+	}
+	action := invocationAction(e.ReadinessState)
+	if action == "" {
+		action = "resolve managed runtime readiness before invoking"
+	}
+	return fmt.Sprintf(
+		"managed runtime %q readiness is %s (lifecycle %s): %s",
+		e.Identity,
+		e.ReadinessState,
+		e.LifecycleState,
+		action,
+	)
+}
+
+func (e *InvocationError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
+// ManagedRuntimeReadinessState exposes readiness through the narrow model seam.
+func (e *InvocationError) ManagedRuntimeReadinessState() ReadinessState {
+	if e == nil {
+		return ""
+	}
+	return e.ReadinessState
+}
+
+// InvocationErrorForRuntime classifies a model-owned runtime projection. A
+// ready runtime returns nil.
+func InvocationErrorForRuntime(runtime Runtime) error {
+	var cause error
+	switch runtime.ReadinessState {
+	case ReadinessStateReady:
+		return nil
+	case ReadinessStateMissing:
+		cause = ErrMissing
+	case ReadinessStateLoading:
+		cause = ErrLoading
+	case ReadinessStateFailed:
+		cause = ErrFailed
+	default:
+		cause = ErrUnsupported
+	}
+	return &InvocationError{
+		Identity:       runtime.Identity,
+		ReadinessState: runtime.ReadinessState,
+		LifecycleState: runtime.LifecycleState,
+		Cause:          cause,
+	}
+}
+
+func invocationAction(readiness ReadinessState) string {
+	switch readiness {
+	case ReadinessStateMissing:
+		return "pull or install the managed runtime before invoking"
+	case ReadinessStateLoading:
+		return "wait for the managed runtime to finish loading before invoking"
+	case ReadinessStateFailed:
+		return "resolve the managed runtime failure before invoking"
+	case ReadinessStateUnsupported:
+		return "use a supported managed runtime for invocation"
+	default:
+		return ""
+	}
 }
 
 // InvocationReadinessError exposes model readiness to consumers without
