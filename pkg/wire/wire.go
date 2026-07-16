@@ -18,7 +18,7 @@ func InjectFactoryService(
 		provideFactoryServiceRoot,
 		provideBaseLogger,
 		provideFactorySessionsRegistry,
-		provideLocalModelDomain,
+		modelProviderSet,
 		provideFactoryConfigLoad,
 		provideServiceClock,
 		provideRuntimeBuildService,

@@ -48,6 +48,24 @@ func NewCollaborators(
 	}
 }
 
+// NewCollaboratorsWithLocalModels assembles the non-model startup collaborators
+// around an already-validated model domain supplied by pkg/wire.
+func NewCollaboratorsWithLocalModels(
+	cfg *runtimehost.Config,
+	clock factory.Clock,
+	baseLogger *zap.Logger,
+	sessions *factorysessions.Registry,
+	localModels LocalModelDomain,
+) Collaborators {
+	hostedWorkers := HostedWorkers(cfg, baseLogger, clock)
+	return Collaborators{
+		Sessions:         sessions,
+		LocalModels:      localModels,
+		RuntimeBuild:     NewRuntimeBuildService(cfg, clock, baseLogger, &localModels, sessions),
+		WorkersScheduler: NewWorkersScheduler(cfg, clock, baseLogger, hostedWorkers),
+	}
+}
+
 // ComposeCore constructs a runtimehost.Core using explicit composition collaborators.
 func ComposeCore(
 	ctx context.Context,
@@ -207,6 +225,24 @@ func composeDurableExecution(
 
 // BuildCore constructs the normalized runtime graph without attaching a transport host.
 func BuildCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core, error) {
+	return buildCore(ctx, cfg, nil)
+}
+
+// BuildCoreWithLocalModels constructs the normalized runtime graph with the
+// validated model collaborators supplied by the application composition root.
+func BuildCoreWithLocalModels(
+	ctx context.Context,
+	cfg *runtimehost.Config,
+	localModels LocalModelDomain,
+) (*runtimehost.Core, error) {
+	return buildCore(ctx, cfg, &localModels)
+}
+
+func buildCore(
+	ctx context.Context,
+	cfg *runtimehost.Config,
+	localModels *LocalModelDomain,
+) (*runtimehost.Core, error) {
 	if err := runtimehost.ValidateReplayModeConfig(cfg); err != nil {
 		return nil, err
 	}
@@ -222,7 +258,13 @@ func BuildCore(ctx context.Context, cfg *runtimehost.Config) (*runtimehost.Core,
 		return nil, err
 	}
 	clock := ClockForCompose(cfg, load)
-	collaborators := NewCollaborators(cfg, clock, root.BaseLogger, NewSessionsRegistry())
+	sessions := NewSessionsRegistry()
+	var collaborators Collaborators
+	if localModels == nil {
+		collaborators = NewCollaborators(cfg, clock, root.BaseLogger, sessions)
+	} else {
+		collaborators = NewCollaboratorsWithLocalModels(cfg, clock, root.BaseLogger, sessions, *localModels)
+	}
 	return ComposeCore(
 		ctx,
 		cfg,

@@ -69,6 +69,22 @@ func (fs *FactoryService) InvokeModel(ctx context.Context, modelName string, req
 	return fs.requireModelService().InvokeModel(ctx, modelName, request)
 }
 
+// CurrentModelRuntimeConfig returns the active runtime configuration used by
+// the model service. The lookup remains dynamic across Current Factory changes.
+func (fs *FactoryService) CurrentModelRuntimeConfig() *factoryconfig.LoadedFactoryConfig {
+	return fs.currentRuntimeConfig()
+}
+
+// BuildModelInvocationExecutor adapts the compatibility service shell to the
+// explicit model-service invocation boundary assembled by pkg/wire.
+func (fs *FactoryService) BuildModelInvocationExecutor(
+	runtimeCfg *factoryconfig.LoadedFactoryConfig,
+	factoryCfg *interfaces.FactoryConfig,
+	workerName string,
+) (workers.WorkstationRequestExecutor, error) {
+	return fs.modelInvocationExecutor(runtimeCfg, factoryCfg, workerName)
+}
+
 type modelPullMetricsHostAdapter struct {
 	inner ModelPullMetricsRecorder
 }

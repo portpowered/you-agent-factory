@@ -20,7 +20,10 @@ func InjectFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig
 		return nil, err
 	}
 	registry := provideFactorySessionsRegistry()
-	v := provideLocalModelDomain(cfg)
+	v, err := provideLocalModelDomain(cfg)
+	if err != nil {
+		return nil, err
+	}
 	factoryConfigLoadResult, err := provideFactoryConfigLoad(cfg, factoryServiceRoot)
 	if err != nil {
 		return nil, err
@@ -35,6 +38,11 @@ func InjectFactoryService(ctx context.Context, cfg *service.FactoryServiceConfig
 	if err != nil {
 		return nil, err
 	}
-	factoryService := provideFactoryService(factoryCore, cfg)
+	wireFactoryServiceShell := provideFactoryServiceShell(factoryCore)
+	modelAPI, err := provideModelService(factoryCore, wireFactoryServiceShell, cfg)
+	if err != nil {
+		return nil, err
+	}
+	factoryService := provideFactoryService(wireFactoryServiceShell, cfg, modelAPI)
 	return factoryService, nil
 }

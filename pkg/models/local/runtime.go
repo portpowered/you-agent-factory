@@ -341,6 +341,12 @@ func NewOmniVoiceRuntime(runner workers.CommandRunner) Runtime {
 	return &omniVoiceLocalRuntime{runner: runner}
 }
 
+// DefaultRuntime returns the package-owned local invocation runtime. Selecting
+// it is inert; construction does not load model assets or start a process.
+func DefaultRuntime() Runtime {
+	return NewOmniVoiceRuntime(nil)
+}
+
 func (r *omniVoiceLocalRuntime) Supports(resource interfaces.ResourceConfig, worker *interfaces.WorkerConfig) bool {
 	if worker == nil {
 		return false

@@ -15,12 +15,79 @@ import (
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
+	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestLocalModelProvidersValidateAndRetainExplicitEdgesWithoutStartingProcess(t *testing.T) {
+	t.Parallel()
+
+	assets := localmodels.NewAssetPuller(t.TempDir())
+	runtime := localmodels.NewOmniVoiceRuntime(nil)
+	launcher := &inertModelProcessLauncher{}
+	domain, err := provideLocalModelDomain(&service.FactoryServiceConfig{
+		ModelAssets:               assets,
+		LocalModelRuntimeOverride: runtime,
+		Logger:                    zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatalf("provideLocalModelDomain() error = %v", err)
+	}
+	if domain.Assets != assets || domain.Runtime != runtime || domain.Manager == nil || domain.Host == nil || domain.LeaseExecution == nil {
+		t.Fatalf("local model domain = %+v, want exact explicit assets/runtime and complete managed collaborators", domain)
+	}
+	constructed, err := constructLocalModelDomain(localModelConstruction{
+		Assets: assets, Runtime: runtime, ProcessLauncher: launcher,
+	})
+	if err != nil || constructed.Host == nil {
+		t.Fatalf("constructLocalModelDomain() = (%+v, %v), want explicit process edge", constructed, err)
+	}
+	if launcher.starts != 0 {
+		t.Fatalf("process starts during graph construction = %d, want zero", launcher.starts)
+	}
+
+	tests := []struct {
+		name  string
+		input localModelConstruction
+		want  string
+	}{
+		{name: "pull and cache", input: localModelConstruction{Runtime: runtime, ProcessLauncher: launcher}, want: "asset puller"},
+		{name: "invocation runtime", input: localModelConstruction{Assets: assets, ProcessLauncher: launcher}, want: "local invocation runtime"},
+		{name: "process", input: localModelConstruction{Assets: assets, Runtime: runtime}, want: "process launcher"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := constructLocalModelDomain(test.input)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("constructLocalModelDomain() = (%+v, %v), want error containing %q", got, err, test.want)
+			}
+		})
+	}
+}
+
+func TestModelServiceProviderRejectsMissingExplicitClock(t *testing.T) {
+	t.Parallel()
+
+	core := &service.FactoryCore{}
+	shell := factoryServiceShell{Service: service.NewFactoryServiceFromCore(core)}
+	models, err := provideModelService(core, shell, &service.FactoryServiceConfig{})
+	if models != nil || err == nil || !strings.Contains(err.Error(), "clock is required") {
+		t.Fatalf("provideModelService() = (%T, %v), want missing-clock construction error", models, err)
+	}
+}
+
+type inertModelProcessLauncher struct{ starts int }
+
+func (l *inertModelProcessLauncher) Start(context.Context, modelhost.ProcessStartSpec) (modelhost.ManagedProcess, error) {
+	l.starts++
+	return nil, errors.New("unexpected process start")
+}
 
 func TestProductionGraphSidecarsStartAndStopThroughInitializer(t *testing.T) {
 	dir := t.TempDir()

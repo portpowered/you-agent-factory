@@ -12,6 +12,7 @@ import (
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	"github.com/portpowered/infinite-you/pkg/initializer"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil"
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
@@ -157,6 +158,8 @@ func TestConfigWithFunctionalEdgesCopiesOnlyForReplacement(t *testing.T) {
 	t.Parallel()
 	configured := &processCommandRunner{}
 	injected := &processCommandRunner{}
+	modelAssets := localmodels.NewAssetPuller(t.TempDir())
+	modelRuntime := localmodels.NewOmniVoiceRuntime(nil)
 	cfg := &service.FactoryServiceConfig{ProviderCommandRunnerOverride: configured}
 
 	production := configWithFunctionalEdges(cfg, FunctionalEdges{})
@@ -164,8 +167,13 @@ func TestConfigWithFunctionalEdgesCopiesOnlyForReplacement(t *testing.T) {
 		t.Fatalf("production config = %+v, want original config and provider runner", production)
 	}
 
-	functional := configWithFunctionalEdges(cfg, FunctionalEdges{ProviderCommandRunner: injected})
-	if functional == cfg || functional.ProviderCommandRunnerOverride != injected {
+	functional := configWithFunctionalEdges(cfg, FunctionalEdges{
+		ProviderCommandRunner: injected,
+		ModelAssets:           modelAssets,
+		LocalModelRuntime:     modelRuntime,
+	})
+	if functional == cfg || functional.ProviderCommandRunnerOverride != injected ||
+		functional.ModelAssets != modelAssets || functional.LocalModelRuntimeOverride != modelRuntime {
 		t.Fatalf("functional config = %+v, want copied config with injected provider runner", functional)
 	}
 	if cfg.ProviderCommandRunnerOverride != configured {
