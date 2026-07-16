@@ -17,8 +17,9 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
+	"go.uber.org/zap"
 )
 
 func (fs *FactoryService) requireModelService() apisurface.ModelAPI {
@@ -190,9 +191,7 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		fs.invocationSkipPermissionsOverride(),
 		fs.providerOverride(),
 		nil,
-		fs.providerCommandRunnerOverride(),
-		fs.agyPTYAllocatorOverride(),
-		fs.commandRunnerOverride(),
+		fs.workerApplication(),
 		nil,
 		nil,
 		nil,
@@ -210,11 +209,12 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 	return workstationExecutor.Executor, nil
 }
 
-func (fs *FactoryService) agyPTYAllocatorOverride() agypty.PTYAllocator {
-	if fs == nil || fs.cfg == nil {
-		return nil
+func (fs *FactoryService) workerApplication() workerapplication.Components {
+	if fs != nil && fs.cfg != nil && fs.cfg.WorkerApplication.Valid() {
+		return fs.cfg.WorkerApplication
 	}
-	return fs.cfg.AgyPTYAllocatorOverride
+	components, _ := workerapplication.New(zap.NewNop(), workerapplication.Edges{})
+	return components
 }
 
 func (fs *FactoryService) factoryRunnerID() string {
@@ -229,20 +229,6 @@ func (fs *FactoryService) providerOverride() workers.Provider {
 		return nil
 	}
 	return fs.coordinatorPolicy().providerOverride
-}
-
-func (fs *FactoryService) providerCommandRunnerOverride() workers.CommandRunner {
-	if fs == nil {
-		return nil
-	}
-	return fs.coordinatorPolicy().providerCommandRunnerOverride
-}
-
-func (fs *FactoryService) commandRunnerOverride() workers.CommandRunner {
-	if fs == nil {
-		return nil
-	}
-	return fs.coordinatorPolicy().commandRunnerOverride
 }
 
 func (fs *FactoryService) invocationSkipPermissionsOverride() *bool {

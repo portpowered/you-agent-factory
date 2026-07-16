@@ -14,6 +14,7 @@ import (
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 )
 
@@ -157,13 +158,22 @@ func buildProcessGraph(
 		if len(invocationBuilders) > 0 {
 			invocationBuilder = invocationBuilders[0]
 		}
+		var sharedWorkerApplication workerapplication.Components
 		application, err := runcli.BuildApplication(ctx, runConfig, func(
 			buildCtx context.Context,
 			cfg *service.FactoryServiceConfig,
 		) (runcli.RuntimeRunner, error) {
-			return buildRunner(buildCtx, configWithFunctionalEdges(cfg, edges), applicationMode)
+			configured, err := configWithFunctionalEdges(cfg, edges, &sharedWorkerApplication)
+			if err != nil {
+				return nil, err
+			}
+			return buildRunner(buildCtx, configured, applicationMode)
 		}, func(buildCtx context.Context, cfg *service.FactoryServiceConfig) (runcli.InvocationRunner, error) {
-			return invocationBuilder(buildCtx, configWithFunctionalEdges(cfg, edges))
+			configured, err := configWithFunctionalEdges(cfg, edges, &sharedWorkerApplication)
+			if err != nil {
+				return nil, err
+			}
+			return invocationBuilder(buildCtx, configured)
 		})
 		if err != nil {
 			return nil, fmt.Errorf("construct run graph: %w", err)
@@ -179,38 +189,37 @@ func buildProcessGraph(
 func configWithFunctionalEdges(
 	cfg *service.FactoryServiceConfig,
 	edges FunctionalEdges,
-) *service.FactoryServiceConfig {
-	if cfg == nil || !hasFunctionalEdges(edges) {
-		return cfg
+	shared ...*workerapplication.Components,
+) (*service.FactoryServiceConfig, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("construct worker application: service config is required")
 	}
 	copied := *cfg
-	if !isNil(edges.ProviderCommandRunner) {
-		copied.ProviderCommandRunnerOverride = edges.ProviderCommandRunner
+	if len(shared) > 0 && shared[0] != nil && shared[0].Valid() {
+		copied.WorkerApplication = *shared[0]
+		return &copied, nil
 	}
-	if !isNil(edges.ScriptCommandRunner) {
-		copied.CommandRunnerOverride = edges.ScriptCommandRunner
+	hostedClock := edges.HostedClock
+	if hostedClock == nil {
+		hostedClock, _ = cfg.Clock.(clockwork.Clock)
 	}
-	if !isNil(edges.AgyPTYAllocator) {
-		copied.AgyPTYAllocatorOverride = edges.AgyPTYAllocator
+	components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{
+		ProviderCommandRunner: edges.ProviderCommandRunner,
+		ScriptCommandRunner:   edges.ScriptCommandRunner,
+		AgyPTYAllocator:       edges.AgyPTYAllocator,
+		HostedHTTPClient:      edges.HostedHTTPClient,
+		HostedLinearEndpoint:  edges.HostedLinearEndpoint,
+		HostedSecretResolver:  edges.HostedSecretResolver,
+		HostedClock:           hostedClock,
+	})
+	if err != nil {
+		return nil, err
 	}
-	if edges.HostedHTTPClient != nil {
-		copied.HostedPollerHTTPClient = edges.HostedHTTPClient
+	copied.WorkerApplication = components
+	if len(shared) > 0 && shared[0] != nil {
+		*shared[0] = components
 	}
-	if edges.HostedLinearEndpoint != "" {
-		copied.HostedLinearEndpoint = edges.HostedLinearEndpoint
-	}
-	if edges.HostedSecretResolver != nil {
-		copied.HostedPollerSecretResolver = edges.HostedSecretResolver
-	}
-	if edges.HostedClock != nil {
-		copied.HostedPollerClock = edges.HostedClock
-	}
-	return &copied
-}
-
-func hasFunctionalEdges(edges FunctionalEdges) bool {
-	return !isNil(edges.ProviderCommandRunner) || !isNil(edges.ScriptCommandRunner) || !isNil(edges.AgyPTYAllocator) ||
-		edges.HostedHTTPClient != nil || edges.HostedLinearEndpoint != "" || edges.HostedSecretResolver != nil || edges.HostedClock != nil
+	return &copied, nil
 }
 
 func buildMCPProcessGraph(

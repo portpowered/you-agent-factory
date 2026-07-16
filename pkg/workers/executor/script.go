@@ -46,14 +46,57 @@ type ScriptEventRecorder func(factoryapi.FactoryEvent)
 type ScriptExecutorOption func(*ScriptExecutor)
 
 // ScriptConstructionInput contains the required process edge and definition
-// for one script worker. Callers that need production behavior should use
-// NewProductionScriptExecutor; functional graphs should supply their selected
-// CommandRunner directly.
+// for one script worker. Production composition uses
+// NewProductionScriptFactory; functional graphs supply their selected command
+// runner to NewScriptFactory.
 type ScriptConstructionInput struct {
 	Definition    *interfaces.WorkerConfig
 	CommandRunner CommandRunner
 	Logger        logging.Logger
 	Options       []ScriptExecutorOption
+}
+
+// ScriptFactory is a validated, reusable script-worker construction component.
+type ScriptFactory struct {
+	commandRunner CommandRunner
+}
+
+// NewScriptFactory validates the command edge selected by process composition.
+func NewScriptFactory(runner CommandRunner) (*ScriptFactory, error) {
+	if runner == nil {
+		return nil, errors.New("construct script worker factory: command runner is required")
+	}
+	return &ScriptFactory{commandRunner: runner}, nil
+}
+
+// NewProductionScriptFactory applies the package-owned production command edge.
+func NewProductionScriptFactory() (*ScriptFactory, error) {
+	return NewScriptFactory(workerprocess.ExecCommandRunner{})
+}
+
+// New constructs one script worker from the factory's validated command edge.
+func (f *ScriptFactory) New(
+	def *interfaces.WorkerConfig,
+	logger logging.Logger,
+	opts ...ScriptExecutorOption,
+) (*ScriptExecutor, error) {
+	if f == nil {
+		return nil, errors.New("construct script worker: factory is required")
+	}
+	return NewScriptExecutorFromInput(ScriptConstructionInput{
+		Definition: def, CommandRunner: f.commandRunner, Logger: logger, Options: opts,
+	})
+}
+
+// WithCommandRunner returns a validated copy with a per-runtime wrapper edge.
+func (f *ScriptFactory) WithCommandRunner(runner CommandRunner) (*ScriptFactory, error) {
+	if f == nil {
+		return nil, errors.New("construct script worker factory: base factory is required")
+	}
+	if runner == nil {
+		return f, nil
+	}
+	return NewScriptFactory(runner)
 }
 
 // NewScriptExecutorFromInput constructs a script executor from explicit
@@ -71,21 +114,6 @@ func NewScriptExecutorFromInput(input ScriptConstructionInput) (*ScriptExecutor,
 		input.Logger,
 		input.Options...,
 	), nil
-}
-
-// NewProductionScriptExecutor applies the package-owned production command
-// edge while sharing the same validated constructor as functional graphs.
-func NewProductionScriptExecutor(
-	def *interfaces.WorkerConfig,
-	logger logging.Logger,
-	opts ...ScriptExecutorOption,
-) (*ScriptExecutor, error) {
-	return NewScriptExecutorFromInput(ScriptConstructionInput{
-		Definition:    def,
-		CommandRunner: workerprocess.ExecCommandRunner{},
-		Logger:        logger,
-		Options:       opts,
-	})
 }
 
 // WithScriptEventRecorder records script-boundary events on the canonical event

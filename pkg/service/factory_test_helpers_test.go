@@ -18,8 +18,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/config"
 	"github.com/portpowered/infinite-you/pkg/factory"
+	factory_context "github.com/portpowered/infinite-you/pkg/factory/context"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	sessioninvocation "github.com/portpowered/infinite-you/pkg/factory/sessions/invocation"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -32,8 +34,74 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
+	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
+	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
+	workerprovider "github.com/portpowered/infinite-you/pkg/workers/provider"
 	"go.uber.org/zap"
 )
+
+func buildHostedWorkersConfigForServiceTest(
+	cfg *FactoryServiceConfig,
+	logger *zap.Logger,
+	clock factory.Clock,
+) hostedworkers.Config {
+	hostedClock, _ := clock.(clockwork.Clock)
+	if cfg != nil && cfg.HostedPollerClock != nil {
+		hostedClock = cfg.HostedPollerClock
+	}
+	components, _ := workerapplication.New(logger, workerapplication.Edges{
+		HostedHTTPClient: cfg.HostedPollerHTTPClient, HostedLinearEndpoint: strings.TrimSpace(cfg.HostedLinearEndpoint),
+		HostedSecretResolver: cfg.HostedPollerSecretResolver, HostedClock: hostedClock,
+	})
+	copied := *cfg
+	copied.WorkerApplication = components
+	return buildHostedWorkersConfig(&copied, logger, clock)
+}
+
+// loadWorkersFromConfig preserves the package-test helper shape while
+// production construction consumes the composed worker application directly.
+func loadWorkersFromConfig(
+	factoryDir string,
+	factoryCfg *interfaces.FactoryConfig,
+	factoryRunnerID string,
+	runtimeCfg interfaces.RuntimeConfigLookup,
+	workflowContext *factory_context.FactoryContext,
+	logger logging.Logger,
+	skipBuiltInRunnerPrerequisiteValidation bool,
+	invocationSkipPermissionsOverride *bool,
+	providerOverride workerprovider.Provider,
+	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
+	providerCommandRunner workers.CommandRunner,
+	commandRunner workers.CommandRunner,
+	scriptRecorder workers.ScriptEventRecorder,
+	inferenceRecorder workerprovider.InferenceEventRecorder,
+	modelRecorder modelEventRecorder,
+	agentRunRecorder workeragentrun.AgentRunEventRecorder,
+	now func() time.Time,
+	modelDomain localModelDomain,
+	agyPTYAllocators ...agypty.PTYAllocator,
+) ([]factory.FactoryOption, error) {
+	var allocator agypty.PTYAllocator
+	if len(agyPTYAllocators) > 0 {
+		allocator = agyPTYAllocators[0]
+	}
+	components, err := workerapplication.New(zap.NewNop(), workerapplication.Edges{
+		ProviderCommandRunner: providerCommandRunner,
+		ScriptCommandRunner:   commandRunner,
+		AgyPTYAllocator:       allocator,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return loadWorkersFromApplication(
+		factoryDir, factoryCfg, factoryRunnerID, runtimeCfg, workflowContext, logger,
+		skipBuiltInRunnerPrerequisiteValidation, invocationSkipPermissionsOverride,
+		providerOverride, inferenceProgressPublisher, components, scriptRecorder,
+		inferenceRecorder, modelRecorder, agentRunRecorder, now, modelDomain,
+	)
+}
 
 func minimalFactoryConfig() map[string]any {
 	return factoryfixtures.MinimalFactoryConfig()

@@ -271,7 +271,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_StartsHostedLinearPoller(t *tes
 	svc := &FactoryService{
 		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
 		logger:        zap.NewNop(),
-		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.NewNop(), nil),
+		hostedWorkers: buildHostedWorkersConfigForServiceTest(svcCfg, zap.NewNop(), nil),
 	}
 	initializeWorkersSchedulerForTest(svc)
 	poller := interfaces.FactoryWorkstationConfig{
@@ -396,7 +396,7 @@ func TestFactoryService_StopLiveRuntimeSidecars_StopsHostedLinearPollerAndLogsLi
 	svc := &FactoryService{
 		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
 		logger:        zap.New(logCore),
-		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.New(logCore), nil),
+		hostedWorkers: buildHostedWorkersConfigForServiceTest(svcCfg, zap.New(logCore), nil),
 	}
 	initializeWorkersSchedulerForTest(svc)
 	poller := interfaces.FactoryWorkstationConfig{
@@ -456,7 +456,7 @@ func TestFactoryService_StartLiveRuntimeSidecars_DisablesUnsupportedHostedProvid
 	svc := &FactoryService{
 		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
 		logger:        zap.New(logCore),
-		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.New(logCore), nil),
+		hostedWorkers: buildHostedWorkersConfigForServiceTest(svcCfg, zap.New(logCore), nil),
 	}
 	initializeWorkersSchedulerForTest(svc)
 	poller := interfaces.FactoryWorkstationConfig{
@@ -1016,7 +1016,7 @@ func newHostedLinearPollerServiceFixture(
 	svc := &FactoryService{
 		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
 		logger:        zap.NewNop(),
-		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.NewNop(), nil),
+		hostedWorkers: buildHostedWorkersConfigForServiceTest(svcCfg, zap.NewNop(), nil),
 	}
 	initializeWorkersSchedulerForTest(svc)
 	return hostedLinearPollerServiceFixture{
@@ -1090,7 +1090,7 @@ func newConcurrentHostedAndScriptPollerFixture(t *testing.T, server *httptest.Se
 	svc := &FactoryService{
 		policy:        serviceCoordinatorPolicyFromConfig(svcCfg),
 		logger:        zap.NewNop(),
-		hostedWorkers: buildHostedWorkersConfig(svcCfg, zap.NewNop(), nil),
+		hostedWorkers: buildHostedWorkersConfigForServiceTest(svcCfg, zap.NewNop(), nil),
 	}
 	initializeWorkersSchedulerForTest(svc)
 	return concurrentHostedAndScriptPollerFixture{

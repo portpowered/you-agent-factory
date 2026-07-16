@@ -34,12 +34,15 @@ import (
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 
 	"go.uber.org/zap"
 )
+
+type secretResolver = hostedworkers.SecretResolver
 
 func portableRecordingArtifacts(artifacts []factoryapi.FactoryArtifact, checkpoint *recording.CanonicalCheckpoint) []recording.CanonicalArtifact {
 	result := make([]recording.CanonicalArtifact, 0, len(artifacts))
@@ -91,8 +94,6 @@ type SimpleDashboardRenderer func(input SimpleDashboardRenderInput)
 // cancelled. Callers (e.g. CLI) provide their own implementation to avoid
 // import cycles between service and api packages.
 type APIServerStarter func(ctx context.Context, runtime apisurface.APISurface, port int, logger *zap.Logger) error
-
-type secretResolver = hostedworkers.SecretResolver
 
 // ErrFactoryActivationRequiresIdle reports that runtime replacement was
 // attempted while the current runtime still had active work.
@@ -380,11 +381,8 @@ type FactoryServiceConfig struct {
 	// (prompt rendering, AgentExecutor, stop-token evaluation) without
 	// shelling out to a real CLI tool.
 	ProviderOverride workers.Provider
-	// ProviderCommandRunnerOverride, when non-nil, is injected into the
-	// ScriptWrapProvider used by MODEL_WORKER executors. This preserves the
-	// real provider request construction while letting tests fake the CLI
-	// subprocess boundary and assert command details, env, stdin, stdout,
-	// stderr, and exit failures.
+	// Legacy direct-service compatibility edges. Canonical process construction
+	// converts FunctionalEdges into WorkerApplication before runtime assembly.
 	ProviderCommandRunnerOverride workers.CommandRunner
 	AgyPTYAllocatorOverride       agypty.PTYAllocator
 	// SkipBuiltInRunnerPrerequisiteValidation disables PATH-style built-in
@@ -397,22 +395,15 @@ type FactoryServiceConfig struct {
 	// (nil, nil) from Load signals "no config available" and the
 	// workstation is skipped. Tests use this to inject workstation
 	// definitions without requiring files on disk.
-	WorkstationLoader factoryconfig.WorkstationLoader
-	// CommandRunnerOverride, when non-nil, is injected into SCRIPT_WORKER
-	// executors instead of the default ExecCommandRunner. This allows
-	// tests to mock os/exec at the CommandRunner level while still
-	// exercising the full ScriptExecutor pipeline (arg templates, env
-	// merging, exit-code routing).
-	CommandRunnerOverride workers.CommandRunner
-	// HostedPollerHTTPClient, when non-nil, overrides the default HTTP client
-	// used by repository-owned hosted pollers such as the built-in Linear
-	// integration.
-	HostedPollerHTTPClient *http.Client
-	// HostedPollerSecretResolver overrides the production env/file lookup.
+	WorkstationLoader          factoryconfig.WorkstationLoader
+	CommandRunnerOverride      workers.CommandRunner
+	HostedPollerHTTPClient     *http.Client
 	HostedPollerSecretResolver secretResolver
-	// HostedLinearEndpoint overrides Linear GraphQL; empty uses the official endpoint.
-	HostedLinearEndpoint string
-	HostedPollerClock    clockwork.Clock // Nil uses the graph clock or a real clock.
+	HostedLinearEndpoint       string
+	HostedPollerClock          clockwork.Clock
+	// WorkerApplication is the process-composed worker/provider, script, and
+	// hosted-worker component shared by every runtime session.
+	WorkerApplication workerapplication.Components
 	// ModelCacheDir optionally overrides the default managed local-model cache
 	// directory under ~/.agent-factory/models.
 	ModelCacheDir string

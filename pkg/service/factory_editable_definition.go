@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	factoryconfig "github.com/portpowered/infinite-you/pkg/config"
 	configpersist "github.com/portpowered/infinite-you/pkg/config/persist"
 	"github.com/portpowered/infinite-you/pkg/factory"
@@ -17,6 +18,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/service/factorysave"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
@@ -683,6 +685,25 @@ func BuildFactoryCore(ctx context.Context, cfg *FactoryServiceConfig) (*FactoryC
 		return nil, err
 	}
 	clock := ServiceClockForCompose(cfg, load)
+	if !cfg.WorkerApplication.Valid() {
+		hostedClock, _ := clock.(clockwork.Clock)
+		if cfg.HostedPollerClock != nil {
+			hostedClock = cfg.HostedPollerClock
+		}
+		components, err := workerapplication.New(root.BaseLogger, workerapplication.Edges{
+			ProviderCommandRunner: cfg.ProviderCommandRunnerOverride,
+			ScriptCommandRunner:   cfg.CommandRunnerOverride,
+			AgyPTYAllocator:       cfg.AgyPTYAllocatorOverride,
+			HostedHTTPClient:      cfg.HostedPollerHTTPClient,
+			HostedLinearEndpoint:  cfg.HostedLinearEndpoint,
+			HostedSecretResolver:  cfg.HostedPollerSecretResolver,
+			HostedClock:           hostedClock,
+		})
+		if err != nil {
+			return nil, err
+		}
+		cfg.WorkerApplication = components
+	}
 	hostedWorkers := NewHostedWorkersConfig(cfg, root.BaseLogger, clock)
 	collaborators := NewFactoryServiceCollaborators(
 		cfg, clock, root.BaseLogger, NewFactorySessionsRegistry(), hostedWorkers,

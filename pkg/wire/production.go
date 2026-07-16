@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jonboulle/clockwork"
 	"github.com/portpowered/infinite-you/pkg/composebridge"
 	"github.com/portpowered/infinite-you/pkg/factory"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
@@ -21,6 +22,7 @@ import (
 	transportmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/composition"
 	mcpfactorysession "github.com/portpowered/infinite-you/pkg/transports/mcp/factorysession"
 	mcpserver "github.com/portpowered/infinite-you/pkg/transports/mcp/server"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
 	"go.uber.org/zap"
@@ -139,6 +141,22 @@ func Build(ctx context.Context, inputs Inputs) (*Graph, error) {
 	}
 
 	cfg := *inputs.Config
+	if !cfg.WorkerApplication.Valid() {
+		hostedClock, _ := cfg.Clock.(clockwork.Clock)
+		components, err := workerapplication.New(cfg.Logger, workerapplication.Edges{
+			ProviderCommandRunner: cfg.ProviderCommandRunnerOverride,
+			ScriptCommandRunner:   cfg.CommandRunnerOverride,
+			AgyPTYAllocator:       cfg.AgyPTYAllocatorOverride,
+			HostedHTTPClient:      cfg.HostedPollerHTTPClient,
+			HostedLinearEndpoint:  cfg.HostedLinearEndpoint,
+			HostedSecretResolver:  cfg.HostedPollerSecretResolver,
+			HostedClock:           hostedClock,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("build production application graph: %w", err)
+		}
+		cfg.WorkerApplication = components
+	}
 	core, err := composebridge.BuildCore(ctx, &cfg)
 	if err != nil {
 		return nil, fmt.Errorf("build production application graph: construct runtime core: %w", err)

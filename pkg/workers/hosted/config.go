@@ -76,6 +76,12 @@ func NewLinearPoller(deps LinearPollerDependencies) (*LinearPoller, error) {
 	}, nil
 }
 
+// NewConfig constructs production-equivalent hosted runtime edges without
+// starting a poller. Process composition may replace any explicit edge.
+func NewConfig(config Config) Config {
+	return config.withProductionDefaults()
+}
+
 func (c Config) withProductionDefaults() Config {
 	c.Logger = c.logger()
 	c.Clock = c.supervisorClock()

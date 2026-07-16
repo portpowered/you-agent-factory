@@ -40,7 +40,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
-	"github.com/portpowered/infinite-you/pkg/workers/agypty"
+	workerapplication "github.com/portpowered/infinite-you/pkg/workers/application"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 	workeragentrun "github.com/portpowered/infinite-you/pkg/workers/executor/agentrun"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
@@ -168,6 +168,7 @@ type runtimeBundleBuildInput struct {
 	providerOverride              workers.Provider
 	providerCommandRunner         workers.CommandRunner
 	commandRunnerOverride         workers.CommandRunner
+	workerApplication             workerapplication.Components
 	additionalFactoryOpts         []factory.FactoryOption
 	prefetchedLocalModels         LocalModelDomain
 	inferenceProgressPublisher    workerprovider.InferenceProgressPublisher
@@ -555,7 +556,7 @@ func loadRuntimeBundleWorkerOptions(
 	eventHistory *factoryevents.FactoryEventHistory,
 	localModels LocalModelDomain,
 ) ([]factory.FactoryOption, error) {
-	workerOpts, err := loadWorkersFromConfig(
+	workerOpts, err := loadWorkersFromApplication(
 		input.loadedFactoryCfg.FactoryDir(),
 		input.loadedFactoryCfg.FactoryConfig(),
 		effectiveFactoryRunnerID,
@@ -566,15 +567,13 @@ func loadRuntimeBundleWorkerOptions(
 		input.cfg.InvocationSkipPermissionsOverride,
 		input.providerOverride,
 		input.inferenceProgressPublisher,
-		wrapProviderCommandRunnerForProgress(input, input.providerCommandRunner),
-		input.commandRunnerOverride,
+		input.workerApplication,
 		eventHistory.RecordScriptEvent,
 		eventHistory.RecordInferenceEvent,
 		eventHistory.RecordModelEvent,
 		eventHistory.RecordAgentRunEvent,
 		input.clock.Now,
 		localModels,
-		input.cfg.AgyPTYAllocatorOverride,
 	)
 	if err != nil {
 		logger.Error("failed to load workers from config", zap.Error(err))
@@ -633,19 +632,14 @@ func closeRuntimeBundleSinks(logSink *logging.RuntimeLogSink, metricsSink *loggi
 }
 
 func buildHostedWorkersConfig(cfg *FactoryServiceConfig, logger *zap.Logger, clock factory.Clock) hostedworkers.Config {
+	if cfg != nil && cfg.WorkerApplication.Valid() {
+		return cfg.WorkerApplication.Hosted
+	}
 	hostedCfg := hostedworkers.Config{Logger: logger}
 	if supervisorClock, ok := clock.(clockwork.Clock); ok && supervisorClock != nil {
 		hostedCfg.Clock = supervisorClock
 	}
-	if cfg != nil {
-		hostedCfg.HTTPClient = cfg.HostedPollerHTTPClient
-		hostedCfg.SecretResolver = cfg.HostedPollerSecretResolver
-		hostedCfg.LinearEndpoint = strings.TrimSpace(cfg.HostedLinearEndpoint)
-		if cfg.HostedPollerClock != nil {
-			hostedCfg.Clock = cfg.HostedPollerClock
-		}
-	}
-	return hostedCfg
+	return hostedworkers.NewConfig(hostedCfg)
 }
 
 func (fs *FactoryService) dashboardLoop(ctx context.Context) {
@@ -720,7 +714,7 @@ func effectiveFactoryRunnerID(override string, factoryCfg *interfaces.FactoryCon
 
 // loadWorkersFromConfig instantiates worker executors from the loaded runtime config.
 // Workers missing AGENTS.md keep the existing noop behavior so topology-only tests continue to work.
-func loadWorkersFromConfig(
+func loadWorkersFromApplication(
 	factoryDir string,
 	factoryCfg *interfaces.FactoryConfig,
 	factoryRunnerID string,
@@ -731,25 +725,22 @@ func loadWorkersFromConfig(
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
-	providerCommandRunner workers.CommandRunner,
-	cmdRunner workers.CommandRunner,
+	workerApplication workerapplication.Components,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	modelRecorder modelEventRecorder,
 	agentRunRecorder workeragentrun.AgentRunEventRecorder,
 	now func() time.Time,
 	modelDomain localModelDomain,
-	agyPTYAllocators ...agypty.PTYAllocator,
 ) ([]factory.FactoryOption, error) {
 	var opts []factory.FactoryOption
 	logger.Info("loading workers from runtime config", "working-directory", factoryDir)
 	preflight := runnerSelectionPreflight{
-		skipCommandAvailability: providerOverride != nil || providerCommandRunner != nil || skipBuiltInRunnerPrerequisiteValidation,
+		skipCommandAvailability: providerOverride != nil || workerApplication.ProviderCommandInjected || skipBuiltInRunnerPrerequisiteValidation,
 	}
-	agyPTYAllocator, err := validateWorkerConstructionInputs(
-		factoryCfg, factoryRunnerID, runtimeCfg, preflight, invocationSkipPermissionsOverride, agyPTYAllocators,
-	)
-	if err != nil {
+	if err := validateWorkerConstructionInputs(
+		factoryCfg, factoryRunnerID, runtimeCfg, preflight, invocationSkipPermissionsOverride, workerApplication,
+	); err != nil {
 		return nil, err
 	}
 	for _, workerCfg := range factoryCfg.Workers {
@@ -760,7 +751,7 @@ func loadWorkersFromConfig(
 			opts = append(opts, factory.WithWorkerExecutor(workerCfg.Name, &workerexecutor.NoopExecutor{}))
 			continue
 		}
-		executor, err := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher, providerCommandRunner, agyPTYAllocator, cmdRunner, scriptRecorder, inferenceRecorder, modelRecorder, agentRunRecorder, now, modelDomain)
+		executor, err := buildWorkerExecutor(runtimeCfg, factoryCfg, workerCfg.Name, factoryRunnerID, workflowContext, logger, invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher, workerApplication, scriptRecorder, inferenceRecorder, modelRecorder, agentRunRecorder, now, modelDomain)
 		if err != nil {
 			return nil, fmt.Errorf("construct worker %q: %w", workerCfg.Name, err)
 		}
@@ -798,18 +789,18 @@ func validateWorkerConstructionInputs(
 	runtimeCfg interfaces.RuntimeConfigLookup,
 	preflight runnerSelectionPreflight,
 	invocationSkipPermissionsOverride *bool,
-	agyPTYAllocators []agypty.PTYAllocator,
-) (agypty.PTYAllocator, error) {
+	workerApplication workerapplication.Components,
+) error {
 	if factoryCfg == nil {
-		return nil, fmt.Errorf("factory config is required")
+		return fmt.Errorf("factory config is required")
 	}
 	if err := validateWorkerLoadPreflight(factoryCfg, factoryRunnerID, runtimeCfg, preflight, invocationSkipPermissionsOverride); err != nil {
-		return nil, err
+		return err
 	}
-	if len(agyPTYAllocators) == 0 {
-		return nil, nil
+	if !workerApplication.Valid() {
+		return fmt.Errorf("worker application components are required")
 	}
-	return agyPTYAllocators[0], nil
+	return nil
 }
 
 func validateWorkerLoadPreflight(
@@ -854,9 +845,7 @@ func buildWorkerExecutor(
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
-	providerCommandRunner workers.CommandRunner,
-	agyPTYAllocator agypty.PTYAllocator,
-	cmdRunner workers.CommandRunner,
+	workerApplication workerapplication.Components,
 	scriptRecorder workers.ScriptEventRecorder,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	modelRecorder modelEventRecorder,
@@ -881,8 +870,7 @@ func buildWorkerExecutor(
 			invocationSkipPermissionsOverride,
 			providerOverride,
 			inferenceProgressPublisher,
-			providerCommandRunner,
-			agyPTYAllocator,
+			workerApplication.Provider,
 			inferenceRecorder,
 			modelRecorder,
 			agentRunRecorder,
@@ -898,7 +886,7 @@ func buildWorkerExecutor(
 			factoryRunnerID,
 			workflowContext,
 			logger,
-			cmdRunner,
+			workerApplication.Script,
 			scriptRecorder,
 		)
 	default:
@@ -916,8 +904,7 @@ func buildProviderBackedWorkerExecutor(
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
-	providerCommandRunner workers.CommandRunner,
-	agyPTYAllocator agypty.PTYAllocator,
+	providerFactory *workerprovider.Factory,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	modelRecorder modelEventRecorder,
 	agentRunRecorder workeragentrun.AgentRunEventRecorder,
@@ -931,8 +918,7 @@ func buildProviderBackedWorkerExecutor(
 		invocationSkipPermissionsOverride,
 		providerOverride,
 		inferenceProgressPublisher,
-		providerCommandRunner,
-		agyPTYAllocator,
+		providerFactory,
 		inferenceRecorder,
 		now,
 	)
@@ -969,12 +955,11 @@ func providerBackedRunner(
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
-	providerCommandRunner workers.CommandRunner,
-	agyPTYAllocator agypty.PTYAllocator,
+	providerFactory *workerprovider.Factory,
 	inferenceRecorder workerprovider.InferenceEventRecorder,
 	now func() time.Time,
 ) (workers.Runner, error) {
-	runner, err := newProviderRunner(runtimeCfg, def, logger, invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher, providerCommandRunner, agyPTYAllocator)
+	runner, err := newProviderRunner(runtimeCfg, def, logger, invocationSkipPermissionsOverride, providerOverride, inferenceProgressPublisher, providerFactory)
 	if err != nil {
 		return nil, err
 	}
@@ -991,11 +976,13 @@ func newProviderRunner(
 	invocationSkipPermissionsOverride *bool,
 	providerOverride workerprovider.Provider,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
-	providerCommandRunner workers.CommandRunner,
-	agyPTYAllocator agypty.PTYAllocator,
+	providerFactory *workerprovider.Factory,
 ) (workers.Runner, error) {
 	if providerOverride != nil {
 		return workers.RunnerFromProvider(providerOverride), nil
+	}
+	if providerFactory == nil {
+		return nil, fmt.Errorf("provider worker factory is required")
 	}
 	opts := providerRunnerOptions(
 		runtimeCfg,
@@ -1003,24 +990,8 @@ func newProviderRunner(
 		logger,
 		invocationSkipPermissionsOverride,
 		inferenceProgressPublisher,
-		providerCommandRunner,
 	)
-	if providerCommandRunner == nil && agyPTYAllocator == nil {
-		return workerprovider.NewProductionProvider(opts...)
-	}
-	if providerCommandRunner == nil {
-		providerCommandRunner = workers.ExecCommandRunner{}
-	}
-	if agyPTYAllocator == nil {
-		var err error
-		agyPTYAllocator, err = agypty.NewDefaultPlatformAllocatorFactory().NewAllocator()
-		if err != nil {
-			return nil, fmt.Errorf("construct Agy PTY edge: %w", err)
-		}
-	}
-	return workerprovider.NewFromInput(workerprovider.ConstructionInput{
-		CommandRunner: providerCommandRunner, AgyPTYAllocator: agyPTYAllocator, Options: opts,
-	})
+	return providerFactory.New(opts...)
 }
 
 func providerRunnerOptions(
@@ -1029,7 +1000,6 @@ func providerRunnerOptions(
 	logger logging.Logger,
 	invocationSkipPermissionsOverride *bool,
 	inferenceProgressPublisher workerprovider.InferenceProgressPublisher,
-	providerCommandRunner workers.CommandRunner,
 ) []workerprovider.ScriptWrapProviderOption {
 	opts := []workerprovider.ScriptWrapProviderOption{
 		workerprovider.WithSkipPermissions(skippermissions.EffectiveSkipPermissions(
@@ -1049,9 +1019,6 @@ func providerRunnerOptions(
 			workerprovider.WithInferenceProgressPublisher(inferenceProgressPublisher),
 			workerprovider.WithResponseStreamExecutor(providerstructured.NewExecutor()),
 		)
-	}
-	if providerCommandRunner != nil {
-		opts = append(opts, workerprovider.WithProviderCommandRunner(providerCommandRunner))
 	}
 	return opts
 }
@@ -1083,19 +1050,14 @@ func buildScriptWorkerExecutor(
 	factoryRunnerID string,
 	workflowContext *factory_context.FactoryContext,
 	logger logging.Logger,
-	cmdRunner workers.CommandRunner,
+	scriptFactory *workerexecutor.ScriptFactory,
 	scriptRecorder workers.ScriptEventRecorder,
 ) (workers.WorkerExecutor, error) {
 	scriptOpts := scriptExecutorOptions(runtimeCfg, scriptRecorder)
-	var scriptExec *workerexecutor.ScriptExecutor
-	var err error
-	if cmdRunner != nil {
-		scriptExec, err = workerexecutor.NewScriptExecutorFromInput(workerexecutor.ScriptConstructionInput{
-			Definition: def, CommandRunner: cmdRunner, Logger: logger, Options: scriptOpts,
-		})
-	} else {
-		scriptExec, err = workerexecutor.NewProductionScriptExecutor(def, logger, scriptOpts...)
+	if scriptFactory == nil {
+		return nil, fmt.Errorf("script worker factory is required")
 	}
+	scriptExec, err := scriptFactory.New(def, logger, scriptOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1177,6 +1139,14 @@ func runtimeBuildConfigFromService(cfg *FactoryServiceConfig) runtimebuild.Confi
 	if cfg == nil {
 		return runtimebuild.Config{}
 	}
+	if !cfg.WorkerApplication.Valid() {
+		components, _ := workerapplication.New(cfg.Logger, workerapplication.Edges{
+			ProviderCommandRunner: cfg.ProviderCommandRunnerOverride,
+			ScriptCommandRunner:   cfg.CommandRunnerOverride,
+			AgyPTYAllocator:       cfg.AgyPTYAllocatorOverride,
+		})
+		cfg.WorkerApplication = components
+	}
 	applyOperatorDefaults := cfg != nil && cfg.ReplayPath == ""
 	operatorDefaults := operatorconfig.ResolvedDefaults{}
 	if cfg != nil {
@@ -1204,6 +1174,7 @@ func runtimeBuildConfigFromService(cfg *FactoryServiceConfig) runtimebuild.Confi
 		ProviderOverride:                        cfg.ProviderOverride,
 		ProviderCommandRunnerOverride:           cfg.ProviderCommandRunnerOverride,
 		CommandRunnerOverride:                   cfg.CommandRunnerOverride,
+		WorkerApplication:                       cfg.WorkerApplication,
 		LocalModelRuntimeOverride:               cfg.LocalModelRuntimeOverride,
 		ExtraOptions:                            cfg.ExtraOptions,
 	}
@@ -1237,6 +1208,7 @@ func newRuntimeBuildService(
 				providerOverride:      input.ProviderOverride,
 				providerCommandRunner: input.ProviderCommandRunner,
 				commandRunnerOverride: input.CommandRunnerOverride,
+				workerApplication:     input.WorkerApplication,
 				additionalFactoryOpts: input.AdditionalFactoryOpts,
 			}
 			if progressPublisherFactory != nil {
@@ -1252,26 +1224,6 @@ func newRuntimeBuildService(
 			}
 			return buildRuntimeBundle(ctx, bundleInput)
 		},
-	)
-}
-
-func wrapProviderCommandRunnerForProgress(
-	input runtimeBundleBuildInput,
-	runner workers.CommandRunner,
-) workers.CommandRunner {
-	if !input.inferenceProgressPublisherSet || input.inferenceProgressPublisher == nil {
-		return runner
-	}
-	if runner != nil {
-		return runner
-	}
-	var logger logging.Logger = logging.NoopLogger{}
-	if input.baseLogger != nil {
-		logger = logging.NewZapLogger(input.baseLogger, input.cfg != nil && input.cfg.Verbose)
-	}
-	return workerprovider.NewInferenceProgressPublishingCommandRunner(
-		input.inferenceProgressPublisher,
-		logger,
 	)
 }
 
@@ -1530,15 +1482,6 @@ func LoadFactoryConfigForStartup(
 // ClockForCompose selects the factory clock for the loaded replay artifact.
 func ClockForCompose(cfg *runtimehost.Config, load FactoryConfigLoadResult) factory.Clock {
 	return ServiceClockForCompose(FactoryServiceConfigFromRuntimeHost(cfg), load)
-}
-
-// HostedWorkersForCompose builds the hosted-workers collaborator from config.
-func HostedWorkersForCompose(
-	cfg *runtimehost.Config,
-	logger *zap.Logger,
-	clock factory.Clock,
-) hostedworkers.Config {
-	return NewHostedWorkersConfig(FactoryServiceConfigFromRuntimeHost(cfg), logger, clock)
 }
 
 // CloseRuntimeBundleSinksForCompose closes startup bundle sinks when compose fails.

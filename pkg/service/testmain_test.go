@@ -183,7 +183,7 @@ func TestBuildHostedWorkersConfig_DelegatesServiceConfigFields(t *testing.T) {
 		HostedLinearEndpoint:       " https://linear.example/graphql ",
 	}
 
-	got := buildHostedWorkersConfig(cfg, zap.NewNop(), nil)
+	got := buildHostedWorkersConfigForServiceTest(cfg, zap.NewNop(), nil)
 	if got.HTTPClient != client {
 		t.Fatal("hosted workers HTTP client was not wired from FactoryServiceConfig")
 	}
@@ -247,7 +247,7 @@ func startLocalModelInferenceTestServer(
 			newInferenceProgressPublisherFactory(sessions, root.BaseLogger),
 			newSessionDispatchCompletionObserverFactory(sessions),
 		),
-		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, root.BaseLogger, buildHostedWorkersConfig(cfg, root.BaseLogger, clock)),
+		WorkersScheduler: NewWorkersSchedulerService(cfg, clock, root.BaseLogger, buildHostedWorkersConfigForServiceTest(cfg, root.BaseLogger, clock)),
 	}
 	shell, err := ComposeFactoryService(
 		ctx,
@@ -256,7 +256,7 @@ func startLocalModelInferenceTestServer(
 		collaborators,
 		load,
 		clock,
-		buildHostedWorkersConfig(cfg, root.BaseLogger, clock),
+		buildHostedWorkersConfigForServiceTest(cfg, root.BaseLogger, clock),
 	)
 	if err != nil {
 		cancel()
