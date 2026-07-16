@@ -1022,7 +1022,7 @@
       "executionClass": "deterministic",
       "evidence": [
         {
-          "test": "tests/release/release_smoke_test.go::TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture",
+          "test": "tests/functional/runtime_api/api_required_session_events_test.go::TestCanonicalSessionFactoryEventStream_StreamsHistoryAtCustomerSSEBoundary",
           "boundary": "sse"
         }
       ],

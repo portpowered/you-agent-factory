@@ -80,7 +80,6 @@ func TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture(t *testing.T
 			t.Fatalf("visible texts = %#v, should retire %q", result.DashboardRenderEvidence.VisibleTexts, retired)
 		}
 	}
-	functionalevidence.Covers(t, "sse/getEventsBySessionId")
 }
 
 func TestReleaseSmokeHarness_FailingRenderedDashboardVerificationReturnsStructuredFailure(t *testing.T) {

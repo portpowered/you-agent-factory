@@ -135,7 +135,7 @@ func applyReviewedEvidence(scenario *Scenario) {
 		scenario.Status = StatusPartial
 		scenario.Lane = LaneShort
 		scenario.ReviewedReason = ""
-		scenario.Evidence = []Evidence{{Test: "tests/release/release_smoke_test.go::TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture", Boundary: InterfaceSSE}}
+		scenario.Evidence = []Evidence{{Test: "tests/functional/runtime_api/api_required_session_events_test.go::TestCanonicalSessionFactoryEventStream_StreamsHistoryAtCustomerSSEBoundary", Boundary: InterfaceSSE}}
 		scenario.Gap = "The customer SSE client decodes and observes session Factory Events, but no qualifying functional test proves that it recovers and continues after malformed JSON data."
 		scenario.SSE = &SSEDisposition{Required: true, Disposition: SSERequired, Scope: sessionEventsScope}
 	case globalEventsStableID:

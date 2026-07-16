@@ -14,7 +14,9 @@ import (
 
 const (
 	RequiredManifestFormatVersion = "required-functional-scenarios/v1"
+	canonicalManifestPath         = "contracts/functional-scenarios.json"
 
+	ViolationMissingScenario       = "missing-scenario"
 	ViolationMissingTest           = "missing-test"
 	ViolationRenamedTest           = "renamed-test"
 	ViolationSkippedTest           = "skipped-test"
@@ -88,11 +90,13 @@ func CheckRequiredScenarios(repositoryRoot string, manifest *RequiredManifest) e
 		return fmt.Errorf("check required functional scenarios: unknown formatVersion %q", manifest.FormatVersion)
 	}
 	seen := make(map[string]bool, len(manifest.Scenarios)+len(manifest.NonRequiredScenarios))
+	required := make(map[string]bool, len(manifest.Scenarios))
 	for _, scenario := range manifest.Scenarios {
 		if seen[scenario.StableID] {
 			return requiredViolation(scenario, ViolationInvalidClassification, "stable ID is declared more than once")
 		}
 		seen[scenario.StableID] = true
+		required[scenario.StableID] = true
 		if err := checkRequiredClassification(scenario); err != nil {
 			return err
 		}
@@ -107,6 +111,32 @@ func CheckRequiredScenarios(repositoryRoot string, manifest *RequiredManifest) e
 		seen[disposition.StableID] = true
 		if err := checkNonRequiredDisposition(disposition); err != nil {
 			return err
+		}
+	}
+	return checkCanonicalRequiredScenarios(repositoryRoot, required)
+}
+
+func checkCanonicalRequiredScenarios(repositoryRoot string, required map[string]bool) error {
+	filename := filepath.Join(repositoryRoot, filepath.FromSlash(canonicalManifestPath))
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return fmt.Errorf("read canonical functional scenario manifest %s: %w", filename, err)
+	}
+	manifest, err := DecodeManifest(data)
+	if err != nil {
+		return err
+	}
+	if err := ValidateManifest(manifest); err != nil {
+		return err
+	}
+	for _, scenario := range manifest.Scenarios {
+		if scenario.SSE == nil || !scenario.SSE.Required || required[scenario.StableID] {
+			continue
+		}
+		return RequiredViolation{
+			StableID: scenario.StableID,
+			Category: ViolationMissingScenario,
+			Detail:   "canonical reviewed scenario is required but has no required short-lane entry",
 		}
 	}
 	return nil

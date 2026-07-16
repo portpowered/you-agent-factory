@@ -23,6 +23,12 @@
       ]
     },
     {
+      "test": "tests/functional/runtime_api/api_required_session_events_test.go::TestCanonicalSessionFactoryEventStream_StreamsHistoryAtCustomerSSEBoundary",
+      "stableIds": [
+        "sse/getEventsBySessionId"
+      ]
+    },
+    {
       "test": "tests/functional/runtime_api/api_session_invocation_test.go::TestSessionInvocationAPI_ReturnsPrimaryResult",
       "stableIds": [
         "rest/invokeFactorySessionBySessionId"
@@ -50,12 +56,6 @@
       "test": "tests/release/release_smoke_test.go::TestGoInstallSmoke_InstallsCmdFactoryBinaryIntoCleanGOBIN",
       "stableIds": [
         "cli/you.docs"
-      ]
-    },
-    {
-      "test": "tests/release/release_smoke_test.go::TestReleaseSmokeHarness_RunsBuiltBinaryAgainstCanonicalFixture",
-      "stableIds": [
-        "sse/getEventsBySessionId"
       ]
     }
   ]

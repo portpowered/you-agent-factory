@@ -19,7 +19,7 @@ func TestRunChecksRepositoryRequiredScenarioManifest(t *testing.T) {
 	if err := run(config{root: root, manifestPath: defaultManifestPath}, &stdout); err != nil {
 		t.Fatalf("run() error = %v", err)
 	}
-	if got := stdout.String(); got != "[agent-factory:required-functional] 1 required short customer-boundary scenario(s) are current; 2 reviewed non-required SSE disposition(s) are explicit; the full functional tree is boundary-enforced; 38 unchanged legacy file(s) remain quarantined by the reviewed migration baseline\n" {
+	if got := stdout.String(); got != "[agent-factory:required-functional] 2 required short customer-boundary scenario(s) are current; 2 reviewed non-required SSE disposition(s) are explicit; the full functional tree is boundary-enforced; 38 unchanged legacy file(s) remain quarantined by the reviewed migration baseline\n" {
 		t.Fatalf("stdout = %q", got)
 	}
 }
@@ -46,6 +46,7 @@ func TestRunReturnsStableBoundaryDiagnostic(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
+	writeCommandCanonicalManifest(t, root)
 	writeCommandFixture(t, root, defaultManifestPath, `{"formatVersion":"required-functional-scenarios/v1","scenarios":[{"stableId":"cli/direct","test":"tests/functional/direct_test.go::TestDirect","interface":"cli","lane":"short","executionClass":"deterministic","customerBoundary":true}]}`)
 	writeCommandFixture(t, root, "tests/functional/direct_test.go", `package functional
 import "testing"
@@ -64,6 +65,7 @@ func TestRunReturnsStableBoundaryDiagnosticOutsideManifest(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
+	writeCommandCanonicalManifest(t, root)
 	writeCommandFixture(t, root, defaultManifestPath, `{"formatVersion":"required-functional-scenarios/v1","scenarios":[{"stableId":"cli/allowed","test":"tests/functional/allowed_test.go::TestAllowed","interface":"cli","lane":"short","executionClass":"deterministic","customerBoundary":true}]}`)
 	writeCommandFixture(t, root, "tests/functional/allowed_test.go", `package functional
 import "testing"
@@ -79,6 +81,11 @@ func direct() { service.BuildFactoryService() }
 	if err == nil || !strings.Contains(err.Error(), want) {
 		t.Fatalf("run() error = %v, want %q", err, want)
 	}
+}
+
+func writeCommandCanonicalManifest(t *testing.T, root string) {
+	t.Helper()
+	writeCommandFixture(t, root, "contracts/functional-scenarios.json", `{"formatVersion":"functional-scenario-manifest/v1","scenarios":[]}`)
 }
 
 func writeCommandFixture(t *testing.T, root, relativePath, content string) {

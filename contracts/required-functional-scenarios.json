@@ -8,6 +8,14 @@
       "lane": "short",
       "executionClass": "deterministic",
       "customerBoundary": true
+    },
+    {
+      "stableId": "sse/getEventsBySessionId",
+      "test": "tests/functional/runtime_api/api_required_session_events_test.go::TestCanonicalSessionFactoryEventStream_StreamsHistoryAtCustomerSSEBoundary",
+      "interface": "sse",
+      "lane": "short",
+      "executionClass": "deterministic",
+      "customerBoundary": true
     }
   ],
   "nonRequiredScenarios": [

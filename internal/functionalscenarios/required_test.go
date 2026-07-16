@@ -17,6 +17,7 @@ import "testing"
 
 func TestRequiredCustomerFlow(t *testing.T) {}
 `)
+	writeCanonicalManifestFixture(t, root, false)
 	if err := CheckRequiredScenarios(root, requiredFixture("tests/functional/api_test.go::TestRequiredCustomerFlow")); err != nil {
 		t.Fatalf("CheckRequiredScenarios() error = %v", err)
 	}
@@ -38,8 +39,23 @@ func TestCheckRequiredScenariosAcceptsReviewedNonRequiredSSEDispositions(t *test
 			},
 		},
 	}
-	if err := CheckRequiredScenarios(t.TempDir(), manifest); err != nil {
+	root := t.TempDir()
+	writeCanonicalManifestFixture(t, root, false)
+	if err := CheckRequiredScenarios(root, manifest); err != nil {
 		t.Fatalf("CheckRequiredScenarios() error = %v", err)
+	}
+}
+
+func TestCheckRequiredScenariosRejectsOmittedCanonicalRequiredSSE(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeCanonicalManifestFixture(t, root, true)
+	manifest := &RequiredManifest{FormatVersion: RequiredManifestFormatVersion}
+	err := CheckRequiredScenarios(root, manifest)
+	want := `required functional scenario "sse/getEventsBySessionId" [missing-scenario]: canonical reviewed scenario is required but has no required short-lane entry`
+	if err == nil || !strings.Contains(err.Error(), want) {
+		t.Fatalf("CheckRequiredScenarios() error = %v, want %q", err, want)
 	}
 }
 
@@ -196,4 +212,13 @@ func writeRequiredTestFixture(t *testing.T, root, relativePath, content string) 
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatalf("write fixture: %v", err)
 	}
+}
+
+func writeCanonicalManifestFixture(t *testing.T, root string, requiredSSE bool) {
+	t.Helper()
+	content := `{"formatVersion":"functional-scenario-manifest/v1","scenarios":[]}`
+	if requiredSSE {
+		content = `{"formatVersion":"functional-scenario-manifest/v1","scenarios":[{"stableId":"sse/getEventsBySessionId","name":"getEventsBySessionId","interface":"sse","classification":"event-stream","status":"partial","lane":"short","executionClass":"deterministic","evidence":[{"test":"tests/functional/events_test.go::TestEvents","boundary":"sse"}],"gap":"Malformed JSON recovery remains unproven.","sse":{"required":true,"disposition":"required","scope":"session Factory Event stream, including recovery after malformed JSON data"}}]}`
+	}
+	writeRequiredTestFixture(t, root, canonicalManifestPath, content)
 }
