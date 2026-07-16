@@ -20,7 +20,6 @@
     { "path": "tests/functional/replay_contracts/replay_regression_harness_long_test.go", "sha256": "f9bddc5ef57b442b8cab5994a18386c714d19a0af7083b50e41d666b0523a619" },
     { "path": "tests/functional/replay_contracts/replay_thin_event_dual_dispatch_smoke_long_helpers_test.go", "sha256": "f690bf955c1cbb892561fa3bd29890cb333febb0bd5c11afbae080a4ed747da7" },
     { "path": "tests/functional/replay_contracts/replay_thin_event_dual_dispatch_smoke_long_test.go", "sha256": "c1f2422c32ddc9e52820fe9e4e92ad5eee35fac33395466fa8da126b7f369501" },
-    { "path": "tests/functional/runtime_api/api_config_driven_submit_query_smoke_test.go", "sha256": "5c7f38d1e25134bbc9eb4d0f5bdb85865fabf86b567d7d56c6d737c3004144a1" },
     { "path": "tests/functional/runtime_api/api_generated_schema_deserialization_smoke_test.go", "sha256": "dd36e3fa10da581200dbb791aeccb892d3ab3b14144f113c220175aa41bf7cca" },
     { "path": "tests/functional/runtime_api/api_inference_events_test.go", "sha256": "7272cefd5dc3602a36e639278b6b12f853acbf8a6bf6145250a72134fc1b4b57" },
     { "path": "tests/functional/runtime_api/api_inference_events_thin_test.go", "sha256": "a0f81e15e0962ff731e2c9abb498247da7d84da619384dcf74950a64674aa2fe" },
