@@ -157,6 +157,78 @@ func TestInit_MigratesInvalidLegacyFactoryBeforePackagedInstallation(t *testing.
 	assertDirectorySnapshotUnchanged(t, canonicalDir, legacyBefore)
 }
 
+func TestInit_MigratesInvalidUnscopedLegacyFactoryAndLeavesNoise(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	legacyRoot := defaultpaths.LegacyNamedFactoriesRoot(homeDir)
+	legacyDir := filepath.Join(legacyRoot, "customer-factory")
+	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(unscoped legacy factory): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyDir, "factory.json"), []byte("{ temporarily invalid\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(invalid unscoped factory): %v", err)
+	}
+	legacyBefore := snapshotDirectoryContents(t, legacyDir)
+
+	noiseFile := filepath.Join(legacyRoot, "README.txt")
+	if err := os.WriteFile(noiseFile, []byte("leave this file in place\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(legacy noise): %v", err)
+	}
+	topLevelStagingDir := filepath.Join(legacyRoot, ".customer-factory.staging-orphan")
+	if err := os.MkdirAll(topLevelStagingDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(top-level staging): %v", err)
+	}
+	scopedStagingDir := filepath.Join(legacyRoot, "@unused", ".factory.staging-orphan")
+	if err := os.MkdirAll(scopedStagingDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(scoped staging): %v", err)
+	}
+
+	if _, err := Init(homeDir); err != nil {
+		t.Fatalf("Init() error = %v", err)
+	}
+
+	canonicalDir, err := factoryconfig.MapNamedFactoryDir(defaultpaths.NamedFactoriesRoot(homeDir), "customer-factory")
+	if err != nil {
+		t.Fatalf("MapNamedFactoryDir(canonical): %v", err)
+	}
+	if _, err := os.Stat(legacyDir); !os.IsNotExist(err) {
+		t.Fatalf("unscoped legacy factory still exists after migration: %v", err)
+	}
+	assertDirectorySnapshotUnchanged(t, canonicalDir, legacyBefore)
+	for _, path := range []string{noiseFile, topLevelStagingDir, scopedStagingDir} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("legacy noise path %s was changed: %v", path, err)
+		}
+	}
+}
+
+func TestInit_RejectsInvalidScopedLegacyDirectoryIdentity(t *testing.T) {
+	t.Parallel()
+
+	homeDir := t.TempDir()
+	legacyDir := filepath.Join(defaultpaths.LegacyNamedFactoriesRoot(homeDir), "@", "factory")
+	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(invalid scoped legacy factory): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyDir, "customer-edit.txt"), []byte("must remain in legacy root\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile(customer edit): %v", err)
+	}
+
+	_, err := Init(homeDir)
+	if err == nil {
+		t.Fatal("expected invalid legacy directory identity error")
+	}
+	for _, want := range []string{"map legacy factory directory", legacyDir, "invalid named factory name"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("Init() error = %q, want substring %q", err, want)
+		}
+	}
+	if _, statErr := os.Stat(legacyDir); statErr != nil {
+		t.Fatalf("invalid legacy directory was not preserved: %v", statErr)
+	}
+}
+
 func TestInit_RejectsLegacyRootThatIsNotADirectory(t *testing.T) {
 	t.Parallel()
 
