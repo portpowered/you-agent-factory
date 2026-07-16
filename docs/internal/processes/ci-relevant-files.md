@@ -63,3 +63,6 @@
   When a functional scenario needs a customer read-model from canonical events
   it already observed, use `testutil.BuildFactoryWorldView` instead of
   importing `pkg/factory/projections` from `tests/functional`.
+  Shared runtime-API helpers used by both short and `functionallong` tests must
+  be build-tag neutral; do not leave a long-lane dependency on a helper supplied
+  only by a removed or short-only test file.
