@@ -758,7 +758,7 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 			if err := applyPackagedSubagentInvocationResponse(newToken, in.workstation, in.result.output, in.runtimeConfig); err != nil {
 				return nil, err
 			}
-			quorum.ApplyWorkRelations(newToken, in.workstation, in.inputColors)
+			applyPackagedQuorumWorkRelations(newToken, in.workstation, in.inputColors, in.runtimeConfig)
 			if newToken.Color.DataType != factorytoken.DataTypeResource {
 				if workOutputIndex < len(in.result.recordedOutputWork) {
 					applyRecordedOutputWorkIdentity(newToken, in.result.recordedOutputWork[workOutputIndex])
@@ -775,6 +775,22 @@ func calculateMutations(in mutationCalculationInput) ([]interfaces.MarkingMutati
 		}
 	}
 	return mutations, nil
+}
+
+// applyPackagedQuorumWorkRelations limits quorum's fixed public relation
+// topology to the shipped package. Customer factories own their relations,
+// even if they independently choose the same workstation or Work type names.
+func applyPackagedQuorumWorkRelations(
+	output *interfaces.Token,
+	workstation *interfaces.FactoryWorkstationConfig,
+	inputs []interfaces.TokenColor,
+	runtimeConfig interfaces.RuntimeWorkstationLookup,
+) {
+	factoryConfigLookup, ok := runtimeConfig.(interfaces.RuntimeFactoryConfigLookup)
+	if !ok || !quorum.IsPackagedFactory(factoryConfigLookup.FactoryConfig()) {
+		return
+	}
+	quorum.ApplyWorkRelations(output, workstation, inputs)
 }
 
 func workstationType(workstation *interfaces.FactoryWorkstationConfig) string {

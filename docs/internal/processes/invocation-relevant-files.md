@@ -1060,6 +1060,12 @@ Supported one-shot factory invocations expose three modes; continuous, replay,
   invocation metadata to terminal token `Content` for the `execute-tts` TTS
   MODEL_INVOKE workstation so primary-result selection returns JSON metadata
   instead of submitted input text or raw audio payload bytes.
+- Packaged runtime behavior in `pkg/factory/subsystems/subsystem_transitioner.go`
+  must first verify the effective `RuntimeFactoryConfigLookup` identity before
+  applying package-owned token relations or metadata. Workstation and Work type
+  names are authored customer data, so they are never sufficient to identify a
+  packaged topology; keep a mutation-level customer-name-collision regression
+  test alongside the transitioner behavior.
 - `docs/architecture/invocation-contract.md` documents CLI/API equivalence and
   invocation-return policy ownership.
 - Production provider mode selection lives at the `pkg/workers/provider`
