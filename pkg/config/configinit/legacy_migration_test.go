@@ -178,7 +178,7 @@ func TestInit_ReportsCanonicalDestinationInspectionFailure(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected canonical destination inspection error")
 	}
-	if !strings.Contains(err.Error(), "create canonical parent for legacy factory") {
-		t.Fatalf("Init() error = %q, want canonical parent guidance", err)
+	if !strings.Contains(err.Error(), canonicalRoot) || !strings.Contains(err.Error(), "legacy factory") {
+		t.Fatalf("Init() error = %q, want actionable canonical-root migration guidance", err)
 	}
 }
