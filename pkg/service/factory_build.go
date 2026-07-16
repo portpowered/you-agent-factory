@@ -33,6 +33,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service/runtimebuild"
@@ -194,10 +195,21 @@ func BuildFactoryService(ctx context.Context, cfg *FactoryServiceConfig) (*Facto
 	}
 	service := NewFactoryServiceFromCore(core)
 	shell := FactoryServiceShell{Service: service}
-	if service.currentRuntimeConfig() != nil {
-		modelAPI, modelErr := ProvideModelServiceCollaborator(shell, cfg)
+	if service.currentRuntimeConfig() == nil && cfg != nil && cfg.ReplayPath != "" {
+		// Portable durable-session recordings intentionally contain no Factory
+		// runtime configuration. Attach an explicit read-only model boundary so
+		// the replay service remains usable without a lazy construction path.
+		service = AttachModelServiceCollaborator(shell, unavailableModelService{})
+	} else if cfg != nil && cfg.ModelAPI != nil {
+		service = AttachModelServiceCollaborator(shell, cfg.ModelAPI)
+	} else {
+		modelDeps, modelErr := ModelServiceDependencies(shell)
 		if modelErr != nil {
 			return nil, modelErr
+		}
+		modelAPI, modelErr := modelsservice.NewService(modelDeps)
+		if modelErr != nil {
+			return nil, fmt.Errorf("construct model service: %w", modelErr)
 		}
 		service = AttachModelServiceCollaborator(shell, modelAPI)
 	}
@@ -468,7 +480,7 @@ func buildRuntimeBundle(
 	localModels := input.prefetchedLocalModels
 	if localModels.Manager == nil {
 		var err error
-		localModels, err = NewLocalModelDomain(input.cfg)
+		localModels, err = modelhost.NewLocalDomain(LocalModelDomainDependencies(input.cfg))
 		if err != nil {
 			return nil, err
 		}

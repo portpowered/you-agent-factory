@@ -31,6 +31,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/logging"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
+	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/testutil/validationassert"
 	api "github.com/portpowered/infinite-you/pkg/transports/http"
@@ -263,11 +264,17 @@ func startLocalModelInferenceTestServer(
 		healthServer.Close()
 		t.Fatalf("ComposeFactoryService: %v", err)
 	}
-	modelAPI, err := ProvideModelServiceCollaborator(shell, cfg)
+	modelDeps, err := ModelServiceDependencies(shell)
 	if err != nil {
 		cancel()
 		healthServer.Close()
-		t.Fatalf("ProvideModelServiceCollaborator: %v", err)
+		t.Fatalf("ModelServiceDependencies: %v", err)
+	}
+	modelAPI, err := modelsservice.NewService(modelDeps)
+	if err != nil {
+		cancel()
+		healthServer.Close()
+		t.Fatalf("modelsservice.NewService: %v", err)
 	}
 	svc := AttachModelServiceCollaborator(shell, modelAPI)
 	svc = AttachFactorySaveCollaborator(

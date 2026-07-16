@@ -14,6 +14,7 @@ import (
 	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factorysessionexecution "github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	workflowruntime "github.com/portpowered/infinite-you/pkg/orchestrators/javascript/runtime"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
@@ -30,26 +31,6 @@ type Collaborators struct {
 	LocalModels      LocalModelDomain
 	RuntimeBuild     *runtimebuild.Service
 	WorkersScheduler *workersservice.Service
-}
-
-// NewCollaborators builds composition collaborators for startup.
-func NewCollaborators(
-	cfg *runtimehost.Config,
-	clock factory.Clock,
-	baseLogger *zap.Logger,
-	sessions *factorysessions.Registry,
-) (Collaborators, error) {
-	startupLocalModels, err := NewLocalModelDomain(cfg)
-	if err != nil {
-		return Collaborators{}, err
-	}
-	hostedWorkers := HostedWorkers(cfg, baseLogger, clock)
-	return Collaborators{
-		Sessions:         sessions,
-		LocalModels:      startupLocalModels,
-		RuntimeBuild:     NewRuntimeBuildService(cfg, clock, baseLogger, &startupLocalModels, sessions),
-		WorkersScheduler: NewWorkersScheduler(cfg, clock, baseLogger, hostedWorkers),
-	}, nil
 }
 
 // NewCollaboratorsWithLocalModels assembles the non-model startup collaborators
@@ -265,10 +246,11 @@ func buildCore(
 	sessions := NewSessionsRegistry()
 	var collaborators Collaborators
 	if localModels == nil {
-		collaborators, err = NewCollaborators(cfg, clock, root.BaseLogger, sessions)
-		if err != nil {
-			return nil, err
+		startupLocalModels, modelErr := modelhost.NewLocalDomain(LocalModelDomainDependencies(cfg))
+		if modelErr != nil {
+			return nil, modelErr
 		}
+		collaborators = NewCollaboratorsWithLocalModels(cfg, clock, root.BaseLogger, sessions, startupLocalModels)
 	} else {
 		collaborators = NewCollaboratorsWithLocalModels(cfg, clock, root.BaseLogger, sessions, *localModels)
 	}
@@ -284,9 +266,19 @@ func buildCore(
 	if err != nil {
 		return nil, err
 	}
-	models, err := constructModelService(core, cfg)
+	modelDeps, err := modelServiceDependencies(core, cfg)
 	if err != nil {
 		return nil, err
+	}
+	models := ModelService(nil)
+	if cfg != nil && cfg.ModelAPI != nil {
+		models = cfg.ModelAPI
+	} else {
+		constructed, modelErr := modelsservice.NewService(modelDeps)
+		if modelErr != nil {
+			return nil, fmt.Errorf("construct model service: %w", modelErr)
+		}
+		models = constructed
 	}
 	return runtimehost.AttachModelService(core, models), nil
 }
@@ -299,19 +291,16 @@ func (a modelPullMetricsAdapter) RecordModelPullMetric(metric modelsservice.Pull
 	a.inner.RecordModelPullMetric(runtimehost.InvocationMetric{Name: metric.Name, Labels: metric.Labels})
 }
 
-func constructModelService(core *runtimehost.Core, cfg *runtimehost.Config) (ModelService, error) {
-	if cfg != nil && cfg.ModelAPI != nil {
-		return cfg.ModelAPI, nil
-	}
+func modelServiceDependencies(core *runtimehost.Core, cfg *runtimehost.Config) (modelsservice.Dependencies, error) {
 	if core == nil || core.Clock() == nil {
-		return nil, fmt.Errorf("construct model service: runtime core and clock are required")
+		return modelsservice.Dependencies{}, fmt.Errorf("construct model service: runtime core and clock are required")
 	}
 	host := runtimehost.NewHostFromCore(core)
 	var metrics modelsservice.PullMetricsRecorder
 	if cfg != nil && cfg.ModelPullMetricsRecorder != nil {
 		metrics = modelPullMetricsAdapter{inner: cfg.ModelPullMetricsRecorder}
 	}
-	models, err := modelsservice.NewService(modelsservice.Dependencies{
+	return modelsservice.Dependencies{
 		RuntimeConfig:           host.CurrentModelRuntimeConfig,
 		ModelHost:               core.ModelHost(),
 		ModelAssetPuller:        core.ModelAssetPuller(),
@@ -320,9 +309,5 @@ func constructModelService(core *runtimehost.Core, cfg *runtimehost.Config) (Mod
 		ModelPullMetrics:        metrics,
 		ModelInvocationExecutor: host.BuildModelInvocationExecutor,
 		FactoryRunnerID:         cfg.RunnerID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("construct model service: %w", err)
-	}
-	return models, nil
+	}, nil
 }

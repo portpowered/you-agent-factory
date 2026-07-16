@@ -20,6 +20,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
 	"github.com/portpowered/infinite-you/pkg/testutil/factoryfixtures"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	apisurface "github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -42,32 +43,14 @@ func TestLocalModelProvidersValidateAndRetainExplicitEdgesWithoutStartingProcess
 	if domain.Assets != assets || domain.Runtime != runtime || domain.Manager == nil || domain.Host == nil || domain.LeaseExecution == nil {
 		t.Fatalf("local model domain = %+v, want exact explicit assets/runtime and complete managed collaborators", domain)
 	}
-	constructed, err := constructLocalModelDomain(localModelConstruction{
-		Assets: assets, Runtime: runtime, ProcessLauncher: launcher,
+	constructed, err := modelhost.NewLocalDomain(modelhost.LocalDomainDependencies{
+		AssetPuller: assets, Runtime: runtime, ProcessLauncher: launcher,
 	})
 	if err != nil || constructed.Host == nil {
-		t.Fatalf("constructLocalModelDomain() = (%+v, %v), want explicit process edge", constructed, err)
+		t.Fatalf("modelhost.NewLocalDomain() = (%+v, %v), want explicit process edge", constructed, err)
 	}
 	if launcher.starts != 0 {
 		t.Fatalf("process starts during graph construction = %d, want zero", launcher.starts)
-	}
-
-	tests := []struct {
-		name  string
-		input localModelConstruction
-		want  string
-	}{
-		{name: "pull and cache", input: localModelConstruction{Runtime: runtime, ProcessLauncher: launcher}, want: "asset puller"},
-		{name: "invocation runtime", input: localModelConstruction{Assets: assets, ProcessLauncher: launcher}, want: "local invocation runtime"},
-		{name: "process", input: localModelConstruction{Assets: assets, Runtime: runtime}, want: "process launcher"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			got, err := constructLocalModelDomain(test.input)
-			if err == nil || !strings.Contains(err.Error(), test.want) {
-				t.Fatalf("constructLocalModelDomain() = (%+v, %v), want error containing %q", got, err, test.want)
-			}
-		})
 	}
 }
 
@@ -80,6 +63,58 @@ func TestModelServiceProviderRejectsMissingExplicitClock(t *testing.T) {
 	if models != nil || err == nil || !strings.Contains(err.Error(), "clock is required") {
 		t.Fatalf("provideModelService() = (%T, %v), want missing-clock construction error", models, err)
 	}
+}
+
+func TestProductionGraphRetainsCoreModelServiceAndInjectedCatalogEdge(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	factoryfixtures.WriteFactoryJSON(t, dir, factoryfixtures.MinimalFactoryConfig())
+	injected := &injectedModelAPI{}
+	graph, err := Build(context.Background(), Inputs{
+		Config: &runtimehost.Config{
+			Dir: dir, SystemConfigHomeDir: t.TempDir(), Logger: zap.NewNop(),
+			Clock: productionInternalClock{}, ModelAPI: injected,
+			DurableSessionPersistencePolicy:         factorysessionexecution.PersistencePolicyDisabled,
+			RuntimeFileLoggingPolicy:                runtimehost.RuntimeFileLoggingPolicyDisabled,
+			RuntimeMetricsPolicy:                    runtimehost.RuntimeMetricsPolicyDisabled,
+			SkipBuiltInRunnerPrerequisiteValidation: true,
+		},
+		MCPInput: strings.NewReader(""), MCPOutput: &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatalf("Build() error = %v", err)
+	}
+	t.Cleanup(func() { _ = graph.Close() })
+
+	if graph.core == nil || graph.core.ModelService() != injected || graph.Models != injected || graph.Transport.Models != injected {
+		t.Fatal("production core, graph, and transport did not retain the exact injected model service instance")
+	}
+	if _, err := graph.Transport.Models.ListModels(context.Background()); err != nil {
+		t.Fatalf("transport model catalog call error = %v", err)
+	}
+	if injected.listCalls != 1 {
+		t.Fatalf("injected model catalog calls = %d, want 1", injected.listCalls)
+	}
+}
+
+type injectedModelAPI struct{ listCalls int }
+
+func (api *injectedModelAPI) ListModels(context.Context) (factoryapi.ListModelsResponse, error) {
+	api.listCalls++
+	return factoryapi.ListModelsResponse{}, nil
+}
+
+func (*injectedModelAPI) GetModel(context.Context, string) (factoryapi.ModelDetail, error) {
+	return factoryapi.ModelDetail{}, nil
+}
+
+func (*injectedModelAPI) PullModel(context.Context, string) (apisurface.ModelPullResult, error) {
+	return apisurface.ModelPullResult{}, nil
+}
+
+func (*injectedModelAPI) InvokeModel(context.Context, string, factoryapi.ModelInvocationRequest) (apisurface.ModelInvocationResult, error) {
+	return apisurface.ModelInvocationResult{}, nil
 }
 
 type inertModelProcessLauncher struct{ starts int }

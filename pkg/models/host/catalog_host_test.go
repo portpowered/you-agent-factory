@@ -29,6 +29,21 @@ func mustNewCatalogHost(t *testing.T, assets AssetGateway, opts Options) *Catalo
 	return host
 }
 
+func TestNewLocalDomainAppliesModelOwnedDefaultsWithoutStartingLifecycle(t *testing.T) {
+	t.Parallel()
+
+	domain, err := NewLocalDomain(LocalDomainDependencies{CacheDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("NewLocalDomain() error = %v", err)
+	}
+	if domain.Resources == nil || domain.Assets == nil || domain.Runtime == nil || domain.Manager == nil || domain.LeaseExecution == nil {
+		t.Fatalf("NewLocalDomain() = %+v, want complete package-default collaborators", domain)
+	}
+	if _, ok := domain.Host.(*CatalogHost); !ok {
+		t.Fatalf("NewLocalDomain() host = %T, want *CatalogHost", domain.Host)
+	}
+}
+
 func TestNewHost_ValidatesRequiredDependenciesWithoutLaunchingProcess(t *testing.T) {
 	assets := stubAssetGateway{}
 	launcher := &fakeProcessLauncher{}

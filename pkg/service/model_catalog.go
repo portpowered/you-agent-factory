@@ -99,24 +99,18 @@ func modelPullMetricsRecorderForService(recorder ModelPullMetricsRecorder) model
 	return modelPullMetricsHostAdapter{inner: recorder}
 }
 
-// ProvideModelServiceCollaborator constructs the model-domain collaborator for a
-// built FactoryService shell.
-func ProvideModelServiceCollaborator(
-	shell FactoryServiceShell,
-	cfg *FactoryServiceConfig,
-) (apisurface.ModelAPI, error) {
-	if cfg != nil && cfg.ModelAPI != nil {
-		return cfg.ModelAPI, nil
-	}
+// ModelServiceDependencies adapts a built compatibility shell to the canonical
+// model-package construction contract without constructing the service.
+func ModelServiceDependencies(shell FactoryServiceShell) (modelsservice.Dependencies, error) {
 	if shell.Service == nil {
-		return nil, fmt.Errorf("construct model service: factory service shell is required")
+		return modelsservice.Dependencies{}, fmt.Errorf("construct model service: factory service shell is required")
 	}
 	fs := shell.Service
 	var now func() time.Time
 	if fs.clock != nil {
 		now = fs.clock.Now
 	}
-	modelAPI, err := modelsservice.NewService(modelsservice.Dependencies{
+	return modelsservice.Dependencies{
 		RuntimeConfig:           fs.currentRuntimeConfig,
 		ModelHost:               fs.modelHost(),
 		ModelAssetPuller:        fs.modelAssets,
@@ -125,11 +119,7 @@ func ProvideModelServiceCollaborator(
 		ModelPullMetrics:        modelPullMetricsRecorderForService(fs.modelPullMetricsRecorder()),
 		ModelInvocationExecutor: fs.modelInvocationExecutor,
 		FactoryRunnerID:         fs.factoryRunnerID(),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("construct model service: %w", err)
-	}
-	return modelAPI, nil
+	}, nil
 }
 
 // AttachModelServiceCollaborator assigns the model-domain collaborator on the

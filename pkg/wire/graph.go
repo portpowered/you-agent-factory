@@ -158,6 +158,7 @@ func (g *phasedGraph) Close() error {
 // Graph is the immutable-after-build process application graph. All fields are
 // eagerly assigned by Build and return stable collaborator identity.
 type Graph struct {
+	core              *runtimehost.Core
 	Config            *factoryconfig.LoadedFactoryConfig
 	Runtime           RuntimeInputs
 	RuntimeLog        runtimehost.RuntimeLogDiagnostics

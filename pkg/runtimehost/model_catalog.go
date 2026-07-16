@@ -71,14 +71,6 @@ func (fs *Host) ModelService() apisurface.ModelAPI {
 	return fs.requireModelService()
 }
 
-// AttachModelServiceCollaborator assigns the explicitly composed model-domain collaborator.
-func AttachModelServiceCollaborator(shell HostShell, modelAPI apisurface.ModelAPI) *Host {
-	if shell.Host != nil {
-		shell.Host.modelService = modelAPI
-	}
-	return shell.Host
-}
-
 // CurrentModelRuntimeConfig returns the active runtime configuration used by
 // model catalog and invocation operations. The callback remains dynamic so a
 // factory switch is visible without reconstructing the model service.

@@ -2809,12 +2809,12 @@ func TestGeneratedFactoryFromRuntimeConfig_CapturesOperatorDefaultedModelWorkerF
 	}
 }
 
-func TestNewLocalModelDomain_WiresProcessWideModelHost(t *testing.T) {
-	domain, err := NewLocalModelDomain(&FactoryServiceConfig{
+func TestModelOwnedLocalDomain_WiresProcessWideModelHost(t *testing.T) {
+	domain, err := modelhost.NewLocalDomain(LocalModelDomainDependencies(&FactoryServiceConfig{
 		ModelCacheDir: t.TempDir(),
-	})
+	}))
 	if err != nil {
-		t.Fatalf("NewLocalModelDomain: %v", err)
+		t.Fatalf("modelhost.NewLocalDomain: %v", err)
 	}
 	if domain.Host == nil {
 		t.Fatal("local model domain host = nil, want process-wide modelhost.Host")

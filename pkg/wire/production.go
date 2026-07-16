@@ -10,12 +10,10 @@ import (
 	"github.com/google/wire"
 	"github.com/portpowered/infinite-you/pkg/composebridge"
 	"github.com/portpowered/infinite-you/pkg/factory"
-	factoryservice "github.com/portpowered/infinite-you/pkg/factory/service"
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/factory/sessions/execution"
 	initializerdashboard "github.com/portpowered/infinite-you/pkg/initializer/dashboard"
 	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
-	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	modelsservice "github.com/portpowered/infinite-you/pkg/models/service"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
 	"github.com/portpowered/infinite-you/pkg/service"
@@ -46,70 +44,16 @@ var modelProviderSet = wire.NewSet(
 	provideModelService,
 )
 
-type localModelConstruction struct {
-	Assets          localmodels.AssetPuller
-	Runtime         localmodels.Runtime
-	ProcessLauncher modelhost.ProcessLauncher
-	HostOverride    modelhost.Host
-	Hooks           localmodels.Hooks
-	Diagnostics     modelhost.Diagnostics
-}
-
 func provideLocalModelDomain(cfg *service.FactoryServiceConfig) (service.LocalModelDomain, error) {
 	if cfg == nil {
 		return service.LocalModelDomain{}, fmt.Errorf("construct model dependencies: config is required")
 	}
-	assets := cfg.ModelAssets
-	if isNil(assets) {
-		assets = localmodels.NewAssetPuller(cfg.ModelCacheDir)
-	}
-	runtime := cfg.LocalModelRuntimeOverride
-	if isNil(runtime) {
-		runtime = localmodels.DefaultRuntime()
-	}
-	return constructLocalModelDomain(localModelConstruction{
-		Assets:          assets,
-		Runtime:         runtime,
-		ProcessLauncher: modelhost.DefaultProcessLauncher(),
-		HostOverride:    cfg.ModelHostOverride,
-		Hooks:           factoryservice.LocalModelHooks(),
-		Diagnostics:     modelHostDiagnostics(cfg.Logger, cfg.InvocationMetricsRecorder),
-	})
-}
-
-func constructLocalModelDomain(input localModelConstruction) (service.LocalModelDomain, error) {
-	manager, err := localmodels.NewManagedRuntime(localmodels.ManagedRuntimeDependencies{
-		AssetPuller: input.Assets,
-		Runtime:     input.Runtime,
-		Hooks:       input.Hooks,
-	})
+	deps := service.LocalModelDomainDependencies(cfg)
+	deps.Diagnostics = modelHostDiagnostics(cfg.Logger, cfg.InvocationMetricsRecorder)
+	domain, err := modelhost.NewLocalDomain(deps)
 	if err != nil {
-		return service.LocalModelDomain{}, fmt.Errorf("construct managed local runtime: %w", err)
+		return service.LocalModelDomain{}, err
 	}
-	host := input.HostOverride
-	if isNil(host) {
-		gateway := modelhost.NewLocalAssetGateway(input.Assets)
-		host, err = modelhost.NewHost(modelhost.Dependencies{
-			AssetPuller:     gateway,
-			CacheInspector:  gateway,
-			ProcessLauncher: input.ProcessLauncher,
-			Options: modelhost.Options{
-				SourceResolver: modelhost.DefaultManagedRuntimeSourceResolverAdapter(),
-				Diagnostics:    input.Diagnostics,
-			},
-		})
-		if err != nil {
-			return service.LocalModelDomain{}, fmt.Errorf("construct model host: %w", err)
-		}
-	}
-	domain := service.LocalModelDomain{
-		Resources: localmodels.NewResourceLimiter(input.Hooks),
-		Assets:    input.Assets,
-		Runtime:   input.Runtime,
-		Manager:   manager,
-		Host:      host,
-	}
-	domain.LeaseExecution = modelhost.NewLeaseExecution(host, input.Assets, input.Runtime, input.Hooks)
 	return domain, nil
 }
 
@@ -127,16 +71,11 @@ func provideModelService(
 	if isNil(core.Clock()) {
 		return nil, fmt.Errorf("construct model service: clock is required")
 	}
-	return newModelService(modelsservice.Dependencies{
-		RuntimeConfig:           shell.Service.CurrentModelRuntimeConfig,
-		ModelHost:               core.ModelHost(),
-		ModelAssetPuller:        core.ModelAssetPuller(),
-		Logger:                  core.Logger(),
-		Clock:                   core.Clock().Now,
-		ModelPullMetrics:        modelPullMetricsForService(cfg.ModelPullMetricsRecorder),
-		ModelInvocationExecutor: shell.Service.BuildModelInvocationExecutor,
-		FactoryRunnerID:         cfg.RunnerID,
-	})
+	deps, err := service.ModelServiceDependencies(service.FactoryServiceShell{Service: shell.Service})
+	if err != nil {
+		return nil, err
+	}
+	return newModelService(deps)
 }
 
 func newModelService(deps modelsservice.Dependencies) (*modelsservice.Service, error) {
@@ -182,21 +121,6 @@ func modelHostDiagnostics(logger *zap.Logger, metrics service.InvocationMetricsR
 		diagnostics.Metrics = modelHostMetricsAdapter{inner: metrics}
 	}
 	return diagnostics
-}
-
-type serviceModelPullMetricsAdapter struct {
-	inner service.ModelPullMetricsRecorder
-}
-
-func (a serviceModelPullMetricsAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
-	a.inner.RecordModelPullMetric(service.InvocationMetric{Name: metric.Name, Labels: metric.Labels})
-}
-
-func modelPullMetricsForService(recorder service.ModelPullMetricsRecorder) modelsservice.PullMetricsRecorder {
-	if isNil(recorder) {
-		return nil
-	}
-	return serviceModelPullMetricsAdapter{inner: recorder}
 }
 
 func provideFactoryServiceRoot(cfg *service.FactoryServiceConfig) (service.FactoryServiceRoot, error) {
@@ -382,12 +306,10 @@ func assembleProductionGraph(
 	}
 	host := runtimehost.NewHostFromCore(core)
 	shell := runtimehost.HostShell{Host: host}
-	models, err := composeModelService(core, host, cfg)
-	if err != nil {
-		return nil, err
+	models := core.ModelService()
+	if isNil(models) {
+		return nil, errors.New("construct production graph: runtime core model service is required")
 	}
-	host = runtimehost.AttachModelServiceCollaborator(shell, models)
-	shell = runtimehost.HostShell{Host: host}
 	host = runtimehost.AttachFactorySaveCollaborator(shell, runtimehost.ProvideFactorySaveCollaborator(shell, cfg))
 	applicationRuntime, err := runtimehost.NewApplicationRuntime(host)
 	if err != nil {
@@ -435,6 +357,7 @@ func assembleProductionGraph(
 		return nil, err
 	}
 	return &Graph{
+		core:              core,
 		Config:            bundle.RuntimeCfg,
 		Runtime:           runtimeInputs,
 		RuntimeLog:        host.RuntimeLogDiagnostics(),
@@ -460,49 +383,6 @@ func assembleProductionGraph(
 		Sidecars:  sidecars,
 		resources: resources,
 	}, nil
-}
-
-type modelPullMetricsAdapter struct {
-	inner runtimehost.ModelPullMetricsRecorder
-}
-
-func (a modelPullMetricsAdapter) RecordModelPullMetric(metric modelsservice.PullMetric) {
-	a.inner.RecordModelPullMetric(runtimehost.InvocationMetric{Name: metric.Name, Labels: metric.Labels})
-}
-
-func composeModelService(
-	core *runtimehost.Core,
-	host *runtimehost.Host,
-	cfg *runtimehost.Config,
-) (apisurface.ModelAPI, error) {
-	if cfg != nil && !isNil(cfg.ModelAPI) {
-		return cfg.ModelAPI, nil
-	}
-	if core == nil || host == nil {
-		return nil, errors.New("construct model service: runtime core and host are required")
-	}
-
-	var metrics modelsservice.PullMetricsRecorder
-	runnerID := ""
-	if cfg != nil && cfg.ModelPullMetricsRecorder != nil {
-		metrics = modelPullMetricsAdapter{inner: cfg.ModelPullMetricsRecorder}
-	}
-	if cfg != nil {
-		runnerID = cfg.RunnerID
-	}
-	if isNil(core.Clock()) {
-		return nil, errors.New("construct model service: clock is required")
-	}
-	return newModelService(modelsservice.Dependencies{
-		RuntimeConfig:           host.CurrentModelRuntimeConfig,
-		ModelHost:               core.ModelHost(),
-		ModelAssetPuller:        core.ModelAssetPuller(),
-		Logger:                  core.Logger(),
-		Clock:                   core.Clock().Now,
-		ModelPullMetrics:        metrics,
-		ModelInvocationExecutor: host.BuildModelInvocationExecutor,
-		FactoryRunnerID:         runnerID,
-	})
 }
 
 func buildProductionSidecars(

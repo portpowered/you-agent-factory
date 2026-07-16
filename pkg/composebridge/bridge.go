@@ -8,6 +8,7 @@ import (
 	factorysessions "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	"github.com/portpowered/infinite-you/pkg/interfaces"
 	"github.com/portpowered/infinite-you/pkg/logging"
+	modelhost "github.com/portpowered/infinite-you/pkg/models/host"
 	localmodels "github.com/portpowered/infinite-you/pkg/models/local"
 	"github.com/portpowered/infinite-you/pkg/replay"
 	"github.com/portpowered/infinite-you/pkg/runtimehost"
@@ -26,6 +27,12 @@ type (
 	ModelService             = apisurface.ModelAPI
 	FactoryDefinitionService = service.FactoryDefinitionService
 )
+
+// LocalModelDomainDependencies adapts initializer configuration to the
+// canonical model-package construction contract.
+func LocalModelDomainDependencies(cfg *runtimehost.Config) modelhost.LocalDomainDependencies {
+	return service.LocalModelDomainDependencies(service.FactoryServiceConfigFromRuntimeHost(cfg))
+}
 
 // resolveRoot absolutizes cfg.Dir, assigns cfg.Logger, and mints cfg.RuntimeInstanceID when empty.
 func resolveRoot(cfg *runtimehost.Config) (Root, error) {
@@ -50,11 +57,6 @@ func ClockForCompose(cfg *runtimehost.Config, load ConfigLoad) factory.Clock {
 // HostedWorkers builds the hosted-workers collaborator from config.
 func HostedWorkers(cfg *runtimehost.Config, logger *zap.Logger, clock factory.Clock) hostedworkers.Config {
 	return service.HostedWorkersForCompose(cfg, logger, clock)
-}
-
-// NewLocalModelDomain constructs the local-model collaborator group for a build.
-func NewLocalModelDomain(cfg *runtimehost.Config) (LocalModelDomain, error) {
-	return service.NewLocalModelDomain(service.FactoryServiceConfigFromRuntimeHost(cfg))
 }
 
 // NewRuntimeBuildService constructs the runtimebuild collaborator for core composition.

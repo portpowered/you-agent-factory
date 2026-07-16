@@ -380,9 +380,10 @@ func NewFactorySessionsRegistry() *factorysessions.Registry {
 // service build time and copied onto each factoryRuntimeBundle.
 type LocalModelDomain = factoryservice.LocalModelDomain
 
-// NewLocalModelDomain constructs the local-model collaborator group for a build.
-func NewLocalModelDomain(cfg *FactoryServiceConfig) (LocalModelDomain, error) {
-	return factoryservice.NewLocalModelDomain(hostConfigFromService(cfg))
+// LocalModelDomainDependencies adapts compatibility configuration to the
+// canonical model-package construction contract.
+func LocalModelDomainDependencies(cfg *FactoryServiceConfig) modelhost.LocalDomainDependencies {
+	return factoryservice.LocalModelDomainDependencies(hostConfigFromService(cfg))
 }
 
 // FactoryServiceCollaborators groups explicit S6 composition collaborators.
@@ -401,7 +402,7 @@ func NewFactoryServiceCollaborators(
 	baseLogger *zap.Logger,
 	sessions *factorysessions.Registry,
 ) (FactoryServiceCollaborators, error) {
-	startupLocalModels, err := NewLocalModelDomain(cfg)
+	startupLocalModels, err := modelhost.NewLocalDomain(LocalModelDomainDependencies(cfg))
 	if err != nil {
 		return FactoryServiceCollaborators{}, err
 	}
