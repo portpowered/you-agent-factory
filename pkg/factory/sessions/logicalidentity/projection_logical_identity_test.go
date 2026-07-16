@@ -10,6 +10,7 @@ import (
 	"github.com/portpowered/infinite-you/pkg/factory/state"
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 )
 
 func withProjectionLogicalIdentity(ctx factorysessions.ProjectionContext, backendScopeID string) factorysessions.ProjectionContext {
@@ -29,7 +30,7 @@ func withProjectionLogicalIdentity(ctx factorysessions.ProjectionContext, backen
 func TestProjectRuntime_JavaScriptWorkflowSessionStreamIdentityIncludesLogicalFields(t *testing.T) {
 	now := time.Date(2026, 6, 8, 14, 5, 0, 0, time.UTC)
 	startedAt := now.Add(-5 * time.Minute)
-	runtime := factorysessions.ProjectRuntime(withProjectionLogicalIdentity(factorysessions.ProjectionContext{
+	runtime := factorysessionmapping.RuntimeFromContextToAPI(withProjectionLogicalIdentity(factorysessions.ProjectionContext{
 		Session: &factorysessions.LiveSession{
 			ID:      "session-js",
 			Project: "dynamic-workflow",
@@ -77,7 +78,7 @@ func TestProjectRuntime_JavaScriptWorkflowSessionStreamIdentityIncludesLogicalFi
 func TestProjectRuntime_JavaScriptWorkflowSessionPrefersSnapshotStreamGenerationIDWithLogicalFields(t *testing.T) {
 	now := time.Date(2026, 6, 27, 7, 30, 0, 0, time.UTC)
 	startedAt := now.Add(-10 * time.Minute)
-	runtime := factorysessions.ProjectRuntime(withProjectionLogicalIdentity(factorysessions.ProjectionContext{
+	runtime := factorysessionmapping.RuntimeFromContextToAPI(withProjectionLogicalIdentity(factorysessions.ProjectionContext{
 		Session: &factorysessions.LiveSession{
 			ID:      "session-js",
 			Project: "dynamic-workflow",

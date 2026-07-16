@@ -1,4 +1,4 @@
-package factorysessions
+package factorysessions_test
 
 import (
 	"encoding/json"
@@ -6,7 +6,9 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/portpowered/infinite-you/pkg/factory/sessions"
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	factorysessionmapping "github.com/portpowered/infinite-you/pkg/transports/mapping/factorysession"
 
 	interfaces "github.com/portpowered/infinite-you/pkg/factory/contracts"
 	"github.com/portpowered/infinite-you/pkg/factory/state"
@@ -14,6 +16,14 @@ import (
 	"github.com/portpowered/infinite-you/pkg/orchestrators/petri"
 	workerexecution "github.com/portpowered/infinite-you/pkg/workers/execution"
 )
+
+func ProjectRuntime(ctx ProjectionContext) factoryapi.FactorySessionRuntime {
+	return factorysessionmapping.RuntimeFromContextToAPI(ctx)
+}
+
+func SessionResponse(ctx ProjectionContext) factoryapi.FactorySession {
+	return factorysessionmapping.SessionResponseToAPI(ctx)
+}
 
 func TestProjectRuntime_LegacyPetriSessionIncludesMarkingAndEnabledTransitions(t *testing.T) {
 	now := time.Date(2026, 6, 8, 14, 0, 0, 0, time.UTC)
@@ -639,8 +649,11 @@ func TestSessionResponse_JavaScriptRuntimeOmitsDispatchesAndPreservesArtifacts(t
 				RedactionCounts: map[string]int{
 					"secrets": 1,
 				},
-				CaptureMetadata: artifactCaptureMetadata(now, "dispatch-agent-1", "application/json"),
-				CapturedAt:      now,
+				CaptureMetadata: map[string]string{
+					"capturedAt": now.UTC().Format(time.RFC3339), "sourceDispatchId": "dispatch-agent-1",
+					"mimeType": "application/json",
+				},
+				CapturedAt: now,
 			}},
 		},
 		Now: now,

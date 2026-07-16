@@ -95,7 +95,7 @@ func (s *Service) GetCurrentFactoryForSession(_ context.Context, sessionID strin
 		return factoryapi.Factory{}, err
 	}
 	rootDir := factorysessions.SessionFactoryRootDir(s.host.PersistRootDir(), session)
-	factoryName := factorysessions.FactoryName(rootDir, runtimeCfg)
+	factoryName := factoryapi.FactoryName(factorysessions.FactoryName(rootDir, runtimeCfg))
 	versionRootDir := rootDir
 	if persistRoot := s.host.SessionFactoryPersistRoot(session); persistRoot != "" {
 		if pointerName, err := configpersist.ReadCurrentFactoryPointer(persistRoot); err == nil {

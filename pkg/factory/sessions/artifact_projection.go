@@ -166,24 +166,3 @@ func projectedArtifactCaptureMetadata(
 	}
 	return projected
 }
-
-func artifactCaptureMetadata(
-	capturedAt time.Time,
-	sourceDispatchID string,
-	mimeType string,
-) map[string]string {
-	metadata := make(map[string]string)
-	if !capturedAt.IsZero() {
-		metadata["capturedAt"] = capturedAt.UTC().Format(time.RFC3339)
-	}
-	if sourceDispatchID = strings.TrimSpace(sourceDispatchID); sourceDispatchID != "" {
-		metadata["sourceDispatchId"] = sourceDispatchID
-	}
-	if mimeType = strings.TrimSpace(mimeType); mimeType != "" {
-		metadata["mimeType"] = mimeType
-	}
-	if len(metadata) == 0 {
-		return nil
-	}
-	return metadata
-}

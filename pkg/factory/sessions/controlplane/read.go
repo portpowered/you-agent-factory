@@ -41,7 +41,7 @@ func ListLiveFactorySessions(ctx context.Context, host LiveReadHost) (factoryapi
 			summaries = append(summaries, factorysession.SessionSummaryToAPI(session))
 			continue
 		}
-		summaries = append(summaries, factorysessions.SummaryWithRuntime(projectionCtx))
+		summaries = append(summaries, factorysession.SummaryWithRuntimeToAPI(projectionCtx))
 	}
 	factorysession.SortSessionSummaries(summaries)
 	return factoryapi.ListFactorySessionsResponse{Sessions: summaries}, nil
@@ -67,5 +67,5 @@ func GetLiveFactorySession(
 	if err != nil {
 		return factoryapi.FactorySession{}, err
 	}
-	return factorysessions.SessionResponse(projectionCtx), nil
+	return factorysession.SessionResponseToAPI(projectionCtx), nil
 }

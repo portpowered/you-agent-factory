@@ -68,13 +68,6 @@ func ProjectRuntimeContract(ctx ProjectionContext) RuntimeProjection {
 	return runtime
 }
 
-func sessionIDFromProjectionContext(ctx ProjectionContext) string {
-	if ctx.Session == nil {
-		return ""
-	}
-	return strings.TrimSpace(ctx.Session.ID)
-}
-
 func projectedSessionStreamIdentity(
 	ctx ProjectionContext,
 	lifecycle RuntimeLifecycle,

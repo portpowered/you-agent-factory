@@ -369,3 +369,10 @@ Live Factory Session summaries and discovered targets retain `LiveSession`,
 including canonical runtime session identity and optional target names, through
 `pkg/transports/mapping/factorysession` when assembling open or list responses;
 do not export generated summary or target constructors from the session owner.
+
+Live Factory Session runtime and detail reads follow the same boundary. Derive
+`RuntimeProjection` in `pkg/factory/sessions`, then map status, lifecycle,
+progress, usage, Petri and JavaScript projections, checkpoints, artifacts,
+stream identity, logical target, and stop-summary compatibility in
+`pkg/transports/mapping/factorysession`. The Factory Session owner should not
+import generated HTTP contracts to expose runtime, summary, or detail helpers.
