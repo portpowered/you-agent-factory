@@ -2,15 +2,24 @@ package runtime_api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/portpowered/infinite-you/pkg/factory"
+	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/service"
 	generatedclient "github.com/portpowered/infinite-you/pkg/transports/http/client"
+	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
+	"github.com/portpowered/infinite-you/pkg/workers"
 	"github.com/portpowered/infinite-you/tests/functional/internal/restclient"
 	"github.com/portpowered/infinite-you/tests/functional/internal/support"
 )
+
+const generatedRESTClientSmokeTimeout = 10 * time.Second
 
 // TestGeneratedRESTClientSmoke_ConfiguresCallerOwnedDependencies is a pre-DI
 // transport/client proof. Production-shaped graph equivalence belongs to the
@@ -44,6 +53,99 @@ func TestGeneratedRESTClientSmoke_ConfiguresCallerOwnedDependencies(t *testing.T
 	}
 }
 
+// TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure is a
+// pre-DI transport/client proof against the current functional HTTP host. It
+// does not claim equivalence with the future Wire-composed production graph.
+func TestGeneratedRESTClientSmoke_RoundTripsTypedSuccessAndAPIFailure(t *testing.T) {
+	dir := support.ScaffoldFactory(t, simplePipelineConfig())
+	support.WriteAgentConfig(t, dir, "worker-a", support.BuildModelWorkerConfig(interfaces.ModelProviderCodex, "gpt-5-codex"))
+	host := startFunctionalServerWithConfig(t, dir, false, func(cfg *service.FactoryServiceConfig) {
+		cfg.RuntimeMode = interfaces.RuntimeModeService
+		cfg.ProviderCommandRunnerOverride = generatedRESTStreamingRunner{}
+	})
+
+	traceID := submitGeneratedWork(t, host.URL(), factoryapi.SubmitWorkRequest{
+		Name:         "generated-rest-client-success",
+		WorkTypeName: "task",
+		Payload:      map[string]string{"title": "generated REST client success"},
+	})
+	waitForGeneratedWorkComplete(t, host.URL(), traceID, generatedRESTClientSmokeTimeout)
+
+	responseStarted := make(chan struct{}, 1)
+	httpClient := &http.Client{Transport: responseStartedRoundTripper{
+		started: responseStarted,
+		base:    http.DefaultTransport,
+	}}
+	adapter, err := restclient.New(host.URL(), httpClient)
+	if err != nil {
+		t.Fatalf("construct generated REST adapter: %v", err)
+	}
+
+	type callResult struct {
+		response *generatedclient.GetFactoryResponseEventsBySessionIdClientResponse
+		err      error
+	}
+	result := make(chan callResult, 1)
+	go func() {
+		response, callErr := adapter.GetFactoryResponseEventsBySessionID(context.Background(), "~default", nil)
+		result <- callResult{response: response, err: callErr}
+	}()
+
+	select {
+	case <-responseStarted:
+	case <-time.After(generatedRESTClientSmokeTimeout):
+		t.Fatal("timed out waiting for generated REST success response to start")
+	}
+	closeDefaultFactorySession(t, host.URL())
+
+	var success callResult
+	select {
+	case success = <-result:
+	case <-time.After(generatedRESTClientSmokeTimeout):
+		t.Fatal("timed out waiting for generated REST success response to finish")
+	}
+	if success.err != nil {
+		t.Fatalf("request generated REST success response: %v", success.err)
+	}
+	if success.response.StatusCode() != http.StatusOK {
+		t.Fatalf("generated success status = %d, want 200", success.response.StatusCode())
+	}
+	if contentType := success.response.HTTPResponse.Header.Get("Content-Type"); !strings.Contains(contentType, "text/event-stream") {
+		t.Fatalf("generated success Content-Type = %q, want text/event-stream", contentType)
+	}
+	wantKind := fmt.Sprintf(`"kind":"%s"`, generatedclient.FactoryResponseEventKindMessage)
+	if body := string(success.response.Body); !strings.Contains(body, wantKind) || !strings.Contains(body, "generated client response COMPLETE") {
+		t.Fatalf("generated success body = %q, want typed MESSAGE event payload", body)
+	}
+
+	failure, err := adapter.GetFactoryResponseEventsBySessionID(context.Background(), "missing-session", nil)
+	if err != nil {
+		t.Fatalf("request generated REST API failure: %v", err)
+	}
+	if failure.StatusCode() != http.StatusNotFound || failure.JSON404 == nil {
+		t.Fatalf("generated failure response = %#v, want typed 404", failure)
+	}
+	if failure.JSON404.Family != generatedclient.ErrorFamilyNotFound || failure.JSON404.Code != generatedclient.RESPONSEEVENTSESSIONNOTFOUND {
+		t.Fatalf("generated API error = %#v, want NOT_FOUND/RESPONSE_EVENT_SESSION_NOT_FOUND", failure.JSON404)
+	}
+}
+
+func closeDefaultFactorySession(t *testing.T, baseURL string) {
+	t.Helper()
+	request, err := http.NewRequest(http.MethodDelete, strings.TrimSuffix(baseURL, "/")+"/factory-sessions/~default", nil)
+	if err != nil {
+		t.Fatalf("build close default Factory Session request: %v", err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatalf("close default Factory Session: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("close default Factory Session status = %d, want 204", response.StatusCode)
+	}
+}
+
 type countingRoundTripper struct {
 	count *atomic.Int32
 	base  http.RoundTripper
@@ -53,3 +155,35 @@ func (t countingRoundTripper) RoundTrip(request *http.Request) (*http.Response, 
 	t.count.Add(1)
 	return t.base.RoundTrip(request)
 }
+
+type responseStartedRoundTripper struct {
+	started chan<- struct{}
+	base    http.RoundTripper
+}
+
+func (t responseStartedRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
+	response, err := t.base.RoundTrip(request)
+	if err == nil {
+		select {
+		case t.started <- struct{}{}:
+		default:
+		}
+	}
+	return response, err
+}
+
+type generatedRESTStreamingRunner struct{}
+
+func (generatedRESTStreamingRunner) Run(context.Context, workers.CommandRequest) (workers.CommandResult, error) {
+	output := strings.Join([]string{
+		`{"type":"thread.started","thread_id":"generated-rest-client-thread"}`,
+		`{"type":"turn.started"}`,
+		`{"type":"item.completed","item":{"id":"generated-rest-client-message","type":"agent_message","text":"generated client response COMPLETE"}}`,
+		`{"type":"turn.completed","usage":{"input_tokens":4,"output_tokens":3}}`,
+	}, "\n") + "\n"
+	return workers.CommandResult{Stdout: []byte(output)}, nil
+}
+
+func (generatedRESTStreamingRunner) SupportsResponseStreaming() bool { return true }
+
+var _ workers.CommandRunner = generatedRESTStreamingRunner{}
