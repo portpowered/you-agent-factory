@@ -12,8 +12,3 @@ var promptAssets embed.FS
 // BuiltInLoopFactoryJSON is the canonical runnable @you/loop packaged factory
 // payload assembled from its authored factory scaffold and prompt assets.
 var BuiltInLoopFactoryJSON = mustAssembleBuiltInLoopFactoryJSON()
-
-// FactoryJSON returns the authored factory scaffold without assembled prompt bodies.
-func FactoryJSON() []byte {
-	return append([]byte(nil), factoryJSON...)
-}
