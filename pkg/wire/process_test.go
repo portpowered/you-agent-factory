@@ -18,6 +18,7 @@ import (
 	sessionexecutioncli "github.com/portpowered/infinite-you/pkg/transports/cli/sessionexecution"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 )
 
 type processRunnerFunc func(context.Context) error
@@ -170,6 +171,28 @@ func TestConfigWithFunctionalEdgesCopiesOnlyForReplacement(t *testing.T) {
 	}
 	if cfg.ProviderCommandRunnerOverride != configured {
 		t.Fatal("functional edge selection mutated the caller-owned config")
+	}
+}
+
+func TestConfigWithFunctionalEdgesSelectsIndependentWorkerEdges(t *testing.T) {
+	t.Parallel()
+	providerRunner := &processCommandRunner{}
+	scriptRunner := &processCommandRunner{}
+	allocator := &agypty.MockAllocator{}
+
+	built := configWithFunctionalEdges(&service.FactoryServiceConfig{}, FunctionalEdges{
+		ProviderCommandRunner: providerRunner,
+		ScriptCommandRunner:   scriptRunner,
+		AgyPTYAllocator:       allocator,
+	})
+	if built.ProviderCommandRunnerOverride != providerRunner {
+		t.Fatal("provider command edge was not selected")
+	}
+	if built.CommandRunnerOverride != scriptRunner {
+		t.Fatal("script command edge was not selected")
+	}
+	if built.AgyPTYAllocatorOverride != allocator {
+		t.Fatal("Agy PTY edge was not selected independently")
 	}
 }
 

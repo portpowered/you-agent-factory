@@ -32,6 +32,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	hostedworkers "github.com/portpowered/infinite-you/pkg/workers/hosted"
 	"github.com/portpowered/infinite-you/pkg/workers/providerexecution"
 	workersservice "github.com/portpowered/infinite-you/pkg/workers/service"
@@ -384,6 +385,7 @@ type FactoryServiceConfig struct {
 	// subprocess boundary and assert command details, env, stdin, stdout,
 	// stderr, and exit failures.
 	ProviderCommandRunnerOverride workers.CommandRunner
+	AgyPTYAllocatorOverride       agypty.PTYAllocator
 	// SkipBuiltInRunnerPrerequisiteValidation disables PATH-style built-in
 	// runner prerequisite checks during startup. Tests that replace execution
 	// with mocks or custom executors use this to exercise service wiring

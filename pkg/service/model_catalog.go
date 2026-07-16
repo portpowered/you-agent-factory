@@ -17,6 +17,7 @@ import (
 	factoryapi "github.com/portpowered/infinite-you/pkg/transports/http/generated"
 	"github.com/portpowered/infinite-you/pkg/transports/mapping"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerexecutor "github.com/portpowered/infinite-you/pkg/workers/executor"
 )
 
@@ -179,7 +180,7 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		}
 		workflowContext = runtime.WorkflowContext(bundle.Factory)
 	}
-	executor := buildWorkerExecutor(
+	executor, err := buildWorkerExecutor(
 		runtimeCfg,
 		factoryCfg,
 		workerName,
@@ -190,6 +191,7 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		fs.providerOverride(),
 		nil,
 		fs.providerCommandRunnerOverride(),
+		fs.agyPTYAllocatorOverride(),
 		fs.commandRunnerOverride(),
 		nil,
 		nil,
@@ -198,11 +200,21 @@ func (fs *FactoryService) modelInvocationExecutor(runtimeCfg *factoryconfig.Load
 		time.Now,
 		modelDomain,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("construct model worker %q: %w", workerName, err)
+	}
 	workstationExecutor, ok := executor.(*workerexecutor.WorkstationExecutor)
 	if !ok || workstationExecutor.Executor == nil {
 		return nil, fmt.Errorf("model worker %q does not support direct invocation", workerName)
 	}
 	return workstationExecutor.Executor, nil
+}
+
+func (fs *FactoryService) agyPTYAllocatorOverride() agypty.PTYAllocator {
+	if fs == nil || fs.cfg == nil {
+		return nil
+	}
+	return fs.cfg.AgyPTYAllocatorOverride
 }
 
 func (fs *FactoryService) factoryRunnerID() string {

@@ -11,6 +11,7 @@ import (
 	runcli "github.com/portpowered/infinite-you/pkg/transports/cli/run"
 	startupcli "github.com/portpowered/infinite-you/pkg/transports/cli/startup"
 	"github.com/portpowered/infinite-you/pkg/workers"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 )
 
 // FunctionalEdges contains the process-owned side-effect boundaries that a
@@ -18,6 +19,8 @@ import (
 // every production edge.
 type FunctionalEdges struct {
 	ProviderCommandRunner workers.CommandRunner
+	ScriptCommandRunner   workers.CommandRunner
+	AgyPTYAllocator       agypty.PTYAllocator
 }
 
 // MCPExecutionRequest contains the transport inputs that select the durable
@@ -170,11 +173,19 @@ func configWithFunctionalEdges(
 	cfg *service.FactoryServiceConfig,
 	edges FunctionalEdges,
 ) *service.FactoryServiceConfig {
-	if cfg == nil || isNil(edges.ProviderCommandRunner) {
+	if cfg == nil || (isNil(edges.ProviderCommandRunner) && isNil(edges.ScriptCommandRunner) && isNil(edges.AgyPTYAllocator)) {
 		return cfg
 	}
 	copied := *cfg
-	copied.ProviderCommandRunnerOverride = edges.ProviderCommandRunner
+	if !isNil(edges.ProviderCommandRunner) {
+		copied.ProviderCommandRunnerOverride = edges.ProviderCommandRunner
+	}
+	if !isNil(edges.ScriptCommandRunner) {
+		copied.CommandRunnerOverride = edges.ScriptCommandRunner
+	}
+	if !isNil(edges.AgyPTYAllocator) {
+		copied.AgyPTYAllocatorOverride = edges.AgyPTYAllocator
+	}
 	return &copied
 }
 

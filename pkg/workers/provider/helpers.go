@@ -13,8 +13,41 @@ import (
 	"time"
 
 	"github.com/portpowered/infinite-you/pkg/interfaces"
+	"github.com/portpowered/infinite-you/pkg/workers/agypty"
 	workerprocess "github.com/portpowered/infinite-you/pkg/workers/process"
 )
+
+// ConstructionInput contains the process boundaries required by a provider-backed worker.
+// CommandRunner intentionally does not control Agy's separate native PTY boundary.
+type ConstructionInput struct {
+	CommandRunner   CommandRunner
+	AgyPTYAllocator agypty.PTYAllocator
+	Options         []ScriptWrapProviderOption
+}
+
+// NewFromInput rejects incomplete graphs before a provider dispatch can start.
+func NewFromInput(input ConstructionInput) (*ScriptWrapProvider, error) {
+	if input.CommandRunner == nil {
+		return nil, errors.New("construct provider-backed worker: command runner is required")
+	}
+	if input.AgyPTYAllocator == nil {
+		return nil, errors.New("construct provider-backed worker: Agy PTY allocator is required")
+	}
+	opts := append([]ScriptWrapProviderOption(nil), input.Options...)
+	opts = append(opts, WithProviderCommandRunner(input.CommandRunner), WithAgyPTYAllocator(input.AgyPTYAllocator))
+	return NewScriptWrapProvider(opts...), nil
+}
+
+// NewProductionProvider applies package-owned production process edges.
+func NewProductionProvider(opts ...ScriptWrapProviderOption) (*ScriptWrapProvider, error) {
+	allocator, err := agypty.NewDefaultPlatformAllocatorFactory().NewAllocator()
+	if err != nil {
+		return nil, fmt.Errorf("construct provider-backed worker: create Agy PTY allocator: %w", err)
+	}
+	return NewFromInput(ConstructionInput{
+		CommandRunner: workerprocess.ExecCommandRunner{}, AgyPTYAllocator: allocator, Options: opts,
+	})
+}
 
 type CommandRunner = workerprocess.CommandRunner
 type CommandRequest = workerprocess.CommandRequest
@@ -590,4 +623,3 @@ func workerEventExitCode(exitCode int, present bool, includeZero bool) *int {
 	exitCodeCopy := exitCode
 	return &exitCodeCopy
 }
-

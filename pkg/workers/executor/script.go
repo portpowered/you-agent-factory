@@ -45,6 +45,49 @@ type ScriptEventRecorder func(factoryapi.FactoryEvent)
 // ScriptExecutorOption configures a ScriptExecutor.
 type ScriptExecutorOption func(*ScriptExecutor)
 
+// ScriptConstructionInput contains the required process edge and definition
+// for one script worker. Callers that need production behavior should use
+// NewProductionScriptExecutor; functional graphs should supply their selected
+// CommandRunner directly.
+type ScriptConstructionInput struct {
+	Definition    *interfaces.WorkerConfig
+	CommandRunner CommandRunner
+	Logger        logging.Logger
+	Options       []ScriptExecutorOption
+}
+
+// NewScriptExecutorFromInput constructs a script executor from explicit
+// dependencies and rejects incomplete graphs before execution can start.
+func NewScriptExecutorFromInput(input ScriptConstructionInput) (*ScriptExecutor, error) {
+	if input.Definition == nil {
+		return nil, errors.New("construct script worker: definition is required")
+	}
+	if input.CommandRunner == nil {
+		return nil, errors.New("construct script worker: command runner is required")
+	}
+	return NewScriptExecutorWithRunner(
+		input.Definition,
+		input.CommandRunner,
+		input.Logger,
+		input.Options...,
+	), nil
+}
+
+// NewProductionScriptExecutor applies the package-owned production command
+// edge while sharing the same validated constructor as functional graphs.
+func NewProductionScriptExecutor(
+	def *interfaces.WorkerConfig,
+	logger logging.Logger,
+	opts ...ScriptExecutorOption,
+) (*ScriptExecutor, error) {
+	return NewScriptExecutorFromInput(ScriptConstructionInput{
+		Definition:    def,
+		CommandRunner: workerprocess.ExecCommandRunner{},
+		Logger:        logger,
+		Options:       opts,
+	})
+}
+
 // WithScriptEventRecorder records script-boundary events on the canonical event
 // history owned by the runtime.
 func WithScriptEventRecorder(recorder ScriptEventRecorder) ScriptExecutorOption {
